@@ -181,7 +181,7 @@ pub struct ChangeNotification {
     /// Type of change
     pub change_type: ChangeType,
     /// Timestamp
-    pub timestamp: Instant,
+    pub timestamp: std::time::SystemTime,
     /// Optional details
     pub details: Option<serde_json::Value>,
 }

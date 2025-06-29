@@ -53,8 +53,12 @@ use oxirs_core::{
 };
 
 pub mod constraints;
+pub mod custom_components;
+pub mod iri_resolver;
+pub mod optimization;
 pub mod paths;
 pub mod report;
+pub mod shape_inheritance;
 pub mod shapes;
 pub mod sparql;
 pub mod targets;
@@ -63,8 +67,12 @@ pub mod vocabulary;
 
 // Re-export key types for convenience
 pub use constraints::*;
+pub use custom_components::*;
+pub use iri_resolver::*;
+pub use optimization::*;
 pub use paths::*;
 pub use report::*;
+pub use shape_inheritance::*;
 pub use shapes::*;
 pub use targets::*;
 pub use validation::*;
@@ -79,8 +87,8 @@ pub static SHACL_NS: &str = "http://www.w3.org/ns/shacl#";
 pub static SHACL_VOCAB: Lazy<vocabulary::ShaclVocabulary> =
     Lazy::new(vocabulary::ShaclVocabulary::new);
 
-/// IRI resolver for validation and expansion
-pub use vocabulary::IriResolver;
+/// IRI resolver for validation and expansion  
+pub use iri_resolver::IriResolver;
 
 /// Core error type for SHACL operations
 #[derive(Debug, thiserror::Error)]
@@ -172,6 +180,24 @@ impl ConstraintComponentId {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl fmt::Display for ConstraintComponentId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for ConstraintComponentId {
+    fn from(s: String) -> Self {
+        ConstraintComponentId(s)
+    }
+}
+
+impl From<&str> for ConstraintComponentId {
+    fn from(s: &str) -> Self {
+        ConstraintComponentId(s.to_string())
     }
 }
 
@@ -605,21 +631,397 @@ impl Validator {
         self.validate_nodes(store, shape_id, &[node.clone()], config)
     }
 
-    /// Check if shapes are valid
+    /// Comprehensive shape validation to ensure shapes graphs are themselves valid
     fn validate_shape(&self, shape: &Shape) -> Result<()> {
-        // Basic shape validation
-        if shape.is_property_shape() && shape.path.is_none() {
-            return Err(ShaclError::ShapeParsing(
-                "Property shape must have a property path".to_string(),
-            ));
+        // 1. Basic shape type validation
+        self.validate_shape_type(shape)?;
+
+        // 2. Validate shape targets
+        self.validate_shape_targets(shape)?;
+
+        // 3. Validate property paths
+        self.validate_shape_paths(shape)?;
+
+        // 4. Validate individual constraints
+        self.validate_shape_constraints(shape)?;
+
+        // 5. Validate constraint combinations
+        self.validate_constraint_combinations(shape)?;
+
+        // 6. Validate metadata
+        self.validate_shape_metadata(shape)?;
+
+        // 7. Validate inheritance references
+        self.validate_inheritance_references(shape)?;
+
+        Ok(())
+    }
+
+    /// Validate shape type requirements
+    fn validate_shape_type(&self, shape: &Shape) -> Result<()> {
+        match shape.shape_type {
+            ShapeType::PropertyShape => {
+                if shape.path.is_none() {
+                    return Err(ShaclError::ShapeParsing(format!(
+                        "Property shape '{}' must have a property path",
+                        shape.id
+                    )));
+                }
+
+                // Property shapes can have targets, though it's more common for node shapes
+                // We'll allow all target types but log a warning for unusual combinations
+                if !shape.targets.is_empty() {
+                    for target in &shape.targets {
+                        match target {
+                            Target::Class(_) => {
+                                tracing::debug!(
+                                    "Property shape '{}' has a class target, which is valid but unusual",
+                                    shape.id
+                                );
+                            }
+                            _ => {} // All target types are valid for property shapes
+                        }
+                    }
+                }
+            }
+            ShapeType::NodeShape => {
+                if shape.path.is_some() {
+                    return Err(ShaclError::ShapeParsing(format!(
+                        "Node shape '{}' should not have a property path",
+                        shape.id
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate shape targets
+    fn validate_shape_targets(&self, shape: &Shape) -> Result<()> {
+        for target in &shape.targets {
+            match target {
+                Target::Class(class_iri) => {
+                    // Validate that the class IRI is a valid IRI
+                    self.validate_iri_format(class_iri.as_str())?;
+                }
+                Target::Node(node_term) => {
+                    // Validate that the node term is valid
+                    if let Term::NamedNode(node_iri) = node_term {
+                        self.validate_iri_format(node_iri.as_str())?;
+                    }
+                    // Other term types (blank nodes, literals) are also valid targets
+                }
+                Target::SubjectsOf(property_iri) => {
+                    // Validate that the property IRI is a valid IRI
+                    self.validate_iri_format(property_iri.as_str())?;
+                }
+                Target::ObjectsOf(property_iri) => {
+                    // Validate that the property IRI is a valid IRI
+                    self.validate_iri_format(property_iri.as_str())?;
+                }
+                Target::Sparql(sparql_target) => {
+                    // Validate SPARQL query syntax
+                    self.validate_sparql_query(&sparql_target.query)?;
+                }
+                Target::Implicit(class_iri) => {
+                    // Validate that the implicit class IRI is a valid IRI
+                    self.validate_iri_format(class_iri.as_str())?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate property paths
+    fn validate_shape_paths(&self, shape: &Shape) -> Result<()> {
+        if let Some(path) = &shape.path {
+            self.validate_property_path(path)?;
+        }
+        Ok(())
+    }
+
+    /// Validate property path structure
+    fn validate_property_path(&self, path: &PropertyPath) -> Result<()> {
+        match path {
+            PropertyPath::Predicate(iri) => {
+                self.validate_iri_format(iri.as_str())?;
+            }
+            PropertyPath::Inverse(inner_path) => {
+                self.validate_property_path(inner_path)?;
+            }
+            PropertyPath::Sequence(paths) => {
+                if paths.is_empty() {
+                    return Err(ShaclError::ShapeParsing(
+                        "Sequence path cannot be empty".to_string(),
+                    ));
+                }
+                for p in paths {
+                    self.validate_property_path(p)?;
+                }
+            }
+            PropertyPath::Alternative(paths) => {
+                if paths.len() < 2 {
+                    return Err(ShaclError::ShapeParsing(
+                        "Alternative path must have at least 2 alternatives".to_string(),
+                    ));
+                }
+                for p in paths {
+                    self.validate_property_path(p)?;
+                }
+            }
+            PropertyPath::ZeroOrMore(inner_path)
+            | PropertyPath::OneOrMore(inner_path)
+            | PropertyPath::ZeroOrOne(inner_path) => {
+                self.validate_property_path(inner_path)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate shape constraints
+    fn validate_shape_constraints(&self, shape: &Shape) -> Result<()> {
+        for (component_id, constraint) in &shape.constraints {
+            // Validate individual constraint
+            constraint.validate().map_err(|e| {
+                ShaclError::ShapeParsing(format!(
+                    "Invalid constraint '{}' in shape '{}': {}",
+                    component_id, shape.id, e
+                ))
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Validate constraint combinations for logical consistency
+    fn validate_constraint_combinations(&self, shape: &Shape) -> Result<()> {
+        let constraints = &shape.constraints;
+
+        // Check for conflicting cardinality constraints
+        if let (Some(min_count), Some(max_count)) = (
+            constraints.get(&ConstraintComponentId::new("minCount")),
+            constraints.get(&ConstraintComponentId::new("maxCount")),
+        ) {
+            if let (Constraint::MinCount(min), Constraint::MaxCount(max)) = (min_count, max_count) {
+                if min.min_count > max.max_count {
+                    return Err(ShaclError::ShapeParsing(format!(
+                        "Shape '{}' has conflicting cardinality: minCount ({}) > maxCount ({})",
+                        shape.id, min.min_count, max.max_count
+                    )));
+                }
+            }
         }
 
-        // Validate constraints
-        for (component_id, constraint) in &shape.constraints {
-            constraint.validate()?;
+        // Check for conflicting string length constraints
+        if let (Some(min_length), Some(max_length)) = (
+            constraints.get(&ConstraintComponentId::new("minLength")),
+            constraints.get(&ConstraintComponentId::new("maxLength")),
+        ) {
+            if let (Constraint::MinLength(min), Constraint::MaxLength(max)) =
+                (min_length, max_length)
+            {
+                if min.min_length > max.max_length {
+                    return Err(ShaclError::ShapeParsing(format!(
+                        "Shape '{}' has conflicting string length: minLength ({}) > maxLength ({})",
+                        shape.id, min.min_length, max.max_length
+                    )));
+                }
+            }
+        }
+
+        // Check for conflicting numeric range constraints
+        self.validate_numeric_range_consistency(shape, constraints)?;
+
+        Ok(())
+    }
+
+    /// Validate numeric range constraint consistency
+    fn validate_numeric_range_consistency(
+        &self,
+        shape: &Shape,
+        constraints: &IndexMap<ConstraintComponentId, Constraint>,
+    ) -> Result<()> {
+        // Extract numeric bounds (as literals for basic consistency check)
+        let mut min_inclusive: Option<&Literal> = None;
+        let mut max_inclusive: Option<&Literal> = None;
+        let mut min_exclusive: Option<&Literal> = None;
+        let mut max_exclusive: Option<&Literal> = None;
+
+        for (_, constraint) in constraints {
+            match constraint {
+                Constraint::MinInclusive(val) => min_inclusive = Some(&val.min_value),
+                Constraint::MaxInclusive(val) => max_inclusive = Some(&val.max_value),
+                Constraint::MinExclusive(val) => min_exclusive = Some(&val.min_value),
+                Constraint::MaxExclusive(val) => max_exclusive = Some(&val.max_value),
+                _ => {}
+            }
+        }
+
+        // Basic consistency check - try to parse as numbers for simple validation
+        if let (Some(min_inc), Some(max_inc)) = (min_inclusive, max_inclusive) {
+            if let (Ok(min_val), Ok(max_val)) = (
+                min_inc.value().parse::<f64>(),
+                max_inc.value().parse::<f64>(),
+            ) {
+                if min_val > max_val {
+                    return Err(ShaclError::ShapeParsing(format!(
+                        "Shape '{}' has inconsistent range: minInclusive ({}) > maxInclusive ({})",
+                        shape.id, min_inc, max_inc
+                    )));
+                }
+            }
+        }
+
+        if let (Some(min_exc), Some(max_exc)) = (min_exclusive, max_exclusive) {
+            if let (Ok(min_val), Ok(max_val)) = (
+                min_exc.value().parse::<f64>(),
+                max_exc.value().parse::<f64>(),
+            ) {
+                if min_val >= max_val {
+                    return Err(ShaclError::ShapeParsing(format!(
+                        "Shape '{}' has inconsistent range: minExclusive ({}) >= maxExclusive ({})",
+                        shape.id, min_exc, max_exc
+                    )));
+                }
+            }
         }
 
         Ok(())
+    }
+
+    /// Validate shape metadata
+    fn validate_shape_metadata(&self, shape: &Shape) -> Result<()> {
+        // Validate severity
+        match shape.severity {
+            Severity::Info | Severity::Warning | Severity::Violation => {
+                // Valid severities
+            }
+        }
+
+        // Validate messages (check for valid language tags)
+        for (lang_tag, _message) in &shape.messages {
+            if !self.is_valid_language_tag(lang_tag) {
+                return Err(ShaclError::ShapeParsing(format!(
+                    "Shape '{}' has invalid language tag: '{}'",
+                    shape.id, lang_tag
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate inheritance references
+    fn validate_inheritance_references(&self, shape: &Shape) -> Result<()> {
+        for parent_shape_id in &shape.extends {
+            // Check if the parent shape is known
+            if !self.shapes.contains_key(parent_shape_id) {
+                tracing::warn!(
+                    "Shape '{}' extends unknown shape '{}'",
+                    shape.id,
+                    parent_shape_id
+                );
+                // This is a warning, not an error, as the parent shape might be defined later
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate IRI format
+    fn validate_iri_format(&self, iri: &str) -> Result<()> {
+        use url::Url;
+
+        // Check if it's a valid absolute IRI
+        if iri.starts_with("http://") || iri.starts_with("https://") || iri.starts_with("urn:") {
+            Url::parse(iri)
+                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid IRI '{}': {}", iri, e)))?;
+        } else if iri.contains(':') {
+            // Could be a prefixed name - validate prefix part
+            if let Some(colon_pos) = iri.find(':') {
+                let prefix = &iri[..colon_pos];
+                if prefix.is_empty() {
+                    return Err(ShaclError::ShapeParsing(format!(
+                        "Invalid prefixed name '{}': empty prefix",
+                        iri
+                    )));
+                }
+            }
+        } else {
+            return Err(ShaclError::ShapeParsing(format!(
+                "Invalid IRI '{}': must be absolute or prefixed",
+                iri
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Validate SPARQL query syntax (basic validation)
+    fn validate_sparql_query(&self, query: &str) -> Result<()> {
+        // Basic validation - check for required keywords
+        let query_upper = query.to_uppercase();
+
+        if !query_upper.contains("SELECT")
+            && !query_upper.contains("ASK")
+            && !query_upper.contains("CONSTRUCT")
+            && !query_upper.contains("DESCRIBE")
+        {
+            return Err(ShaclError::ShapeParsing(
+                "SPARQL query must contain a valid query form (SELECT, ASK, CONSTRUCT, or DESCRIBE)".to_string()
+            ));
+        }
+
+        // Check for balanced braces
+        let mut brace_count = 0;
+        for char in query.chars() {
+            match char {
+                '{' => brace_count += 1,
+                '}' => brace_count -= 1,
+                _ => {}
+            }
+            if brace_count < 0 {
+                return Err(ShaclError::ShapeParsing(
+                    "SPARQL query has unbalanced braces".to_string(),
+                ));
+            }
+        }
+
+        if brace_count != 0 {
+            return Err(ShaclError::ShapeParsing(
+                "SPARQL query has unbalanced braces".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Check if a language tag is valid (basic check)
+    fn is_valid_language_tag(&self, tag: &str) -> bool {
+        // Very basic validation - language tags should be 2-3 characters, possibly with region
+        // Format: language[-region] e.g., "en", "en-US", "fr-CA"
+        if tag.is_empty() || tag.len() > 8 {
+            return false;
+        }
+
+        let parts: Vec<&str> = tag.split('-').collect();
+        if parts.is_empty() || parts.len() > 2 {
+            return false;
+        }
+
+        // First part should be 2-3 character language code
+        let lang = parts[0];
+        if lang.len() < 2 || lang.len() > 3 || !lang.chars().all(|c| c.is_alphabetic()) {
+            return false;
+        }
+
+        // Optional second part should be 2-3 character region code
+        if parts.len() == 2 {
+            let region = parts[1];
+            if region.len() < 2 || region.len() > 3 || !region.chars().all(|c| c.is_alphabetic()) {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Update shape dependency graph
@@ -652,7 +1054,7 @@ impl Validator {
         // Check for circular dependencies
         if petgraph::algo::is_cyclic_directed(&self.shape_dependencies) {
             return Err(ShaclError::ShapeParsing(
-                "Circular dependency detected in shape definitions".to_string(),
+                "circular dependency detected in shape definitions".to_string(),
             ));
         }
 

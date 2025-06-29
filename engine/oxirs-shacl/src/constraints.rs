@@ -273,7 +273,15 @@ impl ConstraintEvaluator for ClassConstraint {
     ) -> Result<ConstraintEvaluationResult> {
         // For each value, check if it's an instance of the required class
         for value in &context.values {
+            println!(
+                "DEBUG ClassConstraint: Checking if value {:?} is instance of class {}",
+                value, self.class_iri
+            );
             let is_instance = self.check_class_membership(store, value)?;
+            println!(
+                "DEBUG ClassConstraint: Value {:?} is_instance: {}",
+                value, is_instance
+            );
             if !is_instance {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -1513,6 +1521,10 @@ impl ConstraintEvaluator for QualifiedValueShapeConstraint {
         // For each value, check if it conforms to the qualified value shape
         for value in &context.values {
             let conforms = self.validate_value_against_shape(store, value, context)?;
+            println!(
+                "DEBUG QualifiedValueShape: value {:?} conforms to shape {}: {}",
+                value, self.qualified_value_shape, conforms
+            );
             if conforms {
                 conforming_count += 1;
             }
@@ -1563,7 +1575,15 @@ impl QualifiedValueShapeConstraint {
 
         // If we have access to the shape through context's shapes registry
         if let Some(shapes_registry) = &context.shapes_registry {
+            println!(
+                "DEBUG: Using shapes registry path for shape {}",
+                self.qualified_value_shape
+            );
             if let Some(qualified_shape) = shapes_registry.get(&self.qualified_value_shape) {
+                println!(
+                    "DEBUG: Found qualified shape in registry: {:?}",
+                    qualified_shape.id
+                );
                 // Create a new validation context for this value
                 let value_context =
                     ConstraintContext::new(value.clone(), self.qualified_value_shape.clone())
@@ -1572,14 +1592,30 @@ impl QualifiedValueShapeConstraint {
                         .with_shapes_registry(shapes_registry.clone());
 
                 // Validate each constraint in the qualified shape
-                for (_, constraint) in &qualified_shape.constraints {
+                for (component_id, constraint) in &qualified_shape.constraints {
+                    println!(
+                        "DEBUG: Evaluating constraint {:?} on value {:?}",
+                        component_id, value
+                    );
                     let result = constraint.evaluate(store, &value_context)?;
+                    println!(
+                        "DEBUG: Constraint result: is_violated={}, is_error={}",
+                        result.is_violated(),
+                        result.is_error()
+                    );
                     if result.is_violated() || result.is_error() {
                         return Ok(false);
                     }
                 }
                 return Ok(true);
+            } else {
+                println!(
+                    "DEBUG: Shape {} not found in registry",
+                    self.qualified_value_shape
+                );
             }
+        } else {
+            println!("DEBUG: No shapes registry available");
         }
 
         // Fallback: basic validation based on shape ID patterns

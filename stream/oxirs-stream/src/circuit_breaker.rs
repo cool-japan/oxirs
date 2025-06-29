@@ -1051,6 +1051,14 @@ mod tests {
             success_threshold: 2,
             timeout: Duration::from_millis(100),
             half_open_max_calls: 2,
+            adaptive_thresholds: false,
+            adaptive_window_size: 50,
+            max_failure_rate: 60.0,
+            classify_failures: false,
+            failure_type_timeouts: HashMap::new(),
+            enable_metrics: false,
+            sliding_window_size: 30,
+            recovery_strategy: RecoveryStrategy::Linear,
         }
     }
 

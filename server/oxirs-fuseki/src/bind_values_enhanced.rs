@@ -702,7 +702,8 @@ impl EnhancedBindProcessor {
     }
 
     async fn update_statistics(&self, eval_time: f64) {
-        if let Ok(mut stats) = self.statistics.write().await {
+        {
+            let mut stats = self.statistics.write().await;
             stats.total_bind_expressions += 1;
 
             let total_time = stats.average_evaluation_time_ms * stats.total_bind_expressions as f64;
@@ -896,7 +897,8 @@ impl EnhancedValuesProcessor {
     }
 
     async fn update_statistics(&self, clause: &ValuesClause) {
-        if let Ok(mut stats) = self.statistics.write().await {
+        {
+            let mut stats = self.statistics.write().await;
             stats.total_values_clauses += 1;
             stats.total_value_count += clause.rows.len() as u64;
         }

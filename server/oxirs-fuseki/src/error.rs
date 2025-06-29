@@ -67,6 +67,15 @@ pub enum FusekiError {
     #[error("Timeout: {0}")]
     TimeoutWithMessage(String),
 
+    #[error("Invalid URL: {0}")]
+    InvalidUrl(String),
+
+    #[error("Network error: {message}")]
+    NetworkError { message: String },
+
+    #[error("Service error: {message}")]
+    ServiceError { message: String },
+
     #[error("Service unavailable: {message}")]
     ServiceUnavailable { message: String },
 
@@ -137,7 +146,8 @@ impl FusekiError {
             | FusekiError::InvalidUpdate { .. }
             | FusekiError::Parse { .. }
             | FusekiError::Validation { .. }
-            | FusekiError::ValidatorError(..) => StatusCode::BAD_REQUEST,
+            | FusekiError::ValidatorError(..)
+            | FusekiError::InvalidUrl(..) => StatusCode::BAD_REQUEST,
 
             FusekiError::Authentication { .. } => StatusCode::UNAUTHORIZED,
 
@@ -154,6 +164,10 @@ impl FusekiError {
             FusekiError::UnsupportedMediaType { .. } => StatusCode::UNSUPPORTED_MEDIA_TYPE,
 
             FusekiError::RateLimit => StatusCode::TOO_MANY_REQUESTS,
+
+            FusekiError::NetworkError { .. } | FusekiError::ServiceError { .. } => {
+                StatusCode::BAD_GATEWAY
+            }
 
             FusekiError::ServiceUnavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
 
@@ -190,6 +204,9 @@ impl FusekiError {
             FusekiError::MethodNotAllowed => "method_not_allowed",
             FusekiError::UnsupportedMediaType { .. } => "unsupported_media_type",
             FusekiError::Timeout | FusekiError::TimeoutWithMessage(..) => "timeout",
+            FusekiError::InvalidUrl(..) => "invalid_url",
+            FusekiError::NetworkError { .. } => "network_error",
+            FusekiError::ServiceError { .. } => "service_error",
             FusekiError::ServiceUnavailable { .. } => "service_unavailable",
             FusekiError::Internal { .. } => "internal_error",
             FusekiError::Io(..) => "io_error",
@@ -394,7 +411,7 @@ pub trait IntoFusekiError<T> {
     fn with_context(self, context: &str) -> FusekiResult<T>;
 }
 
-impl<T, E> IntoFusekiError<T> for Result<T, E>
+impl<T, E> IntoFusekiError<T> for std::result::Result<T, E>
 where
     E: fmt::Display,
 {

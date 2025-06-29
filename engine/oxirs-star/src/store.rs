@@ -32,13 +32,13 @@ mod conversion {
                 let blank_node = CoreBlankNode::new(&bn.id).map_err(|e| StarError::CoreError(e))?;
                 Ok(Subject::BlankNode(blank_node))
             }
-            StarTerm::Literal(_) => Err(StarError::InvalidTermType(
+            StarTerm::Literal(_) => Err(StarError::invalid_term_type(
                 "Literal cannot be used as subject".to_string(),
             )),
-            StarTerm::QuotedTriple(_) => Err(StarError::InvalidTermType(
+            StarTerm::QuotedTriple(_) => Err(StarError::invalid_term_type(
                 "Quoted triple cannot be converted to core RDF subject".to_string(),
             )),
-            StarTerm::Variable(_) => Err(StarError::InvalidTermType(
+            StarTerm::Variable(_) => Err(StarError::invalid_term_type(
                 "Variable cannot be converted to core RDF subject".to_string(),
             )),
         }
@@ -51,7 +51,7 @@ mod conversion {
                     CoreNamedNode::new(&nn.iri).map_err(|e| StarError::CoreError(e))?;
                 Ok(Predicate::NamedNode(named_node))
             }
-            _ => Err(StarError::InvalidTermType(
+            _ => Err(StarError::invalid_term_type(
                 "Only IRIs can be used as predicates".to_string(),
             )),
         }
@@ -72,10 +72,10 @@ mod conversion {
                 let literal = CoreLiteral::new(&lit.value);
                 Ok(Object::Literal(literal))
             }
-            StarTerm::QuotedTriple(_) => Err(StarError::InvalidTermType(
+            StarTerm::QuotedTriple(_) => Err(StarError::invalid_term_type(
                 "Quoted triple cannot be converted to core RDF object".to_string(),
             )),
-            StarTerm::Variable(_) => Err(StarError::InvalidTermType(
+            StarTerm::Variable(_) => Err(StarError::invalid_term_type(
                 "Variable cannot be converted to core RDF object".to_string(),
             )),
         }
@@ -867,10 +867,10 @@ impl StarStore {
         match subject {
             oxirs_core::model::Subject::NamedNode(nn) => Ok(StarTerm::iri(nn.as_str())?),
             oxirs_core::model::Subject::BlankNode(bn) => Ok(StarTerm::blank_node(bn.as_str())?),
-            oxirs_core::model::Subject::Variable(_) => Err(StarError::InvalidTermType(
+            oxirs_core::model::Subject::Variable(_) => Err(StarError::invalid_term_type(
                 "Variables are not supported in subjects for RDF-star storage".to_string(),
             )),
-            oxirs_core::model::Subject::QuotedTriple(_) => Err(StarError::InvalidTermType(
+            oxirs_core::model::Subject::QuotedTriple(_) => Err(StarError::invalid_term_type(
                 "Quoted triples from core are not yet supported".to_string(),
             )),
         }
@@ -883,7 +883,7 @@ impl StarStore {
     ) -> StarResult<StarTerm> {
         match predicate {
             oxirs_core::model::Predicate::NamedNode(nn) => Ok(StarTerm::iri(nn.as_str())?),
-            oxirs_core::model::Predicate::Variable(_) => Err(StarError::InvalidTermType(
+            oxirs_core::model::Predicate::Variable(_) => Err(StarError::invalid_term_type(
                 "Variables are not supported in predicates for RDF-star storage".to_string(),
             )),
         }
@@ -895,10 +895,10 @@ impl StarStore {
             oxirs_core::model::Object::NamedNode(nn) => Ok(StarTerm::iri(nn.as_str())?),
             oxirs_core::model::Object::BlankNode(bn) => Ok(StarTerm::blank_node(bn.as_str())?),
             oxirs_core::model::Object::Literal(lit) => Ok(StarTerm::literal(lit.value())?),
-            oxirs_core::model::Object::Variable(_) => Err(StarError::InvalidTermType(
+            oxirs_core::model::Object::Variable(_) => Err(StarError::invalid_term_type(
                 "Variables are not supported in objects for RDF-star storage".to_string(),
             )),
-            oxirs_core::model::Object::QuotedTriple(_) => Err(StarError::InvalidTermType(
+            oxirs_core::model::Object::QuotedTriple(_) => Err(StarError::invalid_term_type(
                 "Quoted triples from core are not yet supported".to_string(),
             )),
         }

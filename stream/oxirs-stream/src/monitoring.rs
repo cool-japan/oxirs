@@ -116,6 +116,17 @@ pub enum HealthStatus {
     Unknown,
 }
 
+impl std::fmt::Display for HealthStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HealthStatus::Healthy => write!(f, "healthy"),
+            HealthStatus::Warning => write!(f, "warning"),
+            HealthStatus::Critical => write!(f, "critical"),
+            HealthStatus::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
 /// Component health information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentHealth {
@@ -423,7 +434,7 @@ oxirs_availability {}
 }
 
 impl HealthChecker {
-    fn new(config: MonitoringConfig) -> Self {
+    pub fn new(config: MonitoringConfig) -> Self {
         Self {
             config,
             health_status: Arc::new(RwLock::new(SystemHealth::default())),

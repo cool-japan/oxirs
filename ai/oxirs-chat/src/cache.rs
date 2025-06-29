@@ -16,7 +16,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     llm::LLMResponse,
-    rag::{AssembledContext, RetrievedKnowledge},
+    // rag::{AssembledContext, RetrievedKnowledge}, // Temporarily disabled
     Message,
 };
 

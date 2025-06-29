@@ -949,17 +949,13 @@ impl KGEmbedding {
             KGEmbeddingModelType::RotatE => Box::new(RotatE::new(config.clone())),
             KGEmbeddingModelType::GCN => {
                 // Create GCN with default parameters
-                let gcn = GCN::new(config.dimensions, config.dimensions, 0.1, false);
+                let gcn = GCN::new(config.clone());
                 Box::new(GCNAdapter::new(gcn))
             }
             KGEmbeddingModelType::GraphSAGE => {
                 // Create GraphSAGE with default parameters
-                let graphsage = GraphSAGE::new(
-                    config.dimensions,
-                    config.dimensions,
-                    crate::gnn_embeddings::AggregatorType::Mean,
-                    0.1,
-                );
+                let graphsage = GraphSAGE::new(config.clone())
+                    .with_aggregator(crate::gnn_embeddings::AggregatorType::Mean);
                 Box::new(GraphSAGEAdapter::new(graphsage))
             }
         };
@@ -1074,12 +1070,12 @@ impl KGEmbeddingModel for GraphSAGEAdapter {
 
     fn get_entity_embedding(&self, _entity: &str) -> Option<Vector> {
         // GraphSAGE embeddings would be computed from neighbors
-        Some(Vector::new(vec![0.0; self.graphsage.output_dim]))
+        Some(Vector::new(vec![0.0; self.graphsage.dimensions()]))
     }
 
     fn get_relation_embedding(&self, _relation: &str) -> Option<Vector> {
         // Relations in GraphSAGE are typically handled differently
-        Some(Vector::new(vec![0.0; self.graphsage.output_dim]))
+        Some(Vector::new(vec![0.0; self.graphsage.dimensions()]))
     }
 
     fn score_triple(&self, _triple: &Triple) -> f32 {

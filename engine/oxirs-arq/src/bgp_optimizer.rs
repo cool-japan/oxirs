@@ -4,8 +4,9 @@
 //! selectivity estimation for triple patterns.
 
 use crate::algebra::{Algebra, Term, TriplePattern};
-use crate::optimizer::{IndexStatistics, IndexType, Statistics};
+use crate::optimizer::{IndexPosition, IndexStatistics, IndexType, Statistics};
 use anyhow::Result;
+use oxirs_core::model::NamedNode;
 use std::collections::{HashMap, HashSet};
 
 /// BGP optimization result
@@ -67,6 +68,10 @@ pub struct IndexUsagePlan {
     pub pattern_indexes: Vec<IndexAssignment>,
     /// Join index opportunities
     pub join_indexes: Vec<JoinIndexOpportunity>,
+    /// Multi-index intersection opportunities
+    pub index_intersections: Vec<IndexIntersection>,
+    /// Bloom filter recommendations
+    pub bloom_filter_candidates: Vec<BloomFilterCandidate>,
 }
 
 /// Index assignment for a pattern
@@ -91,6 +96,47 @@ pub struct JoinIndexOpportunity {
     pub join_var: String,
     /// Potential speedup factor
     pub speedup_factor: f64,
+}
+
+/// Multi-index intersection for complex queries
+#[derive(Debug, Clone)]
+pub struct IndexIntersection {
+    /// Pattern index
+    pub pattern_idx: usize,
+    /// Primary index to use
+    pub primary_index: IndexType,
+    /// Secondary indexes to intersect
+    pub secondary_indexes: Vec<IndexType>,
+    /// Expected selectivity improvement
+    pub selectivity_improvement: f64,
+    /// Intersection algorithm recommendation
+    pub intersection_algorithm: IntersectionAlgorithm,
+}
+
+/// Intersection algorithm types
+#[derive(Debug, Clone)]
+pub enum IntersectionAlgorithm {
+    /// Bitmap intersection for dense results
+    Bitmap,
+    /// Hash-based intersection for sparse results
+    Hash,
+    /// Skip-list intersection for ordered indexes
+    SkipList,
+}
+
+/// Bloom filter candidate for negative lookups
+#[derive(Debug, Clone)]
+pub struct BloomFilterCandidate {
+    /// Pattern index
+    pub pattern_idx: usize,
+    /// Filter position (Subject, Predicate, Object)
+    pub filter_position: TermPosition,
+    /// Expected false positive rate
+    pub false_positive_rate: f64,
+    /// Memory footprint estimate (bytes)
+    pub memory_footprint: usize,
+    /// Expected performance gain
+    pub performance_gain: f64,
 }
 
 /// Advanced BGP optimizer
@@ -600,20 +646,62 @@ impl<'a> BGPOptimizer<'a> {
             }
         }
 
+        // Identify index intersection opportunities
+        let index_intersections = self.identify_index_intersections(&patterns, &pattern_indexes)?;
+
+        // Identify bloom filter candidates
+        let bloom_filter_candidates =
+            self.identify_bloom_filter_candidates(&patterns, pattern_selectivities)?;
+
         Ok(IndexUsagePlan {
             pattern_indexes,
             join_indexes,
+            index_intersections,
+            bloom_filter_candidates,
         })
     }
 
-    /// Select best index for a pattern
+    /// Select best index for a pattern using advanced index types
     fn select_best_index_for_pattern(&self, pattern: &TriplePattern) -> Result<IndexType> {
         let subject_bound = self.is_bound(&pattern.subject);
         let predicate_bound = self.is_bound(&pattern.predicate);
         let object_bound = self.is_bound(&pattern.object);
 
-        // Priority order for index selection
+        // Check for specialized index types first
+        if let Some(specialized) = self.select_specialized_index(pattern)? {
+            return Ok(specialized);
+        }
+
+        // Enhanced index selection with advanced types
+        if subject_bound && predicate_bound && object_bound {
+            // All three bound - try hash index for exact lookup
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::HashIndex(IndexPosition::FullTriple))
+            {
+                return Ok(IndexType::HashIndex(IndexPosition::FullTriple));
+            }
+        }
+
         if subject_bound && predicate_bound {
+            // Try hash index for exact SP lookup
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::HashIndex(IndexPosition::SubjectPredicate))
+            {
+                return Ok(IndexType::HashIndex(IndexPosition::SubjectPredicate));
+            }
+            // Fall back to B+ tree index
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::BTreeIndex(IndexPosition::SubjectPredicate))
+            {
+                return Ok(IndexType::BTreeIndex(IndexPosition::SubjectPredicate));
+            }
+            // Traditional index
             if self
                 .index_stats
                 .available_indexes
@@ -624,6 +712,33 @@ impl<'a> BGPOptimizer<'a> {
         }
 
         if predicate_bound && object_bound {
+            // Check for bitmap index if predicate has low cardinality
+            if self.is_low_cardinality_predicate(pattern) {
+                if self
+                    .index_stats
+                    .available_indexes
+                    .contains(&IndexType::BitmapIndex(IndexPosition::PredicateObject))
+                {
+                    return Ok(IndexType::BitmapIndex(IndexPosition::PredicateObject));
+                }
+            }
+            // Hash index for exact PO lookup
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::HashIndex(IndexPosition::PredicateObject))
+            {
+                return Ok(IndexType::HashIndex(IndexPosition::PredicateObject));
+            }
+            // B+ tree index
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::BTreeIndex(IndexPosition::PredicateObject))
+            {
+                return Ok(IndexType::BTreeIndex(IndexPosition::PredicateObject));
+            }
+            // Traditional index
             if self
                 .index_stats
                 .available_indexes
@@ -634,6 +749,23 @@ impl<'a> BGPOptimizer<'a> {
         }
 
         if subject_bound && object_bound {
+            // Hash index for exact SO lookup
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::HashIndex(IndexPosition::SubjectObject))
+            {
+                return Ok(IndexType::HashIndex(IndexPosition::SubjectObject));
+            }
+            // B+ tree index
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::BTreeIndex(IndexPosition::SubjectObject))
+            {
+                return Ok(IndexType::BTreeIndex(IndexPosition::SubjectObject));
+            }
+            // Traditional index
             if self
                 .index_stats
                 .available_indexes
@@ -643,8 +775,145 @@ impl<'a> BGPOptimizer<'a> {
             }
         }
 
-        // Default to subject-predicate index
-        Ok(IndexType::SubjectPredicate)
+        // Single bound term optimizations
+        if predicate_bound {
+            // Check for bitmap index for low cardinality predicates
+            if self.is_low_cardinality_predicate(pattern) {
+                if self
+                    .index_stats
+                    .available_indexes
+                    .contains(&IndexType::BitmapIndex(IndexPosition::Predicate))
+                {
+                    return Ok(IndexType::BitmapIndex(IndexPosition::Predicate));
+                }
+            }
+            // B+ tree for range queries
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::BTreeIndex(IndexPosition::Predicate))
+            {
+                return Ok(IndexType::BTreeIndex(IndexPosition::Predicate));
+            }
+        }
+
+        // Default to subject-predicate B+ tree index
+        if self
+            .index_stats
+            .available_indexes
+            .contains(&IndexType::BTreeIndex(IndexPosition::SubjectPredicate))
+        {
+            Ok(IndexType::BTreeIndex(IndexPosition::SubjectPredicate))
+        } else {
+            Ok(IndexType::SubjectPredicate)
+        }
+    }
+
+    /// Select specialized index types for specific pattern characteristics
+    fn select_specialized_index(&self, pattern: &TriplePattern) -> Result<Option<IndexType>> {
+        // Spatial index for geographic data
+        if self.is_spatial_pattern(pattern) {
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::SpatialRTree)
+            {
+                return Ok(Some(IndexType::SpatialRTree));
+            }
+        }
+
+        // Temporal index for date/time data
+        if self.is_temporal_pattern(pattern) {
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::TemporalBTree)
+            {
+                return Ok(Some(IndexType::TemporalBTree));
+            }
+        }
+
+        // Full-text index for text search
+        if self.is_text_search_pattern(pattern) {
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::FullText)
+            {
+                return Ok(Some(IndexType::FullText));
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Check if pattern involves low cardinality predicate suitable for bitmap index
+    fn is_low_cardinality_predicate(&self, pattern: &TriplePattern) -> bool {
+        if let Term::Iri(iri) = &pattern.predicate {
+            if let Some(&frequency) = self.statistics.predicate_frequency.get(iri.as_str()) {
+                // Use bitmap index if predicate appears in less than 1% of triples
+                let total_triples = self
+                    .statistics
+                    .pattern_cardinality
+                    .values()
+                    .sum::<usize>()
+                    .max(1);
+                return frequency < total_triples / 100;
+            }
+        }
+        false
+    }
+
+    /// Check if pattern involves spatial/geographic data
+    fn is_spatial_pattern(&self, pattern: &TriplePattern) -> bool {
+        if let Term::Iri(iri) = &pattern.predicate {
+            let iri_str = iri.as_str();
+            iri_str.contains("geo")
+                || iri_str.contains("spatial")
+                || iri_str.contains("latitude")
+                || iri_str.contains("longitude")
+                || iri_str.contains("wkt")
+                || iri_str.contains("geometry")
+        } else {
+            false
+        }
+    }
+
+    /// Check if pattern involves temporal/date-time data
+    fn is_temporal_pattern(&self, pattern: &TriplePattern) -> bool {
+        // Check predicate for temporal indicators
+        if let Term::Iri(iri) = &pattern.predicate {
+            let iri_str = iri.as_str();
+            if iri_str.contains("date") || iri_str.contains("time") || iri_str.contains("temporal")
+            {
+                return true;
+            }
+        }
+
+        // Check object for date/time literals
+        if let Term::Literal(lit) = &pattern.object {
+            if let Some(ref datatype) = lit.datatype {
+                let dt_str = datatype.as_str();
+                return dt_str.contains("date")
+                    || dt_str.contains("time")
+                    || dt_str.contains("temporal");
+            }
+        }
+
+        false
+    }
+
+    /// Check if pattern involves text search
+    fn is_text_search_pattern(&self, pattern: &TriplePattern) -> bool {
+        if let Term::Iri(iri) = &pattern.predicate {
+            let iri_str = iri.as_str();
+            iri_str.contains("label")
+                || iri_str.contains("comment")
+                || iri_str.contains("description")
+                || iri_str.contains("text")
+        } else {
+            false
+        }
     }
 
     /// Estimate index scan cost
@@ -779,6 +1048,680 @@ impl<'a> BGPOptimizer<'a> {
                 .max(100_000),
         }
     }
+
+    /// Identify opportunities for index intersection
+    fn identify_index_intersections(
+        &self,
+        patterns: &[TriplePattern],
+        pattern_indexes: &[IndexAssignment],
+    ) -> Result<Vec<IndexIntersection>> {
+        let mut intersections = Vec::new();
+
+        for (idx, pattern) in patterns.iter().enumerate() {
+            let primary_index = pattern_indexes[idx].index_type.clone();
+            let mut secondary_indexes = Vec::new();
+
+            // Look for additional indexes that could be intersected
+            let bound_positions = self.count_bound_positions(pattern);
+            if bound_positions >= 2 {
+                // Multi-dimensional pattern - candidate for intersection
+
+                // Check available secondary indexes
+                for index_type in &self.index_stats.available_indexes {
+                    if *index_type != primary_index && self.is_index_applicable(pattern, index_type)
+                    {
+                        secondary_indexes.push(index_type.clone());
+                    }
+                }
+
+                if !secondary_indexes.is_empty() {
+                    let selectivity_improvement = self.estimate_intersection_benefit(
+                        pattern,
+                        &primary_index,
+                        &secondary_indexes,
+                    )?;
+
+                    if selectivity_improvement > 0.3 {
+                        // Significant improvement expected
+                        let algorithm = self.recommend_intersection_algorithm(
+                            &primary_index,
+                            &secondary_indexes,
+                            bound_positions,
+                        );
+
+                        intersections.push(IndexIntersection {
+                            pattern_idx: idx,
+                            primary_index,
+                            secondary_indexes,
+                            selectivity_improvement,
+                            intersection_algorithm: algorithm,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(intersections)
+    }
+
+    /// Identify candidates for bloom filter optimization
+    fn identify_bloom_filter_candidates(
+        &self,
+        patterns: &[TriplePattern],
+        pattern_selectivities: &[PatternSelectivity],
+    ) -> Result<Vec<BloomFilterCandidate>> {
+        let mut candidates = Vec::new();
+
+        for (idx, pattern) in patterns.iter().enumerate() {
+            let selectivity = pattern_selectivities[idx].selectivity;
+
+            // Bloom filters most effective for highly selective patterns
+            if selectivity < 0.1 {
+                // Check each position for bloom filter potential
+                for position in [TermPosition::Subject, TermPosition::Object] {
+                    if self.is_position_variable(pattern, position) {
+                        let performance_gain =
+                            self.estimate_bloom_filter_gain(pattern, position, selectivity)?;
+
+                        if performance_gain > 1.5 {
+                            let cardinality = self.get_total_count_for_position(position);
+                            let false_positive_rate = 0.01; // 1% default
+                            let memory_footprint =
+                                self.estimate_bloom_filter_size(cardinality, false_positive_rate);
+
+                            candidates.push(BloomFilterCandidate {
+                                pattern_idx: idx,
+                                filter_position: position,
+                                false_positive_rate,
+                                memory_footprint,
+                                performance_gain,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(candidates)
+    }
+
+    /// Count bound positions in a pattern
+    fn count_bound_positions(&self, pattern: &TriplePattern) -> usize {
+        let mut count = 0;
+        if self.is_bound(&pattern.subject) {
+            count += 1;
+        }
+        if self.is_bound(&pattern.predicate) {
+            count += 1;
+        }
+        if self.is_bound(&pattern.object) {
+            count += 1;
+        }
+        count
+    }
+
+    /// Check if an index is applicable to a pattern
+    fn is_index_applicable(&self, pattern: &TriplePattern, index_type: &IndexType) -> bool {
+        match index_type {
+            IndexType::SubjectPredicate => {
+                self.is_bound(&pattern.subject) || self.is_bound(&pattern.predicate)
+            }
+            IndexType::PredicateObject => {
+                self.is_bound(&pattern.predicate) || self.is_bound(&pattern.object)
+            }
+            IndexType::SubjectObject => {
+                self.is_bound(&pattern.subject) || self.is_bound(&pattern.object)
+            }
+            IndexType::FullText => {
+                // Full-text indexes apply to literal values
+                matches!(pattern.object, Term::Literal(_))
+            }
+            IndexType::Spatial => {
+                // Spatial indexes apply to geographic data (specialized use case)
+                false
+            }
+            IndexType::Temporal => {
+                // Temporal indexes apply to date/time literals
+                if let Term::Literal(lit) = &pattern.object {
+                    lit.datatype.as_ref().map_or(false, |dt| {
+                        let dt_str = dt.as_str();
+                        dt_str.contains("date") || dt_str.contains("time")
+                    })
+                } else {
+                    false
+                }
+            }
+            IndexType::Custom(_) => {
+                // Custom indexes require specialized logic
+                false
+            }
+            IndexType::BTreeIndex(pos) => {
+                // BTree indexes are efficient for range queries
+                self.pattern_benefits_from_index(pattern, pos)
+            }
+            IndexType::HashIndex(pos) => {
+                // Hash indexes are efficient for equality lookups
+                self.pattern_benefits_from_index(pattern, pos)
+            }
+            IndexType::BitmapIndex(pos) => {
+                // Bitmap indexes are efficient for low-cardinality data
+                self.pattern_benefits_from_index(pattern, pos)
+            }
+            IndexType::SpatialRTree => {
+                // Spatial R-tree indexes for geographic data
+                false
+            }
+            IndexType::TemporalBTree => {
+                // Temporal BTree indexes for time-series data
+                if let Term::Literal(lit) = &pattern.object {
+                    lit.datatype.as_ref().map_or(false, |dt| {
+                        let dt_str = dt.as_str();
+                        dt_str.contains("date") || dt_str.contains("time")
+                    })
+                } else {
+                    false
+                }
+            }
+            IndexType::MultiColumnBTree(positions) => {
+                // Multi-column indexes benefit from multiple bound terms
+                positions
+                    .iter()
+                    .any(|pos| self.pattern_benefits_from_index(pattern, pos))
+            }
+            IndexType::BloomFilter(pos) => {
+                // Bloom filters are useful for membership testing
+                self.pattern_benefits_from_index(pattern, pos)
+            }
+        }
+    }
+
+    /// Check if a pattern benefits from a specific index position
+    fn pattern_benefits_from_index(&self, pattern: &TriplePattern, pos: &IndexPosition) -> bool {
+        match pos {
+            IndexPosition::Subject => self.is_bound(&pattern.subject),
+            IndexPosition::Predicate => self.is_bound(&pattern.predicate),
+            IndexPosition::Object => self.is_bound(&pattern.object),
+            IndexPosition::SubjectPredicate => {
+                self.is_bound(&pattern.subject) || self.is_bound(&pattern.predicate)
+            }
+            IndexPosition::PredicateObject => {
+                self.is_bound(&pattern.predicate) || self.is_bound(&pattern.object)
+            }
+            IndexPosition::SubjectObject => {
+                self.is_bound(&pattern.subject) || self.is_bound(&pattern.object)
+            }
+            IndexPosition::FullTriple => {
+                self.is_bound(&pattern.subject)
+                    && self.is_bound(&pattern.predicate)
+                    && self.is_bound(&pattern.object)
+            }
+        }
+    }
+
+    /// Estimate benefit of index intersection
+    fn estimate_intersection_benefit(
+        &self,
+        pattern: &TriplePattern,
+        primary_index: &IndexType,
+        secondary_indexes: &[IndexType],
+    ) -> Result<f64> {
+        let base_selectivity = 0.1; // Assumed selectivity without intersection
+        let intersection_factor = 1.0 / (1.0 + secondary_indexes.len() as f64);
+        Ok(1.0 - (base_selectivity * intersection_factor))
+    }
+
+    /// Recommend intersection algorithm based on characteristics
+    fn recommend_intersection_algorithm(
+        &self,
+        primary_index: &IndexType,
+        secondary_indexes: &[IndexType],
+        bound_positions: usize,
+    ) -> IntersectionAlgorithm {
+        if secondary_indexes.len() > 2 {
+            IntersectionAlgorithm::Bitmap // Best for multiple intersections
+        } else if bound_positions == 3 {
+            IntersectionAlgorithm::Hash // Good for highly selective queries
+        } else {
+            IntersectionAlgorithm::SkipList // Balanced approach
+        }
+    }
+
+    /// Check if a position in pattern is a variable
+    fn is_position_variable(&self, pattern: &TriplePattern, position: TermPosition) -> bool {
+        match position {
+            TermPosition::Subject => matches!(pattern.subject, Term::Variable(_)),
+            TermPosition::Predicate => matches!(pattern.predicate, Term::Variable(_)),
+            TermPosition::Object => matches!(pattern.object, Term::Variable(_)),
+        }
+    }
+
+    /// Estimate performance gain from bloom filter
+    fn estimate_bloom_filter_gain(
+        &self,
+        pattern: &TriplePattern,
+        position: TermPosition,
+        selectivity: f64,
+    ) -> Result<f64> {
+        // Bloom filters most effective for negative lookups
+        let negative_lookup_ratio = 1.0 - selectivity;
+        let access_cost_reduction = 0.9; // 90% reduction in unnecessary accesses
+        Ok(1.0 + (negative_lookup_ratio * access_cost_reduction * 10.0))
+    }
+
+    /// Estimate bloom filter memory size
+    fn estimate_bloom_filter_size(&self, cardinality: usize, false_positive_rate: f64) -> usize {
+        // Approximate bloom filter size calculation
+        let optimal_bits = (cardinality as f64
+            * (-false_positive_rate.ln() / (2.0_f64.ln().powi(2))))
+        .ceil() as usize;
+        optimal_bits / 8 // Convert bits to bytes
+    }
+
+    // Enhanced index intersection methods for advanced optimization
+
+    /// Identify intersections for OR conditions across patterns
+    fn identify_or_condition_intersections(
+        &self,
+        patterns: &[TriplePattern],
+        pattern_indexes: &[IndexAssignment],
+    ) -> Result<Vec<IndexIntersection>> {
+        let mut intersections = Vec::new();
+
+        // Look for patterns that could benefit from index union (OR operations)
+        for i in 0..patterns.len() {
+            for j in i + 1..patterns.len() {
+                if self.can_benefit_from_index_union(&patterns[i], &patterns[j]) {
+                    let union_opportunity = self.create_index_union_intersection(
+                        i,
+                        j,
+                        &pattern_indexes[i].index_type,
+                        &pattern_indexes[j].index_type,
+                        &patterns[i],
+                        &patterns[j],
+                    )?;
+
+                    if let Some(intersection) = union_opportunity {
+                        intersections.push(intersection);
+                    }
+                }
+            }
+        }
+
+        Ok(intersections)
+    }
+
+    /// Identify dynamic index selections based on workload patterns
+    fn identify_dynamic_index_selections(
+        &self,
+        patterns: &[TriplePattern],
+        pattern_indexes: &[IndexAssignment],
+    ) -> Result<Vec<IndexIntersection>> {
+        let mut intersections = Vec::new();
+
+        // Use adaptive selector to determine if alternative indexes would be better
+        for (idx, pattern) in patterns.iter().enumerate() {
+            let current_index = &pattern_indexes[idx].index_type;
+
+            // Get alternative indexes recommended by adaptive selector
+            let alternatives = self.get_adaptive_index_alternatives(pattern, current_index)?;
+
+            if !alternatives.is_empty() {
+                let selectivity_improvement =
+                    self.estimate_adaptive_improvement(pattern, current_index, &alternatives)?;
+
+                if selectivity_improvement > 0.2 {
+                    let algorithm = IntersectionAlgorithm::Hash; // Use hash for dynamic selection
+
+                    intersections.push(IndexIntersection {
+                        pattern_idx: idx,
+                        primary_index: current_index.clone(),
+                        secondary_indexes: alternatives,
+                        selectivity_improvement,
+                        intersection_algorithm: algorithm,
+                    });
+                }
+            }
+        }
+
+        Ok(intersections)
+    }
+
+    /// Enhanced index applicability check with advanced index types
+    fn is_index_applicable_enhanced(
+        &self,
+        pattern: &TriplePattern,
+        index_type: &IndexType,
+    ) -> bool {
+        match index_type {
+            IndexType::BTreeIndex(position) => self.is_btree_applicable(pattern, position),
+            IndexType::HashIndex(position) => self.is_hash_applicable(pattern, position),
+            IndexType::BitmapIndex(position) => self.is_bitmap_applicable(pattern, position),
+            IndexType::BloomFilter(position) => self.is_bloom_filter_applicable(pattern, position),
+            IndexType::SpatialRTree => self.is_spatial_pattern(pattern),
+            IndexType::TemporalBTree => self.is_temporal_pattern(pattern),
+            IndexType::MultiColumnBTree(positions) => {
+                self.is_multi_column_applicable(pattern, positions)
+            }
+            _ => self.is_index_applicable(pattern, index_type), // Fall back to original method
+        }
+    }
+
+    /// Check if B+ tree index is applicable
+    fn is_btree_applicable(
+        &self,
+        pattern: &TriplePattern,
+        position: &crate::optimizer::IndexPosition,
+    ) -> bool {
+        use crate::optimizer::IndexPosition;
+        match position {
+            IndexPosition::Subject => self.is_bound(&pattern.subject),
+            IndexPosition::Predicate => self.is_bound(&pattern.predicate),
+            IndexPosition::Object => self.is_bound(&pattern.object),
+            IndexPosition::SubjectPredicate => {
+                self.is_bound(&pattern.subject) || self.is_bound(&pattern.predicate)
+            }
+            IndexPosition::PredicateObject => {
+                self.is_bound(&pattern.predicate) || self.is_bound(&pattern.object)
+            }
+            IndexPosition::SubjectObject => {
+                self.is_bound(&pattern.subject) || self.is_bound(&pattern.object)
+            }
+            IndexPosition::FullTriple => {
+                self.is_bound(&pattern.subject)
+                    && self.is_bound(&pattern.predicate)
+                    && self.is_bound(&pattern.object)
+            }
+        }
+    }
+
+    /// Check if hash index is applicable (requires exact matches)
+    fn is_hash_applicable(
+        &self,
+        pattern: &TriplePattern,
+        position: &crate::optimizer::IndexPosition,
+    ) -> bool {
+        use crate::optimizer::IndexPosition;
+        match position {
+            IndexPosition::Subject => self.is_bound(&pattern.subject),
+            IndexPosition::Predicate => self.is_bound(&pattern.predicate),
+            IndexPosition::Object => self.is_bound(&pattern.object),
+            IndexPosition::SubjectPredicate => {
+                self.is_bound(&pattern.subject) && self.is_bound(&pattern.predicate)
+            }
+            IndexPosition::PredicateObject => {
+                self.is_bound(&pattern.predicate) && self.is_bound(&pattern.object)
+            }
+            IndexPosition::SubjectObject => {
+                self.is_bound(&pattern.subject) && self.is_bound(&pattern.object)
+            }
+            IndexPosition::FullTriple => {
+                self.is_bound(&pattern.subject)
+                    && self.is_bound(&pattern.predicate)
+                    && self.is_bound(&pattern.object)
+            }
+        }
+    }
+
+    /// Check if bitmap index is applicable (good for low cardinality)
+    fn is_bitmap_applicable(
+        &self,
+        pattern: &TriplePattern,
+        position: &crate::optimizer::IndexPosition,
+    ) -> bool {
+        use crate::optimizer::IndexPosition;
+        match position {
+            IndexPosition::Predicate => {
+                self.is_bound(&pattern.predicate) && self.is_low_cardinality_predicate(pattern)
+            }
+            IndexPosition::PredicateObject => {
+                self.is_bound(&pattern.predicate) && self.is_low_cardinality_predicate(pattern)
+            }
+            _ => false, // Bitmap indexes most useful for predicates
+        }
+    }
+
+    /// Check if bloom filter is applicable (good for negative lookups)
+    fn is_bloom_filter_applicable(
+        &self,
+        pattern: &TriplePattern,
+        position: &crate::optimizer::IndexPosition,
+    ) -> bool {
+        use crate::optimizer::IndexPosition;
+        // Bloom filters are useful when we expect many negative lookups
+        match position {
+            IndexPosition::Subject => self.is_bound(&pattern.subject),
+            IndexPosition::Object => self.is_bound(&pattern.object),
+            _ => false,
+        }
+    }
+
+    /// Check if multi-column B+ tree is applicable
+    fn is_multi_column_applicable(
+        &self,
+        pattern: &TriplePattern,
+        positions: &[crate::optimizer::IndexPosition],
+    ) -> bool {
+        positions
+            .iter()
+            .any(|pos| self.is_btree_applicable(pattern, pos))
+    }
+
+    /// Check if two patterns can benefit from index union
+    fn can_benefit_from_index_union(&self, p1: &TriplePattern, p2: &TriplePattern) -> bool {
+        // Patterns can benefit from union if they have similar structure but different constants
+        self.have_similar_structure(p1, p2) && !self.have_same_constants(p1, p2)
+    }
+
+    /// Check if patterns have similar structure
+    fn have_similar_structure(&self, p1: &TriplePattern, p2: &TriplePattern) -> bool {
+        let p1_structure = (
+            matches!(p1.subject, Term::Variable(_)),
+            matches!(p1.predicate, Term::Variable(_)),
+            matches!(p1.object, Term::Variable(_)),
+        );
+        let p2_structure = (
+            matches!(p2.subject, Term::Variable(_)),
+            matches!(p2.predicate, Term::Variable(_)),
+            matches!(p2.object, Term::Variable(_)),
+        );
+        p1_structure == p2_structure
+    }
+
+    /// Check if patterns have the same constants
+    fn have_same_constants(&self, p1: &TriplePattern, p2: &TriplePattern) -> bool {
+        format!("{:?}", p1) == format!("{:?}", p2)
+    }
+
+    /// Create index union intersection for OR conditions
+    fn create_index_union_intersection(
+        &self,
+        idx1: usize,
+        idx2: usize,
+        index1: &IndexType,
+        index2: &IndexType,
+        pattern1: &TriplePattern,
+        pattern2: &TriplePattern,
+    ) -> Result<Option<IndexIntersection>> {
+        // Estimate benefit of union operation
+        let union_benefit = self.estimate_union_benefit(pattern1, pattern2)?;
+
+        if union_benefit > 0.25 {
+            Ok(Some(IndexIntersection {
+                pattern_idx: idx1, // Primary pattern
+                primary_index: index1.clone(),
+                secondary_indexes: vec![index2.clone()],
+                selectivity_improvement: union_benefit,
+                intersection_algorithm: IntersectionAlgorithm::Hash, // Good for unions
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get adaptive index alternatives based on workload patterns
+    fn get_adaptive_index_alternatives(
+        &self,
+        pattern: &TriplePattern,
+        current: &IndexType,
+    ) -> Result<Vec<IndexType>> {
+        use crate::optimizer::IndexPosition;
+        let mut alternatives = Vec::new();
+
+        // Check if workload characteristics suggest better alternatives
+        let pattern_key = self.adaptive_selector.pattern_key(pattern);
+        let pattern_frequency = self
+            .adaptive_selector
+            .pattern_frequency
+            .get(&pattern_key)
+            .copied()
+            .unwrap_or(0);
+
+        // For frequently accessed patterns, consider hash indexes
+        if pattern_frequency > 100 {
+            if !matches!(current, IndexType::HashIndex(_)) {
+                if self.count_bound_positions(pattern) >= 2 {
+                    alternatives.push(IndexType::HashIndex(IndexPosition::SubjectPredicate));
+                }
+            }
+        }
+
+        // For low cardinality patterns, consider bitmap indexes
+        if self.is_low_cardinality_predicate(pattern) {
+            if !matches!(current, IndexType::BitmapIndex(_)) {
+                alternatives.push(IndexType::BitmapIndex(IndexPosition::Predicate));
+            }
+        }
+
+        Ok(alternatives)
+    }
+
+    /// Enhanced intersection benefit estimation
+    fn estimate_intersection_benefit_enhanced(
+        &self,
+        pattern: &TriplePattern,
+        primary_index: &IndexType,
+        secondary_indexes: &[IndexType],
+    ) -> Result<f64> {
+        let base_selectivity = self.get_index_selectivity(primary_index);
+        let mut combined_selectivity = base_selectivity;
+
+        for secondary in secondary_indexes {
+            let secondary_selectivity = self.get_index_selectivity(secondary);
+
+            // Different combination rules for different index types
+            combined_selectivity = match (primary_index, secondary) {
+                (IndexType::BTreeIndex(_), IndexType::HashIndex(_)) => {
+                    combined_selectivity * secondary_selectivity * 0.8 // Good combination
+                }
+                (IndexType::BitmapIndex(_), IndexType::BTreeIndex(_)) => {
+                    combined_selectivity * secondary_selectivity * 0.9 // Excellent for low cardinality
+                }
+                (IndexType::BloomFilter(_), _) => {
+                    combined_selectivity * 0.1 // Bloom filters great for negative lookups
+                }
+                _ => combined_selectivity * secondary_selectivity, // Standard combination
+            };
+        }
+
+        Ok(1.0 - combined_selectivity / base_selectivity)
+    }
+
+    /// Enhanced intersection algorithm recommendation
+    fn recommend_intersection_algorithm_enhanced(
+        &self,
+        primary_index: &IndexType,
+        secondary_indexes: &[IndexType],
+        bound_positions: usize,
+        pattern: &TriplePattern,
+    ) -> IntersectionAlgorithm {
+        // Bitmap intersection for bitmap indexes
+        if matches!(primary_index, IndexType::BitmapIndex(_))
+            || secondary_indexes
+                .iter()
+                .any(|idx| matches!(idx, IndexType::BitmapIndex(_)))
+        {
+            return IntersectionAlgorithm::Bitmap;
+        }
+
+        // Hash intersection for hash indexes or high selectivity
+        if matches!(primary_index, IndexType::HashIndex(_))
+            || secondary_indexes
+                .iter()
+                .any(|idx| matches!(idx, IndexType::HashIndex(_)))
+        {
+            return IntersectionAlgorithm::Hash;
+        }
+
+        // Skip list for B+ tree indexes (ordered data)
+        if matches!(primary_index, IndexType::BTreeIndex(_))
+            && secondary_indexes
+                .iter()
+                .all(|idx| matches!(idx, IndexType::BTreeIndex(_)))
+        {
+            return IntersectionAlgorithm::SkipList;
+        }
+
+        // Default based on complexity
+        if secondary_indexes.len() > 2 {
+            IntersectionAlgorithm::Bitmap
+        } else if bound_positions == 3 {
+            IntersectionAlgorithm::Hash
+        } else {
+            IntersectionAlgorithm::SkipList
+        }
+    }
+
+    /// Get index selectivity for cost estimation
+    fn get_index_selectivity(&self, index_type: &IndexType) -> f64 {
+        self.index_stats
+            .index_selectivity
+            .get(index_type)
+            .copied()
+            .unwrap_or_else(|| {
+                // Default selectivities for different index types
+                match index_type {
+                    IndexType::HashIndex(_) => 0.01,    // Very selective
+                    IndexType::BTreeIndex(_) => 0.05,   // Good selectivity
+                    IndexType::BitmapIndex(_) => 0.1,   // Moderate for low cardinality
+                    IndexType::BloomFilter(_) => 0.001, // Excellent for negative lookups
+                    IndexType::SpatialRTree => 0.02,    // Good for spatial queries
+                    IndexType::TemporalBTree => 0.03,   // Good for temporal queries
+                    _ => 0.1,                           // Default
+                }
+            })
+    }
+
+    /// Estimate union benefit for OR conditions
+    fn estimate_union_benefit(&self, p1: &TriplePattern, p2: &TriplePattern) -> Result<f64> {
+        let p1_selectivity =
+            self.calculate_term_selectivity(&p1.predicate, TermPosition::Predicate)?;
+        let p2_selectivity =
+            self.calculate_term_selectivity(&p2.predicate, TermPosition::Predicate)?;
+
+        // Union benefit is higher when individual selectivities are low
+        let combined_selectivity = p1_selectivity + p2_selectivity;
+        Ok((1.0 - combined_selectivity).max(0.0))
+    }
+
+    /// Estimate adaptive improvement from alternative indexes
+    fn estimate_adaptive_improvement(
+        &self,
+        pattern: &TriplePattern,
+        current_index: &IndexType,
+        alternatives: &[IndexType],
+    ) -> Result<f64> {
+        let current_selectivity = self.get_index_selectivity(current_index);
+        let mut best_alternative_selectivity = current_selectivity;
+
+        for alternative in alternatives {
+            let alt_selectivity = self.get_index_selectivity(alternative);
+            if alt_selectivity < best_alternative_selectivity {
+                best_alternative_selectivity = alt_selectivity;
+            }
+        }
+
+        Ok((current_selectivity - best_alternative_selectivity) / current_selectivity)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -874,7 +1817,7 @@ impl Default for AdaptiveIndexSelector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra::{Iri, Literal};
+    use crate::algebra::{Iri, Literal, Variable};
 
     fn create_test_statistics() -> Statistics {
         let mut stats = Statistics::new();
@@ -919,11 +1862,11 @@ mod tests {
 
         // Test pattern with bound predicate
         let pattern = TriplePattern {
-            subject: Term::Variable("s".to_string()),
-            predicate: Term::Iri(Iri(
-                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()
+            subject: Term::Variable(Variable::new("s").unwrap()),
+            predicate: Term::Iri(NamedNode::new_unchecked(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
             )),
-            object: Term::Variable("o".to_string()),
+            object: Term::Variable(Variable::new("o").unwrap()),
         };
 
         let selectivity = optimizer
@@ -941,15 +1884,15 @@ mod tests {
         let optimizer = BGPOptimizer::new(&stats, &stats.index_stats);
 
         let p1 = TriplePattern {
-            subject: Term::Variable("x".to_string()),
-            predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
-            object: Term::Variable("name".to_string()),
+            subject: Term::Variable(Variable::new("x").unwrap()),
+            predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
+            object: Term::Variable(Variable::new("name").unwrap()),
         };
 
         let p2 = TriplePattern {
-            subject: Term::Variable("x".to_string()),
-            predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/knows".to_string())),
-            object: Term::Variable("y".to_string()),
+            subject: Term::Variable(Variable::new("x").unwrap()),
+            predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/knows")),
+            object: Term::Variable(Variable::new("y").unwrap()),
         };
 
         let join_vars = optimizer.find_join_variables(&p1, &p2);
@@ -965,16 +1908,16 @@ mod tests {
         let patterns = vec![
             // Less selective pattern
             TriplePattern {
-                subject: Term::Variable("s".to_string()),
-                predicate: Term::Iri(Iri(
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()
+                subject: Term::Variable(Variable::new("s").unwrap()),
+                predicate: Term::Iri(NamedNode::new_unchecked(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
                 )),
-                object: Term::Variable("o".to_string()),
+                object: Term::Variable(Variable::new("o").unwrap()),
             },
             // More selective pattern
             TriplePattern {
-                subject: Term::Variable("s".to_string()),
-                predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
+                subject: Term::Variable(Variable::new("s").unwrap()),
+                predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
                 object: Term::Literal(Literal {
                     value: "John Doe".to_string(),
                     language: None,

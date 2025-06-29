@@ -113,6 +113,7 @@ gpu = []
 blas = []
 rdf-12 = []
 rdf-star = []
+sparql-12 = []
 
 [[bench]]
 name = "indexed_graph_bench"

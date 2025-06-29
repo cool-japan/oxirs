@@ -123,7 +123,7 @@ impl FederatedExecutor {
     }
 
     /// Execute a federated query plan
-    pub async fn execute(&self, plan: FederatedQueryPlan) -> Result<QueryResult> {
+    pub async fn execute(&self, plan: FederatedQueryPlan) -> FusekiResult<QueryResult> {
         let start = Instant::now();
 
         let mut context = ExecutionContext {
@@ -147,10 +147,15 @@ impl FederatedExecutor {
     }
 
     /// Execute steps sequentially
-    async fn execute_sequential(&self, context: &mut ExecutionContext) -> Result<QueryResult> {
+    async fn execute_sequential(
+        &self,
+        context: &mut ExecutionContext,
+    ) -> FusekiResult<QueryResult> {
         let mut final_result = QueryResult::new_empty();
 
-        for step in &context.plan.steps {
+        // Clone the steps to avoid borrow checker issues
+        let steps = context.plan.steps.clone();
+        for step in &steps {
             let result = self.execute_step(step, context).await?;
             context.results.insert(step.id.clone(), result.clone());
             final_result = result;
@@ -160,7 +165,7 @@ impl FederatedExecutor {
     }
 
     /// Execute steps in parallel
-    async fn execute_parallel(&self, context: &mut ExecutionContext) -> Result<QueryResult> {
+    async fn execute_parallel(&self, context: &mut ExecutionContext) -> FusekiResult<QueryResult> {
         // Group steps by dependencies
         let step_groups = self.group_steps_by_dependencies(&context.plan.steps);
 
@@ -178,7 +183,9 @@ impl FederatedExecutor {
                     let start = std::time::Instant::now();
                     let primary_service =
                         step.services.iter().find(|s| s.is_primary).ok_or_else(|| {
-                            Error::Custom("No primary service for step".to_string())
+                            FusekiError::Configuration {
+                                message: "No primary service for step".to_string(),
+                            }
                         })?;
 
                     self.execute_on_service_standalone(primary_service, &step.sub_query)
@@ -210,7 +217,7 @@ impl FederatedExecutor {
     }
 
     /// Execute with adaptive strategy
-    async fn execute_adaptive(&self, context: &mut ExecutionContext) -> Result<QueryResult> {
+    async fn execute_adaptive(&self, context: &mut ExecutionContext) -> FusekiResult<QueryResult> {
         // Start with parallel, fall back to sequential on errors
         match self.execute_parallel(context).await {
             Ok(result) => Ok(result),
@@ -228,15 +235,15 @@ impl FederatedExecutor {
         &self,
         step: &ExecutionStep,
         context: &mut ExecutionContext,
-    ) -> Result<QueryResult> {
+    ) -> FusekiResult<QueryResult> {
         let start = Instant::now();
 
         // Check if we should use circuit breaker
-        let primary_service = step
-            .services
-            .iter()
-            .find(|s| s.is_primary)
-            .ok_or_else(|| Error::Custom("No primary service for step".to_string()))?;
+        let primary_service = step.services.iter().find(|s| s.is_primary).ok_or_else(|| {
+            FusekiError::Configuration {
+                message: "No primary service for step".to_string(),
+            }
+        })?;
 
         if !self
             .health_monitor
@@ -257,10 +264,9 @@ impl FederatedExecutor {
                 }
             }
 
-            return Err(Error::Custom(format!(
-                "All services unavailable for step {}",
-                step.id
-            )));
+            return Err(FusekiError::ServiceUnavailable {
+                message: format!("All services unavailable for step {}", step.id),
+            });
         }
 
         // Execute on primary service
@@ -295,13 +301,15 @@ impl FederatedExecutor {
         &self,
         service: &ServiceSelection,
         query: &Query,
-    ) -> Result<QueryResult> {
+    ) -> FusekiResult<QueryResult> {
         // Acquire semaphore permit
         let _permit = self
             .semaphore
             .acquire()
             .await
-            .map_err(|_| Error::Custom("Failed to acquire semaphore".to_string()))?;
+            .map_err(|_| FusekiError::QueryExecution {
+                message: "Failed to acquire semaphore".to_string(),
+            })?;
 
         // Prepare request
         let query_string = self.serialize_query(query)?;
@@ -319,18 +327,21 @@ impl FederatedExecutor {
         {
             Ok(Ok(resp)) => resp,
             Ok(Err(e)) => {
-                return Err(Error::Custom(format!("Service request failed: {}", e)));
+                return Err(FusekiError::QueryExecution {
+                    message: format!("Service request failed: {}", e),
+                });
             }
             Err(_) => {
-                return Err(Error::Custom("Service request timed out".to_string()));
+                return Err(FusekiError::QueryExecution {
+                    message: "Service request timed out".to_string(),
+                });
             }
         };
 
         if !response.status().is_success() {
-            return Err(Error::Custom(format!(
-                "Service returned error: {}",
-                response.status()
-            )));
+            return Err(FusekiError::QueryExecution {
+                message: format!("Service returned error: {}", response.status()),
+            });
         }
 
         // Parse response based on query type
@@ -343,13 +354,15 @@ impl FederatedExecutor {
         service: &ServiceSelection,
         query: &Query,
         context: &mut ExecutionContext,
-    ) -> Result<QueryResult> {
+    ) -> FusekiResult<QueryResult> {
         // Acquire semaphore permit
         let _permit = self
             .semaphore
             .acquire()
             .await
-            .map_err(|_| Error::Custom("Failed to acquire semaphore".to_string()))?;
+            .map_err(|_| FusekiError::QueryExecution {
+                message: "Failed to acquire semaphore".to_string(),
+            })?;
 
         context.metrics.service_calls += 1;
 
@@ -370,20 +383,23 @@ impl FederatedExecutor {
             Ok(Ok(resp)) => resp,
             Ok(Err(e)) => {
                 context.metrics.failed_calls += 1;
-                return Err(Error::Custom(format!("Service request failed: {}", e)));
+                return Err(FusekiError::QueryExecution {
+                    message: format!("Service request failed: {}", e),
+                });
             }
             Err(_) => {
                 context.metrics.failed_calls += 1;
-                return Err(Error::Custom("Service request timed out".to_string()));
+                return Err(FusekiError::QueryExecution {
+                    message: "Service request timed out".to_string(),
+                });
             }
         };
 
         if !response.status().is_success() {
             context.metrics.failed_calls += 1;
-            return Err(Error::Custom(format!(
-                "Service returned error: {}",
-                response.status()
-            )));
+            return Err(FusekiError::QueryExecution {
+                message: format!("Service returned error: {}", response.status()),
+            });
         }
 
         // Track bytes transferred
@@ -400,18 +416,24 @@ impl FederatedExecutor {
         &self,
         response: reqwest::Response,
         query_type: &QueryType,
-    ) -> Result<QueryResult> {
+    ) -> FusekiResult<QueryResult> {
         let response_text = response
             .text()
             .await
-            .map_err(|e| Error::Custom(format!("Failed to read response: {}", e)))?;
+            .map_err(|e| FusekiError::QueryExecution {
+                message: format!("Failed to read response: {}", e),
+            })?;
 
         // Parse based on query type
         let results = match query_type {
             QueryType::Select { .. } => {
                 // Parse SPARQL JSON results
-                let json: serde_json::Value = serde_json::from_str(&response_text)
-                    .map_err(|e| Error::Custom(format!("Invalid JSON response: {}", e)))?;
+                let json: serde_json::Value =
+                    serde_json::from_str(&response_text).map_err(|e| {
+                        FusekiError::QueryExecution {
+                            message: format!("Invalid JSON response: {}", e),
+                        }
+                    })?;
 
                 // Extract bindings count for metadata
                 let result_count = json
@@ -424,8 +446,12 @@ impl FederatedExecutor {
                 QueryResults::Solutions(vec![]) // TODO: Parse actual bindings
             }
             QueryType::Ask { .. } => {
-                let json: serde_json::Value = serde_json::from_str(&response_text)
-                    .map_err(|e| Error::Custom(format!("Invalid JSON response: {}", e)))?;
+                let json: serde_json::Value =
+                    serde_json::from_str(&response_text).map_err(|e| {
+                        FusekiError::QueryExecution {
+                            message: format!("Invalid JSON response: {}", e),
+                        }
+                    })?;
 
                 let boolean_result = json
                     .get("boolean")
@@ -451,11 +477,13 @@ impl FederatedExecutor {
     }
 
     /// Serialize query to SPARQL string
-    fn serialize_query(&self, query: &Query) -> Result<String> {
+    fn serialize_query(&self, query: &Query) -> FusekiResult<String> {
         // Use oxirs-arq's built-in query serialization
         match query.to_string() {
             query_str if !query_str.is_empty() => Ok(query_str),
-            _ => Err(Error::Custom("Failed to serialize query".to_string())),
+            _ => Err(FusekiError::QueryExecution {
+                message: "Failed to serialize query".to_string(),
+            }),
         }
     }
 
@@ -522,53 +550,6 @@ impl FederatedExecutor {
         groups
     }
 
-    /// Parse service response
-    async fn parse_response(
-        &self,
-        response: reqwest::Response,
-        query_type: &QueryType,
-    ) -> Result<QueryResult> {
-        let body = response
-            .text()
-            .await
-            .map_err(|e| Error::Custom(format!("Failed to read response: {}", e)))?;
-
-        // TODO: Implement proper response parsing based on query type
-        Ok(QueryResult::new_empty())
-    }
-
-    /// Group steps by dependencies for parallel execution
-    fn group_steps_by_dependencies(&self, steps: &[ExecutionStep]) -> Vec<Vec<ExecutionStep>> {
-        let mut groups = Vec::new();
-        let mut processed = std::collections::HashSet::new();
-
-        while processed.len() < steps.len() {
-            let mut group = Vec::new();
-
-            for step in steps {
-                if !processed.contains(&step.id) {
-                    // Check if all dependencies are processed
-                    if step.dependencies.iter().all(|dep| processed.contains(dep)) {
-                        group.push(step.clone());
-                    }
-                }
-            }
-
-            if group.is_empty() {
-                // Circular dependency or error
-                break;
-            }
-
-            for step in &group {
-                processed.insert(step.id.clone());
-            }
-
-            groups.push(group);
-        }
-
-        groups
-    }
-
     /// Report execution metrics
     fn report_metrics(&self, metrics: &ExecutionMetrics) {
         tracing::info!(
@@ -614,7 +595,7 @@ impl ResultMerger {
     }
 
     /// Merge multiple query results
-    pub async fn merge(&self, results: Vec<QueryResult>) -> Result<QueryResult> {
+    pub async fn merge(&self, results: Vec<QueryResult>) -> FusekiResult<QueryResult> {
         if results.is_empty() {
             return Ok(QueryResult::new_empty());
         }
@@ -627,24 +608,30 @@ impl ResultMerger {
             MergeStrategy::Union => self.merge_union(results).await,
             MergeStrategy::Intersection => self.merge_intersection(results).await,
             MergeStrategy::Join(vars) => self.merge_join(results, vars).await,
-            MergeStrategy::Custom => Err(Error::Custom("Custom merge not implemented".to_string())),
+            MergeStrategy::Custom => Err(FusekiError::QueryExecution {
+                message: "Custom merge not implemented".to_string(),
+            }),
         }
     }
 
     /// Merge results using union
-    async fn merge_union(&self, results: Vec<QueryResult>) -> Result<QueryResult> {
+    async fn merge_union(&self, results: Vec<QueryResult>) -> FusekiResult<QueryResult> {
         // TODO: Implement proper result union
         Ok(results.into_iter().next().unwrap())
     }
 
     /// Merge results using intersection
-    async fn merge_intersection(&self, results: Vec<QueryResult>) -> Result<QueryResult> {
+    async fn merge_intersection(&self, results: Vec<QueryResult>) -> FusekiResult<QueryResult> {
         // TODO: Implement proper result intersection
         Ok(results.into_iter().next().unwrap())
     }
 
     /// Merge results using join
-    async fn merge_join(&self, results: Vec<QueryResult>, vars: &[String]) -> Result<QueryResult> {
+    async fn merge_join(
+        &self,
+        results: Vec<QueryResult>,
+        vars: &[String],
+    ) -> FusekiResult<QueryResult> {
         // TODO: Implement proper result join
         Ok(results.into_iter().next().unwrap())
     }

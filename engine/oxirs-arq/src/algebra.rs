@@ -171,7 +171,7 @@ impl fmt::Display for TriplePattern {
 }
 
 /// SPARQL expression
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Expression {
     /// Variable reference
     Variable(Variable),
@@ -207,7 +207,7 @@ pub enum Expression {
 }
 
 /// Binary operators
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -226,8 +226,30 @@ pub enum BinaryOperator {
     NotIn,
 }
 
+impl std::fmt::Display for BinaryOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryOperator::Add => write!(f, "+"),
+            BinaryOperator::Subtract => write!(f, "-"),
+            BinaryOperator::Multiply => write!(f, "*"),
+            BinaryOperator::Divide => write!(f, "/"),
+            BinaryOperator::Equal => write!(f, "="),
+            BinaryOperator::NotEqual => write!(f, "!="),
+            BinaryOperator::Less => write!(f, "<"),
+            BinaryOperator::LessEqual => write!(f, "<="),
+            BinaryOperator::Greater => write!(f, ">"),
+            BinaryOperator::GreaterEqual => write!(f, ">="),
+            BinaryOperator::And => write!(f, "&&"),
+            BinaryOperator::Or => write!(f, "||"),
+            BinaryOperator::SameTerm => write!(f, "sameTerm"),
+            BinaryOperator::In => write!(f, "IN"),
+            BinaryOperator::NotIn => write!(f, "NOT IN"),
+        }
+    }
+}
+
 /// Unary operators
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UnaryOperator {
     Not,
     Plus,
@@ -239,7 +261,7 @@ pub enum UnaryOperator {
 }
 
 /// Aggregate function
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Aggregate {
     Count {
         distinct: bool,
@@ -279,21 +301,21 @@ pub type Binding = HashMap<Variable, Term>;
 pub type Solution = Vec<Binding>;
 
 /// Order condition
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderCondition {
     pub expr: Expression,
     pub ascending: bool,
 }
 
 /// Group condition
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupCondition {
     pub expr: Expression,
     pub alias: Option<Variable>,
 }
 
 /// Property path expressions for advanced SPARQL 1.1 graph navigation
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PropertyPath {
     /// Direct property IRI
     Iri(Iri),
@@ -316,7 +338,7 @@ pub enum PropertyPath {
 }
 
 /// Property path triple pattern
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PropertyPathPattern {
     pub subject: Term,
     pub path: PropertyPath,
@@ -324,7 +346,7 @@ pub struct PropertyPathPattern {
 }
 
 /// SPARQL algebra expressions
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Algebra {
     /// Basic Graph Pattern
     Bgp(Vec<TriplePattern>),
@@ -903,6 +925,13 @@ impl TriplePattern {
         self.subject.collect_variables(vars);
         self.predicate.collect_variables(vars);
         self.object.collect_variables(vars);
+    }
+
+    /// Returns all variables in this triple pattern
+    pub fn variables(&self) -> Vec<Variable> {
+        let mut vars = Vec::new();
+        self.collect_variables(&mut vars);
+        vars
     }
 }
 

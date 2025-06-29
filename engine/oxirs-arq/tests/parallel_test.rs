@@ -5,6 +5,7 @@ use oxirs_arq::{
     executor::{Dataset, ExecutionContext, InMemoryDataset, ParallelConfig, QueryExecutor},
     Solution,
 };
+use oxirs_core::model::NamedNode;
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -19,17 +20,23 @@ fn test_parallel_bgp_execution() {
     // Add test data
     for i in 0..1000 {
         dataset.add_triple(
-            Term::Iri(Iri(format!("http://example.org/person{}", i))),
-            Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
+            Term::Iri(NamedNode::new_unchecked(&format!(
+                "http://example.org/person{}",
+                i
+            ))),
+            Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
             Term::Literal(Literal::string(format!("Person {}", i))),
         );
 
         dataset.add_triple(
-            Term::Iri(Iri(format!("http://example.org/person{}", i))),
-            Term::Iri(Iri("http://xmlns.com/foaf/0.1/age".to_string())),
+            Term::Iri(NamedNode::new_unchecked(&format!(
+                "http://example.org/person{}",
+                i
+            ))),
+            Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/age")),
             Term::Literal(Literal::typed(
                 (20 + (i % 60)).to_string(),
-                Iri("http://www.w3.org/2001/XMLSchema#integer".to_string()),
+                NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
             )),
         );
     }
@@ -37,14 +44,14 @@ fn test_parallel_bgp_execution() {
     // Create BGP with multiple patterns
     let patterns = vec![
         TriplePattern {
-            subject: Term::Variable("person".to_string()),
-            predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
-            object: Term::Variable("name".to_string()),
+            subject: Term::Variable(Variable::new("person").unwrap()),
+            predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
+            object: Term::Variable(Variable::new("name").unwrap()),
         },
         TriplePattern {
-            subject: Term::Variable("person".to_string()),
-            predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/age".to_string())),
-            object: Term::Variable("age".to_string()),
+            subject: Term::Variable(Variable::new("person").unwrap()),
+            predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/age")),
+            object: Term::Variable(Variable::new("age").unwrap()),
         },
     ];
 
@@ -91,29 +98,38 @@ fn test_parallel_join_execution() {
     // Add parent-child relationships
     for i in 0..100 {
         dataset.add_triple(
-            Term::Iri(Iri(format!("http://example.org/person{}", i))),
-            Term::Iri(Iri("http://example.org/parent".to_string())),
-            Term::Iri(Iri(format!("http://example.org/person{}", i * 2 + 100))),
+            Term::Iri(NamedNode::new_unchecked(&format!(
+                "http://example.org/person{}",
+                i
+            ))),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/parent")),
+            Term::Iri(NamedNode::new_unchecked(&format!(
+                "http://example.org/person{}",
+                i * 2 + 100
+            ))),
         );
 
         dataset.add_triple(
-            Term::Iri(Iri(format!("http://example.org/person{}", i * 2 + 100))),
-            Term::Iri(Iri("http://example.org/name".to_string())),
+            Term::Iri(NamedNode::new_unchecked(&format!(
+                "http://example.org/person{}",
+                i * 2 + 100
+            ))),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/name")),
             Term::Literal(Literal::string(format!("Child of Person {}", i))),
         );
     }
 
     // Create join query: find parents and their children's names
     let left_pattern = Algebra::Bgp(vec![TriplePattern {
-        subject: Term::Variable("parent".to_string()),
-        predicate: Term::Iri(Iri("http://example.org/parent".to_string())),
-        object: Term::Variable("child".to_string()),
+        subject: Term::Variable(Variable::new("parent").unwrap()),
+        predicate: Term::Iri(NamedNode::new_unchecked("http://example.org/parent")),
+        object: Term::Variable(Variable::new("child").unwrap()),
     }]);
 
     let right_pattern = Algebra::Bgp(vec![TriplePattern {
-        subject: Term::Variable("child".to_string()),
-        predicate: Term::Iri(Iri("http://example.org/name".to_string())),
-        object: Term::Variable("childName".to_string()),
+        subject: Term::Variable(Variable::new("child").unwrap()),
+        predicate: Term::Iri(NamedNode::new_unchecked("http://example.org/name")),
+        object: Term::Variable(Variable::new("childName").unwrap()),
     }]);
 
     let join_algebra = Algebra::Join {
@@ -148,17 +164,23 @@ fn test_parallel_aggregation() {
     for i in 0..1000 {
         let dept = format!("Dept{}", i % 10);
         dataset.add_triple(
-            Term::Iri(Iri(format!("http://example.org/person{}", i))),
-            Term::Iri(Iri("http://example.org/department".to_string())),
+            Term::Iri(NamedNode::new_unchecked(&format!(
+                "http://example.org/person{}",
+                i
+            ))),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/department")),
             Term::Literal(Literal::string(dept)),
         );
 
         dataset.add_triple(
-            Term::Iri(Iri(format!("http://example.org/person{}", i))),
-            Term::Iri(Iri("http://example.org/salary".to_string())),
+            Term::Iri(NamedNode::new_unchecked(&format!(
+                "http://example.org/person{}",
+                i
+            ))),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/salary")),
             Term::Literal(Literal::typed(
                 (30000 + (i * 100)).to_string(),
-                Iri("http://www.w3.org/2001/XMLSchema#integer".to_string()),
+                NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
             )),
         );
     }
@@ -166,14 +188,14 @@ fn test_parallel_aggregation() {
     // Create aggregation query: COUNT and SUM by department
     let pattern = Algebra::Bgp(vec![
         TriplePattern {
-            subject: Term::Variable("person".to_string()),
-            predicate: Term::Iri(Iri("http://example.org/department".to_string())),
-            object: Term::Variable("dept".to_string()),
+            subject: Term::Variable(Variable::new("person").unwrap()),
+            predicate: Term::Iri(NamedNode::new_unchecked("http://example.org/department")),
+            object: Term::Variable(Variable::new("dept").unwrap()),
         },
         TriplePattern {
-            subject: Term::Variable("person".to_string()),
-            predicate: Term::Iri(Iri("http://example.org/salary".to_string())),
-            object: Term::Variable("salary".to_string()),
+            subject: Term::Variable(Variable::new("person").unwrap()),
+            predicate: Term::Iri(NamedNode::new_unchecked("http://example.org/salary")),
+            object: Term::Variable(Variable::new("salary").unwrap()),
         },
     ]);
 
@@ -182,21 +204,21 @@ fn test_parallel_aggregation() {
     let group_algebra = Algebra::Group {
         pattern: Box::new(pattern),
         variables: vec![GroupCondition {
-            expr: Expression::Variable("dept".to_string()),
+            expr: Expression::Variable(Variable::new("dept").unwrap()),
             alias: None,
         }],
         aggregates: vec![
             (
-                "count".to_string(),
+                Variable::new("count").unwrap(),
                 Aggregate::Count {
-                    expr: Some(Expression::Variable("person".to_string())),
+                    expr: Some(Expression::Variable(Variable::new("person").unwrap())),
                     distinct: false,
                 },
             ),
             (
-                "totalSalary".to_string(),
+                Variable::new("totalSalary").unwrap(),
                 Aggregate::Sum {
-                    expr: Expression::Variable("salary".to_string()),
+                    expr: Expression::Variable(Variable::new("salary").unwrap()),
                     distinct: false,
                 },
             ),
@@ -222,7 +244,7 @@ fn test_parallel_aggregation() {
 
     // Each department should have 100 people
     for binding in &solution {
-        if let Some(Term::Literal(count_lit)) = binding.get(&"count".to_string()) {
+        if let Some(Term::Literal(count_lit)) = binding.get(&Variable::new("count").unwrap()) {
             assert_eq!(count_lit.value, "100");
         }
     }

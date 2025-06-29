@@ -222,7 +222,7 @@ impl EncodedNode {
     }
 }
 
-/// Dictionary for string compression
+/// Dictionary for string compression with enhanced features per TODO.md Phase 1.3.2
 #[derive(Debug, Clone)]
 pub struct StringDictionary {
     /// String to ID mapping
@@ -233,16 +233,48 @@ pub struct StringDictionary {
     next_id: u32,
     /// Reference counts for garbage collection
     ref_counts: HashMap<u32, u32>,
+    /// Configuration for advanced features
+    config: StringDictionaryConfig,
+}
+
+/// Configuration for string dictionary advanced features
+#[derive(Debug, Clone)]
+pub struct StringDictionaryConfig {
+    /// Enable automatic garbage collection
+    pub enable_gc: bool,
+    /// Garbage collection threshold (trigger when ref_counts exceeds this)
+    pub gc_threshold: usize,
+    /// Enable persistence to disk
+    pub enable_persistence: bool,
+    /// Persistence file path
+    pub persistence_path: Option<String>,
+}
+
+impl Default for StringDictionaryConfig {
+    fn default() -> Self {
+        Self {
+            enable_gc: true,
+            gc_threshold: 10000,
+            enable_persistence: false,
+            persistence_path: None,
+        }
+    }
 }
 
 impl StringDictionary {
-    /// Create a new string dictionary
+    /// Create a new string dictionary with default configuration
     pub fn new() -> Self {
+        Self::with_config(StringDictionaryConfig::default())
+    }
+
+    /// Create a new string dictionary with custom configuration
+    pub fn with_config(config: StringDictionaryConfig) -> Self {
         Self {
             string_to_id: HashMap::new(),
             id_to_string: HashMap::new(),
             next_id: 1, // 0 is reserved for null/invalid
             ref_counts: HashMap::new(),
+            config,
         }
     }
 
@@ -259,6 +291,11 @@ impl StringDictionary {
             self.string_to_id.insert(s.to_string(), id);
             self.id_to_string.insert(id, s.to_string());
             self.ref_counts.insert(id, 1);
+
+            // Check if garbage collection is needed
+            if self.config.enable_gc && self.ref_counts.len() >= self.config.gc_threshold {
+                self.garbage_collect();
+            }
 
             id
         }
@@ -298,12 +335,160 @@ impl StringDictionary {
             self.next_id,
         )
     }
+
+    /// Get detailed statistics about the dictionary
+    pub fn detailed_stats(&self) -> StringDictionaryStats {
+        let string_count = self.string_to_id.len();
+        let ref_count_entries = self.ref_counts.len();
+
+        // Calculate total memory usage (approximate)
+        let string_memory: usize = self.id_to_string.values().map(|s| s.len()).sum();
+
+        let map_overhead =
+            string_count * (std::mem::size_of::<String>() + std::mem::size_of::<u32>()) * 2;
+        let ref_count_overhead = ref_count_entries * std::mem::size_of::<u32>() * 2;
+
+        StringDictionaryStats {
+            string_count,
+            total_memory_bytes: string_memory + map_overhead + ref_count_overhead,
+            ref_count_entries,
+            gc_enabled: self.config.enable_gc,
+        }
+    }
+
+    /// Perform garbage collection
+    ///
+    /// Removes strings with zero reference counts from the dictionary.
+    /// Returns the number of strings removed.
+    pub fn garbage_collect(&mut self) -> usize {
+        if !self.config.enable_gc {
+            return 0;
+        }
+
+        let mut removed_count = 0;
+        let ids_to_remove: Vec<u32> = self
+            .ref_counts
+            .iter()
+            .filter_map(|(&id, &count)| if count == 0 { Some(id) } else { None })
+            .collect();
+
+        for id in ids_to_remove {
+            if let Some(string) = self.id_to_string.remove(&id) {
+                self.string_to_id.remove(&string);
+                self.ref_counts.remove(&id);
+                removed_count += 1;
+            }
+        }
+
+        removed_count
+    }
+
+    /// Get current reference count for an ID
+    pub fn ref_count(&self, id: u32) -> u32 {
+        self.ref_counts.get(&id).copied().unwrap_or(0)
+    }
+
+    /// Clear all entries from the dictionary
+    pub fn clear(&mut self) {
+        self.string_to_id.clear();
+        self.id_to_string.clear();
+        self.ref_counts.clear();
+        self.next_id = 1;
+    }
+
+    /// Save dictionary to disk (if persistence is enabled)
+    pub fn persist(&self) -> Result<()> {
+        if !self.config.enable_persistence {
+            return Ok(());
+        }
+
+        let path = self
+            .config
+            .persistence_path
+            .as_ref()
+            .ok_or_else(|| anyhow!("Persistence enabled but no path specified"))?;
+
+        let snapshot = StringDictionarySnapshot {
+            string_to_id: self.string_to_id.clone(),
+            id_to_string: self.id_to_string.clone(),
+            ref_counts: self.ref_counts.clone(),
+            next_id: self.next_id,
+        };
+
+        let serialized = bincode::serialize(&snapshot)
+            .map_err(|e| anyhow!("Failed to serialize dictionary: {}", e))?;
+
+        std::fs::write(path, serialized)
+            .map_err(|e| anyhow!("Failed to write dictionary to {}: {}", path, e))
+    }
+
+    /// Load dictionary from disk (if persistence is enabled)
+    pub fn load(&mut self) -> Result<()> {
+        if !self.config.enable_persistence {
+            return Ok(());
+        }
+
+        let path = self
+            .config
+            .persistence_path
+            .as_ref()
+            .ok_or_else(|| anyhow!("Persistence enabled but no path specified"))?;
+
+        if !std::path::Path::new(path).exists() {
+            return Ok(()); // No existing dictionary to load
+        }
+
+        let data = std::fs::read(path)
+            .map_err(|e| anyhow!("Failed to read dictionary from {}: {}", path, e))?;
+
+        let snapshot: StringDictionarySnapshot = bincode::deserialize(&data)
+            .map_err(|e| anyhow!("Failed to deserialize dictionary: {}", e))?;
+
+        // Restore state
+        self.string_to_id = snapshot.string_to_id;
+        self.id_to_string = snapshot.id_to_string;
+        self.ref_counts = snapshot.ref_counts;
+        self.next_id = snapshot.next_id;
+
+        Ok(())
+    }
 }
 
 impl Default for StringDictionary {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Statistics about the string dictionary
+#[derive(Debug, Clone)]
+pub struct StringDictionaryStats {
+    /// Number of unique strings stored
+    pub string_count: usize,
+    /// Total memory usage in bytes (approximate)
+    pub total_memory_bytes: usize,
+    /// Number of reference count entries
+    pub ref_count_entries: usize,
+    /// Whether garbage collection is enabled
+    pub gc_enabled: bool,
+}
+
+/// Serializable snapshot of dictionary state for persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StringDictionarySnapshot {
+    string_to_id: HashMap<String, u32>,
+    id_to_string: HashMap<u32, String>,
+    ref_counts: HashMap<u32, u32>,
+    next_id: u32,
+}
+
+/// Global string dictionary instance for project-wide string interning
+static GLOBAL_STRING_DICT: once_cell::sync::Lazy<std::sync::Mutex<StringDictionary>> =
+    once_cell::sync::Lazy::new(|| std::sync::Mutex::new(StringDictionary::new()));
+
+/// Get mutable reference to the global string dictionary
+pub fn global_string_dict() -> std::sync::MutexGuard<'static, StringDictionary> {
+    GLOBAL_STRING_DICT.lock().unwrap()
 }
 
 /// Node table configuration

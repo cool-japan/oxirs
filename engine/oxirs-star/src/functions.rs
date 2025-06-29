@@ -66,12 +66,17 @@ impl FunctionEvaluator {
         // Check argument count
         let expected_arity = function.arity();
         if args.len() != expected_arity {
-            return Err(StarError::QueryError(format!(
-                "Function {} expects {} arguments, got {}",
-                function.name(),
-                expected_arity,
-                args.len()
-            )));
+            return Err(StarError::QueryError {
+                message: format!(
+                    "Function {} expects {} arguments, got {}",
+                    function.name(),
+                    expected_arity,
+                    args.len()
+                ),
+                query_fragment: None,
+                position: None,
+                suggestion: None,
+            });
         }
 
         match function {
@@ -91,24 +96,30 @@ impl FunctionEvaluator {
     ) -> StarResult<StarTerm> {
         // Validate that the arguments can form a valid triple
         if !subject.can_be_subject() {
-            return Err(StarError::QueryError(format!(
-                "Invalid subject for TRIPLE function: {:?}",
-                subject
-            )));
+            return Err(StarError::QueryError {
+                message: format!("Invalid subject for TRIPLE function: {:?}", subject),
+                query_fragment: None,
+                position: None,
+                suggestion: None,
+            });
         }
 
         if !predicate.can_be_predicate() {
-            return Err(StarError::QueryError(format!(
-                "Invalid predicate for TRIPLE function: {:?}",
-                predicate
-            )));
+            return Err(StarError::QueryError {
+                message: format!("Invalid predicate for TRIPLE function: {:?}", predicate),
+                query_fragment: None,
+                position: None,
+                suggestion: None,
+            });
         }
 
         if !object.can_be_object() {
-            return Err(StarError::QueryError(format!(
-                "Invalid object for TRIPLE function: {:?}",
-                object
-            )));
+            return Err(StarError::QueryError {
+                message: format!("Invalid object for TRIPLE function: {:?}", object),
+                query_fragment: None,
+                position: None,
+                suggestion: None,
+            });
         }
 
         // Create the quoted triple
@@ -120,10 +131,12 @@ impl FunctionEvaluator {
     fn evaluate_subject(term: &StarTerm) -> StarResult<StarTerm> {
         match term {
             StarTerm::QuotedTriple(triple) => Ok(triple.subject.clone()),
-            _ => Err(StarError::QueryError(format!(
-                "SUBJECT function expects a quoted triple, got: {:?}",
-                term
-            ))),
+            _ => Err(StarError::QueryError {
+                message: format!("SUBJECT function expects a quoted triple, got: {:?}", term),
+                query_fragment: None,
+                position: None,
+                suggestion: None,
+            }),
         }
     }
 
@@ -131,10 +144,15 @@ impl FunctionEvaluator {
     fn evaluate_predicate(term: &StarTerm) -> StarResult<StarTerm> {
         match term {
             StarTerm::QuotedTriple(triple) => Ok(triple.predicate.clone()),
-            _ => Err(StarError::QueryError(format!(
-                "PREDICATE function expects a quoted triple, got: {:?}",
-                term
-            ))),
+            _ => Err(StarError::QueryError {
+                message: format!(
+                    "PREDICATE function expects a quoted triple, got: {:?}",
+                    term
+                ),
+                query_fragment: None,
+                position: None,
+                suggestion: None,
+            }),
         }
     }
 
@@ -142,10 +160,12 @@ impl FunctionEvaluator {
     fn evaluate_object(term: &StarTerm) -> StarResult<StarTerm> {
         match term {
             StarTerm::QuotedTriple(triple) => Ok(triple.object.clone()),
-            _ => Err(StarError::QueryError(format!(
-                "OBJECT function expects a quoted triple, got: {:?}",
-                term
-            ))),
+            _ => Err(StarError::QueryError {
+                message: format!("OBJECT function expects a quoted triple, got: {:?}", term),
+                query_fragment: None,
+                position: None,
+                suggestion: None,
+            }),
         }
     }
 
@@ -225,10 +245,17 @@ impl ExpressionEvaluator {
     ) -> StarResult<StarTerm> {
         match expr {
             Expression::Term(term) => Ok(term.clone()),
-            Expression::Variable(var) => bindings
-                .get(var)
-                .cloned()
-                .ok_or_else(|| StarError::QueryError(format!("Unbound variable: {}", var))),
+            Expression::Variable(var) => {
+                bindings
+                    .get(var)
+                    .cloned()
+                    .ok_or_else(|| StarError::QueryError {
+                        message: format!("Unbound variable: {}", var),
+                        query_fragment: None,
+                        position: None,
+                        suggestion: None,
+                    })
+            }
             Expression::FunctionCall { function, args } => {
                 // Evaluate arguments first
                 let evaluated_args: Result<Vec<_>, _> = args
@@ -273,10 +300,12 @@ impl ExpressionEvaluator {
                 )
             }
             // Other operators would require type checking and numeric comparisons
-            _ => Err(StarError::QueryError(format!(
-                "Binary operator {:?} not yet implemented",
-                op
-            ))),
+            _ => Err(StarError::QueryError {
+                message: format!("Binary operator {:?} not yet implemented", op),
+                query_fragment: None,
+                position: None,
+                suggestion: None,
+            }),
         }
     }
 
@@ -293,9 +322,12 @@ impl ExpressionEvaluator {
                                 "true" => "false",
                                 "false" => "true",
                                 _ => {
-                                    return Err(StarError::QueryError(
-                                        "Invalid boolean value".to_string(),
-                                    ))
+                                    return Err(StarError::QueryError {
+                                        message: "Invalid boolean value".to_string(),
+                                        query_fragment: None,
+                                        position: None,
+                                        suggestion: None,
+                                    })
                                 }
                             };
                             return StarTerm::literal_with_datatype(
@@ -305,13 +337,19 @@ impl ExpressionEvaluator {
                         }
                     }
                 }
-                Err(StarError::QueryError(
-                    "NOT operator expects a boolean literal".to_string(),
-                ))
+                Err(StarError::QueryError {
+                    message: "NOT operator expects a boolean literal".to_string(),
+                    query_fragment: None,
+                    position: None,
+                    suggestion: None,
+                })
             }
-            UnaryOperator::Minus => Err(StarError::QueryError(
-                "Arithmetic operations not yet implemented".to_string(),
-            )),
+            UnaryOperator::Minus => Err(StarError::QueryError {
+                message: "Arithmetic operations not yet implemented".to_string(),
+                query_fragment: None,
+                position: None,
+                suggestion: None,
+            }),
         }
     }
 }

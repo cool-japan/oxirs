@@ -36,6 +36,7 @@ pub struct MessageBridgeManager {
 }
 
 /// Message bridge
+#[derive(Clone)]
 struct MessageBridge {
     /// Bridge ID
     id: String,
@@ -380,7 +381,7 @@ impl Default for BridgeConfig {
             processing_interval: Duration::from_millis(100),
             enable_monitoring: true,
             enable_dlq: true,
-            message_ttl: Duration::from_hours(24),
+            message_ttl: Duration::from_secs(24 * 60 * 60),
         }
     }
 }
@@ -616,20 +617,21 @@ impl MessageBridgeManager {
 
     /// Start bridge processing
     async fn start_bridge_processing(&self, bridge_id: &str) -> Result<()> {
-        let (bridge, config) = {
-            let bridges = self.bridges.read().await;
-            let configs = self.configs.read().await;
-
-            let bridge = bridges
+        // Clone all necessary data before spawning the task
+        let bridge = {
+            let bridges_guard = self.bridges.read().await;
+            bridges_guard
                 .get(bridge_id)
                 .ok_or_else(|| anyhow!("Bridge not found"))?
-                .clone();
-            let config = configs
+                .clone()
+        };
+
+        let config = {
+            let configs_guard = self.configs.read().await;
+            configs_guard
                 .get(bridge_id)
                 .ok_or_else(|| anyhow!("Bridge config not found"))?
-                .clone();
-
-            (bridge, config)
+                .clone()
         };
 
         let bridges = self.bridges.clone();
@@ -654,7 +656,7 @@ impl MessageBridgeManager {
 
                 if let Some(BridgeStatus::Active) = status {
                     // Process messages from source
-                    match Self::receive_messages(&bridge.source, &config).await {
+                    match MessageBridgeManager::receive_messages(&bridge.source, &config).await {
                         Ok(messages) => {
                             for message in messages {
                                 message_queue.push_back(message);
@@ -679,15 +681,22 @@ impl MessageBridgeManager {
                         for message in batch {
                             let start_time = Instant::now();
 
-                            match Self::process_message(&bridge, &message, &transformers, &router)
-                                .await
+                            match MessageBridgeManager::process_message(
+                                &bridge,
+                                &message,
+                                &transformers,
+                                &router,
+                            )
+                            .await
                             {
                                 Ok(_) => {
                                     let duration = start_time.elapsed();
 
                                     // Update bridge statistics
-                                    Self::update_bridge_stats(&bridges, &bridge_id, true, duration)
-                                        .await;
+                                    MessageBridgeManager::update_bridge_stats(
+                                        &bridges, &bridge_id, true, duration,
+                                    )
+                                    .await;
                                     stats.write().await.total_messages += 1;
 
                                     let _ =
@@ -706,7 +715,7 @@ impl MessageBridgeManager {
                                     );
 
                                     // Update bridge statistics
-                                    Self::update_bridge_stats(
+                                    MessageBridgeManager::update_bridge_stats(
                                         &bridges, &bridge_id, false, duration,
                                     )
                                     .await;

@@ -169,7 +169,7 @@ fn benchmark_rete_network(c: &mut Criterion) {
 
                     // Add rules to RETE network
                     for rule in rules.iter() {
-                        rete.add_rule(rule.clone()).unwrap();
+                        rete.add_rule(rule).unwrap();
                     }
 
                     // Process facts

@@ -713,9 +713,10 @@ impl ShapeLearner {
                                         instance_count,
                                     );
                                     if quality_score > 0.7 {
+                                        let constraint_count = temporal_constraints.len();
                                         current_constraints.extend(temporal_constraints);
                                         self.stats.temporal_constraints_discovered +=
-                                            temporal_constraints.len();
+                                            constraint_count;
                                     }
                                 }
                             }
@@ -1532,6 +1533,8 @@ mod tests {
             max_shapes: 50,
             enable_training: false,
             algorithm_params: HashMap::new(),
+            enable_reinforcement_learning: false,
+            rl_config: None,
         };
 
         let learner = ShapeLearner::with_config(config.clone());

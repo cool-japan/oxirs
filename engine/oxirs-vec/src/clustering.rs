@@ -840,6 +840,7 @@ mod tests {
             algorithm: ClusteringAlgorithm::KMeans,
             num_clusters: Some(2),
             random_seed: Some(42),
+            distance_metric: SimilarityMetric::Euclidean, // Use Euclidean for proper distance calculation
             ..Default::default()
         };
 
@@ -853,6 +854,7 @@ mod tests {
         ];
 
         let result = engine.cluster(&resources).unwrap();
+
         assert_eq!(result.clusters.len(), 2);
         assert!(result.noise.is_empty());
     }

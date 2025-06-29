@@ -4,9 +4,7 @@
 //! including temporal logic, time-aware inference, and temporal query processing.
 
 use crate::ai::AiConfig;
-use crate::model::{Literal, NamedNode, Triple};
-use crate::OxirsError;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};

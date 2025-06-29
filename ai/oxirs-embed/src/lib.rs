@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Vector for embeddings
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Vector {
     pub values: Vec<f32>,
     pub dimensions: usize,
@@ -34,10 +34,77 @@ impl Vector {
         let dimensions = values.len();
         Self { values, dimensions }
     }
+
+    /// Create from ndarray Array1
+    pub fn from_array1(array: &ndarray::Array1<f32>) -> Self {
+        Self::new(array.to_vec())
+    }
+
+    /// Convert to ndarray Array1
+    pub fn to_array1(&self) -> ndarray::Array1<f32> {
+        ndarray::Array1::from_vec(self.values.clone())
+    }
+
+    /// Element-wise mapping
+    pub fn mapv<F>(&self, f: F) -> Self
+    where
+        F: Fn(f32) -> f32,
+    {
+        Self::new(self.values.iter().map(|&x| f(x)).collect())
+    }
+
+    /// Sum of all elements
+    pub fn sum(&self) -> f32 {
+        self.values.iter().sum()
+    }
+
+    /// Square root of the sum
+    pub fn sqrt(&self) -> f32 {
+        self.sum().sqrt()
+    }
+}
+
+// Arithmetic operations for Vector
+use std::ops::{Add, Sub};
+
+impl Add for &Vector {
+    type Output = Vector;
+
+    fn add(self, other: &Vector) -> Vector {
+        assert_eq!(
+            self.dimensions, other.dimensions,
+            "Vector dimensions must match"
+        );
+        let values: Vec<f32> = self
+            .values
+            .iter()
+            .zip(other.values.iter())
+            .map(|(a, b)| a + b)
+            .collect();
+        Vector::new(values)
+    }
+}
+
+impl Sub for &Vector {
+    type Output = Vector;
+
+    fn sub(self, other: &Vector) -> Vector {
+        assert_eq!(
+            self.dimensions, other.dimensions,
+            "Vector dimensions must match"
+        );
+        let values: Vec<f32> = self
+            .values
+            .iter()
+            .zip(other.values.iter())
+            .map(|(a, b)| a - b)
+            .collect();
+        Vector::new(values)
+    }
 }
 
 /// Triple structure for RDF triples
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Triple {
     pub subject: NamedNode,
     pub predicate: NamedNode,
@@ -55,7 +122,7 @@ impl Triple {
 }
 
 /// Named node for RDF resources
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NamedNode {
     pub iri: String,
 }

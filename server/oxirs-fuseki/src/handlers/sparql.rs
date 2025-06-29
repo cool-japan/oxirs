@@ -22,6 +22,7 @@ use crate::{
     config::ServerConfig,
     error::{FusekiError, FusekiResult},
     federated_query_optimizer::FederatedQueryOptimizer,
+    federation::{planner::FederatedQueryPlan, FederationConfig},
     metrics::MetricsService,
     server::AppState,
     store::Store,
@@ -302,7 +303,7 @@ pub struct ValidationRule {
 /// Advanced SERVICE delegation with parallel execution
 #[derive(Debug, Clone)]
 pub struct ServiceDelegator {
-    pub federation_planner: crate::federation::FederationPlanner,
+    pub federation_planner: crate::federation::planner::QueryPlanner,
     pub parallel_executor: ParallelServiceExecutor,
     pub result_merger: ServiceResultMerger,
     pub endpoint_discovery: EndpointDiscovery,
@@ -891,8 +892,21 @@ impl InjectionDetector {
 
 impl ServiceDelegator {
     pub fn new() -> Self {
+        // Create default federation configuration
+        let config = FederationConfig {
+            enable_discovery: true,
+            discovery_interval: Duration::from_secs(300),
+            max_concurrent_requests: 10,
+            request_timeout: Duration::from_secs(30),
+            enable_cost_estimation: true,
+            circuit_breaker: crate::federation::CircuitBreakerConfig::default(),
+        };
+
+        let endpoints =
+            std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
+
         Self {
-            federation_planner: crate::federation::FederationManager::new(),
+            federation_planner: crate::federation::planner::QueryPlanner::new(config, endpoints),
             parallel_executor: ParallelServiceExecutor::new(),
             result_merger: ServiceResultMerger::new(),
             endpoint_discovery: EndpointDiscovery::new(),
@@ -932,10 +946,7 @@ impl ParallelServiceExecutor {
         }
     }
 
-    pub async fn execute_plan(
-        &self,
-        plan: &crate::federation::FederatedQueryPlan,
-    ) -> FusekiResult<Vec<QueryResult>> {
+    pub async fn execute_plan(&self, plan: &FederatedQueryPlan) -> FusekiResult<Vec<QueryResult>> {
         // Execute federated query plan with parallel service calls
         // This would implement the actual parallel execution logic
         Ok(Vec::new())
@@ -1215,7 +1226,7 @@ fn determine_response_format(headers: &HeaderMap) -> String {
 }
 
 /// Basic SPARQL query validation
-fn validate_sparql_query(query: &str) -> FusekiResult<()> {
+pub fn validate_sparql_query(query: &str) -> FusekiResult<()> {
     let trimmed = query.trim().to_lowercase();
 
     if trimmed.is_empty() {
@@ -1280,7 +1291,7 @@ fn determine_query_type(query: &str) -> String {
 }
 
 /// Execute SPARQL query against the store with advanced SPARQL 1.2 features
-async fn execute_sparql_query(
+pub async fn execute_sparql_query(
     store: &Store,
     query: &str,
     default_graphs: &[String],
@@ -2380,7 +2391,7 @@ pub fn extract_annotations(
                     let parts: Vec<&str> = line.split_whitespace().collect();
                     if parts.len() >= 2 {
                         let prop = parts[0].trim_start_matches(':');
-                        let val = parts[1..].join(" ").trim_matches('"');
+                        let val = parts[1..].join(" ").trim_matches('"').to_string();
 
                         annotations.push((format!("annotation_{}", prop), serde_json::json!(val)));
                     }

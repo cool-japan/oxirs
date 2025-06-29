@@ -806,13 +806,7 @@ impl GraphNeuralNetwork {
         for (i, edge) in graph_data.edges.iter().enumerate() {
             if i < num_relations {
                 // Simple encoding of edge features
-                for (j, feature_val) in edge
-                    .features
-                    .features
-                    .iter()
-                    .take(layer.input_dim)
-                    .enumerate()
-                {
+                for (j, feature_val) in edge.properties.values().take(layer.input_dim).enumerate() {
                     relation_features[[i, j]] = *feature_val;
                 }
             }
@@ -878,13 +872,7 @@ impl GraphNeuralNetwork {
 
         for (i, edge) in graph_data.edges.iter().enumerate() {
             if i < num_edges {
-                for (j, feature_val) in edge
-                    .features
-                    .features
-                    .iter()
-                    .take(layer.input_dim)
-                    .enumerate()
-                {
+                for (j, feature_val) in edge.properties.values().take(layer.input_dim).enumerate() {
                     relation_features[[i, j]] = *feature_val;
                 }
             }
@@ -1126,6 +1114,20 @@ impl GraphNeuralNetwork {
                             let update = &grad.weight_gradients * learning_rate;
                             *weight = &*weight - &update;
                         }
+                    }
+                    GNNLayer::GraphCompletionLayer(ref mut layer) => {
+                        let update = &grad.weight_gradients * learning_rate;
+                        layer.entity_encoder = &layer.entity_encoder - &update;
+                        layer.relation_encoder = &layer.relation_encoder - &update;
+                    }
+                    GNNLayer::EntityCompletionLayer(ref mut layer) => {
+                        let update = &grad.weight_gradients * learning_rate;
+                        layer.entity_embedding = &layer.entity_embedding - &update;
+                    }
+                    GNNLayer::RelationCompletionLayer(ref mut layer) => {
+                        let update = &grad.weight_gradients * learning_rate;
+                        layer.pattern_encoder = &layer.pattern_encoder - &update;
+                        layer.relation_embedding = &layer.relation_embedding - &update;
                     }
                 }
             }

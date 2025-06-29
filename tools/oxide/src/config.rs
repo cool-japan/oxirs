@@ -6,6 +6,9 @@ pub mod secrets;
 pub use manager::{ConfigManager, OxideConfig};
 pub use secrets::{SecretBackend, SecretManager};
 
+/// Alias for backward compatibility
+pub type Config = OxideConfig;
+
 /// CLI-specific configuration (legacy compatibility)
 pub struct CliConfig {
     pub default_dataset: Option<String>,

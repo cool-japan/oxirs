@@ -496,7 +496,7 @@ pub mod utils {
         // Check for incomplete reifications
         for (stmt_id, completeness) in statements {
             if !completeness.iter().all(|&x| x) {
-                return Err(StarError::ReificationError(format!(
+                return Err(StarError::reification_error(format!(
                     "Incomplete reification for statement {}",
                     stmt_id
                 )));

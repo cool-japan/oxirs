@@ -28,48 +28,486 @@ pub mod performance;
 pub mod persistence;
 pub mod rag;
 pub mod server;
+pub mod session;
 pub mod sparql_optimizer;
+pub mod types;
 
-/// Chat session configuration
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ChatConfig {
-    pub max_context_length: usize,
-    pub temperature: f32,
-    pub max_retrieval_results: usize,
-    pub enable_sparql_generation: bool,
-    pub session_timeout: Duration,
-    pub max_conversation_turns: usize,
-    pub enable_context_summarization: bool,
-    pub sliding_window_size: usize,
-}
+// Re-export commonly used types
+pub use session::*;
+pub use types::*;
 
-impl Default for ChatConfig {
-    fn default() -> Self {
-        Self {
-            max_context_length: 4096,
-            temperature: 0.7,
-            max_retrieval_results: 10,
-            enable_sparql_generation: true,
-            session_timeout: Duration::from_secs(3600),
-            max_conversation_turns: 100,
-            enable_context_summarization: true,
-            sliding_window_size: 20,
-        }
-    }
-}
-
-/// Chat message
+/// Chat message with rich content support
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Message {
     pub id: String,
     pub role: MessageRole,
-    pub content: String,
+    pub content: MessageContent,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub metadata: Option<MessageMetadata>,
     pub thread_id: Option<String>,
     pub parent_message_id: Option<String>,
     pub token_count: Option<usize>,
     pub reactions: Vec<MessageReaction>,
+    pub attachments: Vec<MessageAttachment>,
+    pub rich_elements: Vec<RichContentElement>,
+}
+
+/// Message content supporting both plain text and rich content
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MessageContent {
+    /// Plain text content
+    Text(String),
+    /// Rich content with multiple elements
+    Rich {
+        text: String,
+        elements: Vec<RichContentElement>,
+    },
+}
+
+impl MessageContent {
+    pub fn to_text(&self) -> &str {
+        match self {
+            MessageContent::Text(text) => text,
+            MessageContent::Rich { text, .. } => text,
+        }
+    }
+
+    pub fn from_text(text: String) -> Self {
+        MessageContent::Text(text)
+    }
+
+    pub fn add_element(&mut self, element: RichContentElement) {
+        match self {
+            MessageContent::Text(text) => {
+                let text = std::mem::take(text);
+                *self = MessageContent::Rich {
+                    text,
+                    elements: vec![element],
+                };
+            }
+            MessageContent::Rich { elements, .. } => {
+                elements.push(element);
+            }
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.to_text().len()
+    }
+
+    pub fn contains(&self, pat: char) -> bool {
+        self.to_text().contains(pat)
+    }
+
+    pub fn to_lowercase(&self) -> String {
+        self.to_text().to_lowercase()
+    }
+
+    pub fn chars(&self) -> std::str::Chars {
+        self.to_text().chars()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.to_text().is_empty()
+    }
+}
+
+impl std::fmt::Display for MessageContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_text())
+    }
+}
+
+/// Rich content elements that can be embedded in messages
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RichContentElement {
+    /// Code snippet with syntax highlighting
+    CodeBlock {
+        language: String,
+        code: String,
+        title: Option<String>,
+        line_numbers: bool,
+        highlight_lines: Vec<usize>,
+    },
+    /// SPARQL query block with execution metadata
+    SparqlQuery {
+        query: String,
+        execution_time_ms: Option<u64>,
+        result_count: Option<usize>,
+        status: QueryExecutionStatus,
+        explanation: Option<String>,
+    },
+    /// Data table with formatting options
+    Table {
+        headers: Vec<String>,
+        rows: Vec<Vec<String>>,
+        title: Option<String>,
+        pagination: Option<TablePagination>,
+        sorting: Option<TableSorting>,
+        formatting: TableFormatting,
+    },
+    /// Graph visualization configuration
+    GraphVisualization {
+        graph_type: GraphType,
+        data: GraphData,
+        layout: GraphLayout,
+        styling: GraphStyling,
+        interactive: bool,
+    },
+    /// Chart or plot
+    Chart {
+        chart_type: ChartType,
+        data: ChartData,
+        title: Option<String>,
+        axes: ChartAxes,
+        styling: ChartStyling,
+    },
+    /// File upload reference
+    FileReference {
+        file_id: String,
+        filename: String,
+        file_type: String,
+        size_bytes: u64,
+        preview: Option<FilePreview>,
+    },
+    /// Interactive widget
+    Widget {
+        widget_type: WidgetType,
+        data: serde_json::Value,
+        config: WidgetConfig,
+    },
+    /// Timeline visualization
+    Timeline {
+        events: Vec<TimelineEvent>,
+        range: TimelineRange,
+        styling: TimelineStyling,
+    },
+}
+
+/// Message attachment for file uploads
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageAttachment {
+    pub id: String,
+    pub filename: String,
+    pub file_type: String,
+    pub size_bytes: u64,
+    pub url: Option<String>,
+    pub thumbnail_url: Option<String>,
+    pub metadata: AttachmentMetadata,
+    pub upload_timestamp: chrono::DateTime<chrono::Utc>,
+    pub processing_status: AttachmentProcessingStatus,
+}
+
+/// Query execution status for SPARQL queries
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum QueryExecutionStatus {
+    Success,
+    Error(String),
+    Timeout,
+    Cancelled,
+    ValidationError(String),
+}
+
+/// Table pagination information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TablePagination {
+    pub current_page: usize,
+    pub total_pages: usize,
+    pub page_size: usize,
+    pub total_rows: usize,
+}
+
+/// Table sorting configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableSorting {
+    pub column: String,
+    pub direction: SortDirection,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SortDirection {
+    Ascending,
+    Descending,
+}
+
+/// Table formatting options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableFormatting {
+    pub striped_rows: bool,
+    pub borders: bool,
+    pub compact: bool,
+    pub hover_highlight: bool,
+    pub column_widths: Option<Vec<String>>,
+}
+
+impl Default for TableFormatting {
+    fn default() -> Self {
+        Self {
+            striped_rows: true,
+            borders: true,
+            compact: false,
+            hover_highlight: true,
+            column_widths: None,
+        }
+    }
+}
+
+/// Graph visualization types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GraphType {
+    NetworkGraph,
+    Tree,
+    DAG,
+    ForceDirected,
+    Hierarchical,
+    Circular,
+}
+
+/// Graph data structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphData {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphNode {
+    pub id: String,
+    pub label: String,
+    pub node_type: Option<String>,
+    pub properties: HashMap<String, String>,
+    pub styling: Option<NodeStyling>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphEdge {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub label: Option<String>,
+    pub edge_type: Option<String>,
+    pub properties: HashMap<String, String>,
+    pub styling: Option<EdgeStyling>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeStyling {
+    pub color: Option<String>,
+    pub size: Option<f32>,
+    pub shape: Option<String>,
+    pub border_color: Option<String>,
+    pub border_width: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EdgeStyling {
+    pub color: Option<String>,
+    pub width: Option<f32>,
+    pub style: Option<String>, // solid, dashed, dotted
+    pub arrow_type: Option<String>,
+}
+
+/// Graph layout configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphLayout {
+    pub algorithm: String,
+    pub parameters: HashMap<String, f32>,
+    pub constraints: Option<Vec<LayoutConstraint>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LayoutConstraint {
+    pub constraint_type: String,
+    pub nodes: Vec<String>,
+    pub parameters: HashMap<String, f32>,
+}
+
+/// Graph styling options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphStyling {
+    pub theme: String,
+    pub background_color: Option<String>,
+    pub node_defaults: Option<NodeStyling>,
+    pub edge_defaults: Option<EdgeStyling>,
+    pub highlight_color: Option<String>,
+}
+
+/// Chart types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ChartType {
+    Line,
+    Bar,
+    Pie,
+    Scatter,
+    Histogram,
+    Heatmap,
+    Box,
+    Violin,
+}
+
+/// Chart data structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChartData {
+    pub datasets: Vec<ChartDataset>,
+    pub labels: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChartDataset {
+    pub label: String,
+    pub data: Vec<f64>,
+    pub styling: ChartDatasetStyling,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChartDatasetStyling {
+    pub color: Option<String>,
+    pub background_color: Option<String>,
+    pub border_color: Option<String>,
+    pub border_width: Option<f32>,
+    pub point_style: Option<String>,
+}
+
+/// Chart axes configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChartAxes {
+    pub x_axis: AxisConfig,
+    pub y_axis: AxisConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AxisConfig {
+    pub title: Option<String>,
+    pub unit: Option<String>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub logarithmic: bool,
+}
+
+/// Chart styling options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChartStyling {
+    pub theme: String,
+    pub responsive: bool,
+    pub legend: LegendConfig,
+    pub tooltip: TooltipConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LegendConfig {
+    pub show: bool,
+    pub position: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TooltipConfig {
+    pub show: bool,
+    pub format: Option<String>,
+}
+
+/// File preview information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FilePreview {
+    Text {
+        content: String,
+        truncated: bool,
+    },
+    Image {
+        thumbnail_url: String,
+        width: u32,
+        height: u32,
+    },
+    Document {
+        page_count: Option<u32>,
+        title: Option<String>,
+    },
+    Data {
+        row_count: Option<u32>,
+        column_count: Option<u32>,
+        schema: Option<Vec<String>>,
+    },
+}
+
+/// Interactive widget types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum WidgetType {
+    QueryBuilder,
+    DataExplorer,
+    GraphNavigator,
+    FilterPanel,
+    PropertyInspector,
+    EntityBrowser,
+}
+
+/// Widget configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WidgetConfig {
+    pub interactive: bool,
+    pub auto_update: bool,
+    pub refresh_interval: Option<u64>,
+    pub height: Option<u32>,
+    pub width: Option<u32>,
+}
+
+/// Timeline event
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimelineEvent {
+    pub id: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub title: String,
+    pub description: Option<String>,
+    pub event_type: String,
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Timeline range
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimelineRange {
+    pub start: chrono::DateTime<chrono::Utc>,
+    pub end: chrono::DateTime<chrono::Utc>,
+    pub granularity: TimelineGranularity,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TimelineGranularity {
+    Second,
+    Minute,
+    Hour,
+    Day,
+    Week,
+    Month,
+    Year,
+}
+
+/// Timeline styling
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimelineStyling {
+    pub theme: String,
+    pub show_grid: bool,
+    pub highlight_current: bool,
+    pub zoom_enabled: bool,
+}
+
+/// Attachment metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachmentMetadata {
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub uploaded_by: Option<String>,
+    pub processed: bool,
+    pub virus_scanned: bool,
+    pub content_hash: Option<String>,
+}
+
+/// Attachment processing status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AttachmentProcessingStatus {
+    Pending,
+    Processing,
+    Complete,
+    Failed(String),
+    VirusDetected,
 }
 
 /// Message reaction
@@ -88,7 +526,7 @@ pub enum MessageRole {
     System,
 }
 
-/// Message metadata
+/// Message metadata with analytics support
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MessageMetadata {
     pub sparql_query: Option<String>,
@@ -99,6 +537,221 @@ pub struct MessageMetadata {
     pub intent_classification: Option<String>,
     pub entities_extracted: Option<Vec<String>>,
     pub context_used: Option<bool>,
+    /// Analytics data
+    pub analytics: Option<MessageAnalytics>,
+}
+
+/// Message analytics data
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MessageAnalytics {
+    /// Intent classification with confidence
+    pub intent: MessageIntent,
+    /// Sentiment analysis result
+    pub sentiment: SentimentAnalysis,
+    /// Complexity scoring
+    pub complexity: ComplexityMetrics,
+    /// Confidence tracking
+    pub confidence: ConfidenceMetrics,
+    /// Success metrics
+    pub success_metrics: SuccessMetrics,
+    /// User satisfaction indicators
+    pub satisfaction: SatisfactionMetrics,
+}
+
+/// Message intent classification
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MessageIntent {
+    pub primary_intent: IntentType,
+    pub secondary_intents: Vec<IntentType>,
+    pub confidence: f32,
+    pub entities: Vec<ExtractedEntity>,
+    pub keywords: Vec<String>,
+}
+
+/// Intent types for message classification
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum IntentType {
+    /// User is asking a factual question
+    Question,
+    /// User is making a request for action
+    Request,
+    /// User is providing information
+    Information,
+    /// User is expressing gratitude
+    Gratitude,
+    /// User is expressing dissatisfaction
+    Complaint,
+    /// User is asking for clarification
+    Clarification,
+    /// User is browsing or exploring
+    Exploration,
+    /// User is comparing options
+    Comparison,
+    /// User is asking for a list
+    ListQuery,
+    /// User is asking for an aggregation
+    Aggregation,
+    /// User is asking about relationships
+    Relationship,
+    /// User is asking for a definition
+    Definition,
+    /// Complex multi-part query
+    Complex,
+    /// Social/conversational message
+    Social,
+}
+
+/// Extracted entity from message
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExtractedEntity {
+    pub text: String,
+    pub entity_type: EntityType,
+    pub confidence: f32,
+    pub start_offset: usize,
+    pub end_offset: usize,
+    pub uri: Option<String>,
+}
+
+/// Types of entities that can be extracted
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum EntityType {
+    Person,
+    Organization,
+    Location,
+    Date,
+    Time,
+    Number,
+    Concept,
+    Property,
+    Class,
+    Resource,
+    Literal,
+}
+
+/// Sentiment analysis result
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SentimentAnalysis {
+    pub polarity: SentimentPolarity,
+    pub confidence: f32,
+    pub emotions: Vec<EmotionScore>,
+    pub subjectivity: f32,
+}
+
+/// Sentiment polarity
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum SentimentPolarity {
+    Positive,
+    Negative,
+    Neutral,
+}
+
+/// Emotion score
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EmotionScore {
+    pub emotion: EmotionType,
+    pub score: f32,
+}
+
+/// Types of emotions
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum EmotionType {
+    Joy,
+    Anger,
+    Fear,
+    Sadness,
+    Surprise,
+    Disgust,
+    Anticipation,
+    Trust,
+    Frustration,
+    Satisfaction,
+    Confusion,
+    Excitement,
+}
+
+/// Complexity metrics for messages
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ComplexityMetrics {
+    pub linguistic_complexity: f32,
+    pub conceptual_complexity: f32,
+    pub structural_complexity: f32,
+    pub domain_complexity: f32,
+    pub overall_score: f32,
+    pub factors: Vec<ComplexityFactor>,
+}
+
+/// Factors contributing to complexity
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ComplexityFactor {
+    pub factor_type: String,
+    pub score: f32,
+    pub description: String,
+}
+
+/// Confidence metrics
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ConfidenceMetrics {
+    pub overall_confidence: f32,
+    pub understanding_confidence: f32,
+    pub response_confidence: f32,
+    pub data_confidence: f32,
+    pub reasoning_confidence: f32,
+    pub uncertainty_factors: Vec<UncertaintyFactor>,
+}
+
+/// Factors that reduce confidence
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UncertaintyFactor {
+    pub factor_type: String,
+    pub impact: f32,
+    pub description: String,
+}
+
+/// Success metrics for message processing
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SuccessMetrics {
+    pub query_successful: bool,
+    pub response_generated: bool,
+    pub context_retrieved: bool,
+    pub entities_found: bool,
+    pub sparql_executed: bool,
+    pub results_returned: bool,
+    pub user_satisfied: Option<bool>,
+    pub completion_time_ms: u64,
+    pub retry_count: u32,
+    pub error_count: u32,
+}
+
+/// User satisfaction metrics
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SatisfactionMetrics {
+    pub explicit_feedback: Option<UserFeedback>,
+    pub implicit_signals: ImplicitSatisfactionSignals,
+    pub satisfaction_score: Option<f32>,
+    pub follow_up_questions: u32,
+    pub clarification_requests: u32,
+}
+
+/// Explicit user feedback
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UserFeedback {
+    pub rating: u32, // 1-5 scale
+    pub comment: Option<String>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub helpful: Option<bool>,
+    pub accurate: Option<bool>,
+    pub complete: Option<bool>,
+}
+
+/// Implicit satisfaction signals
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ImplicitSatisfactionSignals {
+    pub response_time_to_user: Option<u64>,
+    pub conversation_continued: bool,
+    pub message_length_ratio: f32, // user response length / our response length
+    pub topic_shift_occurred: bool,
+    pub repeat_query_pattern: bool,
+    pub engagement_score: f32,
 }
 
 /// Persistent session data
@@ -232,7 +885,7 @@ impl TopicTracker {
 
     /// Analyze a message for topic changes with enhanced drift detection
     pub fn analyze_message(&mut self, message: &Message) -> Option<TopicTransition> {
-        let detected_topics = self.extract_topics(&message.content);
+        let detected_topics = self.extract_topics(message.content.to_text());
 
         if detected_topics.is_empty() {
             return None;
@@ -672,7 +1325,7 @@ impl ChatSession {
         use crate::{
             llm::{ChatMessage, ChatRole, LLMConfig, LLMManager, LLMRequest, Priority, UseCase},
             nl2sparql::{NL2SPARQLConfig, NL2SPARQLSystem},
-            rag::{AssembledContext, QueryContext, QueryIntent, RAGConfig, RAGSystem},
+            // rag::{AssembledContext, QueryContext, QueryIntent, RAGConfig, RAGSystem}, // Temporarily disabled
         };
 
         // Add user message to history
@@ -680,13 +1333,15 @@ impl ChatSession {
         let user_message = Message {
             id: user_message_id.clone(),
             role: MessageRole::User,
-            content: user_input.clone(),
+            content: MessageContent::from_text(user_input.clone()),
             timestamp: chrono::Utc::now(),
             metadata: None,
             thread_id: thread_id.clone(),
             parent_message_id,
             token_count: Some(user_input.split_whitespace().count()),
             reactions: Vec::new(),
+            attachments: Vec::new(),
+            rich_elements: Vec::new(),
         };
         self.messages.push(user_message);
 
@@ -706,7 +1361,7 @@ impl ChatSession {
                 .messages
                 .iter()
                 .take(5) // Last 5 messages for context
-                .map(|m| m.content.clone())
+                .map(|m| m.content.to_text().to_string())
                 .collect(),
         };
 
@@ -821,7 +1476,7 @@ impl ChatSession {
         let response = Message {
             id: Uuid::new_v4().to_string(),
             role: MessageRole::Assistant,
-            content: response_content.clone(),
+            content: MessageContent::from_text(response_content.clone()),
             timestamp: chrono::Utc::now(),
             metadata: Some(MessageMetadata {
                 sparql_query,
@@ -832,11 +1487,14 @@ impl ChatSession {
                 intent_classification: Some(format!("{:?}", self.classify_intent(&user_input))),
                 entities_extracted: None,
                 context_used: Some(context_text.is_some()),
+                analytics: None, // Will be populated by analytics processor
             }),
             thread_id,
             parent_message_id: Some(user_message_id),
             token_count: Some(response_content.split_whitespace().count()),
             reactions: Vec::new(),
+            attachments: Vec::new(),
+            rich_elements: Vec::new(),
         };
 
         self.messages.push(response.clone());

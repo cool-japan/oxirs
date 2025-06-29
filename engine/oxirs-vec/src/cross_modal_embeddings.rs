@@ -586,7 +586,18 @@ impl CrossModalEncoder {
                 (Modality::Graph, ModalityData::Graph(graph)) => {
                     self.graph_encoder.encode(graph)?
                 }
-                (Modality::Numeric, ModalityData::Numeric(values)) => Vector::new(values.clone()),
+                (Modality::Numeric, ModalityData::Numeric(values)) => {
+                    // Ensure numeric vectors match joint embedding dimension
+                    let mut padded_values = values.clone();
+                    if padded_values.len() < self.config.joint_embedding_dim {
+                        // Pad with zeros to match embedding dimension
+                        padded_values.resize(self.config.joint_embedding_dim, 0.0);
+                    } else if padded_values.len() > self.config.joint_embedding_dim {
+                        // Truncate to match embedding dimension
+                        padded_values.truncate(self.config.joint_embedding_dim);
+                    }
+                    Vector::new(padded_values)
+                }
                 _ => return Err(anyhow!("Modality-data type mismatch")),
             };
 

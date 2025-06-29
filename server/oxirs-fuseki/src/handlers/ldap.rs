@@ -318,8 +318,8 @@ pub async fn get_ldap_groups(
 
             let response = LdapGroupResponse {
                 success: true,
-                groups: group_info,
-                message: format!("Found {} groups for user", response.groups.len()),
+                groups: group_info.clone(),
+                message: format!("Found {} groups for user", group_info.len()),
             };
             Ok((StatusCode::OK, Json(response)).into_response())
         }

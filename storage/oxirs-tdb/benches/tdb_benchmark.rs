@@ -92,14 +92,17 @@ fn bench_bulk_load_transactions(c: &mut Criterion) {
                 |(_temp_dir, store, triples)| {
                     let tx = store.begin_transaction().unwrap();
                     for (subject, predicate, object) in triples.iter() {
+                        let subject_id = store.triple_store().store_term(subject).unwrap();
+                        let predicate_id = store.triple_store().store_term(predicate).unwrap();
+                        let object_id = store.triple_store().store_term(object).unwrap();
+                        let triple = oxirs_tdb::triple_store::Triple::new(
+                            subject_id,
+                            predicate_id,
+                            object_id,
+                        );
                         store
                             .triple_store()
-                            .insert_triple_in_transaction(
-                                tx.id(),
-                                &store.triple_store().store_term(subject).unwrap(),
-                                &store.triple_store().store_term(predicate).unwrap(),
-                                &store.triple_store().store_term(object).unwrap(),
-                            )
+                            .insert_triple_tx(tx.id(), &triple)
                             .unwrap();
                     }
                     store.commit_transaction(tx).unwrap();
@@ -602,7 +605,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
                 for _ in 0..num_props {
                     let predicate_str = foaf_predicates.choose(&mut rng).unwrap();
                     if used_predicates.insert(predicate_str) {
-                        let predicate = Term::iri(predicate_str);
+                        let predicate = Term::iri(*predicate_str);
                         let object = match predicate_str {
                             s if s.contains("name") => {
                                 Term::literal(&format!("Person {}", person_id))
@@ -630,7 +633,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
                 let document = Term::iri(&format!("http://example.org/document/{}", doc_id));
 
                 for predicate_str in dc_predicates.choose_multiple(&mut rng, 3) {
-                    let predicate = Term::iri(predicate_str);
+                    let predicate = Term::iri(*predicate_str);
                     let object = match predicate_str {
                         s if s.contains("title") => Term::literal(&format!("Document {}", doc_id)),
                         s if s.contains("creator") => Term::iri(&format!(
@@ -652,7 +655,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
                 let product = Term::iri(&format!("http://example.org/product/{}", product_id));
 
                 for predicate_str in schema_predicates.choose_multiple(&mut rng, 4) {
-                    let predicate = Term::iri(predicate_str);
+                    let predicate = Term::iri(*predicate_str);
                     let object = match predicate_str {
                         s if s.contains("name") => {
                             Term::literal(&format!("Product {}", product_id))

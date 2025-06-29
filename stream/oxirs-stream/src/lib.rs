@@ -30,6 +30,10 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Re-export commonly used types for convenience
+pub use backend_optimizer::{
+    BackendOptimizer, BackendPerformance, BackendRecommendation, ConsistencyLevel, CostModel,
+    OptimizationDecision, OptimizationStats, OptimizerConfig, PatternType, WorkloadPattern,
+};
 pub use bridge::{
     BridgeInfo, BridgeType, ExternalMessage, ExternalSystemConfig, ExternalSystemType,
     MessageBridgeManager, MessageTransformer, RoutingRule,
@@ -57,6 +61,7 @@ pub use webhook::{
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod backend;
+pub mod backend_optimizer;
 pub mod bridge;
 pub mod circuit_breaker;
 pub mod config;

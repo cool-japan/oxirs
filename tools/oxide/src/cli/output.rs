@@ -40,10 +40,22 @@ impl Default for ColorScheme {
 
 impl OutputFormatter {
     /// Create a new output formatter
-    pub fn new(no_color: bool) -> Self {
-        // Respect NO_COLOR environment variable
-        let no_color = no_color || std::env::var("NO_COLOR").is_ok();
+    pub fn new(format: &str) -> Self {
+        // Determine if color should be disabled
+        let no_color = format == "json" || format == "csv" || std::env::var("NO_COLOR").is_ok();
 
+        if no_color {
+            colored::control::set_override(false);
+        }
+
+        Self {
+            no_color,
+            _color_scheme: ColorScheme::default(),
+        }
+    }
+
+    /// Create a new output formatter with explicit color setting
+    pub fn new_with_color(no_color: bool) -> Self {
         if no_color {
             colored::control::set_override(false);
         }
@@ -200,6 +212,240 @@ impl OutputFormatter {
         print!("\r{}\r", " ".repeat(80));
         use std::io::{self, Write};
         io::stdout().flush().unwrap_or(());
+    }
+
+    /// Print performance report
+    pub fn print_performance_report(
+        &self,
+        report: &crate::tools::performance::PerformanceReport,
+    ) -> Result<(), crate::cli::error::CliError> {
+        self.section("Performance Report");
+
+        let timestamp = report
+            .timestamp
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        self.key_value("Timestamp", &format!("{}", timestamp));
+        self.key_value(
+            "CPU Usage",
+            &format!("{:.1}%", report.current_metrics.cpu_usage),
+        );
+        self.key_value(
+            "Memory Usage",
+            &format!(
+                "{:.2} GB",
+                report.current_metrics.memory_usage as f64 / 1_000_000_000.0
+            ),
+        );
+        self.key_value(
+            "Memory Total",
+            &format!(
+                "{:.2} GB",
+                report.current_metrics.memory_total as f64 / 1_000_000_000.0
+            ),
+        );
+        self.key_value(
+            "Active Sessions",
+            &format!("{}", report.active_profiling_sessions),
+        );
+
+        if !report.performance_counters.is_empty() {
+            self.section("Performance Counters");
+            for (name, value) in &report.performance_counters {
+                self.key_value(name, &format!("{}", value));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Print profiling result
+    pub fn print_profiling_result(
+        &self,
+        result: &crate::tools::performance::ProfilingResult,
+    ) -> Result<(), crate::cli::error::CliError> {
+        self.section(&format!("Profiling Result: {}", result.operation_name));
+
+        self.key_value("Session ID", &result.session_id);
+        self.key_value(
+            "Duration",
+            &format!("{:.3}s", result.total_duration.as_secs_f64()),
+        );
+        self.key_value(
+            "Efficiency Score",
+            &format!("{:.1}/100", result.performance_summary.efficiency_score),
+        );
+        self.key_value(
+            "Memory Delta",
+            &format!(
+                "{:.2} MB",
+                result.performance_summary.memory_delta_bytes as f64 / 1_000_000.0
+            ),
+        );
+        self.key_value(
+            "Average CPU",
+            &format!("{:.1}%", result.performance_summary.average_cpu_usage),
+        );
+        self.key_value("Checkpoints", &format!("{}", result.checkpoints.len()));
+
+        if !result.checkpoints.is_empty() {
+            self.section("Checkpoints");
+            let mut table = self.create_table();
+            table.set_titles(self.table_row(vec!["Name", "Time (s)", "Memory Delta (MB)"]));
+
+            for checkpoint in &result.checkpoints {
+                table.add_row(self.table_row(vec![
+                    &checkpoint.name,
+                    &format!("{:.3}", checkpoint.duration_from_start.as_secs_f64()),
+                    &format!("{:.2}", checkpoint.memory_delta as f64 / 1_000_000.0),
+                ]));
+            }
+
+            println!("{}", table);
+        }
+
+        Ok(())
+    }
+
+    /// Print benchmark comparison
+    pub fn print_benchmark_comparison(
+        &self,
+        comparison: &crate::tools::performance::BenchmarkComparison,
+    ) -> Result<(), crate::cli::error::CliError> {
+        self.section("Benchmark Comparison");
+
+        self.key_value("Baseline", &comparison.baseline_name);
+        self.key_value("Current", &comparison.current_name);
+
+        if comparison.performance_ratio < 0.95 {
+            self.success(&comparison.improvement_summary);
+        } else if comparison.performance_ratio > 1.05 {
+            self.warn(&comparison.improvement_summary);
+        } else {
+            self.info(&comparison.improvement_summary);
+        }
+
+        self.key_value("Time Ratio", &format!("{:.3}x", comparison.time_ratio));
+        self.key_value("Memory Ratio", &format!("{:.3}x", comparison.memory_ratio));
+        self.key_value(
+            "Performance Ratio",
+            &format!("{:.3}x", comparison.performance_ratio),
+        );
+
+        if !comparison.detailed_metrics.is_empty() {
+            self.section("Detailed Metrics");
+            let mut table = self.create_table();
+            table.set_titles(self.table_row(vec![
+                "Metric",
+                "Baseline",
+                "Current",
+                "Improvement %",
+                "Significance",
+            ]));
+
+            for (metric_name, metric) in &comparison.detailed_metrics {
+                let improvement_text = if metric.improvement_percentage > 0.0 {
+                    format!("+{:.1}%", metric.improvement_percentage)
+                } else {
+                    format!("{:.1}%", metric.improvement_percentage)
+                };
+
+                table.add_row(self.table_row(vec![
+                    metric_name,
+                    &format!("{:.3}", metric.baseline_value),
+                    &format!("{:.3}", metric.current_value),
+                    &improvement_text,
+                    &format!("{:?}", metric.significance),
+                ]));
+            }
+
+            println!("{}", table);
+        }
+
+        Ok(())
+    }
+
+    /// Print system health
+    pub fn print_system_health(
+        &self,
+        health: &crate::tools::performance::SystemHealth,
+    ) -> Result<(), crate::cli::error::CliError> {
+        self.section("System Health");
+
+        let status_text = format!("{:?}", health.status);
+        match health.status {
+            crate::tools::performance::HealthStatus::Healthy => {
+                self.success(&format!("Status: {}", status_text))
+            }
+            crate::tools::performance::HealthStatus::Moderate => {
+                self.info(&format!("Status: {}", status_text))
+            }
+            crate::tools::performance::HealthStatus::Warning => {
+                self.warn(&format!("Status: {}", status_text))
+            }
+            crate::tools::performance::HealthStatus::Critical => {
+                self.error(&format!("Status: {}", status_text))
+            }
+        }
+
+        self.key_value("CPU Usage", &format!("{:.1}%", health.cpu_usage_percentage));
+        self.key_value(
+            "Memory Usage",
+            &format!("{:.1}%", health.memory_usage_percentage),
+        );
+
+        if health.disk_space_issues {
+            self.warn("Disk space issues detected");
+        }
+
+        if health.network_issues {
+            self.warn("Network issues detected");
+        }
+
+        if !health.recommendations.is_empty() {
+            self.section("Health Recommendations");
+            for recommendation in &health.recommendations {
+                self.list_item(recommendation);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Print detection result for format detection
+    pub fn print_detection_result(
+        &self,
+        result: &crate::tools::format_detection::DetectionResult,
+        path: &std::path::Path,
+    ) -> Result<(), crate::cli::error::CliError> {
+        self.section("Format Detection Result");
+
+        self.key_value("File", &path.display().to_string());
+        self.key_value("Detected Format", &format!("{:?}", result.format));
+        self.key_value("Confidence", &format!("{:.1}%", result.confidence * 100.0));
+        self.key_value(
+            "Detection Method",
+            &format!("{:?}", result.detection_method),
+        );
+
+        if let Some(encoding) = &result.encoding {
+            self.key_value("Encoding", encoding);
+        }
+
+        if let Some(compression) = &result.compression {
+            self.key_value("Compression", compression);
+        }
+
+        if !result.additional_info.is_empty() {
+            self.section("Additional Information");
+            for (key, value) in &result.additional_info {
+                self.key_value(key, value);
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -363,7 +609,7 @@ mod tests {
 
     #[test]
     fn test_output_formatter() {
-        let formatter = OutputFormatter::new(true); // no color for tests
+        let formatter = OutputFormatter::new_with_color(true); // no color for tests
 
         // These should not panic
         formatter.info("Information");

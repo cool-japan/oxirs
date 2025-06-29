@@ -1175,7 +1175,7 @@ fn builtin_greater_than(args: &[SwrlArgument]) -> Result<bool> {
     Ok(val1 > val2)
 }
 
-fn builtin_add(args: &[SwrlArgument]) -> Result<bool> {
+pub fn builtin_add(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 3 {
         return Err(anyhow::anyhow!("add requires exactly 3 arguments"));
     }
@@ -1199,7 +1199,7 @@ fn builtin_subtract(args: &[SwrlArgument]) -> Result<bool> {
     Ok((val1 - val2 - result).abs() < f64::EPSILON)
 }
 
-fn builtin_multiply(args: &[SwrlArgument]) -> Result<bool> {
+pub fn builtin_multiply(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 3 {
         return Err(anyhow::anyhow!("multiply requires exactly 3 arguments"));
     }
@@ -1211,7 +1211,7 @@ fn builtin_multiply(args: &[SwrlArgument]) -> Result<bool> {
     Ok((val1 * val2 - result).abs() < f64::EPSILON)
 }
 
-fn builtin_string_concat(args: &[SwrlArgument]) -> Result<bool> {
+pub fn builtin_string_concat(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() < 3 {
         return Err(anyhow::anyhow!(
             "stringConcat requires at least 3 arguments"
@@ -1300,7 +1300,7 @@ fn builtin_mod(args: &[SwrlArgument]) -> Result<bool> {
     Ok((dividend % divisor - result).abs() < f64::EPSILON)
 }
 
-fn builtin_pow(args: &[SwrlArgument]) -> Result<bool> {
+pub fn builtin_pow(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 3 {
         return Err(anyhow::anyhow!("pow requires exactly 3 arguments"));
     }
@@ -1496,7 +1496,7 @@ fn builtin_substring(args: &[SwrlArgument]) -> Result<bool> {
     Ok(extracted == result)
 }
 
-fn builtin_upper_case(args: &[SwrlArgument]) -> Result<bool> {
+pub fn builtin_upper_case(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 2 {
         return Err(anyhow::anyhow!("upperCase requires exactly 2 arguments"));
     }

@@ -5,7 +5,7 @@ use oxirs_chat::{
     server::{ChatServer, ServerConfig},
     ChatManager,
 };
-use oxirs_core::{parser::RdfFormat, GraphName, Literal, NamedNode, Quad, Store, Triple};
+use oxirs_core::{format::RdfFormat, GraphName, Literal, NamedNode, Quad, Store, Triple};
 use std::{path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
 
@@ -123,9 +123,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Server configuration: {:?}", server_config);
 
-    if let Some(model_config) = &args.model_config {
-        info!("Model config: {:?}", model_config);
-        // TODO: Load and apply model configuration
+    // Load and apply model configuration if provided
+    let llm_config = if let Some(model_config_path) = &args.model_config {
+        info!("Loading model configuration from: {:?}", model_config_path);
+        match load_llm_config(model_config_path).await {
+            Ok(config) => {
+                info!("Successfully loaded model configuration");
+                config
+            }
+            Err(e) => {
+                error!("Failed to load model configuration: {}", e);
+                warn!("Using default model configuration");
+                oxirs_chat::llm::LLMConfig::default()
+            }
+        }
+    } else {
+        info!("No model configuration specified, using defaults");
+        oxirs_chat::llm::LLMConfig::default()
+    };
+
+    // Initialize the LLM manager with the configuration
+    match oxirs_chat::llm::LLMManager::new(llm_config.clone()) {
+        Ok(_llm_manager) => {
+            info!("LLM manager initialized successfully");
+            // TODO: Store LLM manager in chat manager
+        }
+        Err(e) => {
+            error!("Failed to initialize LLM manager: {}", e);
+            warn!("Chat functionality may be limited without LLM integration");
+        }
     }
 
     // Clone chat_manager before moving it
@@ -192,7 +218,13 @@ async fn initialize_store(
                 "ttl" | "turtle" => RdfFormat::Turtle,
                 "rdf" | "xml" => RdfFormat::RdfXml,
                 "n3" => RdfFormat::Turtle, // N3 not supported, use Turtle
-                "jsonld" | "json-ld" => RdfFormat::JsonLd,
+                "jsonld" | "json-ld" => {
+                    // Use default JSON-LD profile
+                    use oxirs_core::format::JsonLdProfileSet;
+                    RdfFormat::JsonLd {
+                        profile: JsonLdProfileSet::empty(),
+                    }
+                }
                 _ => {
                     warn!(
                         "Unknown file extension '{}', defaulting to Turtle",
@@ -208,12 +240,24 @@ async fn initialize_store(
 
         // Load the dataset
         match std::fs::read_to_string(path) {
-            Ok(_content) => {
+            Ok(content) => {
                 info!("File read successfully, format: {:?}", format);
 
-                // TODO: Implement parsing from string with format detection
-                // For now, we'll use the sample data below
-                warn!("Dataset parsing from file not yet implemented, using sample data");
+                // Parse the RDF content using oxirs-core
+                info!("Parsing RDF data from file...");
+                match parse_rdf_content(&content, format, &mut store) {
+                    Ok(count) => {
+                        info!(
+                            "Successfully parsed and loaded {} triples from dataset",
+                            count
+                        );
+                    }
+                    Err(e) => {
+                        error!("Failed to parse RDF data: {}", e);
+                        warn!("Adding sample data instead due to parsing error");
+                        add_sample_data(&mut store)?;
+                    }
+                }
             }
             Err(e) => {
                 error!("Failed to read dataset file: {}", e);
@@ -229,6 +273,138 @@ async fn initialize_store(
     }
 
     Ok(store)
+}
+
+/// Load LLM configuration from file
+async fn load_llm_config(
+    config_path: &PathBuf,
+) -> Result<oxirs_chat::llm::LLMConfig, Box<dyn std::error::Error>> {
+    // Read the configuration file
+    let config_content = std::fs::read_to_string(config_path)?;
+
+    // Determine file format from extension
+    let config = if let Some(extension) = config_path.extension().and_then(|s| s.to_str()) {
+        match extension.to_lowercase().as_str() {
+            "toml" => toml::from_str(&config_content)?,
+            "json" => serde_json::from_str(&config_content)?,
+            "yaml" | "yml" => {
+                // For YAML support, we'd need to add a yaml crate
+                return Err("YAML configuration not yet supported, use TOML or JSON".into());
+            }
+            _ => {
+                warn!(
+                    "Unknown config file extension '{}', trying TOML format",
+                    extension
+                );
+                toml::from_str(&config_content)?
+            }
+        }
+    } else {
+        // Default to TOML if no extension
+        toml::from_str(&config_content)?
+    };
+
+    Ok(config)
+}
+
+/// Parse RDF content from string using specified format
+fn parse_rdf_content(
+    content: &str,
+    format: RdfFormat,
+    store: &mut Store,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    use oxirs_core::format::parser::simple;
+    use std::io::Cursor;
+
+    let mut count = 0;
+
+    match format {
+        RdfFormat::Turtle => {
+            let triples = simple::parse_turtle(content)?;
+            for triple in triples {
+                let quad = Quad::new(
+                    triple.subject().clone(),
+                    triple.predicate().clone(),
+                    triple.object().clone(),
+                    GraphName::DefaultGraph,
+                );
+                store.insert_quad(quad)?;
+                count += 1;
+            }
+        }
+        RdfFormat::NTriples => {
+            let triples = simple::parse_ntriples(content)?;
+            for triple in triples {
+                let quad = Quad::new(
+                    triple.subject().clone(),
+                    triple.predicate().clone(),
+                    triple.object().clone(),
+                    GraphName::DefaultGraph,
+                );
+                store.insert_quad(quad)?;
+                count += 1;
+            }
+        }
+        RdfFormat::RdfXml => {
+            // Use generic parser for RDF/XML
+            use oxirs_core::format::RdfParser;
+            let parser = RdfParser::new(oxirs_core::format::RdfFormat::RdfXml);
+            let quads: Result<Vec<_>, _> = parser.for_slice(content.as_bytes()).collect();
+
+            match quads {
+                Ok(quads) => {
+                    for quad in quads {
+                        store.insert_quad(quad)?;
+                        count += 1;
+                    }
+                }
+                Err(e) => {
+                    return Err(format!("Failed to parse RDF/XML: {}", e).into());
+                }
+            }
+        }
+        RdfFormat::JsonLd { .. } => {
+            // Use generic parser for JSON-LD
+            use oxirs_core::format::RdfParser;
+            let parser = RdfParser::new(format);
+            let quads: Result<Vec<_>, _> = parser.for_slice(content.as_bytes()).collect();
+
+            match quads {
+                Ok(quads) => {
+                    for quad in quads {
+                        store.insert_quad(quad)?;
+                        count += 1;
+                    }
+                }
+                Err(e) => {
+                    return Err(format!("Failed to parse JSON-LD: {}", e).into());
+                }
+            }
+        }
+        _ => {
+            // For other formats, use the generic parser
+            use oxirs_core::format::RdfParser;
+            let format_debug = format!("{:?}", format); // Capture debug representation before move
+            let parser = RdfParser::new(format);
+            let quads: Result<Vec<_>, _> = parser.for_slice(content.as_bytes()).collect();
+
+            match quads {
+                Ok(quads) => {
+                    for quad in quads {
+                        store.insert_quad(quad)?;
+                        count += 1;
+                    }
+                }
+                Err(e) => {
+                    return Err(
+                        format!("Failed to parse RDF format {}: {}", format_debug, e).into(),
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(count)
 }
 
 /// Add sample RDF data for demonstration when no dataset is provided

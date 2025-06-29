@@ -207,6 +207,27 @@ impl From<RdfSyntaxError> for RdfParseError {
     }
 }
 
+impl From<crate::OxirsError> for RdfParseError {
+    fn from(err: crate::OxirsError) -> Self {
+        match err {
+            crate::OxirsError::Parse(msg) => Self::syntax(msg),
+            crate::OxirsError::Io(msg) => Self::syntax(format!("IO error: {}", msg)),
+            crate::OxirsError::Store(msg) => Self::internal(format!("Store error: {}", msg)),
+            crate::OxirsError::Query(msg) => Self::internal(format!("Query error: {}", msg)),
+            crate::OxirsError::Serialize(msg) => {
+                Self::internal(format!("Serialization error: {}", msg))
+            }
+        }
+    }
+}
+
+// Add direct conversion from LanguageTagParseError to RdfParseError
+impl From<crate::model::literal::LanguageTagParseError> for RdfParseError {
+    fn from(err: crate::model::literal::LanguageTagParseError) -> Self {
+        Self::InvalidLanguageTag(err.to_string())
+    }
+}
+
 /// General format error for high-level operations
 #[derive(Debug)]
 pub enum FormatError {

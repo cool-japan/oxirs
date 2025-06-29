@@ -344,6 +344,7 @@ impl<T: PooledConnection> HealthMonitor<T> {
         if let Some(record) = records.get(connection_id) {
             let stats = &record.statistics;
             let old_status = record.status.clone();
+            let consecutive_failures = stats.consecutive_failures; // Copy the value we need
 
             let new_status = if stats.consecutive_failures >= self.config.failure_threshold * 2 {
                 HealthStatus::Dead
@@ -363,7 +364,7 @@ impl<T: PooledConnection> HealthMonitor<T> {
 
                 let _ = self.event_sender.send(HealthEvent::StatusChanged {
                     connection_id: connection_id.to_string(),
-                    old_status,
+                    old_status: old_status.clone(), // Clone instead of moving
                     new_status: new_status.clone(),
                 });
 
@@ -371,7 +372,7 @@ impl<T: PooledConnection> HealthMonitor<T> {
                     HealthStatus::Dead => {
                         let _ = self.event_sender.send(HealthEvent::ConnectionDead {
                             connection_id: connection_id.to_string(),
-                            reason: format!("{} consecutive failures", stats.consecutive_failures),
+                            reason: format!("{} consecutive failures", consecutive_failures), // Use copied value
                         });
                     }
                     HealthStatus::Healthy if old_status == HealthStatus::Unhealthy => {
@@ -415,13 +416,26 @@ impl<T: PooledConnection> HealthMonitor<T> {
                 }
 
                 // Get all connections to check
-                let connections_snapshot = connections.read().await.clone();
+                let connections_guard = connections.read().await;
+                let connection_ids: Vec<String> = connections_guard.keys().cloned().collect();
+                drop(connections_guard);
 
-                for (conn_id, connection) in connections_snapshot {
+                for conn_id in connection_ids {
                     let start_time = Instant::now();
 
-                    match tokio::time::timeout(config.check_timeout, connection.is_healthy()).await
-                    {
+                    // Get connection for health check - avoid holding the lock during async operations
+                    let health_check_result = {
+                        let connection_guard = connections.read().await;
+                        let connection = match connection_guard.get(&conn_id) {
+                            Some(conn) => conn,
+                            None => continue, // Connection was removed
+                        };
+
+                        // Call the health check while holding the guard briefly
+                        tokio::time::timeout(config.check_timeout, connection.is_healthy()).await
+                    };
+
+                    match health_check_result {
                         Ok(healthy) => {
                             let response_time = start_time.elapsed();
                             let response_time_ms = response_time.as_millis() as f64;
@@ -620,6 +634,7 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, Ordering};
 
+    #[derive(Clone)]
     struct TestConnection {
         healthy: Arc<AtomicBool>,
     }

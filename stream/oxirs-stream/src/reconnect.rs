@@ -118,7 +118,7 @@ pub struct ReconnectManager<T: PooledConnection> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: PooledConnection> ReconnectManager<T> {
+impl<T: PooledConnection + Clone> ReconnectManager<T> {
     /// Create a new reconnection manager
     pub fn new(config: ReconnectConfig, strategy: ReconnectStrategy) -> Self {
         let (event_sender, _) = broadcast::channel(1000);
@@ -369,7 +369,7 @@ pub struct ResilientConnection<T: PooledConnection> {
     last_error: Option<String>,
 }
 
-impl<T: PooledConnection> ResilientConnection<T> {
+impl<T: PooledConnection + Clone> ResilientConnection<T> {
     /// Create a new resilient connection
     pub async fn new(
         connection_id: String,
@@ -389,10 +389,18 @@ impl<T: PooledConnection> ResilientConnection<T> {
 
     /// Get the underlying connection, reconnecting if necessary
     pub async fn get_connection(&mut self) -> Result<&mut T> {
-        if let Some(ref mut conn) = self.connection {
-            if conn.is_healthy().await {
-                return Ok(conn);
-            }
+        // Check if we have a healthy connection
+        let needs_reconnection = match self.connection {
+            Some(ref mut conn) => !conn.is_healthy().await,
+            None => true,
+        };
+
+        if !needs_reconnection {
+            // Return the healthy connection
+            return self
+                .connection
+                .as_mut()
+                .ok_or_else(|| anyhow!("Connection unexpectedly None"));
         }
 
         // Connection is unhealthy or missing, attempt reconnection
@@ -457,6 +465,7 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
+    #[derive(Clone)]
     struct TestConnection {
         id: u32,
         healthy: Arc<AtomicBool>,

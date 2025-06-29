@@ -306,12 +306,12 @@ fn test_bound_expression() {
         .bind("x", Term::literal("value"));
 
     // Test BOUND on bound variable
-    let bound_expr = Expression::Bound("x".to_string());
+    let bound_expr = Expression::Bound(Variable::new("x").unwrap());
     let result = evaluator.evaluate(&bound_expr).unwrap();
     assert_eq!(result, Term::typed_literal("true", xsd::BOOLEAN).unwrap());
 
     // Test BOUND on unbound variable
-    let unbound_expr = Expression::Bound("y".to_string());
+    let unbound_expr = Expression::Bound(Variable::new("y").unwrap());
     let result = evaluator.evaluate(&unbound_expr).unwrap();
     assert_eq!(result, Term::typed_literal("false", xsd::BOOLEAN).unwrap());
 }

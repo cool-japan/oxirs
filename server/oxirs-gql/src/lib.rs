@@ -262,6 +262,11 @@ pub mod subscriptions;
 pub mod types;
 pub mod validation;
 
+// Advanced performance modules
+pub mod advanced_cache;
+pub mod dataloader;
+pub mod performance;
+
 // Organized module groups
 pub mod core;
 pub mod docs;

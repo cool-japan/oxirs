@@ -44,7 +44,7 @@ pub struct NatsProducer {
 
 impl NatsProducer {
     /// Create a new NATS producer
-    pub async fn new(config: NatsConfig) -> Result<Self> {
+    pub async fn new(config: NatsConfig) -> FusekiResult<Self> {
         tracing::info!("Creating NATS producer for: {}", config.url);
 
         // TODO: Initialize actual NATS client
@@ -54,7 +54,7 @@ impl NatsProducer {
 
 #[async_trait]
 impl StreamProducer for NatsProducer {
-    async fn send(&self, event: RDFEvent) -> Result<()> {
+    async fn send(&self, event: RDFEvent) -> FusekiResult<()> {
         tracing::debug!("Sending RDF event to NATS");
 
         // TODO: Implement actual NATS message sending
@@ -63,7 +63,7 @@ impl StreamProducer for NatsProducer {
         Ok(())
     }
 
-    async fn send_batch(&self, events: Vec<RDFEvent>) -> Result<()> {
+    async fn send_batch(&self, events: Vec<RDFEvent>) -> FusekiResult<()> {
         tracing::debug!("Sending batch of {} RDF events to NATS", events.len());
 
         // TODO: Implement actual batch sending
@@ -74,7 +74,7 @@ impl StreamProducer for NatsProducer {
         Ok(())
     }
 
-    async fn flush(&self) -> Result<()> {
+    async fn flush(&self) -> FusekiResult<()> {
         tracing::debug!("Flushing NATS producer");
         // TODO: Implement actual flush
         Ok(())
@@ -89,7 +89,7 @@ pub struct NatsConsumer {
 
 impl NatsConsumer {
     /// Create a new NATS consumer
-    pub async fn new(config: NatsConfig) -> Result<Self> {
+    pub async fn new(config: NatsConfig) -> FusekiResult<Self> {
         tracing::info!("Creating NATS consumer for: {}", config.url);
 
         // TODO: Initialize actual NATS client
@@ -99,21 +99,24 @@ impl NatsConsumer {
 
 #[async_trait]
 impl StreamConsumer for NatsConsumer {
-    async fn subscribe(&self, handler: Box<dyn crate::streaming::EventHandler>) -> Result<()> {
+    async fn subscribe(
+        &self,
+        handler: Box<dyn crate::streaming::EventHandler>,
+    ) -> FusekiResult<()> {
         tracing::info!("Subscribing to NATS events with handler");
 
         // TODO: Implement actual subscription
         Ok(())
     }
 
-    async fn unsubscribe(&self) -> Result<()> {
+    async fn unsubscribe(&self) -> FusekiResult<()> {
         tracing::info!("Unsubscribing from NATS events");
 
         // TODO: Implement actual unsubscription
         Ok(())
     }
 
-    async fn commit(&self) -> Result<()> {
+    async fn commit(&self) -> FusekiResult<()> {
         tracing::debug!("Committing NATS consumer (no-op for NATS)");
         // NATS doesn't need commit
         Ok(())

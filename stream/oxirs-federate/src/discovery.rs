@@ -128,6 +128,7 @@ impl ServiceDiscovery {
                     metadata,
                     extended_metadata: None,
                     performance,
+                    status: Some(crate::service::ServiceStatusInfo::default()),
                 }));
             }
         }
@@ -167,6 +168,7 @@ impl ServiceDiscovery {
                     metadata,
                     extended_metadata: None,
                     performance,
+                    status: Some(crate::service::ServiceStatusInfo::default()),
                 }));
             }
         }
@@ -202,6 +204,7 @@ impl ServiceDiscovery {
                     metadata: ServiceMetadata::default(),
                     extended_metadata: None,
                     performance: ServicePerformance::default(),
+                    status: Some(crate::service::ServiceStatusInfo::default()),
                 }))
             }
             _ => Ok(None),

@@ -248,7 +248,7 @@ pub struct ClusterManager {
 
 impl ClusterManager {
     /// Create a new cluster manager
-    pub async fn new(config: ClusterConfig, store: Arc<Store>) -> Result<Self> {
+    pub async fn new(config: ClusterConfig, store: Arc<Store>) -> FusekiResult<Self> {
         let node_info = NodeInfo {
             id: config.node_id.clone(),
             addr: config.bind_addr,
@@ -298,7 +298,7 @@ impl ClusterManager {
     }
 
     /// Start the cluster node
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self) -> FusekiResult<()> {
         // Start Raft node
         self.raft_node.start().await?;
 
@@ -320,7 +320,7 @@ impl ClusterManager {
     }
 
     /// Join existing cluster
-    async fn join_cluster(&self) -> Result<()> {
+    async fn join_cluster(&self) -> FusekiResult<()> {
         tracing::info!("Joining cluster with seeds: {:?}", self.config.seeds);
 
         // Contact seed nodes
@@ -337,7 +337,7 @@ impl ClusterManager {
     }
 
     /// Bootstrap new cluster
-    async fn bootstrap_cluster(&self) -> Result<()> {
+    async fn bootstrap_cluster(&self) -> FusekiResult<()> {
         tracing::info!("Bootstrapping new cluster");
 
         // Initialize as single-node cluster
@@ -357,7 +357,7 @@ impl ClusterManager {
     }
 
     /// Contact a seed node
-    async fn contact_seed(&self, seed: &str) -> Result<()> {
+    async fn contact_seed(&self, seed: &str) -> FusekiResult<()> {
         // TODO: Implement seed contact protocol
         Ok(())
     }

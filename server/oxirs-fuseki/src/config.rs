@@ -198,12 +198,81 @@ pub struct SecurityConfig {
 
     #[validate(nested)]
     pub authentication: AuthenticationConfig,
+
+    #[validate(nested)]
+    pub api_keys: Option<ApiKeyConfig>,
 }
 
 /// Authentication configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct AuthenticationConfig {
     pub enabled: bool,
+}
+
+/// API Key configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ApiKeyConfig {
+    /// Enable API key authentication
+    pub enabled: bool,
+
+    /// Default key expiration in days
+    #[validate(range(min = 1, max = 3650))] // 1 day to 10 years
+    pub default_expiration_days: u32,
+
+    /// Maximum number of keys per user
+    #[validate(range(min = 1, max = 100))]
+    pub max_keys_per_user: u32,
+
+    /// Default rate limiting for API keys
+    pub default_rate_limit: Option<ApiKeyRateLimit>,
+
+    /// Enable usage analytics
+    pub usage_analytics: bool,
+
+    /// Storage backend configuration
+    pub storage: ApiKeyStorageConfig,
+}
+
+/// API key rate limiting configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ApiKeyRateLimit {
+    #[validate(range(min = 1))]
+    pub requests_per_minute: u32,
+
+    #[validate(range(min = 1))]
+    pub requests_per_hour: u32,
+
+    #[validate(range(min = 1))]
+    pub requests_per_day: u32,
+
+    #[validate(range(min = 1))]
+    pub burst_limit: u32,
+}
+
+/// API key storage configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ApiKeyStorageConfig {
+    /// Storage backend type
+    pub backend: ApiKeyStorageBackend,
+
+    /// Connection string or file path
+    #[validate(length(min = 1))]
+    pub connection: String,
+
+    /// Encryption key for sensitive data
+    #[validate(length(min = 32))]
+    pub encryption_key: Option<String>,
+}
+
+/// API key storage backend types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiKeyStorageBackend {
+    Memory,
+    File,
+    Sqlite,
+    Postgres,
+    Redis,
 }
 
 /// JWT configuration

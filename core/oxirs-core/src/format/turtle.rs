@@ -4,9 +4,9 @@
 //! Based on W3C Turtle specification: https://www.w3.org/TR/turtle/
 
 use super::error::SerializeResult;
-use super::error::{ParseResult, RdfParseError, RdfSyntaxError, TextPosition};
+use super::error::{ParseResult, RdfParseError, TextPosition};
 use super::serializer::QuadSerializer;
-use crate::model::{NamedNode, Quad, QuadRef, Triple, TripleRef, Variable};
+use crate::model::{NamedNode, QuadRef, Subject, Term, Triple, TripleRef};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 
@@ -73,13 +73,24 @@ impl TurtleParser {
 
     /// Parse Turtle from a string
     pub fn parse_str(&self, input: &str) -> ParseResult<Vec<Triple>> {
-        // TODO: Implement string-based parsing
-        // This is a stub implementation that demonstrates the structure
-
         let mut triples = Vec::new();
         let mut line_number = 1;
         let mut current_prefixes = self.prefixes.clone();
         let mut current_base = self.base_iri.clone();
+
+        // Add standard prefixes
+        current_prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        current_prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        current_prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
 
         for line in input.lines() {
             let trimmed = line.trim();
@@ -97,7 +108,13 @@ impl TurtleParser {
                 current_base = self.parse_base_directive(trimmed, line_number)?;
             } else {
                 // Parse triple statement
-                // TODO: Implement actual triple parsing
+                let parsed_triples = self.parse_triple_statement(
+                    trimmed,
+                    &current_prefixes,
+                    &current_base,
+                    line_number,
+                )?;
+                triples.extend(parsed_triples);
                 // This would handle:
                 // - Subject parsing (IRI, blank node, or variable)
                 // - Predicate parsing (IRI or 'a' for rdf:type)
@@ -148,9 +165,7 @@ impl TurtleParser {
 
     /// Parse a @base directive
     fn parse_base_directive(&self, line: &str, line_number: usize) -> ParseResult<Option<String>> {
-        // TODO: Implement proper base parsing
         // Format: @base <iri> .
-
         if let Some(rest) = line.strip_prefix("@base") {
             let rest = rest.trim();
             if let Some(iri_start) = rest.find('<') {
@@ -167,6 +182,135 @@ impl TurtleParser {
             "Invalid @base directive",
             TextPosition::new(line_number, 1, 0),
         ))
+    }
+
+    /// Parse a triple statement
+    fn parse_triple_statement(
+        &self,
+        line: &str,
+        prefixes: &HashMap<String, String>,
+        _base: &Option<String>,
+        line_number: usize,
+    ) -> ParseResult<Vec<Triple>> {
+        use crate::model::Term;
+
+        // Basic triple parsing - simplified for demonstration
+        // Real implementation would handle complex Turtle syntax
+
+        // Remove trailing dot if present
+        let line = line.trim_end_matches('.').trim();
+
+        // Split on whitespace (very basic - real parser would handle quoted strings)
+        let parts: Vec<&str> = line.split_whitespace().collect();
+
+        if parts.len() < 3 {
+            return Err(RdfParseError::syntax_at(
+                "Triple must have subject, predicate, and object",
+                TextPosition::new(line_number, 1, 0),
+            ));
+        }
+
+        let subject = self.parse_term(parts[0], prefixes, line_number)?;
+        let predicate = self.parse_predicate(parts[1], prefixes, line_number)?;
+        let object = self.parse_term(parts[2], prefixes, line_number)?;
+
+        // Convert to subject and object terms
+        let subject_term = match subject {
+            Term::NamedNode(n) => Subject::NamedNode(n),
+            Term::BlankNode(b) => Subject::BlankNode(b),
+            _ => {
+                return Err(RdfParseError::syntax_at(
+                    "Subject must be IRI or blank node",
+                    TextPosition::new(line_number, 1, 0),
+                ))
+            }
+        };
+
+        let triple = Triple::new(subject_term, predicate, object);
+        Ok(vec![triple])
+    }
+
+    /// Parse a term (IRI, blank node, or literal)
+    fn parse_term(
+        &self,
+        term_str: &str,
+        prefixes: &HashMap<String, String>,
+        line_number: usize,
+    ) -> ParseResult<Term> {
+        use crate::model::{BlankNode, Literal, NamedNode, Term};
+
+        // IRI in angle brackets
+        if term_str.starts_with('<') && term_str.ends_with('>') {
+            let iri = &term_str[1..term_str.len() - 1];
+            return Ok(Term::NamedNode(NamedNode::new(iri).map_err(|e| {
+                RdfParseError::syntax_at(
+                    &format!("Invalid IRI: {}", e),
+                    TextPosition::new(line_number, 1, 0),
+                )
+            })?));
+        }
+
+        // Prefixed name
+        if let Some(colon_pos) = term_str.find(':') {
+            let prefix = &term_str[..colon_pos];
+            let local = &term_str[colon_pos + 1..];
+
+            if let Some(namespace) = prefixes.get(prefix) {
+                let full_iri = format!("{}{}", namespace, local);
+                return Ok(Term::NamedNode(NamedNode::new(&full_iri).map_err(|e| {
+                    RdfParseError::syntax_at(
+                        &format!("Invalid prefixed IRI: {}", e),
+                        TextPosition::new(line_number, 1, 0),
+                    )
+                })?));
+            }
+        }
+
+        // Blank node
+        if term_str.starts_with("_:") {
+            let id = &term_str[2..];
+            return Ok(Term::BlankNode(BlankNode::new(id).map_err(|e| {
+                RdfParseError::syntax_at(
+                    &format!("Invalid blank node: {}", e),
+                    TextPosition::new(line_number, 1, 0),
+                )
+            })?));
+        }
+
+        // String literal (very basic)
+        if term_str.starts_with('"') && term_str.ends_with('"') {
+            let value = &term_str[1..term_str.len() - 1];
+            return Ok(Term::Literal(Literal::new(value)));
+        }
+
+        Err(RdfParseError::syntax_at(
+            &format!("Unrecognized term: {}", term_str),
+            TextPosition::new(line_number, 1, 0),
+        ))
+    }
+
+    /// Parse a predicate (IRI or 'a' for rdf:type)
+    fn parse_predicate(
+        &self,
+        pred_str: &str,
+        prefixes: &HashMap<String, String>,
+        line_number: usize,
+    ) -> ParseResult<NamedNode> {
+        use crate::model::NamedNode;
+
+        // Handle 'a' as shorthand for rdf:type
+        if pred_str == "a" {
+            return Ok(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap());
+        }
+
+        // Parse as regular term and ensure it's a NamedNode
+        match self.parse_term(pred_str, prefixes, line_number)? {
+            Term::NamedNode(n) => Ok(n),
+            _ => Err(RdfParseError::syntax_at(
+                "Predicate must be an IRI",
+                TextPosition::new(line_number, 1, 0),
+            )),
+        }
     }
 
     /// Get current prefixes
@@ -289,18 +433,120 @@ impl<W: Write> WriterTurtleSerializer<W> {
     pub fn serialize_triple(&mut self, triple: TripleRef<'_>) -> SerializeResult<()> {
         self.ensure_headers_written()?;
 
-        // TODO: Implement actual Turtle serialization
-        // This would involve:
-        // 1. Subject serialization (IRI abbreviation, blank node formatting)
-        // 2. Predicate serialization (IRI abbreviation, 'a' for rdf:type)
-        // 3. Object serialization (IRI, literal, blank node formatting)
-        // 4. Proper punctuation and line breaks
-        // 5. Pretty formatting if enabled
+        // Subject serialization
+        let subject_str = self.serialize_subject(triple.subject())?;
 
-        // Stub implementation
-        writeln!(self.writer, "# TODO: Serialize triple: {}", triple)?;
+        // Predicate serialization
+        let predicate_str = self.serialize_predicate(triple.predicate())?;
+
+        // Object serialization
+        let object_str = self.serialize_object(triple.object())?;
+
+        // Write the triple with proper formatting
+        if self.config.pretty {
+            writeln!(
+                self.writer,
+                "{} {} {} .",
+                subject_str, predicate_str, object_str
+            )?;
+        } else {
+            writeln!(
+                self.writer,
+                "{} {} {}.",
+                subject_str, predicate_str, object_str
+            )?;
+        }
 
         Ok(())
+    }
+
+    /// Serialize a subject (NamedNode, BlankNode, or Variable)
+    fn serialize_subject(&self, subject: crate::model::SubjectRef<'_>) -> SerializeResult<String> {
+        use crate::model::SubjectRef;
+
+        match subject {
+            SubjectRef::NamedNode(node) => self.serialize_named_node(node.into()),
+            SubjectRef::BlankNode(node) => Ok(format!("_:{}", node.as_str())),
+            SubjectRef::Variable(var) => Ok(format!("?{}", var.as_str())),
+        }
+    }
+
+    /// Serialize a predicate (NamedNode or Variable)
+    fn serialize_predicate(
+        &self,
+        predicate: crate::model::PredicateRef<'_>,
+    ) -> SerializeResult<String> {
+        use crate::model::PredicateRef;
+
+        match predicate {
+            PredicateRef::NamedNode(node) => {
+                // Check for rdf:type shorthand
+                if node.as_str() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
+                    Ok("a".to_string())
+                } else {
+                    self.serialize_named_node(node.into())
+                }
+            }
+            PredicateRef::Variable(var) => Ok(format!("?{}", var.as_str())),
+        }
+    }
+
+    /// Serialize an object (NamedNode, BlankNode, Literal, or Variable)
+    fn serialize_object(&self, object: crate::model::ObjectRef<'_>) -> SerializeResult<String> {
+        use crate::model::ObjectRef;
+
+        match object {
+            ObjectRef::NamedNode(node) => self.serialize_named_node(node.into()),
+            ObjectRef::BlankNode(node) => Ok(format!("_:{}", node.as_str())),
+            ObjectRef::Literal(literal) => self.serialize_literal(literal),
+            ObjectRef::Variable(var) => Ok(format!("?{}", var.as_str())),
+        }
+    }
+
+    /// Serialize a named node with prefix abbreviation
+    fn serialize_named_node(
+        &self,
+        node: crate::model::NamedNodeRef<'_>,
+    ) -> SerializeResult<String> {
+        let iri = node.as_str();
+
+        // Try to find a matching prefix
+        for (prefix, namespace) in &self.config.prefixes {
+            if iri.starts_with(namespace) {
+                let local = &iri[namespace.len()..];
+                // Check if local part is valid for prefixed name
+                if is_valid_local_name(local) {
+                    return Ok(format!("{}:{}", prefix, local));
+                }
+            }
+        }
+
+        // Fall back to full IRI in angle brackets
+        Ok(format!("<{}>", iri))
+    }
+
+    /// Serialize a literal
+    fn serialize_literal(&self, literal: &crate::model::Literal) -> SerializeResult<String> {
+        let value = literal.value();
+
+        // Escape special characters in the string
+        let escaped_value = escape_turtle_string(value);
+
+        // Handle language tag
+        if let Some(lang) = literal.language() {
+            return Ok(format!("\"{}\"@{}", escaped_value, lang));
+        }
+
+        // Handle datatype
+        let datatype = literal.datatype();
+        if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
+            // XSD string is the default, no need to specify
+            Ok(format!("\"{}\"", escaped_value))
+        } else {
+            // Serialize datatype as IRI
+            let datatype_str = self.serialize_named_node(datatype)?;
+            Ok(format!("\"{}\"^^{}", escaped_value, datatype_str))
+        }
     }
 
     /// Finish serialization and return the writer
@@ -353,7 +599,6 @@ impl<W: Write> QuadSerializer<W> for WriterTurtleSerializer<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{BlankNode, Literal, NamedNode};
 
     #[test]
     fn test_turtle_parser_creation() {
@@ -439,4 +684,77 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Some("http://example.org/".to_string()));
     }
+}
+
+/// Check if a string is a valid local name for Turtle prefixed names
+fn is_valid_local_name(local: &str) -> bool {
+    if local.is_empty() {
+        return true; // Empty local names are allowed
+    }
+
+    // First character must be a name start char or underscore
+    let first_char = local.chars().next().unwrap();
+    if !is_pn_chars_base(first_char) && first_char != '_' {
+        return false;
+    }
+
+    // Rest of characters must be name chars, underscore, dot, or hyphen
+    for ch in local.chars().skip(1) {
+        if !is_pn_chars(ch) && ch != '.' && ch != '-' {
+            return false;
+        }
+    }
+
+    // Cannot end with a dot
+    !local.ends_with('.')
+}
+
+/// Check if character is a PN_CHARS_BASE (per Turtle grammar)
+fn is_pn_chars_base(ch: char) -> bool {
+    ch.is_ascii_alphabetic()
+        || (ch >= '\u{00C0}' && ch <= '\u{00D6}')
+        || (ch >= '\u{00D8}' && ch <= '\u{00F6}')
+        || (ch >= '\u{00F8}' && ch <= '\u{02FF}')
+        || (ch >= '\u{0370}' && ch <= '\u{037D}')
+        || (ch >= '\u{037F}' && ch <= '\u{1FFF}')
+        || (ch >= '\u{200C}' && ch <= '\u{200D}')
+        || (ch >= '\u{2070}' && ch <= '\u{218F}')
+        || (ch >= '\u{2C00}' && ch <= '\u{2FEF}')
+        || (ch >= '\u{3001}' && ch <= '\u{D7FF}')
+        || (ch >= '\u{F900}' && ch <= '\u{FDCF}')
+        || (ch >= '\u{FDF0}' && ch <= '\u{FFFD}')
+}
+
+/// Check if character is a PN_CHARS (per Turtle grammar)
+fn is_pn_chars(ch: char) -> bool {
+    is_pn_chars_base(ch)
+        || ch == '_'
+        || ch.is_ascii_digit()
+        || ch == '\u{00B7}'
+        || (ch >= '\u{0300}' && ch <= '\u{036F}')
+        || (ch >= '\u{203F}' && ch <= '\u{2040}')
+}
+
+/// Escape special characters in Turtle strings
+fn escape_turtle_string(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+
+    for ch in input.chars() {
+        match ch {
+            '"' => result.push_str("\\\""),
+            '\\' => result.push_str("\\\\"),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            '\x08' => result.push_str("\\b"), // backspace
+            '\x0C' => result.push_str("\\f"), // form feed
+            c if c.is_control() => {
+                // Escape other control characters as Unicode escape sequences
+                result.push_str(&format!("\\u{:04X}", c as u32));
+            }
+            c => result.push(c),
+        }
+    }
+
+    result
 }

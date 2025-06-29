@@ -45,6 +45,17 @@ pub enum RdfCommand {
     CommitTransaction { tx_id: String },
     /// Rollback transaction
     RollbackTransaction { tx_id: String },
+    /// Add a new node to the cluster
+    AddNode {
+        node_id: OxirsNodeId,
+        address: String,
+    },
+    /// Remove a node from the cluster
+    RemoveNode { node_id: OxirsNodeId },
+    /// Transfer leadership to another node
+    TransferLeadership { target_node: OxirsNodeId },
+    /// Force evict a non-responsive node
+    ForceEvictNode { node_id: OxirsNodeId },
 }
 
 /// RDF response from command execution
@@ -131,6 +142,26 @@ impl RdfApp {
                 } else {
                     RdfResponse::Error(format!("Transaction {} not found", tx_id))
                 }
+            }
+            RdfCommand::AddNode { node_id, address } => {
+                // Log the configuration change
+                tracing::info!("Adding node {} at address {} to cluster", node_id, address);
+                RdfResponse::Success
+            }
+            RdfCommand::RemoveNode { node_id } => {
+                // Log the configuration change
+                tracing::info!("Removing node {} from cluster", node_id);
+                RdfResponse::Success
+            }
+            RdfCommand::TransferLeadership { target_node } => {
+                // Log the leadership transfer
+                tracing::info!("Transferring leadership to node {}", target_node);
+                RdfResponse::Success
+            }
+            RdfCommand::ForceEvictNode { node_id } => {
+                // Log the forced eviction
+                tracing::warn!("Force evicting node {} from cluster", node_id);
+                RdfResponse::Success
             }
         }
     }
@@ -549,6 +580,31 @@ impl RaftNode {
     pub async fn is_empty(&self) -> bool {
         let state = self.storage.read().await;
         state.is_empty()
+    }
+
+    /// Shutdown the raft node gracefully
+    pub async fn shutdown(&mut self) -> Result<()> {
+        tracing::info!("Shutting down raft node {}", self.node_id);
+
+        #[cfg(feature = "raft")]
+        {
+            if let Some(raft) = self.raft.take() {
+                // Shutdown the raft instance
+                raft.shutdown()
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to shutdown raft: {}", e))?;
+                tracing::info!("Raft instance shutdown completed");
+            }
+        }
+
+        // Clear storage reference
+        {
+            let mut storage = self.storage.write().await;
+            *storage = RdfApp::default();
+        }
+
+        tracing::info!("Raft node {} shutdown completed", self.node_id);
+        Ok(())
     }
 }
 

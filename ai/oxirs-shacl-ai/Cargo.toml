@@ -26,6 +26,8 @@ ndarray = "0.16"
 rand = "0.8"
 regex = "1.11"
 indexmap = "2.6"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+threadpool = "1.8"
 
 [dev-dependencies]
 criterion.workspace = true

@@ -12,10 +12,10 @@ categories.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-# oxirs-core = { path = "../../core/oxirs-core" }
-# oxirs-fuseki = { path = "../../server/oxirs-fuseki" }
-# oxirs-gql = { path = "../../server/oxirs-gql" }
-# oxirs-tdb = { path = "../../storage/oxirs-tdb" }
+oxirs-core = { path = "../../core/oxirs-core" }
+oxirs-fuseki = { path = "../../server/oxirs-fuseki" }
+oxirs-gql = { path = "../../server/oxirs-gql" }
+oxirs-tdb = { path = "../../storage/oxirs-tdb" }
 clap.workspace = true
 tokio.workspace = true
 serde.workspace = true
@@ -26,6 +26,9 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 rand = "0.8"
+uuid = "1.11"       # UUID generation
+sysinfo = "0.32"    # System information
+tempfile = "3.8"    # Temporary file handling
 
 # Enhanced CLI features
 indicatif = "0.17"  # Progress bars
@@ -49,7 +52,6 @@ dialoguer = "0.11"  # Interactive prompts
 
 [dev-dependencies]
 criterion.workspace = true
-tempfile = "3.8"
 tokio-test = "0.4"
 
 [features]

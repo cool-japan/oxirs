@@ -245,7 +245,7 @@ struct CudaKernel {
 unsafe impl Send for CudaKernel {}
 unsafe impl Sync for CudaKernel {}
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct GpuPerformanceStats {
     total_operations: u64,
     total_compute_time: std::time::Duration,

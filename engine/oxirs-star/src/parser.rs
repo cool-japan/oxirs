@@ -18,7 +18,7 @@ use crate::model::{NamedNode, StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::{StarConfig, StarError, StarResult};
 
 /// RDF-star format types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum StarFormat {
     /// Turtle-star format
     TurtleStar,
@@ -87,7 +87,7 @@ impl FromStr for StarFormat {
             "ntriples-star" | "nts" => Ok(StarFormat::NTriplesStar),
             "trig-star" | "trigs" => Ok(StarFormat::TrigStar),
             "nquads-star" | "nqs" => Ok(StarFormat::NQuadsStar),
-            _ => Err(StarError::ParseError(format!("Unknown format: {}", s))),
+            _ => Err(StarError::parse_error(format!("Unknown format: {}", s))),
         }
     }
 }
@@ -220,7 +220,7 @@ impl ParseContext {
 
                 if self.strict_mode {
                     self.add_error(error_msg.clone(), context, ErrorSeverity::Fatal);
-                    Err(StarError::ParseError(error_msg))
+                    Err(StarError::parse_error(error_msg))
                 } else {
                     self.add_error(error_msg.clone(), context, ErrorSeverity::Warning);
                     // In non-strict mode, return the prefixed name as-is
@@ -234,7 +234,7 @@ impl ParseContext {
                 prefixed.to_string(),
                 ErrorSeverity::Error,
             );
-            Err(StarError::ParseError(error_msg))
+            Err(StarError::parse_error(error_msg))
         }
     }
 
@@ -328,7 +328,7 @@ impl StarParser {
         let buf_reader = BufReader::new(reader);
 
         for (line_num, line_result) in buf_reader.lines().enumerate() {
-            let line = line_result.map_err(|e| StarError::ParseError(e.to_string()))?;
+            let line = line_result.map_err(|e| StarError::parse_error(e.to_string()))?;
             let line = line.trim();
 
             // Update position tracking
@@ -355,7 +355,7 @@ impl StarParser {
                     );
 
                     if context.strict_mode || context.has_fatal_errors() {
-                        return Err(StarError::ParseError(format!(
+                        return Err(StarError::parse_error(format!(
                             "Parsing failed at line {} with {} errors. First error: {}",
                             line_num + 1,
                             context.get_errors().len(),
@@ -415,7 +415,7 @@ impl StarParser {
             match self.parse_triple_pattern_safe(triple_str, context) {
                 Ok(triple) => {
                     graph.insert(triple).map_err(|e| {
-                        StarError::ParseError(format!("Failed to insert triple: {}", e))
+                        StarError::parse_error(format!("Failed to insert triple: {}", e))
                     })?;
                 }
                 Err(e) => {
@@ -424,7 +424,7 @@ impl StarParser {
                     context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
 
                     if context.strict_mode {
-                        return Err(StarError::ParseError(error_msg));
+                        return Err(StarError::parse_error(error_msg));
                     }
                     // In non-strict mode, log error and continue
                 }
@@ -435,7 +435,7 @@ impl StarParser {
             context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Warning);
 
             if context.strict_mode {
-                return Err(StarError::ParseError(error_msg));
+                return Err(StarError::parse_error(error_msg));
             }
         }
 
@@ -557,13 +557,13 @@ impl StarParser {
                 let error_msg = "Empty prefix name in @prefix directive".to_string();
                 context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
                 if context.strict_mode {
-                    return Err(StarError::ParseError(error_msg));
+                    return Err(StarError::parse_error(error_msg));
                 }
             } else if namespace.is_empty() {
                 let error_msg = "Empty namespace in @prefix directive".to_string();
                 context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
                 if context.strict_mode {
-                    return Err(StarError::ParseError(error_msg));
+                    return Err(StarError::parse_error(error_msg));
                 }
             } else {
                 context
@@ -574,7 +574,7 @@ impl StarParser {
             let error_msg = format!("Malformed @prefix directive: {}", line);
             context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
             if context.strict_mode {
-                return Err(StarError::ParseError(error_msg));
+                return Err(StarError::parse_error(error_msg));
             }
         }
         Ok(())
@@ -590,7 +590,7 @@ impl StarParser {
                 let error_msg = "Empty base IRI in @base directive".to_string();
                 context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
                 if context.strict_mode {
-                    return Err(StarError::ParseError(error_msg));
+                    return Err(StarError::parse_error(error_msg));
                 }
             } else {
                 context.base_iri = Some(base_iri.to_string());
@@ -599,7 +599,7 @@ impl StarParser {
             let error_msg = format!("Malformed @base directive: {}", line);
             context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
             if context.strict_mode {
-                return Err(StarError::ParseError(error_msg));
+                return Err(StarError::parse_error(error_msg));
             }
         }
         Ok(())
@@ -617,7 +617,7 @@ impl StarParser {
                     let error_msg =
                         format!("Triple must have exactly 3 terms, found {}", terms.len());
                     context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
-                    return Err(StarError::ParseError(error_msg));
+                    return Err(StarError::parse_error(error_msg));
                 }
 
                 let subject = self.parse_term_safe(&terms[0], context)?;
@@ -630,7 +630,7 @@ impl StarParser {
                 if let Err(validation_error) = triple.validate() {
                     let error_msg = format!("Invalid triple: {}", validation_error);
                     context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
-                    return Err(StarError::ParseError(error_msg));
+                    return Err(StarError::parse_error(error_msg));
                 }
 
                 Ok(triple)
@@ -638,7 +638,7 @@ impl StarParser {
             Err(e) => {
                 let error_msg = format!("Failed to tokenize triple: {}", e);
                 context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
-                Err(StarError::ParseError(error_msg))
+                Err(StarError::parse_error(error_msg))
             }
         }
     }
@@ -660,7 +660,7 @@ impl StarParser {
                         ErrorSeverity::Error,
                     );
                     if context.strict_mode {
-                        return Err(StarError::ParseError(error_msg));
+                        return Err(StarError::parse_error(error_msg));
                     }
                     // In non-strict mode, try to continue with partial parsing
                 }
@@ -669,7 +669,7 @@ impl StarParser {
 
         // Continue with other term types...
         self.parse_term(term_str, context)
-            .map_err(|e| StarError::ParseError(e.to_string()))
+            .map_err(|e| StarError::parse_error(e.to_string()))
     }
 
     /// Parse @prefix directive (legacy)
@@ -707,7 +707,7 @@ impl StarParser {
         let buf_reader = BufReader::new(reader);
 
         for (line_num, line_result) in buf_reader.lines().enumerate() {
-            let line = line_result.map_err(|e| StarError::ParseError(e.to_string()))?;
+            let line = line_result.map_err(|e| StarError::parse_error(e.to_string()))?;
             let line = line.trim();
 
             // Skip empty lines and comments
@@ -720,11 +720,11 @@ impl StarParser {
                 let triple = self
                     .parse_triple_pattern(triple_str, &mut context)
                     .with_context(|| format!("Error parsing line {}: {}", line_num + 1, line))
-                    .map_err(|e| StarError::ParseError(e.to_string()))?;
+                    .map_err(|e| StarError::parse_error(e.to_string()))?;
                 graph.insert(triple)?;
             } else {
                 // In N-Triples-star, all non-empty lines must be valid triples ending with '.'
-                return Err(StarError::ParseError(format!(
+                return Err(StarError::parse_error(format!(
                     "Invalid N-Triples-star line {}: {}",
                     line_num + 1,
                     line
@@ -752,7 +752,7 @@ impl StarParser {
         let max_errors = self.config.max_parse_errors.unwrap_or(100);
 
         for (line_num, line_result) in buf_reader.lines().enumerate() {
-            let line = line_result.map_err(|e| StarError::ParseError(e.to_string()))?;
+            let line = line_result.map_err(|e| StarError::parse_error(e.to_string()))?;
             let line = line.trim();
 
             // Update position tracking
@@ -794,7 +794,7 @@ impl StarParser {
                         );
 
                         if context.strict_mode || error_count >= max_errors {
-                            return Err(StarError::ParseError(format!(
+                            return Err(StarError::parse_error(format!(
                                 "TriG-star parsing failed at line {} with {} errors. First error: {}",
                                 line_num + 1,
                                 context.get_errors().len(),
@@ -826,7 +826,7 @@ impl StarParser {
                 ErrorSeverity::Error,
             );
             if context.strict_mode {
-                return Err(StarError::ParseError(format!(
+                return Err(StarError::parse_error(format!(
                     "Incomplete TriG-star statement at end of input: {}",
                     accumulated_line.trim()
                 )));
@@ -844,7 +844,7 @@ impl StarParser {
                 ErrorSeverity::Error,
             );
             if context.strict_mode {
-                return Err(StarError::ParseError(
+                return Err(StarError::parse_error(
                     "Unclosed graph block at end of input".to_string(),
                 ));
             }
@@ -883,7 +883,7 @@ impl StarParser {
         let buf_reader = BufReader::new(reader);
 
         for (line_num, line_result) in buf_reader.lines().enumerate() {
-            let line = line_result.map_err(|e| StarError::ParseError(e.to_string()))?;
+            let line = line_result.map_err(|e| StarError::parse_error(e.to_string()))?;
             let line = line.trim();
 
             // Update position tracking
@@ -913,7 +913,7 @@ impl StarParser {
                         );
 
                         if context.strict_mode || context.has_fatal_errors() {
-                            return Err(StarError::ParseError(format!(
+                            return Err(StarError::parse_error(format!(
                                 "N-Quads-star parsing failed at line {} with {} errors. First error: {}",
                                 line_num + 1,
                                 context.get_errors().len(),
@@ -939,7 +939,7 @@ impl StarParser {
                 context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
 
                 if context.strict_mode {
-                    return Err(StarError::ParseError(error_msg));
+                    return Err(StarError::parse_error(error_msg));
                 }
             }
         }
@@ -977,7 +977,7 @@ impl StarParser {
                 if terms.len() < 3 || terms.len() > 4 {
                     let error_msg = format!("Quad must have 3 or 4 terms, found {}", terms.len());
                     context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
-                    return Err(StarError::ParseError(error_msg));
+                    return Err(StarError::parse_error(error_msg));
                 }
 
                 let subject = self.parse_term_safe(&terms[0], context)?;
@@ -997,7 +997,7 @@ impl StarParser {
                 if let Err(validation_error) = quad.validate() {
                     let error_msg = format!("Invalid quad: {}", validation_error);
                     context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
-                    return Err(StarError::ParseError(error_msg));
+                    return Err(StarError::parse_error(error_msg));
                 }
 
                 Ok(quad)
@@ -1005,7 +1005,7 @@ impl StarParser {
             Err(e) => {
                 let error_msg = format!("Failed to tokenize quad: {}", e);
                 context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
-                Err(StarError::ParseError(error_msg))
+                Err(StarError::parse_error(error_msg))
             }
         }
     }
@@ -1550,6 +1550,18 @@ impl StarParser {
         }
 
         Ok(())
+    }
+
+    /// Set error recovery mode for parsing
+    pub fn set_error_recovery(&mut self, enable: bool) {
+        self.config.max_parse_errors = if enable { Some(100) } else { None };
+    }
+
+    /// Get parsing errors (placeholder implementation)
+    pub fn get_errors(&self) -> Vec<StarError> {
+        // For now, return empty list. In a complete implementation,
+        // this would return accumulated parsing errors
+        Vec::new()
     }
 }
 

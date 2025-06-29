@@ -624,6 +624,12 @@ pub enum Commands {
         #[arg(long)]
         history: Option<PathBuf>,
     },
+
+    /// Performance monitoring and profiling
+    Performance {
+        #[command(subcommand)]
+        action: commands::performance::PerformanceCommand,
+    },
 }
 
 /// Configuration management actions
@@ -929,6 +935,10 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             ctx.info("Starting interactive mode...");
             let mut interactive = InteractiveMode::new()?;
             interactive.run().await
+        }
+        Commands::Performance { action } => {
+            let config = config::Config::default();
+            action.execute(&config).await
         }
     }
 }

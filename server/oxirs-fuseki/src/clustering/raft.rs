@@ -1,7 +1,7 @@
 //! Raft consensus protocol implementation
 
 use async_trait::async_trait;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
@@ -207,7 +207,7 @@ pub struct RaftNode {
 
 impl RaftNode {
     /// Create a new Raft node
-    pub async fn new(id: String, config: RaftConfig, store: Arc<Store>) -> Result<Self> {
+    pub async fn new(id: String, config: RaftConfig, store: Arc<Store>) -> FusekiResult<Self> {
         let (rpc_tx, rpc_rx) = mpsc::channel(1000);
 
         Ok(Self {
@@ -237,7 +237,7 @@ impl RaftNode {
     }
 
     /// Start the Raft node
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self) -> FusekiResult<()> {
         // Start RPC handler
         self.start_rpc_handler().await;
 
@@ -254,7 +254,7 @@ impl RaftNode {
     }
 
     /// Bootstrap a new single-node cluster
-    pub async fn bootstrap(&self) -> Result<()> {
+    pub async fn bootstrap(&self) -> FusekiResult<()> {
         let mut config = self.cluster_config.write().await;
         config.members = vec![self.id.clone()];
 
@@ -317,7 +317,7 @@ impl RaftNode {
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_millis(50));
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rngs::SmallRng::from_entropy();
 
             loop {
                 interval.tick().await;
@@ -625,7 +625,7 @@ impl RaftNode {
     }
 
     /// Append a log entry
-    async fn append_log_entry(&self, command: Command) -> Result<u64> {
+    async fn append_log_entry(&self, command: Command) -> FusekiResult<u64> {
         let mut persistent = self.persistent.write().await;
         let index = persistent.log.len() as u64 + 1;
         let term = persistent.current_term;
@@ -672,7 +672,7 @@ impl RaftNode {
     }
 
     /// Send RPC to another node
-    async fn send_rpc(&self, target: &str, message: RpcMessage) -> Result<()> {
+    async fn send_rpc(&self, target: &str, message: RpcMessage) -> FusekiResult<()> {
         // TODO: Implement actual network RPC
         tracing::debug!("Sending {:?} to {}", message, target);
         Ok(())
@@ -750,12 +750,12 @@ impl RaftNodeRefs {
         // Implementation would be similar to RaftNode::apply_committed_entries
     }
 
-    async fn append_log_entry(&self, command: Command) -> Result<u64> {
+    async fn append_log_entry(&self, command: Command) -> FusekiResult<u64> {
         // Implementation would be similar to RaftNode::append_log_entry
         Ok(0)
     }
 
-    async fn send_rpc(&self, target: &str, message: RpcMessage) -> Result<()> {
+    async fn send_rpc(&self, target: &str, message: RpcMessage) -> FusekiResult<()> {
         // Implementation would be similar to RaftNode::send_rpc
         Ok(())
     }

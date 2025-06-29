@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -15,9 +15,8 @@ use crate::{executor::GraphQLResponse, ExecutionPlan, QueryResultData, StepResul
 /// Entity data returned from federated services
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityData {
-    pub entity_type: String,
-    pub id: String,
-    pub fields: HashMap<String, serde_json::Value>,
+    pub typename: String,
+    pub fields: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Composed schema for federation
@@ -28,6 +27,8 @@ pub struct ComposedSchema {
     pub mutation_type: Option<String>,
     pub subscription_type: Option<String>,
     pub directives: Vec<String>,
+    pub entity_types: HashMap<String, EntityTypeInfo>,
+    pub field_ownership: HashMap<String, FieldOwnershipType>,
 }
 
 /// GraphQL type definition
@@ -69,8 +70,17 @@ pub struct GraphQLArgument {
 #[derive(Debug, Clone)]
 pub struct EntityTypeInfo {
     pub key_fields: Vec<String>,
-    pub resolvers: HashMap<String, String>,
-    pub external_fields: Vec<String>,
+    pub owning_service: String,
+    pub extending_services: Vec<String>,
+}
+
+/// Field ownership types for federation
+#[derive(Debug, Clone)]
+pub enum FieldOwnershipType {
+    Owned(String),
+    External,
+    Requires(Vec<String>),
+    Provides(Vec<String>),
 }
 
 /// GraphQL directive
@@ -81,12 +91,96 @@ pub struct Directive {
 }
 
 /// Entity reference in a federated query
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct EntityReference {
     pub entity_type: String,
     pub key_fields: Vec<String>,
-    pub service_name: String,
-    pub selection_set: String,
+    pub required_fields: Vec<String>,
+    pub service_id: String,
+}
+
+/// Schema capabilities discovered through introspection
+#[derive(Debug, Clone)]
+pub struct SchemaCapabilities {
+    pub supports_federation: bool,
+    pub supports_subscriptions: bool,
+    pub supports_defer_stream: bool,
+    pub entity_types: Vec<String>,
+    pub custom_directives: Vec<String>,
+    pub scalar_types: Vec<String>,
+    pub estimated_complexity: f64,
+}
+
+/// Result of dynamic schema update
+#[derive(Debug, Clone)]
+pub struct SchemaUpdateResult {
+    pub service_id: String,
+    pub update_successful: bool,
+    pub breaking_changes: Vec<BreakingChange>,
+    pub warnings: Vec<String>,
+    pub rollback_available: bool,
+}
+
+/// Breaking change detected during schema update
+#[derive(Debug, Clone)]
+pub struct BreakingChange {
+    pub change_type: BreakingChangeType,
+    pub description: String,
+    pub severity: BreakingChangeSeverity,
+}
+
+/// Types of breaking changes
+#[derive(Debug, Clone)]
+pub enum BreakingChangeType {
+    TypeRemoved,
+    FieldRemoved,
+    ArgumentMadeRequired,
+    RequiredArgumentAdded,
+    TypeChanged,
+    DirectiveRemoved,
+}
+
+/// Severity of breaking changes
+#[derive(Debug, Clone)]
+pub enum BreakingChangeSeverity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// GraphQL type definition with federation support
+#[derive(Debug, Clone)]
+pub struct GraphQLTypeDefinition {
+    pub name: String,
+    pub kind: String,
+    pub fields: HashMap<String, GraphQLFieldDefinition>,
+    pub directives: Vec<Directive>,
+}
+
+/// GraphQL field definition with federation support
+#[derive(Debug, Clone)]
+pub struct GraphQLFieldDefinition {
+    pub name: String,
+    pub field_type: String,
+    pub arguments: HashMap<String, GraphQLArgument>,
+    pub directives: Vec<Directive>,
+}
+
+/// Entity resolution context
+#[derive(Debug, Clone)]
+pub struct ResolutionContext {
+    pub request_id: String,
+    pub user_id: Option<String>,
+    pub headers: HashMap<String, String>,
+    pub timeout: std::time::Duration,
+}
+
+/// Entity dependency graph for resolution planning
+#[derive(Debug, Clone)]
+pub struct EntityDependencyGraph {
+    pub nodes: HashMap<EntityReference, usize>,
+    pub edges: Vec<(usize, usize)>,
 }
 
 /// Entity resolution plan for federation
@@ -277,14 +371,22 @@ impl GraphQLFederation {
             ),
         };
 
+        let result_size = data.as_ref().map(|d| d.estimated_size()).unwrap_or(0);
+
         Ok(StepResult {
             step_id: step.step_id.clone(),
             step_type: step.step_type,
             status,
             data,
-            error,
+            error: error.clone(),
             execution_time,
             service_id: step.service_id.clone(),
+            memory_used: 0, // TODO: Implement actual memory tracking
+            result_size,
+            success: matches!(status, crate::executor::ExecutionStatus::Success),
+            error_message: error,
+            service_response_time: execution_time, // TODO: Track service-specific response time
+            cache_hit: false,                      // TODO: Implement cache hit tracking
         })
     }
 
@@ -884,8 +986,8 @@ impl GraphQLFederation {
         })
     }
 
-    /// Resolve entity references across federated services
-    pub async fn resolve_entities(
+    /// Resolve entity representations across federated services
+    pub async fn resolve_entity_representations(
         &self,
         representations: Vec<EntityRepresentation>,
     ) -> Result<Vec<serde_json::Value>> {
@@ -905,7 +1007,8 @@ impl GraphQLFederation {
             let service_id = self.find_service_for_entity(&typename).await?;
 
             // Build _entities query for this service
-            let entities_query = self.build_entities_query(&typename, &reprs)?;
+            let entities_query =
+                self.build_entities_query_for_representations(&typename, &reprs)?;
 
             // Execute query (mock for now)
             let mock_entity = serde_json::json!({
@@ -934,8 +1037,8 @@ impl GraphQLFederation {
         Err(anyhow!("No service found for entity type: {}", typename))
     }
 
-    /// Build an _entities query for resolving entity references
-    fn build_entities_query(
+    /// Build an _entities query for resolving entity representations
+    fn build_entities_query_for_representations(
         &self,
         typename: &str,
         representations: &[&EntityRepresentation],
@@ -1132,7 +1235,7 @@ impl GraphQLFederation {
         let mut service_entities: HashMap<String, Vec<EntityReference>> = HashMap::new();
         for entity_ref in entity_refs {
             service_entities
-                .entry(entity_ref.service_name.clone())
+                .entry(entity_ref.service_id.clone())
                 .or_default()
                 .push(entity_ref.clone());
         }
@@ -1167,10 +1270,10 @@ impl GraphQLFederation {
         }
 
         let first_entity = &entities[0];
-        let selection_set = &first_entity.selection_set;
+        let selection_fields = first_entity.required_fields.join(" ");
 
         // Simple implementation - could be enhanced for batching
-        Ok(format!("{{ {} }}", selection_set))
+        Ok(format!("{{ {} }}", selection_fields))
     }
 
     /// Analyze dependencies between entities
@@ -1192,14 +1295,17 @@ impl GraphQLFederation {
         for step in &plan.steps {
             debug!(
                 "Executing entity resolution step for service: {}",
-                step.service_id
+                step.service_name
             );
+
+            // TODO: Extract entity references from the step query
+            let entity_refs = Vec::new(); // Placeholder for entity references
 
             // Batch resolve entities for this service
             let entities = self
-                .batch_resolve_entities(&step.service_id, &step.entities)
+                .batch_resolve_entities(&step.service_name, &entity_refs)
                 .await?;
-            resolved_entities.insert(step.service_id.clone(), entities);
+            resolved_entities.insert(step.service_name.clone(), entities);
         }
 
         Ok(resolved_entities)
@@ -1219,15 +1325,20 @@ impl GraphQLFederation {
         let mut entities_by_type: HashMap<String, Vec<&EntityReference>> = HashMap::new();
         for entity_ref in entity_refs {
             entities_by_type
-                .entry(entity_ref.typename.clone())
+                .entry(entity_ref.entity_type.clone())
                 .or_default()
                 .push(entity_ref);
         }
 
         let mut resolved_entities = Vec::new();
 
-        for (typename, reprs) in entities_by_type {
-            let entities_query = self.build_entities_query(&typename, &reprs)?;
+        for (typename, refs) in entities_by_type {
+            // For now, create a basic query structure - this should be enhanced
+            // to properly build GraphQL _entities queries from EntityReference data
+            let entities_query = format!(
+                "query {{ _entities(representations: [{{ __typename: \"{}\" }}]) {{ ... on {} {{ id }} }} }}",
+                typename, typename
+            );
 
             // Execute query against service (mock implementation)
             let response = self
@@ -1300,7 +1411,7 @@ impl GraphQLFederation {
 
         // Mock implementation - would make actual HTTP request to service
         Ok(GraphQLResponse {
-            data: Some(serde_json::json!({
+            data: serde_json::json!({
                 "_entities": [
                     {
                         "__typename": "User",
@@ -1309,7 +1420,7 @@ impl GraphQLFederation {
                         "email": "john@example.com"
                     }
                 ]
-            })),
+            }),
             errors: Vec::new(),
             extensions: None,
         })
@@ -1364,7 +1475,7 @@ impl GraphQLFederation {
         }
 
         Ok(GraphQLResponse {
-            data: Some(serde_json::Value::Object(combined_data)),
+            data: serde_json::Value::Object(combined_data),
             errors: Vec::new(),
             extensions: None,
         })
@@ -1401,9 +1512,12 @@ impl GraphQLFederation {
 
         let schemas = self.schemas.read().await;
         let mut composed = ComposedSchema {
-            sdl: String::new(),
+            types: HashMap::new(),
+            query_type: "Query".to_string(),
+            mutation_type: None,
+            subscription_type: None,
+            directives: Vec::new(),
             entity_types: HashMap::new(),
-            service_capabilities: HashMap::new(),
             field_ownership: HashMap::new(),
         };
 
@@ -1413,12 +1527,685 @@ impl GraphQLFederation {
         }
 
         // Generate composed SDL
-        composed.sdl = self.generate_composed_sdl(&composed)?;
+        // Generate composed SDL
+        composed.directives = self.extract_federation_directives(&composed)?;
 
         // Validate composition
-        self.validate_federated_composition(&composed)?;
+        self.validate_composed_schema(&composed)?;
 
+        info!(
+            "Successfully composed federated schema with {} types",
+            composed.types.len()
+        );
         Ok(composed)
+    }
+
+    /// Advanced schema discovery with introspection
+    pub async fn discover_schema_capabilities(
+        &self,
+        service_endpoint: &str,
+    ) -> Result<SchemaCapabilities> {
+        debug!("Discovering schema capabilities for {}", service_endpoint);
+
+        let introspection_query = r#"
+            query IntrospectionQuery {
+                __schema {
+                    queryType { name }
+                    mutationType { name }
+                    subscriptionType { name }
+                    types {
+                        ...FullType
+                    }
+                    directives {
+                        name
+                        description
+                        locations
+                        args {
+                            ...InputValue
+                        }
+                    }
+                }
+            }
+            
+            fragment FullType on __Type {
+                kind
+                name
+                description
+                fields(includeDeprecated: true) {
+                    name
+                    description
+                    args {
+                        ...InputValue
+                    }
+                    type {
+                        ...TypeRef
+                    }
+                    isDeprecated
+                    deprecationReason
+                }
+                inputFields {
+                    ...InputValue
+                }
+                interfaces {
+                    ...TypeRef
+                }
+                enumValues(includeDeprecated: true) {
+                    name
+                    description
+                    isDeprecated
+                    deprecationReason
+                }
+                possibleTypes {
+                    ...TypeRef
+                }
+            }
+            
+            fragment InputValue on __InputValue {
+                name
+                description
+                type { ...TypeRef }
+                defaultValue
+            }
+            
+            fragment TypeRef on __Type {
+                kind
+                name
+                ofType {
+                    kind
+                    name
+                    ofType {
+                        kind
+                        name
+                        ofType {
+                            kind
+                            name
+                            ofType {
+                                kind
+                                name
+                                ofType {
+                                    kind
+                                    name
+                                    ofType {
+                                        kind
+                                        name
+                                        ofType {
+                                            kind
+                                            name
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        "#;
+
+        let response = self
+            .execute_introspection_query(service_endpoint, introspection_query)
+            .await?;
+        self.parse_introspection_response(response)
+    }
+
+    /// Execute introspection query against a GraphQL service
+    async fn execute_introspection_query(
+        &self,
+        endpoint: &str,
+        query: &str,
+    ) -> Result<serde_json::Value> {
+        let client = reqwest::Client::new();
+        let request_body = serde_json::json!({
+            "query": query
+        });
+
+        let response = client
+            .post(endpoint)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Introspection query failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let body: serde_json::Value = response.json().await?;
+        Ok(body)
+    }
+
+    /// Parse introspection response to extract schema capabilities
+    fn parse_introspection_response(
+        &self,
+        response: serde_json::Value,
+    ) -> Result<SchemaCapabilities> {
+        let schema = response["data"]["__schema"]
+            .as_object()
+            .ok_or_else(|| anyhow!("Invalid introspection response: missing schema"))?;
+
+        let mut capabilities = SchemaCapabilities {
+            supports_federation: false,
+            supports_subscriptions: false,
+            supports_defer_stream: false,
+            entity_types: Vec::new(),
+            custom_directives: Vec::new(),
+            scalar_types: Vec::new(),
+            estimated_complexity: 0.0,
+        };
+
+        // Check for federation support
+        if let Some(directives) = schema["directives"].as_array() {
+            for directive in directives {
+                if let Some(name) = directive["name"].as_str() {
+                    capabilities.custom_directives.push(name.to_string());
+
+                    // Federation directives
+                    if matches!(
+                        name,
+                        "key" | "external" | "requires" | "provides" | "extends"
+                    ) {
+                        capabilities.supports_federation = true;
+                    }
+                }
+            }
+        }
+
+        // Check for subscription support
+        if schema["subscriptionType"].is_object() {
+            capabilities.supports_subscriptions = true;
+        }
+
+        // Analyze types for entities and complexity
+        if let Some(types) = schema["types"].as_array() {
+            for type_def in types {
+                if let Some(type_name) = type_def["name"].as_str() {
+                    // Skip GraphQL built-in types
+                    if type_name.starts_with("__") {
+                        continue;
+                    }
+
+                    if let Some(kind) = type_def["kind"].as_str() {
+                        match kind {
+                            "OBJECT" => {
+                                capabilities.estimated_complexity += 1.0;
+
+                                // Check if this could be an entity (has ID field)
+                                if let Some(fields) = type_def["fields"].as_array() {
+                                    let has_id = fields
+                                        .iter()
+                                        .any(|field| field["name"].as_str() == Some("id"));
+
+                                    if has_id {
+                                        capabilities.entity_types.push(type_name.to_string());
+                                    }
+                                }
+                            }
+                            "SCALAR" => {
+                                if !matches!(
+                                    type_name,
+                                    "String" | "Int" | "Float" | "Boolean" | "ID"
+                                ) {
+                                    capabilities.scalar_types.push(type_name.to_string());
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check for @defer/@stream support (Apollo Federation 2.0+)
+        capabilities.supports_defer_stream = capabilities
+            .custom_directives
+            .iter()
+            .any(|d| matches!(d.as_str(), "defer" | "stream"));
+
+        Ok(capabilities)
+    }
+
+    /// Dynamic schema update with hot reloading
+    pub async fn update_schema_dynamic(
+        &self,
+        service_id: String,
+        new_schema: FederatedSchema,
+    ) -> Result<SchemaUpdateResult> {
+        debug!(
+            "Performing dynamic schema update for service: {}",
+            service_id
+        );
+
+        let mut update_result = SchemaUpdateResult {
+            service_id: service_id.clone(),
+            update_successful: false,
+            breaking_changes: Vec::new(),
+            warnings: Vec::new(),
+            rollback_available: false,
+        };
+
+        // Backup current schema for rollback
+        let current_schema = {
+            let schemas = self.schemas.read().await;
+            schemas.get(&service_id).cloned()
+        };
+
+        if let Some(old_schema) = &current_schema {
+            // Analyze breaking changes
+            update_result.breaking_changes =
+                self.detect_breaking_changes(old_schema, &new_schema)?;
+            update_result.rollback_available = true;
+
+            // Check if update should be blocked due to breaking changes
+            if !update_result.breaking_changes.is_empty() && !self.config.allow_breaking_changes {
+                update_result
+                    .warnings
+                    .push("Update blocked due to breaking changes".to_string());
+                return Ok(update_result);
+            }
+        }
+
+        // Perform the update
+        {
+            let mut schemas = self.schemas.write().await;
+            schemas.insert(service_id.clone(), new_schema.clone());
+        }
+
+        // Validate the new composed schema
+        match self.create_unified_schema().await {
+            Ok(_) => {
+                update_result.update_successful = true;
+                info!("Schema update successful for service: {}", service_id);
+            }
+            Err(e) => {
+                // Rollback on validation failure
+                if let Some(old_schema) = current_schema {
+                    let mut schemas = self.schemas.write().await;
+                    schemas.insert(service_id.clone(), old_schema);
+                }
+                return Err(anyhow!("Schema update failed validation: {}", e));
+            }
+        }
+
+        Ok(update_result)
+    }
+
+    /// Detect breaking changes between schema versions
+    fn detect_breaking_changes(
+        &self,
+        old_schema: &FederatedSchema,
+        new_schema: &FederatedSchema,
+    ) -> Result<Vec<BreakingChange>> {
+        let mut breaking_changes = Vec::new();
+
+        // Check for removed types
+        for type_name in old_schema.types.keys() {
+            if !new_schema.types.contains_key(type_name) {
+                breaking_changes.push(BreakingChange {
+                    change_type: BreakingChangeType::TypeRemoved,
+                    description: format!("Type '{}' was removed", type_name),
+                    severity: BreakingChangeSeverity::High,
+                });
+            }
+        }
+
+        // Check for field changes in existing types
+        for (type_name, new_type) in &new_schema.types {
+            if let Some(old_type) = old_schema.types.get(type_name) {
+                breaking_changes
+                    .extend(self.detect_type_breaking_changes(type_name, old_type, new_type)?);
+            }
+        }
+
+        Ok(breaking_changes)
+    }
+
+    /// Detect breaking changes in a specific type
+    fn detect_type_breaking_changes(
+        &self,
+        type_name: &str,
+        old_type: &GraphQLTypeDefinition,
+        new_type: &GraphQLTypeDefinition,
+    ) -> Result<Vec<BreakingChange>> {
+        let mut changes = Vec::new();
+
+        // Check for removed fields
+        for field_name in old_type.fields.keys() {
+            if !new_type.fields.contains_key(field_name) {
+                changes.push(BreakingChange {
+                    change_type: BreakingChangeType::FieldRemoved,
+                    description: format!("Field '{}.{}' was removed", type_name, field_name),
+                    severity: BreakingChangeSeverity::High,
+                });
+            }
+        }
+
+        // Check for argument changes in existing fields
+        for (field_name, new_field) in &new_type.fields {
+            if let Some(old_field) = old_type.fields.get(field_name) {
+                // Check for required arguments added
+                for (arg_name, new_arg) in &new_field.arguments {
+                    if let Some(old_arg) = old_field.arguments.get(arg_name) {
+                        // Check if argument became required
+                        if old_arg.default_value.is_some() && new_arg.default_value.is_none() {
+                            changes.push(BreakingChange {
+                                change_type: BreakingChangeType::ArgumentMadeRequired,
+                                description: format!(
+                                    "Argument '{}.{}.{}' is now required",
+                                    type_name, field_name, arg_name
+                                ),
+                                severity: BreakingChangeSeverity::Medium,
+                            });
+                        }
+                    } else if new_arg.default_value.is_none() {
+                        // New required argument
+                        changes.push(BreakingChange {
+                            change_type: BreakingChangeType::RequiredArgumentAdded,
+                            description: format!(
+                                "Required argument '{}.{}.{}' was added",
+                                type_name, field_name, arg_name
+                            ),
+                            severity: BreakingChangeSeverity::High,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(changes)
+    }
+
+    /// Enhanced entity resolution with dependency tracking
+    pub async fn resolve_entities_advanced(
+        &self,
+        entities: &[EntityReference],
+        context: &ResolutionContext,
+    ) -> Result<Vec<EntityData>> {
+        debug!(
+            "Resolving {} entities with advanced dependency tracking",
+            entities.len()
+        );
+
+        // Build dependency graph
+        let dependency_graph = self.build_entity_dependency_graph(entities)?;
+
+        // Topological sort for resolution order
+        let resolution_order = self.topological_sort_entities(&dependency_graph)?;
+
+        let mut resolved_entities = Vec::new();
+        let mut resolution_cache = HashMap::new();
+
+        // Resolve entities in dependency order
+        for batch in resolution_order {
+            let batch_results = self
+                .resolve_entity_batch(&batch, context, &resolution_cache)
+                .await?;
+
+            // Update cache and results
+            for (entity_ref, entity_data) in batch_results {
+                resolution_cache.insert(entity_ref.clone(), entity_data.clone());
+                resolved_entities.push(entity_data);
+            }
+        }
+
+        Ok(resolved_entities)
+    }
+
+    /// Build dependency graph for entity resolution
+    fn build_entity_dependency_graph(
+        &self,
+        entities: &[EntityReference],
+    ) -> Result<EntityDependencyGraph> {
+        let mut graph = EntityDependencyGraph {
+            nodes: HashMap::new(),
+            edges: Vec::new(),
+        };
+
+        // Add nodes
+        for (idx, entity) in entities.iter().enumerate() {
+            graph.nodes.insert(entity.clone(), idx);
+        }
+
+        // Add edges based on field dependencies
+        for (i, entity_a) in entities.iter().enumerate() {
+            for (j, entity_b) in entities.iter().enumerate() {
+                if i != j && self.entities_have_dependency(entity_a, entity_b)? {
+                    graph.edges.push((i, j));
+                }
+            }
+        }
+
+        Ok(graph)
+    }
+
+    /// Check if one entity depends on another
+    fn entities_have_dependency(
+        &self,
+        entity_a: &EntityReference,
+        entity_b: &EntityReference,
+    ) -> Result<bool> {
+        // Simple heuristic: check if entity_a requires fields that entity_b provides
+        for required_field in &entity_a.required_fields {
+            if entity_b.key_fields.contains(required_field) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Topological sort of entities for resolution order
+    fn topological_sort_entities(
+        &self,
+        graph: &EntityDependencyGraph,
+    ) -> Result<Vec<Vec<EntityReference>>> {
+        let mut in_degree = vec![0; graph.nodes.len()];
+        let mut adj_list = vec![Vec::new(); graph.nodes.len()];
+
+        // Build adjacency list and calculate in-degrees
+        for &(from, to) in &graph.edges {
+            adj_list[from].push(to);
+            in_degree[to] += 1;
+        }
+
+        let mut queue = VecDeque::new();
+        let mut result = Vec::new();
+
+        // Find nodes with no incoming edges
+        for (idx, &degree) in in_degree.iter().enumerate() {
+            if degree == 0 {
+                queue.push_back(idx);
+            }
+        }
+
+        // Process in batches (nodes that can be resolved in parallel)
+        while !queue.is_empty() {
+            let mut batch = Vec::new();
+            let batch_size = queue.len();
+
+            // Take all nodes with no dependencies as a batch
+            for _ in 0..batch_size {
+                let node = queue.pop_front().unwrap();
+
+                // Find the entity reference for this node index
+                let entity_ref = graph
+                    .nodes
+                    .iter()
+                    .find(|(_, &idx)| idx == node)
+                    .map(|(entity_ref, _)| entity_ref.clone())
+                    .ok_or_else(|| anyhow!("Node index not found in graph"))?;
+
+                batch.push(entity_ref);
+
+                // Reduce in-degree of neighbors
+                for &neighbor in &adj_list[node] {
+                    in_degree[neighbor] -= 1;
+                    if in_degree[neighbor] == 0 {
+                        queue.push_back(neighbor);
+                    }
+                }
+            }
+
+            if !batch.is_empty() {
+                result.push(batch);
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Resolve a batch of entities in parallel
+    async fn resolve_entity_batch(
+        &self,
+        entities: &[EntityReference],
+        context: &ResolutionContext,
+        cache: &HashMap<EntityReference, EntityData>,
+    ) -> Result<Vec<(EntityReference, EntityData)>> {
+        let mut results = Vec::new();
+
+        // Group entities by service for batch resolution
+        let mut service_groups: HashMap<String, Vec<&EntityReference>> = HashMap::new();
+        for entity in entities {
+            service_groups
+                .entry(entity.service_id.clone())
+                .or_default()
+                .push(entity);
+        }
+
+        // Resolve each service group
+        for (service_id, service_entities) in service_groups {
+            let service_results = self
+                .resolve_service_entity_batch(&service_id, &service_entities, context, cache)
+                .await?;
+            results.extend(service_results);
+        }
+
+        Ok(results)
+    }
+
+    /// Resolve entities from a specific service
+    async fn resolve_service_entity_batch(
+        &self,
+        service_id: &str,
+        entities: &[&EntityReference],
+        _context: &ResolutionContext,
+        _cache: &HashMap<EntityReference, EntityData>,
+    ) -> Result<Vec<(EntityReference, EntityData)>> {
+        // Build entity resolution query
+        let query = self.build_entity_batch_query(entities)?;
+
+        // Execute query against service
+        let response = self
+            .execute_service_query(service_id, &query, &HashMap::new())
+            .await?;
+
+        // Parse response and match to entity references
+        self.parse_entity_batch_response(entities, response)
+    }
+
+    /// Build GraphQL query for batch entity resolution
+    fn build_entity_batch_query(&self, entities: &[&EntityReference]) -> Result<String> {
+        let mut query_parts = Vec::new();
+
+        for (idx, entity) in entities.iter().enumerate() {
+            let alias = format!("entity_{}", idx);
+            let key_args = entity
+                .key_fields
+                .iter()
+                .map(|field| format!("{}: ${}_{}", field, alias, field))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            let field_selection = entity.required_fields.join(" ");
+
+            query_parts.push(format!(
+                "{}: {}({}) {{ {} }}",
+                alias, entity.entity_type, key_args, field_selection
+            ));
+        }
+
+        Ok(format!("query {{ {} }}", query_parts.join(" ")))
+    }
+
+    /// Parse entity batch response
+    fn parse_entity_batch_response(
+        &self,
+        entities: &[&EntityReference],
+        response: GraphQLResponse,
+    ) -> Result<Vec<(EntityReference, EntityData)>> {
+        let mut results = Vec::new();
+
+        if let Some(data) = response.data {
+            for (idx, entity) in entities.iter().enumerate() {
+                let alias = format!("entity_{}", idx);
+
+                if let Some(entity_data) = data.get(&alias) {
+                    if let Some(obj) = entity_data.as_object() {
+                        results.push((
+                            (*entity).clone(),
+                            EntityData {
+                                typename: entity.entity_type.clone(),
+                                fields: obj.clone(),
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Extract federation directives from composed schema
+    fn extract_federation_directives(&self, _composed: &ComposedSchema) -> Result<Vec<String>> {
+        // Federation directives that should be available in the composed schema
+        Ok(vec![
+            "key".to_string(),
+            "external".to_string(),
+            "requires".to_string(),
+            "provides".to_string(),
+            "extends".to_string(),
+            "shareable".to_string(),
+            "inaccessible".to_string(),
+            "override".to_string(),
+            "composeDirective".to_string(),
+            "interfaceObject".to_string(),
+        ])
+    }
+
+    /// Validate composed schema for federation compliance
+    fn validate_composed_schema(&self, composed: &ComposedSchema) -> Result<()> {
+        // Validate entity types have proper key directives
+        for (type_name, entity_info) in &composed.entity_types {
+            if entity_info.key_fields.is_empty() {
+                return Err(anyhow!(
+                    "Entity type '{}' must have at least one key field",
+                    type_name
+                ));
+            }
+        }
+
+        // Validate field ownership
+        for (field_path, ownership) in &composed.field_ownership {
+            match ownership {
+                FieldOwnershipType::Requires(fields) if fields.is_empty() => {
+                    return Err(anyhow!(
+                        "Field '{}' with @requires directive must specify required fields",
+                        field_path
+                    ));
+                }
+                FieldOwnershipType::Provides(fields) if fields.is_empty() => {
+                    return Err(anyhow!(
+                        "Field '{}' with @provides directive must specify provided fields",
+                        field_path
+                    ));
+                }
+                _ => {}
+            }
+        }
+
+        info!("Composed schema validation passed");
+        Ok(())
     }
 
     /// Process schema for federation directives (@key, @external, @requires, @provides)
@@ -1458,7 +2245,7 @@ impl GraphQLFederation {
                                 // Field is defined in another service
                                 composed
                                     .field_ownership
-                                    .insert(field_key.clone(), FieldOwnership::External);
+                                    .insert(field_key.clone(), FieldOwnershipType::External);
                             }
                             "requires" => {
                                 // Field requires other fields to be resolved first
@@ -1466,7 +2253,7 @@ impl GraphQLFederation {
                                     self.extract_requires_fields_from_directive(directive)?;
                                 composed.field_ownership.insert(
                                     field_key.clone(),
-                                    FieldOwnership::Requires(required_fields),
+                                    FieldOwnershipType::Requires(required_fields),
                                 );
                             }
                             "provides" => {
@@ -1475,7 +2262,7 @@ impl GraphQLFederation {
                                     self.extract_provides_fields_from_directive(directive)?;
                                 composed.field_ownership.insert(
                                     field_key.clone(),
-                                    FieldOwnership::Provides(provided_fields),
+                                    FieldOwnershipType::Provides(provided_fields),
                                 );
                             }
                             _ => {}
@@ -1486,7 +2273,7 @@ impl GraphQLFederation {
                     if !composed.field_ownership.contains_key(&field_key) {
                         composed
                             .field_ownership
-                            .insert(field_key, FieldOwnership::Owned(service_id.to_string()));
+                            .insert(field_key, FieldOwnershipType::Owned(service_id.to_string()));
                     }
                 }
             }
@@ -1496,12 +2283,10 @@ impl GraphQLFederation {
     }
 
     /// Extract key fields from @key directive
-    fn extract_key_fields_from_directive(&self, directive: &Directive) -> Result<Vec<String>> {
+    fn extract_key_fields_from_directive(&self, directive: &DirectiveUsage) -> Result<Vec<String>> {
         // Parse fields argument from @key(fields: "id name")
-        for arg in &directive.arguments {
-            if arg.name == "fields" {
-                // Simple parsing - would be more sophisticated in real implementation
-                let fields_str = arg.value.trim_matches('"');
+        if let Some(fields_value) = directive.arguments.get("fields") {
+            if let Some(fields_str) = fields_value.as_str() {
                 return Ok(fields_str
                     .split_whitespace()
                     .map(|s| s.to_string())
@@ -1512,10 +2297,12 @@ impl GraphQLFederation {
     }
 
     /// Extract required fields from @requires directive
-    fn extract_requires_fields_from_directive(&self, directive: &Directive) -> Result<Vec<String>> {
-        for arg in &directive.arguments {
-            if arg.name == "fields" {
-                let fields_str = arg.value.trim_matches('"');
+    fn extract_requires_fields_from_directive(
+        &self,
+        directive: &DirectiveUsage,
+    ) -> Result<Vec<String>> {
+        if let Some(fields_value) = directive.arguments.get("fields") {
+            if let Some(fields_str) = fields_value.as_str() {
                 return Ok(fields_str
                     .split_whitespace()
                     .map(|s| s.to_string())
@@ -1526,10 +2313,12 @@ impl GraphQLFederation {
     }
 
     /// Extract provided fields from @provides directive
-    fn extract_provides_fields_from_directive(&self, directive: &Directive) -> Result<Vec<String>> {
-        for arg in &directive.arguments {
-            if arg.name == "fields" {
-                let fields_str = arg.value.trim_matches('"');
+    fn extract_provides_fields_from_directive(
+        &self,
+        directive: &DirectiveUsage,
+    ) -> Result<Vec<String>> {
+        if let Some(fields_value) = directive.arguments.get("fields") {
+            if let Some(fields_str) = fields_value.as_str() {
                 return Ok(fields_str
                     .split_whitespace()
                     .map(|s| s.to_string())

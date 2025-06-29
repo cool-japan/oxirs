@@ -19,7 +19,7 @@ use crate::{
     error::{FusekiError as Error, FusekiResult as Result},
     federation::{
         FederationConfig, ServiceCapabilities as EndpointCapabilities, ServiceEndpoint,
-        ServiceHealth,
+        ServiceHealth, ServiceMetadata,
     },
 };
 
@@ -269,26 +269,13 @@ impl ServiceDiscovery for DefaultServiceDiscovery {
             .await
         {
             Ok(response) => {
-                let response_time = start.elapsed();
-                let is_healthy = response.status().is_success();
-
-                Ok(ServiceHealth {
-                    is_healthy,
-                    response_time,
-                    last_check: chrono::Utc::now(),
-                    error_message: if is_healthy {
-                        None
-                    } else {
-                        Some("HTTP error".to_string())
-                    },
-                })
+                if response.status().is_success() {
+                    Ok(ServiceHealth::Healthy)
+                } else {
+                    Ok(ServiceHealth::Degraded)
+                }
             }
-            Err(e) => Ok(ServiceHealth {
-                is_healthy: false,
-                response_time: start.elapsed(),
-                last_check: chrono::Utc::now(),
-                error_message: Some(e.to_string()),
-            }),
+            Err(_e) => Ok(ServiceHealth::Unhealthy),
         }
     }
 }
@@ -297,15 +284,19 @@ impl DefaultServiceDiscovery {
     async fn get_service_description(&self, endpoint_url: &str) -> Result<ServiceEndpoint> {
         // Implementation would query the service description
         // For now, return a basic endpoint
+        let url = Url::parse(endpoint_url).map_err(|e| Error::InvalidUrl(e.to_string()))?;
         Ok(ServiceEndpoint {
-            url: endpoint_url.to_string(),
-            name: format!("Service at {}", endpoint_url),
+            url,
+            metadata: ServiceMetadata {
+                name: format!("Service at {}", endpoint_url),
+                description: None,
+                tags: vec![],
+                location: None,
+                version: None,
+                contact: None,
+            },
+            health: self.check_health(endpoint_url).await.unwrap_or_default(),
             capabilities: EndpointCapabilities::default(),
-            statistics: crate::federation::EndpointStatistics::default(),
-            health_status: self.check_health(endpoint_url).await.unwrap_or_default(),
-            authentication: None,
-            timeout_ms: 30000,
-            priority: 0,
         })
     }
 }
@@ -337,7 +328,13 @@ impl CostEstimator for DefaultCostEstimator {
             QueryCost {
                 result_size: Some(pattern_stats.average_result_size),
                 execution_time: Some(pattern_stats.average_execution_time),
-                network_cost: Some(endpoint.statistics.avg_response_time.as_millis() as f64),
+                network_cost: Some(
+                    endpoint
+                        .capabilities
+                        .avg_response_time
+                        .map(|d| d.as_millis() as f64)
+                        .unwrap_or(1.0),
+                ),
                 complexity: Some(self.calculate_complexity(query)),
             }
         } else {
@@ -408,19 +405,21 @@ impl ParallelServiceExecutor {
     }
 
     /// Execute multiple service requests in parallel
-    pub async fn execute_parallel<T, F>(&self, requests: Vec<F>) -> Vec<Result<T>>
+    pub async fn execute_parallel<T, F>(&self, mut requests: Vec<F>) -> Vec<Result<T>>
     where
         F: std::future::Future<Output = Result<T>> + Send,
         T: Send,
     {
         use futures::stream::{FuturesUnordered, StreamExt};
 
-        let mut futures = FuturesUnordered::new();
         let mut results = Vec::new();
 
         // Process requests in batches to respect concurrency limit
-        for batch in requests.chunks(self.max_concurrent) {
-            futures.clear();
+        while !requests.is_empty() {
+            let batch_size = self.max_concurrent.min(requests.len());
+            let batch: Vec<_> = requests.drain(..batch_size).collect();
+
+            let mut futures = FuturesUnordered::new();
 
             for request in batch {
                 let timeout_future = tokio::time::timeout(self.timeout, request);
@@ -502,7 +501,7 @@ impl QueryPlanner {
         {
             let mut endpoint_map = self.endpoints.write().await;
             for endpoint in &endpoints {
-                endpoint_map.insert(endpoint.url.clone(), endpoint.clone());
+                endpoint_map.insert(endpoint.url.to_string(), endpoint.clone());
             }
         }
 
@@ -557,10 +556,10 @@ impl QueryPlanner {
             .map(|endpoint| async {
                 let health = self
                     .discovery_service
-                    .check_health(&endpoint.url)
+                    .check_health(endpoint.url.as_str())
                     .await
                     .unwrap_or_default();
-                (endpoint.url.clone(), health)
+                Ok((endpoint.url.to_string(), health))
             })
             .collect();
 
@@ -572,9 +571,9 @@ impl QueryPlanner {
         // Update endpoints with health status
         for (mut endpoint, health_result) in discovered.into_iter().zip(health_results.into_iter())
         {
-            if let Ok(health) = health_result {
-                endpoint.health_status = health;
-                endpoint_map.insert(endpoint.url.clone(), endpoint);
+            if let Ok((_, health)) = health_result {
+                endpoint.health = health;
+                endpoint_map.insert(endpoint.url.to_string(), endpoint);
             }
         }
 
@@ -609,7 +608,7 @@ impl QueryPlanner {
 
     /// Extract SERVICE patterns from SPARQL query
     fn extract_service_patterns(&self, query: &Query) -> Result<Vec<ServicePattern>> {
-        let query_string = query.to_string();
+        let query_string = format!("{:?}", query);
         let mut patterns = Vec::new();
 
         // Use regex to find SERVICE clauses (simplified approach)
@@ -655,7 +654,7 @@ impl QueryPlanner {
             // Find the endpoint that matches this SERVICE URL
             let matching_endpoint = endpoint_costs
                 .iter()
-                .find(|(endpoint, _)| endpoint.url == pattern.service_url)
+                .find(|(endpoint, _)| endpoint.url.as_str() == pattern.service_url)
                 .or_else(|| endpoint_costs.first()) // Fallback to first available
                 .ok_or_else(|| Error::ServiceUnavailable {
                     message: format!("No endpoint available for SERVICE {}", pattern.service_url),
@@ -665,8 +664,8 @@ impl QueryPlanner {
             let sub_query = self.create_sub_query(&pattern.pattern)?;
 
             let service_selection = ServiceSelection {
-                service_id: matching_endpoint.0.name.clone(),
-                service_url: pattern.service_url.parse().map_err(|e| Error::Parse {
+                service_id: matching_endpoint.0.metadata.name.clone(),
+                service_url: Url::parse(&pattern.service_url).map_err(|e| Error::Parse {
                     message: format!("Invalid service URL: {}", e),
                 })?,
                 score: 1.0
@@ -698,8 +697,8 @@ impl QueryPlanner {
             let final_step = ExecutionStep {
                 id: "final_combination".to_string(),
                 services: vec![ServiceSelection {
-                    service_id: best_endpoint.name.clone(),
-                    service_url: best_endpoint.url.parse().unwrap(),
+                    service_id: best_endpoint.metadata.name.clone(),
+                    service_url: best_endpoint.url.clone(),
                     score: 1.0,
                     is_primary: true,
                 }],
@@ -731,7 +730,7 @@ impl QueryPlanner {
 
     /// Check if query is complex enough to benefit from decomposition
     fn is_complex_query(&self, query: &Query) -> bool {
-        let query_string = query.to_string();
+        let query_string = format!("{:?}", query);
 
         // Heuristics for complexity:
         // 1. Multiple graph patterns
@@ -754,7 +753,7 @@ impl QueryPlanner {
         endpoint_costs: &[(ServiceEndpoint, QueryCost)],
     ) -> Result<Vec<ExecutionStep>> {
         let mut steps = Vec::new();
-        let query_string = query.to_string();
+        let query_string = format!("{:?}", query);
 
         // Try to identify independent graph patterns that can be parallelized
         let graph_patterns = self.identify_graph_patterns(&query_string)?;
@@ -766,10 +765,8 @@ impl QueryPlanner {
                     let sub_query = self.create_sub_query(pattern)?;
 
                     let service_selection = ServiceSelection {
-                        service_id: endpoint.name.clone(),
-                        service_url: endpoint.url.parse().map_err(|e| Error::Parse {
-                            message: format!("Invalid service URL: {}", e),
-                        })?,
+                        service_id: endpoint.metadata.name.clone(),
+                        service_url: endpoint.url.clone(),
                         score: 1.0
                             / (cost.execution_time.unwrap_or_default().as_millis() as f64 + 1.0),
                         is_primary: true,
@@ -791,8 +788,8 @@ impl QueryPlanner {
                 steps.push(ExecutionStep {
                     id: "merge_step".to_string(),
                     services: vec![ServiceSelection {
-                        service_id: best_endpoint.name.clone(),
-                        service_url: best_endpoint.url.parse().unwrap(),
+                        service_id: best_endpoint.metadata.name.clone(),
+                        service_url: best_endpoint.url.clone(),
                         score: 1.0,
                         is_primary: true,
                     }],
@@ -873,10 +870,8 @@ impl QueryPlanner {
                 })?;
 
         let service_selection = ServiceSelection {
-            service_id: best_endpoint.name.clone(),
-            service_url: best_endpoint.url.parse().map_err(|e| Error::Parse {
-                message: format!("Invalid service URL: {}", e),
-            })?,
+            service_id: best_endpoint.metadata.name.clone(),
+            service_url: best_endpoint.url.clone(),
             score: 1.0 / (cost.execution_time.unwrap_or_default().as_millis() as f64 + 1.0),
             is_primary: true,
         };
@@ -895,10 +890,25 @@ impl QueryPlanner {
         // Simple sub-query creation - wrap pattern in SELECT * WHERE
         let sub_query_string = format!("SELECT * WHERE {{ {} }}", pattern);
 
+        // For now, create a simple placeholder query
         // In a real implementation, this would use proper SPARQL parsing
-        // For now, return the original pattern as a query
-        // This would need to be implemented with actual SPARQL parsing
-        Ok(Query::from(sub_query_string)) // Assuming Query has a From trait implementation
+        use oxirs_arq::{Algebra, QueryType};
+        Ok(Query {
+            query_type: QueryType::Select,
+            select_variables: vec![],
+            where_clause: Algebra::Zero,
+            order_by: vec![],
+            group_by: vec![],
+            having: None,
+            limit: None,
+            offset: None,
+            distinct: false,
+            reduced: false,
+            construct_template: vec![],
+            prefixes: std::collections::HashMap::new(),
+            base_iri: None,
+            dataset: oxirs_arq::DatasetClause::default(),
+        })
     }
 
     fn calculate_total_cost(&self, steps: &[ExecutionStep]) -> QueryCost {
@@ -994,8 +1004,8 @@ impl QueryPlanner {
         let start_time = std::time::Instant::now();
         let http_client = reqwest::Client::new();
 
-        // Convert query to SPARQL string
-        let query_string = step.sub_query.to_string();
+        // Convert query to SPARQL string (placeholder implementation)
+        let query_string = format!("{:?}", step.sub_query);
 
         // Execute with retry logic
         let result = self
@@ -1025,8 +1035,10 @@ impl QueryPlanner {
                             .await
                             .unwrap_or_else(|_| "Unknown error".to_string());
                         return Err(Error::ServiceError {
-                            service_url: url.to_string(),
-                            message: format!("HTTP {}: {}", status, error_text),
+                            message: format!(
+                                "Service {} returned HTTP {}: {}",
+                                url, status, error_text
+                            ),
                         });
                     }
 

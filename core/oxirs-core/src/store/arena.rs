@@ -378,6 +378,9 @@ mod tests {
         })
         .unwrap();
 
+        // Ensure the main thread also initializes its thread-local arena
+        let _main_alloc = arena.alloc_str("main_thread_test");
+
         assert!(arena.total_allocated() > 0);
         assert!(arena.arena_count() >= 1);
     }

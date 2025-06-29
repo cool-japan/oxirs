@@ -11,7 +11,7 @@ use governor::{
     Quota, RateLimiter,
 };
 use reqwest::{
-    header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+    header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE},
     Client,
 };
 use serde::{Deserialize, Serialize};
@@ -107,6 +107,12 @@ pub enum ServiceCapability {
     TemporalQueries,
     /// Service supports advanced filtering capabilities
     AdvancedFiltering,
+    /// Service supports temporal queries
+    TemporalQuery,
+    /// Service supports numeric queries
+    NumericQuery,
+    /// Service supports schema repository queries
+    SchemaRepositoryQuery,
 }
 
 /// Authentication type enumeration
@@ -198,6 +204,30 @@ pub enum OverallHealthStatus {
     Critical,
     /// Unable to determine health status
     Unknown,
+}
+
+/// Service status information with load metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceStatusInfo {
+    /// Current service status
+    pub status: ServiceStatus,
+    /// Current load (0.0 to 1.0)
+    pub current_load: f64,
+    /// Last status check timestamp
+    pub last_check: Option<chrono::DateTime<chrono::Utc>>,
+    /// Response time in milliseconds
+    pub response_time_ms: Option<f64>,
+}
+
+impl Default for ServiceStatusInfo {
+    fn default() -> Self {
+        Self {
+            status: ServiceStatus::Unknown,
+            current_load: 0.0,
+            last_check: None,
+            response_time_ms: None,
+        }
+    }
 }
 
 /// Registry for managing federated services
@@ -914,7 +944,10 @@ impl ServiceRegistry {
                         .api_key_header
                         .as_deref()
                         .unwrap_or("X-API-Key");
-                    headers.insert(header_name, HeaderValue::from_str(api_key)?);
+                    headers.insert(
+                        HeaderName::from_bytes(header_name.as_bytes())?,
+                        HeaderValue::from_str(api_key)?,
+                    );
                 }
             }
             AuthType::OAuth2 => {
@@ -930,7 +963,8 @@ impl ServiceRegistry {
             AuthType::Custom => {
                 if let Some(custom_headers) = &auth.credentials.custom_headers {
                     for (key, value) in custom_headers {
-                        headers.insert(key.as_str(), HeaderValue::from_str(value)?);
+                        let header_name = HeaderName::try_from(key.clone())?;
+                        headers.insert(header_name, HeaderValue::from_str(value)?);
                     }
                 }
             }
@@ -1189,6 +1223,8 @@ pub struct FederatedService {
     pub extended_metadata: Option<ExtendedServiceMetadata>,
     /// Performance characteristics
     pub performance: ServicePerformance,
+    /// Current service status and load
+    pub status: Option<ServiceStatusInfo>,
 }
 
 impl FederatedService {
@@ -1210,6 +1246,7 @@ impl FederatedService {
             metadata: ServiceMetadata::default(),
             extended_metadata: None,
             performance: ServicePerformance::default(),
+            status: Some(ServiceStatusInfo::default()),
         }
     }
 
@@ -1232,6 +1269,7 @@ impl FederatedService {
             metadata: ServiceMetadata::default(),
             extended_metadata: None,
             performance: ServicePerformance::default(),
+            status: Some(ServiceStatusInfo::default()),
         }
     }
 

@@ -5,6 +5,7 @@
 
 use crate::algebra::{Binding, Iri, Solution, Term, Variable};
 use anyhow::{anyhow, bail, Result};
+use oxirs_core::model::NamedNode;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -619,14 +620,14 @@ mod tests {
             Self {
                 triples: vec![
                     (
-                        Term::Iri(Iri("http://example.org/person1".to_string())),
-                        Term::Iri(Iri("http://xmlns.com/foaf/0.1/knows".to_string())),
-                        Term::Iri(Iri("http://example.org/person2".to_string())),
+                        Term::Iri(NamedNode::new_unchecked("http://example.org/person1")),
+                        Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/knows")),
+                        Term::Iri(NamedNode::new_unchecked("http://example.org/person2")),
                     ),
                     (
-                        Term::Iri(Iri("http://example.org/person2".to_string())),
-                        Term::Iri(Iri("http://xmlns.com/foaf/0.1/knows".to_string())),
-                        Term::Iri(Iri("http://example.org/person3".to_string())),
+                        Term::Iri(NamedNode::new_unchecked("http://example.org/person2")),
+                        Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/knows")),
+                        Term::Iri(NamedNode::new_unchecked("http://example.org/person3")),
                     ),
                 ],
             }
@@ -684,11 +685,11 @@ mod tests {
         let evaluator = PropertyPathEvaluator::new();
         let dataset = TestDataset::new();
 
-        let path = PropertyPath::Direct(Term::Iri(Iri(
-            "http://xmlns.com/foaf/0.1/knows".to_string()
+        let path = PropertyPath::Direct(Term::Iri(NamedNode::new_unchecked(
+            "http://xmlns.com/foaf/0.1/knows",
         )));
-        let start = Term::Iri(Iri("http://example.org/person1".to_string()));
-        let end = Term::Iri(Iri("http://example.org/person2".to_string()));
+        let start = Term::Iri(NamedNode::new_unchecked("http://example.org/person1"));
+        let end = Term::Iri(NamedNode::new_unchecked("http://example.org/person2"));
 
         assert!(evaluator
             .evaluate_path(&start, &path, &end, &dataset)
@@ -700,13 +701,13 @@ mod tests {
         let evaluator = PropertyPathEvaluator::new();
         let dataset = TestDataset::new();
 
-        let knows = PropertyPath::Direct(Term::Iri(Iri(
-            "http://xmlns.com/foaf/0.1/knows".to_string()
+        let knows = PropertyPath::Direct(Term::Iri(NamedNode::new_unchecked(
+            "http://xmlns.com/foaf/0.1/knows",
         )));
         let path = path_seq!(knows.clone(), knows);
 
-        let start = Term::Iri(Iri("http://example.org/person1".to_string()));
-        let end = Term::Iri(Iri("http://example.org/person3".to_string()));
+        let start = Term::Iri(NamedNode::new_unchecked("http://example.org/person1"));
+        let end = Term::Iri(NamedNode::new_unchecked("http://example.org/person3"));
 
         assert!(evaluator
             .evaluate_path(&start, &path, &end, &dataset)
@@ -718,16 +719,16 @@ mod tests {
         let evaluator = PropertyPathEvaluator::new();
         let dataset = TestDataset::new();
 
-        let path = PropertyPath::Direct(Term::Iri(Iri(
-            "http://xmlns.com/foaf/0.1/knows".to_string()
+        let path = PropertyPath::Direct(Term::Iri(NamedNode::new_unchecked(
+            "http://xmlns.com/foaf/0.1/knows",
         )));
-        let start = Term::Iri(Iri("http://example.org/person1".to_string()));
+        let start = Term::Iri(NamedNode::new_unchecked("http://example.org/person1"));
 
         let reachable = evaluator.find_reachable(&start, &path, &dataset).unwrap();
         assert_eq!(reachable.len(), 1);
         assert_eq!(
             reachable[0],
-            Term::Iri(Iri("http://example.org/person2".to_string()))
+            Term::Iri(NamedNode::new_unchecked("http://example.org/person2"))
         );
     }
 
@@ -735,7 +736,9 @@ mod tests {
     fn test_path_optimization() {
         let evaluator = PropertyPathEvaluator::new();
 
-        let direct = PropertyPath::Direct(Term::Iri(Iri("http://example.org/pred".to_string())));
+        let direct = PropertyPath::Direct(Term::Iri(NamedNode::new_unchecked(
+            "http://example.org/pred",
+        )));
         let double_inverse =
             PropertyPath::Inverse(Box::new(PropertyPath::Inverse(Box::new(direct.clone()))));
 

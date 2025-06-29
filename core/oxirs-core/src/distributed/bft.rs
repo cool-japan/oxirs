@@ -1259,7 +1259,7 @@ impl BftNode {
 
             // Check if we have enough view change messages (2f+1)
             let view_change_count = self.count_view_change_messages(new_view);
-            if view_change_count >= 2 * self.config.fault_tolerance + 1 {
+            if view_change_count > 2 * self.config.fault_tolerance {
                 // If we're the new primary, send new view message
                 if self.get_primary(new_view) == self.node_id {
                     self.send_new_view(new_view).await?;
@@ -1353,15 +1353,14 @@ impl BftNode {
         }
 
         // Verify cryptographic signatures if enabled
-        if self.config.enable_signatures {
-            if !self
+        if self.config.enable_signatures
+            && !self
                 .verify_signatures_for_view_change(node_id, checkpoints, prepared_messages)
                 .await?
-            {
-                let mut detector = self.byzantine_detector.write();
-                detector.report_signature_failure(*node_id);
-                return Ok(false);
-            }
+        {
+            let mut detector = self.byzantine_detector.write();
+            detector.report_signature_failure(*node_id);
+            return Ok(false);
         }
 
         Ok(true)

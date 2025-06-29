@@ -45,6 +45,12 @@ pub struct ParallelConfig {
     pub parallel_threshold: usize,
     /// Thread pool configuration
     pub thread_pool_config: ThreadPoolConfig,
+    /// Enable NUMA-aware execution
+    pub numa_aware: bool,
+    /// Minimum work size for parallel execution
+    pub min_parallel_work: usize,
+    /// Enable adaptive parallelization
+    pub adaptive: bool,
 }
 
 /// Thread pool configuration
@@ -112,6 +118,9 @@ impl Default for ParallelConfig {
             chunk_size: 1000,
             parallel_threshold: 10000,
             thread_pool_config: ThreadPoolConfig::default(),
+            numa_aware: false,
+            min_parallel_work: 100,
+            adaptive: true,
         }
     }
 }

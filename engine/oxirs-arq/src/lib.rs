@@ -7,12 +7,18 @@
 
 use anyhow::Result;
 
+pub mod advanced_optimizer;
 pub mod algebra;
+pub mod algebra_generation;
 pub mod bgp_optimizer;
 pub mod builtin_fixed;
+pub mod cost_model;
+pub mod distributed;
 // pub mod executor;  // Temporarily commented to avoid module conflict
 pub mod extensions;
 pub mod optimizer;
+pub mod query_analysis;
+pub mod streaming;
 
 // Use executor from subdirectory
 pub use self::executor_impl as executor;
@@ -33,13 +39,19 @@ pub mod term;
 pub mod update;
 
 // Re-export main types for convenience
+pub use advanced_optimizer::*;
 pub use algebra::*;
+pub use algebra_generation::*;
+pub use cost_model::*;
+pub use distributed::*;
 pub use executor::*;
 pub use expression::*;
 pub use extensions::*;
 pub use optimizer::*;
 pub use path::*;
 pub use query::*;
+pub use query_analysis::*;
+pub use streaming::*;
 pub use term::*;
 pub use update::*;
 
@@ -198,5 +210,165 @@ impl SparqlEngine {
 impl Default for SparqlEngine {
     fn default() -> Self {
         Self::new().expect("Failed to create default SPARQL engine")
+    }
+}
+
+/// Distributed SPARQL Query Engine - Enhanced interface for distributed processing
+pub struct DistributedSparqlEngine {
+    local_engine: SparqlEngine,
+    distributed_processor: distributed::DistributedQueryProcessor,
+    distribution_threshold: f64,
+}
+
+impl DistributedSparqlEngine {
+    /// Create a new distributed SPARQL engine with default configuration
+    pub fn new() -> Result<Self> {
+        let local_engine = SparqlEngine::new()?;
+        let distributed_config = distributed::DistributedConfig::default();
+        let distributed_processor = distributed::DistributedQueryProcessor::new(distributed_config);
+
+        Ok(Self {
+            local_engine,
+            distributed_processor,
+            distribution_threshold: 100.0, // Complexity threshold for distributed execution
+        })
+    }
+
+    /// Create a new distributed SPARQL engine with custom configuration
+    pub fn with_config(
+        executor_config: executor::ExecutionContext,
+        optimizer_config: optimizer::OptimizerConfig,
+        distributed_config: distributed::DistributedConfig,
+        distribution_threshold: f64,
+    ) -> Result<Self> {
+        let local_engine = SparqlEngine::with_config(executor_config, optimizer_config)?;
+        let distributed_processor = distributed::DistributedQueryProcessor::new(distributed_config);
+
+        Ok(Self {
+            local_engine,
+            distributed_processor,
+            distribution_threshold,
+        })
+    }
+
+    /// Register a node in the distributed system
+    pub async fn register_node(&self, node_info: distributed::NodeInfo) -> Result<()> {
+        self.distributed_processor.register_node(node_info).await
+    }
+
+    /// Execute a SPARQL query with automatic distribution decision
+    pub async fn execute_query(
+        &mut self,
+        query_str: &str,
+        dataset: &dyn executor::Dataset,
+    ) -> Result<(algebra::Solution, executor::ExecutionStats)> {
+        // Parse and analyze query
+        let query = self.local_engine.parser.parse(query_str)?;
+        let algebra = self.local_engine.convert_query_to_algebra(query)?;
+
+        // Determine if query should be distributed
+        if self.should_distribute_query(&algebra).await? {
+            self.execute_distributed_query(algebra, dataset).await
+        } else {
+            // Execute locally
+            let optimized_algebra = self.local_engine.optimizer.optimize(algebra)?;
+            self.local_engine
+                .executor
+                .execute(&optimized_algebra, dataset)
+        }
+    }
+
+    /// Execute query in distributed mode
+    async fn execute_distributed_query(
+        &mut self,
+        algebra: Algebra,
+        dataset: &dyn executor::Dataset,
+    ) -> Result<(algebra::Solution, executor::ExecutionStats)> {
+        let start_time = std::time::Instant::now();
+
+        // Execute distributed query
+        let bindings = self
+            .distributed_processor
+            .execute_distributed(algebra, std::collections::HashMap::new())
+            .await?;
+
+        let execution_time = start_time.elapsed();
+
+        // Convert results to expected format
+        // Solution is just Vec<Binding>, so use bindings directly
+        let solution: algebra::Solution = bindings;
+
+        let stats = executor::ExecutionStats {
+            execution_time,
+            intermediate_results: 0,
+            final_results: solution.len(),
+            memory_used: 0, // TODO: Aggregate from distributed execution
+            operations: 1,
+            property_path_evaluations: 0,
+            time_spent_on_paths: std::time::Duration::from_millis(0),
+            service_calls: 0,
+            time_spent_on_services: std::time::Duration::from_millis(0),
+            warnings: Vec::new(),
+        };
+
+        Ok((solution, stats))
+    }
+
+    /// Determine if a query should be executed in distributed mode
+    async fn should_distribute_query(&self, algebra: &Algebra) -> Result<bool> {
+        let complexity = self.calculate_query_complexity(algebra);
+        Ok(complexity > self.distribution_threshold)
+    }
+
+    /// Calculate query complexity score
+    fn calculate_query_complexity(&self, algebra: &Algebra) -> f64 {
+        match algebra {
+            Algebra::Bgp(patterns) => patterns.len() as f64,
+            Algebra::Join { left, right } => {
+                self.calculate_query_complexity(left)
+                    + self.calculate_query_complexity(right)
+                    + 10.0
+            }
+            Algebra::Union { left, right } => {
+                self.calculate_query_complexity(left) + self.calculate_query_complexity(right) + 5.0
+            }
+            Algebra::Filter { pattern, .. } => self.calculate_query_complexity(pattern) + 2.0,
+            Algebra::Group { pattern, .. } => {
+                self.calculate_query_complexity(pattern) + 20.0 // Aggregation is expensive
+            }
+            _ => 1.0,
+        }
+    }
+
+    /// Register a custom function (delegated to local engine)
+    pub fn register_function<F>(&self, function: F) -> Result<()>
+    where
+        F: extensions::CustomFunction + 'static,
+    {
+        self.local_engine.register_function(function)
+    }
+
+    /// Register a custom aggregate (delegated to local engine)
+    pub fn register_aggregate<A>(&self, aggregate: A) -> Result<()>
+    where
+        A: extensions::CustomAggregate + 'static,
+    {
+        self.local_engine.register_aggregate(aggregate)
+    }
+
+    /// Get the distributed processor for advanced configuration
+    pub fn distributed_processor(&self) -> &distributed::DistributedQueryProcessor {
+        &self.distributed_processor
+    }
+
+    /// Set distribution threshold
+    pub fn set_distribution_threshold(&mut self, threshold: f64) {
+        self.distribution_threshold = threshold;
+    }
+}
+
+impl Default for DistributedSparqlEngine {
+    fn default() -> Self {
+        Self::new().expect("Failed to create default distributed SPARQL engine")
     }
 }

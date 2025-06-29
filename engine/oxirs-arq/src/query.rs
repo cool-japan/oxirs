@@ -8,9 +8,11 @@ use crate::algebra::{
     OrderCondition, PropertyPath, PropertyPathPattern, Term, TriplePattern, UnaryOperator,
     Variable,
 };
+use crate::update::{GraphReference, GraphTarget, QuadPattern, UpdateOperation};
 use anyhow::{anyhow, bail, Context, Result};
 use oxirs_core::model::NamedNode;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::str::FromStr;
 
 /// SPARQL query types
@@ -41,11 +43,86 @@ pub struct Query {
     pub dataset: DatasetClause,
 }
 
+impl fmt::Display for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Basic SPARQL query serialization
+        match self.query_type {
+            QueryType::Select => {
+                write!(f, "SELECT ")?;
+                if self.distinct {
+                    write!(f, "DISTINCT ")?;
+                } else if self.reduced {
+                    write!(f, "REDUCED ")?;
+                }
+
+                if self.select_variables.is_empty() {
+                    write!(f, "* ")?;
+                } else {
+                    for (i, var) in self.select_variables.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, " ")?;
+                        }
+                        write!(f, "?{}", var.as_str())?;
+                    }
+                    write!(f, " ")?;
+                }
+
+                write!(f, "WHERE {{ {:?} }}", self.where_clause)?;
+            }
+            QueryType::Construct => {
+                write!(f, "CONSTRUCT {{ ")?;
+                for (i, pattern) in self.construct_template.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " . ");
+                    }
+                    write!(f, "{:?}", pattern)?;
+                }
+                write!(f, " }} WHERE {{ {:?} }}", self.where_clause)?;
+            }
+            QueryType::Ask => {
+                write!(f, "ASK WHERE {{ {:?} }}", self.where_clause)?;
+            }
+            QueryType::Describe => {
+                write!(f, "DESCRIBE ")?;
+                if self.select_variables.is_empty() {
+                    write!(f, "* ")?;
+                } else {
+                    for (i, var) in self.select_variables.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, " ")?;
+                        }
+                        write!(f, "?{}", var.as_str())?;
+                    }
+                    write!(f, " ")?;
+                }
+                write!(f, "WHERE {{ {:?} }}", self.where_clause)?;
+            }
+        }
+
+        if let Some(limit) = self.limit {
+            write!(f, " LIMIT {}", limit)?;
+        }
+        if let Some(offset) = self.offset {
+            write!(f, " OFFSET {}", offset)?;
+        }
+
+        Ok(())
+    }
+}
+
 /// Dataset clause for FROM and FROM NAMED
 #[derive(Debug, Clone, Default)]
 pub struct DatasetClause {
     pub default_graphs: Vec<Iri>,
     pub named_graphs: Vec<Iri>,
+}
+
+/// SPARQL UPDATE request representation
+#[derive(Debug, Clone)]
+pub struct UpdateRequest {
+    pub operations: Vec<UpdateOperation>,
+    pub prefixes: HashMap<String, String>,
+    pub base_iri: Option<String>,
 }
 
 /// Query parser implementation
@@ -91,6 +168,25 @@ pub enum Token {
     Values,
     Exists,
     NotExists,
+
+    // UPDATE Keywords
+    Insert,
+    Delete,
+    Update,
+    Create,
+    Drop,
+    Clear,
+    Load,
+    Copy,
+    Move,
+    Add,
+    Data,
+    With,
+    Using,
+    Silent,
+    All,
+    Default,
+    To,
 
     // Operators
     Equal,
@@ -446,6 +542,24 @@ impl QueryParser {
             "OR" => Token::Or,
             "TRUE" => Token::BooleanLiteral(true),
             "FALSE" => Token::BooleanLiteral(false),
+            // UPDATE Keywords
+            "INSERT" => Token::Insert,
+            "DELETE" => Token::Delete,
+            "UPDATE" => Token::Update,
+            "CREATE" => Token::Create,
+            "DROP" => Token::Drop,
+            "CLEAR" => Token::Clear,
+            "LOAD" => Token::Load,
+            "COPY" => Token::Copy,
+            "MOVE" => Token::Move,
+            "ADD" => Token::Add,
+            "DATA" => Token::Data,
+            "WITH" => Token::With,
+            "USING" => Token::Using,
+            "SILENT" => Token::Silent,
+            "ALL" => Token::All,
+            "DEFAULT" => Token::Default,
+            "TO" => Token::To,
             _ => {
                 // Check for prefixed name
                 if let Some(colon_pos) = identifier.find(':') {
@@ -950,6 +1064,12 @@ impl QueryParser {
             }
             _ => bail!("Expected term"),
         }
+    }
+
+    /// Parse a variable or term (used for quad parsing)
+    fn parse_var_or_term(&mut self) -> Result<Term> {
+        // This is the same as parse_term since parse_term already handles variables
+        self.parse_term()
     }
 
     fn parse_optional_pattern(&mut self) -> Result<Algebra> {
@@ -1560,6 +1680,366 @@ impl QueryParser {
             _ => None,
         }
     }
+
+    /// Parse a SPARQL UPDATE request string into an UpdateRequest AST
+    pub fn parse_update(&mut self, update_str: &str) -> Result<UpdateRequest> {
+        self.tokenize(update_str)?;
+        self.parse_update_request()
+    }
+
+    /// Parse UPDATE request with multiple operations
+    fn parse_update_request(&mut self) -> Result<UpdateRequest> {
+        let mut update_request = UpdateRequest {
+            operations: Vec::new(),
+            prefixes: HashMap::new(),
+            base_iri: None,
+        };
+
+        // Skip initial whitespace/newlines
+        self.skip_whitespace();
+
+        // Parse prologue (PREFIX and BASE declarations)
+        while let Some(token) = self.peek() {
+            match token {
+                Token::Prefix => {
+                    self.advance(); // consume PREFIX
+                    let prefix = self.expect_prefixed_name()?.0;
+                    let iri = self.expect_iri()?;
+                    update_request.prefixes.insert(prefix.clone(), iri.clone());
+                    self.prefixes.insert(prefix, iri);
+                }
+                Token::Base => {
+                    self.advance(); // consume BASE
+                    let iri = self.expect_iri()?;
+                    update_request.base_iri = Some(iri.clone());
+                    self.base_iri = Some(iri);
+                }
+                _ => break,
+            }
+        }
+
+        // Parse UPDATE operations
+        while !self.is_at_end() {
+            self.skip_whitespace();
+
+            let operation = match self.peek() {
+                Some(Token::Insert) => self.parse_insert_operation()?,
+                Some(Token::Delete) => self.parse_delete_operation()?,
+                Some(Token::Clear) => self.parse_clear_operation()?,
+                Some(Token::Drop) => self.parse_drop_operation()?,
+                Some(Token::Create) => self.parse_create_operation()?,
+                Some(Token::Load) => self.parse_load_operation()?,
+                Some(Token::Copy) => self.parse_copy_operation()?,
+                Some(Token::Move) => self.parse_move_operation()?,
+                Some(Token::Add) => self.parse_add_operation()?,
+                Some(Token::With) => {
+                    // WITH clause followed by UPDATE operation
+                    self.advance(); // consume WITH
+                    let _graph = self.expect_iri()?;
+                    // TODO: Handle WITH clause properly
+                    match self.peek() {
+                        Some(Token::Insert) => self.parse_insert_operation()?,
+                        Some(Token::Delete) => self.parse_delete_operation()?,
+                        _ => bail!("Expected INSERT or DELETE after WITH clause"),
+                    }
+                }
+                Some(Token::Eof) => break,
+                _ => bail!("Expected UPDATE operation"),
+            };
+
+            update_request.operations.push(operation);
+
+            // Skip semicolons between operations
+            self.match_token(&Token::Semicolon);
+            self.skip_whitespace();
+        }
+
+        Ok(update_request)
+    }
+
+    /// Parse INSERT operation (INSERT DATA or INSERT WHERE)
+    fn parse_insert_operation(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::Insert)?;
+
+        if self.match_token(&Token::Data) {
+            // INSERT DATA { ... }
+            self.parse_insert_data()
+        } else {
+            // INSERT { ... } WHERE { ... }
+            self.parse_insert_where()
+        }
+    }
+
+    /// Parse DELETE operation (DELETE DATA or DELETE WHERE)
+    fn parse_delete_operation(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::Delete)?;
+
+        if self.match_token(&Token::Data) {
+            // DELETE DATA { ... }
+            self.parse_delete_data()
+        } else if self.peek() == Some(&Token::Where) {
+            // DELETE WHERE { ... }
+            self.parse_delete_where()
+        } else {
+            // DELETE { ... } WHERE { ... } or DELETE { ... } INSERT { ... } WHERE { ... }
+            self.parse_delete_insert_where()
+        }
+    }
+
+    /// Parse INSERT DATA operation
+    fn parse_insert_data(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::LeftBrace)?;
+        let quads = self.parse_quad_data()?;
+        self.expect_token(Token::RightBrace)?;
+
+        Ok(UpdateOperation::InsertData { data: quads })
+    }
+
+    /// Parse DELETE DATA operation
+    fn parse_delete_data(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::LeftBrace)?;
+        let quads = self.parse_quad_data()?;
+        self.expect_token(Token::RightBrace)?;
+
+        Ok(UpdateOperation::DeleteData { data: quads })
+    }
+
+    /// Parse INSERT WHERE operation
+    fn parse_insert_where(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::LeftBrace)?;
+        let template = self.parse_quad_pattern_data()?;
+        self.expect_token(Token::RightBrace)?;
+
+        self.expect_token(Token::Where)?;
+        self.expect_token(Token::LeftBrace)?;
+        let where_clause = self.parse_group_graph_pattern()?;
+        self.expect_token(Token::RightBrace)?;
+
+        Ok(UpdateOperation::InsertWhere {
+            pattern: Box::new(where_clause),
+            template,
+        })
+    }
+
+    /// Parse DELETE WHERE operation
+    fn parse_delete_where(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::Where)?;
+        self.expect_token(Token::LeftBrace)?;
+        let patterns = self.parse_quad_pattern_data()?;
+        self.expect_token(Token::RightBrace)?;
+
+        // Convert QuadPattern to TriplePattern for now - full implementation would handle quads properly
+        let triple_patterns: Vec<TriplePattern> = patterns
+            .into_iter()
+            .map(|qp| TriplePattern::new(qp.subject, qp.predicate, qp.object))
+            .collect();
+
+        Ok(UpdateOperation::DeleteWhere {
+            pattern: Box::new(Algebra::Bgp(triple_patterns)),
+        })
+    }
+
+    /// Parse DELETE ... INSERT ... WHERE operation
+    fn parse_delete_insert_where(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::LeftBrace)?;
+        let delete_patterns = self.parse_quad_pattern_data()?;
+        self.expect_token(Token::RightBrace)?;
+
+        let insert_patterns = if self.match_token(&Token::Insert) {
+            self.expect_token(Token::LeftBrace)?;
+            let patterns = self.parse_quad_pattern_data()?;
+            self.expect_token(Token::RightBrace)?;
+            Some(patterns)
+        } else {
+            None
+        };
+
+        self.expect_token(Token::Where)?;
+        self.expect_token(Token::LeftBrace)?;
+        let where_clause = self.parse_group_graph_pattern()?;
+        self.expect_token(Token::RightBrace)?;
+
+        if let Some(insert_patterns) = insert_patterns {
+            Ok(UpdateOperation::DeleteInsertWhere {
+                delete_template: delete_patterns,
+                insert_template: insert_patterns,
+                pattern: Box::new(where_clause),
+                using: None,
+            })
+        } else {
+            // Just DELETE ... WHERE - convert to TriplePattern
+            let triple_patterns: Vec<TriplePattern> = delete_patterns
+                .into_iter()
+                .map(|qp| TriplePattern::new(qp.subject, qp.predicate, qp.object))
+                .collect();
+
+            Ok(UpdateOperation::DeleteWhere {
+                pattern: Box::new(Algebra::Bgp(triple_patterns)),
+            })
+        }
+    }
+
+    /// Parse CLEAR operation
+    fn parse_clear_operation(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::Clear)?;
+        let silent = self.match_token(&Token::Silent);
+        let target = self.parse_graph_ref_all()?;
+
+        Ok(UpdateOperation::Clear { target, silent })
+    }
+
+    /// Parse DROP operation
+    fn parse_drop_operation(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::Drop)?;
+        let silent = self.match_token(&Token::Silent);
+        let target = self.parse_graph_ref_all()?;
+
+        Ok(UpdateOperation::Drop { target, silent })
+    }
+
+    /// Parse CREATE operation
+    fn parse_create_operation(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::Create)?;
+        let silent = self.match_token(&Token::Silent);
+        let graph = self.expect_iri()?;
+
+        Ok(UpdateOperation::Create {
+            graph: GraphReference::Iri(graph),
+            silent,
+        })
+    }
+
+    /// Parse LOAD operation
+    fn parse_load_operation(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::Load)?;
+        let silent = self.match_token(&Token::Silent);
+        let source = self.expect_iri()?;
+
+        let graph = if matches!(self.peek(), Some(Token::Iri(_)))
+            || matches!(self.peek(), Some(Token::PrefixedName(_, _)))
+        {
+            Some(GraphReference::Iri(self.expect_iri()?))
+        } else {
+            None
+        };
+
+        Ok(UpdateOperation::Load {
+            source,
+            graph,
+            silent,
+        })
+    }
+
+    /// Parse COPY operation
+    fn parse_copy_operation(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::Copy)?;
+        let silent = self.match_token(&Token::Silent);
+        let from = self.parse_graph_ref()?;
+        self.expect_token(Token::To)?;
+        let to = self.parse_graph_ref()?;
+
+        Ok(UpdateOperation::Copy { from, to, silent })
+    }
+
+    /// Parse MOVE operation
+    fn parse_move_operation(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::Move)?;
+        let silent = self.match_token(&Token::Silent);
+        let from = self.parse_graph_ref()?;
+        self.expect_token(Token::To)?;
+        let to = self.parse_graph_ref()?;
+
+        Ok(UpdateOperation::Move { from, to, silent })
+    }
+
+    /// Parse ADD operation
+    fn parse_add_operation(&mut self) -> Result<UpdateOperation> {
+        self.expect_token(Token::Add)?;
+        let silent = self.match_token(&Token::Silent);
+        let from = self.parse_graph_ref()?;
+        self.expect_token(Token::To)?;
+        let to = self.parse_graph_ref()?;
+
+        Ok(UpdateOperation::Add { from, to, silent })
+    }
+
+    /// Parse graph reference (DEFAULT, NAMED, or IRI)
+    fn parse_graph_ref(&mut self) -> Result<GraphTarget> {
+        match self.peek() {
+            Some(Token::Default) => {
+                self.advance();
+                Ok(GraphTarget::Default)
+            }
+            Some(Token::Named) => {
+                self.advance();
+                Ok(GraphTarget::Named)
+            }
+            Some(Token::Iri(_)) | Some(Token::PrefixedName(_, _)) => {
+                let iri = self.expect_iri()?;
+                Ok(GraphTarget::Graph(GraphReference::Iri(iri)))
+            }
+            _ => bail!("Expected graph reference"),
+        }
+    }
+
+    /// Parse graph reference with ALL option
+    fn parse_graph_ref_all(&mut self) -> Result<GraphTarget> {
+        match self.peek() {
+            Some(Token::All) => {
+                self.advance();
+                Ok(GraphTarget::All)
+            }
+            _ => self.parse_graph_ref(),
+        }
+    }
+
+    /// Parse quad data for INSERT/DELETE DATA
+    fn parse_quad_data(&mut self) -> Result<Vec<QuadPattern>> {
+        let mut quads = Vec::new();
+
+        while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
+            let quad = self.parse_quad()?;
+            quads.push(quad);
+
+            // Skip optional dots
+            self.match_token(&Token::Dot);
+        }
+
+        Ok(quads)
+    }
+
+    /// Parse quad pattern data for INSERT/DELETE templates
+    fn parse_quad_pattern_data(&mut self) -> Result<Vec<QuadPattern>> {
+        // For now, use the same logic as quad_data
+        // In a full implementation, this would handle variables in templates
+        self.parse_quad_data()
+    }
+
+    /// Parse a single quad
+    fn parse_quad(&mut self) -> Result<QuadPattern> {
+        let subject = self.parse_var_or_term()?;
+        let predicate = self.parse_var_or_term()?;
+        let object = self.parse_var_or_term()?;
+
+        // Check for optional graph context
+        let graph = if matches!(
+            self.peek(),
+            Some(Token::Iri(_)) | Some(Token::PrefixedName(_, _))
+        ) && !matches!(self.peek(), Some(Token::Dot) | Some(Token::RightBrace))
+        {
+            let iri = self.expect_iri()?;
+            Some(GraphReference::Iri(iri))
+        } else {
+            None
+        };
+
+        Ok(QuadPattern {
+            subject,
+            predicate,
+            object,
+            graph,
+        })
+    }
 }
 
 impl Default for QueryParser {
@@ -1574,9 +2054,16 @@ pub fn parse_query(query_str: &str) -> Result<Query> {
     parser.parse(query_str)
 }
 
+/// Convenience function to parse a SPARQL UPDATE request
+pub fn parse_update(update_str: &str) -> Result<UpdateRequest> {
+    let mut parser = QueryParser::new();
+    parser.parse_update(update_str)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::algebra::Variable;
 
     #[test]
     fn test_simple_select_query() {
@@ -1591,7 +2078,10 @@ mod tests {
         assert_eq!(query.query_type, QueryType::Select);
         assert_eq!(
             query.select_variables,
-            vec!["person".to_string(), "name".to_string()]
+            vec![
+                Variable::new("person").unwrap(),
+                Variable::new("name").unwrap()
+            ]
         );
         assert!(!query.prefixes.is_empty());
     }
@@ -1647,7 +2137,7 @@ mod tests {
 
         let query = parse_query(query_str).unwrap();
         assert_eq!(query.query_type, QueryType::Select);
-        assert_eq!(query.select_variables, vec!["name".to_string()]);
+        assert_eq!(query.select_variables, vec![Variable::new("name").unwrap()]);
 
         // Check that the where clause is a Union
         match &query.where_clause {
@@ -1668,6 +2158,31 @@ mod tests {
             }
             _ => panic!("Expected Union algebra"),
         }
+    }
+
+    #[test]
+    fn test_update_parsing() {
+        // Test simple INSERT DATA first
+        let update_str = r#"INSERT DATA { <http://example.org/s> <http://example.org/p> <http://example.org/o> }"#;
+
+        let update_request = parse_update(update_str).unwrap();
+        assert_eq!(update_request.operations.len(), 1);
+        match &update_request.operations[0] {
+            UpdateOperation::InsertData { data } => {
+                assert_eq!(data.len(), 1);
+            }
+            _ => panic!("Expected InsertData operation"),
+        }
+    }
+
+    #[test]
+    fn test_update_tokenization() {
+        let mut parser = QueryParser::new();
+        parser.tokenize("INSERT DATA").unwrap();
+
+        println!("UPDATE tokens: {:?}", parser.tokens);
+        assert!(matches!(parser.tokens[0], Token::Insert));
+        assert!(matches!(parser.tokens[1], Token::Data));
     }
 
     #[test]

@@ -393,6 +393,11 @@ impl GraphSAGE {
         self
     }
 
+    /// Get embedding dimensions
+    pub fn dimensions(&self) -> usize {
+        self.config.dimensions
+    }
+
     /// Initialize GraphSAGE model
     fn initialize(&mut self, triples: &[Triple]) -> Result<()> {
         // Collect unique entities and relations

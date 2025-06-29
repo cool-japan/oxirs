@@ -416,7 +416,7 @@ impl QueryDecomposer {
         // Create independent pattern groups
         let independent_groups = self.find_independent_pattern_groups(&component.patterns);
         let mut steps = Vec::new();
-        let mut max_cost = 0.0;
+        let mut max_cost: f64 = 0.0;
 
         for (i, group) in independent_groups.iter().enumerate() {
             let service = services[i % services.len()];
@@ -927,7 +927,7 @@ impl QueryDecomposer {
         services: &[&FederatedService],
     ) -> Result<ComponentPlan> {
         let mut join_graph = self.build_join_graph(&component.patterns);
-        let mut service_assignments = HashMap::new();
+        let mut service_assignments: HashMap<String, Vec<&TriplePattern>> = HashMap::new();
         let mut steps = Vec::new();
 
         // Find connected pattern groups that share variables
@@ -950,12 +950,13 @@ impl QueryDecomposer {
         }
 
         let total_cost = steps.iter().map(|s| s.estimated_cost).sum();
+        let requires_join = steps.len() > 1;
 
         Ok(ComponentPlan {
             strategy: PlanStrategy::JoinAware,
             steps,
             total_cost,
-            requires_join: steps.len() > 1,
+            requires_join,
         })
     }
 
@@ -975,8 +976,16 @@ impl QueryDecomposer {
                 let base_cost = self
                     .cost_estimator
                     .estimate_single_pattern_cost(service, pattern);
-                let selectivity = self.estimate_pattern_selectivity(service, pattern);
-                let network_cost = self.cost_estimator.estimate_network_cost(service);
+                let selectivity = self.estimate_pattern_selectivity(&[(0, pattern.clone())]);
+                let component = QueryComponent {
+                    patterns: vec![pattern.clone()],
+                    filters: Vec::new(),
+                    variables: Vec::new(),
+                    joins: Vec::new(),
+                };
+                let network_cost = self
+                    .cost_estimator
+                    .estimate_network_cost(service, &component);
 
                 // Combined score: lower is better
                 let score = base_cost + (1.0 / selectivity) + network_cost;
@@ -1066,12 +1075,13 @@ impl QueryDecomposer {
         }
 
         let total_cost = steps.iter().map(|s| s.estimated_cost).sum();
+        let requires_join = steps.len() > 1;
 
         Ok(ComponentPlan {
             strategy: PlanStrategy::PatternBased,
             steps,
             total_cost,
-            requires_join: steps.len() > 1,
+            requires_join,
         })
     }
 
@@ -1128,12 +1138,13 @@ impl QueryDecomposer {
         }
 
         let total_cost = steps.iter().map(|s| s.estimated_cost).sum();
+        let requires_join = steps.len() > 1;
 
         Ok(ComponentPlan {
             strategy: PlanStrategy::StarJoinOptimized,
             steps,
             total_cost,
-            requires_join: steps.len() > 1,
+            requires_join,
         })
     }
 
@@ -1151,18 +1162,20 @@ impl QueryDecomposer {
             self.select_order_minimizing_intermediate_results(execution_orders, services);
 
         // Create execution steps with bloom filter hints
-        for (service_id, patterns) in best_order {
-            let service = services.iter().find(|s| s.id == service_id).unwrap();
+        for (service_id, pattern) in best_order {
+            let service = &services[service_id % services.len()];
+            let pattern_vec = vec![(0, pattern.clone())];
             let cost = self
                 .cost_estimator
-                .estimate_pattern_cost(service, &patterns);
+                .estimate_pattern_cost(service, &pattern_vec);
 
             // Add bloom filter optimization hint
-            let estimated_results = self.estimate_result_size_with_bloom_filter(service, &patterns);
+            let estimated_results =
+                self.estimate_result_size_with_bloom_filter(service, &pattern_vec);
 
             steps.push(PlanStep {
-                service_id: service_id.clone(),
-                patterns: patterns.clone(),
+                service_id: service_id.to_string(),
+                patterns: vec![(0, pattern)],
                 filters: Vec::new(),
                 estimated_cost: cost * 0.8, // Bloom filter reduces cost
                 estimated_results: estimated_results as u64,

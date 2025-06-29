@@ -47,7 +47,7 @@ pub struct KafkaProducer {
 
 impl KafkaProducer {
     /// Create a new Kafka producer
-    pub async fn new(config: KafkaConfig) -> Result<Self> {
+    pub async fn new(config: KafkaConfig) -> FusekiResult<Self> {
         tracing::info!("Creating Kafka producer with brokers: {:?}", config.brokers);
 
         // TODO: Initialize actual Kafka producer
@@ -57,7 +57,7 @@ impl KafkaProducer {
 
 #[async_trait]
 impl StreamProducer for KafkaProducer {
-    async fn send(&self, event: RDFEvent) -> Result<()> {
+    async fn send(&self, event: RDFEvent) -> FusekiResult<()> {
         tracing::debug!("Sending RDF event to Kafka");
 
         // TODO: Implement actual Kafka message sending
@@ -67,7 +67,7 @@ impl StreamProducer for KafkaProducer {
         Ok(())
     }
 
-    async fn send_batch(&self, events: Vec<RDFEvent>) -> Result<()> {
+    async fn send_batch(&self, events: Vec<RDFEvent>) -> FusekiResult<()> {
         tracing::debug!("Sending batch of {} RDF events to Kafka", events.len());
 
         // TODO: Implement actual batch sending
@@ -79,7 +79,7 @@ impl StreamProducer for KafkaProducer {
         Ok(())
     }
 
-    async fn flush(&self) -> Result<()> {
+    async fn flush(&self) -> FusekiResult<()> {
         tracing::debug!("Flushing Kafka producer");
         // TODO: Implement actual flush
         Ok(())
@@ -94,7 +94,7 @@ pub struct KafkaConsumer {
 
 impl KafkaConsumer {
     /// Create a new Kafka consumer
-    pub async fn new(config: KafkaConfig) -> Result<Self> {
+    pub async fn new(config: KafkaConfig) -> FusekiResult<Self> {
         tracing::info!("Creating Kafka consumer with brokers: {:?}", config.brokers);
 
         // TODO: Initialize actual Kafka consumer
@@ -104,7 +104,10 @@ impl KafkaConsumer {
 
 #[async_trait]
 impl StreamConsumer for KafkaConsumer {
-    async fn subscribe(&self, handler: Box<dyn crate::streaming::EventHandler>) -> Result<()> {
+    async fn subscribe(
+        &self,
+        handler: Box<dyn crate::streaming::EventHandler>,
+    ) -> FusekiResult<()> {
         tracing::info!("Subscribing to Kafka events with handler");
 
         // TODO: Implement actual subscription
@@ -112,14 +115,14 @@ impl StreamConsumer for KafkaConsumer {
         Ok(())
     }
 
-    async fn unsubscribe(&self) -> Result<()> {
+    async fn unsubscribe(&self) -> FusekiResult<()> {
         tracing::info!("Unsubscribing from Kafka events");
 
         // TODO: Implement actual unsubscription
         Ok(())
     }
 
-    async fn commit(&self) -> Result<()> {
+    async fn commit(&self) -> FusekiResult<()> {
         tracing::debug!("Committing Kafka consumer offsets");
         // TODO: Implement actual commit
         Ok(())

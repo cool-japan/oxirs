@@ -946,40 +946,43 @@ impl HnswIndex {
         let chunks: Vec<&[usize]> = neighbors.chunks(chunk_size).collect();
 
         // Process chunks sequentially (parallel processing removed)
-        let results: Vec<Vec<Candidate>> = chunks.iter().map(|chunk| {
-            let mut local_candidates = Vec::new();
+        let results: Vec<Vec<Candidate>> = chunks
+            .iter()
+            .map(|chunk| {
+                let mut local_candidates = Vec::new();
 
-            for neighbor_id in chunk.iter() {
-                if *neighbor_id >= self.nodes.len() {
-                    continue;
-                }
-
-                // Check if already visited (lock-free check first)
-                let should_process = {
-                    let mut v = visited.write();
-                    if !v.contains(neighbor_id) {
-                        v.insert(*neighbor_id);
-                        true
-                    } else {
-                        false
+                for neighbor_id in chunk.iter() {
+                    if *neighbor_id >= self.nodes.len() {
+                        continue;
                     }
-                };
 
-                if should_process {
-                    let distance = 1.0
-                        - self.similarity_optimized(
-                            query_f32,
-                            &self.nodes[*neighbor_id].vector_data_f32,
-                        );
-                    local_candidates.push(Candidate {
-                        distance,
-                        id: *neighbor_id,
-                    });
+                    // Check if already visited (lock-free check first)
+                    let should_process = {
+                        let mut v = visited.write();
+                        if !v.contains(neighbor_id) {
+                            v.insert(*neighbor_id);
+                            true
+                        } else {
+                            false
+                        }
+                    };
+
+                    if should_process {
+                        let distance = 1.0
+                            - self.similarity_optimized(
+                                query_f32,
+                                &self.nodes[*neighbor_id].vector_data_f32,
+                            );
+                        local_candidates.push(Candidate {
+                            distance,
+                            id: *neighbor_id,
+                        });
+                    }
                 }
-            }
 
-            local_candidates
-        });
+                local_candidates
+            })
+            .collect();
 
         // Merge results back into main data structures
         for local_candidates in results {
@@ -1081,40 +1084,43 @@ impl HnswIndex {
         let chunks: Vec<&[usize]> = candidates.chunks(chunk_size).collect();
 
         // Sequential calculation of similarities
-        let results: Vec<Vec<f32>> = chunks.iter().map(|chunk| {
-            let mut local_results = Vec::with_capacity(chunk.len());
+        let results: Vec<Vec<f32>> = chunks
+            .iter()
+            .map(|chunk| {
+                let mut local_results = Vec::with_capacity(chunk.len());
 
-            // Process chunk with SIMD optimizations when possible
-            if self.config.enable_simd && chunk.len() >= 8 {
-                // Batch SIMD processing
-                for candidate_id in chunk.iter() {
-                    if *candidate_id < self.nodes.len() {
-                        let similarity = self.similarity_optimized(
-                            query,
-                            &self.nodes[*candidate_id].vector_data_f32,
-                        );
-                        local_results.push(similarity);
-                    } else {
-                        local_results.push(0.0);
+                // Process chunk with SIMD optimizations when possible
+                if self.config.enable_simd && chunk.len() >= 8 {
+                    // Batch SIMD processing
+                    for candidate_id in chunk.iter() {
+                        if *candidate_id < self.nodes.len() {
+                            let similarity = self.similarity_optimized(
+                                query,
+                                &self.nodes[*candidate_id].vector_data_f32,
+                            );
+                            local_results.push(similarity);
+                        } else {
+                            local_results.push(0.0);
+                        }
+                    }
+                } else {
+                    // Regular processing for smaller chunks
+                    for candidate_id in chunk.iter() {
+                        if *candidate_id < self.nodes.len() {
+                            let similarity = self.similarity_optimized(
+                                query,
+                                &self.nodes[*candidate_id].vector_data_f32,
+                            );
+                            local_results.push(similarity);
+                        } else {
+                            local_results.push(0.0);
+                        }
                     }
                 }
-            } else {
-                // Regular processing for smaller chunks
-                for candidate_id in chunk.iter() {
-                    if *candidate_id < self.nodes.len() {
-                        let similarity = self.similarity_optimized(
-                            query,
-                            &self.nodes[*candidate_id].vector_data_f32,
-                        );
-                        local_results.push(similarity);
-                    } else {
-                        local_results.push(0.0);
-                    }
-                }
-            }
 
-            local_results
-        });
+                local_results
+            })
+            .collect();
 
         // Flatten results
         results.into_iter().flatten().collect()
@@ -1258,7 +1264,7 @@ impl HnswIndex {
                 let mut local_max = 0;
                 let mut local_isolated = 0;
 
-                for node in chunk {
+                for node in *chunk {
                     if !node.uri.is_empty() {
                         // Skip deleted nodes
                         local_total += 1;

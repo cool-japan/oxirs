@@ -12,14 +12,13 @@ pub mod kafka;
 pub mod nats;
 pub mod pipeline;
 
+use crate::error::FusekiResult;
 use async_trait::async_trait;
+use oxirs_core::{Dataset, Quad, Triple};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, RwLock};
 use url::Url;
-
-use crate::error::FusekiResult;
-use oxirs_core::{Dataset, Quad, Triple};
 
 /// Streaming configuration
 #[derive(Debug, Clone)]
@@ -275,33 +274,33 @@ mod quad_serde {
 #[async_trait]
 pub trait StreamProducer: Send + Sync {
     /// Send a single event
-    async fn send(&self, event: RDFEvent) -> Result<()>;
+    async fn send(&self, event: RDFEvent) -> FusekiResult<()>;
 
     /// Send a batch of events
-    async fn send_batch(&self, events: Vec<RDFEvent>) -> Result<()>;
+    async fn send_batch(&self, events: Vec<RDFEvent>) -> FusekiResult<()>;
 
     /// Flush any pending events
-    async fn flush(&self) -> Result<()>;
+    async fn flush(&self) -> FusekiResult<()>;
 }
 
 /// Stream consumer trait for receiving RDF events
 #[async_trait]
 pub trait StreamConsumer: Send + Sync {
     /// Subscribe to events
-    async fn subscribe(&self, handler: Box<dyn EventHandler>) -> Result<()>;
+    async fn subscribe(&self, handler: Box<dyn EventHandler>) -> FusekiResult<()>;
 
     /// Unsubscribe from events
-    async fn unsubscribe(&self) -> Result<()>;
+    async fn unsubscribe(&self) -> FusekiResult<()>;
 
     /// Commit processed offsets (for Kafka)
-    async fn commit(&self) -> Result<()>;
+    async fn commit(&self) -> FusekiResult<()>;
 }
 
 /// Event handler for processing streamed events
 #[async_trait]
 pub trait EventHandler: Send + Sync {
     /// Handle an RDF event
-    async fn handle(&self, event: RDFEvent) -> Result<()>;
+    async fn handle(&self, event: RDFEvent) -> FusekiResult<()>;
 
     /// Handle errors
     async fn on_error(&self, error: Box<dyn std::error::Error + Send + Sync>) {
@@ -371,10 +370,11 @@ impl StreamingManager {
     /// Send an RDF event to all configured streams
     pub async fn send_event(&self, event: RDFEvent) -> crate::error::Result<()> {
         // Buffer the event
-        self.event_buffer
-            .send(event.clone())
-            .await
-            .map_err(|_| crate::error::Error::Custom("Event buffer full".to_string()))?;
+        self.event_buffer.send(event.clone()).await.map_err(|_| {
+            crate::error::FusekiError::Internal {
+                message: "Event buffer full".to_string(),
+            }
+        })?;
 
         Ok(())
     }

@@ -4,11 +4,10 @@
 //! Based on W3C JSON-LD specifications: https://www.w3.org/TR/json-ld/
 
 use super::error::SerializeResult;
-use super::error::{ParseResult, RdfParseError, RdfSyntaxError, TextPosition};
+use super::error::{ParseResult, RdfParseError};
 use super::format::{JsonLdProfile, JsonLdProfileSet};
 use super::serializer::QuadSerializer;
-use crate::model::{Quad, QuadRef, Triple, TripleRef};
-use std::collections::HashMap;
+use crate::model::{Quad, QuadRef};
 use std::io::{Read, Write};
 
 /// JSON-LD parser implementation

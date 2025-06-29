@@ -13,7 +13,7 @@ use governor::{
     Quota, RateLimiter,
 };
 use reqwest::{
-    header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT},
+    header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT},
     Client, Response, StatusCode,
 };
 use serde::{Deserialize, Serialize};
@@ -145,8 +145,24 @@ impl SparqlClient {
         // Acquire connection permit
         let _permit = self.connection_pool.acquire().await?;
 
-        // Build request
-        let mut headers = self.build_headers(true)?;
+        // Build request with OAuth2 token refresh if needed
+        let mut headers = if let Some(auth) = &self.service.auth {
+            if auth.auth_type == AuthType::OAuth2 {
+                // Refresh OAuth2 token if needed before building headers
+                if let Ok(Some(fresh_token)) = self.ensure_fresh_oauth2_token(auth).await {
+                    let mut headers = self.build_headers(false)?;
+                    let auth_value = format!("Bearer {}", fresh_token);
+                    headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
+                    headers
+                } else {
+                    self.build_headers(true)?
+                }
+            } else {
+                self.build_headers(true)?
+            }
+        } else {
+            self.build_headers(true)?
+        };
         headers.insert(
             CONTENT_TYPE,
             HeaderValue::from_static("application/sparql-query"),
@@ -303,10 +319,9 @@ impl SparqlClient {
                 }
             }
             AuthType::OAuth2 => {
-                // Check if token needs refresh and refresh if necessary
-                let refreshed_token = self.ensure_fresh_oauth2_token(auth).await?;
-
-                if let Some(token) = refreshed_token {
+                // For OAuth2, we need to check token freshness in the query methods
+                // For now, use the existing token if available
+                if let Some(token) = &auth.credentials.token {
                     let auth_value = format!("Bearer {}", token);
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
@@ -314,7 +329,8 @@ impl SparqlClient {
             AuthType::Custom => {
                 if let Some(custom_headers) = &auth.credentials.custom_headers {
                     for (key, value) in custom_headers {
-                        headers.insert(key.as_str(), HeaderValue::from_str(value)?);
+                        let header_name: HeaderName = key.parse()?;
+                        headers.insert(header_name, HeaderValue::from_str(value)?);
                     }
                 }
             }
@@ -672,7 +688,8 @@ impl GraphQLClient {
             AuthType::Custom => {
                 if let Some(custom_headers) = &auth.credentials.custom_headers {
                     for (key, value) in custom_headers {
-                        headers.insert(key.as_str(), HeaderValue::from_str(value)?);
+                        let header_name: HeaderName = key.parse()?;
+                        headers.insert(header_name, HeaderValue::from_str(value)?);
                     }
                 }
             }

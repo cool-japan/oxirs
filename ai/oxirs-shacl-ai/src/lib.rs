@@ -59,24 +59,39 @@ use oxirs_shacl::{
 
 pub mod ai_orchestrator;
 pub mod analytics;
+pub mod collaborative_development;
+pub mod deployment;
 pub mod error_handling;
+pub mod evolution_strategies;
+pub mod forecasting_models;
 pub mod insights;
 pub mod learning;
 pub mod ml;
 pub mod neural_patterns;
 pub mod optimization;
+pub mod optimization_engine;
 pub mod patterns;
+pub mod performance_analytics;
 pub mod prediction;
+pub mod predictive_analytics;
+pub mod production_deployment;
 pub mod quality;
 pub mod shape;
+pub mod shape_management;
+pub mod validation_performance;
+pub mod version_control;
 
 // Re-export key types for convenience with explicit imports to avoid ambiguity
 pub use ai_orchestrator::*;
 pub use analytics::*;
+pub use collaborative_development::*;
+pub use deployment::*;
 pub use error_handling::{
     ErrorClassificationResult, ErrorHandlingConfig, ErrorSeverity, ErrorType,
     IntelligentErrorHandler, RepairSuggestion, RepairType, SmartErrorAnalysis,
 };
+pub use evolution_strategies::*;
+pub use forecasting_models::*;
 pub use insights::*;
 pub use learning::{
     LearningConfig, LearningStatistics, ShapeExample, ShapeLearner,
@@ -90,10 +105,20 @@ pub use neural_patterns::{
     LearnedConstraintPattern, NeuralPattern, NeuralPatternConfig, NeuralPatternRecognizer,
 };
 pub use optimization::*;
+pub use optimization_engine::{
+    AdvancedOptimizationEngine, CacheConfiguration,
+    OptimizationConfig as AdvancedOptimizationConfig, OptimizationResult, OptimizedShape,
+    ParallelValidationConfig, PerformanceMetrics,
+};
 pub use patterns::*;
+pub use performance_analytics::*;
 pub use prediction::*;
+pub use predictive_analytics::*;
+pub use production_deployment::*;
 pub use quality::*;
 pub use shape::*;
+pub use validation_performance::*;
+pub use version_control::*;
 
 /// Core error type for SHACL-AI operations
 #[derive(Debug, Error)]
@@ -124,6 +149,18 @@ pub enum ShaclAiError {
 
     #[error("Data processing error: {0}")]
     DataProcessing(String),
+
+    #[error("Shape management error: {0}")]
+    ShapeManagement(String),
+
+    #[error("Predictive analytics error: {0}")]
+    PredictiveAnalytics(String),
+
+    #[error("Performance analytics error: {0}")]
+    PerformanceAnalytics(String),
+
+    #[error("Version not found: {0}")]
+    VersionNotFound(String),
 
     #[error("SHACL error: {0}")]
     Shacl(#[from] oxirs_shacl::ShaclError),
@@ -631,7 +668,7 @@ pub struct ShaclAiConfig {
     pub prediction: PredictionConfig,
 
     /// Optimization configuration
-    pub optimization: OptimizationConfig,
+    pub optimization: optimization::OptimizationConfig,
 
     /// Pattern analysis configuration
     pub patterns: PatternConfig,
@@ -649,7 +686,7 @@ impl Default for ShaclAiConfig {
             learning: LearningConfig::default(),
             quality: QualityConfig::default(),
             prediction: PredictionConfig::default(),
-            optimization: OptimizationConfig::default(),
+            optimization: optimization::OptimizationConfig::default(),
             patterns: PatternConfig::default(),
             analytics: AnalyticsConfig::default(),
             global: GlobalAiConfig::default(),
@@ -761,7 +798,7 @@ impl ShaclAiAssistantBuilder {
         self
     }
 
-    pub fn with_optimization_config(mut self, config: OptimizationConfig) -> Self {
+    pub fn with_optimization_config(mut self, config: optimization::OptimizationConfig) -> Self {
         self.config.optimization = config;
         self
     }

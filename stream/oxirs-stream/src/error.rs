@@ -44,6 +44,30 @@ pub enum StreamError {
     #[error("Feature not supported: {0}")]
     NotSupported(String),
 
+    #[error("Not connected: {0}")]
+    NotConnected(String),
+
+    #[error("Topic creation error: {0}")]
+    TopicCreation(String),
+
+    #[error("Topic deletion error: {0}")]
+    TopicDeletion(String),
+
+    #[error("Topic list error: {0}")]
+    TopicList(String),
+
+    #[error("Send error: {0}")]
+    Send(String),
+
+    #[error("Receive error: {0}")]
+    Receive(String),
+
+    #[error("Offset commit error: {0}")]
+    OffsetCommit(String),
+
+    #[error("Unsupported operation: {0}")]
+    UnsupportedOperation(String),
+
     #[error("Other error: {0}")]
     Other(String),
 }

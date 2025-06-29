@@ -1303,7 +1303,7 @@ impl<T: Send + Sync> WorkStealingQueue<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra::{Iri, Variable};
+    use crate::algebra::{Iri, Literal, Term, Variable};
 
     #[test]
     fn test_parallel_executor_creation() {
@@ -1334,8 +1334,12 @@ mod tests {
         for i in 0..100 {
             let mut binding = HashMap::new();
             binding.insert(
-                "x".to_string(),
-                AlgebraTerm::Literal(Literal::string((i % 10).to_string())),
+                Variable::new("x").unwrap(),
+                Term::Literal(Literal {
+                    value: (i % 10).to_string(),
+                    language: None,
+                    datatype: None,
+                }),
             );
             solution.push(binding);
         }

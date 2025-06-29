@@ -736,7 +736,7 @@ mod tests {
             predicate: "http://example.org/p".to_string(),
             object: "http://example.org/o".to_string(),
             graph: None,
-            metadata: HashMap::new(),
+            metadata: EventMetadata::default(),
         };
 
         // Process event with state

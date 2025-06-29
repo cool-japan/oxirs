@@ -79,9 +79,7 @@ impl StarTerm {
     /// Create a new IRI term
     pub fn iri(iri: &str) -> StarResult<Self> {
         if iri.is_empty() {
-            return Err(StarError::InvalidTermType(
-                "IRI cannot be empty".to_string(),
-            ));
+            return Err(StarError::invalid_term_type("IRI cannot be empty"));
         }
         Ok(StarTerm::NamedNode(NamedNode {
             iri: iri.to_string(),
@@ -91,8 +89,8 @@ impl StarTerm {
     /// Create a new blank node term
     pub fn blank_node(id: &str) -> StarResult<Self> {
         if id.is_empty() {
-            return Err(StarError::InvalidTermType(
-                "Blank node ID cannot be empty".to_string(),
+            return Err(StarError::invalid_term_type(
+                "Blank node ID cannot be empty",
             ));
         }
         Ok(StarTerm::BlankNode(BlankNode { id: id.to_string() }))
@@ -135,8 +133,8 @@ impl StarTerm {
     /// Create a new variable term
     pub fn variable(name: &str) -> StarResult<Self> {
         if name.is_empty() {
-            return Err(StarError::InvalidTermType(
-                "Variable name cannot be empty".to_string(),
+            return Err(StarError::invalid_term_type(
+                "Variable name cannot be empty",
             ));
         }
         Ok(StarTerm::Variable(Variable {
@@ -255,21 +253,21 @@ impl StarTriple {
     /// Validate that the triple is well-formed according to RDF-star rules
     pub fn validate(&self) -> StarResult<()> {
         if !self.subject.can_be_subject() {
-            return Err(StarError::InvalidQuotedTriple(format!(
+            return Err(StarError::invalid_quoted_triple(format!(
                 "Invalid subject term: {:?}",
                 self.subject
             )));
         }
 
         if !self.predicate.can_be_predicate() {
-            return Err(StarError::InvalidQuotedTriple(format!(
+            return Err(StarError::invalid_quoted_triple(format!(
                 "Invalid predicate term: {:?}",
                 self.predicate
             )));
         }
 
         if !self.object.can_be_object() {
-            return Err(StarError::InvalidQuotedTriple(format!(
+            return Err(StarError::invalid_quoted_triple(format!(
                 "Invalid object term: {:?}",
                 self.object
             )));
@@ -342,8 +340,8 @@ impl StarQuad {
         // Validate graph name if present
         if let Some(ref graph) = self.graph {
             if !matches!(graph, StarTerm::NamedNode(_) | StarTerm::BlankNode(_)) {
-                return Err(StarError::InvalidQuotedTriple(
-                    "Graph name must be a named node or blank node".to_string(),
+                return Err(StarError::invalid_quoted_triple(
+                    "Graph name must be a named node or blank node",
                 ));
             }
         }
@@ -472,8 +470,8 @@ impl StarGraph {
                 StarTerm::NamedNode(node) => node.iri.clone(),
                 StarTerm::BlankNode(node) => format!("_:{}", node.id),
                 _ => {
-                    return Err(StarError::InvalidQuotedTriple(
-                        "Graph name must be a named node or blank node".to_string(),
+                    return Err(StarError::invalid_quoted_triple(
+                        "Graph name must be a named node or blank node",
                     ))
                 }
             };
@@ -708,6 +706,21 @@ impl StarGraph {
             .unwrap_or(0);
 
         default_max.max(named_max)
+    }
+}
+
+/// Iterator implementation for StarGraph to iterate over all triples
+impl<'a> IntoIterator for &'a StarGraph {
+    type Item = &'a StarTriple;
+    type IntoIter = std::iter::Chain<
+        std::slice::Iter<'a, StarTriple>,
+        std::iter::Flatten<std::collections::hash_map::Values<'a, String, Vec<StarTriple>>>,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.triples
+            .iter()
+            .chain(self.named_graphs.values().flatten())
     }
 }
 

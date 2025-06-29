@@ -177,6 +177,229 @@ impl ConsensusManager {
             triple_count: self.len().await,
         }
     }
+
+    /// Add a node to the cluster with consensus (joint consensus protocol)
+    pub async fn add_node_with_consensus(
+        &mut self,
+        node_id: OxirsNodeId,
+        address: String,
+    ) -> Result<()> {
+        if !self.is_leader().await {
+            return Err(anyhow::anyhow!(
+                "Not the leader - cannot modify cluster configuration"
+            ));
+        }
+
+        // Validate the node isn't already in the cluster
+        if self.peers.contains(&node_id) {
+            return Err(anyhow::anyhow!(
+                "Node {} already exists in cluster",
+                node_id
+            ));
+        }
+
+        // Create configuration change command
+        let command = RdfCommand::AddNode { node_id, address };
+
+        // Submit through consensus
+        let response = self.propose_command(command).await?;
+
+        // Update local peer set on success
+        if matches!(response, RdfResponse::Success) {
+            self.add_peer(node_id);
+            tracing::info!(
+                "Successfully added node {} to cluster through consensus",
+                node_id
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Remove a node from the cluster with consensus
+    pub async fn remove_node_with_consensus(&mut self, node_id: OxirsNodeId) -> Result<()> {
+        if !self.is_leader().await {
+            return Err(anyhow::anyhow!(
+                "Not the leader - cannot modify cluster configuration"
+            ));
+        }
+
+        // Validate the node exists in the cluster
+        if !self.peers.contains(&node_id) {
+            return Err(anyhow::anyhow!("Node {} not found in cluster", node_id));
+        }
+
+        // Create configuration change command
+        let command = RdfCommand::RemoveNode { node_id };
+
+        // Submit through consensus
+        let response = self.propose_command(command).await?;
+
+        // Update local peer set on success
+        if matches!(response, RdfResponse::Success) {
+            self.remove_peer(node_id);
+            tracing::info!(
+                "Successfully removed node {} from cluster through consensus",
+                node_id
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Gracefully shutdown this node
+    pub async fn graceful_shutdown(&mut self) -> Result<()> {
+        tracing::info!("Initiating graceful shutdown of consensus manager");
+
+        // If we're the leader, try to transfer leadership
+        if self.is_leader().await && !self.peers.is_empty() {
+            tracing::info!("Attempting leadership transfer before shutdown");
+
+            // Find the best candidate (node with highest ID for simplicity)
+            if let Some(&target_node) = self.peers.iter().max() {
+                if let Err(e) = self.transfer_leadership(target_node).await {
+                    tracing::warn!("Failed to transfer leadership: {}", e);
+                }
+            }
+        }
+
+        // Wait for any pending operations to complete
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+        // Signal shutdown to raft node
+        self.raft_node.shutdown().await?;
+
+        tracing::info!("Consensus manager shutdown completed");
+        Ok(())
+    }
+
+    /// Transfer leadership to another node
+    pub async fn transfer_leadership(&self, target_node: OxirsNodeId) -> Result<()> {
+        if !self.is_leader().await {
+            return Err(anyhow::anyhow!(
+                "Not the leader - cannot transfer leadership"
+            ));
+        }
+
+        if !self.peers.contains(&target_node) {
+            return Err(anyhow::anyhow!(
+                "Target node {} not in cluster",
+                target_node
+            ));
+        }
+
+        // Submit leadership transfer command
+        let command = RdfCommand::TransferLeadership { target_node };
+        self.propose_command(command).await?;
+
+        tracing::info!("Leadership transfer initiated to node {}", target_node);
+        Ok(())
+    }
+
+    /// Force evict a non-responsive node
+    pub async fn force_evict_node(&mut self, node_id: OxirsNodeId) -> Result<()> {
+        if !self.is_leader().await {
+            return Err(anyhow::anyhow!("Not the leader - cannot evict nodes"));
+        }
+
+        tracing::warn!("Force evicting non-responsive node {}", node_id);
+
+        // Create force eviction command
+        let command = RdfCommand::ForceEvictNode { node_id };
+
+        // Submit through consensus
+        let response = self.propose_command(command).await?;
+
+        // Update local peer set on success
+        if matches!(response, RdfResponse::Success) {
+            self.remove_peer(node_id);
+            tracing::info!("Successfully force evicted node {}", node_id);
+        }
+
+        Ok(())
+    }
+
+    /// Check health of peer nodes
+    pub async fn check_peer_health(&self) -> Result<Vec<NodeHealthStatus>> {
+        let mut health_statuses = Vec::new();
+
+        for &peer_id in &self.peers {
+            let health = self.check_single_node_health(peer_id).await;
+            health_statuses.push(health);
+        }
+
+        Ok(health_statuses)
+    }
+
+    /// Check health of a single node
+    async fn check_single_node_health(&self, node_id: OxirsNodeId) -> NodeHealthStatus {
+        // Try to get metrics from the node
+        let start_time = std::time::Instant::now();
+
+        // In a real implementation, this would ping the actual node
+        // For now, we'll simulate based on raft metrics
+        #[cfg(feature = "raft")]
+        let is_responsive = if let Some(_metrics) = self.raft_node.get_metrics().await {
+            start_time.elapsed() < tokio::time::Duration::from_millis(1000)
+        } else {
+            false
+        };
+
+        #[cfg(not(feature = "raft"))]
+        let is_responsive = start_time.elapsed() < tokio::time::Duration::from_millis(100);
+
+        NodeHealthStatus {
+            node_id,
+            is_responsive,
+            last_seen: if is_responsive {
+                Some(std::time::SystemTime::now())
+            } else {
+                None
+            },
+            latency_ms: start_time.elapsed().as_millis() as u64,
+        }
+    }
+
+    /// Attempt to recover from a partition or failure
+    pub async fn attempt_recovery(&mut self) -> Result<()> {
+        tracing::info!("Attempting cluster recovery");
+
+        // Check if we have enough healthy nodes for quorum
+        let health_statuses = self.check_peer_health().await?;
+        let healthy_nodes: Vec<_> = health_statuses
+            .iter()
+            .filter(|status| status.is_responsive)
+            .collect();
+
+        let quorum_size = (self.peers.len() + 1) / 2 + 1; // +1 for self
+
+        if healthy_nodes.len() + 1 >= quorum_size {
+            tracing::info!("Sufficient nodes for quorum, attempting to re-establish consensus");
+
+            // Re-initialize consensus with healthy nodes only
+            let healthy_node_ids: std::collections::BTreeSet<_> =
+                healthy_nodes.iter().map(|status| status.node_id).collect();
+
+            self.peers = healthy_node_ids;
+            self.init().await?;
+
+            tracing::info!(
+                "Recovery completed with {} healthy nodes",
+                healthy_nodes.len()
+            );
+        } else {
+            tracing::error!(
+                "Insufficient nodes for quorum: {} healthy out of {} required",
+                healthy_nodes.len() + 1,
+                quorum_size
+            );
+            return Err(anyhow::anyhow!(
+                "Cannot recover: insufficient nodes for quorum"
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 /// Status information for the consensus system
@@ -186,6 +409,15 @@ pub struct ConsensusStatus {
     pub current_term: u64,
     pub peer_count: usize,
     pub triple_count: usize,
+}
+
+/// Health status of a cluster node
+#[derive(Debug, Clone)]
+pub struct NodeHealthStatus {
+    pub node_id: OxirsNodeId,
+    pub is_responsive: bool,
+    pub last_seen: Option<std::time::SystemTime>,
+    pub latency_ms: u64,
 }
 
 /// Consensus error types

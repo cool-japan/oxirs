@@ -8,12 +8,19 @@ use oxirs_core::{
     model::{quad::Quad, term::Term, triple::Triple, NamedNode, Object, Subject},
     Store,
 };
-// Vector search integration (temporarily disabled)
-// use oxirs_vec::{
-//     embeddings::{EmbeddingModel, EmbeddingProvider},
-//     index::VectorIndex,
-//     similarity::SimilaritySearch,
-// };
+// Vector search integration now properly enabled
+use oxirs_embed::{
+    models::{ComplEx, RotatE, TransE},
+    EmbeddingModel, Vector,
+};
+use oxirs_vec::{
+    embeddings::{EmbeddingManager, EmbeddingStrategy},
+    index::{
+        AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType,
+        SearchResult as VecSearchResult,
+    },
+    similarity, VectorIndex,
+};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -24,131 +31,130 @@ use std::{
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-// Vector search integration types
-pub trait EmbeddingModel: Send + Sync {
-    fn encode<'a>(
-        &'a self,
-        texts: &'a [String],
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send + 'a>,
-    >;
+/// Enhanced vector index with oxirs-vec integration
+pub struct EnhancedVectorIndex {
+    index: AdvancedVectorIndex,
+    embedding_manager: EmbeddingManager,
+    document_mapping: HashMap<String, RagDocument>,
+    triple_index: HashMap<String, Triple>,
 }
 
-/// Simple in-memory vector index for semantic search
-pub struct VectorIndex {
-    vectors: Vec<IndexedVector>,
-    dimension: usize,
-}
-
-#[derive(Debug, Clone)]
-struct IndexedVector {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RagDocument {
     id: String,
-    vector: Vec<f32>,
-    triple: Triple,
+    content: String,
+    triple: Option<Triple>,
     metadata: HashMap<String, String>,
+    embedding: Option<Vec<f32>>,
 }
 
-impl VectorIndex {
-    pub fn new(dimension: usize) -> Self {
-        Self {
-            vectors: Vec::new(),
+impl EnhancedVectorIndex {
+    pub fn new(dimension: usize, embedding_strategy: EmbeddingStrategy) -> Result<Self> {
+        let config = IndexConfig {
+            index_type: IndexType::Hnsw,
             dimension,
-        }
-    }
-
-    /// Add a vector to the index
-    pub fn add(
-        &mut self,
-        id: String,
-        vector: Vec<f32>,
-        triple: Triple,
-        metadata: HashMap<String, String>,
-    ) -> Result<()> {
-        if vector.len() != self.dimension {
-            return Err(anyhow!(
-                "Vector dimension mismatch: expected {}, got {}",
-                self.dimension,
-                vector.len()
-            ));
-        }
-
-        let indexed_vector = IndexedVector {
-            id,
-            vector,
-            triple,
-            metadata,
+            distance_metric: DistanceMetric::Cosine,
+            ..Default::default()
         };
 
-        self.vectors.push(indexed_vector);
+        let index = AdvancedVectorIndex::new(config)?;
+        let embedding_manager = EmbeddingManager::new(embedding_strategy);
+
+        Ok(Self {
+            index,
+            embedding_manager,
+            document_mapping: HashMap::new(),
+            triple_index: HashMap::new(),
+        })
+    }
+
+    /// Add a vector to the index with automatic embedding generation
+    pub async fn add_document(
+        &mut self,
+        id: String,
+        content: String,
+        triple: Option<Triple>,
+        metadata: HashMap<String, String>,
+    ) -> Result<()> {
+        // Generate embedding for the content
+        let embedding = self.embedding_manager.encode(&[content.clone()]).await?;
+        let vector = embedding
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("Failed to generate embedding for content"))?;
+
+        // Add to vector index
+        self.index.add_vector(id.clone(), vector.clone())?;
+
+        // Store document mapping
+        let document = RagDocument {
+            id: id.clone(),
+            content,
+            triple: triple.clone(),
+            metadata,
+            embedding: Some(vector),
+        };
+        self.document_mapping.insert(id.clone(), document);
+
+        // Store triple mapping if provided
+        if let Some(triple) = triple {
+            self.triple_index.insert(id, triple);
+        }
+
         Ok(())
     }
 
-    /// Search for similar vectors using cosine similarity
-    pub fn search(
-        &self,
-        query: &[f32],
-        limit: usize,
-    ) -> Result<Vec<SearchDocument>, anyhow::Error> {
-        if query.len() != self.dimension {
-            return Err(anyhow!(
-                "Query vector dimension mismatch: expected {}, got {}",
-                self.dimension,
-                query.len()
-            ));
+    /// Search for similar documents using semantic similarity
+    pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchDocument>> {
+        // Generate embedding for query
+        let query_embedding = self.embedding_manager.encode(&[query.to_string()]).await?;
+        let query_vector = query_embedding
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("Failed to generate embedding for query"))?;
+
+        // Search the vector index
+        let search_results: Vec<VecSearchResult> = self.index.search(&query_vector, limit)?;
+
+        // Convert to SearchDocument
+        let mut documents = Vec::new();
+        for result in search_results {
+            if let Some(document) = self.document_mapping.get(&result.id) {
+                let search_doc = SearchDocument {
+                    document: document.triple.clone().unwrap_or_else(|| {
+                        // Create a default triple if none exists
+                        Triple::new(
+                            Subject::NamedNode(NamedNode::new_unchecked(&result.id)),
+                            NamedNode::new_unchecked("http://www.w3.org/2000/01/rdf-schema#label"),
+                            Object::Literal(document.content.clone().into()),
+                        )
+                    }),
+                    score: result.distance,
+                };
+                documents.push(search_doc);
+            }
         }
 
-        let mut results: Vec<(f32, &IndexedVector)> = self
-            .vectors
-            .iter()
-            .map(|indexed_vector| {
-                let similarity = cosine_similarity(query, &indexed_vector.vector);
-                (similarity, indexed_vector)
-            })
-            .collect();
-
-        // Sort by similarity score (highest first)
-        results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Take top results and convert to SearchDocument
-        let search_results = results
-            .into_iter()
-            .take(limit)
-            .map(|(score, indexed_vector)| SearchDocument {
-                document: indexed_vector.triple.clone(),
-                score,
-            })
-            .collect();
-
-        Ok(search_results)
+        Ok(documents)
     }
 
-    /// Get the number of vectors in the index
+    /// Get the number of documents in the index
     pub fn len(&self) -> usize {
-        self.vectors.len()
+        self.document_mapping.len()
     }
 
     /// Check if the index is empty
     pub fn is_empty(&self) -> bool {
-        self.vectors.is_empty()
+        self.document_mapping.is_empty()
+    }
+
+    /// Get all indexed triples
+    pub fn get_triples(&self) -> Vec<Triple> {
+        self.triple_index.values().cloned().collect()
     }
 }
 
-/// Calculate cosine similarity between two vectors
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() {
-        return 0.0;
-    }
-
-    let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-    if norm_a == 0.0 || norm_b == 0.0 {
-        return 0.0;
-    }
-
-    dot_product / (norm_a * norm_b)
-}
+// Using cosine_similarity from oxirs-vec instead of custom implementation
 
 pub struct SearchDocument {
     pub document: Triple,
@@ -1162,7 +1168,7 @@ impl RAGSystem {
         &self,
         query: &str,
         vector_index: &VectorIndex,
-    ) -> Result<Vec<SearchResult>> {
+    ) -> Result<Vec<RagSearchResult>> {
         if let Some(ref embedding_model) = self.embedding_model {
             let query_embedding = embedding_model.encode(&[query.to_string()]).await?;
             let results =
@@ -1170,7 +1176,7 @@ impl RAGSystem {
 
             Ok(results
                 .into_iter()
-                .map(|r| SearchResult {
+                .map(|r| RagSearchResult {
                     triple: r.document, // Assuming document is a triple
                     score: r.score,
                     search_type: SearchType::Semantic,
@@ -1186,7 +1192,7 @@ impl RAGSystem {
         &self,
         query: &str,
         vector_index: &VectorIndex,
-    ) -> Result<Vec<SearchResult>> {
+    ) -> Result<Vec<RagSearchResult>> {
         // Semantic search
         let semantic_results = self.semantic_search(query, vector_index).await?;
 
@@ -1201,7 +1207,7 @@ impl RAGSystem {
     }
 
     /// BM25-inspired keyword search
-    async fn keyword_search(&self, query: &str) -> Result<Vec<SearchResult>> {
+    async fn keyword_search(&self, query: &str) -> Result<Vec<RagSearchResult>> {
         let mut results = Vec::new();
         let query_lower = query.to_lowercase();
         let query_terms: Vec<&str> = query_lower
@@ -1248,7 +1254,7 @@ impl RAGSystem {
                 let coverage_boost = matched_terms as f32 / query_terms.len() as f32;
                 score *= 1.0 + coverage_boost;
 
-                results.push(SearchResult {
+                results.push(RagSearchResult {
                     triple,
                     score,
                     search_type: SearchType::BM25,
@@ -1270,11 +1276,11 @@ impl RAGSystem {
     /// Combine semantic and keyword search results with hybrid scoring
     fn combine_search_results(
         &self,
-        semantic_results: Vec<SearchResult>,
-        keyword_results: Vec<SearchResult>,
+        semantic_results: Vec<RagSearchResult>,
+        keyword_results: Vec<RagSearchResult>,
         config: &RetrievalConfig,
-    ) -> Result<Vec<SearchResult>> {
-        let mut combined_map: HashMap<String, SearchResult> = HashMap::new();
+    ) -> Result<Vec<RagSearchResult>> {
+        let mut combined_map: HashMap<String, RagSearchResult> = HashMap::new();
 
         // Add semantic results
         for result in semantic_results {
@@ -1282,7 +1288,7 @@ impl RAGSystem {
             let weighted_score = result.score * config.semantic_weight;
             combined_map.insert(
                 key,
-                SearchResult {
+                RagSearchResult {
                     score: weighted_score,
                     search_type: SearchType::Hybrid,
                     ..result
@@ -1301,7 +1307,7 @@ impl RAGSystem {
             } else {
                 combined_map.insert(
                     key,
-                    SearchResult {
+                    RagSearchResult {
                         score: weighted_score,
                         search_type: SearchType::Hybrid,
                         ..result
@@ -1311,7 +1317,7 @@ impl RAGSystem {
         }
 
         // Convert to vec and sort
-        let mut final_results: Vec<SearchResult> = combined_map.into_values().collect();
+        let mut final_results: Vec<RagSearchResult> = combined_map.into_values().collect();
         final_results.sort_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)
@@ -1326,7 +1332,7 @@ impl RAGSystem {
     }
 
     /// Enhanced graph traversal with multiple strategies
-    async fn graph_traversal(&self, entities: &[ExtractedEntity]) -> Result<Vec<SearchResult>> {
+    async fn graph_traversal(&self, entities: &[ExtractedEntity]) -> Result<Vec<RagSearchResult>> {
         let mut results = Vec::new();
         let mut visited_entities = HashSet::new();
 
@@ -1343,7 +1349,7 @@ impl RAGSystem {
                     .await?;
 
                 for triple in entity_triples {
-                    results.push(SearchResult {
+                    results.push(RagSearchResult {
                         triple,
                         score: entity.confidence * 0.8, // Slightly lower score than direct matches
                         search_type: SearchType::GraphTraversal,
@@ -1368,13 +1374,13 @@ impl RAGSystem {
         &self,
         entity_iri: &str,
         base_confidence: f32,
-    ) -> Result<Vec<SearchResult>> {
+    ) -> Result<Vec<RagSearchResult>> {
         let mut expanded_results = Vec::new();
 
         // Find type information
         let type_triples = self.find_entity_types(entity_iri).await?;
         for triple in type_triples {
-            expanded_results.push(SearchResult {
+            expanded_results.push(RagSearchResult {
                 triple,
                 score: base_confidence * 0.9, // High score for type information
                 search_type: SearchType::GraphTraversal,
@@ -1384,7 +1390,7 @@ impl RAGSystem {
         // Find same-type entities (for entity recommendation)
         let same_type_entities = self.find_same_type_entities(entity_iri, 5).await?;
         for triple in same_type_entities {
-            expanded_results.push(SearchResult {
+            expanded_results.push(RagSearchResult {
                 triple,
                 score: base_confidence * 0.6, // Lower score for related entities
                 search_type: SearchType::GraphTraversal,
@@ -1394,7 +1400,7 @@ impl RAGSystem {
         // Find property domains and ranges
         let property_context = self.find_property_context(entity_iri).await?;
         for triple in property_context {
-            expanded_results.push(SearchResult {
+            expanded_results.push(RagSearchResult {
                 triple,
                 score: base_confidence * 0.7,
                 search_type: SearchType::GraphTraversal,
@@ -1496,9 +1502,9 @@ impl RAGSystem {
     /// Remove duplicates and apply graph-specific ranking
     fn deduplicate_and_rank_graph_results(
         &self,
-        results: Vec<SearchResult>,
-    ) -> Result<Vec<SearchResult>> {
-        let mut unique_results: HashMap<String, SearchResult> = HashMap::new();
+        results: Vec<RagSearchResult>,
+    ) -> Result<Vec<RagSearchResult>> {
+        let mut unique_results: HashMap<String, RagSearchResult> = HashMap::new();
 
         for result in results {
             let key = format!("{:?}", result.triple);
@@ -1512,7 +1518,7 @@ impl RAGSystem {
             }
         }
 
-        let mut final_results: Vec<SearchResult> = unique_results.into_values().collect();
+        let mut final_results: Vec<RagSearchResult> = unique_results.into_values().collect();
 
         // Apply graph-specific ranking factors
         for result in &mut final_results {
@@ -1669,16 +1675,16 @@ impl RAGSystem {
 
     fn combine_and_rank_results(
         &self,
-        semantic_results: Vec<SearchResult>,
-        graph_results: Vec<SearchResult>,
+        semantic_results: Vec<RagSearchResult>,
+        graph_results: Vec<RagSearchResult>,
         intent: &QueryIntent,
-    ) -> Result<Vec<SearchResult>> {
+    ) -> Result<Vec<RagSearchResult>> {
         let mut all_results = Vec::new();
         all_results.extend(semantic_results);
         all_results.extend(graph_results);
 
         // Remove duplicates and compute hybrid scores
-        let mut unique_results: HashMap<String, SearchResult> = HashMap::new();
+        let mut unique_results: HashMap<String, RagSearchResult> = HashMap::new();
 
         for result in all_results {
             let key = format!("{:?}", result.triple); // Simple serialization as key
@@ -1695,7 +1701,7 @@ impl RAGSystem {
             }
         }
 
-        let mut final_results: Vec<SearchResult> = unique_results.into_values().collect();
+        let mut final_results: Vec<RagSearchResult> = unique_results.into_values().collect();
 
         // Sort by relevance score
         final_results.sort_by(|a, b| {
@@ -1727,7 +1733,7 @@ impl RAGSystem {
         }
     }
 
-    fn filter_results(&self, results: Vec<SearchResult>) -> Result<FilteredResults> {
+    fn filter_results(&self, results: Vec<RagSearchResult>) -> Result<FilteredResults> {
         let mut filtered_triples = Vec::new();
         let mut entities = Vec::new();
         let mut schema_info = Vec::new();
@@ -1753,7 +1759,7 @@ impl RAGSystem {
 
 /// Search result from different retrieval methods
 #[derive(Debug, Clone)]
-struct SearchResult {
+struct RagSearchResult {
     triple: Triple,
     score: f32,
     search_type: SearchType,

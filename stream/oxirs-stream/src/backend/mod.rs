@@ -93,7 +93,7 @@ pub struct StreamBackendConfig {
 }
 
 /// Backend types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum BackendType {
     Kafka,
     Nats,

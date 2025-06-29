@@ -15,6 +15,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
+use tracing;
 
 /// Query optimizer configuration
 #[derive(Debug, Clone)]
@@ -90,6 +91,26 @@ pub enum IndexType {
     Spatial,
     Temporal,
     Custom(String),
+    // Advanced index types for enhanced optimization
+    BTreeIndex(IndexPosition),
+    HashIndex(IndexPosition),
+    BitmapIndex(IndexPosition),
+    SpatialRTree,
+    TemporalBTree,
+    MultiColumnBTree(Vec<IndexPosition>),
+    BloomFilter(IndexPosition),
+}
+
+/// Index position specification
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum IndexPosition {
+    Subject,
+    Predicate,
+    Object,
+    SubjectPredicate,
+    PredicateObject,
+    SubjectObject,
+    FullTriple,
 }
 
 /// Execution record for learning-based optimization
@@ -782,7 +803,7 @@ impl QueryOptimizer {
 
                 // Use dynamic programming to find optimal join order
                 let optimal_order = self.find_optimal_join_order(&join_chain)?;
-                Ok(self.build_join_tree_from_order(optimal_order))
+                Ok(self.build_join_tree_from_order(&join_chain, optimal_order))
             }
             _ => self.apply_to_children(algebra, |child| self.cost_based_join_reordering(child)),
         }
@@ -823,14 +844,28 @@ impl QueryOptimizer {
     }
 
     /// Build join tree from optimal order
-    fn build_join_tree_from_order(&self, order: Vec<usize>) -> Algebra {
-        // Simplified implementation - build left-deep tree
+    fn build_join_tree_from_order(&self, join_chain: &[Algebra], order: Vec<usize>) -> Algebra {
         if order.is_empty() {
             return Algebra::Zero;
         }
 
-        // This is a placeholder - real implementation would build optimal tree structure
-        Algebra::Zero // Simplified
+        if order.len() == 1 {
+            // Single relation
+            return join_chain[order[0]].clone();
+        }
+
+        // Build left-deep join tree for now (can be enhanced to bushy trees later)
+        let mut current = join_chain[order[0]].clone();
+
+        for &relation_idx in &order[1..] {
+            let right_relation = join_chain[relation_idx].clone();
+            current = Algebra::Join {
+                left: Box::new(current),
+                right: Box::new(right_relation),
+            };
+        }
+
+        current
     }
 
     /// Index-aware optimization
@@ -842,12 +877,111 @@ impl QueryOptimizer {
                     BGPOptimizer::new(&self.statistics, &self.statistics.index_stats);
                 let optimized_bgp = bgp_optimizer.optimize_bgp(patterns)?;
 
-                // Apply recommended index usage if needed
-                // In a real implementation, this would annotate the patterns with index hints
+                // Store index plan metadata for the executor
+                self.record_index_plan(&optimized_bgp.index_plan)?;
 
-                Ok(Algebra::Bgp(optimized_bgp.patterns))
+                // Check if we need to transform BGP based on index opportunities
+                let transformed_algebra = self.transform_bgp_for_indexes(&optimized_bgp)?;
+
+                Ok(transformed_algebra)
             }
             _ => self.apply_to_children(algebra, |child| self.index_aware_optimization(child)),
+        }
+    }
+
+    /// Record index plan for later execution
+    fn record_index_plan(&self, index_plan: &crate::bgp_optimizer::IndexUsagePlan) -> Result<()> {
+        // Store index plan metadata for the query executor
+        // This would typically be stored in a query context or execution plan
+
+        // Log index usage decisions for monitoring and debugging
+        for assignment in &index_plan.pattern_indexes {
+            tracing::debug!(
+                "Index assignment: pattern {} -> {:?} (cost: {:.2})",
+                assignment.pattern_idx,
+                assignment.index_type,
+                assignment.scan_cost
+            );
+        }
+
+        for join_opportunity in &index_plan.join_indexes {
+            tracing::debug!(
+                "Join index opportunity: patterns {} and {} on variable {} (speedup: {:.2}x)",
+                join_opportunity.left_pattern_idx,
+                join_opportunity.right_pattern_idx,
+                join_opportunity.join_var,
+                join_opportunity.speedup_factor
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Transform BGP based on index usage plan
+    fn transform_bgp_for_indexes(
+        &self,
+        optimized_bgp: &crate::bgp_optimizer::OptimizedBGP,
+    ) -> Result<Algebra> {
+        let patterns = &optimized_bgp.patterns;
+        let index_plan = &optimized_bgp.index_plan;
+
+        // If there are beneficial join index opportunities, restructure the BGP
+        if !index_plan.join_indexes.is_empty() {
+            // Find the most beneficial join opportunity
+            if let Some(best_join) = index_plan
+                .join_indexes
+                .iter()
+                .max_by(|a, b| a.speedup_factor.partial_cmp(&b.speedup_factor).unwrap())
+            {
+                if best_join.speedup_factor > 2.0 {
+                    return self.create_index_optimized_join(patterns, best_join);
+                }
+            }
+        }
+
+        // For now, return optimized BGP with patterns reordered for best index usage
+        Ok(Algebra::Bgp(patterns.clone()))
+    }
+
+    /// Create an index-optimized join structure
+    fn create_index_optimized_join(
+        &self,
+        patterns: &[TriplePattern],
+        join_opportunity: &crate::bgp_optimizer::JoinIndexOpportunity,
+    ) -> Result<Algebra> {
+        let left_idx = join_opportunity.left_pattern_idx;
+        let right_idx = join_opportunity.right_pattern_idx;
+
+        if left_idx >= patterns.len() || right_idx >= patterns.len() {
+            return Ok(Algebra::Bgp(patterns.to_vec()));
+        }
+
+        // Create separate BGPs for the join
+        let left_bgp = Algebra::Bgp(vec![patterns[left_idx].clone()]);
+        let right_bgp = Algebra::Bgp(vec![patterns[right_idx].clone()]);
+
+        // Create join
+        let join_algebra = Algebra::Join {
+            left: Box::new(left_bgp),
+            right: Box::new(right_bgp),
+        };
+
+        // Add remaining patterns
+        let mut remaining_patterns = Vec::new();
+        for (i, pattern) in patterns.iter().enumerate() {
+            if i != left_idx && i != right_idx {
+                remaining_patterns.push(pattern.clone());
+            }
+        }
+
+        if remaining_patterns.is_empty() {
+            Ok(join_algebra)
+        } else {
+            // Join with remaining patterns
+            Ok(Algebra::Join {
+                left: Box::new(join_algebra),
+                right: Box::new(Algebra::Bgp(remaining_patterns)),
+            })
         }
     }
 
@@ -1606,7 +1740,7 @@ impl Default for RuleSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra::{Algebra, BinaryOperator, Expression, Iri, Term, TriplePattern};
+    use crate::algebra::{Algebra, BinaryOperator, Expression, Iri, Term, TriplePattern, Variable};
 
     #[test]
     fn test_constant_folding() {
@@ -1614,9 +1748,9 @@ mod tests {
 
         // Create a filter with always-true condition
         let pattern = Algebra::Bgp(vec![TriplePattern::new(
-            Term::Variable("s".to_string()),
-            Term::Variable("p".to_string()),
-            Term::Variable("o".to_string()),
+            Term::Variable(Variable::new("s").unwrap()),
+            Term::Variable(Variable::new("p").unwrap()),
+            Term::Variable(Variable::new("o").unwrap()),
         )]);
 
         let always_true = Expression::Binary {

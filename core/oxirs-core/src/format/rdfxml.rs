@@ -3,9 +3,9 @@
 //! Extracted and adapted from OxiGraph oxrdfxml with OxiRS enhancements.
 //! Based on W3C RDF/XML specification: https://www.w3.org/TR/rdf-syntax-grammar/
 
-use super::error::{ParseResult, RdfParseError, RdfSyntaxError, TextPosition};
+use super::error::{ParseResult, RdfParseError};
 use super::serializer::{QuadSerializer, SerializeResult};
-use crate::model::{NamedNode, Quad, QuadRef, Triple, TripleRef};
+use crate::model::{QuadRef, Triple, TripleRef};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 

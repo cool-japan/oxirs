@@ -78,7 +78,7 @@ pub struct SubscriptionRequest {
 }
 
 /// Subscription actions
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SubscriptionAction {
     Subscribe,

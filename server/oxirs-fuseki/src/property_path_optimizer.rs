@@ -4,6 +4,7 @@
 //! including path rewriting, cost-based optimization, and advanced execution strategies.
 
 use crate::error::{FusekiError, FusekiResult};
+use futures::future::BoxFuture;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -695,97 +696,100 @@ impl AdvancedPropertyPathOptimizer {
     }
 
     /// Decompose path into executable operations
-    async fn decompose_path_into_operations(
-        &self,
-        path: &PathPattern,
-        strategy: &PathExecutionStrategy,
-    ) -> FusekiResult<Vec<EnhancedPathStep>> {
-        let mut steps = Vec::new();
+    fn decompose_path_into_operations<'a>(
+        &'a self,
+        path: &'a PathPattern,
+        strategy: &'a PathExecutionStrategy,
+    ) -> BoxFuture<'a, FusekiResult<Vec<EnhancedPathStep>>> {
+        Box::pin(async move {
+            let mut steps = Vec::new();
 
-        match path {
-            PathPattern::Property(prop) => {
-                steps.push(
-                    self.create_traverse_step(prop, TraversalDirection::Forward)
-                        .await?,
-                );
-            }
-            PathPattern::Sequence(seq) => {
-                for (i, p) in seq.iter().enumerate() {
-                    let sub_steps = self.decompose_path_into_operations(p, strategy).await?;
-                    let deps: Vec<usize> = if i > 0 { vec![steps.len() - 1] } else { vec![] };
-                    for mut step in sub_steps {
-                        step.dependencies = deps.clone();
-                        steps.push(step);
-                    }
+            match path {
+                PathPattern::Property(prop) => {
+                    steps.push(
+                        self.create_traverse_step(prop, TraversalDirection::Forward)
+                            .await?,
+                    );
                 }
-            }
-            PathPattern::Alternative(alts) => {
-                let mut alt_operations = Vec::new();
-                for alt in alts {
-                    let sub_steps = self.decompose_path_into_operations(alt, strategy).await?;
-                    if sub_steps.len() == 1 {
-                        if let Some(step) = sub_steps.into_iter().next() {
-                            alt_operations.push(step.operation);
+                PathPattern::Sequence(seq) => {
+                    for (i, p) in seq.iter().enumerate() {
+                        let sub_steps = self.decompose_path_into_operations(p, strategy).await?;
+                        let deps: Vec<usize> = if i > 0 { vec![steps.len() - 1] } else { vec![] };
+                        for mut step in sub_steps {
+                            step.dependencies = deps.clone();
+                            steps.push(step);
                         }
                     }
                 }
-                if !alt_operations.is_empty() {
-                    steps.push(EnhancedPathStep {
-                        operation: PathOperation::Union(alt_operations),
-                        estimated_cost: self.cost_model.alternative_multiplier
-                            * self.cost_model.traversal_cost,
-                        estimated_selectivity: 0.8,
-                        can_use_index: false,
-                        memory_usage: 1024 * 1024, // 1MB estimate
-                        dependencies: vec![],
-                    });
-                }
-            }
-            PathPattern::Inverse(inner) => {
-                let mut sub_steps = self.decompose_path_into_operations(inner, strategy).await?;
-                for step in &mut sub_steps {
-                    if let PathOperation::Traverse { direction, .. } = &mut step.operation {
-                        *direction = match direction {
-                            TraversalDirection::Forward => TraversalDirection::Backward,
-                            TraversalDirection::Backward => TraversalDirection::Forward,
-                            TraversalDirection::Both => TraversalDirection::Both,
-                        };
+                PathPattern::Alternative(alts) => {
+                    let mut alt_operations = Vec::new();
+                    for alt in alts {
+                        let sub_steps = self.decompose_path_into_operations(alt, strategy).await?;
+                        if sub_steps.len() == 1 {
+                            if let Some(step) = sub_steps.into_iter().next() {
+                                alt_operations.push(step.operation);
+                            }
+                        }
+                    }
+                    if !alt_operations.is_empty() {
+                        steps.push(EnhancedPathStep {
+                            operation: PathOperation::Union(alt_operations),
+                            estimated_cost: self.cost_model.alternative_multiplier
+                                * self.cost_model.traversal_cost,
+                            estimated_selectivity: 0.8,
+                            can_use_index: false,
+                            memory_usage: 1024 * 1024, // 1MB estimate
+                            dependencies: vec![],
+                        });
                     }
                 }
-                steps.extend(sub_steps);
-            }
-            PathPattern::ZeroOrMore(inner) | PathPattern::OneOrMore(inner) => {
-                if let PathPattern::Property(prop) = inner.as_ref() {
-                    let min_length = if matches!(path, PathPattern::OneOrMore(_)) {
-                        1
-                    } else {
-                        0
-                    };
-                    steps.push(EnhancedPathStep {
-                        operation: PathOperation::TransitiveClosure {
-                            predicate: prop.clone(),
-                            min_length,
-                            max_length: None,
-                        },
-                        estimated_cost: self.cost_model.repetition_multiplier
-                            * self.cost_model.traversal_cost,
-                        estimated_selectivity: 0.3,
-                        can_use_index: self.can_use_transitive_index(prop).await?,
-                        memory_usage: 10 * 1024 * 1024, // 10MB estimate for transitive closure
-                        dependencies: vec![],
-                    });
+                PathPattern::Inverse(inner) => {
+                    let mut sub_steps =
+                        self.decompose_path_into_operations(inner, strategy).await?;
+                    for step in &mut sub_steps {
+                        if let PathOperation::Traverse { direction, .. } = &mut step.operation {
+                            *direction = match direction {
+                                TraversalDirection::Forward => TraversalDirection::Backward,
+                                TraversalDirection::Backward => TraversalDirection::Forward,
+                                TraversalDirection::Both => TraversalDirection::Both,
+                            };
+                        }
+                    }
+                    steps.extend(sub_steps);
+                }
+                PathPattern::ZeroOrMore(inner) | PathPattern::OneOrMore(inner) => {
+                    if let PathPattern::Property(prop) = inner.as_ref() {
+                        let min_length = if matches!(path, PathPattern::OneOrMore(_)) {
+                            1
+                        } else {
+                            0
+                        };
+                        steps.push(EnhancedPathStep {
+                            operation: PathOperation::TransitiveClosure {
+                                predicate: prop.clone(),
+                                min_length,
+                                max_length: None,
+                            },
+                            estimated_cost: self.cost_model.repetition_multiplier
+                                * self.cost_model.traversal_cost,
+                            estimated_selectivity: 0.3,
+                            can_use_index: self.can_use_transitive_index(prop).await?,
+                            memory_usage: 10 * 1024 * 1024, // 10MB estimate for transitive closure
+                            dependencies: vec![],
+                        });
+                    }
+                }
+                _ => {
+                    // Default to simple traversal
+                    steps.push(
+                        self.create_traverse_step("?", TraversalDirection::Forward)
+                            .await?,
+                    );
                 }
             }
-            _ => {
-                // Default to simple traversal
-                steps.push(
-                    self.create_traverse_step("?", TraversalDirection::Forward)
-                        .await?,
-                );
-            }
-        }
 
-        Ok(steps)
+            Ok(steps)
+        })
     }
 
     /// Create a traverse step
@@ -937,28 +941,33 @@ impl AdvancedPropertyPathOptimizer {
         }
     }
 
-    async fn estimate_branching_factor(&self, path: &PathPattern) -> FusekiResult<f64> {
-        // This would use actual statistics in production
-        Ok(match path {
-            PathPattern::Property(prop) => {
-                // Estimate based on property statistics
-                if prop.contains("type") || prop.contains("Type") {
-                    5.0 // Type properties typically have lower branching
-                } else if prop.contains("subClassOf") || prop.contains("subPropertyOf") {
-                    3.0 // Hierarchical properties
-                } else {
-                    10.0 // Default estimate
+    fn estimate_branching_factor<'a>(
+        &'a self,
+        path: &'a PathPattern,
+    ) -> BoxFuture<'a, FusekiResult<f64>> {
+        Box::pin(async move {
+            // This would use actual statistics in production
+            Ok(match path {
+                PathPattern::Property(prop) => {
+                    // Estimate based on property statistics
+                    if prop.contains("type") || prop.contains("Type") {
+                        5.0 // Type properties typically have lower branching
+                    } else if prop.contains("subClassOf") || prop.contains("subPropertyOf") {
+                        3.0 // Hierarchical properties
+                    } else {
+                        10.0 // Default estimate
+                    }
                 }
-            }
-            PathPattern::Alternative(alts) => {
-                // Sum of branching factors for alternatives
-                let mut total = 0.0;
-                for alt in alts {
-                    total += self.estimate_branching_factor(alt).await?;
+                PathPattern::Alternative(alts) => {
+                    // Sum of branching factors for alternatives
+                    let mut total = 0.0;
+                    for alt in alts {
+                        total += self.estimate_branching_factor(alt).await?;
+                    }
+                    total
                 }
-                total
-            }
-            _ => 10.0, // Default
+                _ => 10.0, // Default
+            })
         })
     }
 
@@ -979,28 +988,33 @@ impl AdvancedPropertyPathOptimizer {
         }
     }
 
-    async fn estimate_result_cardinality(&self, path: &PathPattern) -> FusekiResult<u64> {
-        // This would use actual statistics in production
-        Ok(match path {
-            PathPattern::Property(_) => 1000,
-            PathPattern::Sequence(seq) => {
-                // Multiply selectivities
-                let mut cardinality = 10000u64;
-                for _ in seq {
-                    cardinality = (cardinality as f64 * 0.1) as u64;
+    fn estimate_result_cardinality<'a>(
+        &'a self,
+        path: &'a PathPattern,
+    ) -> futures::future::BoxFuture<'a, FusekiResult<u64>> {
+        Box::pin(async move {
+            // This would use actual statistics in production
+            Ok(match path {
+                PathPattern::Property(_) => 1000,
+                PathPattern::Sequence(seq) => {
+                    // Multiply selectivities
+                    let mut cardinality = 10000u64;
+                    for _ in seq {
+                        cardinality = (cardinality as f64 * 0.1) as u64;
+                    }
+                    cardinality.max(1)
                 }
-                cardinality.max(1)
-            }
-            PathPattern::Alternative(alts) => {
-                // Sum cardinalities
-                let mut total = 0u64;
-                for alt in alts {
-                    total += self.estimate_result_cardinality(alt).await?;
+                PathPattern::Alternative(alts) => {
+                    // Sum cardinalities
+                    let mut total = 0u64;
+                    for alt in alts {
+                        total += self.estimate_result_cardinality(alt).await?;
+                    }
+                    total
                 }
-                total
-            }
-            PathPattern::ZeroOrMore(_) | PathPattern::OneOrMore(_) => 10000,
-            _ => 1000,
+                PathPattern::ZeroOrMore(_) | PathPattern::OneOrMore(_) => 10000,
+                _ => 1000,
+            })
         })
     }
 

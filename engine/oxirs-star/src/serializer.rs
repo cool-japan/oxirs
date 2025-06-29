@@ -15,6 +15,33 @@ use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::parser::StarFormat;
 use crate::{StarConfig, StarError, StarResult};
 
+/// Serialization options for configuring output format
+#[derive(Debug, Clone)]
+pub struct SerializationOptions {
+    /// Pretty print with indentation
+    pub pretty_print: bool,
+    /// Use compact notation where possible
+    pub compact: bool,
+    /// Namespace prefixes to use
+    pub prefixes: HashMap<String, String>,
+    /// Base IRI for relative references
+    pub base_iri: Option<String>,
+    /// Indentation string (spaces or tabs)
+    pub indent_string: String,
+}
+
+impl Default for SerializationOptions {
+    fn default() -> Self {
+        Self {
+            pretty_print: true,
+            compact: false,
+            prefixes: HashMap::new(),
+            base_iri: None,
+            indent_string: "  ".to_string(),
+        }
+    }
+}
+
 /// Context for serialization with namespace prefixes and formatting options
 #[derive(Debug, Default)]
 struct SerializationContext {
@@ -118,7 +145,7 @@ impl StarSerializer {
     pub fn serialize_to_string(&self, graph: &StarGraph, format: StarFormat) -> StarResult<String> {
         let mut buffer = Vec::new();
         self.serialize(graph, &mut buffer, format)?;
-        String::from_utf8(buffer).map_err(|e| StarError::SerializationError(e.to_string()))
+        String::from_utf8(buffer).map_err(|e| StarError::serialization_error(e.to_string()))
     }
 
     /// Serialize to Turtle-star format
@@ -142,7 +169,7 @@ impl StarSerializer {
 
         buf_writer
             .flush()
-            .map_err(|e| StarError::SerializationError(e.to_string()))?;
+            .map_err(|e| StarError::serialization_error(e.to_string()))?;
         debug!("Serialized {} triples in Turtle-star format", graph.len());
         Ok(())
     }
@@ -155,11 +182,11 @@ impl StarSerializer {
     ) -> StarResult<()> {
         for (prefix, namespace) in &context.prefixes {
             writeln!(writer, "@prefix {}: <{}> .", prefix, namespace)
-                .map_err(|e| StarError::SerializationError(e.to_string()))?;
+                .map_err(|e| StarError::serialization_error(e.to_string()))?;
         }
 
         if !context.prefixes.is_empty() {
-            writeln!(writer).map_err(|e| StarError::SerializationError(e.to_string()))?;
+            writeln!(writer).map_err(|e| StarError::serialization_error(e.to_string()))?;
         }
 
         Ok(())
@@ -185,10 +212,10 @@ impl StarSerializer {
                 predicate_str,
                 object_str
             )
-            .map_err(|e| StarError::SerializationError(e.to_string()))?;
+            .map_err(|e| StarError::serialization_error(e.to_string()))?;
         } else {
             writeln!(writer, "{} {} {} .", subject_str, predicate_str, object_str)
-                .map_err(|e| StarError::SerializationError(e.to_string()))?;
+                .map_err(|e| StarError::serialization_error(e.to_string()))?;
         }
 
         Ok(())
@@ -212,7 +239,7 @@ impl StarSerializer {
 
         buf_writer
             .flush()
-            .map_err(|e| StarError::SerializationError(e.to_string()))?;
+            .map_err(|e| StarError::serialization_error(e.to_string()))?;
         debug!(
             "Serialized {} triples in N-Triples-star format",
             graph.len()
@@ -232,7 +259,7 @@ impl StarSerializer {
         let object_str = self.format_term_ntriples(&triple.object)?;
 
         writeln!(writer, "{} {} {} .", subject_str, predicate_str, object_str)
-            .map_err(|e| StarError::SerializationError(e.to_string()))?;
+            .map_err(|e| StarError::serialization_error(e.to_string()))?;
 
         Ok(())
     }
@@ -254,7 +281,8 @@ impl StarSerializer {
 
         // Serialize default graph if it has triples
         if !graph.triples().is_empty() {
-            writeln!(buf_writer, "{{").map_err(|e| StarError::SerializationError(e.to_string()))?;
+            writeln!(buf_writer, "{{")
+                .map_err(|e| StarError::serialization_error(e.to_string()))?;
 
             context.increase_indent();
             for triple in graph.triples() {
@@ -262,8 +290,9 @@ impl StarSerializer {
             }
             context.decrease_indent();
 
-            writeln!(buf_writer, "}}").map_err(|e| StarError::SerializationError(e.to_string()))?;
-            writeln!(buf_writer).map_err(|e| StarError::SerializationError(e.to_string()))?;
+            writeln!(buf_writer, "}}")
+                .map_err(|e| StarError::serialization_error(e.to_string()))?;
+            writeln!(buf_writer).map_err(|e| StarError::serialization_error(e.to_string()))?;
         }
 
         // Serialize named graphs
@@ -273,7 +302,7 @@ impl StarSerializer {
                     // Write graph declaration
                     let graph_term = self.parse_graph_name(graph_name, &context)?;
                     writeln!(buf_writer, "{} {{", graph_term)
-                        .map_err(|e| StarError::SerializationError(e.to_string()))?;
+                        .map_err(|e| StarError::serialization_error(e.to_string()))?;
 
                     context.increase_indent();
                     for triple in named_triples {
@@ -282,16 +311,16 @@ impl StarSerializer {
                     context.decrease_indent();
 
                     writeln!(buf_writer, "}}")
-                        .map_err(|e| StarError::SerializationError(e.to_string()))?;
+                        .map_err(|e| StarError::serialization_error(e.to_string()))?;
                     writeln!(buf_writer)
-                        .map_err(|e| StarError::SerializationError(e.to_string()))?;
+                        .map_err(|e| StarError::serialization_error(e.to_string()))?;
                 }
             }
         }
 
         buf_writer
             .flush()
-            .map_err(|e| StarError::SerializationError(e.to_string()))?;
+            .map_err(|e| StarError::serialization_error(e.to_string()))?;
         debug!(
             "Serialized {} quads ({} total triples) in TriG-star format",
             graph.quad_len(),
@@ -315,7 +344,7 @@ impl StarSerializer {
 
         buf_writer
             .flush()
-            .map_err(|e| StarError::SerializationError(e.to_string()))?;
+            .map_err(|e| StarError::serialization_error(e.to_string()))?;
         debug!(
             "Serialized {} quads ({} total triples) in N-Quads-star format",
             graph.quad_len(),
@@ -343,11 +372,11 @@ impl StarSerializer {
                 "{} {} {} {} .",
                 subject_str, predicate_str, object_str, graph_str
             )
-            .map_err(|e| StarError::SerializationError(e.to_string()))?;
+            .map_err(|e| StarError::serialization_error(e.to_string()))?;
         } else {
             // Default graph quad (triple)
             writeln!(writer, "{} {} {} .", subject_str, predicate_str, object_str)
-                .map_err(|e| StarError::SerializationError(e.to_string()))?;
+                .map_err(|e| StarError::serialization_error(e.to_string()))?;
         }
 
         Ok(())
@@ -366,7 +395,7 @@ impl StarSerializer {
 
         // Default graph (no graph component)
         writeln!(writer, "{} {} {} .", subject_str, predicate_str, object_str)
-            .map_err(|e| StarError::SerializationError(e.to_string()))?;
+            .map_err(|e| StarError::serialization_error(e.to_string()))?;
 
         Ok(())
     }
@@ -499,7 +528,7 @@ impl StarSerializer {
         // Check nesting depth
         let max_depth = graph.max_nesting_depth();
         if max_depth > self.config.max_nesting_depth {
-            return Err(StarError::SerializationError(format!(
+            return Err(StarError::serialization_error(format!(
                 "Graph nesting depth {} exceeds maximum {}",
                 max_depth, self.config.max_nesting_depth
             )));
@@ -516,6 +545,18 @@ impl StarSerializer {
                 Ok(())
             }
         }
+    }
+
+    /// Serialize a graph to string using the specified format and options
+    pub fn serialize_graph(
+        &self,
+        graph: &StarGraph,
+        format: StarFormat,
+        options: &SerializationOptions,
+    ) -> StarResult<String> {
+        // For now, this is a wrapper around serialize_to_string
+        // In a more complete implementation, this would use the options parameter
+        self.serialize_to_string(graph, format)
     }
 }
 

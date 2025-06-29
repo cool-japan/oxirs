@@ -80,6 +80,7 @@ pub enum StreamEvent {
     Heartbeat {
         timestamp: DateTime<Utc>,
         source: String,
+        metadata: EventMetadata,
     },
     QueryResultAdded {
         query_id: String,
@@ -204,10 +205,26 @@ pub enum StreamEvent {
         metadata: EventMetadata,
     },
 
+    // Schema Update Events
+    SchemaUpdated {
+        schema_uri: String,
+        update_type: String,
+        old_definition: Option<String>,
+        new_definition: String,
+        metadata: EventMetadata,
+    },
+
     // SHACL Shape Events
     ShapeAdded {
         shape_uri: String,
         shape_definition: String,
+        target_class: Option<String>,
+        metadata: EventMetadata,
+    },
+    ShapeUpdated {
+        shape_uri: String,
+        old_definition: String,
+        new_definition: String,
         target_class: Option<String>,
         metadata: EventMetadata,
     },
@@ -243,6 +260,55 @@ pub enum StreamEvent {
         message: String,
         metadata: EventMetadata,
     },
+}
+
+impl StreamEvent {
+    /// Extract timestamp from any StreamEvent variant
+    pub fn timestamp(&self) -> DateTime<Utc> {
+        match self {
+            StreamEvent::TripleAdded { metadata, .. } => metadata.timestamp,
+            StreamEvent::TripleRemoved { metadata, .. } => metadata.timestamp,
+            StreamEvent::QuadAdded { metadata, .. } => metadata.timestamp,
+            StreamEvent::QuadRemoved { metadata, .. } => metadata.timestamp,
+            StreamEvent::GraphCreated { metadata, .. } => metadata.timestamp,
+            StreamEvent::GraphCleared { metadata, .. } => metadata.timestamp,
+            StreamEvent::GraphDeleted { metadata, .. } => metadata.timestamp,
+            StreamEvent::SparqlUpdate { metadata, .. } => metadata.timestamp,
+            StreamEvent::TransactionBegin { metadata, .. } => metadata.timestamp,
+            StreamEvent::TransactionCommit { metadata, .. } => metadata.timestamp,
+            StreamEvent::TransactionAbort { metadata, .. } => metadata.timestamp,
+            StreamEvent::SchemaChanged { metadata, .. } => metadata.timestamp,
+            StreamEvent::Heartbeat { timestamp, .. } => *timestamp,
+            StreamEvent::QueryResultAdded { metadata, .. } => metadata.timestamp,
+            StreamEvent::QueryResultRemoved { metadata, .. } => metadata.timestamp,
+            StreamEvent::QueryCompleted { metadata, .. } => metadata.timestamp,
+            StreamEvent::GraphMetadataUpdated { metadata, .. } => metadata.timestamp,
+            StreamEvent::GraphPermissionsChanged { metadata, .. } => metadata.timestamp,
+            StreamEvent::GraphStatisticsUpdated { metadata, .. } => metadata.timestamp,
+            StreamEvent::GraphRenamed { metadata, .. } => metadata.timestamp,
+            StreamEvent::GraphMerged { metadata, .. } => metadata.timestamp,
+            StreamEvent::GraphSplit { metadata, .. } => metadata.timestamp,
+            StreamEvent::SchemaDefinitionAdded { metadata, .. } => metadata.timestamp,
+            StreamEvent::SchemaDefinitionRemoved { metadata, .. } => metadata.timestamp,
+            StreamEvent::SchemaDefinitionModified { metadata, .. } => metadata.timestamp,
+            StreamEvent::OntologyImported { metadata, .. } => metadata.timestamp,
+            StreamEvent::OntologyRemoved { metadata, .. } => metadata.timestamp,
+            StreamEvent::ConstraintAdded { metadata, .. } => metadata.timestamp,
+            StreamEvent::ConstraintRemoved { metadata, .. } => metadata.timestamp,
+            StreamEvent::ConstraintViolated { metadata, .. } => metadata.timestamp,
+            StreamEvent::IndexCreated { metadata, .. } => metadata.timestamp,
+            StreamEvent::IndexDropped { metadata, .. } => metadata.timestamp,
+            StreamEvent::IndexRebuilt { metadata, .. } => metadata.timestamp,
+            StreamEvent::SchemaUpdated { metadata, .. } => metadata.timestamp,
+            StreamEvent::ShapeAdded { metadata, .. } => metadata.timestamp,
+            StreamEvent::ShapeUpdated { metadata, .. } => metadata.timestamp,
+            StreamEvent::ShapeRemoved { metadata, .. } => metadata.timestamp,
+            StreamEvent::ShapeModified { metadata, .. } => metadata.timestamp,
+            StreamEvent::ShapeValidationStarted { metadata, .. } => metadata.timestamp,
+            StreamEvent::ShapeValidationCompleted { metadata, .. } => metadata.timestamp,
+            StreamEvent::ShapeViolationDetected { metadata, .. } => metadata.timestamp,
+        }
+    }
 }
 
 /// Event metadata for tracking and provenance
@@ -358,9 +424,11 @@ pub enum StreamEventType {
     IndexCreated,
     IndexDropped,
     IndexRebuilt,
+    SchemaUpdated,
     ShapeAdded,
     ShapeRemoved,
     ShapeModified,
+    ShapeUpdated,
     ShapeValidationStarted,
     ShapeValidationCompleted,
     ShapeViolationDetected,
@@ -391,22 +459,30 @@ impl StreamEvent {
             StreamEvent::GraphDeleted { metadata, .. } => metadata,
             StreamEvent::GraphMetadataUpdated { metadata, .. } => metadata,
             StreamEvent::GraphPermissionsChanged { metadata, .. } => metadata,
-            StreamEvent::QueryExecuted { metadata, .. } => metadata,
-            StreamEvent::TransactionStarted { metadata, .. } => metadata,
-            StreamEvent::TransactionCommitted { metadata, .. } => metadata,
-            StreamEvent::TransactionAborted { metadata, .. } => metadata,
-            StreamEvent::ServiceRegistered { metadata, .. } => metadata,
-            StreamEvent::ServiceUnregistered { metadata, .. } => metadata,
-            StreamEvent::ServiceHealthChanged { metadata, .. } => metadata,
-            StreamEvent::Custom { metadata, .. } => metadata,
             StreamEvent::GraphStatisticsUpdated { metadata, .. } => metadata,
             StreamEvent::GraphRenamed { metadata, .. } => metadata,
-            StreamEvent::SchemaUpdated { metadata, .. } => metadata,
+            StreamEvent::GraphMerged { metadata, .. } => metadata,
+            StreamEvent::GraphSplit { metadata, .. } => metadata,
+            StreamEvent::SparqlUpdate { metadata, .. } => metadata,
+            StreamEvent::TransactionBegin { metadata, .. } => metadata,
+            StreamEvent::TransactionCommit { metadata, .. } => metadata,
+            StreamEvent::TransactionAbort { metadata, .. } => metadata,
+            StreamEvent::SchemaChanged { metadata, .. } => metadata,
+            StreamEvent::SchemaDefinitionAdded { metadata, .. } => metadata,
+            StreamEvent::SchemaDefinitionRemoved { metadata, .. } => metadata,
+            StreamEvent::SchemaDefinitionModified { metadata, .. } => metadata,
+            StreamEvent::OntologyImported { metadata, .. } => metadata,
+            StreamEvent::OntologyRemoved { metadata, .. } => metadata,
+            StreamEvent::ConstraintAdded { metadata, .. } => metadata,
+            StreamEvent::ConstraintRemoved { metadata, .. } => metadata,
+            StreamEvent::ConstraintViolated { metadata, .. } => metadata,
             StreamEvent::IndexCreated { metadata, .. } => metadata,
             StreamEvent::IndexDropped { metadata, .. } => metadata,
             StreamEvent::IndexRebuilt { metadata, .. } => metadata,
+            StreamEvent::SchemaUpdated { metadata, .. } => metadata,
             StreamEvent::ShapeAdded { metadata, .. } => metadata,
             StreamEvent::ShapeRemoved { metadata, .. } => metadata,
+            StreamEvent::ShapeModified { metadata, .. } => metadata,
             StreamEvent::ShapeUpdated { metadata, .. } => metadata,
             StreamEvent::ShapeValidationStarted { metadata, .. } => metadata,
             StreamEvent::ShapeValidationCompleted { metadata, .. } => metadata,
@@ -618,6 +694,7 @@ impl StreamEvent {
             | StreamEvent::SchemaDefinitionAdded { .. }
             | StreamEvent::SchemaDefinitionRemoved { .. }
             | StreamEvent::SchemaDefinitionModified { .. }
+            | StreamEvent::SchemaUpdated { .. }
             | StreamEvent::OntologyImported { .. }
             | StreamEvent::OntologyRemoved { .. }
             | StreamEvent::ConstraintAdded { .. }
@@ -631,6 +708,7 @@ impl StreamEvent {
             StreamEvent::ShapeAdded { .. }
             | StreamEvent::ShapeRemoved { .. }
             | StreamEvent::ShapeModified { .. }
+            | StreamEvent::ShapeUpdated { .. }
             | StreamEvent::ShapeValidationStarted { .. }
             | StreamEvent::ShapeValidationCompleted { .. }
             | StreamEvent::ShapeViolationDetected { .. } => EventCategory::Shape,
@@ -679,9 +757,11 @@ impl StreamEvent {
             StreamEvent::IndexCreated { .. } => StreamEventType::IndexCreated,
             StreamEvent::IndexDropped { .. } => StreamEventType::IndexDropped,
             StreamEvent::IndexRebuilt { .. } => StreamEventType::IndexRebuilt,
+            StreamEvent::SchemaUpdated { .. } => StreamEventType::SchemaUpdated,
             StreamEvent::ShapeAdded { .. } => StreamEventType::ShapeAdded,
             StreamEvent::ShapeRemoved { .. } => StreamEventType::ShapeRemoved,
             StreamEvent::ShapeModified { .. } => StreamEventType::ShapeModified,
+            StreamEvent::ShapeUpdated { .. } => StreamEventType::ShapeUpdated,
             StreamEvent::ShapeValidationStarted { .. } => StreamEventType::ShapeValidationStarted,
             StreamEvent::ShapeValidationCompleted { .. } => {
                 StreamEventType::ShapeValidationCompleted
@@ -711,9 +791,9 @@ impl StreamEvent {
             StreamEvent::GraphCleared { graph, .. } => {
                 graph.as_ref().map_or(true, |g| g == target_graph)
             }
-            StreamEvent::GraphRenamed { old_name, new_name } => {
-                old_name == target_graph || new_name == target_graph
-            }
+            StreamEvent::GraphRenamed {
+                old_name, new_name, ..
+            } => old_name == target_graph || new_name == target_graph,
             StreamEvent::GraphMerged {
                 source_graphs,
                 target_graph: target,

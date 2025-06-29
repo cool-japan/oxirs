@@ -204,7 +204,7 @@ fn test_algebra_term_conversion() {
     match algebra_term {
         AlgebraTerm::Literal(lit) => {
             assert_eq!(lit.value, "3.14");
-            assert_eq!(lit.datatype.as_ref().unwrap().0, xsd::DOUBLE);
+            assert_eq!(lit.datatype.as_ref().unwrap().as_str(), xsd::DOUBLE);
         }
         _ => panic!("Expected literal"),
     }

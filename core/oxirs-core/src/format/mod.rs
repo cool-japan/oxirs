@@ -15,11 +15,14 @@
 pub mod error;
 pub mod format;
 pub mod jsonld;
+pub mod n3_lexer;
 pub mod ntriples;
 pub mod parser;
 pub mod rdfxml;
 pub mod serializer;
+pub mod toolkit;
 pub mod turtle;
+pub mod turtle_grammar;
 
 // Re-export key types
 pub use error::{FormatError, RdfParseError, RdfSyntaxError, TextPosition};

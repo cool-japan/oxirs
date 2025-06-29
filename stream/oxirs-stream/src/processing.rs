@@ -55,6 +55,18 @@ impl Watermark {
             allowed_lateness: ChronoDuration::seconds(60),
         }
     }
+
+    /// Update the watermark timestamp
+    pub fn update(&mut self, timestamp: DateTime<Utc>) {
+        if timestamp > self.timestamp {
+            self.timestamp = timestamp;
+        }
+    }
+
+    /// Get the current watermark timestamp
+    pub fn current(&self) -> DateTime<Utc> {
+        self.timestamp
+    }
 }
 
 impl Default for Watermark {
@@ -315,7 +327,9 @@ impl EventProcessor {
             | StreamEvent::ShapeViolationDetected { metadata, .. }
             | StreamEvent::QueryResultAdded { metadata, .. }
             | StreamEvent::QueryResultRemoved { metadata, .. }
-            | StreamEvent::QueryCompleted { metadata, .. } => metadata.timestamp,
+            | StreamEvent::QueryCompleted { metadata, .. }
+            | StreamEvent::SchemaUpdated { metadata, .. }
+            | StreamEvent::ShapeUpdated { metadata, .. } => metadata.timestamp,
             StreamEvent::Heartbeat { timestamp, .. } => *timestamp,
         }
     }
@@ -638,6 +652,8 @@ impl EventWindow {
             StreamEvent::QueryResultAdded { .. } => "query_result_added".to_string(),
             StreamEvent::QueryResultRemoved { .. } => "query_result_removed".to_string(),
             StreamEvent::QueryCompleted { .. } => "query_completed".to_string(),
+            StreamEvent::SchemaUpdated { .. } => "schema_updated".to_string(),
+            StreamEvent::ShapeUpdated { .. } => "shape_updated".to_string(),
             StreamEvent::Heartbeat { .. } => "heartbeat".to_string(),
         }
     }
@@ -681,7 +697,9 @@ impl EventWindow {
             | StreamEvent::ShapeViolationDetected { metadata, .. }
             | StreamEvent::QueryResultAdded { metadata, .. }
             | StreamEvent::QueryResultRemoved { metadata, .. }
-            | StreamEvent::QueryCompleted { metadata, .. } => metadata.source.clone(),
+            | StreamEvent::QueryCompleted { metadata, .. }
+            | StreamEvent::SchemaUpdated { metadata, .. }
+            | StreamEvent::ShapeUpdated { metadata, .. } => metadata.source.clone(),
             StreamEvent::Heartbeat { source, .. } => source.clone(),
         }
     }
@@ -1118,6 +1136,8 @@ impl ComplexEventProcessor {
             StreamEvent::QueryResultAdded { .. } => "query_result_added",
             StreamEvent::QueryResultRemoved { .. } => "query_result_removed",
             StreamEvent::QueryCompleted { .. } => "query_completed",
+            StreamEvent::SchemaUpdated { .. } => "schema_updated",
+            StreamEvent::ShapeUpdated { .. } => "shape_updated",
             StreamEvent::Heartbeat { .. } => "heartbeat",
         };
         event_type == expected_type

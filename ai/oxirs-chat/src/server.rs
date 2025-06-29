@@ -299,7 +299,7 @@ async fn send_message(
 
                 let response = MessageResponse {
                     message_id: message.id,
-                    content: message.content,
+                    content: message.content.to_string(),
                     role: match message.role {
                         MessageRole::User => "user".to_string(),
                         MessageRole::Assistant => "assistant".to_string(),
@@ -340,7 +340,7 @@ async fn get_messages(
             .take(params.limit.unwrap_or(100))
             .map(|msg| MessageResponse {
                 message_id: msg.id.clone(),
-                content: msg.content.clone(),
+                content: msg.content.to_string(),
                 role: match msg.role {
                     MessageRole::User => "user".to_string(),
                     MessageRole::Assistant => "assistant".to_string(),
@@ -395,7 +395,7 @@ async fn get_thread_messages(
             .into_iter()
             .map(|msg| MessageResponse {
                 message_id: msg.id.clone(),
-                content: msg.content.clone(),
+                content: msg.content.to_string(),
                 role: match msg.role {
                     MessageRole::User => "user".to_string(),
                     MessageRole::Assistant => "assistant".to_string(),
@@ -429,7 +429,7 @@ async fn get_message_replies(
             .into_iter()
             .map(|msg| MessageResponse {
                 message_id: msg.id.clone(),
-                content: msg.content.clone(),
+                content: msg.content.to_string(),
                 role: match msg.role {
                     MessageRole::User => "user".to_string(),
                     MessageRole::Assistant => "assistant".to_string(),
@@ -569,7 +569,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                         {
                                             let response = WebSocketResponse::Message {
                                                 message_id: response_msg.id,
-                                                content: response_msg.content,
+                                                content: response_msg.content.to_string(),
                                                 role: match response_msg.role {
                                                     MessageRole::User => "user".to_string(),
                                                     MessageRole::Assistant => {

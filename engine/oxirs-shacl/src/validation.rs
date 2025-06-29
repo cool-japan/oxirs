@@ -448,122 +448,18 @@ impl<'a> ValidationEngine<'a> {
                 ));
             }
 
-            // Check if there's any type information for this node in the store
-            let has_type_info_query = if let Some(graph) = graph_name {
-                format!(
-                    r#"
-                    ASK {{
-                        GRAPH <{}> {{
-                            {} <{}> ?type .
-                        }}
-                    }}
-                "#,
-                    graph,
-                    format_term_for_sparql(value)?,
-                    rdf_type.as_str()
-                )
-            } else {
-                format!(
-                    r#"
-                    ASK {{
-                        {} <{}> ?type .
-                    }}
-                "#,
-                    format_term_for_sparql(value)?,
-                    rdf_type.as_str()
-                )
-            };
-
-            // First check if the node has any type information
-            let has_type_info = match self.execute_constraint_query(store, &has_type_info_query) {
-                Ok(result) => {
-                    if let oxirs_core::query::QueryResult::Ask(has_info) = result {
-                        has_info
-                    } else {
-                        false
-                    }
-                }
-                Err(_) => false,
-            };
-
-            // If there's no type information in the store, consider it valid for now
-            // This handles the case where we're validating against an empty store
-            if !has_type_info {
-                tracing::debug!("No type information found for {} in store, skipping class constraint validation", value.as_str());
-                continue;
-            }
-
-            // Check if the value is an instance of the required class using SPARQL
-            let instance_query = if let Some(graph) = graph_name {
-                format!(
-                    r#"
-                    ASK {{
-                        GRAPH <{}> {{
-                            {} <{}> <{}> .
-                        }}
-                    }}
-                "#,
-                    graph,
-                    format_term_for_sparql(value)?,
-                    rdf_type.as_str(),
-                    constraint.class_iri.as_str()
-                )
-            } else {
-                format!(
-                    r#"
-                    ASK {{
-                        {} <{}> <{}> .
-                    }}
-                "#,
-                    format_term_for_sparql(value)?,
-                    rdf_type.as_str(),
-                    constraint.class_iri.as_str()
-                )
-            };
-
-            // Execute the ASK query
-            match self.execute_constraint_query(store, &instance_query) {
-                Ok(result) => {
-                    if let oxirs_core::query::QueryResult::Ask(is_instance) = result {
-                        if !is_instance {
-                            // Value is not an instance of the required class
-                            return Ok(ConstraintEvaluationResult::violated(
-                                Some(value.clone()),
-                                Some(format!(
-                                    "Value {} is not an instance of class {}",
-                                    value.as_str(),
-                                    constraint.class_iri.as_str()
-                                )),
-                            ));
-                        }
-                    } else {
-                        return Err(ShaclError::ConstraintValidation(
-                            "Expected ASK result for class constraint query".to_string(),
-                        ));
-                    }
-                }
-                Err(e) => {
-                    tracing::debug!(
-                        "SPARQL query failed for class constraint, trying direct store query: {}",
-                        e
-                    );
-                    // Fallback to direct store query
-                    if !self.is_instance_of_class_direct(
-                        store,
-                        value,
-                        &constraint.class_iri,
-                        graph_name,
-                    )? {
-                        return Ok(ConstraintEvaluationResult::violated(
-                            Some(value.clone()),
-                            Some(format!(
-                                "Value {} is not an instance of class {}",
-                                value.as_str(),
-                                constraint.class_iri.as_str()
-                            )),
-                        ));
-                    }
-                }
+            // Use direct store query for class membership check
+            let is_instance =
+                self.is_instance_of_class_direct(store, value, &constraint.class_iri, graph_name)?;
+            if !is_instance {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some(format!(
+                        "Value {} is not an instance of class {}",
+                        value.as_str(),
+                        constraint.class_iri.as_str()
+                    )),
+                ));
             }
         }
 
@@ -2009,39 +1905,99 @@ impl<'a> ValidationEngine<'a> {
         resolved_constraints: &mut IndexMap<ConstraintComponentId, Constraint>,
         visited: &mut HashSet<ShapeId>,
     ) -> Result<()> {
-        // Avoid infinite recursion
+        // Detect circular inheritance
         if visited.contains(shape_id) {
-            return Ok(());
+            return Err(ShaclError::ValidationEngine(format!(
+                "Circular inheritance detected: shape '{}' creates a cycle in the inheritance hierarchy",
+                shape_id.as_str()
+            )));
         }
         visited.insert(shape_id.clone());
 
         if let Some(shape) = self.shapes.get(shape_id) {
-            // First process parent shapes (depth-first) in priority order
-            let mut parent_shapes: Vec<_> = shape.extends.iter().collect();
-
-            // Sort parent shapes by priority if they exist
-            parent_shapes.sort_by(|a, b| {
-                let priority_a = self
-                    .shapes
-                    .get(*a)
-                    .map(|s| s.effective_priority())
-                    .unwrap_or(0);
-                let priority_b = self
-                    .shapes
-                    .get(*b)
-                    .map(|s| s.effective_priority())
-                    .unwrap_or(0);
-                priority_b.cmp(&priority_a) // Higher priority first
-            });
-
-            for parent_id in parent_shapes {
+            // Process parent shapes first (depth-first)
+            for parent_id in &shape.extends {
                 self.collect_inherited_constraints(parent_id, resolved_constraints, visited)?;
             }
 
-            // Then add this shape's constraints, potentially overriding parent constraints
-            // Child constraints override parent constraints (standard inheritance behavior)
+            // Add this shape's constraints with priority-based resolution
+            // Higher priority constraints always win
             for (component_id, constraint) in &shape.constraints {
-                resolved_constraints.insert(component_id.clone(), constraint.clone());
+                let current_priority = shape.effective_priority();
+
+                // Check if we already have this constraint from a parent
+                if let Some(existing_constraint) = resolved_constraints.get(component_id) {
+                    // Find the priority of the existing constraint
+                    let existing_priority =
+                        self.find_constraint_priority(component_id, shape_id, visited)?;
+
+                    // Only override if current shape has higher or equal priority
+                    // Equal priority means child overrides parent (standard inheritance)
+                    if current_priority >= existing_priority {
+                        resolved_constraints.insert(component_id.clone(), constraint.clone());
+                    }
+                } else {
+                    // No existing constraint, just add it
+                    resolved_constraints.insert(component_id.clone(), constraint.clone());
+                }
+            }
+        }
+
+        visited.remove(shape_id);
+        Ok(())
+    }
+
+    /// Find the priority of a constraint in the inheritance hierarchy
+    fn find_constraint_priority(
+        &self,
+        component_id: &ConstraintComponentId,
+        start_shape_id: &ShapeId,
+        visited: &HashSet<ShapeId>,
+    ) -> Result<i32> {
+        let mut max_priority = i32::MIN;
+        let mut search_visited = HashSet::new();
+
+        self.find_constraint_priority_recursive(
+            component_id,
+            start_shape_id,
+            visited,
+            &mut search_visited,
+            &mut max_priority,
+        )?;
+
+        Ok(max_priority)
+    }
+
+    /// Recursively find the highest priority for a constraint
+    fn find_constraint_priority_recursive(
+        &self,
+        component_id: &ConstraintComponentId,
+        shape_id: &ShapeId,
+        inheritance_visited: &HashSet<ShapeId>,
+        search_visited: &mut HashSet<ShapeId>,
+        max_priority: &mut i32,
+    ) -> Result<()> {
+        if search_visited.contains(shape_id) || inheritance_visited.contains(shape_id) {
+            return Ok(());
+        }
+        search_visited.insert(shape_id.clone());
+
+        if let Some(shape) = self.shapes.get(shape_id) {
+            // Check if this shape has the constraint
+            if shape.constraints.contains_key(component_id) {
+                let priority = shape.effective_priority();
+                *max_priority = (*max_priority).max(priority);
+            }
+
+            // Check parent shapes
+            for parent_id in &shape.extends {
+                self.find_constraint_priority_recursive(
+                    component_id,
+                    parent_id,
+                    inheritance_visited,
+                    search_visited,
+                    max_priority,
+                )?;
             }
         }
 

@@ -154,16 +154,16 @@ impl QueryCoordinator {
     }
 
     /// Execute a distributed query
-    pub async fn execute_query(&self, query: DistributedQuery) -> Result<QueryResult> {
+    pub async fn execute_query(&self, query: DistributedQuery) -> FusekiResult<QueryResult> {
         let start_time = Instant::now();
 
         // Get nodes for the partitions
         let nodes = self.get_nodes_for_partitions(&query.partitions).await?;
 
         if nodes.is_empty() {
-            return Err(Error::Custom(
-                "No nodes available for query execution".to_string(),
-            ));
+            return Err(FusekiError::Internal {
+                message: "No nodes available for query execution".to_string(),
+            });
         }
 
         // Calculate required responses based on consistency level
@@ -203,7 +203,9 @@ impl QueryCoordinator {
         {
             Ok(responses) => responses?,
             Err(_) => {
-                return Err(Error::Custom("Query timeout".to_string()));
+                return Err(FusekiError::Internal {
+                    message: "Query timeout".to_string(),
+                });
             }
         };
 
@@ -218,16 +220,16 @@ impl QueryCoordinator {
     }
 
     /// Execute a distributed write
-    pub async fn execute_write(&self, write: DistributedWrite) -> Result<()> {
+    pub async fn execute_write(&self, write: DistributedWrite) -> FusekiResult<()> {
         let start_time = Instant::now();
 
         // Get nodes for the partitions
         let nodes = self.get_nodes_for_partitions(&write.partitions).await?;
 
         if nodes.is_empty() {
-            return Err(Error::Custom(
-                "No nodes available for write operation".to_string(),
-            ));
+            return Err(FusekiError::Internal {
+                message: "No nodes available for write operation".to_string(),
+            });
         }
 
         // Calculate required responses based on consistency level
@@ -267,7 +269,9 @@ impl QueryCoordinator {
         {
             Ok(responses) => responses?,
             Err(_) => {
-                return Err(Error::Custom("Write timeout".to_string()));
+                return Err(FusekiError::Internal {
+                    message: "Write timeout".to_string(),
+                });
             }
         };
 
@@ -281,10 +285,12 @@ impl QueryCoordinator {
             .count();
 
         if successful_count < required_responses {
-            return Err(Error::Custom(format!(
-                "Write failed: only {} of {} required responses succeeded",
-                successful_count, required_responses
-            )));
+            return Err(FusekiError::Internal {
+                message: format!(
+                    "Write failed: only {} of {} required responses succeeded",
+                    successful_count, required_responses
+                ),
+            });
         }
 
         // Clean up tracker
@@ -295,7 +301,7 @@ impl QueryCoordinator {
     }
 
     /// Get nodes for partitions
-    async fn get_nodes_for_partitions(&self, partitions: &[u32]) -> Result<Vec<String>> {
+    async fn get_nodes_for_partitions(&self, partitions: &[u32]) -> FusekiResult<Vec<String>> {
         // TODO: Implement actual partition to node mapping
         // For now, return a dummy node list
         Ok(vec!["node1".to_string()])
@@ -317,7 +323,7 @@ impl QueryCoordinator {
     }
 
     /// Send query to a specific node
-    async fn send_query_to_node(&self, node_id: &str, query: DistributedQuery) -> Result<()> {
+    async fn send_query_to_node(&self, node_id: &str, query: DistributedQuery) -> FusekiResult<()> {
         // TODO: Implement actual network communication
         // For now, execute locally
         let start = Instant::now();
@@ -342,7 +348,7 @@ impl QueryCoordinator {
     }
 
     /// Send write to a specific node
-    async fn send_write_to_node(&self, node_id: &str, write: DistributedWrite) -> Result<()> {
+    async fn send_write_to_node(&self, node_id: &str, write: DistributedWrite) -> FusekiResult<()> {
         // TODO: Implement actual network communication
         // For now, execute locally
         let success = self.execute_local_write(&write).await.is_ok();
@@ -367,13 +373,13 @@ impl QueryCoordinator {
     }
 
     /// Execute query locally
-    async fn execute_local_query(&self, query: &DistributedQuery) -> Result<QueryResult> {
+    async fn execute_local_query(&self, query: &DistributedQuery) -> FusekiResult<QueryResult> {
         // TODO: Implement actual query execution
         Ok(QueryResults::Boolean(false))
     }
 
     /// Execute write locally
-    async fn execute_local_write(&self, write: &DistributedWrite) -> Result<()> {
+    async fn execute_local_write(&self, write: &DistributedWrite) -> FusekiResult<()> {
         // TODO: Implement actual write execution
         Ok(())
     }
@@ -383,7 +389,7 @@ impl QueryCoordinator {
         &self,
         request_id: &str,
         required: usize,
-    ) -> Result<Vec<CoordinatorResponse>> {
+    ) -> FusekiResult<Vec<CoordinatorResponse>> {
         let check_interval = Duration::from_millis(10);
         let mut collected = Vec::new();
 
@@ -397,7 +403,9 @@ impl QueryCoordinator {
                     break;
                 }
             } else {
-                return Err(Error::Custom("Request not found".to_string()));
+                return Err(FusekiError::Internal {
+                    message: "Request not found".to_string(),
+                });
             }
         }
 
@@ -405,7 +413,10 @@ impl QueryCoordinator {
     }
 
     /// Merge query results from multiple nodes
-    fn merge_query_results(&self, responses: Vec<CoordinatorResponse>) -> Result<QueryResult> {
+    fn merge_query_results(
+        &self,
+        responses: Vec<CoordinatorResponse>,
+    ) -> FusekiResult<QueryResult> {
         let mut results = Vec::new();
 
         for response in responses {
@@ -417,7 +428,9 @@ impl QueryCoordinator {
         }
 
         if results.is_empty() {
-            return Err(Error::Custom("No successful query responses".to_string()));
+            return Err(FusekiError::Internal {
+                message: "No successful query responses".to_string(),
+            });
         }
 
         // TODO: Implement proper result merging
@@ -448,7 +461,7 @@ impl ReadRepair {
     }
 
     /// Perform read repair
-    pub async fn repair(&self, key: &str, responses: Vec<QueryResponse>) -> Result<()> {
+    pub async fn repair(&self, key: &str, responses: Vec<QueryResponse>) -> FusekiResult<()> {
         // Find the most recent value
         let latest = self.find_latest_value(&responses)?;
 
@@ -464,13 +477,15 @@ impl ReadRepair {
     }
 
     /// Find the latest value from responses
-    fn find_latest_value(&self, responses: &[QueryResponse]) -> Result<QueryResponse> {
+    fn find_latest_value(&self, responses: &[QueryResponse]) -> FusekiResult<QueryResponse> {
         responses
             .iter()
             .filter(|r| r.success)
             .max_by_key(|r| r.execution_time)
             .cloned()
-            .ok_or_else(|| Error::Custom("No successful responses for read repair".to_string()))
+            .ok_or_else(|| FusekiError::Internal {
+                message: "No successful responses for read repair".to_string(),
+            })
     }
 
     /// Find nodes with stale data
@@ -489,7 +504,7 @@ impl ReadRepair {
     }
 
     /// Repair nodes with stale data
-    async fn repair_nodes(&self, nodes: &[String], latest: &QueryResponse) -> Result<()> {
+    async fn repair_nodes(&self, nodes: &[String], latest: &QueryResponse) -> FusekiResult<()> {
         // TODO: Implement repair writes to stale nodes
         Ok(())
     }

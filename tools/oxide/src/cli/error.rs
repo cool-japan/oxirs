@@ -39,6 +39,14 @@ pub enum CliErrorKind {
     ValidationError(String),
     /// IO error
     IoError(io::Error),
+    /// Performance monitoring/profiling error
+    ProfileError(String),
+    /// Serialization/deserialization error
+    SerializationError(String),
+    /// Feature not implemented error
+    Unimplemented(String),
+    /// Unknown format error
+    UnknownFormat(String),
     /// Other error
     Other(String), // Changed from Box<dyn Error> to avoid Send+Sync issues
 }
@@ -113,6 +121,26 @@ impl CliError {
         Self::new(CliErrorKind::IoError(error))
     }
 
+    /// Create a profiling error
+    pub fn profile_error(message: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::ProfileError(message.into()))
+    }
+
+    /// Create a serialization error
+    pub fn serialization_error(message: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::SerializationError(message.into()))
+    }
+
+    /// Create an unimplemented error
+    pub fn unimplemented(feature: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::Unimplemented(feature.into()))
+    }
+
+    /// Create an unknown format error
+    pub fn unknown_format(message: impl Into<String>) -> Self {
+        Self::new(CliErrorKind::UnknownFormat(message.into()))
+    }
+
     /// Get user-friendly error message
     pub fn user_message(&self) -> String {
         match &self.kind {
@@ -139,6 +167,18 @@ impl CliError {
             }
             CliErrorKind::IoError(err) => {
                 format!("IO error: {}", err)
+            }
+            CliErrorKind::ProfileError(msg) => {
+                format!("Performance error: {}", msg)
+            }
+            CliErrorKind::SerializationError(msg) => {
+                format!("Serialization error: {}", msg)
+            }
+            CliErrorKind::Unimplemented(feature) => {
+                format!("Feature not implemented: {}", feature)
+            }
+            CliErrorKind::UnknownFormat(msg) => {
+                format!("Unknown format: {}", msg)
             }
             CliErrorKind::Other(msg) => {
                 format!("Error: {}", msg)

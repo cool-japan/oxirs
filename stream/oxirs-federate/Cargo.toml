@@ -58,6 +58,10 @@ moka = { version = "0.12", features = ["future"], optional = true }
 bloom = { version = "0.3", optional = true }
 petgraph = "0.6"
 regex = "1.11"
+flate2 = "1.0"
+brotli = "7.0"
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-util = "0.3"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

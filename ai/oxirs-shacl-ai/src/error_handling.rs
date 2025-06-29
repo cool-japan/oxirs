@@ -1342,7 +1342,7 @@ impl ErrorImpactAssessor {
             _ => 1.0,
         };
 
-        Ok((base_security_impact * criticality_multiplier).min(1.0))
+        Ok((base_security_impact as f64 * criticality_multiplier as f64).min(1.0_f64))
     }
 }
 

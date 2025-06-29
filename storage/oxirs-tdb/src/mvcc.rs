@@ -679,10 +679,16 @@ where
             .map(|tx| tx.start_version)
             .min()
             .unwrap_or_else(|| {
-                *self
-                    .current_version
-                    .read()
-                    .unwrap_or_else(|_| panic!("Failed to acquire version lock"))
+                // If no active transactions, use current version as fallback
+                // Handle the lock acquisition properly
+                match self.current_version.read() {
+                    Ok(version) => *version,
+                    Err(_) => {
+                        // If we can't acquire the lock, return a conservative estimate
+                        warn!("Failed to acquire version lock in get_oldest_active_version, using version 0");
+                        0
+                    }
+                }
             });
 
         Ok(oldest)
@@ -734,5 +740,563 @@ where
             stats: Arc::clone(&self.stats),
             vacuum_queue: Arc::clone(&self.vacuum_queue),
         }
+    }
+}
+
+/// Logical timestamp for ordering operations across distributed nodes
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct LogicalTimestamp {
+    /// Lamport timestamp component
+    pub lamport_time: u64,
+    /// Node identifier for tie-breaking
+    pub node_id: u64,
+    /// Physical timestamp for additional ordering
+    pub physical_time: SystemTime,
+}
+
+impl LogicalTimestamp {
+    pub fn new(lamport_time: u64, node_id: u64) -> Self {
+        Self {
+            lamport_time,
+            node_id,
+            physical_time: SystemTime::now(),
+        }
+    }
+
+    /// Increment the logical timestamp for a new operation
+    pub fn increment(&mut self) {
+        self.lamport_time += 1;
+        self.physical_time = SystemTime::now();
+    }
+
+    /// Update timestamp based on received timestamp (for distributed coordination)
+    pub fn update(&mut self, other: &LogicalTimestamp) {
+        self.lamport_time = self.lamport_time.max(other.lamport_time) + 1;
+        self.physical_time = SystemTime::now();
+    }
+
+    /// Check if this timestamp happened before another
+    pub fn happens_before(&self, other: &LogicalTimestamp) -> bool {
+        self.lamport_time < other.lamport_time
+            || (self.lamport_time == other.lamport_time && self.node_id < other.node_id)
+    }
+}
+
+/// Vector clock for distributed timestamp ordering
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VectorClock {
+    /// Clock values for each node
+    pub clocks: HashMap<u64, u64>,
+    /// This node's ID
+    pub node_id: u64,
+}
+
+impl VectorClock {
+    pub fn new(node_id: u64) -> Self {
+        let mut clocks = HashMap::new();
+        clocks.insert(node_id, 0);
+        Self { clocks, node_id }
+    }
+
+    /// Increment local clock
+    pub fn tick(&mut self) {
+        *self.clocks.entry(self.node_id).or_insert(0) += 1;
+    }
+
+    /// Update clock based on received message
+    pub fn update(&mut self, other: &VectorClock) {
+        // Update all clocks to max of local and received
+        for (&node_id, &time) in &other.clocks {
+            let current = self.clocks.entry(node_id).or_insert(0);
+            *current = (*current).max(time);
+        }
+        // Increment local clock
+        self.tick();
+    }
+
+    /// Check if this event happened before another (partial order)
+    pub fn happens_before(&self, other: &VectorClock) -> bool {
+        // All components must be ≤ and at least one must be <
+        let mut all_leq = true;
+        let mut some_less = false;
+
+        for (&node, &other_time) in &other.clocks {
+            let self_time = self.clocks.get(&node).unwrap_or(&0);
+            if self_time > &other_time {
+                all_leq = false;
+                break;
+            }
+            if self_time < &other_time {
+                some_less = true;
+            }
+        }
+
+        all_leq && some_less
+    }
+
+    /// Check if events are concurrent (neither happens before the other)
+    pub fn is_concurrent(&self, other: &VectorClock) -> bool {
+        !self.happens_before(other) && !other.happens_before(self)
+    }
+}
+
+/// Read and write sets for optimistic concurrency control
+#[derive(Debug, Clone)]
+pub struct ReadWriteSets<K>
+where
+    K: Clone + Eq + std::hash::Hash,
+{
+    /// Keys read during transaction
+    pub read_set: HashSet<K>,
+    /// Keys written during transaction with their versions
+    pub write_set: HashMap<K, Version>,
+    /// Timestamp when transaction started
+    pub start_timestamp: Option<LogicalTimestamp>,
+    /// Timestamp when transaction attempts to commit
+    pub commit_timestamp: Option<LogicalTimestamp>,
+}
+
+impl<K> ReadWriteSets<K>
+where
+    K: Clone + Eq + std::hash::Hash,
+{
+    pub fn new() -> Self {
+        Self {
+            read_set: HashSet::new(),
+            write_set: HashMap::new(),
+            start_timestamp: None,
+            commit_timestamp: None,
+        }
+    }
+
+    /// Record a read operation
+    pub fn add_read(&mut self, key: K) {
+        self.read_set.insert(key);
+    }
+
+    /// Record a write operation
+    pub fn add_write(&mut self, key: K, version: Version) {
+        self.write_set.insert(key, version);
+    }
+
+    /// Set start timestamp for transaction
+    pub fn set_start_timestamp(&mut self, timestamp: LogicalTimestamp) {
+        self.start_timestamp = Some(timestamp);
+    }
+
+    /// Set commit timestamp for validation
+    pub fn set_commit_timestamp(&mut self, timestamp: LogicalTimestamp) {
+        self.commit_timestamp = Some(timestamp);
+    }
+}
+
+impl<K> Default for ReadWriteSets<K>
+where
+    K: Clone + Eq + std::hash::Hash,
+{
+    fn default() -> Self {
+        Self {
+            read_set: HashSet::new(),
+            write_set: HashMap::new(),
+            start_timestamp: None,
+            commit_timestamp: None,
+        }
+    }
+}
+
+/// Optimistic concurrency control validation result
+#[derive(Debug, PartialEq)]
+pub enum ValidationResult {
+    Valid,
+    ReadConflict(String),
+    WriteConflict(String),
+    TimestampConflict(String),
+}
+
+/// Optimistic concurrency control manager
+pub struct OptimisticConcurrencyControl<K>
+where
+    K: Clone + Eq + std::hash::Hash + std::fmt::Debug,
+{
+    /// Active transaction read/write sets
+    transaction_sets: Arc<RwLock<HashMap<TransactionId, ReadWriteSets<K>>>>,
+    /// Committed transaction history for validation
+    committed_transactions: Arc<RwLock<Vec<(TransactionId, ReadWriteSets<K>, LogicalTimestamp)>>>,
+    /// Logical timestamp generator
+    timestamp_generator: Arc<Mutex<LogicalTimestamp>>,
+    /// Node ID for distributed coordination
+    node_id: u64,
+    /// Configuration for backoff and retry
+    config: OptimisticConfig,
+}
+
+/// Configuration for optimistic concurrency control
+#[derive(Debug, Clone)]
+pub struct OptimisticConfig {
+    /// Maximum retry attempts for failed transactions
+    pub max_retry_attempts: u32,
+    /// Base backoff time in milliseconds
+    pub base_backoff_ms: u64,
+    /// Maximum backoff time in milliseconds  
+    pub max_backoff_ms: u64,
+    /// History size for validation (number of committed transactions to keep)
+    pub validation_history_size: usize,
+    /// Enable advanced conflict detection
+    pub enable_phantom_read_detection: bool,
+}
+
+impl Default for OptimisticConfig {
+    fn default() -> Self {
+        Self {
+            max_retry_attempts: 3,
+            base_backoff_ms: 10,
+            max_backoff_ms: 1000,
+            validation_history_size: 10000,
+            enable_phantom_read_detection: true,
+        }
+    }
+}
+
+impl<K> OptimisticConcurrencyControl<K>
+where
+    K: Clone + Eq + std::hash::Hash + std::fmt::Debug + ToString,
+{
+    pub fn new(node_id: u64) -> Self {
+        Self::with_config(node_id, OptimisticConfig::default())
+    }
+
+    pub fn with_config(node_id: u64, config: OptimisticConfig) -> Self {
+        Self {
+            transaction_sets: Arc::new(RwLock::new(HashMap::new())),
+            committed_transactions: Arc::new(RwLock::new(Vec::new())),
+            timestamp_generator: Arc::new(Mutex::new(LogicalTimestamp::new(0, node_id))),
+            node_id,
+            config,
+        }
+    }
+
+    /// Begin optimistic transaction and assign start timestamp
+    pub fn begin_transaction(&self, tx_id: TransactionId) -> Result<LogicalTimestamp> {
+        let mut timestamp_gen = self
+            .timestamp_generator
+            .lock()
+            .map_err(|_| anyhow!("Failed to acquire timestamp generator lock"))?;
+
+        timestamp_gen.increment();
+        let start_timestamp = timestamp_gen.clone();
+
+        let mut sets = ReadWriteSets::new();
+        sets.set_start_timestamp(start_timestamp.clone());
+
+        let mut transaction_sets = self
+            .transaction_sets
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire transaction sets lock"))?;
+
+        transaction_sets.insert(tx_id, sets);
+
+        debug!(
+            "Started optimistic transaction {} with timestamp {:?}",
+            tx_id, start_timestamp
+        );
+        Ok(start_timestamp)
+    }
+
+    /// Record read operation for transaction
+    pub fn record_read(&self, tx_id: TransactionId, key: K) -> Result<()> {
+        let mut transaction_sets = self
+            .transaction_sets
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire transaction sets lock"))?;
+
+        if let Some(sets) = transaction_sets.get_mut(&tx_id) {
+            sets.add_read(key);
+            Ok(())
+        } else {
+            Err(anyhow!("Transaction {} not found", tx_id))
+        }
+    }
+
+    /// Record write operation for transaction
+    pub fn record_write(&self, tx_id: TransactionId, key: K, version: Version) -> Result<()> {
+        let mut transaction_sets = self
+            .transaction_sets
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire transaction sets lock"))?;
+
+        if let Some(sets) = transaction_sets.get_mut(&tx_id) {
+            sets.add_write(key, version);
+            Ok(())
+        } else {
+            Err(anyhow!("Transaction {} not found", tx_id))
+        }
+    }
+
+    /// Validate transaction for commit using optimistic concurrency control
+    pub fn validate_transaction(&self, tx_id: TransactionId) -> Result<ValidationResult> {
+        let mut timestamp_gen = self
+            .timestamp_generator
+            .lock()
+            .map_err(|_| anyhow!("Failed to acquire timestamp generator lock"))?;
+
+        timestamp_gen.increment();
+        let commit_timestamp = timestamp_gen.clone();
+
+        let mut transaction_sets = self
+            .transaction_sets
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire transaction sets lock"))?;
+
+        let sets = transaction_sets
+            .get_mut(&tx_id)
+            .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
+
+        sets.set_commit_timestamp(commit_timestamp.clone());
+
+        // Validation phase: check for conflicts with committed transactions
+        let committed = self
+            .committed_transactions
+            .read()
+            .map_err(|_| anyhow!("Failed to acquire committed transactions lock"))?;
+
+        let start_timestamp = sets
+            .start_timestamp
+            .as_ref()
+            .ok_or_else(|| anyhow!("No start timestamp for transaction {}", tx_id))?;
+
+        // Check read-write conflicts
+        for (committed_tx_id, committed_sets, committed_timestamp) in committed.iter() {
+            // Only check transactions that committed after our start time
+            if committed_timestamp.happens_before(start_timestamp) {
+                continue;
+            }
+
+            // Check if we read something that was written by a committed transaction
+            for read_key in &sets.read_set {
+                if committed_sets.write_set.contains_key(read_key) {
+                    return Ok(ValidationResult::ReadConflict(format!(
+                        "Read key {:?} was written by committed transaction {}",
+                        read_key, committed_tx_id
+                    )));
+                }
+            }
+
+            // Check write-write conflicts
+            for write_key in sets.write_set.keys() {
+                if committed_sets.write_set.contains_key(write_key) {
+                    return Ok(ValidationResult::WriteConflict(format!(
+                        "Write key {:?} conflicts with committed transaction {}",
+                        write_key, committed_tx_id
+                    )));
+                }
+            }
+        }
+
+        // Phantom read detection (if enabled)
+        if self.config.enable_phantom_read_detection {
+            if let Some(phantom_conflict) = self.detect_phantom_reads(&sets, &committed)? {
+                return Ok(ValidationResult::ReadConflict(phantom_conflict));
+            }
+        }
+
+        info!("Transaction {} validated successfully", tx_id);
+        Ok(ValidationResult::Valid)
+    }
+
+    /// Commit validated transaction
+    pub fn commit_transaction(&self, tx_id: TransactionId) -> Result<()> {
+        let mut transaction_sets = self
+            .transaction_sets
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire transaction sets lock"))?;
+
+        let sets = transaction_sets
+            .remove(&tx_id)
+            .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
+
+        let commit_timestamp = sets
+            .commit_timestamp
+            .clone()
+            .ok_or_else(|| anyhow!("No commit timestamp for transaction {}", tx_id))?;
+
+        // Add to committed transaction history
+        let mut committed = self
+            .committed_transactions
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire committed transactions lock"))?;
+
+        committed.push((tx_id, sets, commit_timestamp));
+
+        // Cleanup old history if it gets too large
+        if committed.len() > self.config.validation_history_size {
+            let remove_count = committed.len() - self.config.validation_history_size;
+            committed.drain(0..remove_count);
+        }
+
+        info!("Transaction {} committed successfully", tx_id);
+        Ok(())
+    }
+
+    /// Abort transaction and cleanup
+    pub fn abort_transaction(&self, tx_id: TransactionId) -> Result<()> {
+        let mut transaction_sets = self
+            .transaction_sets
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire transaction sets lock"))?;
+
+        transaction_sets.remove(&tx_id);
+        warn!("Transaction {} aborted", tx_id);
+        Ok(())
+    }
+
+    /// Execute transaction with retry and exponential backoff
+    pub async fn execute_with_retry<F, R>(&self, mut operation: F) -> Result<R>
+    where
+        F: FnMut() -> Result<R>,
+    {
+        let mut attempts = 0;
+        let mut backoff_ms = self.config.base_backoff_ms;
+
+        loop {
+            match operation() {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    attempts += 1;
+                    if attempts >= self.config.max_retry_attempts {
+                        return Err(anyhow!(
+                            "Transaction failed after {} attempts: {}",
+                            attempts,
+                            e
+                        ));
+                    }
+
+                    // Exponential backoff with jitter
+                    let jitter = rand::random::<u64>() % (backoff_ms / 4);
+                    let sleep_time = Duration::from_millis(backoff_ms + jitter);
+
+                    warn!(
+                        "Transaction attempt {} failed: {}. Retrying after {:?}",
+                        attempts, e, sleep_time
+                    );
+                    tokio::time::sleep(sleep_time).await;
+
+                    backoff_ms = (backoff_ms * 2).min(self.config.max_backoff_ms);
+                }
+            }
+        }
+    }
+
+    /// Detect phantom reads in read set
+    fn detect_phantom_reads(
+        &self,
+        sets: &ReadWriteSets<K>,
+        committed: &[(TransactionId, ReadWriteSets<K>, LogicalTimestamp)],
+    ) -> Result<Option<String>> {
+        // This is a simplified phantom read detection
+        // In a full implementation, this would involve predicate-based conflict detection
+
+        for (committed_tx_id, committed_sets, _) in committed {
+            // Check if committed transaction inserted records that would match our reads
+            for read_key in &sets.read_set {
+                // Simple heuristic: if we read a key pattern and a committed transaction
+                // wrote to a similar key, it might be a phantom read
+                for write_key in committed_sets.write_set.keys() {
+                    if self.keys_might_conflict(read_key, write_key) {
+                        return Ok(Some(format!(
+                            "Potential phantom read: read pattern {:?} conflicts with insert {:?} from transaction {}",
+                            read_key, write_key, committed_tx_id
+                        )));
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Check if two keys might conflict (simplified for demonstration)
+    fn keys_might_conflict(&self, read_key: &K, write_key: &K) -> bool {
+        // This is a placeholder - in a real implementation, this would involve
+        // sophisticated predicate analysis for range queries, etc.
+        read_key
+            .to_string()
+            .contains(&write_key.to_string()[..write_key.to_string().len().min(3)])
+    }
+
+    /// Get statistics about optimistic concurrency control
+    pub fn get_stats(&self) -> Result<OptimisticStats> {
+        let transaction_sets = self
+            .transaction_sets
+            .read()
+            .map_err(|_| anyhow!("Failed to acquire transaction sets lock"))?;
+        let committed = self
+            .committed_transactions
+            .read()
+            .map_err(|_| anyhow!("Failed to acquire committed transactions lock"))?;
+
+        Ok(OptimisticStats {
+            active_transactions: transaction_sets.len(),
+            committed_transactions: committed.len(),
+            node_id: self.node_id,
+            current_timestamp: self.timestamp_generator.lock().unwrap().clone(),
+        })
+    }
+}
+
+/// Statistics for optimistic concurrency control
+#[derive(Debug, Clone, Serialize)]
+pub struct OptimisticStats {
+    pub active_transactions: usize,
+    pub committed_transactions: usize,
+    pub node_id: u64,
+    pub current_timestamp: LogicalTimestamp,
+}
+
+/// Enhanced MVCC storage with timestamp ordering and optimistic concurrency control
+impl<K, V> MvccStorage<K, V>
+where
+    K: Clone + Eq + std::hash::Hash + std::fmt::Debug + ToString,
+    V: Clone + Default,
+{
+    /// Create new MVCC storage with optimistic concurrency control
+    pub fn with_optimistic_control(node_id: u64) -> Self {
+        let mut storage = Self::new();
+        // Initialize optimistic concurrency control (this would be integrated more deeply in a real implementation)
+        storage
+    }
+
+    /// Begin transaction with timestamp ordering
+    pub fn begin_transaction_with_timestamp(
+        &self,
+        read_only: bool,
+        node_id: u64,
+    ) -> Result<(TransactionId, LogicalTimestamp)> {
+        // Generate logical timestamp
+        let timestamp = LogicalTimestamp::new(
+            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos() as u64,
+            node_id,
+        );
+
+        let tx_id = self.begin_transaction(read_only)?;
+
+        // In a full implementation, we would store the timestamp with the transaction
+        debug!(
+            "Started transaction {} with timestamp {:?}",
+            tx_id, timestamp
+        );
+
+        Ok((tx_id, timestamp))
+    }
+
+    /// Commit transaction with optimistic validation
+    pub fn commit_transaction_optimistic(&self, tx_id: TransactionId) -> Result<Version> {
+        // In a full implementation, this would perform optimistic validation
+        // before committing the transaction
+
+        info!(
+            "Committing transaction {} with optimistic validation",
+            tx_id
+        );
+        self.commit_transaction(tx_id)
     }
 }

@@ -15,6 +15,7 @@ use crate::{
 use async_trait::async_trait;
 use dashmap::DashMap;
 use futures::{stream::FuturesUnordered, StreamExt};
+use metrics::{counter, histogram};
 use reqwest::{Client, ClientBuilder, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -259,6 +260,18 @@ pub struct EndpointStatistics {
     pub last_updated: Instant,
 }
 
+impl Default for EndpointStatistics {
+    fn default() -> Self {
+        Self {
+            triple_count: 0,
+            distinct_subjects: 0,
+            distinct_predicates: 0,
+            distinct_objects: 0,
+            last_updated: Instant::now(),
+        }
+    }
+}
+
 /// Histogram for selectivity estimation
 #[derive(Debug, Clone)]
 pub struct Histogram {
@@ -402,7 +415,7 @@ impl FederatedQueryOptimizer {
         // Extract SERVICE clauses
         let service_patterns = self.extract_service_patterns(query)?;
         if service_patterns.is_empty() {
-            return Err(FusekiError::bad_request("No SERVICE patterns found".into()));
+            return Err(FusekiError::bad_request("No SERVICE patterns found"));
         }
 
         // Check endpoint health
@@ -416,8 +429,7 @@ impl FederatedQueryOptimizer {
 
         // Estimate costs
         let cost_estimate = self.cost_estimator.estimate_cost(&plan).await?;
-        self.metrics
-            .record_histogram("federated_query.estimated_cost", cost_estimate);
+        histogram!("federated_query.estimated_cost").record(cost_estimate);
 
         // Execute with timeout
         let results = timeout(
@@ -425,15 +437,12 @@ impl FederatedQueryOptimizer {
             self.executor.execute_plan(&plan),
         )
         .await
-        .map_err(|_| FusekiError::timeout("Federated query timeout".into()))??;
+        .map_err(|_| FusekiError::TimeoutWithMessage("Federated query timeout".into()))??;
 
         // Record metrics
         let duration = start.elapsed();
-        self.metrics.record_histogram(
-            "federated_query.execution_time",
-            duration.as_millis() as f64,
-        );
-        self.metrics.increment_counter("federated_query.total", 1);
+        histogram!("federated_query.execution_time").record(duration.as_millis() as f64);
+        counter!("federated_query.total").increment(1);
 
         Ok(results)
     }
@@ -937,7 +946,7 @@ impl FederatedExecutor {
             .semaphore
             .acquire()
             .await
-            .map_err(|_| FusekiError::internal("Semaphore error".into()))?;
+            .map_err(|_| FusekiError::internal("Semaphore error"))?;
 
         let client = self.client_pool.get_client(endpoint_url).await?;
 
@@ -990,7 +999,7 @@ impl FederatedExecutor {
         let bindings = self.parse_sparql_results(json)?;
 
         Ok(QueryResults {
-            bindings,
+            bindings: bindings.clone(),
             metadata: ResultMetadata {
                 total_execution_time_ms: 0,
                 endpoint_times: HashMap::new(),
@@ -1289,12 +1298,13 @@ impl MergeStrategy for UnionMergeStrategy {
             endpoint_times.extend(result.metadata.endpoint_times);
         }
 
+        let result_count = merged_bindings.len();
         Ok(QueryResults {
             bindings: merged_bindings,
             metadata: ResultMetadata {
                 total_execution_time_ms: total_time,
                 endpoint_times,
-                result_count: merged_bindings.len(),
+                result_count,
                 partial_results: false,
             },
         })
@@ -1393,12 +1403,13 @@ impl MergeStrategy for DistinctMergeStrategy {
             endpoint_times.extend(result.metadata.endpoint_times);
         }
 
+        let result_count = distinct_bindings.len();
         Ok(QueryResults {
             bindings: distinct_bindings,
             metadata: ResultMetadata {
                 total_execution_time_ms: total_time,
                 endpoint_times,
-                result_count: distinct_bindings.len(),
+                result_count,
                 partial_results: false,
             },
         })

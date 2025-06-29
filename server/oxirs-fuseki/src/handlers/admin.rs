@@ -256,7 +256,9 @@ pub async fn server_info(
         info.insert("system_metrics", serde_json::json!(summary.system));
     }
 
-    Ok(Json(serde_json::Value::Object(info.into_iter().collect())))
+    Ok(Json(serde_json::Value::Object(
+        info.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
+    )))
 }
 
 /// Get server statistics

@@ -561,7 +561,9 @@ mod tests {
 
     #[test]
     fn test_cache_friendly_index() {
-        let config = IndexConfig::default();
+        let mut config = IndexConfig::default();
+        // Use Euclidean distance for this test since all vectors have same cosine similarity
+        config.similarity_config.primary_metric = crate::similarity::SimilarityMetric::Euclidean;
         let mut index = CacheFriendlyVectorIndex::new(config);
 
         // Insert test vectors
@@ -575,7 +577,7 @@ mod tests {
         let results = index.search_knn(&query, 5).unwrap();
 
         assert_eq!(results.len(), 5);
-        // The most similar should be vec_50
+        // The most similar should be vec_50 (exact match with Euclidean distance)
         assert_eq!(results[0].0, "vec_50");
     }
 }

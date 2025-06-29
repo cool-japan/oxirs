@@ -246,7 +246,7 @@ impl StreamJoinProcessor {
 
     /// Update watermark and clean expired events
     pub async fn update_watermark(&self, watermark: DateTime<Utc>) -> Result<()> {
-        self.watermark.write().await.update(watermark);
+        (*self.watermark.write().await).update(watermark);
         self.statistics.write().await.last_watermark = Some(watermark);
 
         // Clean expired events from buffers
@@ -356,7 +356,7 @@ impl StreamJoinProcessor {
     /// Check if event is too late based on watermark
     async fn is_late_event(&self, event_time: DateTime<Utc>) -> bool {
         let watermark = self.watermark.read().await;
-        let watermark_time = watermark.current();
+        let watermark_time = (*watermark).current();
 
         event_time < watermark_time - self.config.allowed_lateness
     }

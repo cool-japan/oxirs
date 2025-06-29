@@ -958,7 +958,7 @@ impl QueryParser {
         let parts = Self::tokenize_pattern(line)?;
 
         if parts.len() != 3 {
-            return Err(StarError::QueryError(format!(
+            return Err(StarError::query_error(format!(
                 "Invalid triple pattern: {}",
                 line
             )));
@@ -1057,7 +1057,7 @@ impl QueryParser {
             return StarTerm::literal(value);
         }
 
-        Err(StarError::QueryError(format!(
+        Err(StarError::query_error(format!(
             "Cannot parse term: {}",
             term_str
         )))

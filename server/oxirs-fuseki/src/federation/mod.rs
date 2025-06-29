@@ -95,6 +95,8 @@ pub struct ServiceMetadata {
     pub location: Option<String>,
     /// Service version
     pub version: Option<String>,
+    /// Contact information
+    pub contact: Option<String>,
 }
 
 /// Service health status
@@ -108,6 +110,12 @@ pub enum ServiceHealth {
     Unhealthy,
     /// Health status unknown
     Unknown,
+}
+
+impl Default for ServiceHealth {
+    fn default() -> Self {
+        ServiceHealth::Unknown
+    }
 }
 
 /// Service capabilities for query planning
@@ -166,7 +174,7 @@ impl FederationManager {
     }
 
     /// Start federation services
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self) -> FusekiResult<()> {
         // Start service discovery
         if self.config.enable_discovery {
             self.discovery.start().await?;
@@ -179,14 +187,18 @@ impl FederationManager {
     }
 
     /// Stop federation services
-    pub async fn stop(&self) -> Result<()> {
+    pub async fn stop(&self) -> FusekiResult<()> {
         self.discovery.stop().await?;
         self.health_monitor.stop().await?;
         Ok(())
     }
 
     /// Register a service endpoint manually
-    pub async fn register_endpoint(&self, id: String, endpoint: ServiceEndpoint) -> Result<()> {
+    pub async fn register_endpoint(
+        &self,
+        id: String,
+        endpoint: ServiceEndpoint,
+    ) -> FusekiResult<()> {
         let mut endpoints = self.endpoints.write().await;
         endpoints.insert(id, endpoint);
         Ok(())

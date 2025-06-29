@@ -8,10 +8,12 @@
 //! - TuckER: Tucker decomposition based embeddings (optional)
 //! - TransformerEmbedding: Transformer-based embeddings (BERT, RoBERTa, etc.)
 //! - GNNEmbedding: Graph Neural Network embeddings (GCN, GraphSAGE, GAT, etc.)
+//! - OntologyAwareEmbedding: Embeddings that respect RDF/OWL ontology constraints
 
 pub mod complex;
 pub mod distmult;
 pub mod gnn;
+pub mod ontology;
 pub mod rotate;
 pub mod transe;
 pub mod transformer;
@@ -29,6 +31,9 @@ pub mod common;
 pub use complex::ComplEx;
 pub use distmult::DistMult;
 pub use gnn::{AggregationType, GNNConfig, GNNEmbedding, GNNType};
+pub use ontology::{
+    OntologyAwareConfig, OntologyAwareEmbedding, OntologyConstraints, OntologyRelation,
+};
 pub use rotate::RotatE;
 pub use transe::TransE;
 pub use transformer::{PoolingStrategy, TransformerConfig, TransformerEmbedding, TransformerType};

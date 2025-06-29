@@ -96,9 +96,8 @@ fn test_node_validation() {
     assert!(result.is_ok());
     let report = result.unwrap();
 
-    // The validation should complete successfully
-    // (actual conformance depends on store contents)
-    assert_eq!(report.violation_count(), 0); // No violations with empty store
+    // With empty store, John doesn't have rdf:type Person, so should fail
+    assert_eq!(report.violation_count(), 1); // Should violate class constraint
 }
 
 #[test]

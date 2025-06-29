@@ -3,9 +3,9 @@
 //! Provides a consistent API for parsing all supported RDF formats.
 //! Extracted and adapted from OxiGraph with OxiRS enhancements.
 
-use super::error::{ParseResult, RdfParseError, TextPosition};
+use super::error::ParseResult;
 use super::format::RdfFormat;
-use crate::model::{Quad, QuadRef, Triple, TripleRef};
+use crate::model::{Quad, Triple};
 use std::collections::HashMap;
 use std::io::Read;
 

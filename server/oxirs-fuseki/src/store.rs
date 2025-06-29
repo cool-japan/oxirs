@@ -55,7 +55,7 @@ pub struct UpdateStats {
 }
 
 /// Multi-dataset store manager
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Store {
     /// Default dataset store
     default_store: Arc<RwLock<CoreStore>>,
@@ -65,6 +65,17 @@ pub struct Store {
     query_engine: Arc<QueryEngine>,
     /// Store metadata
     metadata: Arc<RwLock<StoreMetadata>>,
+}
+
+impl std::fmt::Debug for Store {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Store")
+            .field("default_store", &"CoreStore")
+            .field("datasets", &self.datasets)
+            .field("query_engine", &"QueryEngine")
+            .field("metadata", &self.metadata)
+            .finish()
+    }
 }
 
 /// Store metadata and statistics
@@ -252,16 +263,16 @@ impl Store {
             metadata.last_modified = Some(Instant::now());
         }
 
+        let (result_count, query_type) = match &core_result {
+            CoreQueryResult::Select { bindings, .. } => (bindings.len(), "SELECT"),
+            CoreQueryResult::Construct(triples) => (triples.len(), "CONSTRUCT"),
+            CoreQueryResult::Ask(_) => (1, "ASK"),
+        };
+
         let query_stats = QueryStats {
             execution_time,
-            result_count: core_result.len(),
-            query_type: match &core_result {
-                CoreQueryResult::Select { .. } => "SELECT",
-                CoreQueryResult::Construct { .. } => "CONSTRUCT",
-                CoreQueryResult::Ask(_) => "ASK",
-                CoreQueryResult::Describe { .. } => "DESCRIBE",
-            }
-            .to_string(),
+            result_count,
+            query_type: query_type.to_string(),
             success: true,
             error_message: None,
         };
@@ -329,7 +340,7 @@ impl Store {
             let change = StoreChange {
                 id: metadata.last_change_id,
                 timestamp: chrono::Utc::now(),
-                operation_type: operation_type.clone(),
+                operation_type: operation_type.to_string(),
                 affected_graphs: vec!["default".to_string()], // TODO: extract actual graphs
                 triple_count: quads_inserted + quads_deleted,
                 dataset_name: dataset_name.map(|s| s.to_string()),
@@ -926,6 +937,7 @@ impl QueryResult {
                                         Term::BlankNode(_) => "bnode",
                                         Term::Literal(_) => "literal",
                                         Term::Variable(_) => "variable",
+                                        Term::QuotedTriple(_) => "quotedTriple",
                                     },
                                     "value": v.to_string()
                                 }))
@@ -942,11 +954,8 @@ impl QueryResult {
                 });
                 Ok(json_result.to_string())
             }
-            CoreQueryResult::Construct { .. } => Err(FusekiError::unsupported_media_type(
+            CoreQueryResult::Construct(_) => Err(FusekiError::unsupported_media_type(
                 "CONSTRUCT queries should use RDF format, not JSON",
-            )),
-            CoreQueryResult::Describe { .. } => Err(FusekiError::unsupported_media_type(
-                "DESCRIBE queries should use RDF format, not JSON",
             )),
         }
     }
@@ -989,6 +998,12 @@ impl QueryResult {
                                 xml.push_str(&format!(
                                     "        <variable>{}</variable>\n",
                                     variable.as_str()
+                                ));
+                            }
+                            Term::QuotedTriple(triple) => {
+                                xml.push_str(&format!(
+                                    "        <quotedTriple>&lt;&lt;{} {} {}&gt;&gt;</quotedTriple>\n",
+                                    triple.subject(), triple.predicate(), triple.object()
                                 ));
                             }
                         }
@@ -1076,7 +1091,7 @@ impl QueryResult {
     /// Convert to RDF string (for CONSTRUCT/DESCRIBE)
     pub fn to_rdf(&self, format: RdfSerializationFormat) -> FusekiResult<String> {
         match &self.inner {
-            CoreQueryResult::Construct { triples } => {
+            CoreQueryResult::Construct(triples) => {
                 let core_format = match format {
                     RdfSerializationFormat::Turtle => CoreRdfFormat::Turtle,
                     RdfSerializationFormat::NTriples => CoreRdfFormat::NTriples,
@@ -1093,24 +1108,6 @@ impl QueryResult {
                 let graph = oxirs_core::model::graph::Graph::from_iter(triples.clone());
                 serializer.serialize_graph(&graph).map_err(|e| {
                     FusekiError::parse(format!("Failed to serialize CONSTRUCT result: {}", e))
-                })
-            }
-            CoreQueryResult::Describe { graph } => {
-                let core_format = match format {
-                    RdfSerializationFormat::Turtle => CoreRdfFormat::Turtle,
-                    RdfSerializationFormat::NTriples => CoreRdfFormat::NTriples,
-                    RdfSerializationFormat::RdfXml => CoreRdfFormat::RdfXml,
-                    RdfSerializationFormat::JsonLd => {
-                        return Err(FusekiError::unsupported_media_type(
-                            "JSON-LD not supported yet",
-                        ))
-                    }
-                    RdfSerializationFormat::NQuads => CoreRdfFormat::NQuads,
-                };
-
-                let serializer = Serializer::new(core_format);
-                serializer.serialize_graph(graph).map_err(|e| {
-                    FusekiError::parse(format!("Failed to serialize DESCRIBE result: {}", e))
                 })
             }
             _ => Err(FusekiError::unsupported_media_type(

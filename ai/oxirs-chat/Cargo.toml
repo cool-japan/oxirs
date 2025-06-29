@@ -13,8 +13,8 @@ rust-version.workspace = true
 
 [dependencies]
 oxirs-core = { path = "../../core/oxirs-core" }
-# oxirs-vec = { path = "../../engine/oxirs-vec" } # Temporarily disabled due to compilation issues
-# oxirs-embed = { path = "../oxirs-embed" } # Temporarily disabled due to compilation issues
+oxirs-vec = { path = "../../engine/oxirs-vec" }
+oxirs-embed = { path = "../oxirs-embed" }
 tokio = { workspace = true, features = ["full"] }
 hyper = { workspace = true, features = ["full"] }
 serde = { workspace = true, features = ["derive"] }

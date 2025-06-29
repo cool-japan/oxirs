@@ -460,27 +460,237 @@ impl DiscoveryService {
     /// DNS-based discovery implementation
     async fn discover_via_dns(
         &mut self,
-        _service_name: &str,
-        _domain: &str,
-        _port: u16,
+        service_name: &str,
+        domain: &str,
+        port: u16,
     ) -> Result<Vec<NodeInfo>> {
-        // TODO: Implement DNS SRV record lookup
-        tracing::debug!("DNS discovery not yet implemented");
-        Ok(self.known_nodes.values().cloned().collect())
+        use std::process::Command;
+
+        tracing::debug!("Running DNS discovery for _{}.{}", service_name, domain);
+
+        // Simple DNS TXT record lookup for development
+        // In production, this would use proper DNS SRV record resolution
+        let fqdn = format!("_{}.{}", service_name, domain);
+
+        // Use nslookup or dig to resolve TXT records containing node information
+        let output = Command::new("nslookup").args(["-type=TXT", &fqdn]).output();
+
+        match output {
+            Ok(result) if result.status.success() => {
+                let output_str = String::from_utf8_lossy(&result.stdout);
+                let mut discovered_nodes = Vec::new();
+
+                // Parse TXT records in format: "node_id=1;address=127.0.0.1:8080"
+                for line in output_str.lines() {
+                    if line.contains("node_id=") && line.contains("address=") {
+                        if let Some(node_info) = self.parse_dns_txt_record(line, port) {
+                            if node_info.node_id != self.local_node_id {
+                                self.add_node(node_info.clone());
+                                discovered_nodes.push(node_info);
+                            }
+                        }
+                    }
+                }
+
+                Ok(discovered_nodes)
+            }
+            _ => {
+                tracing::warn!("DNS lookup failed for {}", fqdn);
+                Ok(self.known_nodes.values().cloned().collect())
+            }
+        }
     }
 
     /// Multicast-based discovery implementation
-    async fn discover_via_multicast(&mut self, _group: &str, _port: u16) -> Result<Vec<NodeInfo>> {
-        // TODO: Implement multicast discovery protocol
-        tracing::debug!("Multicast discovery not yet implemented");
-        Ok(self.known_nodes.values().cloned().collect())
+    async fn discover_via_multicast(&mut self, group: &str, port: u16) -> Result<Vec<NodeInfo>> {
+        use std::net::{IpAddr, Ipv4Addr};
+        use tokio::net::UdpSocket;
+
+        tracing::debug!("Running multicast discovery on {}:{}", group, port);
+
+        let multicast_addr: SocketAddr = format!("{}:{}", group, port)
+            .parse()
+            .map_err(|e| anyhow::anyhow!("Invalid multicast address: {}", e))?;
+
+        // Create UDP socket for multicast
+        let socket = UdpSocket::bind("0.0.0.0:0")
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to bind UDP socket: {}", e))?;
+
+        // Enable multicast
+        let multicast_ip = match multicast_addr.ip() {
+            IpAddr::V4(ip) => ip,
+            _ => return Err(anyhow::anyhow!("Only IPv4 multicast supported")),
+        };
+
+        // Broadcast node announcement
+        let announcement = serde_json::json!({
+            "type": "node_announcement",
+            "node_id": self.local_node_id,
+            "address": self.local_address.to_string(),
+            "metadata": self.local_metadata
+        });
+
+        let message = announcement.to_string();
+        if let Err(e) = socket.send_to(message.as_bytes(), multicast_addr).await {
+            tracing::warn!("Failed to send multicast announcement: {}", e);
+        }
+
+        // Listen for responses for a short time
+        let mut buffer = [0u8; 1024];
+        let mut discovered_nodes = Vec::new();
+
+        for _ in 0..5 {
+            // Listen for up to 5 responses
+            match timeout(Duration::from_millis(200), socket.recv_from(&mut buffer)).await {
+                Ok(Ok((len, _addr))) => {
+                    if let Ok(response_str) = std::str::from_utf8(&buffer[..len]) {
+                        if let Ok(response) =
+                            serde_json::from_str::<serde_json::Value>(response_str)
+                        {
+                            if let Some(node_info) = self.parse_multicast_response(&response) {
+                                if node_info.node_id != self.local_node_id {
+                                    self.add_node(node_info.clone());
+                                    discovered_nodes.push(node_info);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => break, // Timeout or error, stop listening
+            }
+        }
+
+        Ok(discovered_nodes)
     }
 
     /// File-based discovery implementation  
-    async fn discover_via_file(&mut self, _path: &str) -> Result<Vec<NodeInfo>> {
-        // TODO: Implement file-based discovery
-        tracing::debug!("File-based discovery not yet implemented");
-        Ok(self.known_nodes.values().cloned().collect())
+    async fn discover_via_file(&mut self, path: &str) -> Result<Vec<NodeInfo>> {
+        use tokio::fs;
+
+        tracing::debug!("Running file-based discovery from {}", path);
+
+        match fs::read_to_string(path).await {
+            Ok(content) => {
+                let mut discovered_nodes = Vec::new();
+
+                // Support both JSON and simple text format
+                if content.trim_start().starts_with('{') || content.trim_start().starts_with('[') {
+                    // JSON format
+                    match serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                        Ok(nodes_json) => {
+                            for node_json in nodes_json {
+                                if let Some(node_info) = self.parse_json_node(&node_json) {
+                                    if node_info.node_id != self.local_node_id {
+                                        self.add_node(node_info.clone());
+                                        discovered_nodes.push(node_info);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => tracing::warn!("Failed to parse JSON nodes file: {}", e),
+                    }
+                } else {
+                    // Simple text format: "node_id:address" per line
+                    for line in content.lines() {
+                        let line = line.trim();
+                        if line.is_empty() || line.starts_with('#') {
+                            continue;
+                        }
+
+                        if let Some((node_id_str, address_str)) = line.split_once(':') {
+                            if let (Ok(node_id), Ok(address)) = (
+                                node_id_str.parse::<OxirsNodeId>(),
+                                address_str.parse::<SocketAddr>(),
+                            ) {
+                                if node_id != self.local_node_id {
+                                    let node_info = NodeInfo::new(node_id, address);
+                                    self.add_node(node_info.clone());
+                                    discovered_nodes.push(node_info);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Ok(discovered_nodes)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to read discovery file {}: {}", path, e);
+                Ok(self.known_nodes.values().cloned().collect())
+            }
+        }
+    }
+
+    /// Parse DNS TXT record into NodeInfo
+    fn parse_dns_txt_record(&self, record: &str, default_port: u16) -> Option<NodeInfo> {
+        let mut node_id = None;
+        let mut address = None;
+
+        // Parse "node_id=1;address=127.0.0.1:8080" format
+        for part in record.split(';') {
+            if let Some((key, value)) = part.split_once('=') {
+                match key.trim() {
+                    "node_id" => {
+                        node_id = value.trim().parse().ok();
+                    }
+                    "address" => {
+                        if let Ok(addr) = value.trim().parse::<SocketAddr>() {
+                            address = Some(addr);
+                        } else if let Ok(ip) = value.trim().parse::<std::net::IpAddr>() {
+                            address = Some(SocketAddr::new(ip, default_port));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if let (Some(id), Some(addr)) = (node_id, address) {
+            Some(NodeInfo::new(id, addr))
+        } else {
+            None
+        }
+    }
+
+    /// Parse multicast response into NodeInfo
+    fn parse_multicast_response(&self, response: &serde_json::Value) -> Option<NodeInfo> {
+        if response["type"] != "node_announcement" {
+            return None;
+        }
+
+        let node_id = response["node_id"].as_u64()?;
+        let address_str = response["address"].as_str()?;
+        let address = address_str.parse::<SocketAddr>().ok()?;
+
+        let mut node_info = NodeInfo::new(node_id, address);
+
+        // Parse metadata if present
+        if let Some(metadata_json) = response.get("metadata") {
+            if let Ok(metadata) = serde_json::from_value::<NodeMetadata>(metadata_json.clone()) {
+                node_info.metadata = metadata;
+            }
+        }
+
+        Some(node_info)
+    }
+
+    /// Parse JSON node definition into NodeInfo
+    fn parse_json_node(&self, node_json: &serde_json::Value) -> Option<NodeInfo> {
+        let node_id = node_json["node_id"].as_u64()?;
+        let address_str = node_json["address"].as_str()?;
+        let address = address_str.parse::<SocketAddr>().ok()?;
+
+        let mut node_info = NodeInfo::new(node_id, address);
+
+        // Parse metadata if present
+        if let Some(metadata_json) = node_json.get("metadata") {
+            if let Ok(metadata) = serde_json::from_value::<NodeMetadata>(metadata_json.clone()) {
+                node_info.metadata = metadata;
+            }
+        }
+
+        Some(node_info)
     }
 }
 

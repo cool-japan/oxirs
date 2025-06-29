@@ -325,7 +325,7 @@ impl MvccStore {
     /// Begin a new transaction
     pub fn begin_transaction(&self, isolation_level: IsolationLevel) -> Result<TransactionId> {
         let tx_id = self.transaction_counter.fetch_add(1, Ordering::SeqCst);
-        let start_timestamp = self.get_current_timestamp();
+        let start_timestamp = self.get_next_timestamp();
 
         let tx_state = TransactionState {
             id: tx_id,
@@ -403,8 +403,11 @@ impl MvccStore {
         let candidates = self.get_candidate_keys(subject, predicate, object);
 
         let mut results = Vec::new();
+        let mut processed_keys = HashSet::new();
 
         for key in candidates {
+            processed_keys.insert(key.clone());
+
             // Add to read set for conflict detection
             tx.read_set.insert(key.clone());
 
@@ -440,6 +443,24 @@ impl MvccStore {
             }
         }
 
+        // Also check write set for new keys not in main indexes (read-your-writes)
+        if self.config.enable_read_your_writes {
+            for (key, write_op) in &tx.write_set {
+                if !processed_keys.contains(key) {
+                    match write_op {
+                        WriteOperation::Insert(triple) => {
+                            if self.matches_pattern(triple, subject, predicate, object) {
+                                results.push(triple.clone());
+                            }
+                        }
+                        WriteOperation::Delete => {
+                            // Already handled above
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(results)
     }
 
@@ -461,7 +482,7 @@ impl MvccStore {
             let version = match operation {
                 WriteOperation::Insert(triple) => Version {
                     id: self.get_next_timestamp(), // Use timestamp as version ID
-                    timestamp: tx.start_timestamp,
+                    timestamp: commit_timestamp,
                     transaction_id: tx_id,
                     deleted: false,
                     triple: Some(triple.clone()),
@@ -469,7 +490,7 @@ impl MvccStore {
                 },
                 WriteOperation::Delete => Version {
                     id: self.get_next_timestamp(),
-                    timestamp: tx.start_timestamp,
+                    timestamp: commit_timestamp,
                     transaction_id: tx_id,
                     deleted: true,
                     triple: None,

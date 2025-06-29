@@ -14,8 +14,12 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::{
-    rag::QueryIntent, ChatSession, DetailedSessionMetrics, Message, MessageMetadata, MessageRole,
-    SessionMetrics, Topic, TopicTransition,
+    rag::QueryIntent, ChatSession, ComplexityFactor, ComplexityMetrics, ConfidenceMetrics,
+    DetailedSessionMetrics, EmotionScore, EmotionType, EntityType, ExtractedEntity,
+    ImplicitSatisfactionSignals, IntentType, Message, MessageAnalytics, MessageContent,
+    MessageIntent, MessageMetadata, MessageRole, SatisfactionMetrics, SentimentAnalysis,
+    SentimentPolarity, SessionMetrics, SuccessMetrics, Topic, TopicTransition, UncertaintyFactor,
+    UserFeedback,
 };
 
 /// Configuration for analytics collection and processing
@@ -799,7 +803,7 @@ impl PatternDetector {
                             .iter()
                             .rev()
                             .take(3)
-                            .map(|m| m.content.clone())
+                            .map(|m| m.content.to_string())
                             .collect(),
                     });
                 }
@@ -812,7 +816,9 @@ impl PatternDetector {
                 .recent_messages
                 .iter()
                 .filter(|m| m.role == MessageRole::User && m.id != message.id)
-                .filter(|m| self.calculate_similarity(&m.content, &message.content) > 0.7)
+                .filter(|m| {
+                    self.calculate_similarity(m.content.to_text(), message.content.to_text()) > 0.7
+                })
                 .count();
 
             if similar_count >= self.config.min_pattern_frequency {
@@ -823,7 +829,7 @@ impl PatternDetector {
                     confidence: 0.9,
                     first_occurrence: SystemTime::now(),
                     last_occurrence: SystemTime::now(),
-                    example_messages: vec![message.content.clone()],
+                    example_messages: vec![message.content.to_string()],
                 });
             }
         }
@@ -902,7 +908,7 @@ impl AnomalyDetector {
                             AnomalySeverity::Medium
                         },
                         detected_at: SystemTime::now(),
-                        message_context: vec![message.content.clone()],
+                        message_context: vec![message.content.to_string()],
                         suggested_action: Some(
                             "Check system resources and query complexity".to_string(),
                         ),
@@ -928,7 +934,7 @@ impl AnomalyDetector {
                         ),
                         severity: AnomalySeverity::Medium,
                         detected_at: SystemTime::now(),
-                        message_context: vec![message.content.clone()],
+                        message_context: vec![message.content.to_string()],
                         suggested_action: Some(
                             "Review retrieval results and LLM outputs".to_string(),
                         ),
@@ -1021,7 +1027,7 @@ impl QualityAnalyzer {
                 / analytics.assistant_message_count as f32;
 
             // Update coherence score (based on message length and structure)
-            let coherence = self.calculate_coherence_score(&message.content);
+            let coherence = self.calculate_coherence_score(message.content.to_text());
             quality.coherence_score = (quality.coherence_score
                 * (analytics.assistant_message_count - 1) as f32
                 + coherence)
@@ -1092,5 +1098,750 @@ impl QualityAnalyzer {
         };
 
         (length_score + punctuation_score) / 2.0
+    }
+}
+
+/// Message analytics processor for individual message analysis
+pub struct MessageAnalyticsProcessor {
+    config: AnalyticsConfig,
+    intent_classifier: IntentClassifier,
+    sentiment_analyzer: SentimentAnalyzer,
+    complexity_analyzer: ComplexityAnalyzer,
+    entity_extractor: EntityExtractor,
+}
+
+impl MessageAnalyticsProcessor {
+    pub fn new(config: AnalyticsConfig) -> Self {
+        Self {
+            intent_classifier: IntentClassifier::new(&config),
+            sentiment_analyzer: SentimentAnalyzer::new(&config),
+            complexity_analyzer: ComplexityAnalyzer::new(&config),
+            entity_extractor: EntityExtractor::new(&config),
+            config,
+        }
+    }
+
+    /// Process a message and generate comprehensive analytics
+    pub async fn process_message(
+        &self,
+        message: &Message,
+        context: Option<&[Message]>,
+    ) -> Result<MessageAnalytics> {
+        let content_text = message.content.to_text();
+
+        // Parallel processing of different analytics components
+        let (intent, sentiment, complexity, entities) = tokio::try_join!(
+            self.intent_classifier
+                .classify_intent(content_text, context),
+            self.sentiment_analyzer.analyze_sentiment(content_text),
+            self.complexity_analyzer
+                .analyze_complexity(content_text, message),
+            self.entity_extractor.extract_entities(content_text)
+        )?;
+
+        // Calculate confidence metrics
+        let confidence = self
+            .calculate_confidence_metrics(&intent, &sentiment, &complexity, message)
+            .await?;
+
+        // Calculate success metrics
+        let success_metrics = self.calculate_success_metrics(message, &intent).await?;
+
+        // Calculate satisfaction metrics (requires conversation context)
+        let satisfaction = self
+            .calculate_satisfaction_metrics(message, context)
+            .await?;
+
+        Ok(MessageAnalytics {
+            intent,
+            sentiment,
+            complexity,
+            confidence,
+            success_metrics,
+            satisfaction,
+        })
+    }
+
+    async fn calculate_confidence_metrics(
+        &self,
+        intent: &MessageIntent,
+        sentiment: &SentimentAnalysis,
+        complexity: &ComplexityMetrics,
+        message: &Message,
+    ) -> Result<ConfidenceMetrics> {
+        let mut uncertainty_factors = Vec::new();
+
+        // Intent confidence factor
+        if intent.confidence < 0.7 {
+            uncertainty_factors.push(UncertaintyFactor {
+                factor_type: "Intent Classification".to_string(),
+                impact: 1.0 - intent.confidence,
+                description: "Low confidence in intent classification".to_string(),
+            });
+        }
+
+        // Sentiment confidence factor
+        if sentiment.confidence < 0.7 {
+            uncertainty_factors.push(UncertaintyFactor {
+                factor_type: "Sentiment Analysis".to_string(),
+                impact: 1.0 - sentiment.confidence,
+                description: "Low confidence in sentiment analysis".to_string(),
+            });
+        }
+
+        // Complexity factor
+        if complexity.overall_score > 0.8 {
+            uncertainty_factors.push(UncertaintyFactor {
+                factor_type: "High Complexity".to_string(),
+                impact: complexity.overall_score - 0.8,
+                description: "Message complexity may affect processing accuracy".to_string(),
+            });
+        }
+
+        // Metadata confidence factor
+        let data_confidence = if let Some(ref metadata) = message.metadata {
+            metadata.confidence_score.unwrap_or(0.5)
+        } else {
+            0.3
+        };
+
+        if data_confidence < 0.5 {
+            uncertainty_factors.push(UncertaintyFactor {
+                factor_type: "Data Quality".to_string(),
+                impact: 0.5 - data_confidence,
+                description: "Low confidence in underlying data".to_string(),
+            });
+        }
+
+        let understanding_confidence = (intent.confidence + sentiment.confidence) / 2.0;
+        let response_confidence = data_confidence;
+        let reasoning_confidence = 1.0 - (complexity.overall_score * 0.3);
+
+        let overall_confidence = (understanding_confidence
+            + response_confidence
+            + data_confidence
+            + reasoning_confidence)
+            / 4.0;
+
+        Ok(ConfidenceMetrics {
+            overall_confidence,
+            understanding_confidence,
+            response_confidence,
+            data_confidence,
+            reasoning_confidence,
+            uncertainty_factors,
+        })
+    }
+
+    async fn calculate_success_metrics(
+        &self,
+        message: &Message,
+        intent: &MessageIntent,
+    ) -> Result<SuccessMetrics> {
+        let processing_time = message
+            .metadata
+            .as_ref()
+            .and_then(|m| m.processing_time_ms)
+            .unwrap_or(0);
+
+        let context_retrieved = message
+            .metadata
+            .as_ref()
+            .and_then(|m| m.context_used)
+            .unwrap_or(false);
+
+        let entities_found = !intent.entities.is_empty();
+        let sparql_executed = message
+            .metadata
+            .as_ref()
+            .and_then(|m| m.sparql_query.as_ref())
+            .is_some();
+
+        let query_successful = message
+            .metadata
+            .as_ref()
+            .and_then(|m| m.confidence_score)
+            .map(|score| score > 0.5)
+            .unwrap_or(false);
+
+        let response_generated = !message.content.to_text().is_empty();
+        let results_returned = response_generated && context_retrieved;
+
+        Ok(SuccessMetrics {
+            query_successful,
+            response_generated,
+            context_retrieved,
+            entities_found,
+            sparql_executed,
+            results_returned,
+            user_satisfied: None, // Will be updated based on user feedback
+            completion_time_ms: processing_time,
+            retry_count: 0, // Would need to track across conversation
+            error_count: 0, // Would need to track across conversation
+        })
+    }
+
+    async fn calculate_satisfaction_metrics(
+        &self,
+        message: &Message,
+        context: Option<&[Message]>,
+    ) -> Result<SatisfactionMetrics> {
+        let mut follow_up_questions = 0;
+        let mut clarification_requests = 0;
+
+        if let Some(context) = context {
+            for msg in context.iter().rev().take(5) {
+                if msg.role == MessageRole::User {
+                    let content = msg.content.to_text().to_lowercase();
+                    if content.contains("?") {
+                        follow_up_questions += 1;
+                    }
+                    if content.contains("clarify")
+                        || content.contains("explain")
+                        || content.contains("what do you mean")
+                        || content.contains("i don't understand")
+                    {
+                        clarification_requests += 1;
+                    }
+                }
+            }
+        }
+
+        // Calculate implicit signals
+        let engagement_score = if message.role == MessageRole::User {
+            let word_count = message.content.to_text().split_whitespace().count();
+            // Higher word count indicates higher engagement (up to a point)
+            (word_count as f32 / 50.0).min(1.0)
+        } else {
+            0.5 // Neutral for assistant messages
+        };
+
+        let topic_shift_occurred = false; // Would need conversation history analysis
+        let repeat_query_pattern = false; // Would need pattern analysis
+
+        let implicit_signals = ImplicitSatisfactionSignals {
+            response_time_to_user: None, // Would need timing data
+            conversation_continued: context.map(|c| c.len() > 1).unwrap_or(false),
+            message_length_ratio: 1.0, // Would need comparison with previous messages
+            topic_shift_occurred,
+            repeat_query_pattern,
+            engagement_score,
+        };
+
+        Ok(SatisfactionMetrics {
+            explicit_feedback: None, // Set separately when user provides feedback
+            implicit_signals,
+            satisfaction_score: None, // Calculated later based on patterns
+            follow_up_questions,
+            clarification_requests,
+        })
+    }
+}
+
+/// Intent classification component
+struct IntentClassifier {
+    _config: AnalyticsConfig,
+}
+
+impl IntentClassifier {
+    fn new(config: &AnalyticsConfig) -> Self {
+        Self {
+            _config: config.clone(),
+        }
+    }
+
+    async fn classify_intent(
+        &self,
+        content: &str,
+        _context: Option<&[Message]>,
+    ) -> Result<MessageIntent> {
+        let content_lower = content.to_lowercase();
+
+        // Keywords for different intent types
+        let question_indicators = ["what", "who", "when", "where", "why", "how", "?"];
+        let request_indicators = [
+            "please",
+            "can you",
+            "could you",
+            "would you",
+            "help me",
+            "show me",
+        ];
+        let gratitude_indicators = ["thank", "thanks", "appreciate", "grateful"];
+        let complaint_indicators = [
+            "wrong",
+            "error",
+            "problem",
+            "issue",
+            "broken",
+            "not working",
+        ];
+        let clarification_indicators =
+            ["clarify", "explain", "what do you mean", "don't understand"];
+        let comparison_indicators = ["compare", "difference", "vs", "versus", "better", "worse"];
+        let list_indicators = ["list", "show all", "give me all", "what are"];
+        let aggregation_indicators = ["count", "how many", "total", "sum", "average"];
+        let relationship_indicators = [
+            "relationship",
+            "connected",
+            "related",
+            "link",
+            "association",
+        ];
+
+        // Classify primary intent
+        let primary_intent = if question_indicators
+            .iter()
+            .any(|&ind| content_lower.contains(ind))
+        {
+            if aggregation_indicators
+                .iter()
+                .any(|&ind| content_lower.contains(ind))
+            {
+                IntentType::Aggregation
+            } else if list_indicators
+                .iter()
+                .any(|&ind| content_lower.contains(ind))
+            {
+                IntentType::ListQuery
+            } else if comparison_indicators
+                .iter()
+                .any(|&ind| content_lower.contains(ind))
+            {
+                IntentType::Comparison
+            } else if relationship_indicators
+                .iter()
+                .any(|&ind| content_lower.contains(ind))
+            {
+                IntentType::Relationship
+            } else if content_lower.contains("define") || content_lower.contains("definition") {
+                IntentType::Definition
+            } else {
+                IntentType::Question
+            }
+        } else if request_indicators
+            .iter()
+            .any(|&ind| content_lower.contains(ind))
+        {
+            IntentType::Request
+        } else if gratitude_indicators
+            .iter()
+            .any(|&ind| content_lower.contains(ind))
+        {
+            IntentType::Gratitude
+        } else if complaint_indicators
+            .iter()
+            .any(|&ind| content_lower.contains(ind))
+        {
+            IntentType::Complaint
+        } else if clarification_indicators
+            .iter()
+            .any(|&ind| content_lower.contains(ind))
+        {
+            IntentType::Clarification
+        } else if content.split_whitespace().count() > 50 || content.matches(" and ").count() > 2 {
+            IntentType::Complex
+        } else {
+            IntentType::Exploration
+        };
+
+        // Extract keywords (simple approach)
+        let keywords: Vec<String> = content_lower
+            .split_whitespace()
+            .filter(|word| word.len() > 3)
+            .filter(|word| {
+                ![
+                    "what", "that", "this", "with", "from", "they", "them", "were", "said", "each",
+                    "which", "their", "time", "about",
+                ]
+                .contains(word)
+            })
+            .take(10)
+            .map(|s| s.to_string())
+            .collect();
+
+        // Calculate confidence based on keyword matches and patterns
+        let confidence = self.calculate_intent_confidence(&primary_intent, &content_lower);
+
+        Ok(MessageIntent {
+            primary_intent,
+            secondary_intents: Vec::new(), // Could be enhanced to detect multiple intents
+            confidence,
+            entities: Vec::new(), // Will be filled by entity extractor
+            keywords,
+        })
+    }
+
+    fn calculate_intent_confidence(&self, intent: &IntentType, content: &str) -> f32 {
+        // Base confidence
+        let mut confidence: f32 = 0.6;
+
+        // Boost confidence based on strong indicators
+        match intent {
+            IntentType::Question => {
+                if content.contains("?") {
+                    confidence += 0.3;
+                }
+                if content.starts_with("what") || content.starts_with("how") {
+                    confidence += 0.2;
+                }
+            }
+            IntentType::Request => {
+                if content.contains("please") {
+                    confidence += 0.2;
+                }
+                if content.contains("can you") {
+                    confidence += 0.3;
+                }
+            }
+            IntentType::Gratitude => {
+                if content.contains("thank") {
+                    confidence += 0.4;
+                }
+            }
+            IntentType::Aggregation => {
+                if content.contains("how many") || content.contains("count") {
+                    confidence += 0.3;
+                }
+            }
+            IntentType::ListQuery => {
+                if content.contains("list") || content.contains("show all") {
+                    confidence += 0.3;
+                }
+            }
+            _ => {}
+        }
+
+        confidence.min(1.0)
+    }
+}
+
+/// Sentiment analysis component
+struct SentimentAnalyzer {
+    _config: AnalyticsConfig,
+}
+
+impl SentimentAnalyzer {
+    fn new(config: &AnalyticsConfig) -> Self {
+        Self {
+            _config: config.clone(),
+        }
+    }
+
+    async fn analyze_sentiment(&self, content: &str) -> Result<SentimentAnalysis> {
+        let content_lower = content.to_lowercase();
+
+        // Simple lexicon-based sentiment analysis
+        let positive_words = [
+            "good",
+            "great",
+            "excellent",
+            "amazing",
+            "wonderful",
+            "fantastic",
+            "perfect",
+            "love",
+            "like",
+            "enjoy",
+            "happy",
+            "pleased",
+            "satisfied",
+            "thank",
+            "helpful",
+        ];
+
+        let negative_words = [
+            "bad",
+            "terrible",
+            "awful",
+            "horrible",
+            "hate",
+            "dislike",
+            "angry",
+            "frustrated",
+            "confused",
+            "problem",
+            "issue",
+            "error",
+            "wrong",
+            "broken",
+            "useless",
+            "disappointed",
+        ];
+
+        let neutral_words = ["okay", "fine", "alright", "maybe", "perhaps", "possibly"];
+
+        let words: Vec<&str> = content_lower.split_whitespace().collect();
+        let mut positive_score = 0;
+        let mut negative_score = 0;
+        let mut neutral_score = 0;
+
+        for word in &words {
+            if positive_words.contains(word) {
+                positive_score += 1;
+            } else if negative_words.contains(word) {
+                negative_score += 1;
+            } else if neutral_words.contains(word) {
+                neutral_score += 1;
+            }
+        }
+
+        let (polarity, confidence) =
+            if positive_score > negative_score && positive_score > neutral_score {
+                (
+                    SentimentPolarity::Positive,
+                    positive_score as f32 / words.len() as f32,
+                )
+            } else if negative_score > positive_score && negative_score > neutral_score {
+                (
+                    SentimentPolarity::Negative,
+                    negative_score as f32 / words.len() as f32,
+                )
+            } else {
+                (SentimentPolarity::Neutral, 0.5)
+            };
+
+        // Simple emotion detection based on keywords
+        let mut emotions = Vec::new();
+        if content_lower.contains("happy") || content_lower.contains("joy") {
+            emotions.push(EmotionScore {
+                emotion: EmotionType::Joy,
+                score: 0.8,
+            });
+        }
+        if content_lower.contains("angry") || content_lower.contains("mad") {
+            emotions.push(EmotionScore {
+                emotion: EmotionType::Anger,
+                score: 0.8,
+            });
+        }
+        if content_lower.contains("confused") || content_lower.contains("don't understand") {
+            emotions.push(EmotionScore {
+                emotion: EmotionType::Confusion,
+                score: 0.7,
+            });
+        }
+        if content_lower.contains("frustrated") || content_lower.contains("annoyed") {
+            emotions.push(EmotionScore {
+                emotion: EmotionType::Frustration,
+                score: 0.7,
+            });
+        }
+        if content_lower.contains("satisfied") || content_lower.contains("pleased") {
+            emotions.push(EmotionScore {
+                emotion: EmotionType::Satisfaction,
+                score: 0.8,
+            });
+        }
+
+        // Calculate subjectivity (0 = objective, 1 = subjective)
+        let subjective_indicators = ["think", "feel", "believe", "opinion", "personally", "i"];
+        let subjectivity = subjective_indicators
+            .iter()
+            .filter(|&&word| content_lower.contains(word))
+            .count() as f32
+            / words.len() as f32;
+
+        Ok(SentimentAnalysis {
+            polarity,
+            confidence: confidence.min(1.0).max(0.3),
+            emotions,
+            subjectivity: subjectivity.min(1.0),
+        })
+    }
+}
+
+/// Complexity analysis component
+struct ComplexityAnalyzer {
+    _config: AnalyticsConfig,
+}
+
+impl ComplexityAnalyzer {
+    fn new(config: &AnalyticsConfig) -> Self {
+        Self {
+            _config: config.clone(),
+        }
+    }
+
+    async fn analyze_complexity(
+        &self,
+        content: &str,
+        message: &Message,
+    ) -> Result<ComplexityMetrics> {
+        let words: Vec<&str> = content.split_whitespace().collect();
+        let sentences: Vec<&str> = content
+            .split(&['.', '!', '?'][..])
+            .filter(|s| !s.trim().is_empty())
+            .collect();
+
+        // Linguistic complexity
+        let avg_word_length =
+            words.iter().map(|w| w.len()).sum::<usize>() as f32 / words.len() as f32;
+        let avg_sentence_length = if !sentences.is_empty() {
+            words.len() as f32 / sentences.len() as f32
+        } else {
+            0.0
+        };
+
+        let linguistic_complexity = ((avg_word_length - 4.0) / 6.0).max(0.0).min(1.0)
+            + ((avg_sentence_length - 15.0) / 20.0).max(0.0).min(1.0);
+
+        // Conceptual complexity (based on domain-specific terms)
+        let technical_terms = [
+            "sparql",
+            "rdf",
+            "ontology",
+            "semantic",
+            "triple",
+            "graph",
+            "query",
+            "database",
+            "algorithm",
+            "machine learning",
+            "artificial intelligence",
+            "neural network",
+        ];
+        let technical_count = words
+            .iter()
+            .filter(|word| technical_terms.contains(&word.to_lowercase().as_str()))
+            .count();
+        let conceptual_complexity = (technical_count as f32 / words.len() as f32 * 10.0).min(1.0);
+
+        // Structural complexity (nesting, conjunctions, etc.)
+        let conjunction_count = ["and", "or", "but", "however", "although"]
+            .iter()
+            .map(|word| content.matches(word).count())
+            .sum::<usize>();
+        let question_count = content.matches('?').count();
+        let structural_complexity =
+            ((conjunction_count + question_count) as f32 / sentences.len() as f32).min(1.0);
+
+        // Domain complexity (based on metadata)
+        let domain_complexity = if let Some(ref metadata) = message.metadata {
+            if metadata.sparql_query.is_some() {
+                0.8 // SPARQL queries add complexity
+            } else if metadata
+                .entities_extracted
+                .as_ref()
+                .map(|e| e.len())
+                .unwrap_or(0)
+                > 3
+            {
+                0.6 // Multiple entities add complexity
+            } else {
+                0.4
+            }
+        } else {
+            0.3
+        };
+
+        let overall_score = (linguistic_complexity
+            + conceptual_complexity
+            + structural_complexity
+            + domain_complexity)
+            / 4.0;
+
+        let mut factors = Vec::new();
+        if linguistic_complexity > 0.7 {
+            factors.push(ComplexityFactor {
+                factor_type: "Linguistic".to_string(),
+                score: linguistic_complexity,
+                description: "Complex sentence structure and vocabulary".to_string(),
+            });
+        }
+        if conceptual_complexity > 0.5 {
+            factors.push(ComplexityFactor {
+                factor_type: "Conceptual".to_string(),
+                score: conceptual_complexity,
+                description: "Technical or domain-specific concepts".to_string(),
+            });
+        }
+
+        Ok(ComplexityMetrics {
+            linguistic_complexity: linguistic_complexity / 2.0, // Normalize to 0-1
+            conceptual_complexity,
+            structural_complexity,
+            domain_complexity,
+            overall_score,
+            factors,
+        })
+    }
+}
+
+/// Entity extraction component
+struct EntityExtractor {
+    _config: AnalyticsConfig,
+}
+
+impl EntityExtractor {
+    fn new(config: &AnalyticsConfig) -> Self {
+        Self {
+            _config: config.clone(),
+        }
+    }
+
+    async fn extract_entities(&self, content: &str) -> Result<Vec<ExtractedEntity>> {
+        let mut entities = Vec::new();
+        let words: Vec<&str> = content.split_whitespace().collect();
+
+        // Simple pattern-based entity extraction
+        for (i, word) in words.iter().enumerate() {
+            let word_lower = word.to_lowercase();
+
+            // Numbers
+            if word.chars().all(|c| c.is_ascii_digit()) {
+                entities.push(ExtractedEntity {
+                    text: word.to_string(),
+                    entity_type: EntityType::Number,
+                    confidence: 0.9,
+                    start_offset: content.find(word).unwrap_or(0),
+                    end_offset: content.find(word).unwrap_or(0) + word.len(),
+                    uri: None,
+                });
+            }
+
+            // Dates (simple patterns)
+            if word.contains("/") && word.len() >= 8 {
+                entities.push(ExtractedEntity {
+                    text: word.to_string(),
+                    entity_type: EntityType::Date,
+                    confidence: 0.7,
+                    start_offset: content.find(word).unwrap_or(0),
+                    end_offset: content.find(word).unwrap_or(0) + word.len(),
+                    uri: None,
+                });
+            }
+
+            // Proper nouns (capitalized words not at sentence start)
+            if word
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+                && i > 0
+                && !words[i - 1].ends_with(&['.', '!', '?'][..])
+            {
+                let entity_type = if word_lower.ends_with("corp")
+                    || word_lower.ends_with("inc")
+                    || word_lower.ends_with("ltd")
+                    || word_lower.contains("company")
+                {
+                    EntityType::Organization
+                } else {
+                    EntityType::Person
+                };
+
+                entities.push(ExtractedEntity {
+                    text: word.to_string(),
+                    entity_type,
+                    confidence: 0.6,
+                    start_offset: content.find(word).unwrap_or(0),
+                    end_offset: content.find(word).unwrap_or(0) + word.len(),
+                    uri: None,
+                });
+            }
+        }
+
+        Ok(entities)
     }
 }

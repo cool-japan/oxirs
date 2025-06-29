@@ -4,9 +4,8 @@
 //! Based on W3C N-Triples specification: https://www.w3.org/TR/n-triples/
 
 use super::error::SerializeResult;
-use super::error::{ParseResult, RdfParseError, RdfSyntaxError, TextPosition};
+use super::error::{ParseResult, RdfParseError, TextPosition};
 use super::serializer::QuadSerializer;
-use crate::model::term::{Object, Predicate, Subject};
 use crate::model::{BlankNode, Literal, NamedNode, Triple, TripleRef};
 use std::io::{Read, Write};
 

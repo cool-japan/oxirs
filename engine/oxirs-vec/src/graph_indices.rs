@@ -594,19 +594,21 @@ impl PANNGGraph {
         }
 
         let mut pruned = Vec::new();
-        let query = &self.data[idx].1.as_f32();
+        let (_, vector) = &self.data[idx];
+        let query = vector.as_f32();
 
         for &(neighbor_idx, distance) in neighbors {
-            let neighbor = &self.data[neighbor_idx].1.as_f32();
+            let (_, vector) = &self.data[neighbor_idx];
+            let neighbor = vector.as_f32();
             let mut keep = true;
 
             // Check angle with already selected neighbors
             for &(selected_idx, _) in &pruned {
-                let selected_data: &Vector = &self.data[selected_idx].1;
-                let selected = &selected_data.as_f32();
+                let (_id, vector): &(String, Vector) = &self.data[selected_idx];
+                let selected = vector.as_f32();
 
                 // Calculate angle between neighbor and selected
-                let angle = self.calculate_angle(query, neighbor, selected);
+                let angle = self.calculate_angle(&query, &neighbor, &selected);
 
                 if angle < self.pruning_threshold {
                     keep = false;
@@ -781,11 +783,11 @@ impl DelaunayGraph {
 
             // Check if any existing neighbor violates the empty circumsphere property
             for &(neighbor_idx, _) in &neighbors {
-                let neighbor_data = &self.data[neighbor_idx].1;
-                let neighbor = &neighbor_data.as_f32();
+                let (_id, vector): &(String, Vector) = &self.data[neighbor_idx];
+                let neighbor = vector.as_f32();
 
                 // Approximate check: if candidate is closer to neighbor than to point
-                let dist_to_neighbor = self.config.distance_metric.distance(candidate, neighbor);
+                let dist_to_neighbor = self.config.distance_metric.distance(candidate, &neighbor);
                 if dist_to_neighbor < distance * 0.9 {
                     is_neighbor = false;
                     break;

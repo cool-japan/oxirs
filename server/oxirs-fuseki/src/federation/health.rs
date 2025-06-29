@@ -174,7 +174,7 @@ impl HealthMonitor {
     }
 
     /// Start health monitoring
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self) -> FusekiResult<()> {
         let shutdown = self.shutdown.clone();
         let endpoints = self.endpoints.clone();
         let circuit_breakers = self.circuit_breakers.clone();
@@ -210,7 +210,7 @@ impl HealthMonitor {
     }
 
     /// Stop health monitoring
-    pub async fn stop(&self) -> Result<()> {
+    pub async fn stop(&self) -> FusekiResult<()> {
         self.shutdown.notify_one();
         Ok(())
     }

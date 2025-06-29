@@ -17,6 +17,7 @@ use axum::{
 use axum_extra::headers::{authorization::Bearer, Authorization, HeaderMapExt};
 use chrono::{DateTime, Utc};
 use der_parser::oid::Oid;
+use oid_registry::{OID_X509_EXT_EXTENDED_KEY_USAGE, OID_X509_EXT_KEY_USAGE};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -365,10 +366,11 @@ impl AuthService {
             session_id: session_id.clone(),
         };
 
+        let username = session.user.username.clone();
         let mut sessions = self.sessions.write().await;
         sessions.insert(session_id.clone(), session);
 
-        info!("Created session for user: {}", session.user.username);
+        info!("Created session for user: {}", username);
         Ok(session_id)
     }
 
@@ -794,10 +796,7 @@ impl AuthService {
 
         // Extract key usage
         let mut key_usage = Vec::new();
-        if let Some(ext) = cert
-            .extensions()
-            .get(&x509_parser::extensions::OID_X509_EXT_KEY_USAGE)
-        {
+        if let Some(ext) = cert.extensions().get(&OID_X509_EXT_KEY_USAGE) {
             if let Ok(ku) = ext.parsed_extension::<KeyUsage>() {
                 if ku.digital_signature() {
                     key_usage.push("digitalSignature".to_string());
@@ -816,10 +815,7 @@ impl AuthService {
 
         // Extract extended key usage
         let mut extended_key_usage = Vec::new();
-        if let Some(ext) = cert
-            .extensions()
-            .get(&x509_parser::extensions::OID_X509_EXT_EXTENDED_KEY_USAGE)
-        {
+        if let Some(ext) = cert.extensions().get(&OID_X509_EXT_EXTENDED_KEY_USAGE) {
             if let Ok(eku) = ext.parsed_extension::<ExtendedKeyUsage>() {
                 for purpose in eku.any {
                     let purpose_str = purpose.to_string();
@@ -913,7 +909,7 @@ impl AuthService {
 
         // Check if the issuer is in our trust list
         let is_trusted = trusted_issuers.iter().any(|&issuer| {
-            cert_info.issuer_dn.contains(issuer) || 
+            cert_info.issuer_dn.contains(issuer) ||
             // Allow partial matches for flexibility
             self.is_issuer_pattern_match(&cert_info.issuer_dn, issuer)
         });
@@ -1556,7 +1552,7 @@ pub enum PasswordStrength {
 }
 
 /// Decode Basic authentication header
-fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
+fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::error::Error + Send>> {
     use base64::{engine::general_purpose, Engine as _};
 
     let decoded_bytes = general_purpose::STANDARD.decode(encoded)?;

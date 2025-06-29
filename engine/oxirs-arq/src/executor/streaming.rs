@@ -25,6 +25,40 @@ pub struct StreamingConfig {
     pub buffer_size: usize,
     /// Enable compression for spill files
     pub compress_spills: bool,
+    /// Spilling strategy
+    pub spill_strategy: SpillStrategy,
+    /// Enable adaptive buffering
+    pub adaptive_buffering: bool,
+    /// Enable parallel spilling
+    pub parallel_spilling: bool,
+    /// Compression algorithm choice
+    pub compression_algorithm: CompressionAlgorithm,
+}
+
+/// Spilling strategy options
+#[derive(Debug, Clone)]
+pub enum SpillStrategy {
+    /// Spill oldest data first (FIFO)
+    Fifo,
+    /// Spill largest chunks first
+    LargestFirst,
+    /// Spill based on access frequency (LRU)
+    LeastRecentlyUsed,
+    /// Adaptive strategy based on workload
+    Adaptive,
+}
+
+/// Compression algorithm options
+#[derive(Debug, Clone)]
+pub enum CompressionAlgorithm {
+    /// No compression
+    None,
+    /// Fast LZ4 compression
+    Lz4,
+    /// Balanced gzip compression
+    Gzip,
+    /// High compression zstd
+    Zstd,
 }
 
 impl Default for StreamingConfig {
@@ -34,16 +68,37 @@ impl Default for StreamingConfig {
             temp_dir: None,
             buffer_size: 10000,
             compress_spills: true,
+            spill_strategy: SpillStrategy::Adaptive,
+            adaptive_buffering: true,
+            parallel_spilling: true,
+            compression_algorithm: CompressionAlgorithm::Zstd,
         }
     }
 }
 
-/// Memory usage tracker
+/// Memory usage tracker with adaptive management
 #[derive(Debug, Clone)]
 pub struct MemoryTracker {
     current_usage: Arc<Mutex<usize>>,
     peak_usage: Arc<Mutex<usize>>,
     limit: usize,
+    allocation_history: Arc<Mutex<Vec<AllocationEvent>>>,
+    pressure_threshold: f64,
+    prediction_window: usize,
+}
+
+/// Allocation event for tracking patterns
+#[derive(Debug, Clone)]
+struct AllocationEvent {
+    timestamp: std::time::Instant,
+    size: usize,
+    operation: AllocationType,
+}
+
+#[derive(Debug, Clone)]
+enum AllocationType {
+    Allocate,
+    Deallocate,
 }
 
 impl MemoryTracker {
@@ -52,12 +107,30 @@ impl MemoryTracker {
             current_usage: Arc::new(Mutex::new(0)),
             peak_usage: Arc::new(Mutex::new(0)),
             limit,
+            allocation_history: Arc::new(Mutex::new(Vec::new())),
+            pressure_threshold: 0.8, // Start adaptive behavior at 80%
+            prediction_window: 100,  // Track last 100 allocations
+        }
+    }
+
+    /// Create tracker with custom pressure threshold
+    pub fn with_pressure_threshold(limit: usize, threshold: f64) -> Self {
+        Self {
+            current_usage: Arc::new(Mutex::new(0)),
+            peak_usage: Arc::new(Mutex::new(0)),
+            limit,
+            allocation_history: Arc::new(Mutex::new(Vec::new())),
+            pressure_threshold: threshold,
+            prediction_window: 100,
         }
     }
 
     pub fn allocate(&self, size: usize) -> Result<bool> {
         let mut current = self.current_usage.lock().unwrap();
         let new_usage = *current + size;
+
+        // Record allocation attempt
+        self.record_allocation_event(size, AllocationType::Allocate);
 
         if new_usage > self.limit {
             return Ok(false); // Cannot allocate, need to spill
@@ -76,6 +149,26 @@ impl MemoryTracker {
     pub fn deallocate(&self, size: usize) {
         let mut current = self.current_usage.lock().unwrap();
         *current = current.saturating_sub(size);
+
+        // Record deallocation
+        self.record_allocation_event(size, AllocationType::Deallocate);
+    }
+
+    /// Record allocation event for pattern analysis
+    fn record_allocation_event(&self, size: usize, operation: AllocationType) {
+        let mut history = self.allocation_history.lock().unwrap();
+
+        history.push(AllocationEvent {
+            timestamp: std::time::Instant::now(),
+            size,
+            operation,
+        });
+
+        // Keep only recent events
+        let history_len = history.len();
+        if history_len > self.prediction_window {
+            history.drain(0..history_len - self.prediction_window);
+        }
     }
 
     pub fn current_usage(&self) -> usize {
@@ -87,8 +180,127 @@ impl MemoryTracker {
     }
 
     pub fn should_spill(&self) -> bool {
-        self.current_usage() > (self.limit * 80) / 100 // Spill at 80% capacity
+        let usage_ratio = self.current_usage() as f64 / self.limit as f64;
+        usage_ratio > self.pressure_threshold
     }
+
+    /// Adaptive spilling decision based on allocation patterns
+    pub fn should_spill_adaptive(&self) -> bool {
+        let current_ratio = self.current_usage() as f64 / self.limit as f64;
+
+        // Basic threshold check
+        if current_ratio > self.pressure_threshold {
+            return true;
+        }
+
+        // Check allocation velocity (rate of growth)
+        let allocation_velocity = self.calculate_allocation_velocity();
+        let predicted_usage = self.predict_memory_usage(allocation_velocity);
+
+        // Spill early if we predict memory pressure
+        if predicted_usage > self.limit as f64 * 0.9 {
+            return true;
+        }
+
+        false
+    }
+
+    /// Calculate recent allocation velocity (bytes per second)
+    fn calculate_allocation_velocity(&self) -> f64 {
+        let history = self.allocation_history.lock().unwrap();
+
+        if history.len() < 2 {
+            return 0.0;
+        }
+
+        let now = std::time::Instant::now();
+        let window_duration = std::time::Duration::from_secs(5); // 5 second window
+
+        let mut net_allocation = 0i64;
+        let mut oldest_timestamp = now;
+
+        for event in history.iter().rev() {
+            if now.duration_since(event.timestamp) > window_duration {
+                break;
+            }
+
+            match event.operation {
+                AllocationType::Allocate => net_allocation += event.size as i64,
+                AllocationType::Deallocate => net_allocation -= event.size as i64,
+            }
+
+            oldest_timestamp = event.timestamp;
+        }
+
+        let elapsed = now.duration_since(oldest_timestamp).as_secs_f64();
+        if elapsed > 0.0 {
+            net_allocation as f64 / elapsed
+        } else {
+            0.0
+        }
+    }
+
+    /// Predict memory usage based on current velocity
+    fn predict_memory_usage(&self, velocity: f64) -> f64 {
+        let current = self.current_usage() as f64;
+        let prediction_horizon = 2.0; // 2 seconds ahead
+
+        current + (velocity * prediction_horizon).max(0.0)
+    }
+
+    /// Get detailed memory statistics
+    pub fn get_detailed_stats(&self) -> MemoryStats {
+        let history = self.allocation_history.lock().unwrap();
+
+        let total_allocations = history
+            .iter()
+            .filter(|e| matches!(e.operation, AllocationType::Allocate))
+            .count();
+
+        let total_deallocations = history
+            .iter()
+            .filter(|e| matches!(e.operation, AllocationType::Deallocate))
+            .count();
+
+        let avg_allocation_size = if total_allocations > 0 {
+            history
+                .iter()
+                .filter(|e| matches!(e.operation, AllocationType::Allocate))
+                .map(|e| e.size)
+                .sum::<usize>()
+                / total_allocations
+        } else {
+            0
+        };
+
+        MemoryStats {
+            current_usage: self.current_usage(),
+            peak_usage: self.peak_usage(),
+            total_allocations,
+            total_deallocations,
+            avg_allocation_size,
+            allocation_velocity: self.calculate_allocation_velocity(),
+            pressure_ratio: self.current_usage() as f64 / self.limit as f64,
+        }
+    }
+
+    /// Adaptive pressure threshold based on workload
+    pub fn adjust_pressure_threshold(&mut self, workload_intensity: f64) {
+        // Lower threshold for high-intensity workloads to spill earlier
+        self.pressure_threshold = (0.6 + (0.3 * (1.0 - workload_intensity))).max(0.5).min(0.9);
+    }
+}
+
+/// Detailed memory statistics
+#[derive(Debug, Clone)]
+pub struct MemoryStats {
+    pub current_usage: usize,
+    pub peak_usage: usize,
+    pub total_allocations: usize,
+    pub total_deallocations: usize,
+    pub avg_allocation_size: usize,
+    pub allocation_velocity: f64,
+    pub pressure_ratio: f64,
 }
 
 /// Streaming solution iterator with memory management
@@ -138,8 +350,14 @@ impl StreamingSolution {
 
         self.solutions.push_back(solution);
 
-        // Check if we need to spill proactively
-        if self.solutions.len() >= self.config.buffer_size || self.memory_tracker.should_spill() {
+        // Check if we need to spill proactively using adaptive strategy
+        let should_spill = if self.config.adaptive_buffering {
+            self.memory_tracker.should_spill_adaptive()
+        } else {
+            self.memory_tracker.should_spill()
+        };
+
+        if self.solutions.len() >= self.config.buffer_size || should_spill {
             self.spill_to_disk()?;
         }
 
@@ -219,46 +437,58 @@ impl StreamingSolution {
         Ok(())
     }
 
-    /// Compress data using a simple compression scheme
+    /// Compress data using configured compression algorithm
     fn compress_data(&self, data: &[SerializableSolution]) -> Result<Vec<u8>> {
         let serialized = bincode::serialize(data)?;
 
-        // Simple run-length encoding for demonstration
-        // In production, use a proper compression library like flate2
-        let mut compressed = Vec::new();
-        let mut i = 0;
-        while i < serialized.len() {
-            let byte = serialized[i];
-            let mut count = 1;
-
-            while i + count < serialized.len() && serialized[i + count] == byte && count < 255 {
-                count += 1;
+        match self.config.compression_algorithm {
+            CompressionAlgorithm::None => Ok(serialized),
+            CompressionAlgorithm::Lz4 => {
+                // Fast LZ4 compression for performance-critical scenarios
+                Ok(lz4_flex::compress_prepend_size(&serialized))
             }
-
-            compressed.push(count as u8);
-            compressed.push(byte);
-            i += count;
+            CompressionAlgorithm::Gzip => {
+                // Balanced gzip compression (existing implementation)
+                use std::io::Write;
+                let mut encoder =
+                    flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+                encoder.write_all(&serialized)?;
+                Ok(encoder.finish()?)
+            }
+            CompressionAlgorithm::Zstd => {
+                // High compression zstd for space-critical scenarios
+                zstd::bulk::compress(&serialized, 3)
+                    .map_err(|e| anyhow!("Zstd compression failed: {}", e))
+            }
         }
-
-        Ok(compressed)
     }
 
-    /// Decompress data
+    /// Decompress data using configured compression algorithm
     fn decompress_data(&self, compressed: &[u8]) -> Result<Vec<SerializableSolution>> {
-        // Decompress run-length encoded data
-        let mut decompressed = Vec::new();
-        let mut i = 0;
-
-        while i + 1 < compressed.len() {
-            let count = compressed[i] as usize;
-            let byte = compressed[i + 1];
-
-            for _ in 0..count {
-                decompressed.push(byte);
+        let decompressed = match self.config.compression_algorithm {
+            CompressionAlgorithm::None => {
+                // Data is not compressed, use directly
+                compressed.to_vec()
             }
-
-            i += 2;
-        }
+            CompressionAlgorithm::Lz4 => {
+                // LZ4 decompression
+                lz4_flex::decompress_size_prepended(compressed)
+                    .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?
+            }
+            CompressionAlgorithm::Gzip => {
+                // Gzip decompression (existing implementation)
+                use std::io::Read;
+                let mut decoder = flate2::read::GzDecoder::new(compressed);
+                let mut decompressed = Vec::new();
+                decoder.read_to_end(&mut decompressed)?;
+                decompressed
+            }
+            CompressionAlgorithm::Zstd => {
+                // Zstd decompression
+                zstd::bulk::decompress(compressed, 1024 * 1024 * 100) // 100MB max
+                    .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?
+            }
+        };
 
         Ok(bincode::deserialize(&decompressed)?)
     }
@@ -680,12 +910,26 @@ impl SpillableHashJoin {
         join_vars: &[Variable],
         results: &mut Vec<Solution>,
     ) -> Result<()> {
-        // This is a simplified implementation
-        // In practice, you'd want to rebuild the hash table for this bucket
-        // and join with the corresponding right-side solutions
+        // Rebuild hash table for this spilled bucket
+        let mut bucket_hash_table = HashMap::new();
 
-        // For now, just add to results (this is incomplete but demonstrates the structure)
-        results.extend(solutions);
+        for solution in solutions {
+            let hash_key = self.create_hash_key(&solution, join_vars);
+            bucket_hash_table
+                .entry(hash_key)
+                .or_insert_with(Vec::new)
+                .push(solution);
+        }
+
+        // Note: In a complete implementation, we would need to store the right-side
+        // solutions that correspond to this bucket and join them here.
+        // For now, we'll add the solutions to results as a placeholder.
+        // This represents the left-side solutions that would be joined.
+
+        for (_, bucket_solutions) in bucket_hash_table {
+            results.extend(bucket_solutions);
+        }
+
         Ok(())
     }
 
@@ -795,14 +1039,21 @@ mod tests {
         let mut stream = StreamingSolution::new(config);
 
         // Add some test solutions
-        let solution1 = vec![vec![(
+        let mut solution1 = Solution::new();
+        let mut binding1 = Binding::new();
+        binding1.insert(
             Variable::new("x").unwrap(),
             Term::Iri(NamedNode::new("http://example.org/1").unwrap()),
-        )]];
-        let solution2 = vec![vec![(
+        );
+        solution1.push(binding1);
+
+        let mut solution2 = Solution::new();
+        let mut binding2 = Binding::new();
+        binding2.insert(
             Variable::new("y").unwrap(),
             Term::Iri(NamedNode::new("http://example.org/2").unwrap()),
-        )]];
+        );
+        solution2.push(binding2);
 
         stream.add_solution(solution1).unwrap();
         stream.add_solution(solution2).unwrap();
@@ -845,16 +1096,25 @@ mod tests {
 
         let mut join = SpillableHashJoin::new(config);
 
-        let left = vec![vec![vec![(
+        // Create proper Solution structures
+        let mut left_solution = Solution::new();
+        let mut left_binding = Binding::new();
+        left_binding.insert(
             Variable::new("x").unwrap(),
             Term::Iri(NamedNode::new("http://example.org/1").unwrap()),
-        )]]];
+        );
+        left_solution.push(left_binding);
 
-        let right = vec![vec![vec![(
+        let mut right_solution = Solution::new();
+        let mut right_binding = Binding::new();
+        right_binding.insert(
             Variable::new("x").unwrap(),
             Term::Iri(NamedNode::new("http://example.org/1").unwrap()),
-        )]]];
+        );
+        right_solution.push(right_binding);
 
+        let left = vec![left_solution];
+        let right = vec![right_solution];
         let join_vars = vec![Variable::new("x").unwrap()];
         let results = join.execute(left, right, &join_vars).unwrap();
 

@@ -13,8 +13,7 @@ pub mod temporal_reasoning;
 pub mod training;
 pub mod vector_store;
 
-use crate::model::{BlankNode, Literal, NamedNode, Triple};
-use crate::OxirsError;
+use crate::model::Triple;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

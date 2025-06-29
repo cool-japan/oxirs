@@ -425,7 +425,11 @@ impl From<StreamEvent> for KafkaEvent {
                 metadata,
                 Some("schema".to_string()),
             ),
-            StreamEvent::Heartbeat { timestamp, source } => (
+            StreamEvent::Heartbeat {
+                timestamp,
+                source,
+                metadata,
+            } => (
                 "heartbeat".to_string(),
                 serde_json::json!({
                     "source": source
@@ -610,6 +614,7 @@ impl TryFrom<KafkaEvent> for StreamEvent {
                 Ok(StreamEvent::Heartbeat {
                     timestamp: kafka_event.timestamp,
                     source,
+                    metadata: EventMetadata::default(),
                 })
             }
             _ => Err(anyhow!("Unknown event type: {}", kafka_event.event_type)),

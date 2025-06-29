@@ -242,26 +242,30 @@ impl StoreChangeDetector {
     }
 
     /// Start change detection
-    pub async fn start(&self) -> Result<()> {
-        match &self.strategy {
-            ChangeDetectionStrategy::TransactionLog {
-                poll_interval,
-                batch_size,
-            } => {
-                self.start_transaction_log_tailing(*poll_interval, *batch_size)
-                    .await
+    pub fn start(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move {
+            match &self.strategy {
+                ChangeDetectionStrategy::TransactionLog {
+                    poll_interval,
+                    batch_size,
+                } => {
+                    self.start_transaction_log_tailing(*poll_interval, *batch_size)
+                        .await
+                }
+                ChangeDetectionStrategy::TriggerBased { .. } => {
+                    self.start_trigger_based_detection().await
+                }
+                ChangeDetectionStrategy::Polling { poll_interval, .. } => {
+                    self.start_polling_detection(*poll_interval).await
+                }
+                ChangeDetectionStrategy::EventSourcing { .. } => self.start_event_sourcing().await,
+                ChangeDetectionStrategy::Hybrid { primary, fallback } => {
+                    self.start_hybrid_detection().await
+                }
             }
-            ChangeDetectionStrategy::TriggerBased { .. } => {
-                self.start_trigger_based_detection().await
-            }
-            ChangeDetectionStrategy::Polling { poll_interval, .. } => {
-                self.start_polling_detection(*poll_interval).await
-            }
-            ChangeDetectionStrategy::EventSourcing { .. } => self.start_event_sourcing().await,
-            ChangeDetectionStrategy::Hybrid { primary, fallback } => {
-                self.start_hybrid_detection().await
-            }
-        }
+        })
     }
 
     /// Start transaction log tailing
@@ -572,7 +576,10 @@ impl StoreChangeDetector {
             if primary_events == 0 {
                 info!("Primary strategy not producing events, starting fallback");
 
-                if let Err(e) = fallback_detector.start().await {
+                if let Err(e) = fallback_detector
+                    .start_polling_detection(Duration::from_secs(5))
+                    .await
+                {
                     error!("Fallback strategy failed: {}", e);
                     fallback_stats.write().await.errors += 1;
                     let _ = fallback_notifier.send(StoreChangeEvent::Error {

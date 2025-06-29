@@ -99,6 +99,12 @@ pub enum FailoverEvent {
         to: String,
         duration: Duration,
     },
+    /// Failback failed
+    FailbackFailed {
+        from: String,
+        to: String,
+        error: String,
+    },
     /// Health check failed
     HealthCheckFailed {
         connection: String,
@@ -125,6 +131,8 @@ pub struct FailoverStatistics {
     pub last_failover: Option<Instant>,
     #[serde(skip)]
     pub last_failback: Option<Instant>,
+    #[serde(skip)]
+    pub last_failback_failure: Option<Instant>,
     pub current_state: FailoverState,
     #[serde(skip)]
     pub state_changes: Vec<(Instant, FailoverState)>,
@@ -132,14 +140,14 @@ pub struct FailoverStatistics {
 
 /// Connection endpoint configuration
 #[derive(Clone)]
-pub struct ConnectionEndpoint<T: PooledConnection> {
+pub struct ConnectionEndpoint<T: PooledConnection + Clone> {
     pub name: String,
     pub factory: Arc<dyn ConnectionFactory<T>>,
     pub priority: u32,
     pub metadata: HashMap<String, String>,
 }
 
-impl<T: PooledConnection> std::fmt::Debug for ConnectionEndpoint<T> {
+impl<T: PooledConnection + Clone> std::fmt::Debug for ConnectionEndpoint<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ConnectionEndpoint")
             .field("name", &self.name)
@@ -151,7 +159,7 @@ impl<T: PooledConnection> std::fmt::Debug for ConnectionEndpoint<T> {
 }
 
 /// Failover manager for primary/secondary connections
-pub struct FailoverManager<T: PooledConnection> {
+pub struct FailoverManager<T: PooledConnection + Clone> {
     config: FailoverConfig,
     primary: ConnectionEndpoint<T>,
     secondary: ConnectionEndpoint<T>,
@@ -191,7 +199,7 @@ impl Default for HealthStatusTracker {
     }
 }
 
-impl<T: PooledConnection> FailoverManager<T> {
+impl<T: PooledConnection + Clone> FailoverManager<T> {
     /// Create a new failover manager
     pub async fn new(
         config: FailoverConfig,
@@ -387,14 +395,9 @@ impl<T: PooledConnection> FailoverManager<T> {
                     "Failover successful but connection borrowing not implemented"
                 ))
             }
-            Ok(Err(e)) | Err(e) => {
+            Ok(Err(e)) => {
                 *self.state.write().await = FailoverState::Unavailable;
-
-                let error_msg = if let Ok(Err(e)) = e.downcast::<anyhow::Error>() {
-                    e.to_string()
-                } else {
-                    "Connection timeout".to_string()
-                };
+                let error_msg = e.to_string();
 
                 // Update statistics
                 let mut stats = self.statistics.write().await;
@@ -415,6 +418,31 @@ impl<T: PooledConnection> FailoverManager<T> {
                 }
 
                 error!("Failover to secondary failed: {}", error_msg);
+                Err(anyhow!("Failover failed: {}", error_msg))
+            }
+            Err(_timeout_err) => {
+                *self.state.write().await = FailoverState::Unavailable;
+                let error_msg = "Connection timeout".to_string();
+
+                // Update statistics
+                let mut stats = self.statistics.write().await;
+                stats.total_failovers += 1;
+                stats.failed_failovers += 1;
+                stats.current_state = FailoverState::Unavailable;
+
+                if self.config.enable_notifications {
+                    let _ = self.event_sender.send(FailoverEvent::FailoverFailed {
+                        from: self.primary.name.clone(),
+                        to: self.secondary.name.clone(),
+                        error: error_msg.clone(),
+                    });
+
+                    let _ = self
+                        .event_sender
+                        .send(FailoverEvent::AllConnectionsUnavailable);
+                }
+
+                error!("Failover to secondary timed out");
                 Err(anyhow!("Failover failed: {}", error_msg))
             }
         }
@@ -479,19 +507,49 @@ impl<T: PooledConnection> FailoverManager<T> {
                     "Failback successful but connection borrowing not implemented"
                 ))
             }
-            Ok(Err(e)) | Err(e) => {
-                // Failback failed, stay on secondary
+            Ok(Err(connection_err)) => {
+                // Connection creation failed
                 *self.state.write().await = FailoverState::Secondary;
+                let error_msg = connection_err.to_string();
 
-                let error_msg = if let Ok(Err(e)) = e.downcast::<anyhow::Error>() {
-                    e.to_string()
-                } else {
-                    "Connection timeout".to_string()
-                };
+                let mut stats = self.statistics.write().await;
+                stats.total_failbacks += 1;
+                stats.failed_failbacks += 1;
+                stats.last_failback_failure = Some(Instant::now());
+
+                if self.config.enable_notifications {
+                    let _ = self.event_sender.send(FailoverEvent::FailbackFailed {
+                        from: self.secondary.name.clone(),
+                        to: self.primary.name.clone(),
+                        error: error_msg.clone(),
+                    });
+                }
+
+                warn!(
+                    "Failback from {} to {} failed: {}",
+                    self.secondary.name, self.primary.name, error_msg
+                );
+
+                Err(anyhow!("Failback failed: {}", error_msg))
+            }
+            Err(_timeout_err) => {
+                // Timeout occurred
+                *self.state.write().await = FailoverState::Secondary;
+                let error_msg = "Connection timeout".to_string();
 
                 // Update statistics
-                self.statistics.write().await.total_failbacks += 1;
-                self.statistics.write().await.failed_failbacks += 1;
+                let mut stats = self.statistics.write().await;
+                stats.total_failbacks += 1;
+                stats.failed_failbacks += 1;
+                stats.last_failback_failure = Some(Instant::now());
+
+                if self.config.enable_notifications {
+                    let _ = self.event_sender.send(FailoverEvent::FailbackFailed {
+                        from: self.secondary.name.clone(),
+                        to: self.primary.name.clone(),
+                        error: error_msg.clone(),
+                    });
+                }
 
                 warn!(
                     "Failback to primary failed: {}, staying on secondary",
@@ -667,6 +725,7 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
+    #[derive(Clone)]
     struct TestConnection {
         id: u32,
         healthy: Arc<AtomicBool>,

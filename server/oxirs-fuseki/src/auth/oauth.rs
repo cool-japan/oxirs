@@ -302,11 +302,11 @@ impl OAuth2Service {
             .map_err(|e| FusekiError::authentication(format!("Token exchange failed: {}", e)))?;
 
         if !response.status().is_success() {
+            let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(FusekiError::authentication(format!(
                 "Token exchange failed with status {}: {}",
-                response.status(),
-                error_text
+                status, error_text
             )));
         }
 

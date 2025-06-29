@@ -740,7 +740,8 @@ impl ContinuousQueryManager {
         // Check cache if enabled
         if metadata.enable_caching {
             if let Some(cached) = executor.cache.read().await.get(query, metadata.cache_ttl) {
-                return Ok((cached, Self::hash_result(&cached)));
+                let hash = Self::hash_result(&cached);
+                return Ok((cached, hash));
             }
         }
 

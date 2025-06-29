@@ -17,6 +17,8 @@ use crate::{
     },
 };
 
+type Result<T> = FusekiResult<T>;
+
 /// Service discovery mechanisms
 #[derive(Debug, Clone)]
 pub enum DiscoveryMethod {
@@ -205,13 +207,14 @@ impl ServiceDiscovery {
             .header("Accept", "application/sparql-results+json")
             .send()
             .await
-            .map_err(|e| Error::Custom(format!("Failed to fetch service description: {}", e)))?;
+            .map_err(|e| FusekiError::Internal {
+                message: format!("Failed to fetch service description: {}", e),
+            })?;
 
         if !response.status().is_success() {
-            return Err(Error::Custom(format!(
-                "Service description query failed: {}",
-                response.status()
-            )));
+            return Err(FusekiError::Internal {
+                message: format!("Service description query failed: {}", response.status()),
+            });
         }
 
         // Parse SPARQL results and build capabilities
@@ -243,14 +246,18 @@ impl ServiceDiscovery {
         );
 
         // Create DNS resolver
-        let resolver = Resolver::new(ResolverConfig::default(), ResolverOpts::default())
-            .map_err(|e| Error::Custom(format!("Failed to create DNS resolver: {}", e)))?;
+        let resolver =
+            Resolver::new(ResolverConfig::default(), ResolverOpts::default()).map_err(|e| {
+                FusekiError::Internal {
+                    message: format!("Failed to create DNS resolver: {}", e),
+                }
+            })?;
 
         // Look up SRV records for SPARQL services
         // Convention: _sparql._tcp.domain.com
         let srv_query = format!("_sparql._tcp.{}", domain);
 
-        match resolver.srv_lookup(&srv_query).await {
+        match resolver.srv_lookup(&srv_query) {
             Ok(lookup) => {
                 let mut eps = endpoints.write().await;
                 let mut discovered_count = 0;
@@ -292,6 +299,8 @@ impl ServiceDiscovery {
                                     )),
                                     version: None,
                                     contact: None,
+                                    location: None,
+                                    tags: vec![],
                                 },
                                 health,
                                 capabilities: ServiceCapabilities::default(),
@@ -355,19 +364,20 @@ impl ServiceDiscovery {
             .timeout(Duration::from_secs(10))
             .send()
             .await
-            .map_err(|e| Error::Custom(format!("Failed to query Consul: {}", e)))?;
+            .map_err(|e| FusekiError::Internal {
+                message: format!("Failed to query Consul: {}", e),
+            })?;
 
         if !response.status().is_success() {
-            return Err(Error::Custom(format!(
-                "Consul query failed with status: {}",
-                response.status()
-            )));
+            return Err(FusekiError::Internal {
+                message: format!("Consul query failed with status: {}", response.status()),
+            });
         }
 
-        let consul_services: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| Error::Custom(format!("Failed to parse Consul response: {}", e)))?;
+        let consul_services: serde_json::Value =
+            response.json().await.map_err(|e| FusekiError::Internal {
+                message: format!("Failed to parse Consul response: {}", e),
+            })?;
 
         let mut eps = endpoints.write().await;
         let mut discovered_count = 0;
@@ -461,6 +471,8 @@ impl ServiceDiscovery {
                                                 .to_string()
                                         }),
                                     contact: None,
+                                    location: None,
+                                    tags: tags.iter().map(|s| s.to_string()).collect(),
                                 },
                                 health,
                                 capabilities: ServiceCapabilities::default(),
@@ -533,7 +545,9 @@ impl ServiceDiscovery {
             }
             Err(e) => {
                 tracing::warn!("Failed to reach service at {}: {}", url, e);
-                Err(Error::Custom(format!("Service health check failed: {}", e)))
+                Err(FusekiError::Internal {
+                    message: format!("Service health check failed: {}", e),
+                })
             }
         }
     }
@@ -581,6 +595,8 @@ impl ServiceDiscovery {
                                 ),
                                 version: None,
                                 contact: None,
+                                location: None,
+                                tags: vec![],
                             },
                             health,
                             capabilities: ServiceCapabilities::default(),

@@ -5,9 +5,9 @@
 
 use oxirs_arq::algebra::Term;
 use oxirs_arq::{
-    Algebra, BinaryOperator, Expression, Iri, Literal, QueryExecutor, Solution, TriplePattern,
-    Variable,
+    Algebra, BinaryOperator, Expression, Literal, QueryExecutor, Solution, TriplePattern, Variable,
 };
+use oxirs_core::model::NamedNode;
 use std::collections::HashMap;
 
 /// Mock dataset for testing
@@ -119,8 +119,8 @@ mod basic_tests {
 
         // Add some test data
         dataset.add_triple(
-            Term::Iri(Iri("http://example.org/alice".to_string())),
-            Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/alice")),
+            Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
             Term::Literal(Literal {
                 value: "Alice".to_string(),
                 language: None,
@@ -129,18 +129,20 @@ mod basic_tests {
         );
 
         dataset.add_triple(
-            Term::Iri(Iri("http://example.org/alice".to_string())),
-            Term::Iri(Iri("http://xmlns.com/foaf/0.1/age".to_string())),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/alice")),
+            Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/age")),
             Term::Literal(Literal {
                 value: "30".to_string(),
                 language: None,
-                datatype: Some(Iri("http://www.w3.org/2001/XMLSchema#integer".to_string())),
+                datatype: Some(NamedNode::new_unchecked(
+                    "http://www.w3.org/2001/XMLSchema#integer",
+                )),
             }),
         );
 
         dataset.add_triple(
-            Term::Iri(Iri("http://example.org/bob".to_string())),
-            Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/bob")),
+            Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
             Term::Literal(Literal {
                 value: "Bob".to_string(),
                 language: None,
@@ -149,12 +151,14 @@ mod basic_tests {
         );
 
         dataset.add_triple(
-            Term::Iri(Iri("http://example.org/bob".to_string())),
-            Term::Iri(Iri("http://xmlns.com/foaf/0.1/age".to_string())),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/bob")),
+            Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/age")),
             Term::Literal(Literal {
                 value: "25".to_string(),
                 language: None,
-                datatype: Some(Iri("http://www.w3.org/2001/XMLSchema#integer".to_string())),
+                datatype: Some(NamedNode::new_unchecked(
+                    "http://www.w3.org/2001/XMLSchema#integer",
+                )),
             }),
         );
 
@@ -164,13 +168,13 @@ mod basic_tests {
     #[test]
     fn test_basic_bgp() {
         let dataset = create_test_dataset();
-        let executor = QueryExecutor::new();
+        let mut executor = QueryExecutor::new();
 
         // Query: ?person foaf:name ?name
         let algebra = Algebra::Bgp(vec![TriplePattern {
-            subject: Term::Variable("person".to_string()),
-            predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
-            object: Term::Variable("name".to_string()),
+            subject: Term::Variable(Variable::new("person").unwrap()),
+            predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
+            object: Term::Variable(Variable::new("name").unwrap()),
         }]);
 
         let (solution, _stats) = executor.execute(&algebra, &dataset).unwrap();
@@ -181,10 +185,12 @@ mod basic_tests {
         let names: Vec<String> = solution
             .iter()
             .filter_map(|binding| {
-                binding.get("name").and_then(|term| match term {
-                    Term::Literal(lit) => Some(lit.value.clone()),
-                    _ => None,
-                })
+                binding
+                    .get(&Variable::new("name").unwrap())
+                    .and_then(|term| match term {
+                        Term::Literal(lit) => Some(lit.value.clone()),
+                        _ => None,
+                    })
             })
             .collect();
 
@@ -195,22 +201,24 @@ mod basic_tests {
     #[test]
     fn test_filter_numeric_comparison() {
         let dataset = create_test_dataset();
-        let executor = QueryExecutor::new();
+        let mut executor = QueryExecutor::new();
 
         // Query: ?person foaf:age ?age . FILTER(?age > 25)
         let algebra = Algebra::Filter {
             pattern: Box::new(Algebra::Bgp(vec![TriplePattern {
-                subject: Term::Variable("person".to_string()),
-                predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/age".to_string())),
-                object: Term::Variable("age".to_string()),
+                subject: Term::Variable(Variable::new("person").unwrap()),
+                predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/age")),
+                object: Term::Variable(Variable::new("age").unwrap()),
             }])),
             condition: Expression::Binary {
                 op: BinaryOperator::Greater,
-                left: Box::new(Expression::Variable("age".to_string())),
+                left: Box::new(Expression::Variable(Variable::new("age").unwrap())),
                 right: Box::new(Expression::Literal(Literal {
                     value: "25".to_string(),
                     language: None,
-                    datatype: Some(Iri("http://www.w3.org/2001/XMLSchema#integer".to_string())),
+                    datatype: Some(NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#integer",
+                    )),
                 })),
             },
         };
@@ -220,9 +228,9 @@ mod basic_tests {
         // Should only return Alice (age 30)
         assert_eq!(solution.len(), 1);
 
-        let person = solution[0].get("person").unwrap();
+        let person = solution[0].get(&Variable::new("person").unwrap()).unwrap();
         match person {
-            Term::Iri(iri) => assert_eq!(iri.0, "http://example.org/alice"),
+            Term::Iri(iri) => assert_eq!(iri.as_str(), "http://example.org/alice"),
             _ => panic!("Expected IRI"),
         }
     }
@@ -230,13 +238,13 @@ mod basic_tests {
     #[test]
     fn test_optional_pattern() {
         let dataset = create_test_dataset();
-        let executor = QueryExecutor::new();
+        let mut executor = QueryExecutor::new();
 
         // Add a person without age
         let mut dataset = dataset;
         dataset.add_triple(
-            Term::Iri(Iri("http://example.org/charlie".to_string())),
-            Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/charlie")),
+            Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
             Term::Literal(Literal {
                 value: "Charlie".to_string(),
                 language: None,
@@ -247,14 +255,14 @@ mod basic_tests {
         // Query: ?person foaf:name ?name . OPTIONAL { ?person foaf:age ?age }
         let algebra = Algebra::LeftJoin {
             left: Box::new(Algebra::Bgp(vec![TriplePattern {
-                subject: Term::Variable("person".to_string()),
-                predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
-                object: Term::Variable("name".to_string()),
+                subject: Term::Variable(Variable::new("person").unwrap()),
+                predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
+                object: Term::Variable(Variable::new("name").unwrap()),
             }])),
             right: Box::new(Algebra::Bgp(vec![TriplePattern {
-                subject: Term::Variable("person".to_string()),
-                predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/age".to_string())),
-                object: Term::Variable("age".to_string()),
+                subject: Term::Variable(Variable::new("person").unwrap()),
+                predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/age")),
+                object: Term::Variable(Variable::new("age").unwrap()),
             }])),
             filter: None,
         };
@@ -269,7 +277,7 @@ mod basic_tests {
             .iter()
             .find(|binding| {
                 binding
-                    .get("name")
+                    .get(&Variable::new("name").unwrap())
                     .and_then(|term| match term {
                         Term::Literal(lit) => Some(lit.value.as_str()),
                         _ => None,
@@ -278,20 +286,20 @@ mod basic_tests {
             })
             .unwrap();
 
-        assert!(charlie_binding.contains_key("name"));
-        assert!(!charlie_binding.contains_key("age"));
+        assert!(charlie_binding.contains_key(&Variable::new("name").unwrap()));
+        assert!(!charlie_binding.contains_key(&Variable::new("age").unwrap()));
     }
 
     #[test]
     fn test_union_pattern() {
         let dataset = create_test_dataset();
-        let executor = QueryExecutor::new();
+        let mut executor = QueryExecutor::new();
 
         // Query: { ?s foaf:name "Alice" } UNION { ?s foaf:age "25"^^xsd:integer }
         let algebra = Algebra::Union {
             left: Box::new(Algebra::Bgp(vec![TriplePattern {
-                subject: Term::Variable("s".to_string()),
-                predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
+                subject: Term::Variable(Variable::new("s").unwrap()),
+                predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
                 object: Term::Literal(Literal {
                     value: "Alice".to_string(),
                     language: None,
@@ -299,12 +307,14 @@ mod basic_tests {
                 }),
             }])),
             right: Box::new(Algebra::Bgp(vec![TriplePattern {
-                subject: Term::Variable("s".to_string()),
-                predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/age".to_string())),
+                subject: Term::Variable(Variable::new("s").unwrap()),
+                predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/age")),
                 object: Term::Literal(Literal {
                     value: "25".to_string(),
                     language: None,
-                    datatype: Some(Iri("http://www.w3.org/2001/XMLSchema#integer".to_string())),
+                    datatype: Some(NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#integer",
+                    )),
                 }),
             }])),
         };
@@ -317,10 +327,12 @@ mod basic_tests {
         let subjects: Vec<String> = solution
             .iter()
             .filter_map(|binding| {
-                binding.get("s").and_then(|term| match term {
-                    Term::Iri(iri) => Some(iri.0.clone()),
-                    _ => None,
-                })
+                binding
+                    .get(&Variable::new("s").unwrap())
+                    .and_then(|term| match term {
+                        Term::Iri(iri) => Some(iri.as_str().to_string()),
+                        _ => None,
+                    })
             })
             .collect();
 
@@ -331,45 +343,47 @@ mod basic_tests {
     #[test]
     fn test_projection() {
         let dataset = create_test_dataset();
-        let executor = QueryExecutor::new();
+        let mut executor = QueryExecutor::new();
 
         // Query: SELECT ?name WHERE { ?person foaf:name ?name ; foaf:age ?age }
         let algebra = Algebra::Project {
             pattern: Box::new(Algebra::Bgp(vec![
                 TriplePattern {
-                    subject: Term::Variable("person".to_string()),
-                    predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
-                    object: Term::Variable("name".to_string()),
+                    subject: Term::Variable(Variable::new("person").unwrap()),
+                    predicate: Term::Iri(NamedNode::new_unchecked(
+                        "http://xmlns.com/foaf/0.1/name",
+                    )),
+                    object: Term::Variable(Variable::new("name").unwrap()),
                 },
                 TriplePattern {
-                    subject: Term::Variable("person".to_string()),
-                    predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/age".to_string())),
-                    object: Term::Variable("age".to_string()),
+                    subject: Term::Variable(Variable::new("person").unwrap()),
+                    predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/age")),
+                    object: Term::Variable(Variable::new("age").unwrap()),
                 },
             ])),
-            variables: vec!["name".to_string()],
+            variables: vec![Variable::new("name").unwrap()],
         };
 
         let (solution, _stats) = executor.execute(&algebra, &dataset).unwrap();
 
         // Check that only 'name' variable is in results
         for binding in &solution {
-            assert!(binding.contains_key("name"));
-            assert!(!binding.contains_key("person"));
-            assert!(!binding.contains_key("age"));
+            assert!(binding.contains_key(&Variable::new("name").unwrap()));
+            assert!(!binding.contains_key(&Variable::new("person").unwrap()));
+            assert!(!binding.contains_key(&Variable::new("age").unwrap()));
         }
     }
 
     #[test]
     fn test_distinct() {
         let dataset = create_test_dataset();
-        let executor = QueryExecutor::new();
+        let mut executor = QueryExecutor::new();
 
         // Add duplicate data
         let mut dataset = dataset;
         dataset.add_triple(
-            Term::Iri(Iri("http://example.org/alice2".to_string())),
-            Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/alice2")),
+            Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
             Term::Literal(Literal {
                 value: "Alice".to_string(),
                 language: None,
@@ -381,11 +395,13 @@ mod basic_tests {
         let algebra = Algebra::Distinct {
             pattern: Box::new(Algebra::Project {
                 pattern: Box::new(Algebra::Bgp(vec![TriplePattern {
-                    subject: Term::Variable("person".to_string()),
-                    predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
-                    object: Term::Variable("name".to_string()),
+                    subject: Term::Variable(Variable::new("person").unwrap()),
+                    predicate: Term::Iri(NamedNode::new_unchecked(
+                        "http://xmlns.com/foaf/0.1/name",
+                    )),
+                    object: Term::Variable(Variable::new("name").unwrap()),
                 }])),
-                variables: vec!["name".to_string()],
+                variables: vec![Variable::new("name").unwrap()],
             }),
         };
 
@@ -398,17 +414,17 @@ mod basic_tests {
     #[test]
     fn test_order_by() {
         let dataset = create_test_dataset();
-        let executor = QueryExecutor::new();
+        let mut executor = QueryExecutor::new();
 
         // Query: SELECT ?person ?age WHERE { ?person foaf:age ?age } ORDER BY ?age
         let algebra = Algebra::OrderBy {
             pattern: Box::new(Algebra::Bgp(vec![TriplePattern {
-                subject: Term::Variable("person".to_string()),
-                predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/age".to_string())),
-                object: Term::Variable("age".to_string()),
+                subject: Term::Variable(Variable::new("person").unwrap()),
+                predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/age")),
+                object: Term::Variable(Variable::new("age").unwrap()),
             }])),
             conditions: vec![oxirs_arq::OrderCondition {
-                expr: Expression::Variable("age".to_string()),
+                expr: Expression::Variable(Variable::new("age").unwrap()),
                 ascending: true,
             }],
         };
@@ -418,15 +434,15 @@ mod basic_tests {
         // Bob (25) should come before Alice (30)
         assert_eq!(solution.len(), 2);
 
-        let first_person = solution[0].get("person").unwrap();
+        let first_person = solution[0].get(&Variable::new("person").unwrap()).unwrap();
         match first_person {
-            Term::Iri(iri) => assert_eq!(iri.0, "http://example.org/bob"),
+            Term::Iri(iri) => assert_eq!(iri.as_str(), "http://example.org/bob"),
             _ => panic!("Expected IRI"),
         }
 
-        let second_person = solution[1].get("person").unwrap();
+        let second_person = solution[1].get(&Variable::new("person").unwrap()).unwrap();
         match second_person {
-            Term::Iri(iri) => assert_eq!(iri.0, "http://example.org/alice"),
+            Term::Iri(iri) => assert_eq!(iri.as_str(), "http://example.org/alice"),
             _ => panic!("Expected IRI"),
         }
     }
@@ -434,14 +450,14 @@ mod basic_tests {
     #[test]
     fn test_limit_offset() {
         let dataset = create_test_dataset();
-        let executor = QueryExecutor::new();
+        let mut executor = QueryExecutor::new();
 
         // Query: SELECT ?person WHERE { ?person foaf:name ?name } LIMIT 1 OFFSET 1
         let algebra = Algebra::Slice {
             pattern: Box::new(Algebra::Bgp(vec![TriplePattern {
-                subject: Term::Variable("person".to_string()),
-                predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
-                object: Term::Variable("name".to_string()),
+                subject: Term::Variable(Variable::new("person").unwrap()),
+                predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
+                object: Term::Variable(Variable::new("name").unwrap()),
             }])),
             offset: Some(1),
             limit: Some(1),
@@ -462,18 +478,18 @@ mod aggregation_tests {
     #[test]
     fn test_count_aggregation() {
         let dataset = super::basic_tests::create_test_dataset();
-        let executor = QueryExecutor::new();
+        let mut executor = QueryExecutor::new();
 
         // Query: SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }
         let algebra = Algebra::Group {
             pattern: Box::new(Algebra::Bgp(vec![TriplePattern {
-                subject: Term::Variable("s".to_string()),
-                predicate: Term::Variable("p".to_string()),
-                object: Term::Variable("o".to_string()),
+                subject: Term::Variable(Variable::new("s").unwrap()),
+                predicate: Term::Variable(Variable::new("p").unwrap()),
+                object: Term::Variable(Variable::new("o").unwrap()),
             }])),
             variables: vec![], // No grouping variables = single group
             aggregates: vec![(
-                "count".to_string(),
+                Variable::new("count").unwrap(),
                 Aggregate::Count {
                     distinct: false,
                     expr: None, // COUNT(*)
@@ -489,7 +505,7 @@ mod aggregation_tests {
         }
 
         assert_eq!(solution.len(), 1);
-        let count = solution[0].get("count").unwrap();
+        let count = solution[0].get(&Variable::new("count").unwrap()).unwrap();
         match count {
             Term::Literal(lit) => assert_eq!(lit.value, "4"), // 4 triples in test dataset
             _ => panic!("Expected literal"),
@@ -499,29 +515,29 @@ mod aggregation_tests {
     #[test]
     fn test_group_by_with_count() {
         let dataset = super::basic_tests::create_test_dataset();
-        let executor = QueryExecutor::new();
+        let mut executor = QueryExecutor::new();
 
         // Add more data for grouping
         let mut dataset = dataset;
         dataset.add_triple(
-            Term::Iri(Iri("http://example.org/alice".to_string())),
-            Term::Iri(Iri("http://xmlns.com/foaf/0.1/knows".to_string())),
-            Term::Iri(Iri("http://example.org/bob".to_string())),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/alice")),
+            Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/knows")),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/bob")),
         );
 
         // Query: SELECT ?person (COUNT(*) as ?count) WHERE { ?person ?p ?o } GROUP BY ?person
         let algebra = Algebra::Group {
             pattern: Box::new(Algebra::Bgp(vec![TriplePattern {
-                subject: Term::Variable("person".to_string()),
-                predicate: Term::Variable("p".to_string()),
-                object: Term::Variable("o".to_string()),
+                subject: Term::Variable(Variable::new("person").unwrap()),
+                predicate: Term::Variable(Variable::new("p").unwrap()),
+                object: Term::Variable(Variable::new("o").unwrap()),
             }])),
             variables: vec![GroupCondition {
-                expr: Expression::Variable("person".to_string()),
+                expr: Expression::Variable(Variable::new("person").unwrap()),
                 alias: None,
             }],
             aggregates: vec![(
-                "count".to_string(),
+                Variable::new("count").unwrap(),
                 Aggregate::Count {
                     distinct: false,
                     expr: None,
@@ -539,16 +555,16 @@ mod aggregation_tests {
             .iter()
             .find(|binding| {
                 binding
-                    .get("person")
+                    .get(&Variable::new("person").unwrap())
                     .and_then(|term| match term {
-                        Term::Iri(iri) => Some(iri.0.as_str()),
+                        Term::Iri(iri) => Some(iri.as_str()),
                         _ => None,
                     })
                     .map_or(false, |iri| iri.contains("alice"))
             })
             .unwrap();
 
-        let alice_count = alice_binding.get("count").unwrap();
+        let alice_count = alice_binding.get(&Variable::new("count").unwrap()).unwrap();
         match alice_count {
             Term::Literal(lit) => assert_eq!(lit.value, "3"),
             _ => panic!("Expected literal"),

@@ -40,15 +40,20 @@ pub mod executor;
 pub mod graphql;
 pub mod integration;
 pub mod k8s_discovery;
+pub mod materialized_views;
 pub mod metadata;
 pub mod monitoring;
 pub mod nats_federation;
+pub mod network_optimizer;
 pub mod planner;
 pub mod query_decomposition;
+pub mod request_batcher;
 pub mod service;
 pub mod service_client;
 pub mod service_executor;
 pub mod service_optimizer;
+pub mod source_selection;
+pub mod streaming_optimizer;
 
 pub use auto_discovery::*;
 pub use cache::*;
@@ -58,15 +63,20 @@ pub use executor::*;
 pub use graphql::*;
 pub use integration::*;
 pub use k8s_discovery::*;
+pub use materialized_views::*;
 pub use metadata::*;
 pub use monitoring::*;
 pub use nats_federation::*;
+pub use network_optimizer::*;
 pub use planner::*;
 pub use query_decomposition::*;
+pub use request_batcher::*;
 pub use service::*;
 pub use service_client::*;
 pub use service_executor::*;
 pub use service_optimizer::*;
+pub use source_selection::*;
+pub use streaming_optimizer::*;
 
 /// Main federation engine that coordinates all federated query processing
 #[derive(Debug, Clone)]
@@ -776,6 +786,58 @@ pub enum ServiceStatus {
     Unavailable,
     Unknown,
 }
+
+/// Spatial coverage for geospatial services
+#[derive(Debug, Clone)]
+pub struct SpatialCoverage {
+    pub coverage_type: SpatialCoverageType,
+    pub min_lat: f64,
+    pub max_lat: f64,
+    pub min_lon: f64,
+    pub max_lon: f64,
+}
+
+/// Types of spatial coverage
+#[derive(Debug, Clone)]
+pub enum SpatialCoverageType {
+    BoundingBox,
+    Circle,
+    Polygon,
+}
+
+/// Numeric range for numeric services
+#[derive(Debug, Clone)]
+pub struct NumericRange {
+    pub min: f64,
+    pub max: f64,
+    pub data_type: String,
+}
+
+/// Extended service metadata for enhanced optimization
+#[derive(Debug, Clone)]
+pub struct ExtendedServiceMetadata {
+    pub estimated_triple_count: Option<u64>,
+    pub domain_specializations: Option<Vec<String>>,
+    pub known_vocabularies: Option<Vec<String>>,
+    pub schema_mappings: Option<HashMap<String, String>>,
+    pub performance_history: Option<HashMap<String, PerformanceRecord>>,
+    pub successful_query_patterns: Option<Vec<PatternFeatures>>,
+    pub temporal_coverage: Option<TemporalRange>,
+    pub spatial_coverage: Option<SpatialCoverage>,
+    pub numeric_ranges: Option<Vec<NumericRange>>,
+}
+
+/// Performance record for service history
+#[derive(Debug, Clone)]
+pub struct PerformanceRecord {
+    pub avg_response_time_score: f64,
+    pub success_rate: f64,
+    pub last_updated: chrono::DateTime<chrono::Utc>,
+}
+
+/// Pattern features for ML analysis (reexport from materialized_views)
+pub use materialized_views::PatternFeatures;
+pub use materialized_views::TemporalRange;
 
 #[cfg(test)]
 mod tests {

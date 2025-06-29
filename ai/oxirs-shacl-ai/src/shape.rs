@@ -13,8 +13,11 @@ use crate::{Result, ShaclAiError};
 // Simplified shape types for AI operations
 // We'll expand this as the SHACL crate stabilizes
 
+/// Type alias for better integration with shape_management module
+pub type AiShape = Shape;
+
 /// Enhanced shape wrapper with AI capabilities
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Shape {
     pub id: String,
     pub target_classes: Vec<String>,
@@ -94,7 +97,7 @@ impl Shape {
 }
 
 /// Property constraint builder with AI enhancements
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PropertyConstraint {
     pub path: String,
     pub min_count: Option<u32>,
@@ -225,6 +228,61 @@ impl PropertyConstraint {
             "no constraints".to_string()
         } else {
             parts.join(", ")
+        }
+    }
+
+    /// Get the property path
+    pub fn property(&self) -> &str {
+        &self.path
+    }
+
+    /// Get the primary constraint type
+    pub fn constraint_type(&self) -> String {
+        if self.min_count.is_some() || self.max_count.is_some() {
+            "sh:count".to_string()
+        } else if self.datatype.is_some() {
+            "sh:datatype".to_string()
+        } else if self.node_kind.is_some() {
+            "sh:nodeKind".to_string()
+        } else if self.pattern.is_some() {
+            "sh:pattern".to_string()
+        } else if self.class.is_some() {
+            "sh:class".to_string()
+        } else if self.has_value.is_some() {
+            "sh:hasValue".to_string()
+        } else if !self.in_values.is_empty() {
+            "sh:in".to_string()
+        } else if self.min_length.is_some() || self.max_length.is_some() {
+            "sh:length".to_string()
+        } else {
+            "sh:unknown".to_string()
+        }
+    }
+
+    /// Get the primary constraint value as a string
+    pub fn value(&self) -> Option<String> {
+        if let Some(min_count) = self.min_count {
+            Some(min_count.to_string())
+        } else if let Some(max_count) = self.max_count {
+            Some(max_count.to_string())
+        } else if let Some(ref datatype) = self.datatype {
+            Some(datatype.clone())
+        } else if let Some(ref node_kind) = self.node_kind {
+            Some(node_kind.clone())
+        } else if let Some(ref pattern) = self.pattern {
+            Some(pattern.clone())
+        } else if let Some(ref class) = self.class {
+            Some(class.clone())
+        } else if let Some(ref has_value) = self.has_value {
+            Some(has_value.clone())
+        } else if !self.in_values.is_empty() {
+            Some(self.in_values.join(","))
+        } else if let Some(min_length) = self.min_length {
+            Some(min_length.to_string())
+        } else if let Some(max_length) = self.max_length {
+            Some(max_length.to_string())
+        } else {
+            None
         }
     }
 }

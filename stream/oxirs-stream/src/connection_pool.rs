@@ -86,7 +86,7 @@ impl Default for PoolConfig {
 }
 
 /// Load balancing strategies for connection distribution
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum LoadBalancingStrategy {
     /// Round-robin selection
     RoundRobin,
@@ -139,6 +139,9 @@ pub trait PooledConnection: Send + Sync + 'static {
 
     /// Update last activity time
     fn update_activity(&mut self);
+
+    /// Clone the connection (custom method for trait object compatibility)
+    fn clone_connection(&self) -> Box<dyn PooledConnection>;
 }
 
 /// Implement PooledConnection for Box<dyn PooledConnection> to enable trait object usage
@@ -162,6 +165,10 @@ impl PooledConnection for Box<dyn PooledConnection> {
 
     fn update_activity(&mut self) {
         self.as_mut().update_activity()
+    }
+
+    fn clone_connection(&self) -> Box<dyn PooledConnection> {
+        self.as_ref().clone_connection()
     }
 }
 
@@ -252,7 +259,7 @@ impl<T: PooledConnection> PooledConnectionWrapper<T> {
 }
 
 /// Advanced connection pool implementation with monitoring and load balancing
-pub struct ConnectionPool<T: PooledConnection> {
+pub struct ConnectionPool<T: PooledConnection + Clone> {
     config: PoolConfig,
     connections: Arc<Mutex<VecDeque<PooledConnectionWrapper<T>>>>,
     active_count: Arc<Mutex<usize>>,
@@ -281,7 +288,7 @@ pub struct ConnectionPool<T: PooledConnection> {
 
 /// Connection factory trait
 #[async_trait::async_trait]
-pub trait ConnectionFactory<T: PooledConnection>: Send + Sync {
+pub trait ConnectionFactory<T: PooledConnection + Clone>: Send + Sync {
     async fn create_connection(&self) -> Result<T>;
 }
 
@@ -410,7 +417,7 @@ impl AdaptiveController {
     }
 }
 
-impl<T: PooledConnection> ConnectionPool<T> {
+impl<T: PooledConnection + Clone> ConnectionPool<T> {
     /// Create a new advanced connection pool with monitoring and circuit breaker
     pub async fn new(config: PoolConfig, factory: Arc<dyn ConnectionFactory<T>>) -> Result<Self> {
         // Initialize circuit breaker if enabled
@@ -795,8 +802,9 @@ impl<T: PooledConnection> ConnectionPool<T> {
                 }
 
                 // Attempt to reconnect unhealthy connections
-                for (index, conn_id) in to_reconnect {
-                    if index < connections_guard.len() {
+                let to_reconnect_count = to_reconnect.len();
+                for (index, conn_id) in &to_reconnect {
+                    if *index < connections_guard.len() {
                         match reconnect_manager
                             .reconnect(conn_id.clone(), connection_factory.clone())
                             .await
@@ -808,15 +816,17 @@ impl<T: PooledConnection> ConnectionPool<T> {
                                 // Register new connection with health monitor
                                 let mut metadata = HashMap::new();
                                 metadata.insert("pool_id".to_string(), "main".to_string());
-                                health_monitor.register_connection(conn_id, metadata).await;
+                                health_monitor
+                                    .register_connection(conn_id.clone(), metadata)
+                                    .await;
 
-                                connections_guard[index] = new_wrapper;
+                                connections_guard[*index] = new_wrapper;
                                 info!("Successfully reconnected connection {}", conn_id);
                             }
                             Err(e) => {
                                 warn!("Failed to reconnect connection {}: {}", conn_id, e);
                                 // Remove the failed connection
-                                connections_guard.remove(index);
+                                connections_guard.remove(*index);
                                 stats.write().await.total_destroyed += 1;
                             }
                         }
@@ -835,7 +845,7 @@ impl<T: PooledConnection> ConnectionPool<T> {
                 debug!(
                     "Pool maintenance completed, removed {} connections, attempted {} reconnections",
                     to_remove.len(),
-                    to_reconnect.len()
+                    to_reconnect_count
                 );
             }
         });
@@ -1180,7 +1190,7 @@ impl<T: PooledConnection> Drop for PooledConnectionHandle<T> {
 }
 
 /// Helper for creating connection pools from stream config
-impl<T: PooledConnection> ConnectionPool<T> {
+impl<T: PooledConnection + Clone> ConnectionPool<T> {
     /// Create a connection pool from stream configuration
     pub async fn new_from_config(
         config: &StreamConfig,
@@ -1407,7 +1417,7 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     struct TestConnection {
         id: u32,
         created_at: Instant,
@@ -1450,6 +1460,10 @@ mod tests {
 
         fn update_activity(&mut self) {
             self.last_activity = Instant::now();
+        }
+
+        fn clone_connection(&self) -> Box<dyn PooledConnection> {
+            Box::new(self.clone())
         }
     }
 

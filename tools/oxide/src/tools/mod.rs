@@ -49,7 +49,10 @@ pub mod wwwenc;
 pub mod utils;
 
 /// Format detection and conversion
-pub mod format;
+pub mod format_detection;
+
+/// Performance monitoring and profiling
+pub mod performance;
 
 /// Tool execution statistics
 #[derive(Debug, Clone)]

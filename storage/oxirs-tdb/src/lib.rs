@@ -99,15 +99,17 @@
 //! - Serialization/deserialization failures
 //! - Index corruption or validation failures
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::path::Path;
 
 pub mod assembler;
 pub mod btree;
 pub mod compression;
+pub mod filesystem;
 pub mod mvcc;
 pub mod nodes;
 pub mod page;
+pub mod production_hardening;
 pub mod storage;
 pub mod transactions;
 pub mod triple_store;
@@ -118,8 +120,12 @@ pub use compression::{
     AdaptiveCompressor, AdvancedCompressionType, ColumnStoreCompressor, CompressedData,
     CompressionMetadata,
 };
+pub use filesystem::{DatabaseMetadata, FileSystemConfig, FileType, TdbFileSystem};
 pub use mvcc::{TransactionId, Version};
 pub use nodes::{NodeId, NodeTable, Term};
+pub use production_hardening::{
+    CircuitBreaker, EdgeCaseValidator, HealthMetrics, HealthMonitor, ResourceLimits,
+};
 pub use triple_store::{Quad, Triple, TripleStore, TripleStoreConfig, TripleStoreStats};
 
 /// Configuration for TDB storage engine
@@ -197,6 +203,7 @@ impl Default for TdbConfig {
 /// - **Transactions**: ACID compliance with write-ahead logging
 /// - **Concurrency**: Multi-reader, single-writer with snapshot isolation
 /// - **Recovery**: Automatic crash recovery using ARIES protocol
+/// - **File System**: TDB2-compatible directory structure and file management
 ///
 /// # Examples
 ///
@@ -247,9 +254,12 @@ impl Default for TdbConfig {
 /// - **Cache Size**: Larger cache sizes improve query performance
 /// - **Index Selection**: The store automatically selects optimal indices for queries
 /// - **Compression**: Enable advanced compression for space-constrained environments
+/// - **File Layout**: TDB2-compatible file organization for optimal I/O patterns
 pub struct TdbStore {
     config: TdbConfig,
+    filesystem: TdbFileSystem,
     triple_store: TripleStore,
+    health_monitor: HealthMonitor,
 }
 
 impl TdbStore {
@@ -287,8 +297,33 @@ impl TdbStore {
     /// # }
     /// ```
     pub fn new(config: TdbConfig) -> Result<Self> {
+        // Initialize TDB2-compatible file system
+        let filesystem_config = FileSystemConfig {
+            create_if_missing: true,
+            sync_writes: config.enable_transactions,
+            use_memory_mapping: false,
+            backup_on_startup: false, // Don't backup on every open
+            max_file_handles: 256,
+            page_size: crate::page::PAGE_SIZE,
+        };
+
+        let filesystem = TdbFileSystem::new(&config.location, filesystem_config)?;
+
+        // Initialize production hardening components
+        let resource_limits = ResourceLimits {
+            max_memory_usage: 85.0,
+            max_cpu_usage: 90.0,
+            max_disk_usage: 95.0,
+            max_file_handles: 1000,
+            max_connections: 500,
+            max_error_rate: 5.0,
+            max_response_time_ms: 1000.0,
+        };
+
+        let health_monitor = HealthMonitor::new(resource_limits);
+
         let triple_store_config = TripleStoreConfig {
-            storage_path: config.location.clone().into(),
+            storage_path: filesystem.data_path().to_path_buf(),
             buffer_config: crate::page::BufferPoolConfig {
                 max_pages: config.cache_size / crate::page::PAGE_SIZE,
                 ..Default::default()
@@ -300,7 +335,9 @@ impl TdbStore {
 
         Ok(Self {
             config,
+            filesystem,
             triple_store,
+            health_monitor,
         })
     }
 
@@ -427,12 +464,49 @@ impl TdbStore {
     /// - Duplicate triples are handled efficiently (no-op for exact duplicates)
     /// - Bulk insertions should be wrapped in transactions for better performance
     pub fn insert_triple(&self, subject: &Term, predicate: &Term, object: &Term) -> Result<()> {
-        let subject_id = self.triple_store.store_term(subject)?;
-        let predicate_id = self.triple_store.store_term(predicate)?;
-        let object_id = self.triple_store.store_term(object)?;
+        // Robust validation with edge case handling
+        let subject_str = match subject {
+            Term::Iri(iri) => iri.as_str(),
+            Term::BlankNode(node) => &format!("_:{}", node),
+            _ => return Err(anyhow!("Subject must be an IRI or blank node")),
+        };
 
-        let triple = Triple::new(subject_id, predicate_id, object_id);
-        self.triple_store.insert_triple(&triple)
+        let predicate_str = match predicate {
+            Term::Iri(iri) => iri.as_str(),
+            _ => return Err(anyhow!("Predicate must be an IRI")),
+        };
+
+        let object_str = match object {
+            Term::Iri(iri) => iri.as_str(),
+            Term::BlankNode(node) => &format!("_:{}", node),
+            Term::Literal { value, .. } => value.as_str(),
+            _ => return Err(anyhow!("Invalid object term type")),
+        };
+
+        // Validate with edge case handling
+        EdgeCaseValidator::validate_iri_robust(subject_str)?;
+        EdgeCaseValidator::validate_iri_robust(predicate_str)?;
+
+        if object_str.starts_with("http://") || object_str.starts_with("https://") {
+            EdgeCaseValidator::validate_iri_robust(object_str)?;
+        } else {
+            let datatype = match object {
+                Term::Literal { datatype, .. } => datatype.as_deref(),
+                _ => None,
+            };
+            EdgeCaseValidator::validate_literal_robust(object_str, datatype)?;
+        }
+
+        // Execute with circuit breaker protection
+        self.health_monitor
+            .execute_with_protection("insert_triple", || {
+                let subject_id = self.triple_store.store_term(subject)?;
+                let predicate_id = self.triple_store.store_term(predicate)?;
+                let object_id = self.triple_store.store_term(object)?;
+
+                let triple = Triple::new(subject_id, predicate_id, object_id);
+                self.triple_store.insert_triple(&triple)
+            })
     }
 
     /// Insert a quad
@@ -611,6 +685,74 @@ impl TdbStore {
     /// Access the underlying triple store
     pub fn triple_store(&self) -> &TripleStore {
         &self.triple_store
+    }
+
+    /// Access the file system
+    pub fn filesystem(&self) -> &TdbFileSystem {
+        &self.filesystem
+    }
+
+    /// Get database metadata
+    pub fn get_database_metadata(&self) -> DatabaseMetadata {
+        self.filesystem.get_metadata()
+    }
+
+    /// Create a backup of the database
+    pub fn create_backup(&self) -> Result<std::path::PathBuf> {
+        self.filesystem.create_backup()
+    }
+
+    /// Validate database integrity
+    pub fn validate_integrity(&self) -> Result<Vec<String>> {
+        self.filesystem.validate_integrity()
+    }
+
+    /// Update database statistics
+    pub fn update_database_stats(&self) -> Result<()> {
+        let stats = self.get_stats()?;
+        let triple_count = stats.total_triples;
+        // For node_count, we can estimate from the total_triples or use a default
+        let node_count = stats.total_triples; // Using total_triples as an estimate for now
+        self.filesystem.update_stats(triple_count, node_count)
+    }
+
+    /// Get health monitor
+    pub fn health_monitor(&self) -> &HealthMonitor {
+        &self.health_monitor
+    }
+
+    /// Check system health status
+    pub fn check_health(&self) -> Result<(), production_hardening::HardeningError> {
+        self.health_monitor.is_healthy()
+    }
+
+    /// Generate comprehensive health report
+    pub fn generate_health_report(&self) -> String {
+        self.health_monitor.generate_health_report()
+    }
+
+    /// Update system metrics for health monitoring
+    pub fn update_health_metrics(&self, metrics: HealthMetrics) {
+        self.health_monitor.update_metrics(metrics);
+    }
+
+    /// Attempt automatic recovery from system issues
+    pub fn attempt_recovery(&self, component: &str, error: &str) -> Result<()> {
+        self.health_monitor.attempt_recovery(component, error)
+    }
+
+    /// Execute operation with circuit breaker protection
+    pub fn execute_protected<T, F>(&self, service: &str, operation: F) -> Result<T>
+    where
+        F: FnOnce() -> Result<T>,
+    {
+        self.health_monitor
+            .execute_with_protection(service, operation)
+    }
+
+    /// Get operation statistics from health monitor
+    pub fn get_operation_stats(&self) -> std::collections::HashMap<String, f64> {
+        self.health_monitor.get_operation_stats()
     }
 }
 

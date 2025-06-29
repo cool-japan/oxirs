@@ -4,9 +4,7 @@ use rio_api::model::Triple as RioTriple;
 use rio_api::parser::{QuadsParser, TriplesParser};
 // Parsers available but currently unused
 use std::collections::HashMap;
-use std::future::Future;
 use std::io::BufRead;
-use std::pin::Pin;
 // use oxrdf::{Quad as OxrdfQuad, Subject as OxrdfSubject, Term as OxrdfTerm}; // REMOVED: Native implementation
 use crate::model::*;
 use crate::{OxirsError, Result};

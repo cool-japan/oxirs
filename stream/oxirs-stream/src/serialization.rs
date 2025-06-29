@@ -256,7 +256,7 @@ impl EventSerializer {
             }
         }
 
-        buffer.put(data);
+        buffer.put(&data[..]);
         Ok(buffer.freeze())
     }
 
@@ -366,6 +366,8 @@ impl EventSerializer {
             StreamEvent::QueryResultAdded { .. } => 14,
             StreamEvent::QueryResultRemoved { .. } => 15,
             StreamEvent::QueryCompleted { .. } => 16,
+            StreamEvent::SchemaUpdated { .. } => 40,
+            StreamEvent::ShapeUpdated { .. } => 41,
             StreamEvent::Heartbeat { .. } => 13,
         };
         buffer.push(event_type);
@@ -570,12 +572,12 @@ impl EventSerializer {
     async fn deserialize_avro(&self, data: &[u8]) -> Result<StreamEvent> {
         // Extract schema from data header
         let reader = apache_avro::Reader::new(data)?;
-        let schema = reader.writer_schema();
+        let schema = reader.writer_schema().clone();
 
         // Read the first (and only) record
         if let Some(record) = reader.into_iter().next() {
             let avro_value = record?;
-            let event = from_avro_value(&avro_value, schema)?;
+            let event = from_avro_value(&avro_value, &schema)?;
             Ok(event)
         } else {
             Err(anyhow!("No Avro record found in data"))
@@ -742,6 +744,7 @@ mod tests {
         let event = StreamEvent::Heartbeat {
             timestamp: chrono::Utc::now(),
             source: "test".to_string(),
+            metadata: crate::event::EventMetadata::default(),
         };
 
         let serializer = EventSerializer::new(SerializationFormat::Json);
@@ -776,6 +779,7 @@ mod tests {
         let event = StreamEvent::Heartbeat {
             timestamp: chrono::Utc::now(),
             source: "test".to_string(),
+            metadata: crate::event::EventMetadata::default(),
         };
 
         let serializer =
@@ -827,6 +831,7 @@ mod tests {
         let event = StreamEvent::Heartbeat {
             timestamp: chrono::Utc::now(),
             source: "test".to_string(),
+            metadata: crate::event::EventMetadata::default(),
         };
 
         // Serialize to JSON
@@ -1253,7 +1258,7 @@ impl DeltaCompressor {
                 }
             }
             serde_json::Value::Object(obj) => {
-                for (_, val) in obj.values_mut() {
+                for val in obj.values_mut() {
                     self.replace_strings_in_json(val, dictionary);
                 }
             }
@@ -1368,7 +1373,7 @@ impl DeltaCompressor {
                 }
             }
             serde_json::Value::Object(obj) => {
-                for (_, val) in obj.values_mut() {
+                for val in obj.values_mut() {
                     self.restore_strings_from_ids(val, reverse_dict);
                 }
             }

@@ -310,8 +310,8 @@ impl LdapService {
         // Extract username (prefer sAMAccountName for AD, uid for OpenLDAP)
         let username = ldap_user
             .sam_account_name
-            .or(ldap_user.uid)
-            .or(ldap_user.cn)
+            .or(ldap_user.uid.clone())
+            .or(ldap_user.cn.clone())
             .ok_or_else(|| FusekiError::authentication("No suitable username attribute found"))?;
 
         // Extract display name

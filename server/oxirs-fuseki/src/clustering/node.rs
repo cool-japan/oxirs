@@ -56,13 +56,13 @@ pub enum NodeMessage {
 #[async_trait]
 pub trait NodeCommunication: Send + Sync {
     /// Send message to a specific node
-    async fn send_message(&self, target: &str, message: NodeMessage) -> Result<()>;
+    async fn send_message(&self, target: &str, message: NodeMessage) -> FusekiResult<()>;
 
     /// Broadcast message to all nodes
-    async fn broadcast_message(&self, message: NodeMessage) -> Result<()>;
+    async fn broadcast_message(&self, message: NodeMessage) -> FusekiResult<()>;
 
     /// Receive messages from other nodes
-    async fn receive_messages(&self) -> Result<mpsc::Receiver<(String, NodeMessage)>>;
+    async fn receive_messages(&self) -> FusekiResult<mpsc::Receiver<(String, NodeMessage)>>;
 }
 
 /// Cluster node implementation
@@ -84,7 +84,7 @@ pub struct ClusterNode {
 }
 
 /// Node performance metrics
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct NodeMetrics {
     /// Total messages sent
     pub messages_sent: u64,
@@ -107,7 +107,7 @@ impl ClusterNode {
     pub async fn new(
         config: ClusterConfig,
         communication: Arc<dyn NodeCommunication>,
-    ) -> Result<Self> {
+    ) -> FusekiResult<Self> {
         let node_info = Arc::new(RwLock::new(NodeInfo {
             id: config.node_id.clone(),
             addr: config.bind_addr,
@@ -136,7 +136,7 @@ impl ClusterNode {
     }
 
     /// Start the node
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self) -> FusekiResult<()> {
         info!("Starting cluster node {}", self.config.node_id);
 
         // Update node state to active
@@ -161,7 +161,7 @@ impl ClusterNode {
     }
 
     /// Stop the node
-    pub async fn stop(&self) -> Result<()> {
+    pub async fn stop(&self) -> FusekiResult<()> {
         info!("Stopping cluster node {}", self.config.node_id);
 
         // Send leave notification
@@ -180,7 +180,7 @@ impl ClusterNode {
     }
 
     /// Join an existing cluster
-    pub async fn join_cluster(&self, seed_nodes: &[String]) -> Result<()> {
+    pub async fn join_cluster(&self, seed_nodes: &[String]) -> FusekiResult<()> {
         info!("Joining cluster via seeds: {:?}", seed_nodes);
 
         let node_info = self.node_info.read().await.clone();
@@ -207,7 +207,7 @@ impl ClusterNode {
     }
 
     /// Start message processing loop
-    async fn start_message_processing(&self) -> Result<()> {
+    async fn start_message_processing(&self) -> FusekiResult<()> {
         let mut receiver = self.communication.receive_messages().await?;
         let node_info = self.node_info.clone();
         let cluster_members = self.cluster_members.clone();
@@ -486,7 +486,7 @@ impl TcpNodeCommunication {
 
 #[async_trait]
 impl NodeCommunication for TcpNodeCommunication {
-    async fn send_message(&self, target: &str, message: NodeMessage) -> Result<()> {
+    async fn send_message(&self, target: &str, message: NodeMessage) -> FusekiResult<()> {
         let nodes = self.known_nodes.read().await;
         let target_addr = nodes
             .get(target)
@@ -500,7 +500,7 @@ impl NodeCommunication for TcpNodeCommunication {
         Ok(())
     }
 
-    async fn broadcast_message(&self, message: NodeMessage) -> Result<()> {
+    async fn broadcast_message(&self, message: NodeMessage) -> FusekiResult<()> {
         let nodes = self.known_nodes.read().await;
         for (node_id, addr) in nodes.iter() {
             // TODO: Implement actual TCP message sending
@@ -512,7 +512,7 @@ impl NodeCommunication for TcpNodeCommunication {
         Ok(())
     }
 
-    async fn receive_messages(&self) -> Result<mpsc::Receiver<(String, NodeMessage)>> {
+    async fn receive_messages(&self) -> FusekiResult<mpsc::Receiver<(String, NodeMessage)>> {
         let (sender, receiver) = mpsc::channel(1000);
 
         // TODO: Implement actual TCP message receiving

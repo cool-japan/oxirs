@@ -256,7 +256,19 @@ impl BindingSet {
             _ => return false, // Variables and QuotedTriples not supported
         };
 
-        allowed_types.contains(&term_type) || allowed_types.contains(&TermType::Literal)
+        // Check if the specific type is allowed
+        if allowed_types.contains(&term_type) {
+            return true;
+        }
+
+        // Check if Literal is allowed for literal subtypes
+        match term_type {
+            TermType::NumericLiteral
+            | TermType::StringLiteral
+            | TermType::BooleanLiteral
+            | TermType::DateTimeLiteral => allowed_types.contains(&TermType::Literal),
+            _ => false,
+        }
     }
 
     /// Check value constraint
