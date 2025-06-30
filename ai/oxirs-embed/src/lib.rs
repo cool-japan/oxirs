@@ -126,9 +126,9 @@ pub mod contextual_embeddings;
 pub mod continual_learning;
 pub mod cross_domain_transfer;
 pub mod delta;
-pub mod federated_learning;
 pub mod enterprise_knowledge;
 pub mod evaluation;
+pub mod federated_learning;
 pub mod gpu_acceleration;
 pub mod graphql_api;
 pub mod inference;
@@ -140,9 +140,10 @@ pub mod multimodal;
 pub mod neural_symbolic_integration;
 pub mod novel_architectures;
 pub mod persistence;
-pub mod research_networks;
+pub mod quantum_circuits;
 pub mod real_time_fine_tuning;
 pub mod real_time_optimization;
+pub mod research_networks;
 pub mod training;
 pub mod utils;
 pub mod vision_language_graph;
@@ -436,6 +437,12 @@ pub use biomedical_embeddings::{
     SpecializedTextModel,
 };
 pub use caching::{CacheConfig, CacheManager, CachedEmbeddingModel};
+pub use causal_representation_learning::{
+    CausalDiscoveryAlgorithm, CausalDiscoveryConfig, CausalGraph, CausalRepresentationConfig,
+    CausalRepresentationModel, ConstraintSettings, CounterfactualConfig, CounterfactualQuery,
+    DisentanglementConfig, DisentanglementMethod, ExplanationType, IndependenceTest,
+    InterventionConfig, ScoreSettings, StructuralCausalModelConfig,
+};
 pub use cloud_integration::{
     AWSSageMakerService, AutoScalingConfig, AzureMLService, BackupConfig, CloudIntegrationConfig,
     CloudIntegrationManager, CloudProvider, CloudService, ClusterStatus, CostEstimate,
@@ -452,29 +459,19 @@ pub use compression::{
 };
 pub use contextual_embeddings::{
     AdaptationEngine, AdaptationRecord, AdaptationState, AdaptationStrategy, AdaptationType,
-    ContextualConfig, ContextualEmbeddingModel, ContextCache, ContextFusionMethod, ContextProcessor,
-    ContextType, EmbeddingContext, ExpertiseLevel, FeedbackAggregation, FusionNetwork,
+    ContextCache, ContextFusionMethod, ContextProcessor, ContextType, ContextualConfig,
+    ContextualEmbeddingModel, EmbeddingContext, ExpertiseLevel, FeedbackAggregation, FusionNetwork,
     InteractiveConfig, PerformanceRequirements, QueryComplexity, QueryContext, QueryIntent,
     TaskContext, TaskType, TemporalConfig, TemporalContext, UserContext, UserPreferences,
+};
+pub use continual_learning::{
+    ArchitectureConfig, BoundaryDetection, ConsolidationConfig, ContinualLearningConfig,
+    ContinualLearningModel, MemoryConfig, MemoryType, MemoryUpdateStrategy, RegularizationConfig,
+    ReplayConfig, ReplayMethod, TaskConfig, TaskDetection, TaskSwitching,
 };
 pub use delta::{
     ChangeRecord, ChangeStatistics, ChangeType, DeltaConfig, DeltaManager, DeltaResult, DeltaStats,
     IncrementalStrategy,
-};
-pub use federated_learning::{
-    AggregationEngine, AggregationStrategy, AuthenticationConfig, AuthenticationMethod,
-    CertificateConfig, ClippingMechanisms, ClippingMethod, CommunicationConfig, CommunicationManager,
-    CommunicationProtocol, CompressionAlgorithm, CompressionConfig, CompressionEngine,
-    ConvergenceMetrics, ConvergenceStatus, 
-    DataSelectionStrategy, DataStatistics, EncryptionScheme, FederatedConfig, FederatedCoordinator, 
-    FederatedEmbeddingModel, FederatedMessage, FederatedRound, FederationStats, GlobalModelState, 
-    HardwareAccelerator, KeyManager, LocalModelState, LocalTrainingStats, LocalUpdate, 
-    MetaLearningConfig, NoiseMechanism, NoiseGenerator, OutlierAction, 
-    OutlierDetection, OutlierDetectionMethod, Participant, ParticipantCapabilities, ParticipantStatus,
-    PersonalizationConfig, PersonalizationStrategy, PrivacyAccountant, PrivacyConfig,
-    PrivacyEngine, PrivacyMetrics, PrivacyParams, RoundMetrics, RoundStatus, SecurityConfig,
-    SecurityFeature, SecurityManager, TrainingConfig, VerificationEngine, VerificationMechanism,
-    VerificationResult, WeightingScheme,
 };
 pub use enterprise_knowledge::{
     BehaviorMetrics, CareerPredictions, Category, CategoryHierarchy, CategoryPerformance,
@@ -489,21 +486,25 @@ pub use enterprise_knowledge::{
     RecommendationReason, SalesMetrics, Skill, SkillCategory, Team, TeamPerformance,
 };
 pub use evaluation::{
-    QueryAnsweringEvaluator,
-    QueryEvaluationConfig,
-    QueryEvaluationResults,
-    QueryType,
-    QueryMetric,
-    QueryTemplate,
-    QueryResult,
-    TypeSpecificResults,
-    ReasoningTaskEvaluator,
-    ReasoningEvaluationConfig,
-    ReasoningEvaluationResults,
-    ReasoningType,
-    ReasoningRule,
-    ReasoningChain,
-    ReasoningStep,
+    QueryAnsweringEvaluator, QueryEvaluationConfig, QueryEvaluationResults, QueryMetric,
+    QueryResult, QueryTemplate, QueryType, ReasoningChain, ReasoningEvaluationConfig,
+    ReasoningEvaluationResults, ReasoningRule, ReasoningStep, ReasoningTaskEvaluator,
+    ReasoningType, TypeSpecificResults,
+};
+pub use federated_learning::{
+    AggregationEngine, AggregationStrategy, AuthenticationConfig, AuthenticationMethod,
+    CertificateConfig, ClippingMechanisms, ClippingMethod, CommunicationConfig,
+    CommunicationManager, CommunicationProtocol, CompressionAlgorithm, CompressionConfig,
+    CompressionEngine, ConvergenceMetrics, ConvergenceStatus, DataSelectionStrategy,
+    DataStatistics, EncryptionScheme, FederatedConfig, FederatedCoordinator,
+    FederatedEmbeddingModel, FederatedMessage, FederatedRound, FederationStats, GlobalModelState,
+    HardwareAccelerator, KeyManager, LocalModelState, LocalTrainingStats, LocalUpdate,
+    MetaLearningConfig, NoiseGenerator, NoiseMechanism, OutlierAction, OutlierDetection,
+    OutlierDetectionMethod, Participant, ParticipantCapabilities, ParticipantStatus,
+    PersonalizationConfig, PersonalizationStrategy, PrivacyAccountant, PrivacyConfig,
+    PrivacyEngine, PrivacyMetrics, PrivacyParams, RoundMetrics, RoundStatus, SecurityConfig,
+    SecurityFeature, SecurityManager, TrainingConfig, VerificationEngine, VerificationMechanism,
+    VerificationResult, WeightingScheme,
 };
 pub use gpu_acceleration::{
     GpuAccelerationConfig, GpuAccelerationManager, GpuMemoryPool, GpuPerformanceStats,
@@ -528,10 +529,11 @@ pub use multimodal::{
     AlignmentNetwork, AlignmentObjective, ContrastiveConfig, CrossDomainConfig, CrossModalConfig,
     KGEncoder, MultiModalEmbedding, MultiModalStats, TextEncoder,
 };
-pub use research_networks::{
-    AuthorEmbedding, Citation, CitationNetwork, CitationType, Collaboration, CollaborationNetwork,
-    NetworkMetrics, PaperSection, PublicationEmbedding, PublicationType, ResearchCommunity,
-    ResearchNetworkAnalyzer, ResearchNetworkConfig, TopicModel, TopicModelingConfig,
+pub use neural_symbolic_integration::{
+    ConstraintSatisfactionConfig, ConstraintType, KnowledgeIntegrationConfig, KnowledgeRule,
+    LogicIntegrationConfig, LogicProgrammingConfig, LogicalFormula, NeuralSymbolicConfig,
+    NeuralSymbolicModel, NeuroSymbolicArchitectureConfig, OntologicalConfig, ReasoningEngine,
+    RuleBasedConfig, SymbolicReasoningConfig,
 };
 pub use novel_architectures::{
     ActivationType, ArchitectureParams, ArchitectureState, ArchitectureType, AttentionMechanism,
@@ -544,32 +546,26 @@ pub use novel_architectures::{
     ParallelTransport, QuantumGateSet, QuantumMeasurement, QuantumNoise, QuantumParams,
     QuantumState, StabilityConstraints, StructuralBias, TimeEvolution, TransportMethod,
 };
+pub use quantum_circuits::{
+    Complex, MeasurementStrategy, QNNLayerType, QuantumApproximateOptimization, QuantumCircuit,
+    QuantumGate, QuantumNeuralNetwork, QuantumNeuralNetworkLayer, QuantumSimulator,
+    VariationalQuantumEigensolver,
+};
+pub use research_networks::{
+    AuthorEmbedding, Citation, CitationNetwork, CitationType, Collaboration, CollaborationNetwork,
+    NetworkMetrics, PaperSection, PublicationEmbedding, PublicationType, ResearchCommunity,
+    ResearchNetworkAnalyzer, ResearchNetworkConfig, TopicModel, TopicModelingConfig,
+};
 pub use vision_language_graph::{
-    AggregationFunction, CNNConfig, CrossAttentionConfig, DomainAdaptationConfig, DomainAdaptationMethod,
-    EpisodeConfig, FewShotConfig, FewShotMethod, FusionStrategy, GraphArchitecture, GraphEncoder,
-    GraphEncoderConfig, JointTrainingConfig, LanguageArchitecture, LanguageEncoder, LanguageEncoderConfig,
-    LanguageTransformerConfig, MetaLearner, ModalityEncoding,
-    MultiModalTransformer, MultiModalTransformerConfig, NormalizationType, PoolingType, PositionEncodingType,
-    ReadoutFunction, TaskCategory, TaskSpecificParams, TrainingObjective, TransferLearningConfig,
-    TransferStrategy, VisionArchitecture, VisionEncoder, VisionEncoderConfig, VisionLanguageGraphConfig,
-    VisionLanguageGraphModel, VisionLanguageGraphStats, ViTConfig, ZeroShotConfig, ZeroShotMethod,
-};
-pub use causal_representation_learning::{
-    CausalRepresentationConfig, CausalRepresentationModel, CausalDiscoveryConfig, CausalDiscoveryAlgorithm,
-    StructuralCausalModelConfig, InterventionConfig, CounterfactualConfig, DisentanglementConfig,
-    ConstraintSettings, ScoreSettings, IndependenceTest, CausalGraph, DisentanglementMethod,
-    CounterfactualQuery, ExplanationType,
-};
-pub use continual_learning::{
-    ContinualLearningConfig, ContinualLearningModel, MemoryConfig, RegularizationConfig,
-    ArchitectureConfig, TaskConfig, ReplayConfig, MemoryType, MemoryUpdateStrategy,
-    ConsolidationConfig, TaskDetection, BoundaryDetection, TaskSwitching, ReplayMethod,
-};
-pub use neural_symbolic_integration::{
-    NeuralSymbolicConfig, NeuralSymbolicModel, SymbolicReasoningConfig, LogicIntegrationConfig,
-    KnowledgeIntegrationConfig, NeuroSymbolicArchitectureConfig, ConstraintSatisfactionConfig,
-    ReasoningEngine, LogicProgrammingConfig, RuleBasedConfig, OntologicalConfig,
-    ConstraintType, KnowledgeRule, LogicalFormula,
+    AggregationFunction, CNNConfig, CrossAttentionConfig, DomainAdaptationConfig,
+    DomainAdaptationMethod, EpisodeConfig, FewShotConfig, FewShotMethod, FusionStrategy,
+    GraphArchitecture, GraphEncoder, GraphEncoderConfig, JointTrainingConfig, LanguageArchitecture,
+    LanguageEncoder, LanguageEncoderConfig, LanguageTransformerConfig, MetaLearner,
+    ModalityEncoding, MultiModalTransformer, MultiModalTransformerConfig, NormalizationType,
+    PoolingType, PositionEncodingType, ReadoutFunction, TaskCategory, TaskSpecificParams,
+    TrainingObjective, TransferLearningConfig, TransferStrategy, ViTConfig, VisionArchitecture,
+    VisionEncoder, VisionEncoderConfig, VisionLanguageGraphConfig, VisionLanguageGraphModel,
+    VisionLanguageGraphStats, ZeroShotConfig, ZeroShotMethod,
 };
 
 #[cfg(feature = "tucker")]

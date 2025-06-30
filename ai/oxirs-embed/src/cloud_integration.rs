@@ -1297,8 +1297,14 @@ impl AzureCognitiveServices {
             embeddings,
             model: deployment_name.to_string(),
             usage: TokenUsage {
-                prompt_tokens: input_texts.iter().map(|t| t.split_whitespace().count() as u32).sum(),
-                total_tokens: input_texts.iter().map(|t| t.split_whitespace().count() as u32).sum(),
+                prompt_tokens: input_texts
+                    .iter()
+                    .map(|t| t.split_whitespace().count() as u32)
+                    .sum(),
+                total_tokens: input_texts
+                    .iter()
+                    .map(|t| t.split_whitespace().count() as u32)
+                    .sum(),
             },
         })
     }
@@ -1318,9 +1324,21 @@ impl AzureCognitiveServices {
         Ok(SentimentResult {
             sentiment: sentiment.to_string(),
             confidence_scores: SentimentScores {
-                positive: if sentiment == "positive" { score } else { 1.0 - score },
-                neutral: if sentiment == "neutral" { score } else { (1.0 - score) / 2.0 },
-                negative: if sentiment == "negative" { score } else { 1.0 - score },
+                positive: if sentiment == "positive" {
+                    score
+                } else {
+                    1.0 - score
+                },
+                neutral: if sentiment == "neutral" {
+                    score
+                } else {
+                    (1.0 - score) / 2.0
+                },
+                negative: if sentiment == "negative" {
+                    score
+                } else {
+                    1.0 - score
+                },
             },
         })
     }
@@ -1404,14 +1422,21 @@ impl AzureContainerInstances {
             container_group_id,
             name: config.name.clone(),
             status: ContainerGroupStatus::Creating,
-            fqdn: Some(format!("{}.{}.azurecontainer.io", config.name, config.location)),
+            fqdn: Some(format!(
+                "{}.{}.azurecontainer.io",
+                config.name, config.location
+            )),
             ip_address: Some("20.1.2.3".to_string()),
-            containers: config.containers.iter().map(|c| ContainerStatus {
-                name: c.name.clone(),
-                status: "Creating".to_string(),
-                restart_count: 0,
-                current_state: "Waiting".to_string(),
-            }).collect(),
+            containers: config
+                .containers
+                .iter()
+                .map(|c| ContainerStatus {
+                    name: c.name.clone(),
+                    status: "Creating".to_string(),
+                    restart_count: 0,
+                    current_state: "Waiting".to_string(),
+                })
+                .collect(),
             creation_time: Utc::now(),
             estimated_hourly_cost: estimated_cost,
         })

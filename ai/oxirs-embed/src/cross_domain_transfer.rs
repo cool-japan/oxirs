@@ -69,7 +69,6 @@ pub struct DomainModel {
     pub vocabulary: HashSet<String>,
 }
 
-
 /// Domain characteristics for transfer analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DomainCharacteristics {
@@ -149,9 +148,7 @@ pub enum TransferStrategy {
         regularization_strength: f64,
     },
     /// Multi-task learning
-    MultiTaskLearning {
-        task_weights: HashMap<String, f64>,
-    },
+    MultiTaskLearning { task_weights: HashMap<String, f64> },
     /// Meta-learning approach
     MetaLearning {
         inner_steps: usize,
@@ -399,14 +396,10 @@ impl CrossDomainTransferManager {
         )?;
 
         // Perform entity alignment
-        let entity_alignments = self
-            .align_entities(source_domain, target_domain)
-            .await?;
+        let entity_alignments = self.align_entities(source_domain, target_domain).await?;
 
         // Perform relation alignment
-        let relation_alignments = self
-            .align_relations(source_domain, target_domain)
-            .await?;
+        let relation_alignments = self.align_relations(source_domain, target_domain).await?;
 
         // Analyze semantic shifts
         let semantic_shifts = self
@@ -414,8 +407,10 @@ impl CrossDomainTransferManager {
             .await?;
 
         // Analyze structural changes
-        let structural_changes = self
-            .analyze_structural_changes(&source_domain.characteristics, &target_domain.characteristics)?;
+        let structural_changes = self.analyze_structural_changes(
+            &source_domain.characteristics,
+            &target_domain.characteristics,
+        )?;
 
         // Evaluate transfer metrics
         let mut metric_scores = HashMap::new();
@@ -493,10 +488,11 @@ impl CrossDomainTransferManager {
         // Entity type overlap
         let source_entity_types: HashSet<_> = source.entity_types.iter().collect();
         let target_entity_types: HashSet<_> = target.entity_types.iter().collect();
-        let entity_overlap = source_entity_types.intersection(&target_entity_types).count() as f64;
-        let entity_similarity = entity_overlap
-            / (source_entity_types.len() + target_entity_types.len()) as f64
-            * 2.0;
+        let entity_overlap = source_entity_types
+            .intersection(&target_entity_types)
+            .count() as f64;
+        let entity_similarity =
+            entity_overlap / (source_entity_types.len() + target_entity_types.len()) as f64 * 2.0;
         similarity_scores.push(entity_similarity);
 
         // Relation type overlap
@@ -524,7 +520,8 @@ impl CrossDomainTransferManager {
         similarity_scores.push(complexity_similarity);
 
         // Overall similarity
-        let overall_similarity = similarity_scores.iter().sum::<f64>() / similarity_scores.len() as f64;
+        let overall_similarity =
+            similarity_scores.iter().sum::<f64>() / similarity_scores.len() as f64;
 
         Ok(overall_similarity)
     }
@@ -544,7 +541,7 @@ impl CrossDomainTransferManager {
         for source_entity in &source_entities {
             for target_entity in &target_entities {
                 let similarity = self.calculate_string_similarity(source_entity, target_entity);
-                
+
                 if similarity > 0.7 {
                     // High similarity threshold
                     alignments.push(EntityAlignment {
@@ -671,10 +668,9 @@ impl CrossDomainTransferManager {
         target: &DomainCharacteristics,
     ) -> Result<StructuralChanges> {
         // Calculate relative changes in structural properties
-        let degree_distribution_shift = (source.size_metrics.avg_entity_degree
-            - target.size_metrics.avg_entity_degree)
-            .abs()
-            / source.size_metrics.avg_entity_degree;
+        let degree_distribution_shift =
+            (source.size_metrics.avg_entity_degree - target.size_metrics.avg_entity_degree).abs()
+                / source.size_metrics.avg_entity_degree;
 
         let clustering_changes = 0.1; // Placeholder - would calculate actual clustering coefficients
         let path_length_changes = 0.15; // Placeholder
@@ -743,7 +739,8 @@ impl CrossDomainTransferManager {
             }
             TransferMetric::CrossDomainCoherence => {
                 // Evaluate coherence across domain boundaries
-                self.calculate_cross_domain_coherence(source, target, entity_alignments).await
+                self.calculate_cross_domain_coherence(source, target, entity_alignments)
+                    .await
             }
             TransferMetric::KnowledgeRetention => {
                 // Measure knowledge retention during transfer
@@ -759,7 +756,8 @@ impl CrossDomainTransferManager {
             }
             TransferMetric::SemanticDriftDetection => {
                 // Detection of semantic drift during transfer
-                self.calculate_semantic_drift_detection(source, target).await
+                self.calculate_semantic_drift_detection(source, target)
+                    .await
             }
             TransferMetric::GeneralizationAbility => {
                 // Ability to generalize across domains
@@ -775,7 +773,10 @@ impl CrossDomainTransferManager {
         target: &DomainSpecification,
     ) -> Result<f64> {
         let mut correct_predictions = 0;
-        let total_predictions = target.test_data.len().min(self.config.evaluation_sample_size);
+        let total_predictions = target
+            .test_data
+            .len()
+            .min(self.config.evaluation_sample_size);
 
         if total_predictions == 0 {
             return Ok(0.5); // Default accuracy when no data
@@ -809,11 +810,12 @@ impl CrossDomainTransferManager {
 
         for alignment in entity_alignments.iter().take(20) {
             // Limit for efficiency
-            if let Ok(source_embedding) = source.model.get_entity_embedding(&alignment.source_entity)
+            if let Ok(source_embedding) =
+                source.model.get_entity_embedding(&alignment.source_entity)
             {
                 // Create target embedding (simplified)
                 let target_embedding = self.create_simple_embedding(&alignment.target_entity);
-                
+
                 // Calculate preservation as cosine similarity
                 let preservation = self.cosine_similarity(&source_embedding, &target_embedding);
                 preservation_scores.push(preservation);
@@ -871,7 +873,10 @@ impl CrossDomainTransferManager {
             );
         }
 
-        let high_shift_count = semantic_shifts.iter().filter(|s| s.shift_magnitude > 0.5).count();
+        let high_shift_count = semantic_shifts
+            .iter()
+            .filter(|s| s.shift_magnitude > 0.5)
+            .count();
         if high_shift_count > 5 {
             recommendations.push(
                 "Significant semantic shifts detected. Consider gradual domain adaptation."
@@ -880,16 +885,18 @@ impl CrossDomainTransferManager {
         }
 
         if domain_similarity > 0.7 {
-            recommendations.push(
-                "High domain similarity. Direct transfer should work well.".to_string(),
-            );
+            recommendations
+                .push("High domain similarity. Direct transfer should work well.".to_string());
         }
 
         recommendations
     }
 
     /// Helper: Extract entities from triples
-    fn extract_entities_from_triples(&self, triples: &[(String, String, String)]) -> HashSet<String> {
+    fn extract_entities_from_triples(
+        &self,
+        triples: &[(String, String, String)],
+    ) -> HashSet<String> {
         let mut entities = HashSet::new();
         for (subject, _, object) in triples {
             entities.insert(subject.clone());
@@ -899,8 +906,14 @@ impl CrossDomainTransferManager {
     }
 
     /// Helper: Extract relations from triples
-    fn extract_relations_from_triples(&self, triples: &[(String, String, String)]) -> HashSet<String> {
-        triples.iter().map(|(_, predicate, _)| predicate.clone()).collect()
+    fn extract_relations_from_triples(
+        &self,
+        triples: &[(String, String, String)],
+    ) -> HashSet<String> {
+        triples
+            .iter()
+            .map(|(_, predicate, _)| predicate.clone())
+            .collect()
     }
 
     /// Helper: Calculate string similarity
@@ -939,7 +952,9 @@ impl CrossDomainTransferManager {
         // Simple character-based embedding (in practice, use pre-trained embeddings)
         let mut embedding = vec![0.0f32; 100]; // Fixed dimension
         for (i, byte) in entity.bytes().enumerate() {
-            if i >= embedding.len() { break; }
+            if i >= embedding.len() {
+                break;
+            }
             embedding[i] = (byte as f32) / 255.0;
         }
         Vector::new(embedding)
@@ -947,7 +962,12 @@ impl CrossDomainTransferManager {
 
     /// Helper: Calculate cosine similarity
     fn cosine_similarity(&self, v1: &Vector, v2: &Vector) -> f64 {
-        let dot_product: f32 = v1.values.iter().zip(v2.values.iter()).map(|(a, b)| a * b).sum();
+        let dot_product: f32 = v1
+            .values
+            .iter()
+            .zip(v2.values.iter())
+            .map(|(a, b)| a * b)
+            .sum();
         let norm_a: f32 = v1.values.iter().map(|x| x * x).sum::<f32>().sqrt();
         let norm_b: f32 = v2.values.iter().map(|x| x * x).sum::<f32>().sqrt();
 
@@ -992,28 +1012,26 @@ impl CrossDomainTransferManager {
             })
     }
 
-    /// Calculate transfer efficiency 
+    /// Calculate transfer efficiency
     async fn calculate_transfer_efficiency(
         &self,
         source: &DomainModel,
         target: &DomainSpecification,
     ) -> Result<f64> {
         let start_time = std::time::Instant::now();
-        
+
         // Calculate domain similarity as a proxy for transfer ease
-        let domain_similarity = self.calculate_domain_similarity(
-            &source.characteristics,
-            &target.characteristics,
-        )?;
-        
+        let domain_similarity =
+            self.calculate_domain_similarity(&source.characteristics, &target.characteristics)?;
+
         // Simulate transfer performance
         let transfer_accuracy = self.calculate_transfer_accuracy(source, target).await?;
         let transfer_time = start_time.elapsed().as_secs_f64();
-        
+
         // Efficiency = (accuracy * domain_similarity) / normalized_time
         let normalized_time = (transfer_time / 60.0).min(1.0).max(0.01); // Normalize to minutes
         let efficiency = (transfer_accuracy * domain_similarity) / normalized_time;
-        
+
         Ok(efficiency.min(1.0).max(0.0))
     }
 
@@ -1026,20 +1044,20 @@ impl CrossDomainTransferManager {
         // Measure performance degradation on source domain tasks
         let source_entities = source.model.get_entities();
         let sample_size = source_entities.len().min(20);
-        
+
         if sample_size == 0 {
             return Ok(0.0);
         }
-        
+
         let mut forgetting_scores = Vec::new();
-        
+
         // Test retention of source domain knowledge
         for entity in source_entities.iter().take(sample_size) {
             if let Ok(source_embedding) = source.model.get_entity_embedding(entity) {
                 // Simulate post-adaptation embedding quality degradation
                 let target_entities = self.extract_entities_from_triples(&target.training_data);
                 let domain_overlap = target_entities.contains(entity);
-                
+
                 let degradation = if domain_overlap {
                     // Less forgetting for overlapping entities
                     0.1 + rand::random::<f64>() * 0.2
@@ -1047,15 +1065,16 @@ impl CrossDomainTransferManager {
                     // More forgetting for non-overlapping entities
                     0.3 + rand::random::<f64>() * 0.4
                 };
-                
+
                 forgetting_scores.push(degradation);
             }
         }
-        
+
         if forgetting_scores.is_empty() {
             Ok(0.1) // Low forgetting by default
         } else {
-            let avg_forgetting = forgetting_scores.iter().sum::<f64>() / forgetting_scores.len() as f64;
+            let avg_forgetting =
+                forgetting_scores.iter().sum::<f64>() / forgetting_scores.len() as f64;
             Ok(avg_forgetting.min(1.0).max(0.0))
         }
     }
@@ -1070,34 +1089,41 @@ impl CrossDomainTransferManager {
         if entity_alignments.is_empty() {
             return Ok(0.5);
         }
-        
+
         let mut coherence_scores = Vec::new();
-        
+
         // Evaluate coherence across aligned entities
         for alignment in entity_alignments.iter().take(15) {
             if alignment.confidence > 0.6 {
-                if let Ok(source_embedding) = source.model.get_entity_embedding(&alignment.source_entity) {
+                if let Ok(source_embedding) =
+                    source.model.get_entity_embedding(&alignment.source_entity)
+                {
                     let target_embedding = self.create_simple_embedding(&alignment.target_entity);
-                    
+
                     // Calculate embedding coherence
-                    let embedding_coherence = self.cosine_similarity(&source_embedding, &target_embedding);
-                    
+                    let embedding_coherence =
+                        self.cosine_similarity(&source_embedding, &target_embedding);
+
                     // Calculate neighborhood coherence
-                    let source_neighbors = self.get_source_neighbors(&alignment.source_entity, source);
-                    let target_neighbors = self.get_target_neighbors(&alignment.target_entity, target);
-                    let neighborhood_coherence = self.calculate_neighborhood_similarity(&source_neighbors, &target_neighbors);
-                    
+                    let source_neighbors =
+                        self.get_source_neighbors(&alignment.source_entity, source);
+                    let target_neighbors =
+                        self.get_target_neighbors(&alignment.target_entity, target);
+                    let neighborhood_coherence = self
+                        .calculate_neighborhood_similarity(&source_neighbors, &target_neighbors);
+
                     // Combined coherence score
                     let combined_coherence = (embedding_coherence + neighborhood_coherence) / 2.0;
                     coherence_scores.push(combined_coherence);
                 }
             }
         }
-        
+
         if coherence_scores.is_empty() {
             Ok(0.5)
         } else {
-            let avg_coherence = coherence_scores.iter().sum::<f64>() / coherence_scores.len() as f64;
+            let avg_coherence =
+                coherence_scores.iter().sum::<f64>() / coherence_scores.len() as f64;
             Ok(avg_coherence.min(1.0).max(0.0))
         }
     }
@@ -1175,21 +1201,25 @@ impl CrossDomainTransferManager {
     }
 
     /// Helper: Calculate neighborhood similarity
-    fn calculate_neighborhood_similarity(&self, source_neighbors: &[String], target_neighbors: &[String]) -> f64 {
+    fn calculate_neighborhood_similarity(
+        &self,
+        source_neighbors: &[String],
+        target_neighbors: &[String],
+    ) -> f64 {
         if source_neighbors.is_empty() && target_neighbors.is_empty() {
             return 1.0;
         }
-        
+
         if source_neighbors.is_empty() || target_neighbors.is_empty() {
             return 0.0;
         }
-        
+
         let source_set: HashSet<&String> = source_neighbors.iter().collect();
         let target_set: HashSet<&String> = target_neighbors.iter().collect();
-        
+
         let intersection = source_set.intersection(&target_set).count();
         let union = source_set.union(&target_set).count();
-        
+
         if union == 0 {
             0.0
         } else {
@@ -1255,8 +1285,8 @@ impl TransferUtils {
             complexity_metrics: DomainComplexityMetrics {
                 entity_type_diversity: 1, // Simplified
                 relation_type_diversity: num_relations,
-                hierarchical_depth: 3, // Estimated
-                semantic_diversity: 0.5, // Estimated
+                hierarchical_depth: 3,                           // Estimated
+                semantic_diversity: 0.5,                         // Estimated
                 structural_complexity: avg_entity_degree / 10.0, // Simplified metric
             },
         }
@@ -1306,13 +1336,15 @@ mod tests {
         let triples = vec![
             ("alice".to_string(), "knows".to_string(), "bob".to_string()),
             ("bob".to_string(), "likes".to_string(), "pizza".to_string()),
-            ("alice".to_string(), "likes".to_string(), "coffee".to_string()),
+            (
+                "alice".to_string(),
+                "likes".to_string(),
+                "coffee".to_string(),
+            ),
         ];
 
-        let characteristics = TransferUtils::analyze_domain_from_triples(
-            "test_domain".to_string(),
-            &triples,
-        );
+        let characteristics =
+            TransferUtils::analyze_domain_from_triples("test_domain".to_string(), &triples);
 
         assert_eq!(characteristics.size_metrics.num_triples, 3);
         assert_eq!(characteristics.size_metrics.num_entities, 4); // alice, bob, pizza, coffee
@@ -1322,7 +1354,7 @@ mod tests {
     #[test]
     fn test_string_similarity() {
         let manager = CrossDomainTransferManager::new(TransferConfig::default());
-        
+
         let sim1 = manager.calculate_string_similarity("hello", "hello");
         assert_eq!(sim1, 1.0);
 
@@ -1369,7 +1401,11 @@ mod tests {
             "target".to_string(),
             vec![
                 ("alice".to_string(), "knows".to_string(), "bob".to_string()),
-                ("bob".to_string(), "knows".to_string(), "charlie".to_string()),
+                (
+                    "bob".to_string(),
+                    "knows".to_string(),
+                    "charlie".to_string(),
+                ),
             ],
         );
 
@@ -1434,10 +1470,12 @@ mod tests {
             },
         };
 
-        let similarity = manager.calculate_domain_similarity(&source, &target).unwrap();
+        let similarity = manager
+            .calculate_domain_similarity(&source, &target)
+            .unwrap();
         assert!(similarity > 0.0);
         assert!(similarity <= 1.0);
-        
+
         // Should have reasonable similarity due to shared entity and relation types
         assert!(similarity > 0.2);
     }

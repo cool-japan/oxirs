@@ -3,11 +3,11 @@
 //! This module implements real-time fine-tuning capabilities for embedding models
 //! with incremental learning, online adaptation, and dynamic model updates.
 
-use crate::{EmbeddingModel, ModelConfig, TrainingStats, Vector, Triple, NamedNode};
+use crate::{EmbeddingModel, ModelConfig, NamedNode, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{Array1, Array2, Array3, Axis, s};
+use ndarray::{s, Array1, Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
@@ -233,31 +233,31 @@ impl OnlinePerformanceTracker {
 pub struct RealTimeFinetuningModel {
     pub config: RealTimeFinetuningConfig,
     pub model_id: Uuid,
-    
+
     /// Core model parameters
     pub embeddings: Array2<f32>,
     pub fisher_information: Array2<f32>, // For EWC
     pub optimal_parameters: Array2<f32>, // For EWC
-    
+
     /// Experience replay buffer
     pub replay_buffer: VecDeque<ExperienceEntry>,
-    
+
     /// Online performance tracking
     pub performance_tracker: OnlinePerformanceTracker,
-    
+
     /// Entity and relation mappings
     pub entities: HashMap<String, usize>,
     pub relations: HashMap<String, usize>,
-    
+
     /// Training state
     pub examples_seen: usize,
     pub last_update: DateTime<Utc>,
     pub is_adapting: bool,
-    
+
     /// Task-specific memory
     pub task_memory: HashMap<String, Array2<f32>>,
     pub current_task: Option<String>,
-    
+
     /// Statistics
     pub training_stats: Option<TrainingStats>,
     pub is_trained: bool,
@@ -268,7 +268,7 @@ impl RealTimeFinetuningModel {
     pub fn new(config: RealTimeFinetuningConfig) -> Self {
         let model_id = Uuid::new_v4();
         let dimensions = config.base_config.dimensions;
-        
+
         Self {
             config: config.clone(),
             model_id,
@@ -276,7 +276,9 @@ impl RealTimeFinetuningModel {
             fisher_information: Array2::zeros((0, dimensions)),
             optimal_parameters: Array2::zeros((0, dimensions)),
             replay_buffer: VecDeque::with_capacity(config.replay_buffer_size),
-            performance_tracker: OnlinePerformanceTracker::new(config.online_evaluation.window_size),
+            performance_tracker: OnlinePerformanceTracker::new(
+                config.online_evaluation.window_size,
+            ),
             entities: HashMap::new(),
             relations: HashMap::new(),
             examples_seen: 0,
@@ -290,7 +292,12 @@ impl RealTimeFinetuningModel {
     }
 
     /// Add new example for online learning
-    pub async fn add_example(&mut self, input: Array1<f32>, target: Array1<f32>, task_id: Option<String>) -> Result<()> {
+    pub async fn add_example(
+        &mut self,
+        input: Array1<f32>,
+        target: Array1<f32>,
+        task_id: Option<String>,
+    ) -> Result<()> {
         // Add to replay buffer
         let entry = ExperienceEntry {
             input: input.clone(),
@@ -299,19 +306,19 @@ impl RealTimeFinetuningModel {
             importance: 1.0, // Can be computed based on novelty/difficulty
             task_id: task_id.clone(),
         };
-        
+
         self.replay_buffer.push_back(entry);
         if self.replay_buffer.len() > self.config.replay_buffer_size {
             self.replay_buffer.pop_front();
         }
-        
+
         self.examples_seen += 1;
-        
+
         // Trigger adaptation if threshold met
         if self.should_adapt() {
             self.adapt_online().await?;
         }
-        
+
         Ok(())
     }
 
@@ -321,13 +328,13 @@ impl RealTimeFinetuningModel {
         if self.examples_seen % self.config.update_frequency == 0 {
             return true;
         }
-        
+
         // Adapt if performance drops below threshold
         let current_loss = self.performance_tracker.get_average_loss();
         if current_loss > self.config.adaptation_threshold {
             return true;
         }
-        
+
         false
     }
 
@@ -336,36 +343,36 @@ impl RealTimeFinetuningModel {
         if self.replay_buffer.is_empty() {
             return Ok(());
         }
-        
+
         self.is_adapting = true;
-        
+
         // Sample batch from replay buffer
         let batch = self.sample_replay_batch();
-        
+
         // Compute gradients
         let gradients = self.compute_gradients(&batch)?;
-        
+
         // Apply EWC regularization if enabled
         let regularized_gradients = if self.config.forgetting_prevention.use_ewc {
             self.apply_ewc_regularization(gradients)?
         } else {
             gradients
         };
-        
+
         // Update parameters
         self.update_parameters(regularized_gradients)?;
-        
+
         // Update Fisher information for EWC
         if self.config.forgetting_prevention.use_ewc {
             self.update_fisher_information(&batch)?;
         }
-        
+
         // Evaluate performance
         self.evaluate_online_performance().await?;
-        
+
         self.last_update = Utc::now();
         self.is_adapting = false;
-        
+
         Ok(())
     }
 
@@ -373,13 +380,13 @@ impl RealTimeFinetuningModel {
     fn sample_replay_batch(&self) -> Vec<ExperienceEntry> {
         let batch_size = self.config.online_batch_size.min(self.replay_buffer.len());
         let mut batch = Vec::with_capacity(batch_size);
-        
+
         // Sample with importance-based probability
         for _ in 0..batch_size {
             let idx = rand::random::<usize>() % self.replay_buffer.len();
             batch.push(self.replay_buffer[idx].clone());
         }
-        
+
         batch
     }
 
@@ -387,28 +394,29 @@ impl RealTimeFinetuningModel {
     fn compute_gradients(&self, batch: &[ExperienceEntry]) -> Result<Array2<f32>> {
         let dimensions = self.config.base_config.dimensions;
         let mut gradients = Array2::zeros((batch.len(), dimensions));
-        
+
         for (i, entry) in batch.iter().enumerate() {
             // Simplified gradient computation
             // In practice, this would involve backpropagation through the model
             let prediction = self.forward_pass(&entry.input)?;
             let error = &entry.target - &prediction;
-            
+
             // Simple gradient: error * input
             let gradient = &error * &entry.input;
             gradients.row_mut(i).assign(&gradient);
         }
-        
+
         Ok(gradients)
     }
 
     /// Apply EWC regularization to gradients
     fn apply_ewc_regularization(&self, gradients: Array2<f32>) -> Result<Array2<f32>> {
         let lambda = self.config.forgetting_prevention.ewc_lambda;
-        
+
         // EWC penalty: λ * F * (θ - θ*)
-        let ewc_penalty = &self.fisher_information * (&self.embeddings - &self.optimal_parameters) * lambda;
-        
+        let ewc_penalty =
+            &self.fisher_information * (&self.embeddings - &self.optimal_parameters) * lambda;
+
         // Regularized gradients
         let mut regularized = gradients;
         for i in 0..regularized.nrows().min(ewc_penalty.nrows()) {
@@ -416,34 +424,35 @@ impl RealTimeFinetuningModel {
                 regularized[[i, j]] -= ewc_penalty[[i, j]];
             }
         }
-        
+
         Ok(regularized)
     }
 
     /// Update model parameters
     fn update_parameters(&mut self, gradients: Array2<f32>) -> Result<()> {
         let learning_rate = self.config.online_learning_rate;
-        
+
         // Apply gradients with learning rate
         let update = &gradients * learning_rate;
-        
+
         // Ensure embeddings matrix has the right shape
         if self.embeddings.nrows() < gradients.nrows() {
             let dimensions = self.config.base_config.dimensions;
             let new_rows = gradients.nrows();
-            self.embeddings = Array2::from_shape_fn((new_rows, dimensions), |_| rand::random::<f32>() * 0.1);
+            self.embeddings =
+                Array2::from_shape_fn((new_rows, dimensions), |_| rand::random::<f32>() * 0.1);
         }
-        
+
         // Update embeddings
         let rows_to_update = update.nrows().min(self.embeddings.nrows());
         let cols_to_update = update.ncols().min(self.embeddings.ncols());
-        
+
         for i in 0..rows_to_update {
             for j in 0..cols_to_update {
                 self.embeddings[[i, j]] += update[[i, j]];
             }
         }
-        
+
         Ok(())
     }
 
@@ -451,31 +460,32 @@ impl RealTimeFinetuningModel {
     fn update_fisher_information(&mut self, batch: &[ExperienceEntry]) -> Result<()> {
         let dimensions = self.config.base_config.dimensions;
         let mut fisher_update = Array2::zeros((batch.len(), dimensions));
-        
+
         for (i, entry) in batch.iter().enumerate() {
             // Compute second-order derivatives (simplified)
             let prediction = self.forward_pass(&entry.input)?;
             let second_derivative = prediction.mapv(|x| x * (1.0 - x)); // Sigmoid derivative approximation
             fisher_update.row_mut(i).assign(&second_derivative);
         }
-        
+
         // Update Fisher information with exponential moving average
         let decay = self.config.memory_decay;
-        
+
         // Resize Fisher information if needed
         if self.fisher_information.nrows() < fisher_update.nrows() {
             self.fisher_information = Array2::zeros((fisher_update.nrows(), dimensions));
         }
-        
+
         let rows_to_update = fisher_update.nrows().min(self.fisher_information.nrows());
         let cols_to_update = fisher_update.ncols().min(self.fisher_information.ncols());
-        
+
         for i in 0..rows_to_update {
             for j in 0..cols_to_update {
-                self.fisher_information[[i, j]] = decay * self.fisher_information[[i, j]] + (1.0 - decay) * fisher_update[[i, j]];
+                self.fisher_information[[i, j]] =
+                    decay * self.fisher_information[[i, j]] + (1.0 - decay) * fisher_update[[i, j]];
             }
         }
-        
+
         Ok(())
     }
 
@@ -484,12 +494,12 @@ impl RealTimeFinetuningModel {
         if self.embeddings.is_empty() {
             return Ok(Array1::zeros(input.len()));
         }
-        
+
         // Simple linear transformation
         let input_len = input.len().min(self.embeddings.ncols());
         let output_len = self.embeddings.nrows();
         let mut output = Array1::zeros(output_len);
-        
+
         for i in 0..output_len {
             let mut sum = 0.0;
             for j in 0..input_len {
@@ -497,7 +507,7 @@ impl RealTimeFinetuningModel {
             }
             output[i] = sum.tanh(); // Apply activation
         }
-        
+
         Ok(output)
     }
 
@@ -506,44 +516,49 @@ impl RealTimeFinetuningModel {
         if self.replay_buffer.is_empty() {
             return Ok(());
         }
-        
+
         let mut total_loss = 0.0;
         let mut total_accuracy = 0.0;
         let mut total_drift = 0.0;
         let mut total_forgetting = 0.0;
-        let sample_size = self.config.online_evaluation.window_size.min(self.replay_buffer.len());
-        
+        let sample_size = self
+            .config
+            .online_evaluation
+            .window_size
+            .min(self.replay_buffer.len());
+
         for i in 0..sample_size {
             let idx = self.replay_buffer.len() - 1 - i; // Recent examples
             let entry = &self.replay_buffer[idx];
-            
+
             let prediction = self.forward_pass(&entry.input)?;
-            
+
             // Compute loss (MSE)
             let diff = &entry.target - &prediction;
             let loss = diff.dot(&diff) / diff.len() as f32;
             total_loss += loss;
-            
+
             // Compute accuracy (simplified)
             let accuracy = 1.0 / (1.0 + loss);
             total_accuracy += accuracy;
-            
+
             // Compute drift (change in prediction distribution)
             let drift = self.compute_drift_score(&prediction)?;
             total_drift += drift;
-            
+
             // Compute forgetting (performance on old tasks)
             let forgetting = self.compute_forgetting_score(&entry.input, &entry.target)?;
             total_forgetting += forgetting;
         }
-        
+
         let avg_loss = total_loss / sample_size as f32;
         let avg_accuracy = total_accuracy / sample_size as f32;
         let avg_drift = total_drift / sample_size as f32;
         let avg_forgetting = total_forgetting / sample_size as f32;
-        
-        self.performance_tracker.update_metrics(avg_loss, avg_accuracy, avg_drift, avg_forgetting);
-        
+
+        self.performance_tracker
+            .update_metrics(avg_loss, avg_accuracy, avg_drift, avg_forgetting);
+
         Ok(())
     }
 
@@ -586,15 +601,33 @@ impl RealTimeFinetuningModel {
     /// Get online performance statistics
     pub fn get_online_stats(&self) -> HashMap<String, f32> {
         let mut stats = HashMap::new();
-        
-        stats.insert("average_loss".to_string(), self.performance_tracker.get_average_loss());
-        stats.insert("average_accuracy".to_string(), self.performance_tracker.get_average_accuracy());
-        stats.insert("drift_score".to_string(), self.performance_tracker.get_drift_score());
-        stats.insert("forgetting_score".to_string(), self.performance_tracker.get_forgetting_score());
+
+        stats.insert(
+            "average_loss".to_string(),
+            self.performance_tracker.get_average_loss(),
+        );
+        stats.insert(
+            "average_accuracy".to_string(),
+            self.performance_tracker.get_average_accuracy(),
+        );
+        stats.insert(
+            "drift_score".to_string(),
+            self.performance_tracker.get_drift_score(),
+        );
+        stats.insert(
+            "forgetting_score".to_string(),
+            self.performance_tracker.get_forgetting_score(),
+        );
         stats.insert("examples_seen".to_string(), self.examples_seen as f32);
-        stats.insert("update_count".to_string(), self.performance_tracker.update_count as f32);
-        stats.insert("replay_buffer_size".to_string(), self.replay_buffer.len() as f32);
-        
+        stats.insert(
+            "update_count".to_string(),
+            self.performance_tracker.update_count as f32,
+        );
+        stats.insert(
+            "replay_buffer_size".to_string(),
+            self.replay_buffer.len() as f32,
+        );
+
         stats
     }
 }
@@ -626,7 +659,9 @@ impl EmbeddingModel for RealTimeFinetuningModel {
 
         // Add relation
         let next_relation_id = self.relations.len();
-        self.relations.entry(predicate_str).or_insert(next_relation_id);
+        self.relations
+            .entry(predicate_str)
+            .or_insert(next_relation_id);
 
         Ok(())
     }
@@ -706,7 +741,12 @@ impl EmbeddingModel for RealTimeFinetuningModel {
         Ok(-distance as f64)
     }
 
-    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for (entity, _) in &self.entities {
@@ -722,7 +762,12 @@ impl EmbeddingModel for RealTimeFinetuningModel {
         Ok(scores)
     }
 
-    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for (entity, _) in &self.entities {
@@ -738,7 +783,12 @@ impl EmbeddingModel for RealTimeFinetuningModel {
         Ok(scores)
     }
 
-    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for (relation, _) in &self.relations {
@@ -769,7 +819,11 @@ impl EmbeddingModel for RealTimeFinetuningModel {
             is_trained: self.is_trained,
             model_type: self.model_type().to_string(),
             creation_time: Utc::now(),
-            last_training_time: if self.is_trained { Some(Utc::now()) } else { None },
+            last_training_time: if self.is_trained {
+                Some(Utc::now())
+            } else {
+                None
+            },
         }
     }
 
@@ -786,7 +840,8 @@ impl EmbeddingModel for RealTimeFinetuningModel {
         self.relations.clear();
         self.embeddings = Array2::zeros((0, self.config.base_config.dimensions));
         self.replay_buffer.clear();
-        self.performance_tracker = OnlinePerformanceTracker::new(self.config.online_evaluation.window_size);
+        self.performance_tracker =
+            OnlinePerformanceTracker::new(self.config.online_evaluation.window_size);
         self.examples_seen = 0;
         self.is_trained = false;
         self.training_stats = None;
@@ -803,7 +858,9 @@ impl EmbeddingModel for RealTimeFinetuningModel {
             // Simple text encoding
             let mut embedding = vec![0.0f32; self.config.base_config.dimensions];
             for (i, c) in text.chars().enumerate() {
-                if i >= self.config.base_config.dimensions { break; }
+                if i >= self.config.base_config.dimensions {
+                    break;
+                }
                 embedding[i] = (c as u8 as f32) / 255.0;
             }
             results.push(embedding);
@@ -834,7 +891,7 @@ mod tests {
             importance: 1.0,
             task_id: Some("task1".to_string()),
         };
-        
+
         assert_eq!(entry.input.len(), 3);
         assert_eq!(entry.target.len(), 3);
         assert!(entry.importance > 0.0);
@@ -844,7 +901,7 @@ mod tests {
     fn test_online_performance_tracker() {
         let mut tracker = OnlinePerformanceTracker::new(10);
         tracker.update_metrics(0.5, 0.8, 0.1, 0.2);
-        
+
         assert_eq!(tracker.get_average_loss(), 0.5);
         assert_eq!(tracker.get_average_accuracy(), 0.8);
         assert_eq!(tracker.update_count, 1);
@@ -854,7 +911,7 @@ mod tests {
     fn test_real_time_finetuning_model_creation() {
         let config = RealTimeFinetuningConfig::default();
         let model = RealTimeFinetuningModel::new(config);
-        
+
         assert_eq!(model.entities.len(), 0);
         assert_eq!(model.examples_seen, 0);
         assert!(!model.is_adapting);
@@ -867,12 +924,15 @@ mod tests {
             ..Default::default()
         };
         let mut model = RealTimeFinetuningModel::new(config);
-        
+
         let input = Array1::from_vec(vec![1.0, 2.0, 3.0]);
         let target = Array1::from_vec(vec![4.0, 5.0, 6.0]);
-        
-        model.add_example(input, target, Some("task1".to_string())).await.unwrap();
-        
+
+        model
+            .add_example(input, target, Some("task1".to_string()))
+            .await
+            .unwrap();
+
         assert_eq!(model.examples_seen, 1);
         assert_eq!(model.replay_buffer.len(), 1);
     }
@@ -881,19 +941,19 @@ mod tests {
     async fn test_task_memory_management() {
         let config = RealTimeFinetuningConfig::default();
         let mut model = RealTimeFinetuningModel::new(config);
-        
+
         // Initialize embeddings
         model.embeddings = Array2::from_shape_fn((5, 10), |_| rand::random::<f32>());
-        
+
         // Save task parameters
         model.save_task_parameters("task1".to_string()).unwrap();
-        
+
         // Modify embeddings
         model.embeddings *= 2.0;
-        
+
         // Load task parameters
         model.load_task_parameters("task1").unwrap();
-        
+
         assert!(model.task_memory.contains_key("task1"));
     }
 
@@ -902,9 +962,9 @@ mod tests {
         let mut config = RealTimeFinetuningConfig::default();
         config.online_evaluation.window_size = 5;
         let model = RealTimeFinetuningModel::new(config);
-        
+
         let stats = model.get_online_stats();
-        
+
         assert!(stats.contains_key("average_loss"));
         assert!(stats.contains_key("examples_seen"));
         assert!(stats.contains_key("replay_buffer_size"));
@@ -915,12 +975,12 @@ mod tests {
     async fn test_real_time_training() {
         let config = RealTimeFinetuningConfig::default();
         let mut model = RealTimeFinetuningModel::new(config);
-        
+
         // Add some examples to replay buffer
         let input = Array1::from_vec(vec![1.0, 2.0, 3.0]);
         let target = Array1::from_vec(vec![4.0, 5.0, 6.0]);
         model.add_example(input, target, None).await.unwrap();
-        
+
         let stats = model.train(Some(5)).await.unwrap();
         assert_eq!(stats.epochs_completed, 5);
         assert!(model.is_trained());

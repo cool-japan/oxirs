@@ -4,11 +4,11 @@
 //! neural learning with symbolic reasoning, logic-based constraints,
 //! and knowledge-guided embeddings.
 
-use crate::{EmbeddingModel, ModelConfig, TrainingStats, Vector, Triple, NamedNode};
+use crate::{EmbeddingModel, ModelConfig, NamedNode, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{Array1, Array2, Array3, Axis, s};
+use ndarray::{s, Array1, Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
@@ -473,9 +473,18 @@ impl Default for NeuralComponentConfig {
     fn default() -> Self {
         Self {
             layers: vec![
-                LayerConfig { size: 512, layer_type: LayerType::Dense },
-                LayerConfig { size: 256, layer_type: LayerType::Dense },
-                LayerConfig { size: 128, layer_type: LayerType::Dense },
+                LayerConfig {
+                    size: 512,
+                    layer_type: LayerType::Dense,
+                },
+                LayerConfig {
+                    size: 256,
+                    layer_type: LayerType::Dense,
+                },
+                LayerConfig {
+                    size: 128,
+                    layer_type: LayerType::Dense,
+                },
             ],
             activations: vec![
                 ActivationFunction::ReLU,
@@ -640,7 +649,7 @@ impl Default for ConstraintSatisfactionConfig {
         weights.insert("logical_consistency".to_string(), 1.0);
         weights.insert("domain_constraints".to_string(), 0.8);
         weights.insert("type_constraints".to_string(), 0.9);
-        
+
         Self {
             constraint_types: vec![
                 ConstraintType::Logical,
@@ -731,7 +740,7 @@ impl LogicalFormula {
     pub fn new_atom(predicate: String) -> Self {
         let mut variables = HashSet::new();
         variables.insert(predicate.clone());
-        
+
         Self {
             structure: FormulaStructure::Atom(predicate),
             truth_value: 1.0,
@@ -744,21 +753,23 @@ impl LogicalFormula {
         self.evaluate_structure(&self.structure, assignment)
     }
 
-    fn evaluate_structure(&self, structure: &FormulaStructure, assignment: &HashMap<String, f32>) -> f32 {
+    fn evaluate_structure(
+        &self,
+        structure: &FormulaStructure,
+        assignment: &HashMap<String, f32>,
+    ) -> f32 {
         match structure {
-            FormulaStructure::Atom(predicate) => {
-                assignment.get(predicate).copied().unwrap_or(0.0)
-            }
-            FormulaStructure::Negation(sub) => {
-                1.0 - self.evaluate_structure(sub, assignment)
-            }
+            FormulaStructure::Atom(predicate) => assignment.get(predicate).copied().unwrap_or(0.0),
+            FormulaStructure::Negation(sub) => 1.0 - self.evaluate_structure(sub, assignment),
             FormulaStructure::Conjunction(formulas) => {
-                formulas.iter()
+                formulas
+                    .iter()
                     .map(|f| self.evaluate_structure(f, assignment))
                     .fold(1.0, |acc, val| acc * val) // Product T-norm
             }
             FormulaStructure::Disjunction(formulas) => {
-                formulas.iter()
+                formulas
+                    .iter()
                     .map(|f| self.evaluate_structure(f, assignment))
                     .fold(0.0, |acc, val| acc + val - acc * val) // Probabilistic sum
             }
@@ -812,15 +823,16 @@ impl KnowledgeRule {
 
     pub fn apply(&self, facts: &HashMap<String, f32>) -> Option<(String, f32)> {
         let antecedent_value = self.antecedent.evaluate(facts);
-        
-        if antecedent_value > 0.5 { // Threshold for rule activation
+
+        if antecedent_value > 0.5 {
+            // Threshold for rule activation
             // Find the main predicate in consequent
             if let FormulaStructure::Atom(predicate) = &self.consequent.structure {
                 let consequent_value = antecedent_value * self.confidence;
                 return Some((predicate.clone(), consequent_value));
             }
         }
-        
+
         None
     }
 }
@@ -830,29 +842,29 @@ impl KnowledgeRule {
 pub struct NeuralSymbolicModel {
     pub config: NeuralSymbolicConfig,
     pub model_id: Uuid,
-    
+
     /// Neural components
     pub neural_layers: Vec<Array2<f32>>,
     pub attention_weights: Array3<f32>,
-    
+
     /// Symbolic components
     pub knowledge_base: Vec<KnowledgeRule>,
     pub logical_formulas: Vec<LogicalFormula>,
     pub symbol_embeddings: HashMap<String, Array1<f32>>,
-    
+
     /// Integration layers
     pub neural_to_symbolic: Array2<f32>,
     pub symbolic_to_neural: Array2<f32>,
     pub fusion_weights: Array2<f32>,
-    
+
     /// Constraint satisfaction
     pub constraints: Vec<LogicalFormula>,
     pub constraint_weights: Array1<f32>,
-    
+
     /// Entity and relation mappings
     pub entities: HashMap<String, usize>,
     pub relations: HashMap<String, usize>,
-    
+
     /// Training state
     pub training_stats: Option<TrainingStats>,
     pub is_trained: bool,
@@ -863,27 +875,35 @@ impl NeuralSymbolicModel {
     pub fn new(config: NeuralSymbolicConfig) -> Self {
         let model_id = Uuid::new_v4();
         let dimensions = config.base_config.dimensions;
-        
+
         // Initialize neural layers
         let mut neural_layers = Vec::new();
         for layer_config in &config.architecture_config.neural_config.layers {
             neural_layers.push(Array2::from_shape_fn(
                 (layer_config.size, dimensions),
-                |_| rand::random::<f32>() * 0.1
+                |_| rand::random::<f32>() * 0.1,
             ));
         }
-        
+
         Self {
             config,
             model_id,
             neural_layers,
-            attention_weights: Array3::from_shape_fn((8, dimensions, dimensions), |_| rand::random::<f32>() * 0.1),
+            attention_weights: Array3::from_shape_fn((8, dimensions, dimensions), |_| {
+                rand::random::<f32>() * 0.1
+            }),
             knowledge_base: Vec::new(),
             logical_formulas: Vec::new(),
             symbol_embeddings: HashMap::new(),
-            neural_to_symbolic: Array2::from_shape_fn((dimensions, dimensions), |_| rand::random::<f32>() * 0.1),
-            symbolic_to_neural: Array2::from_shape_fn((dimensions, dimensions), |_| rand::random::<f32>() * 0.1),
-            fusion_weights: Array2::from_shape_fn((dimensions, dimensions * 2), |_| rand::random::<f32>() * 0.1),
+            neural_to_symbolic: Array2::from_shape_fn((dimensions, dimensions), |_| {
+                rand::random::<f32>() * 0.1
+            }),
+            symbolic_to_neural: Array2::from_shape_fn((dimensions, dimensions), |_| {
+                rand::random::<f32>() * 0.1
+            }),
+            fusion_weights: Array2::from_shape_fn((dimensions, dimensions * 2), |_| {
+                rand::random::<f32>() * 0.1
+            }),
             constraints: Vec::new(),
             constraint_weights: Array1::from_shape_fn(10, |_| 1.0),
             entities: HashMap::new(),
@@ -906,44 +926,46 @@ impl NeuralSymbolicModel {
     /// Forward pass through neural component
     fn neural_forward(&self, input: &Array1<f32>) -> Result<Array1<f32>> {
         let mut activation = input.clone();
-        
+
         for (i, layer) in self.neural_layers.iter().enumerate() {
             // Linear transformation
             activation = layer.dot(&activation);
-            
+
             // Apply activation function
             let activation_fn = &self.config.architecture_config.neural_config.activations[i];
             activation = match activation_fn {
                 ActivationFunction::ReLU => activation.mapv(|x| x.max(0.0)),
                 ActivationFunction::Sigmoid => activation.mapv(|x| 1.0 / (1.0 + (-x).exp())),
                 ActivationFunction::Tanh => activation.mapv(|x| x.tanh()),
-                ActivationFunction::GELU => activation.mapv(|x| x * 0.5 * (1.0 + (x * 0.7978845608).tanh())),
+                ActivationFunction::GELU => {
+                    activation.mapv(|x| x * 0.5 * (1.0 + (x * 0.7978845608).tanh()))
+                }
                 ActivationFunction::Swish => activation.mapv(|x| x * (1.0 / (1.0 + (-x).exp()))),
                 ActivationFunction::LogicActivation => activation.mapv(|x| (x.tanh() + 1.0) / 2.0), // Maps to [0,1]
                 _ => activation.mapv(|x| x.max(0.0)),
             };
         }
-        
+
         Ok(activation)
     }
 
     /// Forward pass through symbolic component
     fn symbolic_forward(&self, input: &Array1<f32>) -> Result<Array1<f32>> {
         let mut symbolic_state = HashMap::new();
-        
+
         // Ground neural input to symbolic facts
         for (i, &value) in input.iter().enumerate() {
             let symbol = format!("input_{}", i);
             symbolic_state.insert(symbol, value);
         }
-        
+
         // Apply knowledge rules
         let mut inferred_facts = symbolic_state.clone();
-        
+
         for _ in 0..self.config.symbolic_config.rule_based.max_depth {
             let mut new_facts = inferred_facts.clone();
             let mut facts_added = false;
-            
+
             for rule in &self.knowledge_base {
                 if let Some((predicate, value)) = rule.apply(&inferred_facts) {
                     if !new_facts.contains_key(&predicate) || new_facts[&predicate] < value {
@@ -952,22 +974,25 @@ impl NeuralSymbolicModel {
                     }
                 }
             }
-            
+
             if !facts_added {
                 break;
             }
-            
+
             inferred_facts = new_facts;
         }
-        
+
         // Convert back to vector
         let mut output = Array1::zeros(input.len());
-        for (i, symbol) in (0..input.len()).map(|i| format!("output_{}", i)).enumerate() {
+        for (i, symbol) in (0..input.len())
+            .map(|i| format!("output_{}", i))
+            .enumerate()
+        {
             if let Some(&value) = inferred_facts.get(&symbol) {
                 output[i] = value;
             }
         }
-        
+
         Ok(output)
     }
 
@@ -975,26 +1000,29 @@ impl NeuralSymbolicModel {
     pub fn integrated_forward(&self, input: &Array1<f32>) -> Result<Array1<f32>> {
         // Neural forward pass
         let neural_output = self.neural_forward(input)?;
-        
+
         // Map neural output to symbolic space
         let symbolic_input = self.neural_to_symbolic.dot(&neural_output);
-        
+
         // Symbolic forward pass
         let symbolic_output = self.symbolic_forward(&symbolic_input)?;
-        
+
         // Map symbolic output back to neural space
         let neural_symbolic_output = self.symbolic_to_neural.dot(&symbolic_output);
-        
+
         // Fuse neural and neural-symbolic outputs
         let fused_input = Array1::from_iter(
-            neural_output.iter().chain(neural_symbolic_output.iter()).cloned()
+            neural_output
+                .iter()
+                .chain(neural_symbolic_output.iter())
+                .cloned(),
         );
-        
+
         let fused_output = self.fusion_weights.dot(&fused_input);
-        
+
         // Apply constraints
         let constrained_output = self.apply_constraints(fused_output)?;
-        
+
         Ok(constrained_output)
     }
 
@@ -1003,24 +1031,24 @@ impl NeuralSymbolicModel {
         if self.constraints.is_empty() {
             return Ok(output);
         }
-        
+
         // Convert output to symbolic facts
         let mut facts = HashMap::new();
         for (i, &value) in output.iter().enumerate() {
             facts.insert(format!("output_{}", i), value);
         }
-        
+
         // Evaluate constraints and adjust output
         for (constraint, &weight) in self.constraints.iter().zip(self.constraint_weights.iter()) {
             let constraint_satisfaction = constraint.evaluate(&facts);
-            
+
             // If constraint is not satisfied, adjust output
             if constraint_satisfaction < 0.8 {
                 let adjustment_factor = (0.8 - constraint_satisfaction) * weight * 0.1;
                 output *= (1.0 - adjustment_factor);
             }
         }
-        
+
         Ok(output)
     }
 
@@ -1028,7 +1056,7 @@ impl NeuralSymbolicModel {
     pub fn learn_symbolic_rules(&mut self, examples: &[(Array1<f32>, Array1<f32>)]) -> Result<()> {
         // Simple rule learning algorithm
         let mut candidate_rules = Vec::new();
-        
+
         for (i, (input, output)) in examples.iter().enumerate() {
             // Create candidate rules based on input-output patterns
             for j in 0..input.len() {
@@ -1037,30 +1065,30 @@ impl NeuralSymbolicModel {
                         // Create rule: input_j -> output_k
                         let antecedent = LogicalFormula::new_atom(format!("input_{}", j));
                         let consequent = LogicalFormula::new_atom(format!("output_{}", k));
-                        let rule = KnowledgeRule::new(
-                            format!("rule_{}_{}", j, k),
-                            antecedent,
-                            consequent
-                        );
+                        let rule =
+                            KnowledgeRule::new(format!("rule_{}_{}", j, k), antecedent, consequent);
                         candidate_rules.push(rule);
                     }
                 }
             }
         }
-        
+
         // Evaluate and filter rules based on support and confidence
         for rule in candidate_rules {
             let mut support = 0;
             let mut confidence_sum = 0.0;
-            
+
             for (input, output) in examples {
                 let mut facts = HashMap::new();
                 for (i, &value) in input.iter().enumerate() {
                     facts.insert(format!("input_{}", i), value);
                 }
-                
+
                 if let Some((predicate, predicted_value)) = rule.apply(&facts) {
-                    if let Some(index) = predicate.strip_prefix("output_").and_then(|s| s.parse::<usize>().ok()) {
+                    if let Some(index) = predicate
+                        .strip_prefix("output_")
+                        .and_then(|s| s.parse::<usize>().ok())
+                    {
                         if index < output.len() {
                             let actual_value = output[index];
                             let error = (predicted_value - actual_value).abs();
@@ -1072,30 +1100,34 @@ impl NeuralSymbolicModel {
                     }
                 }
             }
-            
+
             if support >= 3 && confidence_sum / support as f32 > 0.7 {
                 self.add_knowledge_rule(rule);
             }
         }
-        
+
         Ok(())
     }
 
     /// Compute semantic loss
-    pub fn compute_semantic_loss(&self, predictions: &Array1<f32>, targets: &Array1<f32>) -> Result<f32> {
+    pub fn compute_semantic_loss(
+        &self,
+        predictions: &Array1<f32>,
+        targets: &Array1<f32>,
+    ) -> Result<f32> {
         // Standard MSE loss
         let mse_loss = {
             let diff = predictions - targets;
             diff.dot(&diff) / predictions.len() as f32
         };
-        
+
         // Constraint violation loss
         let constraint_loss = {
             let mut facts = HashMap::new();
             for (i, &value) in predictions.iter().enumerate() {
                 facts.insert(format!("output_{}", i), value);
             }
-            
+
             let mut total_violation = 0.0;
             for constraint in &self.constraints {
                 let satisfaction = constraint.evaluate(&facts);
@@ -1105,18 +1137,21 @@ impl NeuralSymbolicModel {
             }
             total_violation / self.constraints.len().max(1) as f32
         };
-        
+
         // Rule consistency loss
         let rule_loss = {
             let mut facts = HashMap::new();
             for (i, &value) in predictions.iter().enumerate() {
                 facts.insert(format!("input_{}", i), value);
             }
-            
+
             let mut total_inconsistency = 0.0;
             for rule in &self.knowledge_base {
                 if let Some((predicate, predicted_value)) = rule.apply(&facts) {
-                    if let Some(index) = predicate.strip_prefix("output_").and_then(|s| s.parse::<usize>().ok()) {
+                    if let Some(index) = predicate
+                        .strip_prefix("output_")
+                        .and_then(|s| s.parse::<usize>().ok())
+                    {
                         if index < predictions.len() {
                             let actual_value = predictions[index];
                             let inconsistency = (predicted_value - actual_value).powi(2);
@@ -1127,24 +1162,28 @@ impl NeuralSymbolicModel {
             }
             total_inconsistency / self.knowledge_base.len().max(1) as f32
         };
-        
+
         // Combine losses
         let total_loss = mse_loss + 0.1 * constraint_loss + 0.1 * rule_loss;
-        
+
         Ok(total_loss)
     }
 
     /// Explain prediction using symbolic reasoning
-    pub fn explain_prediction(&self, input: &Array1<f32>, prediction: &Array1<f32>) -> Result<String> {
+    pub fn explain_prediction(
+        &self,
+        input: &Array1<f32>,
+        prediction: &Array1<f32>,
+    ) -> Result<String> {
         let mut explanation = String::new();
         explanation.push_str("Prediction Explanation:\n");
-        
+
         // Ground input to facts
         let mut facts = HashMap::new();
         for (i, &value) in input.iter().enumerate() {
             facts.insert(format!("input_{}", i), value);
         }
-        
+
         // Find activated rules
         let mut activated_rules = Vec::new();
         for rule in &self.knowledge_base {
@@ -1153,7 +1192,7 @@ impl NeuralSymbolicModel {
                 activated_rules.push((rule, antecedent_value));
             }
         }
-        
+
         if !activated_rules.is_empty() {
             explanation.push_str("\nActivated Rules:\n");
             for (rule, activation) in activated_rules {
@@ -1163,28 +1202,31 @@ impl NeuralSymbolicModel {
                 ));
             }
         }
-        
+
         // Check constraint satisfaction
         let mut constraint_violations = Vec::new();
         let mut prediction_facts = HashMap::new();
         for (i, &value) in prediction.iter().enumerate() {
             prediction_facts.insert(format!("output_{}", i), value);
         }
-        
+
         for constraint in &self.constraints {
             let satisfaction = constraint.evaluate(&prediction_facts);
             if satisfaction < 0.8 {
                 constraint_violations.push(satisfaction);
             }
         }
-        
+
         if !constraint_violations.is_empty() {
             explanation.push_str("\nConstraint Violations:\n");
             for (i, violation) in constraint_violations.iter().enumerate() {
-                explanation.push_str(&format!("- Constraint {}: satisfaction = {:.2}\n", i, violation));
+                explanation.push_str(&format!(
+                    "- Constraint {}: satisfaction = {:.2}\n",
+                    i, violation
+                ));
             }
         }
-        
+
         Ok(explanation)
     }
 }
@@ -1210,13 +1252,19 @@ impl EmbeddingModel for NeuralSymbolicModel {
 
         // Add entities
         let next_entity_id = self.entities.len();
-        self.entities.entry(subject_str.clone()).or_insert(next_entity_id);
+        self.entities
+            .entry(subject_str.clone())
+            .or_insert(next_entity_id);
         let next_entity_id = self.entities.len();
-        self.entities.entry(object_str.clone()).or_insert(next_entity_id);
+        self.entities
+            .entry(object_str.clone())
+            .or_insert(next_entity_id);
 
         // Add relation
         let next_relation_id = self.relations.len();
-        self.relations.entry(predicate_str.clone()).or_insert(next_relation_id);
+        self.relations
+            .entry(predicate_str.clone())
+            .or_insert(next_relation_id);
 
         // Create symbolic representation
         let rule_id = format!("{}_{}", subject_str, predicate_str);
@@ -1243,8 +1291,14 @@ impl EmbeddingModel for NeuralSymbolicModel {
             if epoch % 10 == 0 && epoch > 0 {
                 // Simulate learning from examples
                 let examples = vec![
-                    (Array1::from_vec(vec![1.0, 0.0, 1.0]), Array1::from_vec(vec![1.0, 1.0])),
-                    (Array1::from_vec(vec![0.0, 1.0, 0.0]), Array1::from_vec(vec![0.0, 1.0])),
+                    (
+                        Array1::from_vec(vec![1.0, 0.0, 1.0]),
+                        Array1::from_vec(vec![1.0, 1.0]),
+                    ),
+                    (
+                        Array1::from_vec(vec![0.0, 1.0, 0.0]),
+                        Array1::from_vec(vec![0.0, 1.0]),
+                    ),
                 ];
                 self.learn_symbolic_rules(&examples)?;
             }
@@ -1275,9 +1329,13 @@ impl EmbeddingModel for NeuralSymbolicModel {
         if let Some(&entity_id) = self.entities.get(entity) {
             // Generate embedding from neural-symbolic integration
             let input = Array1::from_shape_fn(self.config.base_config.dimensions, |i| {
-                if i == entity_id % self.config.base_config.dimensions { 1.0 } else { 0.0 }
+                if i == entity_id % self.config.base_config.dimensions {
+                    1.0
+                } else {
+                    0.0
+                }
             });
-            
+
             if let Ok(embedding) = self.integrated_forward(&input) {
                 return Ok(Vector::new(embedding.to_vec()));
             }
@@ -1289,9 +1347,13 @@ impl EmbeddingModel for NeuralSymbolicModel {
         if let Some(&relation_id) = self.relations.get(relation) {
             // Generate embedding from neural-symbolic integration
             let input = Array1::from_shape_fn(self.config.base_config.dimensions, |i| {
-                if i == relation_id % self.config.base_config.dimensions { 1.0 } else { 0.0 }
+                if i == relation_id % self.config.base_config.dimensions {
+                    1.0
+                } else {
+                    0.0
+                }
             });
-            
+
             if let Ok(embedding) = self.integrated_forward(&input) {
                 return Ok(Vector::new(embedding.to_vec()));
             }
@@ -1304,20 +1366,25 @@ impl EmbeddingModel for NeuralSymbolicModel {
         let mut facts = HashMap::new();
         facts.insert(subject.to_string(), 1.0);
         facts.insert(predicate.to_string(), 1.0);
-        
+
         // Check if any rules support this triple
-        let mut max_score = 0.0;
+        let mut max_score: f32 = 0.0;
         for rule in &self.knowledge_base {
             let antecedent_value = rule.antecedent.evaluate(&facts);
             let consequent_value = rule.consequent.evaluate(&facts);
             let rule_score = antecedent_value * consequent_value * rule.confidence;
             max_score = max_score.max(rule_score);
         }
-        
+
         Ok(max_score as f64)
     }
 
-    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for (entity, _) in &self.entities {
@@ -1333,7 +1400,12 @@ impl EmbeddingModel for NeuralSymbolicModel {
         Ok(scores)
     }
 
-    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for (entity, _) in &self.entities {
@@ -1349,7 +1421,12 @@ impl EmbeddingModel for NeuralSymbolicModel {
         Ok(scores)
     }
 
-    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for (relation, _) in &self.relations {
@@ -1380,7 +1457,11 @@ impl EmbeddingModel for NeuralSymbolicModel {
             is_trained: self.is_trained,
             model_type: self.model_type().to_string(),
             creation_time: Utc::now(),
-            last_training_time: if self.is_trained { Some(Utc::now()) } else { None },
+            last_training_time: if self.is_trained {
+                Some(Utc::now())
+            } else {
+                None
+            },
         }
     }
 
@@ -1419,7 +1500,7 @@ impl EmbeddingModel for NeuralSymbolicModel {
                     0.0
                 }
             });
-            
+
             if let Ok(embedding) = self.integrated_forward(&input) {
                 results.push(embedding.to_vec());
             } else {
@@ -1438,7 +1519,10 @@ mod tests {
     #[test]
     fn test_neural_symbolic_config_default() {
         let config = NeuralSymbolicConfig::default();
-        assert!(matches!(config.architecture_config.architecture_type, NeuroSymbolicArchitecture::HybridPipeline));
+        assert!(matches!(
+            config.architecture_config.architecture_type,
+            NeuroSymbolicArchitecture::HybridPipeline
+        ));
         assert_eq!(config.symbolic_config.rule_based.confidence_threshold, 0.7);
     }
 
@@ -1455,7 +1539,7 @@ mod tests {
         let formula = LogicalFormula::new_atom("P".to_string());
         let mut assignment = HashMap::new();
         assignment.insert("P".to_string(), 0.8);
-        
+
         let result = formula.evaluate(&assignment);
         assert_eq!(result, 0.8);
     }
@@ -1465,7 +1549,7 @@ mod tests {
         let antecedent = LogicalFormula::new_atom("A".to_string());
         let consequent = LogicalFormula::new_atom("B".to_string());
         let rule = KnowledgeRule::new("rule1".to_string(), antecedent, consequent);
-        
+
         assert_eq!(rule.id, "rule1");
         assert_eq!(rule.confidence, 1.0);
     }
@@ -1475,10 +1559,10 @@ mod tests {
         let antecedent = LogicalFormula::new_atom("A".to_string());
         let consequent = LogicalFormula::new_atom("B".to_string());
         let rule = KnowledgeRule::new("rule1".to_string(), antecedent, consequent);
-        
+
         let mut facts = HashMap::new();
         facts.insert("A".to_string(), 0.8);
-        
+
         let result = rule.apply(&facts);
         assert!(result.is_some());
         let (predicate, value) = result.unwrap();
@@ -1490,7 +1574,7 @@ mod tests {
     fn test_neural_symbolic_model_creation() {
         let config = NeuralSymbolicConfig::default();
         let model = NeuralSymbolicModel::new(config);
-        
+
         assert_eq!(model.entities.len(), 0);
         assert_eq!(model.knowledge_base.len(), 0);
         assert!(!model.is_trained);
@@ -1500,7 +1584,7 @@ mod tests {
     async fn test_neural_symbolic_training() {
         let config = NeuralSymbolicConfig::default();
         let mut model = NeuralSymbolicModel::new(config);
-        
+
         let stats = model.train(Some(5)).await.unwrap();
         assert_eq!(stats.epochs_completed, 5);
         assert!(model.is_trained());
@@ -1510,13 +1594,22 @@ mod tests {
     fn test_symbolic_rule_learning() {
         let config = NeuralSymbolicConfig::default();
         let mut model = NeuralSymbolicModel::new(config);
-        
+
         let examples = vec![
-            (Array1::from_vec(vec![1.0, 0.0]), Array1::from_vec(vec![1.0])),
-            (Array1::from_vec(vec![1.0, 0.0]), Array1::from_vec(vec![1.0])),
-            (Array1::from_vec(vec![1.0, 0.0]), Array1::from_vec(vec![1.0])),
+            (
+                Array1::from_vec(vec![1.0, 0.0]),
+                Array1::from_vec(vec![1.0]),
+            ),
+            (
+                Array1::from_vec(vec![1.0, 0.0]),
+                Array1::from_vec(vec![1.0]),
+            ),
+            (
+                Array1::from_vec(vec![1.0, 0.0]),
+                Array1::from_vec(vec![1.0]),
+            ),
         ];
-        
+
         let result = model.learn_symbolic_rules(&examples);
         assert!(result.is_ok());
     }
@@ -1525,10 +1618,10 @@ mod tests {
     fn test_integrated_forward() {
         let config = NeuralSymbolicConfig::default();
         let model = NeuralSymbolicModel::new(config);
-        
+
         let input = Array1::from_vec(vec![1.0, 0.5, 0.0]);
         let result = model.integrated_forward(&input);
-        
+
         assert!(result.is_ok());
         let output = result.unwrap();
         assert_eq!(output.len(), input.len());
@@ -1538,10 +1631,10 @@ mod tests {
     fn test_semantic_loss_computation() {
         let config = NeuralSymbolicConfig::default();
         let model = NeuralSymbolicModel::new(config);
-        
+
         let predictions = Array1::from_vec(vec![0.8, 0.3, 0.9]);
         let targets = Array1::from_vec(vec![1.0, 0.0, 1.0]);
-        
+
         let loss = model.compute_semantic_loss(&predictions, &targets).unwrap();
         assert!(loss >= 0.0);
     }
@@ -1550,10 +1643,10 @@ mod tests {
     fn test_explanation_generation() {
         let config = NeuralSymbolicConfig::default();
         let model = NeuralSymbolicModel::new(config);
-        
+
         let input = Array1::from_vec(vec![1.0, 0.0, 0.5]);
         let prediction = Array1::from_vec(vec![0.8, 0.9]);
-        
+
         let explanation = model.explain_prediction(&input, &prediction).unwrap();
         assert!(explanation.contains("Prediction Explanation"));
     }

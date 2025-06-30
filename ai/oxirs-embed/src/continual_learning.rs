@@ -4,11 +4,11 @@
 //! catastrophic forgetting prevention, task-incremental learning,
 //! and lifelong adaptation capabilities.
 
-use crate::{EmbeddingModel, ModelConfig, TrainingStats, Vector, Triple, NamedNode};
+use crate::{EmbeddingModel, ModelConfig, NamedNode, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{Array1, Array2, Array3, Axis, s};
+use ndarray::{s, Array1, Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
@@ -402,7 +402,10 @@ pub struct ReplayConfig {
 impl Default for ReplayConfig {
     fn default() -> Self {
         Self {
-            methods: vec![ReplayMethod::ExperienceReplay, ReplayMethod::GenerativeReplay],
+            methods: vec![
+                ReplayMethod::ExperienceReplay,
+                ReplayMethod::GenerativeReplay,
+            ],
             buffer_size: 5000,
             replay_ratio: 0.5,
             generative_config: GenerativeReplayConfig::default(),
@@ -519,37 +522,37 @@ pub struct EWCState {
 pub struct ContinualLearningModel {
     pub config: ContinualLearningConfig,
     pub model_id: Uuid,
-    
+
     /// Core model parameters
     pub embeddings: Array2<f32>,
     pub task_specific_embeddings: HashMap<String, Array2<f32>>,
-    
+
     /// Memory systems
     pub episodic_memory: VecDeque<MemoryEntry>,
     pub semantic_memory: HashMap<String, Array1<f32>>,
-    
+
     /// Regularization state
     pub ewc_states: Vec<EWCState>,
     pub synaptic_importance: Array2<f32>,
     pub parameter_trajectory: Array2<f32>,
-    
+
     /// Task management
     pub current_task: Option<TaskInfo>,
     pub task_history: Vec<TaskInfo>,
     pub task_boundaries: Vec<usize>,
-    
+
     /// Progressive networks
     pub network_columns: Vec<Array2<f32>>,
     pub lateral_connections: Vec<Array2<f32>>,
-    
+
     /// Generative models for replay
     pub generator: Option<Array2<f32>>,
     pub discriminator: Option<Array2<f32>>,
-    
+
     /// Entity and relation mappings
     pub entities: HashMap<String, usize>,
     pub relations: HashMap<String, usize>,
-    
+
     /// Training state
     pub examples_seen: usize,
     pub training_stats: Option<TrainingStats>,
@@ -561,7 +564,7 @@ impl ContinualLearningModel {
     pub fn new(config: ContinualLearningConfig) -> Self {
         let model_id = Uuid::new_v4();
         let dimensions = config.base_config.dimensions;
-        
+
         Self {
             config: config.clone(),
             model_id,
@@ -575,10 +578,16 @@ impl ContinualLearningModel {
             current_task: None,
             task_history: Vec::new(),
             task_boundaries: Vec::new(),
-            network_columns: vec![Array2::from_shape_fn((dimensions, dimensions), |_| rand::random::<f32>() * 0.1)],
+            network_columns: vec![Array2::from_shape_fn((dimensions, dimensions), |_| {
+                rand::random::<f32>() * 0.1
+            })],
             lateral_connections: Vec::new(),
-            generator: Some(Array2::from_shape_fn((dimensions, dimensions), |_| rand::random::<f32>() * 0.1)),
-            discriminator: Some(Array2::from_shape_fn((dimensions, dimensions), |_| rand::random::<f32>() * 0.1)),
+            generator: Some(Array2::from_shape_fn((dimensions, dimensions), |_| {
+                rand::random::<f32>() * 0.1
+            })),
+            discriminator: Some(Array2::from_shape_fn((dimensions, dimensions), |_| {
+                rand::random::<f32>() * 0.1
+            })),
             entities: HashMap::new(),
             relations: HashMap::new(),
             examples_seen: 0,
@@ -602,12 +611,20 @@ impl ContinualLearningModel {
         }
 
         // Compute EWC state for previous task
-        if self.config.regularization_config.methods.contains(&RegularizationMethod::EWC) {
+        if self
+            .config
+            .regularization_config
+            .methods
+            .contains(&RegularizationMethod::EWC)
+        {
             self.compute_ewc_state()?;
         }
 
         // Add new network column for progressive learning
-        if matches!(self.config.architecture_config.adaptation_method, ArchitectureAdaptation::Progressive) {
+        if matches!(
+            self.config.architecture_config.adaptation_method,
+            ArchitectureAdaptation::Progressive
+        ) {
             self.add_network_column()?;
         }
 
@@ -620,15 +637,24 @@ impl ContinualLearningModel {
     }
 
     /// Add example to continual learning
-    pub async fn add_example(&mut self, data: Array1<f32>, target: Array1<f32>, task_id: Option<String>) -> Result<()> {
+    pub async fn add_example(
+        &mut self,
+        data: Array1<f32>,
+        target: Array1<f32>,
+        task_id: Option<String>,
+    ) -> Result<()> {
         let task_id = task_id.unwrap_or_else(|| {
-            self.current_task.as_ref()
+            self.current_task
+                .as_ref()
                 .map(|t| t.task_id.clone())
                 .unwrap_or_else(|| "default".to_string())
         });
 
         // Detect task boundary if using automatic detection
-        if matches!(self.config.task_config.detection_method, TaskDetection::Automatic) {
+        if matches!(
+            self.config.task_config.detection_method,
+            TaskDetection::Automatic
+        ) {
             if self.detect_task_boundary(&data)? {
                 let new_task_id = format!("task_{}", self.task_history.len() + 1);
                 self.start_task(new_task_id.clone(), "automatic".to_string())?;
@@ -652,7 +678,12 @@ impl ContinualLearningModel {
     }
 
     /// Add example to memory
-    fn add_to_memory(&mut self, data: Array1<f32>, target: Array1<f32>, task_id: String) -> Result<()> {
+    fn add_to_memory(
+        &mut self,
+        data: Array1<f32>,
+        target: Array1<f32>,
+        task_id: String,
+    ) -> Result<()> {
         let entry = MemoryEntry::new(data, target, task_id);
 
         match self.config.memory_config.update_strategy {
@@ -773,7 +804,12 @@ impl ContinualLearningModel {
     }
 
     /// Continual learning update
-    async fn continual_update(&mut self, data: Array1<f32>, target: Array1<f32>, task_id: String) -> Result<()> {
+    async fn continual_update(
+        &mut self,
+        data: Array1<f32>,
+        target: Array1<f32>,
+        task_id: String,
+    ) -> Result<()> {
         // Compute gradients
         let gradients = self.compute_gradients(&data, &target)?;
 
@@ -784,17 +820,32 @@ impl ContinualLearningModel {
         self.update_parameters(regularized_gradients)?;
 
         // Update synaptic importance for Synaptic Intelligence
-        if self.config.regularization_config.methods.contains(&RegularizationMethod::SynapticIntelligence) {
+        if self
+            .config
+            .regularization_config
+            .methods
+            .contains(&RegularizationMethod::SynapticIntelligence)
+        {
             self.update_synaptic_importance(&data, &target)?;
         }
 
         // Replay from memory
-        if self.config.replay_config.methods.contains(&ReplayMethod::ExperienceReplay) {
+        if self
+            .config
+            .replay_config
+            .methods
+            .contains(&ReplayMethod::ExperienceReplay)
+        {
             self.experience_replay().await?;
         }
 
         // Generative replay
-        if self.config.replay_config.methods.contains(&ReplayMethod::GenerativeReplay) {
+        if self
+            .config
+            .replay_config
+            .methods
+            .contains(&ReplayMethod::GenerativeReplay)
+        {
             self.generative_replay().await?;
         }
 
@@ -845,9 +896,10 @@ impl ContinualLearningModel {
         let lambda = self.config.regularization_config.ewc_config.lambda;
 
         for ewc_state in &self.ewc_states {
-            let penalty = &ewc_state.fisher_information * 
-                (&self.embeddings - &ewc_state.optimal_parameters) * 
-                lambda * ewc_state.importance;
+            let penalty = &ewc_state.fisher_information
+                * (&self.embeddings - &ewc_state.optimal_parameters)
+                * lambda
+                * ewc_state.importance;
 
             // Apply penalty to gradients
             let rows_to_update = gradients.nrows().min(penalty.nrows());
@@ -898,7 +950,8 @@ impl ContinualLearningModel {
         if self.embeddings.nrows() < gradients.nrows() {
             let dimensions = self.config.base_config.dimensions;
             let new_rows = gradients.nrows();
-            self.embeddings = Array2::from_shape_fn((new_rows, dimensions), |_| rand::random::<f32>() * 0.1);
+            self.embeddings =
+                Array2::from_shape_fn((new_rows, dimensions), |_| rand::random::<f32>() * 0.1);
         }
 
         // Update embeddings
@@ -915,7 +968,11 @@ impl ContinualLearningModel {
     }
 
     /// Update synaptic importance
-    fn update_synaptic_importance(&mut self, data: &Array1<f32>, target: &Array1<f32>) -> Result<()> {
+    fn update_synaptic_importance(
+        &mut self,
+        data: &Array1<f32>,
+        target: &Array1<f32>,
+    ) -> Result<()> {
         let xi = self.config.regularization_config.si_config.xi;
         let damping = self.config.regularization_config.si_config.damping;
 
@@ -932,9 +989,8 @@ impl ContinualLearningModel {
 
         for i in 0..rows_to_update {
             for j in 0..cols_to_update {
-                self.synaptic_importance[[i, j]] = 
-                    damping * self.synaptic_importance[[i, j]] + 
-                    xi * gradients[[i, j]].abs();
+                self.synaptic_importance[[i, j]] =
+                    damping * self.synaptic_importance[[i, j]] + xi * gradients[[i, j]].abs();
             }
         }
 
@@ -948,7 +1004,10 @@ impl ContinualLearningModel {
         }
 
         // Use current task's network column if progressive
-        let network = if matches!(self.config.architecture_config.adaptation_method, ArchitectureAdaptation::Progressive) {
+        let network = if matches!(
+            self.config.architecture_config.adaptation_method,
+            ArchitectureAdaptation::Progressive
+        ) {
             &self.network_columns[self.network_columns.len() - 1]
         } else {
             &self.embeddings
@@ -981,11 +1040,18 @@ impl ContinualLearningModel {
 
         for _ in 0..batch_size {
             let idx = rand::random::<usize>() % self.episodic_memory.len();
-            let entry = &mut self.episodic_memory[idx];
-            entry.access_count += 1;
+
+            // Extract data before modifying entry to avoid borrow conflicts
+            let (data, target) = {
+                let entry = &self.episodic_memory[idx];
+                (entry.data.clone(), entry.target.clone())
+            };
+
+            // Update access count after data extraction
+            self.episodic_memory[idx].access_count += 1;
 
             // Replay this example
-            let gradients = self.compute_gradients(&entry.data, &entry.target)?;
+            let gradients = self.compute_gradients(&data, &target)?;
             let regularized_gradients = self.apply_regularization(gradients)?;
             self.update_parameters(regularized_gradients)?;
         }
@@ -996,6 +1062,13 @@ impl ContinualLearningModel {
     /// Generative replay
     async fn generative_replay(&mut self) -> Result<()> {
         if let Some(ref generator) = self.generator {
+            let replay_batch_size = (self.config.replay_config.replay_ratio * 32.0) as usize;
+            let generator_clone = generator.clone();
+
+            // Drop the immutable borrow by exiting the if let scope
+        }
+
+        if let Some(generator) = self.generator.as_ref().map(|g| g.clone()) {
             let replay_batch_size = (self.config.replay_config.replay_ratio * 32.0) as usize;
 
             for _ in 0..replay_batch_size {
@@ -1026,7 +1099,7 @@ impl ContinualLearningModel {
             for entry in &self.episodic_memory {
                 if entry.task_id == current_task.task_id {
                     let gradients = self.compute_gradients(&entry.data, &entry.target)?;
-                    
+
                     let rows_to_update = gradients.nrows().min(fisher_information.nrows());
                     let cols_to_update = gradients.ncols().min(fisher_information.ncols());
 
@@ -1039,7 +1112,9 @@ impl ContinualLearningModel {
             }
 
             // Normalize by number of examples
-            let task_examples = self.episodic_memory.iter()
+            let task_examples = self
+                .episodic_memory
+                .iter()
                 .filter(|entry| entry.task_id == current_task.task_id)
                 .count() as f32;
 
@@ -1063,13 +1138,19 @@ impl ContinualLearningModel {
     /// Add new network column for progressive learning
     fn add_network_column(&mut self) -> Result<()> {
         let dimensions = self.config.base_config.dimensions;
-        let new_column = Array2::from_shape_fn((dimensions, dimensions), |_| rand::random::<f32>() * 0.1);
+        let new_column =
+            Array2::from_shape_fn((dimensions, dimensions), |_| rand::random::<f32>() * 0.1);
         self.network_columns.push(new_column);
 
         // Add lateral connections to previous columns
         if self.network_columns.len() > 1 {
             let lateral_connection = Array2::from_shape_fn((dimensions, dimensions), |_| {
-                rand::random::<f32>() * self.config.architecture_config.progressive_config.lateral_strength
+                rand::random::<f32>()
+                    * self
+                        .config
+                        .architecture_config
+                        .progressive_config
+                        .lateral_strength
             });
             self.lateral_connections.push(lateral_connection);
         }
@@ -1084,7 +1165,9 @@ impl ContinualLearningModel {
 
         // Simple hash-based task embedding
         for (i, byte) in task_id.bytes().enumerate() {
-            if i >= dimensions { break; }
+            if i >= dimensions {
+                break;
+            }
             task_embedding[i] = (byte as f32) / 255.0;
         }
 
@@ -1208,7 +1291,9 @@ impl EmbeddingModel for ContinualLearningModel {
 
         // Add relation
         let next_relation_id = self.relations.len();
-        self.relations.entry(predicate_str).or_insert(next_relation_id);
+        self.relations
+            .entry(predicate_str)
+            .or_insert(next_relation_id);
 
         Ok(())
     }
@@ -1289,7 +1374,12 @@ impl EmbeddingModel for ContinualLearningModel {
         Ok(-distance as f64)
     }
 
-    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for (entity, _) in &self.entities {
@@ -1305,7 +1395,12 @@ impl EmbeddingModel for ContinualLearningModel {
         Ok(scores)
     }
 
-    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for (entity, _) in &self.entities {
@@ -1321,7 +1416,12 @@ impl EmbeddingModel for ContinualLearningModel {
         Ok(scores)
     }
 
-    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for (relation, _) in &self.relations {
@@ -1352,7 +1452,11 @@ impl EmbeddingModel for ContinualLearningModel {
             is_trained: self.is_trained,
             model_type: self.model_type().to_string(),
             creation_time: Utc::now(),
-            last_training_time: if self.is_trained { Some(Utc::now()) } else { None },
+            last_training_time: if self.is_trained {
+                Some(Utc::now())
+            } else {
+                None
+            },
         }
     }
 
@@ -1388,7 +1492,9 @@ impl EmbeddingModel for ContinualLearningModel {
         for text in texts {
             let mut embedding = vec![0.0f32; self.config.base_config.dimensions];
             for (i, c) in text.chars().enumerate() {
-                if i >= self.config.base_config.dimensions { break; }
+                if i >= self.config.base_config.dimensions {
+                    break;
+                }
                 embedding[i] = (c as u8 as f32) / 255.0;
             }
             results.push(embedding);
@@ -1405,7 +1511,10 @@ mod tests {
     #[test]
     fn test_continual_learning_config_default() {
         let config = ContinualLearningConfig::default();
-        assert!(matches!(config.memory_config.memory_type, MemoryType::EpisodicMemory));
+        assert!(matches!(
+            config.memory_config.memory_type,
+            MemoryType::EpisodicMemory
+        ));
         assert_eq!(config.memory_config.memory_capacity, 10000);
     }
 
@@ -1422,7 +1531,7 @@ mod tests {
         let data = Array1::from_vec(vec![1.0, 2.0, 3.0]);
         let target = Array1::from_vec(vec![0.0, 1.0]);
         let entry = MemoryEntry::new(data, target, "task1".to_string());
-        
+
         assert_eq!(entry.task_id, "task1");
         assert_eq!(entry.importance, 1.0);
         assert_eq!(entry.access_count, 0);
@@ -1432,7 +1541,7 @@ mod tests {
     fn test_continual_learning_model_creation() {
         let config = ContinualLearningConfig::default();
         let model = ContinualLearningModel::new(config);
-        
+
         assert_eq!(model.entities.len(), 0);
         assert_eq!(model.examples_seen, 0);
         assert!(model.current_task.is_none());
@@ -1442,12 +1551,16 @@ mod tests {
     async fn test_task_management() {
         let config = ContinualLearningConfig::default();
         let mut model = ContinualLearningModel::new(config);
-        
-        model.start_task("task1".to_string(), "test".to_string()).unwrap();
+
+        model
+            .start_task("task1".to_string(), "test".to_string())
+            .unwrap();
         assert!(model.current_task.is_some());
         assert_eq!(model.current_task.as_ref().unwrap().task_id, "task1");
-        
-        model.start_task("task2".to_string(), "test".to_string()).unwrap();
+
+        model
+            .start_task("task2".to_string(), "test".to_string())
+            .unwrap();
         assert_eq!(model.task_history.len(), 1);
         assert_eq!(model.current_task.as_ref().unwrap().task_id, "task2");
     }
@@ -1456,14 +1569,19 @@ mod tests {
     async fn test_add_example() {
         let config = ContinualLearningConfig::default();
         let mut model = ContinualLearningModel::new(config);
-        
-        model.start_task("task1".to_string(), "test".to_string()).unwrap();
-        
+
+        model
+            .start_task("task1".to_string(), "test".to_string())
+            .unwrap();
+
         let data = Array1::from_vec(vec![1.0, 2.0, 3.0]);
         let target = Array1::from_vec(vec![0.0, 1.0]);
-        
-        model.add_example(data, target, Some("task1".to_string())).await.unwrap();
-        
+
+        model
+            .add_example(data, target, Some("task1".to_string()))
+            .await
+            .unwrap();
+
         assert_eq!(model.examples_seen, 1);
         assert_eq!(model.episodic_memory.len(), 1);
         assert_eq!(model.current_task.as_ref().unwrap().examples_seen, 1);
@@ -1474,17 +1592,22 @@ mod tests {
         let mut config = ContinualLearningConfig::default();
         config.memory_config.memory_capacity = 3;
         config.memory_config.update_strategy = MemoryUpdateStrategy::FIFO;
-        
+
         let mut model = ContinualLearningModel::new(config);
-        model.start_task("task1".to_string(), "test".to_string()).unwrap();
-        
+        model
+            .start_task("task1".to_string(), "test".to_string())
+            .unwrap();
+
         // Add more examples than capacity
         for i in 0..5 {
             let data = Array1::from_vec(vec![i as f32]);
             let target = Array1::from_vec(vec![i as f32]);
-            model.add_example(data, target, Some("task1".to_string())).await.unwrap();
+            model
+                .add_example(data, target, Some("task1".to_string()))
+                .await
+                .unwrap();
         }
-        
+
         assert_eq!(model.episodic_memory.len(), 3); // Should be capped at capacity
     }
 
@@ -1492,7 +1615,7 @@ mod tests {
     async fn test_continual_training() {
         let config = ContinualLearningConfig::default();
         let mut model = ContinualLearningModel::new(config);
-        
+
         let stats = model.train(Some(10)).await.unwrap();
         assert_eq!(stats.epochs_completed, 10);
         assert!(model.is_trained());
@@ -1503,7 +1626,7 @@ mod tests {
     fn test_forgetting_evaluation() {
         let config = ContinualLearningConfig::default();
         let model = ContinualLearningModel::new(config);
-        
+
         let forgetting = model.evaluate_forgetting();
         assert_eq!(forgetting, 0.0); // No tasks, so no forgetting
     }
@@ -1512,14 +1635,14 @@ mod tests {
     fn test_ewc_state_creation() {
         let fisher = Array2::from_shape_fn((5, 5), |_| rand::random::<f32>());
         let params = Array2::from_shape_fn((5, 5), |_| rand::random::<f32>());
-        
+
         let ewc_state = EWCState {
             fisher_information: fisher,
             optimal_parameters: params,
             task_id: "task1".to_string(),
             importance: 1.0,
         };
-        
+
         assert_eq!(ewc_state.task_id, "task1");
         assert_eq!(ewc_state.importance, 1.0);
     }

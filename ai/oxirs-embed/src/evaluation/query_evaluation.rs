@@ -223,7 +223,7 @@ impl QueryAnsweringEvaluator {
     /// Evaluate a model on query answering tasks
     pub async fn evaluate(&self, model: &dyn EmbeddingModel) -> Result<QueryEvaluationResults> {
         info!("Starting query answering evaluation");
-        
+
         // Placeholder implementation
         let results = QueryEvaluationResults {
             overall_accuracy: 0.85,
@@ -248,7 +248,10 @@ pub mod utils {
     use super::*;
 
     /// Generate test queries from templates
-    pub fn generate_test_queries(templates: &[QueryTemplate], num_queries: usize) -> Vec<QueryResult> {
+    pub fn generate_test_queries(
+        templates: &[QueryTemplate],
+        num_queries: usize,
+    ) -> Vec<QueryResult> {
         Vec::new()
     }
 

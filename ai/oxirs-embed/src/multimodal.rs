@@ -1226,10 +1226,7 @@ impl Default for MAMLComponents {
                 layer.to_string(),
                 Array2::from_shape_fn((128, 128), |(_, _)| (rand::random::<f32>() - 0.5) * 0.1),
             );
-            meta_grads.insert(
-                layer.to_string(),
-                Array2::zeros((128, 128)),
-            );
+            meta_grads.insert(layer.to_string(), Array2::zeros((128, 128)));
         }
 
         Self {
@@ -1264,22 +1261,26 @@ impl FewShotLearning {
     pub async fn few_shot_adapt(
         &mut self,
         support_examples: &[(String, String, String)], // (text, entity, label)
-        query_examples: &[(String, String)], // (text, entity)
+        query_examples: &[(String, String)],           // (text, entity)
         model: &MultiModalEmbedding,
     ) -> Result<Vec<(String, f32)>> {
         match self.meta_algorithm {
             MetaAlgorithm::PrototypicalNetworks => {
-                self.prototypical_adapt(support_examples, query_examples, model).await
+                self.prototypical_adapt(support_examples, query_examples, model)
+                    .await
             }
             MetaAlgorithm::MAML => {
-                self.maml_adapt(support_examples, query_examples, model).await
+                self.maml_adapt(support_examples, query_examples, model)
+                    .await
             }
             MetaAlgorithm::Reptile => {
-                self.reptile_adapt(support_examples, query_examples, model).await
+                self.reptile_adapt(support_examples, query_examples, model)
+                    .await
             }
             _ => {
                 // Fallback to prototypical networks
-                self.prototypical_adapt(support_examples, query_examples, model).await
+                self.prototypical_adapt(support_examples, query_examples, model)
+                    .await
             }
         }
     }
@@ -1299,10 +1300,10 @@ impl FewShotLearning {
             let text_emb = model.text_encoder.encode(text)?;
             let kg_emb_raw = model.get_or_create_kg_embedding(entity)?;
             let kg_emb = model.kg_encoder.encode_entity(&kg_emb_raw)?;
-            
+
             // Combine text and KG embeddings
             let combined_emb = &text_emb + &kg_emb;
-            
+
             label_embeddings
                 .entry(label.clone())
                 .or_insert_with(Vec::new)
@@ -1321,22 +1322,22 @@ impl FewShotLearning {
             let text_emb = model.text_encoder.encode(text)?;
             let kg_emb_raw = model.get_or_create_kg_embedding(entity)?;
             let kg_emb = model.kg_encoder.encode_entity(&kg_emb_raw)?;
-            
+
             let query_emb = &text_emb + &kg_emb;
-            
+
             let mut best_score = f32::NEG_INFINITY;
             let mut best_label = String::new();
-            
+
             for (label, prototype) in &prototypes {
                 let distance = self.compute_distance(&query_emb, prototype);
                 let score = (-distance / self.adaptation_config.temperature).exp();
-                
+
                 if score > best_score {
                     best_score = score;
                     best_label = label.clone();
                 }
             }
-            
+
             predictions.push((best_label, best_score));
         }
 
@@ -1351,7 +1352,7 @@ impl FewShotLearning {
         model: &MultiModalEmbedding,
     ) -> Result<Vec<(String, f32)>> {
         let task_id = format!("task_{}", rand::random::<u32>());
-        
+
         // Initialize task-specific parameters
         let mut task_params = HashMap::new();
         for (layer_name, params) in &self.maml_components.inner_loop_params {
@@ -1361,24 +1362,26 @@ impl FewShotLearning {
         // Inner loop: adapt on support set
         for _ in 0..self.adaptation_config.adaptation_steps {
             let mut gradients = HashMap::new();
-            
+
             // Compute gradients on support set
             for (text, entity, label) in support_examples {
                 let text_emb = model.text_encoder.encode(text)?;
                 let kg_emb_raw = model.get_or_create_kg_embedding(entity)?;
                 let kg_emb = model.kg_encoder.encode_entity(&kg_emb_raw)?;
-                
+
                 let input_emb = &text_emb + &kg_emb;
                 let predicted = self.forward_pass(&input_emb, &task_params)?;
-                
+
                 // Compute loss and gradients (simplified)
                 let target = self.label_to_target(label)?;
                 let loss_grad = &predicted - &target;
-                
+
                 // Accumulate gradients
                 for (layer_name, _) in &task_params {
                     let grad = self.compute_layer_gradient(&input_emb, &loss_grad, layer_name)?;
-                    *gradients.entry(layer_name.clone()).or_insert_with(|| Array2::zeros(grad.dim())) += &grad;
+                    *gradients
+                        .entry(layer_name.clone())
+                        .or_insert_with(|| Array2::zeros(grad.dim())) += &grad;
                 }
             }
 
@@ -1391,7 +1394,9 @@ impl FewShotLearning {
         }
 
         // Store task adaptation
-        self.maml_components.task_adaptations.insert(task_id.clone(), task_params.clone());
+        self.maml_components
+            .task_adaptations
+            .insert(task_id.clone(), task_params.clone());
 
         // Evaluate on query set
         let mut predictions = Vec::new();
@@ -1399,10 +1404,10 @@ impl FewShotLearning {
             let text_emb = model.text_encoder.encode(text)?;
             let kg_emb_raw = model.get_or_create_kg_embedding(entity)?;
             let kg_emb = model.kg_encoder.encode_entity(&kg_emb_raw)?;
-            
+
             let query_emb = &text_emb + &kg_emb;
             let output = self.forward_pass(&query_emb, &task_params)?;
-            
+
             // Convert output to prediction
             let (predicted_label, confidence) = self.output_to_prediction(&output)?;
             predictions.push((predicted_label, confidence));
@@ -1420,7 +1425,7 @@ impl FewShotLearning {
     ) -> Result<Vec<(String, f32)>> {
         // Reptile is similar to MAML but uses first-order gradients
         let mut adapted_params = HashMap::new();
-        
+
         // Initialize with current parameters
         for (layer_name, params) in &self.maml_components.outer_loop_params {
             adapted_params.insert(layer_name.clone(), params.clone());
@@ -1429,19 +1434,19 @@ impl FewShotLearning {
         // Adapt on support set with multiple steps
         for _ in 0..self.adaptation_config.adaptation_steps {
             let mut param_updates = HashMap::new();
-            
+
             for (text, entity, label) in support_examples {
                 let text_emb = model.text_encoder.encode(text)?;
                 let kg_emb_raw = model.get_or_create_kg_embedding(entity)?;
                 let kg_emb = model.kg_encoder.encode_entity(&kg_emb_raw)?;
-                
+
                 let input_emb = &text_emb + &kg_emb;
                 let predicted = self.forward_pass(&input_emb, &adapted_params)?;
-                
+
                 // Simple gradient approximation
                 let target = self.label_to_target(label)?;
                 let error = &predicted - &target;
-                
+
                 // Update parameters toward reducing error
                 for (layer_name, params) in &adapted_params {
                     let update = &error * self.adaptation_config.adaptation_lr;
@@ -1452,11 +1457,13 @@ impl FewShotLearning {
                             0.0
                         }
                     });
-                    
-                    *param_updates.entry(layer_name.clone()).or_insert_with(|| Array2::zeros(params.dim())) += &param_change;
+
+                    *param_updates
+                        .entry(layer_name.clone())
+                        .or_insert_with(|| Array2::zeros(params.dim())) += &param_change;
                 }
             }
-            
+
             // Apply updates
             for (layer_name, params) in &mut adapted_params {
                 if let Some(update) = param_updates.get(layer_name) {
@@ -1471,10 +1478,10 @@ impl FewShotLearning {
             let text_emb = model.text_encoder.encode(text)?;
             let kg_emb_raw = model.get_or_create_kg_embedding(entity)?;
             let kg_emb = model.kg_encoder.encode_entity(&kg_emb_raw)?;
-            
+
             let query_emb = &text_emb + &kg_emb;
             let output = self.forward_pass(&query_emb, &adapted_params)?;
-            
+
             let (predicted_label, confidence) = self.output_to_prediction(&output)?;
             predictions.push((predicted_label, confidence));
         }
@@ -1501,13 +1508,13 @@ impl FewShotLearning {
                 // Compute attention-weighted prototype
                 let mut weights = Vec::new();
                 let mut weight_sum = 0.0;
-                
+
                 for emb in embeddings {
                     let weight = emb.dot(emb).sqrt(); // Use norm as attention weight
                     weights.push(weight);
                     weight_sum += weight;
                 }
-                
+
                 let mut prototype = Array1::zeros(embeddings[0].len());
                 for (emb, &weight) in embeddings.iter().zip(weights.iter()) {
                     prototype = &prototype + &(emb * (weight / weight_sum));
@@ -1559,9 +1566,13 @@ impl FewShotLearning {
     }
 
     /// Forward pass through adapted network
-    fn forward_pass(&self, input: &Array1<f32>, params: &HashMap<String, Array2<f32>>) -> Result<Array1<f32>> {
+    fn forward_pass(
+        &self,
+        input: &Array1<f32>,
+        params: &HashMap<String, Array2<f32>>,
+    ) -> Result<Array1<f32>> {
         let mut output = input.clone();
-        
+
         // Simple feedforward network
         for layer_name in ["layer1", "layer2", "output"] {
             if let Some(weights) = params.get(layer_name) {
@@ -1571,7 +1582,7 @@ impl FewShotLearning {
                 }
             }
         }
-        
+
         Ok(output)
     }
 
@@ -1586,12 +1597,17 @@ impl FewShotLearning {
     }
 
     /// Compute layer gradient
-    fn compute_layer_gradient(&self, input: &Array1<f32>, loss_grad: &Array1<f32>, _layer_name: &str) -> Result<Array2<f32>> {
+    fn compute_layer_gradient(
+        &self,
+        input: &Array1<f32>,
+        loss_grad: &Array1<f32>,
+        _layer_name: &str,
+    ) -> Result<Array2<f32>> {
         // Simplified gradient computation
         let input_len = input.len();
         let grad_len = loss_grad.len();
         let mut gradient = Array2::zeros((grad_len.min(128), input_len.min(128)));
-        
+
         for i in 0..gradient.nrows() {
             for j in 0..gradient.ncols() {
                 if i < loss_grad.len() && j < input.len() {
@@ -1599,7 +1615,7 @@ impl FewShotLearning {
                 }
             }
         }
-        
+
         Ok(gradient)
     }
 
@@ -1611,11 +1627,11 @@ impl FewShotLearning {
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or((0, &0.0));
-        
+
         // Convert index to label
         let label = format!("class_{}", max_idx);
         let confidence = 1.0 / (1.0 + (-max_val).exp()); // Sigmoid
-        
+
         Ok((label, confidence))
     }
 
@@ -1625,17 +1641,19 @@ impl FewShotLearning {
             MetaAlgorithm::MAML => {
                 // Update outer loop parameters based on task performance
                 let mut meta_gradients = HashMap::new();
-                
+
                 for task in tasks {
                     // Simulate task-specific adaptation
                     for (layer_name, _) in &self.maml_components.outer_loop_params {
                         let grad = Array2::from_shape_fn((128, 128), |(_, _)| {
                             (rand::random::<f32>() - 0.5) * 0.01
                         });
-                        *meta_gradients.entry(layer_name.clone()).or_insert_with(|| Array2::zeros((128, 128))) += &grad;
+                        *meta_gradients
+                            .entry(layer_name.clone())
+                            .or_insert_with(|| Array2::zeros((128, 128))) += &grad;
                     }
                 }
-                
+
                 // Apply meta-gradients
                 for (layer_name, params) in &mut self.maml_components.outer_loop_params {
                     if let Some(meta_grad) = meta_gradients.get(layer_name) {
@@ -1665,7 +1683,7 @@ impl FewShotLearning {
                 }
             }
         }
-        
+
         Ok(())
     }
 }
@@ -1685,7 +1703,9 @@ impl MultiModalEmbedding {
         query_examples: &[(String, String)],
     ) -> Result<Vec<(String, f32)>> {
         let mut few_shot_learner = FewShotLearning::default();
-        few_shot_learner.few_shot_adapt(support_examples, query_examples, self).await
+        few_shot_learner
+            .few_shot_adapt(support_examples, query_examples, self)
+            .await
     }
 }
 
@@ -1744,12 +1764,12 @@ impl RealTimeFinetuning {
     /// Add new training example for real-time learning
     pub fn add_example(&mut self, text: String, entity: String, label: String) {
         self.online_buffer.push((text, entity, label));
-        
+
         // Keep buffer size limited
         if self.online_buffer.len() > self.buffer_size {
             self.online_buffer.remove(0);
         }
-        
+
         self.update_count += 1;
     }
 
@@ -1766,35 +1786,35 @@ impl RealTimeFinetuning {
 
         let mut total_loss = 0.0;
         let batch_size = self.update_frequency.min(self.online_buffer.len());
-        
+
         // Take recent examples for update
         let update_batch = &self.online_buffer[self.online_buffer.len() - batch_size..];
-        
+
         for (text, entity, _label) in update_batch {
             // Generate unified embedding
             let unified = model.generate_unified_embedding(text, entity).await?;
-            
+
             // Compute reconstruction loss
             let loss = unified.iter().map(|&x| x * x).sum::<f32>() / unified.len() as f32;
             total_loss += loss;
-            
+
             // Apply EWC regularization
             let ewc_loss = self.compute_ewc_loss(&model.text_encoder.parameters)?;
             total_loss += ewc_loss * self.ewc_config.lambda;
         }
-        
+
         total_loss /= batch_size as f32;
-        
+
         // Update Fisher information (simplified)
         self.update_fisher_information(model)?;
-        
+
         Ok(total_loss)
     }
 
     /// Compute EWC regularization loss
     fn compute_ewc_loss(&self, current_params: &HashMap<String, Array2<f32>>) -> Result<f32> {
         let mut ewc_loss = 0.0;
-        
+
         for (param_name, current_param) in current_params {
             if let (Some(fisher), Some(optimal)) = (
                 self.ewc_config.fisher_information.get(param_name),
@@ -1805,7 +1825,7 @@ impl RealTimeFinetuning {
                 ewc_loss += (&diff * &weighted_diff).sum();
             }
         }
-        
+
         Ok(ewc_loss)
     }
 
@@ -1814,10 +1834,14 @@ impl RealTimeFinetuning {
         for (param_name, param) in &model.text_encoder.parameters {
             // Simplified Fisher information computation
             let fisher = Array2::from_shape_fn(param.dim(), |(_, _)| rand::random::<f32>() * 0.01);
-            self.ewc_config.fisher_information.insert(param_name.clone(), fisher);
-            self.ewc_config.optimal_params.insert(param_name.clone(), param.clone());
+            self.ewc_config
+                .fisher_information
+                .insert(param_name.clone(), fisher);
+            self.ewc_config
+                .optimal_params
+                .insert(param_name.clone(), param.clone());
         }
-        
+
         Ok(())
     }
 }
@@ -1997,20 +2021,42 @@ mod tests {
 
         // Create support examples (training data for few-shot learning)
         let support_examples = vec![
-            ("Scientists study biology".to_string(), "scientist".to_string(), "profession".to_string()),
-            ("Doctors treat patients".to_string(), "doctor".to_string(), "profession".to_string()),
-            ("Dogs are pets".to_string(), "dog".to_string(), "animal".to_string()),
-            ("Cats meow loudly".to_string(), "cat".to_string(), "animal".to_string()),
+            (
+                "Scientists study biology".to_string(),
+                "scientist".to_string(),
+                "profession".to_string(),
+            ),
+            (
+                "Doctors treat patients".to_string(),
+                "doctor".to_string(),
+                "profession".to_string(),
+            ),
+            (
+                "Dogs are pets".to_string(),
+                "dog".to_string(),
+                "animal".to_string(),
+            ),
+            (
+                "Cats meow loudly".to_string(),
+                "cat".to_string(),
+                "animal".to_string(),
+            ),
         ];
 
         // Create query examples (test data)
         let query_examples = vec![
-            ("Teachers educate students".to_string(), "teacher".to_string()),
+            (
+                "Teachers educate students".to_string(),
+                "teacher".to_string(),
+            ),
             ("Birds fly in the sky".to_string(), "bird".to_string()),
         ];
 
-        let predictions = model.few_shot_learn(&support_examples, &query_examples).await.unwrap();
-        
+        let predictions = model
+            .few_shot_learn(&support_examples, &query_examples)
+            .await
+            .unwrap();
+
         assert_eq!(predictions.len(), 2);
         assert!(predictions[0].1 >= 0.0 && predictions[0].1 <= 1.0); // Valid confidence score
         assert!(predictions[1].1 >= 0.0 && predictions[1].1 <= 1.0);
@@ -2022,7 +2068,10 @@ mod tests {
         assert_eq!(few_shot.support_size, 5);
         assert_eq!(few_shot.query_size, 15);
         assert_eq!(few_shot.num_ways, 3);
-        assert!(matches!(few_shot.meta_algorithm, MetaAlgorithm::PrototypicalNetworks));
+        assert!(matches!(
+            few_shot.meta_algorithm,
+            MetaAlgorithm::PrototypicalNetworks
+        ));
     }
 
     #[test]
@@ -2056,11 +2105,10 @@ mod tests {
         let config = CrossModalConfig::default();
         let mut model = MultiModalEmbedding::new(config);
 
-        let loss = model.real_time_update(
-            "New scientific discovery",
-            "researcher",
-            "profession"
-        ).await.unwrap();
+        let loss = model
+            .real_time_update("New scientific discovery", "researcher", "profession")
+            .await
+            .unwrap();
 
         assert!(loss >= 0.0);
     }
@@ -2068,11 +2116,11 @@ mod tests {
     #[test]
     fn test_real_time_finetuning_components() {
         let mut rt_finetuning = RealTimeFinetuning::default();
-        
+
         rt_finetuning.add_example(
             "Example text".to_string(),
             "example_entity".to_string(),
-            "example_label".to_string()
+            "example_label".to_string(),
         );
 
         assert_eq!(rt_finetuning.online_buffer.len(), 1);

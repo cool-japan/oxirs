@@ -7,11 +7,11 @@
 //! - Temporal context for time-aware embeddings
 //! - Interactive refinement based on feedback
 
-use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Vector, Triple};
+use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{Array1, Array2, s};
+use ndarray::{s, Array1, Array2};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -726,9 +726,11 @@ impl BaseEmbeddingModel {
     pub fn generate_embedding(&self, input: &str) -> Result<Array1<f32>> {
         // Simplified embedding generation
         let input_vector = self.text_to_vector(input)?;
-        let projection = self.parameters.get("projection")
+        let projection = self
+            .parameters
+            .get("projection")
             .ok_or_else(|| anyhow!("Projection matrix not found"))?;
-        
+
         Ok(projection.dot(&input_vector))
     }
 
@@ -737,7 +739,7 @@ impl BaseEmbeddingModel {
         // Simplified tokenization and vectorization
         let tokens: Vec<_> = text.split_whitespace().collect();
         let mut vector = Array1::zeros(self.input_dim);
-        
+
         for (i, token) in tokens.iter().enumerate() {
             if i < self.input_dim {
                 // Simple hash-based encoding
@@ -745,7 +747,7 @@ impl BaseEmbeddingModel {
                 vector[i] = (hash % 1000) as f32 / 1000.0;
             }
         }
-        
+
         Ok(vector)
     }
 }
@@ -806,7 +808,7 @@ impl ContextProcessor {
     /// Process context into context vector
     pub fn process_context(&mut self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         let start_time = std::time::Instant::now();
-        
+
         let result = match self.context_type {
             ContextType::Query => self.process_query_context(context),
             ContextType::User => self.process_user_context(context),
@@ -820,17 +822,18 @@ impl ContextProcessor {
         // Update statistics
         let processing_time = start_time.elapsed().as_millis() as f64;
         self.stats.contexts_processed += 1;
-        self.stats.avg_processing_time_ms = 
-            (self.stats.avg_processing_time_ms * (self.stats.contexts_processed - 1) as f64 + processing_time) 
+        self.stats.avg_processing_time_ms = (self.stats.avg_processing_time_ms
+            * (self.stats.contexts_processed - 1) as f64
+            + processing_time)
             / self.stats.contexts_processed as f64;
 
         if result.is_ok() {
-            self.stats.success_rate = 
-                (self.stats.success_rate * (self.stats.contexts_processed - 1) as f32 + 1.0) 
-                / self.stats.contexts_processed as f32;
+            self.stats.success_rate =
+                (self.stats.success_rate * (self.stats.contexts_processed - 1) as f32 + 1.0)
+                    / self.stats.contexts_processed as f32;
         } else {
-            self.stats.success_rate = 
-                (self.stats.success_rate * (self.stats.contexts_processed - 1) as f32) 
+            self.stats.success_rate = (self.stats.success_rate
+                * (self.stats.contexts_processed - 1) as f32)
                 / self.stats.contexts_processed as f32;
         }
 
@@ -841,7 +844,7 @@ impl ContextProcessor {
     fn process_query_context(&self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         if let Some(query_ctx) = &context.query_context {
             let mut context_vector = Array1::zeros(256); // Fixed dimension for simplicity
-            
+
             // Encode query intent
             match query_ctx.intent {
                 QueryIntent::Factual => context_vector[0] = 1.0,
@@ -853,7 +856,7 @@ impl ContextProcessor {
                 QueryIntent::Classification => context_vector[6] = 1.0,
                 QueryIntent::Unknown => context_vector[7] = 1.0,
             }
-            
+
             // Encode query complexity
             match query_ctx.complexity {
                 QueryComplexity::Simple => context_vector[8] = 0.25,
@@ -861,11 +864,11 @@ impl ContextProcessor {
                 QueryComplexity::Complex => context_vector[8] = 0.75,
                 QueryComplexity::Expert => context_vector[8] = 1.0,
             }
-            
+
             // Encode domain information
             let domain_hash = query_ctx.domain.chars().map(|c| c as u32).sum::<u32>();
             context_vector[9] = (domain_hash % 1000) as f32 / 1000.0;
-            
+
             // Encode keywords and entities (simplified)
             for (i, keyword) in query_ctx.keywords.iter().enumerate() {
                 if i + 10 < context_vector.len() {
@@ -873,7 +876,7 @@ impl ContextProcessor {
                     context_vector[i + 10] = (keyword_hash % 1000) as f32 / 1000.0;
                 }
             }
-            
+
             Ok(context_vector)
         } else {
             Ok(Array1::zeros(256))
@@ -884,7 +887,7 @@ impl ContextProcessor {
     fn process_user_context(&self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         if let Some(user_ctx) = &context.user_context {
             let mut context_vector = Array1::zeros(256);
-            
+
             // Encode expertise level
             match user_ctx.expertise_level {
                 ExpertiseLevel::Beginner => context_vector[0] = 0.2,
@@ -893,7 +896,7 @@ impl ContextProcessor {
                 ExpertiseLevel::Expert => context_vector[0] = 0.8,
                 ExpertiseLevel::Specialist => context_vector[0] = 1.0,
             }
-            
+
             // Encode detail level preference
             match user_ctx.preferences.detail_level {
                 DetailLevel::Brief => context_vector[1] = 0.25,
@@ -901,14 +904,14 @@ impl ContextProcessor {
                 DetailLevel::Detailed => context_vector[1] = 0.75,
                 DetailLevel::Comprehensive => context_vector[1] = 1.0,
             }
-            
+
             // Encode domain interests
             for (i, (domain, interest)) in user_ctx.domain_interests.iter().enumerate() {
                 if i + 2 < context_vector.len() {
                     context_vector[i + 2] = *interest;
                 }
             }
-            
+
             // Use personalization vector if available
             if let Some(ref personalization) = user_ctx.personalization_vector {
                 let copy_len = std::cmp::min(personalization.len(), context_vector.len() - 50);
@@ -916,7 +919,7 @@ impl ContextProcessor {
                     context_vector[i + 50] = personalization[i];
                 }
             }
-            
+
             Ok(context_vector)
         } else {
             Ok(Array1::zeros(256))
@@ -927,7 +930,7 @@ impl ContextProcessor {
     fn process_task_context(&self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         if let Some(task_ctx) = &context.task_context {
             let mut context_vector = Array1::zeros(256);
-            
+
             // Encode task type
             match task_ctx.task_type {
                 TaskType::InformationRetrieval => context_vector[0] = 1.0,
@@ -941,18 +944,18 @@ impl ContextProcessor {
                 TaskType::Summarization => context_vector[8] = 1.0,
                 TaskType::Translation => context_vector[9] = 1.0,
             }
-            
+
             // Encode performance requirements
             let perf_req = &task_ctx.performance_requirements;
             context_vector[10] = (perf_req.max_latency_ms as f32).log10() / 4.0; // Normalize log scale
             context_vector[11] = perf_req.min_accuracy;
             context_vector[12] = (perf_req.max_memory_mb as f32).log10() / 4.0;
             context_vector[13] = perf_req.min_throughput.log10() / 4.0;
-            
+
             // Encode domain
             let domain_hash = task_ctx.domain.chars().map(|c| c as u32).sum::<u32>();
             context_vector[14] = (domain_hash % 1000) as f32 / 1000.0;
-            
+
             Ok(context_vector)
         } else {
             Ok(Array1::zeros(256))
@@ -963,7 +966,7 @@ impl ContextProcessor {
     fn process_temporal_context(&self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         if let Some(temporal_ctx) = &context.temporal_context {
             let mut context_vector = Array1::zeros(256);
-            
+
             // Encode time period
             match temporal_ctx.time_period {
                 TimePeriod::RealTime => context_vector[0] = 1.0,
@@ -973,15 +976,18 @@ impl ContextProcessor {
                 TimePeriod::Monthly => context_vector[4] = 1.0,
                 TimePeriod::Historical => context_vector[5] = 1.0,
             }
-            
+
             // Encode temporal weights if available
             if temporal_ctx.temporal_weights.len() > 0 {
-                let copy_len = std::cmp::min(temporal_ctx.temporal_weights.len(), context_vector.len() - 10);
+                let copy_len = std::cmp::min(
+                    temporal_ctx.temporal_weights.len(),
+                    context_vector.len() - 10,
+                );
                 for i in 0..copy_len {
                     context_vector[i + 10] = temporal_ctx.temporal_weights[i];
                 }
             }
-            
+
             // Encode trend information
             for (i, trend) in temporal_ctx.trends.iter().enumerate() {
                 if i + 100 < context_vector.len() {
@@ -989,7 +995,7 @@ impl ContextProcessor {
                     context_vector[i + 150] = trend.confidence;
                 }
             }
-            
+
             Ok(context_vector)
         } else {
             Ok(Array1::zeros(256))
@@ -1000,12 +1006,12 @@ impl ContextProcessor {
     fn process_interactive_context(&self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         if let Some(interactive_ctx) = &context.interactive_context {
             let mut context_vector = Array1::zeros(256);
-            
+
             // Encode recent feedback
             let mut positive_feedback = 0.0;
             let mut negative_feedback = 0.0;
             let mut total_feedback = 0;
-            
+
             for feedback in &interactive_ctx.recent_feedback {
                 total_feedback += 1;
                 match feedback {
@@ -1028,23 +1034,23 @@ impl ContextProcessor {
                     UserFeedback::Neutral => {}
                 }
             }
-            
+
             if total_feedback > 0 {
                 context_vector[0] = positive_feedback / total_feedback as f32;
                 context_vector[1] = negative_feedback / total_feedback as f32;
             }
-            
+
             // Encode adaptation state
             context_vector[2] = interactive_ctx.current_state.confidence;
-            
+
             // Encode confidence scores
             let mut avg_confidence = 0.0;
             if !interactive_ctx.confidence_scores.is_empty() {
-                avg_confidence = interactive_ctx.confidence_scores.values().sum::<f32>() 
+                avg_confidence = interactive_ctx.confidence_scores.values().sum::<f32>()
                     / interactive_ctx.confidence_scores.len() as f32;
             }
             context_vector[3] = avg_confidence;
-            
+
             Ok(context_vector)
         } else {
             Ok(Array1::zeros(256))
@@ -1054,26 +1060,26 @@ impl ContextProcessor {
     /// Process domain context
     fn process_domain_context(&self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         let mut context_vector = Array1::zeros(256);
-        
+
         // Extract domain information from metadata
         if let Some(domain) = context.metadata.get("domain") {
             let domain_hash = domain.chars().map(|c| c as u32).sum::<u32>();
             context_vector[0] = (domain_hash % 1000) as f32 / 1000.0;
         }
-        
+
         // Extract subdomain information
         if let Some(subdomain) = context.metadata.get("subdomain") {
             let subdomain_hash = subdomain.chars().map(|c| c as u32).sum::<u32>();
             context_vector[1] = (subdomain_hash % 1000) as f32 / 1000.0;
         }
-        
+
         Ok(context_vector)
     }
 
     /// Process cross-lingual context
     fn process_crosslingual_context(&self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         let mut context_vector = Array1::zeros(256);
-        
+
         // Extract language information from metadata
         if let Some(language) = context.metadata.get("language") {
             // Simple language encoding (would be more sophisticated in practice)
@@ -1089,13 +1095,13 @@ impl ContextProcessor {
                 _ => context_vector[8] = 1.0, // Other languages
             }
         }
-        
+
         // Extract cross-lingual alignment information
         if let Some(alignment) = context.metadata.get("cross_lingual_alignment") {
             let alignment_score: f32 = alignment.parse().unwrap_or(0.0);
             context_vector[10] = alignment_score;
         }
-        
+
         Ok(context_vector)
     }
 }
@@ -1115,7 +1121,10 @@ pub struct FusionNetwork {
 
 impl FusionNetwork {
     /// Fuse multiple context vectors into unified representation
-    pub fn fuse_contexts(&self, context_vectors: HashMap<ContextType, Array1<f32>>) -> Result<Array1<f32>> {
+    pub fn fuse_contexts(
+        &self,
+        context_vectors: HashMap<ContextType, Array1<f32>>,
+    ) -> Result<Array1<f32>> {
         match self.method {
             ContextFusionMethod::Concatenation => self.concatenate_contexts(context_vectors),
             ContextFusionMethod::WeightedSum => self.weighted_sum_contexts(context_vectors),
@@ -1127,9 +1136,12 @@ impl FusionNetwork {
     }
 
     /// Simple concatenation of context vectors
-    fn concatenate_contexts(&self, context_vectors: HashMap<ContextType, Array1<f32>>) -> Result<Array1<f32>> {
+    fn concatenate_contexts(
+        &self,
+        context_vectors: HashMap<ContextType, Array1<f32>>,
+    ) -> Result<Array1<f32>> {
         let mut result = Vec::new();
-        
+
         // Concatenate in fixed order for consistency
         let order = [
             ContextType::Query,
@@ -1140,7 +1152,7 @@ impl FusionNetwork {
             ContextType::Domain,
             ContextType::CrossLingual,
         ];
-        
+
         for context_type in &order {
             if let Some(vector) = context_vectors.get(context_type) {
                 result.extend(vector.iter());
@@ -1149,56 +1161,70 @@ impl FusionNetwork {
                 result.extend(vec![0.0; 256]); // Assuming 256-dim context vectors
             }
         }
-        
+
         Ok(Array1::from_vec(result))
     }
 
     /// Weighted sum of context vectors
-    fn weighted_sum_contexts(&self, context_vectors: HashMap<ContextType, Array1<f32>>) -> Result<Array1<f32>> {
-        let weights = self.parameters.get("fusion_weights")
+    fn weighted_sum_contexts(
+        &self,
+        context_vectors: HashMap<ContextType, Array1<f32>>,
+    ) -> Result<Array1<f32>> {
+        let weights = self
+            .parameters
+            .get("fusion_weights")
             .ok_or_else(|| anyhow!("Fusion weights not found"))?;
-        
+
         let target_dim = 512; // Target fusion dimension
         let mut result = Array1::zeros(target_dim);
         let mut total_weight = 0.0;
-        
+
         for (i, (context_type, vector)) in context_vectors.iter().enumerate() {
             if i < weights.nrows() {
                 let weight = weights[[i, 0]];
                 total_weight += weight;
-                
+
                 // Project vector to target dimension if needed
                 let projected = if vector.len() != target_dim {
                     self.project_vector(vector, target_dim)?
                 } else {
                     vector.clone()
                 };
-                
+
                 result = result + &projected * weight;
             }
         }
-        
+
         // Normalize by total weight
         if total_weight > 0.0 {
             result = result / total_weight;
         }
-        
+
         Ok(result)
     }
 
     /// Multi-head attention fusion
-    fn attention_fusion(&self, context_vectors: HashMap<ContextType, Array1<f32>>) -> Result<Array1<f32>> {
-        let query_matrix = self.parameters.get("query_matrix")
+    fn attention_fusion(
+        &self,
+        context_vectors: HashMap<ContextType, Array1<f32>>,
+    ) -> Result<Array1<f32>> {
+        let query_matrix = self
+            .parameters
+            .get("query_matrix")
             .ok_or_else(|| anyhow!("Query matrix not found"))?;
-        let key_matrix = self.parameters.get("key_matrix")
+        let key_matrix = self
+            .parameters
+            .get("key_matrix")
             .ok_or_else(|| anyhow!("Key matrix not found"))?;
-        let value_matrix = self.parameters.get("value_matrix")
+        let value_matrix = self
+            .parameters
+            .get("value_matrix")
             .ok_or_else(|| anyhow!("Value matrix not found"))?;
-        
+
         let target_dim = 512;
         let head_dim = target_dim / self.attention_heads;
         let mut result = Array1::zeros(target_dim);
-        
+
         // Convert context vectors to matrix
         let mut context_matrix = Array2::zeros((context_vectors.len(), 256));
         for (i, (_, vector)) in context_vectors.iter().enumerate() {
@@ -1206,55 +1232,74 @@ impl FusionNetwork {
                 context_matrix[[i, j]] = vector[j];
             }
         }
-        
+
         // Simplified multi-head attention
         for head in 0..self.attention_heads {
             let start_idx = head * head_dim;
             let end_idx = std::cmp::min(start_idx + head_dim, target_dim);
-            
+
             // Compute attention scores (simplified)
-            let queries = query_matrix.slice(s![start_idx..end_idx, ..]).dot(&context_matrix.t());
-            let keys = key_matrix.slice(s![start_idx..end_idx, ..]).dot(&context_matrix.t());
-            let values = value_matrix.slice(s![start_idx..end_idx, ..]).dot(&context_matrix.t());
-            
+            let queries = query_matrix
+                .slice(s![start_idx..end_idx, ..])
+                .dot(&context_matrix.t());
+            let keys = key_matrix
+                .slice(s![start_idx..end_idx, ..])
+                .dot(&context_matrix.t());
+            let values = value_matrix
+                .slice(s![start_idx..end_idx, ..])
+                .dot(&context_matrix.t());
+
             // Simplified attention computation
             let attention_weights = Array1::from_iter(
-                (0..context_vectors.len()).map(|_| 1.0 / context_vectors.len() as f32)
+                (0..context_vectors.len()).map(|_| 1.0 / context_vectors.len() as f32),
             );
-            
+
             // Apply attention to values
             for i in start_idx..end_idx {
-                result[i] = attention_weights.iter().zip(values.row(i - start_idx).iter()).map(|(w, v)| w * v).sum();
+                result[i] = attention_weights
+                    .iter()
+                    .zip(values.row(i - start_idx).iter())
+                    .map(|(w, v)| w * v)
+                    .sum();
             }
         }
-        
+
         Ok(result)
     }
 
     /// Transformer-based fusion
-    fn transformer_fusion(&self, context_vectors: HashMap<ContextType, Array1<f32>>) -> Result<Array1<f32>> {
+    fn transformer_fusion(
+        &self,
+        context_vectors: HashMap<ContextType, Array1<f32>>,
+    ) -> Result<Array1<f32>> {
         // Simplified transformer fusion (would be more complex in practice)
         self.attention_fusion(context_vectors)
     }
 
     /// Graph-based fusion
-    fn graph_fusion(&self, context_vectors: HashMap<ContextType, Array1<f32>>) -> Result<Array1<f32>> {
+    fn graph_fusion(
+        &self,
+        context_vectors: HashMap<ContextType, Array1<f32>>,
+    ) -> Result<Array1<f32>> {
         // Simplified graph fusion - treat contexts as graph nodes
         let mut result = Array1::zeros(512);
         let num_contexts = context_vectors.len() as f32;
-        
+
         // Simple aggregation with graph-like connections
         for (_, vector) in context_vectors.iter() {
             let projected = self.project_vector(vector, 512)?;
             result = result + &projected;
         }
-        
+
         result = result / num_contexts;
         Ok(result)
     }
 
     /// Neural module network fusion
-    fn neural_module_fusion(&self, context_vectors: HashMap<ContextType, Array1<f32>>) -> Result<Array1<f32>> {
+    fn neural_module_fusion(
+        &self,
+        context_vectors: HashMap<ContextType, Array1<f32>>,
+    ) -> Result<Array1<f32>> {
         // Simplified neural module fusion
         self.weighted_sum_contexts(context_vectors)
     }
@@ -1264,15 +1309,15 @@ impl FusionNetwork {
         if vector.len() == target_dim {
             return Ok(vector.clone());
         }
-        
+
         // Simple projection - pad or truncate
         let mut result = Array1::zeros(target_dim);
         let copy_len = std::cmp::min(vector.len(), target_dim);
-        
+
         for i in 0..copy_len {
             result[i] = vector[i];
         }
-        
+
         Ok(result)
     }
 }
@@ -1299,131 +1344,179 @@ impl AdaptationEngine {
         feedback: Option<&UserFeedback>,
     ) -> Result<Array1<f32>> {
         match self.strategy {
-            AdaptationStrategy::DynamicAttention => self.dynamic_attention_adaptation(base_embedding, context),
-            AdaptationStrategy::ConditionalLayerNorm => self.conditional_layernorm_adaptation(base_embedding, context),
-            AdaptationStrategy::AdapterLayers => self.adapter_layer_adaptation(base_embedding, context),
-            AdaptationStrategy::MetaLearning => self.meta_learning_adaptation(base_embedding, context),
-            AdaptationStrategy::PromptBased => self.prompt_based_adaptation(base_embedding, context),
-            AdaptationStrategy::MemoryAugmented => self.memory_augmented_adaptation(base_embedding, context),
+            AdaptationStrategy::DynamicAttention => {
+                self.dynamic_attention_adaptation(base_embedding, context)
+            }
+            AdaptationStrategy::ConditionalLayerNorm => {
+                self.conditional_layernorm_adaptation(base_embedding, context)
+            }
+            AdaptationStrategy::AdapterLayers => {
+                self.adapter_layer_adaptation(base_embedding, context)
+            }
+            AdaptationStrategy::MetaLearning => {
+                self.meta_learning_adaptation(base_embedding, context)
+            }
+            AdaptationStrategy::PromptBased => {
+                self.prompt_based_adaptation(base_embedding, context)
+            }
+            AdaptationStrategy::MemoryAugmented => {
+                self.memory_augmented_adaptation(base_embedding, context)
+            }
         }
     }
 
     /// Dynamic attention adaptation
-    fn dynamic_attention_adaptation(&self, base_embedding: &Array1<f32>, context: &EmbeddingContext) -> Result<Array1<f32>> {
-        let attention_matrix = self.parameters.get("attention_matrix")
+    fn dynamic_attention_adaptation(
+        &self,
+        base_embedding: &Array1<f32>,
+        context: &EmbeddingContext,
+    ) -> Result<Array1<f32>> {
+        let attention_matrix = self
+            .parameters
+            .get("attention_matrix")
             .ok_or_else(|| anyhow!("Attention matrix not found"))?;
-        
+
         // Simplified attention-based adaptation
         let context_vector = self.extract_context_features(context)?;
         let attention_weights = attention_matrix.dot(&context_vector);
-        
+
         // Apply attention to base embedding
         let mut adapted = base_embedding.clone();
         for i in 0..std::cmp::min(adapted.len(), attention_weights.len()) {
             adapted[i] *= 1.0 + attention_weights[i] * 0.1; // Small adaptation
         }
-        
+
         Ok(adapted)
     }
 
     /// Conditional layer normalization adaptation
-    fn conditional_layernorm_adaptation(&self, base_embedding: &Array1<f32>, context: &EmbeddingContext) -> Result<Array1<f32>> {
-        let gamma_matrix = self.parameters.get("gamma_matrix")
+    fn conditional_layernorm_adaptation(
+        &self,
+        base_embedding: &Array1<f32>,
+        context: &EmbeddingContext,
+    ) -> Result<Array1<f32>> {
+        let gamma_matrix = self
+            .parameters
+            .get("gamma_matrix")
             .ok_or_else(|| anyhow!("Gamma matrix not found"))?;
-        let beta_matrix = self.parameters.get("beta_matrix")
+        let beta_matrix = self
+            .parameters
+            .get("beta_matrix")
             .ok_or_else(|| anyhow!("Beta matrix not found"))?;
-        
+
         let context_vector = self.extract_context_features(context)?;
         let gamma = gamma_matrix.dot(&context_vector);
         let beta = beta_matrix.dot(&context_vector);
-        
+
         // Apply conditional layer normalization
         let mean = base_embedding.mean().unwrap_or(0.0);
         let var = base_embedding.var(0.0);
         let std = var.sqrt();
-        
+
         let mut normalized = base_embedding.clone();
         for i in 0..normalized.len() {
             normalized[i] = (normalized[i] - mean) / (std + 1e-6);
         }
-        
+
         // Apply learned gamma and beta
         for i in 0..std::cmp::min(normalized.len(), gamma.len()) {
             normalized[i] = normalized[i] * (1.0 + gamma[i] * 0.1) + beta[i] * 0.1;
         }
-        
+
         Ok(normalized)
     }
 
     /// Adapter layer adaptation
-    fn adapter_layer_adaptation(&self, base_embedding: &Array1<f32>, context: &EmbeddingContext) -> Result<Array1<f32>> {
-        let down_proj = self.parameters.get("adapter_down")
+    fn adapter_layer_adaptation(
+        &self,
+        base_embedding: &Array1<f32>,
+        context: &EmbeddingContext,
+    ) -> Result<Array1<f32>> {
+        let down_proj = self
+            .parameters
+            .get("adapter_down")
             .ok_or_else(|| anyhow!("Adapter down projection not found"))?;
-        let up_proj = self.parameters.get("adapter_up")
+        let up_proj = self
+            .parameters
+            .get("adapter_up")
             .ok_or_else(|| anyhow!("Adapter up projection not found"))?;
-        
+
         // Adapter residual connection
         let down_output = down_proj.dot(base_embedding);
         let up_output = up_proj.dot(&down_output);
-        
+
         // Residual connection with small adaptation
         let mut adapted = base_embedding.clone();
         for i in 0..std::cmp::min(adapted.len(), up_output.len()) {
             adapted[i] += up_output[i] * 0.1; // Small residual
         }
-        
+
         Ok(adapted)
     }
 
     /// Meta-learning adaptation
-    fn meta_learning_adaptation(&self, base_embedding: &Array1<f32>, context: &EmbeddingContext) -> Result<Array1<f32>> {
+    fn meta_learning_adaptation(
+        &self,
+        base_embedding: &Array1<f32>,
+        context: &EmbeddingContext,
+    ) -> Result<Array1<f32>> {
         // Simplified meta-learning - use context to generate adaptation parameters
         let context_vector = self.extract_context_features(context)?;
-        let meta_params = self.parameters.get("meta_network")
+        let meta_params = self
+            .parameters
+            .get("meta_network")
             .ok_or_else(|| anyhow!("Meta network not found"))?
             .dot(&context_vector);
-        
+
         // Apply meta-learned parameters
         let mut adapted = base_embedding.clone();
         for i in 0..std::cmp::min(adapted.len(), meta_params.len()) {
             adapted[i] *= 1.0 + meta_params[i] * 0.05;
         }
-        
+
         Ok(adapted)
     }
 
     /// Prompt-based adaptation
-    fn prompt_based_adaptation(&self, base_embedding: &Array1<f32>, context: &EmbeddingContext) -> Result<Array1<f32>> {
+    fn prompt_based_adaptation(
+        &self,
+        base_embedding: &Array1<f32>,
+        context: &EmbeddingContext,
+    ) -> Result<Array1<f32>> {
         // Generate prompt embedding from context
         let prompt_embedding = self.generate_prompt_embedding(context)?;
-        
+
         // Combine base embedding with prompt
         let mut adapted = base_embedding.clone();
         for i in 0..std::cmp::min(adapted.len(), prompt_embedding.len()) {
             adapted[i] += prompt_embedding[i] * 0.1;
         }
-        
+
         Ok(adapted)
     }
 
     /// Memory-augmented adaptation
-    fn memory_augmented_adaptation(&self, base_embedding: &Array1<f32>, context: &EmbeddingContext) -> Result<Array1<f32>> {
+    fn memory_augmented_adaptation(
+        &self,
+        base_embedding: &Array1<f32>,
+        context: &EmbeddingContext,
+    ) -> Result<Array1<f32>> {
         // Retrieve relevant memories (simplified)
         let memory_vector = self.retrieve_memories(context)?;
-        
+
         // Combine with base embedding
         let mut adapted = base_embedding.clone();
         for i in 0..std::cmp::min(adapted.len(), memory_vector.len()) {
             adapted[i] += memory_vector[i] * 0.1;
         }
-        
+
         Ok(adapted)
     }
 
     /// Extract context features for adaptation
     fn extract_context_features(&self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         let mut features = Array1::zeros(64); // Simplified feature vector
-        
+
         // Extract basic context features
         if context.query_context.is_some() {
             features[0] = 1.0;
@@ -1440,21 +1533,23 @@ impl AdaptationEngine {
         if context.interactive_context.is_some() {
             features[4] = 1.0;
         }
-        
+
         // Add timestamp encoding
         let timestamp_seconds = context.timestamp.timestamp() as f32;
         features[5] = (timestamp_seconds % 86400.0) / 86400.0; // Time of day
         features[6] = ((timestamp_seconds / 86400.0) % 7.0) / 7.0; // Day of week
-        
+
         Ok(features)
     }
 
     /// Generate prompt embedding from context
     fn generate_prompt_embedding(&self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         let default_matrix = Array2::zeros((128, 64));
-        let prompt_matrix = self.parameters.get("prompt_matrix")
+        let prompt_matrix = self
+            .parameters
+            .get("prompt_matrix")
             .unwrap_or(&default_matrix);
-        
+
         let context_features = self.extract_context_features(context)?;
         Ok(prompt_matrix.dot(&context_features))
     }
@@ -1463,9 +1558,11 @@ impl AdaptationEngine {
     fn retrieve_memories(&self, context: &EmbeddingContext) -> Result<Array1<f32>> {
         // Simplified memory retrieval
         let default_matrix = Array2::zeros((128, 64));
-        let memory_matrix = self.parameters.get("memory_matrix")
+        let memory_matrix = self
+            .parameters
+            .get("memory_matrix")
             .unwrap_or(&default_matrix);
-        
+
         let context_features = self.extract_context_features(context)?;
         Ok(memory_matrix.dot(&context_features))
     }
@@ -1541,7 +1638,7 @@ impl ContextCache {
         // Check if expired first
         let now = Utc::now();
         let expiry_duration = chrono::Duration::hours(self.config.expiry_hours as i64);
-        
+
         if let Some(cached) = self.cached_contexts.get(context_key) {
             if now.signed_duration_since(cached.cached_at) > expiry_duration {
                 self.cached_contexts.remove(context_key);
@@ -1549,14 +1646,14 @@ impl ContextCache {
                 return None;
             }
         }
-        
+
         // Get and update if not expired
         if let Some(cached) = self.cached_contexts.get_mut(context_key) {
             // Update access statistics
             cached.access_count += 1;
             cached.last_accessed = now;
             self.stats.cache_hits += 1;
-            
+
             Some(cached.clone())
         } else {
             self.stats.cache_misses += 1;
@@ -1570,15 +1667,17 @@ impl ContextCache {
         if self.cached_contexts.len() >= self.config.max_cache_size {
             self.evict_lru();
         }
-        
+
         self.cached_contexts.insert(context_key, cached_context);
         self.stats.current_size = self.cached_contexts.len();
-        self.stats.max_size_reached = std::cmp::max(self.stats.max_size_reached, self.stats.current_size);
+        self.stats.max_size_reached =
+            std::cmp::max(self.stats.max_size_reached, self.stats.current_size);
     }
 
     /// Evict least recently used context
     fn evict_lru(&mut self) {
-        if let Some((lru_key, _)) = self.cached_contexts
+        if let Some((lru_key, _)) = self
+            .cached_contexts
             .iter()
             .min_by_key(|(_, cached)| cached.last_accessed)
             .map(|(k, v)| (k.clone(), v.clone()))
@@ -1592,23 +1691,23 @@ impl ContextCache {
     pub fn generate_cache_key(&self, context: &EmbeddingContext) -> String {
         // Simplified cache key generation
         let mut key_parts = Vec::new();
-        
+
         if let Some(query_ctx) = &context.query_context {
             key_parts.push(format!("query:{}", query_ctx.query_text));
         }
-        
+
         if let Some(user_ctx) = &context.user_context {
             key_parts.push(format!("user:{}", user_ctx.user_id));
         }
-        
+
         if let Some(task_ctx) = &context.task_context {
             key_parts.push(format!("task:{:?}", task_ctx.task_type));
         }
-        
+
         // Add timestamp bucket for temporal sensitivity
         let timestamp_bucket = context.timestamp.timestamp() / 3600; // Hour buckets
         key_parts.push(format!("time:{}", timestamp_bucket));
-        
+
         key_parts.join("|")
     }
 }
@@ -1765,7 +1864,7 @@ impl ContextualEmbeddingModel {
     /// Create new contextual embedding model
     pub fn new(config: ContextualConfig) -> Self {
         let model_id = Uuid::new_v4();
-        
+
         // Initialize base model
         let base_model = BaseEmbeddingModel {
             model_type: "contextual-transformer".to_string(),
@@ -1782,7 +1881,7 @@ impl ContextualEmbeddingModel {
                 params
             },
         };
-        
+
         // Initialize context processors
         let mut context_processors = HashMap::new();
         for context_type in &config.context_types {
@@ -1794,7 +1893,7 @@ impl ContextualEmbeddingModel {
             };
             context_processors.insert(context_type.clone(), processor);
         }
-        
+
         // Initialize fusion network
         let fusion_network = FusionNetwork {
             method: config.fusion_method.clone(),
@@ -1829,7 +1928,7 @@ impl ContextualEmbeddingModel {
             attention_heads: 8,
             hidden_dim: config.context_dim,
         };
-        
+
         // Initialize adaptation engines
         let mut adaptation_engines = HashMap::new();
         let adaptation_engine = AdaptationEngine {
@@ -1878,13 +1977,13 @@ impl ContextualEmbeddingModel {
             adaptation_history: Vec::new(),
         };
         adaptation_engines.insert(config.adaptation_strategy.clone(), adaptation_engine);
-        
+
         // Initialize context cache
         let context_cache = ContextCache::new(config.cache_config.clone());
-        
+
         // Store dimensions before moving config
         let context_dim = config.context_dim;
-        
+
         Self {
             config,
             model_id,
@@ -1911,7 +2010,7 @@ impl ContextualEmbeddingModel {
         context: EmbeddingContext,
     ) -> Result<Array1<f32>> {
         let start_time = std::time::Instant::now();
-        
+
         // Check cache first
         let cache_key = self.context_cache.generate_cache_key(&context);
         if let Some(cached) = self.context_cache.get_context(&cache_key) {
@@ -1919,10 +2018,10 @@ impl ContextualEmbeddingModel {
             let base_embedding = self.base_model.generate_embedding(input)?;
             return self.apply_cached_context(&base_embedding, &cached.fused_context);
         }
-        
+
         // Generate base embedding
         let base_embedding = self.base_model.generate_embedding(input)?;
-        
+
         // Process individual contexts
         let mut context_vectors = HashMap::new();
         for context_type in &self.config.context_types {
@@ -1931,10 +2030,10 @@ impl ContextualEmbeddingModel {
                 context_vectors.insert(context_type.clone(), context_vector);
             }
         }
-        
+
         // Fuse contexts
         let fused_context = self.fusion_network.fuse_contexts(context_vectors.clone())?;
-        
+
         // Cache the processed context
         let cached_context = CachedContext {
             context: context.clone(),
@@ -1945,31 +2044,38 @@ impl ContextualEmbeddingModel {
             last_accessed: Utc::now(),
         };
         self.context_cache.put_context(cache_key, cached_context);
-        
+
         // Apply contextual adaptation
-        let adapted_embedding = if let Some(adaptation_engine) = self.adaptation_engines.get_mut(&self.config.adaptation_strategy) {
+        let adapted_embedding = if let Some(adaptation_engine) = self
+            .adaptation_engines
+            .get_mut(&self.config.adaptation_strategy)
+        {
             adaptation_engine.adapt_embedding(&base_embedding, &context, None)?
         } else {
             base_embedding
         };
-        
+
         // Update performance metrics
         let processing_time = start_time.elapsed().as_millis() as f64;
         self.performance_metrics.overall_metrics.e2e_latency_ms = processing_time;
-        
+
         Ok(adapted_embedding)
     }
 
     /// Apply cached context to base embedding
-    fn apply_cached_context(&self, base_embedding: &Array1<f32>, fused_context: &Array1<f32>) -> Result<Array1<f32>> {
+    fn apply_cached_context(
+        &self,
+        base_embedding: &Array1<f32>,
+        fused_context: &Array1<f32>,
+    ) -> Result<Array1<f32>> {
         // Simple context application - could be more sophisticated
         let mut result = base_embedding.clone();
-        
+
         let context_influence = 0.1; // How much context affects the embedding
         for i in 0..std::cmp::min(result.len(), fused_context.len()) {
             result[i] += fused_context[i] * context_influence;
         }
-        
+
         Ok(result)
     }
 
@@ -1984,7 +2090,7 @@ impl ContextualEmbeddingModel {
         for adaptation_engine in self.adaptation_engines.values_mut() {
             let base_embedding = self.base_model.generate_embedding(input)?;
             adaptation_engine.adapt_embedding(&base_embedding, &context, Some(&feedback))?;
-            
+
             // Record adaptation
             let adaptation_record = AdaptationRecord {
                 timestamp: Utc::now(),
@@ -1995,10 +2101,12 @@ impl ContextualEmbeddingModel {
             };
             adaptation_engine.adaptation_history.push(adaptation_record);
         }
-        
+
         // Update performance metrics
-        self.performance_metrics.adaptation_metrics.total_adaptations += 1;
-        
+        self.performance_metrics
+            .adaptation_metrics
+            .total_adaptations += 1;
+
         Ok(())
     }
 
@@ -2018,19 +2126,21 @@ impl ContextualEmbeddingModel {
         training_data: Vec<(String, EmbeddingContext, Option<UserFeedback>)>,
     ) -> Result<()> {
         let start_time = std::time::Instant::now();
-        
+
         for (input, context, feedback) in training_data {
             // Generate embedding and update with feedback if available
-            let _embedding = self.generate_contextual_embedding(&input, context.clone()).await?;
-            
+            let _embedding = self
+                .generate_contextual_embedding(&input, context.clone())
+                .await?;
+
             if let Some(feedback) = feedback {
                 self.update_with_feedback(&input, context, feedback).await?;
             }
         }
-        
+
         self.is_trained = true;
         self.training_stats.training_time_seconds = start_time.elapsed().as_secs_f64();
-        
+
         Ok(())
     }
 }
@@ -2058,14 +2168,14 @@ impl EmbeddingModel for ContextualEmbeddingModel {
     async fn train(&mut self, epochs: Option<usize>) -> Result<TrainingStats> {
         let start_time = std::time::Instant::now();
         let epochs = epochs.unwrap_or(10);
-        
+
         for _epoch in 0..epochs {
             // Training logic would go here
         }
-        
+
         self.is_trained = true;
         let training_time = start_time.elapsed().as_secs_f64();
-        
+
         let stats = TrainingStats {
             epochs_completed: epochs,
             final_loss: 0.1,
@@ -2073,7 +2183,7 @@ impl EmbeddingModel for ContextualEmbeddingModel {
             convergence_achieved: true,
             loss_history: vec![0.5, 0.3, 0.2, 0.1],
         };
-        
+
         self.training_stats = stats.clone();
         Ok(stats)
     }
@@ -2092,7 +2202,12 @@ impl EmbeddingModel for ContextualEmbeddingModel {
         Ok(0.5) // Simplified
     }
 
-    fn predict_objects(&self, _subject: &str, _predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        _subject: &str,
+        _predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
         for i in 0..k {
             predictions.push((format!("object_{}", i), 0.8 - i as f64 * 0.1));
@@ -2100,7 +2215,12 @@ impl EmbeddingModel for ContextualEmbeddingModel {
         Ok(predictions)
     }
 
-    fn predict_subjects(&self, _predicate: &str, _object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        _predicate: &str,
+        _object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
         for i in 0..k {
             predictions.push((format!("subject_{}", i), 0.8 - i as f64 * 0.1));
@@ -2108,7 +2228,12 @@ impl EmbeddingModel for ContextualEmbeddingModel {
         Ok(predictions)
     }
 
-    fn predict_relations(&self, _subject: &str, _object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        _subject: &str,
+        _object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
         for i in 0..k {
             predictions.push((format!("relation_{}", i), 0.8 - i as f64 * 0.1));
@@ -2175,7 +2300,7 @@ impl ContextualEmbeddingModel {
             relations: Vec::new(),
             answer_type: None,
         };
-        
+
         let context = EmbeddingContext::new().with_query_context(query_context);
         self.generate_contextual_embedding(query, context).await
     }
@@ -2197,7 +2322,7 @@ impl ContextualEmbeddingModel {
             language_preferences: vec!["en".to_string()],
             personalization_vector: None,
         };
-        
+
         let context = EmbeddingContext::new().with_user_context(user_context);
         self.generate_contextual_embedding(input, context).await
     }
@@ -2218,7 +2343,7 @@ impl ContextualEmbeddingModel {
             performance_requirements,
             task_embeddings: HashMap::new(),
         };
-        
+
         let context = EmbeddingContext::new().with_task_context(task_context);
         self.generate_contextual_embedding(input, context).await
     }
@@ -2251,7 +2376,7 @@ mod tests {
                 answer_type: None,
             })
             .with_metadata("language".to_string(), "en".to_string());
-        
+
         assert!(context.query_context.is_some());
         assert_eq!(context.metadata.get("language"), Some(&"en".to_string()));
     }
@@ -2260,7 +2385,7 @@ mod tests {
     async fn test_contextual_embedding_model_creation() {
         let config = ContextualConfig::default();
         let model = ContextualEmbeddingModel::new(config);
-        
+
         assert_eq!(model.config.base_dim, 768);
         assert_eq!(model.config.context_dim, 512);
         assert!(!model.is_trained);
@@ -2281,7 +2406,7 @@ mod tests {
                 params
             },
         };
-        
+
         let embedding = base_model.generate_embedding("test input").unwrap();
         assert_eq!(embedding.len(), 50);
     }
@@ -2294,19 +2419,18 @@ mod tests {
             parameters: HashMap::new(),
             stats: ProcessingStats::default(),
         };
-        
-        let context = EmbeddingContext::new()
-            .with_query_context(QueryContext {
-                query_text: "test".to_string(),
-                intent: QueryIntent::Factual,
-                complexity: QueryComplexity::Simple,
-                domain: "test".to_string(),
-                keywords: vec!["test".to_string()],
-                entities: Vec::new(),
-                relations: Vec::new(),
-                answer_type: None,
-            });
-        
+
+        let context = EmbeddingContext::new().with_query_context(QueryContext {
+            query_text: "test".to_string(),
+            intent: QueryIntent::Factual,
+            complexity: QueryComplexity::Simple,
+            domain: "test".to_string(),
+            keywords: vec!["test".to_string()],
+            entities: Vec::new(),
+            relations: Vec::new(),
+            answer_type: None,
+        });
+
         let result = processor.process_context(&context).unwrap();
         assert_eq!(result.len(), 256);
         assert_eq!(processor.stats.contexts_processed, 1);
@@ -2320,11 +2444,11 @@ mod tests {
             attention_heads: 8,
             hidden_dim: 512,
         };
-        
+
         let mut context_vectors = HashMap::new();
         context_vectors.insert(ContextType::Query, Array1::zeros(256));
         context_vectors.insert(ContextType::User, Array1::ones(256));
-        
+
         let result = fusion_network.fuse_contexts(context_vectors).unwrap();
         assert_eq!(result.len(), 256 * 7); // 7 context types with padding
     }
@@ -2344,18 +2468,20 @@ mod tests {
             learning_rate: 0.001,
             adaptation_history: Vec::new(),
         };
-        
+
         let base_embedding = Array1::ones(128);
         let context = EmbeddingContext::new();
-        
-        let adapted = adaptation_engine.adapt_embedding(&base_embedding, &context, None).unwrap();
+
+        let adapted = adaptation_engine
+            .adapt_embedding(&base_embedding, &context, None)
+            .unwrap();
         assert_eq!(adapted.len(), 128);
     }
 
     #[tokio::test]
     async fn test_context_cache() {
         let mut cache = ContextCache::new(ContextCacheConfig::default());
-        
+
         let context = EmbeddingContext::new();
         let cached_context = CachedContext {
             context: context.clone(),
@@ -2365,10 +2491,10 @@ mod tests {
             access_count: 0,
             last_accessed: Utc::now(),
         };
-        
+
         let cache_key = cache.generate_cache_key(&context);
         cache.put_context(cache_key.clone(), cached_context);
-        
+
         let retrieved = cache.get_context(&cache_key);
         assert!(retrieved.is_some());
         assert_eq!(cache.stats.cache_hits, 1);
@@ -2378,14 +2504,17 @@ mod tests {
     async fn test_query_specific_embedding() {
         let config = ContextualConfig::default();
         let mut model = ContextualEmbeddingModel::new(config);
-        
-        let embedding = model.generate_query_embedding(
-            "What is machine learning?",
-            QueryIntent::Factual,
-            QueryComplexity::Simple,
-            "computer_science".to_string(),
-        ).await.unwrap();
-        
+
+        let embedding = model
+            .generate_query_embedding(
+                "What is machine learning?",
+                QueryIntent::Factual,
+                QueryComplexity::Simple,
+                "computer_science".to_string(),
+            )
+            .await
+            .unwrap();
+
         assert_eq!(embedding.len(), 512);
     }
 
@@ -2393,7 +2522,7 @@ mod tests {
     async fn test_user_specific_embedding() {
         let config = ContextualConfig::default();
         let mut model = ContextualEmbeddingModel::new(config);
-        
+
         let preferences = UserPreferences {
             detail_level: DetailLevel::Standard,
             preferred_formats: vec!["text".to_string()],
@@ -2401,14 +2530,17 @@ mod tests {
             accessibility: AccessibilityPreferences::default(),
             privacy_settings: PrivacySettings::default(),
         };
-        
-        let embedding = model.generate_user_embedding(
-            "machine learning tutorial",
-            "user123".to_string(),
-            preferences,
-            ExpertiseLevel::Beginner,
-        ).await.unwrap();
-        
+
+        let embedding = model
+            .generate_user_embedding(
+                "machine learning tutorial",
+                "user123".to_string(),
+                preferences,
+                ExpertiseLevel::Beginner,
+            )
+            .await
+            .unwrap();
+
         assert_eq!(embedding.len(), 512);
     }
 
@@ -2416,14 +2548,17 @@ mod tests {
     async fn test_task_specific_embedding() {
         let config = ContextualConfig::default();
         let mut model = ContextualEmbeddingModel::new(config);
-        
-        let embedding = model.generate_task_embedding(
-            "classify sentiment",
-            TaskType::Classification,
-            "nlp".to_string(),
-            PerformanceRequirements::default(),
-        ).await.unwrap();
-        
+
+        let embedding = model
+            .generate_task_embedding(
+                "classify sentiment",
+                TaskType::Classification,
+                "nlp".to_string(),
+                PerformanceRequirements::default(),
+            )
+            .await
+            .unwrap();
+
         assert_eq!(embedding.len(), 512);
     }
 
@@ -2431,19 +2566,28 @@ mod tests {
     async fn test_feedback_integration() {
         let config = ContextualConfig::default();
         let mut model = ContextualEmbeddingModel::new(config);
-        
+
         let context = EmbeddingContext::new();
         let feedback = UserFeedback::Positive(0.8);
-        
-        model.update_with_feedback("test input", context, feedback).await.unwrap();
-        assert_eq!(model.performance_metrics.adaptation_metrics.total_adaptations, 1);
+
+        model
+            .update_with_feedback("test input", context, feedback)
+            .await
+            .unwrap();
+        assert_eq!(
+            model
+                .performance_metrics
+                .adaptation_metrics
+                .total_adaptations,
+            1
+        );
     }
 
     #[tokio::test]
     async fn test_performance_metrics() {
         let config = ContextualConfig::default();
         let model = ContextualEmbeddingModel::new(config);
-        
+
         let metrics = model.get_performance_metrics();
         assert_eq!(metrics.adaptation_metrics.total_adaptations, 0);
         assert_eq!(metrics.fusion_metrics.total_fusions, 0);

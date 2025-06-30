@@ -258,7 +258,7 @@ impl ChatIntegration {
     ) -> Result<Vector> {
         // Get user profile and preferences
         let user_profile = self.personalization.get_user_profile(user_id)?.clone();
-        
+
         // Apply user preferences to query embedding
         let embeddings = self.model.encode(&[query.to_string()]).await?;
         let base_embedding = Vector::new(embeddings[0].clone());
@@ -294,7 +294,9 @@ impl ChatIntegration {
         source_lang: &str,
         target_lang: &str,
     ) -> Result<String> {
-        self.multilingual.translate_text(query, source_lang, target_lang).await
+        self.multilingual
+            .translate_text(query, source_lang, target_lang)
+            .await
     }
 
     /// Detect language of input text
@@ -309,12 +311,9 @@ impl ChatIntegration {
         source_lang: &str,
         target_lang: &str,
     ) -> Result<Vector> {
-        self.multilingual.generate_cross_lingual_embedding(
-            text,
-            source_lang,
-            target_lang,
-            &*self.model,
-        ).await
+        self.multilingual
+            .generate_cross_lingual_embedding(text, source_lang, target_lang, &*self.model)
+            .await
     }
 
     /// Get multilingual entity alignment
@@ -324,11 +323,9 @@ impl ChatIntegration {
         source_lang: &str,
         target_langs: &[String],
     ) -> Result<HashMap<String, String>> {
-        self.multilingual.align_entities(
-            entity,
-            source_lang,
-            target_langs,
-        ).await
+        self.multilingual
+            .align_entities(entity, source_lang, target_langs)
+            .await
     }
 }
 
@@ -477,8 +474,9 @@ impl PersonalizationEngine {
             let profile = UserProfile::new(user_id.to_string());
             self.user_profiles.insert(user_id.to_string(), profile);
         }
-        
-        self.user_profiles.get(user_id)
+
+        self.user_profiles
+            .get(user_id)
             .ok_or_else(|| anyhow!("Failed to get user profile for {}", user_id))
     }
 
@@ -490,7 +488,7 @@ impl PersonalizationEngine {
         conversation_history: &[String],
     ) -> Result<Vector> {
         let mut personalized = base_embedding.clone();
-        
+
         // Apply domain preferences
         for (domain, weight) in &user_profile.domain_preferences {
             if conversation_history.iter().any(|msg| msg.contains(domain)) {
@@ -507,11 +505,13 @@ impl PersonalizationEngine {
             let avg_sentiment = recent_interactions
                 .iter()
                 .map(|i| i.sentiment_score.unwrap_or(0.0))
-                .sum::<f32>() / recent_interactions.len() as f32;
-            
+                .sum::<f32>()
+                / recent_interactions.len() as f32;
+
             // Adjust embedding based on user's typical sentiment
             for i in 0..personalized.values.len() {
-                personalized.values[i] *= 1.0 + (avg_sentiment * self.preference_weights.sentiment_influence);
+                personalized.values[i] *=
+                    1.0 + (avg_sentiment * self.preference_weights.sentiment_influence);
             }
         }
 
@@ -552,13 +552,7 @@ impl PersonalizationEngine {
     fn get_recent_interactions(&self, user_id: &str, limit: usize) -> Vec<&UserInteraction> {
         self.interaction_history
             .get(user_id)
-            .map(|history| {
-                history
-                    .iter()
-                    .rev()
-                    .take(limit)
-                    .collect()
-            })
+            .map(|history| history.iter().rev().take(limit).collect())
             .unwrap_or_default()
     }
 
@@ -566,16 +560,23 @@ impl PersonalizationEngine {
     fn analyze_query_sentiment(&self, query: &str) -> Option<f32> {
         let positive_words = ["good", "great", "excellent", "amazing", "wonderful"];
         let negative_words = ["bad", "terrible", "awful", "horrible", "disappointing"];
-        
+
         let query_lower = query.to_lowercase();
-        let positive_count = positive_words.iter().filter(|&&word| query_lower.contains(word)).count();
-        let negative_count = negative_words.iter().filter(|&&word| query_lower.contains(word)).count();
-        
+        let positive_count = positive_words
+            .iter()
+            .filter(|&&word| query_lower.contains(word))
+            .count();
+        let negative_count = negative_words
+            .iter()
+            .filter(|&&word| query_lower.contains(word))
+            .count();
+
         if positive_count + negative_count == 0 {
             return None;
         }
-        
-        let sentiment = (positive_count as f32 - negative_count as f32) / (positive_count + negative_count) as f32;
+
+        let sentiment = (positive_count as f32 - negative_count as f32)
+            / (positive_count + negative_count) as f32;
         Some(sentiment)
     }
 }
@@ -609,7 +610,7 @@ impl UserProfile {
     /// Update profile based on user interaction
     pub fn update_from_interaction(&mut self, interaction: &UserInteraction) {
         self.last_updated = chrono::Utc::now();
-        
+
         // Update interaction patterns
         self.interaction_patterns.total_interactions += 1;
         match interaction.interaction_type {
@@ -617,30 +618,43 @@ impl UserProfile {
             InteractionType::Feedback => self.interaction_patterns.feedback_count += 1,
             InteractionType::EntityLookup => self.interaction_patterns.entity_lookup_count += 1,
         }
-        
+
         // Update average sentiment
         if let Some(sentiment) = interaction.sentiment_score {
             let current_avg = self.interaction_patterns.average_sentiment;
             let total = self.interaction_patterns.total_interactions as f32;
-            self.interaction_patterns.average_sentiment = 
+            self.interaction_patterns.average_sentiment =
                 (current_avg * (total - 1.0) + sentiment) / total;
         }
-        
+
         // Extract and update domain preferences from query
         self.extract_domain_preferences(&interaction.query);
     }
-    
+
     /// Extract domain preferences from query text
     fn extract_domain_preferences(&mut self, query: &str) {
         let domains = [
-            "science", "technology", "medicine", "business", "education", 
-            "sports", "entertainment", "politics", "history", "art"
+            "science",
+            "technology",
+            "medicine",
+            "business",
+            "education",
+            "sports",
+            "entertainment",
+            "politics",
+            "history",
+            "art",
         ];
-        
+
         for domain in &domains {
             if query.to_lowercase().contains(domain) {
-                let current = self.domain_preferences.get(&domain.to_string()).copied().unwrap_or(0.0);
-                self.domain_preferences.insert(domain.to_string(), current + 0.1);
+                let current = self
+                    .domain_preferences
+                    .get(&domain.to_string())
+                    .copied()
+                    .unwrap_or(0.0);
+                self.domain_preferences
+                    .insert(domain.to_string(), current + 0.1);
             }
         }
     }
@@ -706,10 +720,18 @@ impl MultilingualSupport {
     pub fn new() -> Self {
         Self {
             supported_languages: vec![
-                "en".to_string(), "es".to_string(), "fr".to_string(), 
-                "de".to_string(), "it".to_string(), "pt".to_string(),
-                "zh".to_string(), "ja".to_string(), "ko".to_string(),
-                "ar".to_string(), "hi".to_string(), "ru".to_string(),
+                "en".to_string(),
+                "es".to_string(),
+                "fr".to_string(),
+                "de".to_string(),
+                "it".to_string(),
+                "pt".to_string(),
+                "zh".to_string(),
+                "ja".to_string(),
+                "ko".to_string(),
+                "ar".to_string(),
+                "hi".to_string(),
+                "ru".to_string(),
             ],
             translation_cache: HashMap::new(),
             language_models: HashMap::new(),
@@ -749,31 +771,44 @@ impl MultilingualSupport {
     pub async fn detect_language(&self, text: &str) -> Result<LanguageDetection> {
         // Simple language detection based on common words
         let text_lower = text.to_lowercase();
-        
+
         let mut scores = HashMap::new();
-        
+
         // English indicators
         let en_words = ["the", "and", "is", "hello", "world", "of", "to", "in"];
-        let en_score = en_words.iter().filter(|&&word| text_lower.contains(word)).count();
+        let en_score = en_words
+            .iter()
+            .filter(|&&word| text_lower.contains(word))
+            .count();
         scores.insert("en", en_score);
-        
-        // Spanish indicators  
+
+        // Spanish indicators
         let es_words = ["el", "y", "es", "hola", "buenos", "dias", "de", "en", "la"];
-        let es_score = es_words.iter().filter(|&&word| text_lower.contains(word)).count();
+        let es_score = es_words
+            .iter()
+            .filter(|&&word| text_lower.contains(word))
+            .count();
         scores.insert("es", es_score);
-        
+
         // French indicators
         let fr_words = ["le", "et", "est", "bonjour", "de", "la", "les"];
-        let fr_score = fr_words.iter().filter(|&&word| text_lower.contains(word)).count();
+        let fr_score = fr_words
+            .iter()
+            .filter(|&&word| text_lower.contains(word))
+            .count();
         scores.insert("fr", fr_score);
-        
+
         // German indicators
         let de_words = ["der", "und", "ist", "hallo", "von", "die", "das"];
-        let de_score = de_words.iter().filter(|&&word| text_lower.contains(word)).count();
+        let de_score = de_words
+            .iter()
+            .filter(|&&word| text_lower.contains(word))
+            .count();
         scores.insert("de", de_score);
-        
+
         // Find language with highest score
-        let detected_lang = scores.iter()
+        let detected_lang = scores
+            .iter()
             .max_by_key(|(_, &score)| score)
             .map(|(lang, _)| *lang)
             .unwrap_or("en");
@@ -801,7 +836,7 @@ impl MultilingualSupport {
         // 1. Use a multilingual embedding model
         // 2. Or translate text and generate embedding
         // 3. Or use language-specific models with alignment
-        
+
         let translated_text = self.translate_text(text, source_lang, target_lang).await?;
         let embeddings = model.encode(&[translated_text]).await?;
         Ok(Vector::new(embeddings[0].clone()))
@@ -815,13 +850,13 @@ impl MultilingualSupport {
         target_langs: &[String],
     ) -> Result<HashMap<String, String>> {
         let mut alignments = HashMap::new();
-        
+
         for target_lang in target_langs {
             if target_lang == source_lang {
                 alignments.insert(target_lang.clone(), entity.to_string());
                 continue;
             }
-            
+
             // Mock entity alignment - in practice would use knowledge bases
             let aligned_entity = match target_lang.as_str() {
                 "es" => format!("{}_es", entity),
@@ -830,10 +865,10 @@ impl MultilingualSupport {
                 "zh" => format!("{}_zh", entity),
                 _ => format!("{}_{}", entity, target_lang),
             };
-            
+
             alignments.insert(target_lang.clone(), aligned_entity);
         }
-        
+
         Ok(alignments)
     }
 }
@@ -896,19 +931,21 @@ mod tests {
     fn test_personalization_engine() {
         let mut engine = PersonalizationEngine::new();
         let user_id = "test_user";
-        
+
         // Test user profile creation
         let profile = engine.get_user_profile(user_id).unwrap();
         assert_eq!(profile.user_id, user_id);
-        
+
         // Test interaction update
-        engine.update_user_profile(
-            user_id,
-            "What is machine learning?",
-            Some(0.9),
-            InteractionType::Query,
-        ).unwrap();
-        
+        engine
+            .update_user_profile(
+                user_id,
+                "What is machine learning?",
+                Some(0.9),
+                InteractionType::Query,
+            )
+            .unwrap();
+
         let history = engine.get_recent_interactions(user_id, 5);
         assert_eq!(history.len(), 1);
     }
@@ -916,31 +953,27 @@ mod tests {
     #[tokio::test]
     async fn test_multilingual_support() -> Result<()> {
         let multilingual = MultilingualSupport::new();
-        
+
         // Test language detection with English text
         let detection_en = multilingual.detect_language("Hello world").await?;
         assert_eq!(detection_en.language_code, "en");
-        
+
         // Test language detection with Spanish text
         let detection_es = multilingual.detect_language("Hola y buenos dias").await?;
         assert_eq!(detection_es.language_code, "es");
-        
+
         // Test translation
-        let translated = multilingual.translate_text(
-            "Hello world",
-            "en",
-            "es",
-        ).await?;
+        let translated = multilingual
+            .translate_text("Hello world", "en", "es")
+            .await?;
         assert!(translated.contains("[ES]"));
-        
+
         // Test entity alignment
-        let alignments = multilingual.align_entities(
-            "person",
-            "en",
-            &["es".to_string(), "fr".to_string()],
-        ).await?;
+        let alignments = multilingual
+            .align_entities("person", "en", &["es".to_string(), "fr".to_string()])
+            .await?;
         assert_eq!(alignments.len(), 2);
-        
+
         Ok(())
     }
 }

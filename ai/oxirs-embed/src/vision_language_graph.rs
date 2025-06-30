@@ -8,11 +8,11 @@
 //! - Meta-learning for adaptation
 //! - Vision-text-graph unified embedding spaces
 
-use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Vector, Triple, NamedNode};
+use crate::{EmbeddingModel, ModelConfig, ModelStats, NamedNode, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{Array1, Array2, Array3, Array4, Axis, s};
+use ndarray::{s, Array1, Array2, Array3, Array4, Axis};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -493,7 +493,7 @@ impl Default for TaskSpecificParams {
         domain_weights.insert("vision".to_string(), 1.0);
         domain_weights.insert("language".to_string(), 1.0);
         domain_weights.insert("graph".to_string(), 1.0);
-        
+
         Self {
             task_categories: vec![
                 TaskCategory::ImageCaptioning,
@@ -725,7 +725,7 @@ impl Default for JointTrainingConfig {
         objective_weights.insert("language_graph_alignment".to_string(), 0.8);
         objective_weights.insert("vision_graph_alignment".to_string(), 0.6);
         objective_weights.insert("tri_modal_alignment".to_string(), 1.2);
-        
+
         Self {
             objectives: vec![
                 TrainingObjective::ContrastiveLearning,
@@ -802,32 +802,43 @@ impl VisionEncoder {
     pub fn new(config: VisionEncoderConfig) -> Self {
         let mut cnn_parameters = HashMap::new();
         let mut vit_parameters = HashMap::new();
-        
+
         // Initialize CNN parameters
         for (i, &filter_size) in config.cnn_config.filter_sizes.iter().enumerate() {
             let layer_name = format!("conv_{}", i);
-            let weight_shape = (filter_size, if i == 0 { config.channels } else { config.cnn_config.filter_sizes[i-1] }, 3, 3);
+            let weight_shape = (
+                filter_size,
+                if i == 0 {
+                    config.channels
+                } else {
+                    config.cnn_config.filter_sizes[i - 1]
+                },
+                3,
+                3,
+            );
             cnn_parameters.insert(
                 layer_name,
-                Array4::from_shape_fn(weight_shape, |_| (rand::random::<f32>() - 0.5) * 0.1)
+                Array4::from_shape_fn(weight_shape, |_| (rand::random::<f32>() - 0.5) * 0.1),
             );
         }
-        
+
         // Initialize ViT parameters
         vit_parameters.insert(
             "patch_embedding".to_string(),
             Array2::from_shape_fn(
-                (config.channels * config.patch_size.0 * config.patch_size.1, config.vision_dim),
-                |_| (rand::random::<f32>() - 0.5) * 0.1
-            )
+                (
+                    config.channels * config.patch_size.0 * config.patch_size.1,
+                    config.vision_dim,
+                ),
+                |_| (rand::random::<f32>() - 0.5) * 0.1,
+            ),
         );
-        
+
         // Projection to unified dimension
-        let projection = Array2::from_shape_fn(
-            (config.vision_dim, config.vision_dim),
-            |_| (rand::random::<f32>() - 0.5) * 0.1
-        );
-        
+        let projection = Array2::from_shape_fn((config.vision_dim, config.vision_dim), |_| {
+            (rand::random::<f32>() - 0.5) * 0.1
+        });
+
         Self {
             config,
             cnn_parameters,
@@ -835,7 +846,7 @@ impl VisionEncoder {
             projection,
         }
     }
-    
+
     /// Encode image to visual embeddings
     pub fn encode_image(&self, image: &Array3<f32>) -> Result<Array1<f32>> {
         match self.config.architecture {
@@ -844,35 +855,35 @@ impl VisionEncoder {
             _ => self.encode_with_vit(image), // Default to ViT
         }
     }
-    
+
     /// Encode with Vision Transformer
     fn encode_with_vit(&self, image: &Array3<f32>) -> Result<Array1<f32>> {
         // Simulate patch extraction and embedding
         let (h, w, c) = image.dim();
         let (patch_h, patch_w) = self.config.patch_size;
-        
+
         let num_patches_h = h / patch_h;
         let num_patches_w = w / patch_w;
         let num_patches = num_patches_h * num_patches_w;
-        
+
         // Extract patches and flatten
         let mut patch_embeddings = Array2::zeros((num_patches, self.config.vision_dim));
-        
+
         for i in 0..num_patches_h {
             for j in 0..num_patches_w {
                 let patch_idx = i * num_patches_w + j;
-                
+
                 // Extract patch
                 let patch = image.slice(s![
-                    i*patch_h..(i+1)*patch_h,
-                    j*patch_w..(j+1)*patch_w,
+                    i * patch_h..(i + 1) * patch_h,
+                    j * patch_w..(j + 1) * patch_w,
                     ..
                 ]);
-                
+
                 // Flatten patch
                 let patch_owned = patch.to_owned();
                 let flattened_patch = patch_owned.into_shape(c * patch_h * patch_w).unwrap();
-                
+
                 // Project to embedding space
                 if let Some(patch_embedding_matrix) = self.vit_parameters.get("patch_embedding") {
                     let embedding = flattened_patch.dot(patch_embedding_matrix);
@@ -880,35 +891,36 @@ impl VisionEncoder {
                 }
             }
         }
-        
+
         // Global average pooling over patches
         let global_embedding = patch_embeddings.mean_axis(Axis(0)).unwrap();
-        
+
         Ok(global_embedding)
     }
-    
+
     /// Encode with CNN
     fn encode_with_cnn(&self, image: &Array3<f32>) -> Result<Array1<f32>> {
         // Simulate CNN forward pass
         let mut features = image.clone();
-        
+
         // Apply multiple conv layers
-        for i in 0..self.config.cnn_config.num_layers.min(2) { // Limit for simplicity
+        for i in 0..self.config.cnn_config.num_layers.min(2) {
+            // Limit for simplicity
             // Simulate convolution + pooling
             let (h, w, c) = features.dim();
             let new_h = h / 2; // Simulate stride 2
             let new_w = w / 2;
             let new_c = self.config.cnn_config.filter_sizes[i];
-            
+
             let mut new_features = Array3::zeros((new_h, new_w, new_c));
-            
+
             // Simple downsampling simulation
             for new_i in 0..new_h {
                 for new_j in 0..new_w {
                     for new_k in 0..new_c {
                         let old_i = new_i * 2;
                         let old_j = new_j * 2;
-                        
+
                         if old_i < h && old_j < w {
                             // Average over 2x2 region
                             let mut sum = 0.0;
@@ -928,19 +940,19 @@ impl VisionEncoder {
                     }
                 }
             }
-            
+
             features = new_features;
         }
-        
+
         // Global average pooling
         let features_len = features.len();
         let flattened = features.into_shape(features_len).unwrap();
         let mut global_features = vec![0.0; self.config.vision_dim];
-        
+
         for i in 0..global_features.len().min(flattened.len()) {
             global_features[i] = flattened[i];
         }
-        
+
         Ok(Array1::from_vec(global_features))
     }
 }
@@ -960,37 +972,39 @@ pub struct LanguageEncoder {
 impl LanguageEncoder {
     pub fn new(config: LanguageEncoderConfig) -> Self {
         // Initialize embeddings
-        let token_embeddings = Array2::from_shape_fn(
-            (config.vocab_size, config.language_dim),
-            |_| (rand::random::<f32>() - 0.5) * 0.1
-        );
-        
-        let position_embeddings = Array2::from_shape_fn(
-            (config.max_seq_length, config.language_dim),
-            |_| (rand::random::<f32>() - 0.5) * 0.1
-        );
-        
+        let token_embeddings =
+            Array2::from_shape_fn((config.vocab_size, config.language_dim), |_| {
+                (rand::random::<f32>() - 0.5) * 0.1
+            });
+
+        let position_embeddings =
+            Array2::from_shape_fn((config.max_seq_length, config.language_dim), |_| {
+                (rand::random::<f32>() - 0.5) * 0.1
+            });
+
         let mut transformer_parameters = HashMap::new();
-        
+
         // Initialize transformer layers
         for layer in 0..config.transformer_config.num_layers {
             transformer_parameters.insert(
                 format!("attention_weights_{}", layer),
-                Array2::from_shape_fn(
-                    (config.language_dim, config.language_dim),
-                    |_| (rand::random::<f32>() - 0.5) * 0.1
-                )
+                Array2::from_shape_fn((config.language_dim, config.language_dim), |_| {
+                    (rand::random::<f32>() - 0.5) * 0.1
+                }),
             );
-            
+
             transformer_parameters.insert(
                 format!("feed_forward_{}", layer),
                 Array2::from_shape_fn(
-                    (config.transformer_config.intermediate_dim, config.language_dim),
-                    |_| (rand::random::<f32>() - 0.5) * 0.1
-                )
+                    (
+                        config.transformer_config.intermediate_dim,
+                        config.language_dim,
+                    ),
+                    |_| (rand::random::<f32>() - 0.5) * 0.1,
+                ),
             );
         }
-        
+
         Self {
             config,
             token_embeddings,
@@ -998,34 +1012,40 @@ impl LanguageEncoder {
             transformer_parameters,
         }
     }
-    
+
     /// Encode text to language embeddings
     pub fn encode_text(&self, text: &str) -> Result<Array1<f32>> {
         // Simple tokenization (in real implementation would use proper tokenizer)
         let tokens = self.tokenize(text);
-        
+
         // Get token embeddings
         let mut sequence_embeddings = Array2::zeros((tokens.len(), self.config.language_dim));
-        
+
         for (i, &token_id) in tokens.iter().enumerate() {
             if token_id < self.token_embeddings.nrows() {
                 let token_emb = self.token_embeddings.row(token_id);
-                let pos_emb = self.position_embeddings.row(i.min(self.config.max_seq_length - 1));
-                
+                let pos_emb = self
+                    .position_embeddings
+                    .row(i.min(self.config.max_seq_length - 1));
+
                 // Add token and position embeddings
                 let combined = &token_emb + &pos_emb;
                 sequence_embeddings.row_mut(i).assign(&combined);
             }
         }
-        
+
         // Apply transformer layers (simplified)
         let mut hidden_states = sequence_embeddings;
-        
-        for layer in 0..self.config.transformer_config.num_layers.min(2) { // Limit for performance
-            if let Some(attention_weights) = self.transformer_parameters.get(&format!("attention_weights_{}", layer)) {
+
+        for layer in 0..self.config.transformer_config.num_layers.min(2) {
+            // Limit for performance
+            if let Some(attention_weights) = self
+                .transformer_parameters
+                .get(&format!("attention_weights_{}", layer))
+            {
                 // Apply self-attention (simplified)
                 hidden_states = hidden_states.dot(attention_weights);
-                
+
                 // Apply layer norm (simplified)
                 for mut row in hidden_states.rows_mut() {
                     let mean = row.mean().unwrap_or(0.0);
@@ -1034,13 +1054,13 @@ impl LanguageEncoder {
                 }
             }
         }
-        
+
         // Pool to sentence-level representation (mean pooling)
         let sentence_embedding = hidden_states.mean_axis(Axis(0)).unwrap();
-        
+
         Ok(sentence_embedding)
     }
-    
+
     /// Simple tokenization
     fn tokenize(&self, text: &str) -> Vec<usize> {
         text.split_whitespace()
@@ -1073,47 +1093,44 @@ impl GraphEncoder {
         let mut node_parameters = HashMap::new();
         let mut edge_parameters = HashMap::new();
         let mut graph_parameters = HashMap::new();
-        
+
         // Initialize node transformation layers
         for layer in 0..config.num_layers {
             node_parameters.insert(
                 format!("node_transform_{}", layer),
-                Array2::from_shape_fn(
-                    (config.node_dim, config.node_dim),
-                    |_| (rand::random::<f32>() - 0.5) * 0.1
-                )
+                Array2::from_shape_fn((config.node_dim, config.node_dim), |_| {
+                    (rand::random::<f32>() - 0.5) * 0.1
+                }),
             );
         }
-        
+
         // Initialize edge transformation layers
         for layer in 0..config.num_layers {
             edge_parameters.insert(
                 format!("edge_transform_{}", layer),
-                Array2::from_shape_fn(
-                    (config.edge_dim, config.edge_dim),
-                    |_| (rand::random::<f32>() - 0.5) * 0.1
-                )
+                Array2::from_shape_fn((config.edge_dim, config.edge_dim), |_| {
+                    (rand::random::<f32>() - 0.5) * 0.1
+                }),
             );
         }
-        
+
         // Graph readout parameters (for attention mechanism)
         graph_parameters.insert(
             "readout".to_string(),
             Array2::from_shape_fn(
                 (config.node_dim, 1), // Single attention score per node
-                |_| (rand::random::<f32>() - 0.5) * 0.1
-            )
+                |_| (rand::random::<f32>() - 0.5) * 0.1,
+            ),
         );
-        
+
         // Graph projection parameters (from node_dim to graph_dim)
         graph_parameters.insert(
             "graph_projection".to_string(),
-            Array2::from_shape_fn(
-                (config.node_dim, config.graph_dim),
-                |_| (rand::random::<f32>() - 0.5) * 0.1
-            )
+            Array2::from_shape_fn((config.node_dim, config.graph_dim), |_| {
+                (rand::random::<f32>() - 0.5) * 0.1
+            }),
         );
-        
+
         Self {
             config,
             node_parameters,
@@ -1121,7 +1138,7 @@ impl GraphEncoder {
             graph_parameters,
         }
     }
-    
+
     /// Encode graph to graph embeddings
     pub fn encode_graph(
         &self,
@@ -1130,23 +1147,20 @@ impl GraphEncoder {
         adjacency_matrix: &Array2<f32>,
     ) -> Result<Array1<f32>> {
         let mut node_embeddings = node_features.clone();
-        
+
         // Apply GNN layers
-        for layer in 0..self.config.num_layers.min(2) { // Limit for performance
-            node_embeddings = self.apply_gnn_layer(
-                &node_embeddings,
-                edge_features,
-                adjacency_matrix,
-                layer
-            )?;
+        for layer in 0..self.config.num_layers.min(2) {
+            // Limit for performance
+            node_embeddings =
+                self.apply_gnn_layer(&node_embeddings, edge_features, adjacency_matrix, layer)?;
         }
-        
+
         // Graph-level readout
         let graph_embedding = self.graph_readout(&node_embeddings)?;
-        
+
         Ok(graph_embedding)
     }
-    
+
     /// Apply a single GNN layer
     fn apply_gnn_layer(
         &self,
@@ -1156,42 +1170,38 @@ impl GraphEncoder {
         layer: usize,
     ) -> Result<Array2<f32>> {
         let transform_key = format!("node_transform_{}", layer);
-        
+
         if let Some(transform_matrix) = self.node_parameters.get(&transform_key) {
             // Message passing: aggregate neighbor features
             let aggregated = adjacency_matrix.dot(node_embeddings);
-            
+
             // Apply transformation
             let transformed = aggregated.dot(transform_matrix);
-            
+
             // Apply activation (ReLU)
             let activated = transformed.mapv(|x| x.max(0.0));
-            
+
             Ok(activated)
         } else {
             Ok(node_embeddings.clone())
         }
     }
-    
+
     /// Graph-level readout
     fn graph_readout(&self, node_embeddings: &Array2<f32>) -> Result<Array1<f32>> {
         let node_level_embedding = match self.config.readout {
-            ReadoutFunction::GlobalMean => {
-                node_embeddings.mean_axis(Axis(0)).unwrap()
-            }
+            ReadoutFunction::GlobalMean => node_embeddings.mean_axis(Axis(0)).unwrap(),
             ReadoutFunction::GlobalMax => {
                 node_embeddings.fold_axis(Axis(0), f32::NEG_INFINITY, |&a, &b| a.max(b))
             }
-            ReadoutFunction::GlobalSum => {
-                node_embeddings.sum_axis(Axis(0))
-            }
+            ReadoutFunction::GlobalSum => node_embeddings.sum_axis(Axis(0)),
             ReadoutFunction::GlobalAttention => {
                 if let Some(readout_matrix) = self.graph_parameters.get("readout") {
                     // Attention-based readout
                     let attention_scores = node_embeddings.dot(readout_matrix); // (num_nodes, 1)
                     let attention_scores_1d = attention_scores.column(0).to_owned(); // (num_nodes,)
                     let attention_weights = self.softmax_1d(&attention_scores_1d); // (num_nodes,)
-                    
+
                     // Weighted average of node embeddings
                     let mut weighted_sum = Array1::zeros(node_embeddings.ncols());
                     for (i, &weight) in attention_weights.iter().enumerate() {
@@ -1205,7 +1215,7 @@ impl GraphEncoder {
             }
             _ => node_embeddings.mean_axis(Axis(0)).unwrap(),
         };
-        
+
         // Project from node_dim to graph_dim
         if let Some(projection_matrix) = self.graph_parameters.get("graph_projection") {
             Ok(projection_matrix.t().dot(&node_level_embedding))
@@ -1213,7 +1223,7 @@ impl GraphEncoder {
             Ok(node_level_embedding)
         }
     }
-    
+
     /// Apply softmax to 2D array
     fn softmax_2d(&self, x: &Array2<f32>) -> Array2<f32> {
         let mut result = x.clone();
@@ -1227,7 +1237,7 @@ impl GraphEncoder {
         }
         result
     }
-    
+
     fn softmax_1d(&self, x: &Array1<f32>) -> Array1<f32> {
         let max_val = x.fold(f32::NEG_INFINITY, |a, &b| a.max(b));
         let mut result = x.mapv(|v| (v - max_val).exp());
@@ -1255,35 +1265,33 @@ impl MultiModalTransformer {
     pub fn new(config: MultiModalTransformerConfig) -> Self {
         let mut cross_attention_params = HashMap::new();
         let mut fusion_params = HashMap::new();
-        
+
         // Initialize cross-attention parameters
         for layer in 0..config.num_fusion_layers {
             for modality_pair in &["vision_language", "language_graph", "vision_graph"] {
                 cross_attention_params.insert(
                     format!("{}_{}", modality_pair, layer),
-                    Array2::from_shape_fn(
-                        (config.unified_dim, config.unified_dim),
-                        |_| (rand::random::<f32>() - 0.5) * 0.1
-                    )
+                    Array2::from_shape_fn((config.unified_dim, config.unified_dim), |_| {
+                        (rand::random::<f32>() - 0.5) * 0.1
+                    }),
                 );
             }
         }
-        
+
         // Initialize fusion parameters
         fusion_params.insert(
             "tri_modal_fusion".to_string(),
-            Array2::from_shape_fn(
-                (config.unified_dim, config.unified_dim * 3),
-                |_| (rand::random::<f32>() - 0.5) * 0.1
-            )
+            Array2::from_shape_fn((config.unified_dim, config.unified_dim * 3), |_| {
+                (rand::random::<f32>() - 0.5) * 0.1
+            }),
         );
-        
+
         // Modality embeddings
         let modality_embeddings = Array2::from_shape_fn(
             (3, config.unified_dim), // vision, language, graph
-            |_| (rand::random::<f32>() - 0.5) * 0.1
+            |_| (rand::random::<f32>() - 0.5) * 0.1,
         );
-        
+
         Self {
             config,
             cross_attention_params,
@@ -1291,28 +1299,24 @@ impl MultiModalTransformer {
             modality_embeddings,
         }
     }
-    
+
     /// Fuse multi-modal embeddings
     pub fn fuse_embeddings(
         &self,
         vision_emb: &Array1<f32>,
-        language_emb: &Array1<f32>, 
+        language_emb: &Array1<f32>,
         graph_emb: &Array1<f32>,
     ) -> Result<Array1<f32>> {
         match self.config.fusion_strategy {
-            FusionStrategy::EarlyFusion => {
-                self.early_fusion(vision_emb, language_emb, graph_emb)
-            }
+            FusionStrategy::EarlyFusion => self.early_fusion(vision_emb, language_emb, graph_emb),
             FusionStrategy::CrossAttention => {
                 self.cross_attention_fusion(vision_emb, language_emb, graph_emb)
             }
-            FusionStrategy::TensorFusion => {
-                self.tensor_fusion(vision_emb, language_emb, graph_emb)
-            }
+            FusionStrategy::TensorFusion => self.tensor_fusion(vision_emb, language_emb, graph_emb),
             _ => self.early_fusion(vision_emb, language_emb, graph_emb),
         }
     }
-    
+
     /// Early fusion by concatenation
     fn early_fusion(
         &self,
@@ -1324,24 +1328,27 @@ impl MultiModalTransformer {
         concatenated.extend_from_slice(vision_emb.as_slice().unwrap());
         concatenated.extend_from_slice(language_emb.as_slice().unwrap());
         concatenated.extend_from_slice(graph_emb.as_slice().unwrap());
-        
+
         let concat_array = Array1::from_vec(concatenated);
-        
+
         if let Some(fusion_matrix) = self.fusion_params.get("tri_modal_fusion") {
             Ok(fusion_matrix.dot(&concat_array))
         } else {
             // Simple average if no fusion matrix
-            let avg_len = vision_emb.len().min(language_emb.len()).min(graph_emb.len());
+            let avg_len = vision_emb
+                .len()
+                .min(language_emb.len())
+                .min(graph_emb.len());
             let mut averaged = Array1::zeros(avg_len);
-            
+
             for i in 0..avg_len {
                 averaged[i] = (vision_emb[i] + language_emb[i] + graph_emb[i]) / 3.0;
             }
-            
+
             Ok(averaged)
         }
     }
-    
+
     /// Cross-attention fusion
     fn cross_attention_fusion(
         &self,
@@ -1351,28 +1358,28 @@ impl MultiModalTransformer {
     ) -> Result<Array1<f32>> {
         // Simplified cross-attention
         let mut fused = vision_emb.clone();
-        
+
         // Vision-Language attention
         if let Some(vl_attention) = self.cross_attention_params.get("vision_language_0") {
             let vl_attended = vl_attention.dot(language_emb);
             fused = &fused + &vl_attended;
         }
-        
+
         // Vision-Graph attention
         if let Some(vg_attention) = self.cross_attention_params.get("vision_graph_0") {
             let vg_attended = vg_attention.dot(graph_emb);
             fused = &fused + &vg_attended;
         }
-        
+
         // Normalize
         let norm = fused.dot(&fused).sqrt();
         if norm > 0.0 {
             fused /= norm;
         }
-        
+
         Ok(fused)
     }
-    
+
     /// Tensor fusion
     fn tensor_fusion(
         &self,
@@ -1381,13 +1388,16 @@ impl MultiModalTransformer {
         graph_emb: &Array1<f32>,
     ) -> Result<Array1<f32>> {
         // Simplified tensor fusion using outer products
-        let min_dim = vision_emb.len().min(language_emb.len()).min(graph_emb.len());
+        let min_dim = vision_emb
+            .len()
+            .min(language_emb.len())
+            .min(graph_emb.len());
         let mut fused = Array1::zeros(min_dim);
-        
+
         for i in 0..min_dim {
             fused[i] = vision_emb[i] * language_emb[i] * graph_emb[i];
         }
-        
+
         Ok(fused)
     }
 }
@@ -1406,25 +1416,25 @@ impl MetaLearner {
     pub fn new(config: MetaLearningConfig) -> Self {
         let mut meta_parameters = HashMap::new();
         let mut task_parameters = HashMap::new();
-        
+
         // Initialize meta-learning parameters
         meta_parameters.insert(
             "meta_weights".to_string(),
-            Array2::from_shape_fn((512, 512), |_| (rand::random::<f32>() - 0.5) * 0.1)
+            Array2::from_shape_fn((512, 512), |_| (rand::random::<f32>() - 0.5) * 0.1),
         );
-        
+
         task_parameters.insert(
             "adaptation_weights".to_string(),
-            Array2::from_shape_fn((256, 512), |_| (rand::random::<f32>() - 0.5) * 0.1)
+            Array2::from_shape_fn((256, 512), |_| (rand::random::<f32>() - 0.5) * 0.1),
         );
-        
+
         Self {
             config,
             meta_parameters,
             task_parameters,
         }
     }
-    
+
     /// Adapt to new task with few examples
     pub fn adapt_to_task(
         &mut self,
@@ -1437,14 +1447,14 @@ impl MetaLearner {
             _ => self.maml_adaptation(support_set),
         }
     }
-    
+
     /// MAML adaptation
     fn maml_adaptation(
         &mut self,
         support_set: &[(Array1<f32>, Array1<f32>)],
     ) -> Result<HashMap<String, Array2<f32>>> {
         let mut adapted_params = self.meta_parameters.clone();
-        
+
         // Perform gradient steps on support set
         for _step in 0..self.config.adaptation_steps {
             // Simplified gradient computation
@@ -1452,16 +1462,16 @@ impl MetaLearner {
                 if let Some(weights) = adapted_params.get_mut("meta_weights") {
                     // Compute forward pass
                     let _output = weights.dot(input);
-                    
+
                     // Simplified gradient update (in real implementation would compute actual gradients)
                     *weights = &*weights * 0.99; // Simple decay as placeholder
                 }
             }
         }
-        
+
         Ok(adapted_params)
     }
-    
+
     /// Prototypical Networks adaptation
     fn prototypical_adaptation(
         &self,
@@ -1470,26 +1480,28 @@ impl MetaLearner {
         // Compute prototypes for each class
         let mut prototypes = HashMap::new();
         let mut class_counts = HashMap::new();
-        
+
         for (input, target) in support_set {
             // Convert target to class ID (simplified)
             let class_id = target[0] as i32;
-            
+
             let class_key = class_id.to_string();
-            let prototype = prototypes.entry(class_key.clone()).or_insert(Array1::zeros(input.len()));
+            let prototype = prototypes
+                .entry(class_key.clone())
+                .or_insert(Array1::zeros(input.len()));
             let count = class_counts.entry(class_key).or_insert(0);
-            
+
             *prototype = &*prototype + input;
             *count += 1;
         }
-        
+
         // Average prototypes
         for (class_key, count) in class_counts {
             if let Some(prototype) = prototypes.get_mut(&class_key) {
                 *prototype /= count as f32;
             }
         }
-        
+
         // Return adapted parameters (simplified)
         Ok(self.meta_parameters.clone())
     }
@@ -1499,13 +1511,13 @@ impl VisionLanguageGraphModel {
     /// Create new vision-language-graph model
     pub fn new(config: VisionLanguageGraphConfig) -> Self {
         let model_id = Uuid::new_v4();
-        
+
         let vision_encoder = VisionEncoder::new(config.vision_config.clone());
         let language_encoder = LanguageEncoder::new(config.language_config.clone());
         let graph_encoder = GraphEncoder::new(config.graph_config.clone());
         let multimodal_transformer = MultiModalTransformer::new(config.transformer_config.clone());
         let meta_learner = MetaLearner::new(config.meta_learning_config.clone());
-        
+
         Self {
             config,
             model_id,
@@ -1522,7 +1534,7 @@ impl VisionLanguageGraphModel {
             is_trained: false,
         }
     }
-    
+
     /// Generate unified multi-modal embedding
     pub async fn generate_unified_embedding(
         &mut self,
@@ -1531,54 +1543,60 @@ impl VisionLanguageGraphModel {
         graph_data: Option<(&Array2<f32>, &Array2<f32>, &Array2<f32>)>,
     ) -> Result<Array1<f32>> {
         let mut embeddings = Vec::new();
-        
+
         // Vision embedding
         let vision_emb = if let Some(img) = image {
             let emb = self.vision_encoder.encode_image(img)?;
-            self.vision_embeddings.insert("current_image".to_string(), emb.clone());
+            self.vision_embeddings
+                .insert("current_image".to_string(), emb.clone());
             emb
         } else {
             Array1::zeros(self.config.vision_config.vision_dim)
         };
         embeddings.push(vision_emb.clone());
-        
+
         // Language embedding
         let language_emb = if let Some(txt) = text {
             let emb = self.language_encoder.encode_text(txt)?;
-            self.language_embeddings.insert("current_text".to_string(), emb.clone());
+            self.language_embeddings
+                .insert("current_text".to_string(), emb.clone());
             emb
         } else {
             Array1::zeros(self.config.language_config.language_dim)
         };
         embeddings.push(language_emb.clone());
-        
+
         // Graph embedding
         let graph_emb = if let Some((nodes, edges, adj)) = graph_data {
             let emb = self.graph_encoder.encode_graph(nodes, edges, adj)?;
-            self.graph_embeddings.insert("current_graph".to_string(), emb.clone());
+            self.graph_embeddings
+                .insert("current_graph".to_string(), emb.clone());
             emb
         } else {
             Array1::zeros(self.config.graph_config.graph_dim)
         };
         embeddings.push(graph_emb.clone());
-        
+
         // Fuse embeddings
-        let unified_emb = self.multimodal_transformer.fuse_embeddings(
-            &vision_emb,
-            &language_emb, 
-            &graph_emb,
-        )?;
-        
-        self.unified_embeddings.insert("current_unified".to_string(), unified_emb.clone());
-        
+        let unified_emb =
+            self.multimodal_transformer
+                .fuse_embeddings(&vision_emb, &language_emb, &graph_emb)?;
+
+        self.unified_embeddings
+            .insert("current_unified".to_string(), unified_emb.clone());
+
         Ok(unified_emb)
     }
-    
+
     /// Zero-shot prediction
-    pub fn zero_shot_predict(&self, query_embedding: &Array1<f32>, class_prototypes: &HashMap<String, Array1<f32>>) -> Result<String> {
+    pub fn zero_shot_predict(
+        &self,
+        query_embedding: &Array1<f32>,
+        class_prototypes: &HashMap<String, Array1<f32>>,
+    ) -> Result<String> {
         let mut best_class = String::new();
         let mut best_score = f32::NEG_INFINITY;
-        
+
         for (class_name, prototype) in class_prototypes {
             let score = self.cosine_similarity(query_embedding, prototype);
             if score > best_score {
@@ -1586,10 +1604,10 @@ impl VisionLanguageGraphModel {
                 best_class = class_name.clone();
             }
         }
-        
+
         Ok(best_class)
     }
-    
+
     /// Few-shot adaptation
     pub fn few_shot_adapt(
         &mut self,
@@ -1597,28 +1615,30 @@ impl VisionLanguageGraphModel {
         query_examples: &[Array1<f32>],
     ) -> Result<Vec<String>> {
         // Convert support examples to meta-learning format
-        let support_set: Vec<(Array1<f32>, Array1<f32>)> = support_examples.iter()
+        let support_set: Vec<(Array1<f32>, Array1<f32>)> = support_examples
+            .iter()
             .map(|(emb, label)| {
                 let label_emb = Array1::from_vec(vec![label.len() as f32]); // Simplified label encoding
                 (emb.clone(), label_emb)
             })
             .collect();
-        
-        let query_set: Vec<(Array1<f32>, Array1<f32>)> = query_examples.iter()
+
+        let query_set: Vec<(Array1<f32>, Array1<f32>)> = query_examples
+            .iter()
             .map(|emb| (emb.clone(), Array1::zeros(1)))
             .collect();
-        
+
         // Adapt meta-learner
         let _adapted_params = self.meta_learner.adapt_to_task(&support_set, &query_set)?;
-        
+
         // Make predictions on query set
         let mut predictions = Vec::new();
-        
+
         for query_emb in query_examples {
             // Find nearest support example
             let mut best_label = String::new();
             let mut best_distance = f32::INFINITY;
-            
+
             for (support_emb, label) in support_examples {
                 let distance = self.euclidean_distance(query_emb, support_emb);
                 if distance < best_distance {
@@ -1626,26 +1646,26 @@ impl VisionLanguageGraphModel {
                     best_label = label.clone();
                 }
             }
-            
+
             predictions.push(best_label);
         }
-        
+
         Ok(predictions)
     }
-    
+
     /// Cosine similarity
     fn cosine_similarity(&self, a: &Array1<f32>, b: &Array1<f32>) -> f32 {
         let dot_product = a.dot(b);
         let norm_a = a.dot(a).sqrt();
         let norm_b = b.dot(b).sqrt();
-        
+
         if norm_a > 0.0 && norm_b > 0.0 {
             dot_product / (norm_a * norm_b)
         } else {
             0.0
         }
     }
-    
+
     /// Euclidean distance
     fn euclidean_distance(&self, a: &Array1<f32>, b: &Array1<f32>) -> f32 {
         let diff = a - b;
@@ -1709,22 +1729,22 @@ impl EmbeddingModel for VisionLanguageGraphModel {
     async fn train(&mut self, epochs: Option<usize>) -> Result<TrainingStats> {
         let epochs = epochs.unwrap_or(self.config.base_config.max_epochs);
         let start_time = std::time::Instant::now();
-        
+
         let mut loss_history = Vec::new();
-        
+
         for epoch in 0..epochs {
             // Simulate multi-modal training
             let epoch_loss = self.train_epoch().await?;
             loss_history.push(epoch_loss);
-            
+
             if epoch > 10 && epoch_loss < 1e-4 {
                 break;
             }
         }
-        
+
         let training_time = start_time.elapsed().as_secs_f64();
         let final_loss = loss_history.last().copied().unwrap_or(0.0);
-        
+
         let stats = TrainingStats {
             epochs_completed: loss_history.len(),
             final_loss,
@@ -1732,10 +1752,10 @@ impl EmbeddingModel for VisionLanguageGraphModel {
             convergence_achieved: final_loss < 1e-4,
             loss_history,
         };
-        
+
         self.training_stats = Some(stats.clone());
         self.is_trained = true;
-        
+
         Ok(stats)
     }
 
@@ -1759,62 +1779,77 @@ impl EmbeddingModel for VisionLanguageGraphModel {
         let subject_emb = self.get_entity_embedding(subject)?;
         let predicate_emb = self.get_relation_embedding(predicate)?;
         let object_emb = self.get_entity_embedding(object)?;
-        
+
         // Simple TransE-style scoring
         let subject_arr = Array1::from_vec(subject_emb.values);
         let predicate_arr = Array1::from_vec(predicate_emb.values);
         let object_arr = Array1::from_vec(object_emb.values);
-        
+
         let predicted = &subject_arr + &predicate_arr;
         let diff = &predicted - &object_arr;
         let distance = diff.dot(&diff).sqrt();
-        
+
         Ok(-distance as f64)
     }
 
-    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
-        
+
         for entity in self.unified_embeddings.keys() {
             if entity != subject {
                 let score = self.score_triple(subject, predicate, entity)?;
                 scores.push((entity.clone(), score));
             }
         }
-        
+
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
-    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
-        
+
         for entity in self.unified_embeddings.keys() {
             if entity != object {
                 let score = self.score_triple(entity, predicate, object)?;
                 scores.push((entity.clone(), score));
             }
         }
-        
+
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
-    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
-        
+
         for relation in self.unified_embeddings.keys() {
             let score = self.score_triple(subject, relation, object)?;
             scores.push((relation.clone(), score));
         }
-        
+
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
@@ -1835,7 +1870,11 @@ impl EmbeddingModel for VisionLanguageGraphModel {
             is_trained: self.is_trained,
             model_type: self.model_type().to_string(),
             creation_time: Utc::now(),
-            last_training_time: if self.is_trained { Some(Utc::now()) } else { None },
+            last_training_time: if self.is_trained {
+                Some(Utc::now())
+            } else {
+                None
+            },
         }
     }
 
@@ -1862,12 +1901,12 @@ impl EmbeddingModel for VisionLanguageGraphModel {
 
     async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut results = Vec::new();
-        
+
         for text in texts {
             let embedding = self.language_encoder.encode_text(text)?;
             results.push(embedding.to_vec());
         }
-        
+
         Ok(results)
     }
 }
@@ -1880,9 +1919,9 @@ impl VisionLanguageGraphModel {
         let language_loss = 0.1 * rand::random::<f64>();
         let graph_loss = 0.1 * rand::random::<f64>();
         let fusion_loss = 0.1 * rand::random::<f64>();
-        
+
         let total_loss = vision_loss + language_loss + graph_loss + fusion_loss;
-        
+
         Ok(total_loss)
     }
 }
@@ -1943,10 +1982,10 @@ mod tests {
     fn test_vision_encoder_image_encoding() {
         let config = VisionEncoderConfig::default();
         let encoder = VisionEncoder::new(config);
-        
+
         let image = Array3::from_shape_fn((224, 224, 3), |_| rand::random::<f32>());
         let embedding = encoder.encode_image(&image).unwrap();
-        
+
         assert_eq!(embedding.len(), encoder.config.vision_dim);
     }
 
@@ -1954,10 +1993,10 @@ mod tests {
     fn test_language_encoder_text_encoding() {
         let config = LanguageEncoderConfig::default();
         let encoder = LanguageEncoder::new(config);
-        
+
         let text = "Hello world, this is a test";
         let embedding = encoder.encode_text(text).unwrap();
-        
+
         assert_eq!(embedding.len(), encoder.config.language_dim);
     }
 
@@ -1967,13 +2006,15 @@ mod tests {
         let node_dim = config.node_dim;
         let edge_dim = config.edge_dim;
         let encoder = GraphEncoder::new(config);
-        
+
         let node_features = Array2::from_shape_fn((5, node_dim), |_| rand::random::<f32>());
         let edge_features = Array2::from_shape_fn((10, edge_dim), |_| rand::random::<f32>());
         let adjacency = Array2::eye(5);
-        
-        let embedding = encoder.encode_graph(&node_features, &edge_features, &adjacency).unwrap();
-        
+
+        let embedding = encoder
+            .encode_graph(&node_features, &edge_features, &adjacency)
+            .unwrap();
+
         assert_eq!(embedding.len(), encoder.config.graph_dim);
     }
 
@@ -1981,19 +2022,22 @@ mod tests {
     async fn test_unified_embedding_generation() {
         let config = VisionLanguageGraphConfig::default();
         let mut model = VisionLanguageGraphModel::new(config);
-        
+
         let image = Array3::from_shape_fn((224, 224, 3), |_| rand::random::<f32>());
         let text = "A beautiful landscape with mountains";
         let node_features = Array2::from_shape_fn((3, 256), |_| rand::random::<f32>());
         let edge_features = Array2::from_shape_fn((6, 128), |_| rand::random::<f32>());
         let adjacency = Array2::eye(3);
-        
-        let unified_embedding = model.generate_unified_embedding(
-            Some(&image),
-            Some(text),
-            Some((&node_features, &edge_features, &adjacency))
-        ).await.unwrap();
-        
+
+        let unified_embedding = model
+            .generate_unified_embedding(
+                Some(&image),
+                Some(text),
+                Some((&node_features, &edge_features, &adjacency)),
+            )
+            .await
+            .unwrap();
+
         assert!(unified_embedding.len() > 0);
         assert_eq!(model.vision_embeddings.len(), 1);
         assert_eq!(model.language_embeddings.len(), 1);
@@ -2005,13 +2049,19 @@ mod tests {
     fn test_zero_shot_prediction() {
         let config = VisionLanguageGraphConfig::default();
         let model = VisionLanguageGraphModel::new(config);
-        
+
         let query = Array1::from_shape_fn(768, |_| rand::random::<f32>());
-        
+
         let mut prototypes = HashMap::new();
-        prototypes.insert("class1".to_string(), Array1::from_shape_fn(768, |_| rand::random::<f32>()));
-        prototypes.insert("class2".to_string(), Array1::from_shape_fn(768, |_| rand::random::<f32>()));
-        
+        prototypes.insert(
+            "class1".to_string(),
+            Array1::from_shape_fn(768, |_| rand::random::<f32>()),
+        );
+        prototypes.insert(
+            "class2".to_string(),
+            Array1::from_shape_fn(768, |_| rand::random::<f32>()),
+        );
+
         let prediction = model.zero_shot_predict(&query, &prototypes).unwrap();
         assert!(prototypes.contains_key(&prediction));
     }
@@ -2020,18 +2070,26 @@ mod tests {
     fn test_few_shot_adaptation() {
         let config = VisionLanguageGraphConfig::default();
         let mut model = VisionLanguageGraphModel::new(config);
-        
+
         let support_examples = vec![
-            (Array1::from_shape_fn(512, |_| rand::random::<f32>()), "cat".to_string()),
-            (Array1::from_shape_fn(512, |_| rand::random::<f32>()), "dog".to_string()),
+            (
+                Array1::from_shape_fn(512, |_| rand::random::<f32>()),
+                "cat".to_string(),
+            ),
+            (
+                Array1::from_shape_fn(512, |_| rand::random::<f32>()),
+                "dog".to_string(),
+            ),
         ];
-        
+
         let query_examples = vec![
             Array1::from_shape_fn(512, |_| rand::random::<f32>()),
             Array1::from_shape_fn(512, |_| rand::random::<f32>()),
         ];
-        
-        let predictions = model.few_shot_adapt(&support_examples, &query_examples).unwrap();
+
+        let predictions = model
+            .few_shot_adapt(&support_examples, &query_examples)
+            .unwrap();
         assert_eq!(predictions.len(), 2);
     }
 
@@ -2039,15 +2097,23 @@ mod tests {
     fn test_meta_learner_adaptation() {
         let config = MetaLearningConfig::default();
         let mut meta_learner = MetaLearner::new(config);
-        
+
         let support_set = vec![
-            (Array1::from_shape_fn(512, |_| rand::random::<f32>()), Array1::from_vec(vec![1.0])),
-            (Array1::from_shape_fn(512, |_| rand::random::<f32>()), Array1::from_vec(vec![0.0])),
+            (
+                Array1::from_shape_fn(512, |_| rand::random::<f32>()),
+                Array1::from_vec(vec![1.0]),
+            ),
+            (
+                Array1::from_shape_fn(512, |_| rand::random::<f32>()),
+                Array1::from_vec(vec![0.0]),
+            ),
         ];
-        
+
         let query_set = vec![];
-        
-        let adapted_params = meta_learner.adapt_to_task(&support_set, &query_set).unwrap();
+
+        let adapted_params = meta_learner
+            .adapt_to_task(&support_set, &query_set)
+            .unwrap();
         assert!(!adapted_params.is_empty());
     }
 
@@ -2055,7 +2121,7 @@ mod tests {
     async fn test_vision_language_graph_training() {
         let config = VisionLanguageGraphConfig::default();
         let mut model = VisionLanguageGraphModel::new(config);
-        
+
         let stats = model.train(Some(3)).await.unwrap();
         assert_eq!(stats.epochs_completed, 3);
         assert!(model.is_trained());
@@ -2066,10 +2132,10 @@ mod tests {
         let config = VisionLanguageGraphConfig::default();
         let expected_dim = config.language_config.language_dim;
         let model = VisionLanguageGraphModel::new(config);
-        
+
         let texts = vec!["hello world".to_string(), "test encoding".to_string()];
         let embeddings = model.encode(&texts).await.unwrap();
-        
+
         assert_eq!(embeddings.len(), 2);
         assert_eq!(embeddings[0].len(), expected_dim);
     }

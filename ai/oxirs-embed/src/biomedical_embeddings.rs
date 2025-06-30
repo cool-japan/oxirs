@@ -1711,7 +1711,7 @@ impl PublicationNetworkAnalyzer {
         let config = SpecializedTextEmbedding::scibert_config();
         let mut model = SpecializedTextEmbedding::new(config);
         let embedding_array = model.encode_text(&combined_text).await?;
-        
+
         // Convert ndarray to Vector
         let embedding = Vector::new(embedding_array.to_vec());
 
@@ -1825,7 +1825,12 @@ impl PublicationNetworkAnalyzer {
         match (emb1, emb2) {
             (Some(e1), Some(e2)) => {
                 // Calculate cosine similarity
-                let dot_product: f32 = e1.values.iter().zip(e2.values.iter()).map(|(a, b)| a * b).sum();
+                let dot_product: f32 = e1
+                    .values
+                    .iter()
+                    .zip(e2.values.iter())
+                    .map(|(a, b)| a * b)
+                    .sum();
                 let norm1: f32 = e1.values.iter().map(|x| x * x).sum::<f32>().sqrt();
                 let norm2: f32 = e2.values.iter().map(|x| x * x).sum::<f32>().sqrt();
 

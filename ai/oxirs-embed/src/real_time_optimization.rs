@@ -6,13 +6,13 @@
 //! online learning, and intelligent resource management.
 
 use crate::{EmbeddingModel, Vector};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Real-time optimization engine that continuously improves model performance
@@ -167,7 +167,7 @@ impl AdaptiveLearningRateScheduler {
             strategy,
         }
     }
-    
+
     /// Adjust learning rate based on current performance
     pub fn adjust_learning_rate(
         &mut self,
@@ -187,18 +187,16 @@ impl AdaptiveLearningRateScheduler {
             LearningRateStrategy::PerformanceBased => {
                 self.performance_based_adjustment(current_metrics, recent_metrics)?
             }
-            LearningRateStrategy::OneCycle => {
-                self.one_cycle_adjustment(current_metrics)?
-            }
+            LearningRateStrategy::OneCycle => self.one_cycle_adjustment(current_metrics)?,
         };
-        
+
         // Record adjustment
         self.record_adjustment(new_lr, "Adaptive adjustment".to_string(), current_metrics);
-        
+
         self.current_lr = new_lr;
         Ok(new_lr)
     }
-    
+
     fn adaptive_gradient_adjustment(
         &self,
         current_metrics: &PerformanceMetrics,
@@ -207,10 +205,10 @@ impl AdaptiveLearningRateScheduler {
         if recent_metrics.len() < 2 {
             return Ok(self.current_lr);
         }
-        
+
         // Calculate gradient of loss over recent steps
         let loss_gradient = self.calculate_loss_gradient(recent_metrics);
-        
+
         // Adjust learning rate based on gradient magnitude
         let adjustment_factor = if loss_gradient.abs() < 0.001 {
             1.1 // Increase LR if loss is plateauing
@@ -219,29 +217,30 @@ impl AdaptiveLearningRateScheduler {
         } else {
             1.05 // Slightly increase LR if loss is decreasing
         };
-        
+
         Ok(self.current_lr * adjustment_factor)
     }
-    
+
     fn cyclical_lr_adjustment(&self, current_metrics: &PerformanceMetrics) -> Result<f32> {
         // Implement cyclical learning rate based on time
         let cycle_length = 1000; // steps
         let step = current_metrics.timestamp.timestamp() as f32;
         let cycle_position = (step % cycle_length as f32) / cycle_length as f32;
-        
+
         let min_lr = self.base_lr * 0.1;
         let max_lr = self.base_lr * 10.0;
-        
-        let lr = min_lr + (max_lr - min_lr) * (1.0 + (cycle_position * 2.0 * std::f32::consts::PI).cos()) / 2.0;
+
+        let lr = min_lr
+            + (max_lr - min_lr) * (1.0 + (cycle_position * 2.0 * std::f32::consts::PI).cos()) / 2.0;
         Ok(lr)
     }
-    
+
     fn warmup_cosine_adjustment(&self, current_metrics: &PerformanceMetrics) -> Result<f32> {
         // Implement warmup followed by cosine annealing
         let warmup_steps = 1000.0;
         let total_steps = 10000.0;
         let step = current_metrics.timestamp.timestamp() as f32;
-        
+
         if step < warmup_steps {
             // Linear warmup
             Ok(self.base_lr * step / warmup_steps)
@@ -252,7 +251,7 @@ impl AdaptiveLearningRateScheduler {
             Ok(lr)
         }
     }
-    
+
     fn performance_based_adjustment(
         &self,
         current_metrics: &PerformanceMetrics,
@@ -261,14 +260,12 @@ impl AdaptiveLearningRateScheduler {
         if recent_metrics.len() < 5 {
             return Ok(self.current_lr);
         }
-        
+
         // Check if performance is improving
-        let recent_losses: Vec<f32> = recent_metrics.iter()
-            .map(|m| m.training_loss)
-            .collect();
-        
+        let recent_losses: Vec<f32> = recent_metrics.iter().map(|m| m.training_loss).collect();
+
         let improving = self.is_performance_improving(&recent_losses);
-        
+
         if improving {
             // Performance is improving, slightly increase LR
             Ok(self.current_lr * 1.02)
@@ -277,15 +274,15 @@ impl AdaptiveLearningRateScheduler {
             Ok(self.current_lr * 0.95)
         }
     }
-    
+
     fn one_cycle_adjustment(&self, current_metrics: &PerformanceMetrics) -> Result<f32> {
         // Implement one-cycle learning rate policy
         let cycle_length = 5000.0;
         let step = current_metrics.timestamp.timestamp() as f32;
         let cycle_position = step % cycle_length / cycle_length;
-        
+
         let max_lr = self.base_lr * 10.0;
-        
+
         if cycle_position < 0.3 {
             // Ascending phase
             let progress = cycle_position / 0.3;
@@ -300,29 +297,29 @@ impl AdaptiveLearningRateScheduler {
             Ok(self.base_lr * (1.0 - 0.9 * progress))
         }
     }
-    
+
     fn calculate_loss_gradient(&self, recent_metrics: &[PerformanceMetrics]) -> f32 {
         if recent_metrics.len() < 2 {
             return 0.0;
         }
-        
+
         let recent_loss = recent_metrics[recent_metrics.len() - 1].training_loss;
         let previous_loss = recent_metrics[recent_metrics.len() - 2].training_loss;
-        
+
         recent_loss - previous_loss
     }
-    
+
     fn is_performance_improving(&self, recent_losses: &[f32]) -> bool {
         if recent_losses.len() < 3 {
             return false;
         }
-        
+
         let recent_avg = recent_losses[recent_losses.len() - 3..].iter().sum::<f32>() / 3.0;
         let earlier_avg = recent_losses[0..3].iter().sum::<f32>() / 3.0;
-        
+
         recent_avg < earlier_avg
     }
-    
+
     fn record_adjustment(
         &mut self,
         new_lr: f32,
@@ -337,9 +334,9 @@ impl AdaptiveLearningRateScheduler {
             performance_before: current_metrics.training_loss,
             performance_after: None,
         };
-        
+
         self.adjustment_history.push_back(adjustment);
-        
+
         // Keep only recent adjustments
         while self.adjustment_history.len() > 100 {
             self.adjustment_history.pop_front();
@@ -392,25 +389,32 @@ pub struct ArchitectureSearchResult {
 }
 
 impl DynamicArchitectureOptimizer {
-    pub fn new(initial_config: ArchitectureConfig, strategy: ArchitectureOptimizationStrategy) -> Self {
+    pub fn new(
+        initial_config: ArchitectureConfig,
+        strategy: ArchitectureOptimizationStrategy,
+    ) -> Self {
         Self {
             current_architecture: initial_config,
             search_history: Vec::new(),
             strategy,
         }
     }
-    
+
     /// Optimize architecture based on current performance
     pub async fn optimize_architecture(
         &mut self,
         current_metrics: &PerformanceMetrics,
         model: &dyn EmbeddingModel,
     ) -> Result<ArchitectureConfig> {
-        info!("Starting architecture optimization with strategy: {:?}", self.strategy);
-        
+        info!(
+            "Starting architecture optimization with strategy: {:?}",
+            self.strategy
+        );
+
         let new_architecture = match self.strategy {
             ArchitectureOptimizationStrategy::NeuralArchitectureSearch => {
-                self.neural_architecture_search(current_metrics, model).await?
+                self.neural_architecture_search(current_metrics, model)
+                    .await?
             }
             ArchitectureOptimizationStrategy::GradientBasedSearch => {
                 self.gradient_based_search(current_metrics, model).await?
@@ -419,29 +423,32 @@ impl DynamicArchitectureOptimizer {
                 self.evolutionary_search(current_metrics, model).await?
             }
             ArchitectureOptimizationStrategy::HyperparameterOptimization => {
-                self.hyperparameter_optimization(current_metrics, model).await?
+                self.hyperparameter_optimization(current_metrics, model)
+                    .await?
             }
             ArchitectureOptimizationStrategy::PruningAndGrowth => {
                 self.pruning_and_growth(current_metrics, model).await?
             }
         };
-        
+
         // Evaluate new architecture
         let performance = self.evaluate_architecture(&new_architecture, model).await?;
-        
+
         // Record search result
         self.record_search_result(new_architecture.clone(), performance);
-        
+
         // Update current architecture if improvement is significant
         if performance > current_metrics.validation_accuracy + 0.01 {
-            info!("Architecture optimization successful: {:.3} -> {:.3}", 
-                  current_metrics.validation_accuracy, performance);
+            info!(
+                "Architecture optimization successful: {:.3} -> {:.3}",
+                current_metrics.validation_accuracy, performance
+            );
             self.current_architecture = new_architecture.clone();
         }
-        
+
         Ok(new_architecture)
     }
-    
+
     async fn neural_architecture_search(
         &self,
         current_metrics: &PerformanceMetrics,
@@ -449,13 +456,15 @@ impl DynamicArchitectureOptimizer {
     ) -> Result<ArchitectureConfig> {
         // Implement neural architecture search
         let mut new_config = self.current_architecture.clone();
-        
+
         // Mutate embedding dimension
         if rand::random::<f32>() < 0.3 {
             let adjustment = if rand::random::<bool>() { 1.1 } else { 0.9 };
-            new_config.embedding_dim = ((new_config.embedding_dim as f32 * adjustment) as usize).max(32).min(1024);
+            new_config.embedding_dim = ((new_config.embedding_dim as f32 * adjustment) as usize)
+                .max(32)
+                .min(1024);
         }
-        
+
         // Mutate number of layers
         if rand::random::<f32>() < 0.2 {
             new_config.num_layers = if rand::random::<bool>() {
@@ -464,18 +473,20 @@ impl DynamicArchitectureOptimizer {
                 (new_config.num_layers.saturating_sub(1)).max(1)
             };
         }
-        
+
         // Mutate hidden dimensions
         for hidden_dim in &mut new_config.hidden_dims {
             if rand::random::<f32>() < 0.2 {
                 let adjustment = 0.8 + rand::random::<f32>() * 0.4; // 0.8 to 1.2
-                *hidden_dim = ((*hidden_dim as f32 * adjustment) as usize).max(16).min(2048);
+                *hidden_dim = ((*hidden_dim as f32 * adjustment) as usize)
+                    .max(16)
+                    .min(2048);
             }
         }
-        
+
         Ok(new_config)
     }
-    
+
     async fn gradient_based_search(
         &self,
         current_metrics: &PerformanceMetrics,
@@ -483,7 +494,7 @@ impl DynamicArchitectureOptimizer {
     ) -> Result<ArchitectureConfig> {
         // Implement gradient-based architecture search
         let mut new_config = self.current_architecture.clone();
-        
+
         // Use gradient information to guide architecture changes
         // This is a simplified implementation
         if current_metrics.training_loss > 0.5 {
@@ -497,10 +508,10 @@ impl DynamicArchitectureOptimizer {
                 *dropout_rate = (*dropout_rate + 0.1).min(0.5);
             }
         }
-        
+
         Ok(new_config)
     }
-    
+
     async fn evolutionary_search(
         &self,
         current_metrics: &PerformanceMetrics,
@@ -508,27 +519,31 @@ impl DynamicArchitectureOptimizer {
     ) -> Result<ArchitectureConfig> {
         // Implement evolutionary architecture search
         let mut population = self.generate_architecture_population(5);
-        
+
         // Evaluate population
         let mut fitness_scores = Vec::new();
         for config in &population {
             let fitness = self.evaluate_architecture(config, model).await?;
             fitness_scores.push(fitness);
         }
-        
+
         // Select best configurations
-        let mut indexed_scores: Vec<(usize, f32)> = fitness_scores.iter().enumerate().map(|(i, &s)| (i, s)).collect();
+        let mut indexed_scores: Vec<(usize, f32)> = fitness_scores
+            .iter()
+            .enumerate()
+            .map(|(i, &s)| (i, s))
+            .collect();
         indexed_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        
+
         // Crossover and mutation
         let parent1 = &population[indexed_scores[0].0];
         let parent2 = &population[indexed_scores[1].0];
         let offspring = self.crossover_architectures(parent1, parent2);
         let mutated_offspring = self.mutate_architecture(offspring);
-        
+
         Ok(mutated_offspring)
     }
-    
+
     async fn hyperparameter_optimization(
         &self,
         current_metrics: &PerformanceMetrics,
@@ -536,12 +551,12 @@ impl DynamicArchitectureOptimizer {
     ) -> Result<ArchitectureConfig> {
         // Implement hyperparameter optimization
         let mut new_config = self.current_architecture.clone();
-        
+
         // Optimize dropout rates
         for dropout_rate in &mut new_config.dropout_rates {
             *dropout_rate = rand::random::<f32>() * 0.5; // 0.0 to 0.5
         }
-        
+
         // Optimize layer dimensions using Bayesian optimization principles
         for hidden_dim in &mut new_config.hidden_dims {
             let log_dim = (*hidden_dim as f32).ln();
@@ -549,10 +564,10 @@ impl DynamicArchitectureOptimizer {
             let new_log_dim = log_dim + noise;
             *hidden_dim = new_log_dim.exp() as usize;
         }
-        
+
         Ok(new_config)
     }
-    
+
     async fn pruning_and_growth(
         &self,
         current_metrics: &PerformanceMetrics,
@@ -560,11 +575,11 @@ impl DynamicArchitectureOptimizer {
     ) -> Result<ArchitectureConfig> {
         // Implement pruning and growth strategy
         let mut new_config = self.current_architecture.clone();
-        
+
         // Prune if model is too complex
         if current_metrics.model_complexity > 0.8 {
             new_config.embedding_dim = (new_config.embedding_dim as f32 * 0.9) as usize;
-            
+
             // Remove smallest hidden layers
             new_config.hidden_dims.sort();
             if new_config.hidden_dims.len() > 2 {
@@ -572,11 +587,11 @@ impl DynamicArchitectureOptimizer {
                 new_config.num_layers = new_config.num_layers.saturating_sub(1);
             }
         }
-        
+
         // Grow if model is underperforming
         if current_metrics.validation_accuracy < 0.6 {
             new_config.embedding_dim = (new_config.embedding_dim as f32 * 1.1) as usize;
-            
+
             // Add new hidden layer
             if new_config.num_layers < 6 {
                 let new_hidden_dim = new_config.embedding_dim / 2;
@@ -584,75 +599,99 @@ impl DynamicArchitectureOptimizer {
                 new_config.num_layers += 1;
             }
         }
-        
+
         Ok(new_config)
     }
-    
+
     fn generate_architecture_population(&self, size: usize) -> Vec<ArchitectureConfig> {
         let mut population = Vec::new();
-        
+
         for _ in 0..size {
             let mut config = self.current_architecture.clone();
-            
+
             // Random mutations
-            config.embedding_dim = (64..=512).step_by(32).collect::<Vec<_>>()[rand::random::<usize>() % 15];
+            config.embedding_dim =
+                (64..=512).step_by(32).collect::<Vec<_>>()[rand::random::<usize>() % 15];
             config.num_layers = (1..=6).collect::<Vec<_>>()[rand::random::<usize>() % 6];
-            
+
             // Generate random hidden dimensions
             config.hidden_dims = (0..config.num_layers)
                 .map(|_| (32..=1024).step_by(32).collect::<Vec<_>>()[rand::random::<usize>() % 31])
                 .collect();
-            
+
             population.push(config);
         }
-        
+
         population
     }
-    
+
     fn crossover_architectures(
         &self,
         parent1: &ArchitectureConfig,
         parent2: &ArchitectureConfig,
     ) -> ArchitectureConfig {
         ArchitectureConfig {
-            embedding_dim: if rand::random::<bool>() { parent1.embedding_dim } else { parent2.embedding_dim },
-            num_layers: if rand::random::<bool>() { parent1.num_layers } else { parent2.num_layers },
-            hidden_dims: parent1.hidden_dims.iter()
+            embedding_dim: if rand::random::<bool>() {
+                parent1.embedding_dim
+            } else {
+                parent2.embedding_dim
+            },
+            num_layers: if rand::random::<bool>() {
+                parent1.num_layers
+            } else {
+                parent2.num_layers
+            },
+            hidden_dims: parent1
+                .hidden_dims
+                .iter()
                 .zip(parent2.hidden_dims.iter())
                 .map(|(d1, d2)| if rand::random::<bool>() { *d1 } else { *d2 })
                 .collect(),
-            activations: if rand::random::<bool>() { parent1.activations.clone() } else { parent2.activations.clone() },
-            dropout_rates: parent1.dropout_rates.iter()
+            activations: if rand::random::<bool>() {
+                parent1.activations.clone()
+            } else {
+                parent2.activations.clone()
+            },
+            dropout_rates: parent1
+                .dropout_rates
+                .iter()
                 .zip(parent2.dropout_rates.iter())
                 .map(|(r1, r2)| if rand::random::<bool>() { *r1 } else { *r2 })
                 .collect(),
-            normalizations: if rand::random::<bool>() { parent1.normalizations.clone() } else { parent2.normalizations.clone() },
+            normalizations: if rand::random::<bool>() {
+                parent1.normalizations.clone()
+            } else {
+                parent2.normalizations.clone()
+            },
         }
     }
-    
+
     fn mutate_architecture(&self, mut config: ArchitectureConfig) -> ArchitectureConfig {
         // Mutate embedding dimension
         if rand::random::<f32>() < 0.3 {
-            config.embedding_dim = (config.embedding_dim as f32 * (0.8 + rand::random::<f32>() * 0.4)) as usize;
+            config.embedding_dim =
+                (config.embedding_dim as f32 * (0.8 + rand::random::<f32>() * 0.4)) as usize;
         }
-        
+
         // Mutate hidden dimensions
         for hidden_dim in &mut config.hidden_dims {
             if rand::random::<f32>() < 0.2 {
                 *hidden_dim = (*hidden_dim as f32 * (0.8 + rand::random::<f32>() * 0.4)) as usize;
             }
         }
-        
+
         // Mutate dropout rates
         for dropout_rate in &mut config.dropout_rates {
             if rand::random::<f32>() < 0.2 {
-                *dropout_rate = (*dropout_rate + (rand::random::<f32>() - 0.5) * 0.1).max(0.0).min(0.5);
+                *dropout_rate = (*dropout_rate + (rand::random::<f32>() - 0.5) * 0.1)
+                    .max(0.0)
+                    .min(0.5);
             }
         }
-        
+
         config
     }
-    
+
     async fn evaluate_architecture(
         &self,
         config: &ArchitectureConfig,
@@ -661,13 +700,14 @@ impl DynamicArchitectureOptimizer {
         // Evaluate architecture performance
         // This would involve training a model with the given architecture
         // For now, return a simplified score based on architecture properties
-        
-        let complexity_penalty = (config.embedding_dim as f32 / 512.0 + config.num_layers as f32 / 6.0) * 0.1;
+
+        let complexity_penalty =
+            (config.embedding_dim as f32 / 512.0 + config.num_layers as f32 / 6.0) * 0.1;
         let base_score = 0.7 + rand::random::<f32>() * 0.2;
-        
+
         Ok((base_score - complexity_penalty).max(0.0).min(1.0))
     }
-    
+
     fn record_search_result(&mut self, architecture: ArchitectureConfig, performance: f32) {
         let result = ArchitectureSearchResult {
             timestamp: chrono::Utc::now(),
@@ -676,9 +716,9 @@ impl DynamicArchitectureOptimizer {
             search_time: 10.0, // Simplified
             validation_score: performance,
         };
-        
+
         self.search_history.push(result);
-        
+
         // Keep only recent results
         if self.search_history.len() > 50 {
             self.search_history.remove(0);
@@ -722,10 +762,10 @@ pub struct OnlineDataPoint {
 
 #[derive(Debug, Clone)]
 pub enum UpdateScheduler {
-    Fixed(usize),      // Update every N samples
-    Adaptive(f32),     // Update based on performance degradation
+    Fixed(usize),        // Update every N samples
+    Adaptive(f32),       // Update based on performance degradation
     Timebased(Duration), // Update every X minutes
-    TriggerBased,      // Update when triggered by external events
+    TriggerBased,        // Update when triggered by external events
 }
 
 impl OnlineLearningManager {
@@ -736,49 +776,54 @@ impl OnlineLearningManager {
             update_scheduler: UpdateScheduler::Fixed(100),
         }
     }
-    
+
     /// Add new data point for online learning
     pub async fn add_data_point(&mut self, data_point: OnlineDataPoint) -> Result<()> {
         self.data_buffer.push_back(data_point);
-        
+
         // Maintain buffer size
         while self.data_buffer.len() > self.config.buffer_size {
             self.data_buffer.pop_front();
         }
-        
+
         // Check if update is needed
         if self.should_update() {
             self.trigger_update().await?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Perform online model update
     pub async fn perform_online_update<M: EmbeddingModel>(
         &mut self,
         model: &mut M,
     ) -> Result<OnlineUpdateResult> {
-        info!("Performing online model update with {} data points", self.data_buffer.len());
-        
+        info!(
+            "Performing online model update with {} data points",
+            self.data_buffer.len()
+        );
+
         let start_time = Instant::now();
-        
+
         // Prepare training batch
-        let batch_data: Vec<_> = self.data_buffer.iter()
+        let batch_data: Vec<_> = self
+            .data_buffer
+            .iter()
             .take(self.config.update_frequency)
             .cloned()
             .collect();
-        
+
         // Update model with new data
         let update_stats = self.update_model_incremental(model, &batch_data).await?;
-        
+
         let update_time = start_time.elapsed();
-        
+
         // Clear processed data from buffer
         for _ in 0..batch_data.len().min(self.data_buffer.len()) {
             self.data_buffer.pop_front();
         }
-        
+
         Ok(OnlineUpdateResult {
             timestamp: chrono::Utc::now(),
             samples_processed: batch_data.len(),
@@ -788,7 +833,7 @@ impl OnlineLearningManager {
             model_drift_detected: update_stats.drift_detected,
         })
     }
-    
+
     fn should_update(&self) -> bool {
         match self.update_scheduler {
             UpdateScheduler::Fixed(n) => self.data_buffer.len() >= n,
@@ -808,13 +853,13 @@ impl OnlineLearningManager {
             }
         }
     }
-    
+
     async fn trigger_update(&mut self) -> Result<()> {
         info!("Triggering online learning update");
         // This would trigger the actual model update process
         Ok(())
     }
-    
+
     async fn update_model_incremental<M: EmbeddingModel>(
         &self,
         model: &mut M,
@@ -822,14 +867,14 @@ impl OnlineLearningManager {
     ) -> Result<IncrementalUpdateStats> {
         // Perform incremental model update
         // This is a simplified implementation
-        
+
         let performance_before = 0.7; // Placeholder
-        
+
         // Simulate incremental training
         sleep(Duration::from_millis(100)).await;
-        
+
         let performance_after = performance_before + rand::random::<f32>() * 0.05;
-        
+
         Ok(IncrementalUpdateStats {
             performance_improvement: performance_after - performance_before,
             memory_usage: 1024.0,
@@ -900,14 +945,17 @@ pub enum ResourceOptimizationStrategy {
 }
 
 impl ResourceOptimizer {
-    pub fn new(initial_allocation: ResourceAllocation, strategy: ResourceOptimizationStrategy) -> Self {
+    pub fn new(
+        initial_allocation: ResourceAllocation,
+        strategy: ResourceOptimizationStrategy,
+    ) -> Self {
         Self {
             current_allocation: initial_allocation,
             usage_history: VecDeque::new(),
             strategy,
         }
     }
-    
+
     /// Optimize resource allocation based on current usage patterns
     pub async fn optimize_resources(
         &mut self,
@@ -915,123 +963,128 @@ impl ResourceOptimizer {
         performance_metrics: &PerformanceMetrics,
     ) -> Result<ResourceAllocation> {
         self.usage_history.push_back(current_usage.clone());
-        
+
         // Keep only recent history
         while self.usage_history.len() > 100 {
             self.usage_history.pop_front();
         }
-        
+
         let new_allocation = match self.strategy {
             ResourceOptimizationStrategy::ThroughputMaximization => {
-                self.optimize_for_throughput(current_usage, performance_metrics).await?
+                self.optimize_for_throughput(current_usage, performance_metrics)
+                    .await?
             }
             ResourceOptimizationStrategy::LatencyMinimization => {
-                self.optimize_for_latency(current_usage, performance_metrics).await?
+                self.optimize_for_latency(current_usage, performance_metrics)
+                    .await?
             }
             ResourceOptimizationStrategy::MemoryEfficiency => {
-                self.optimize_for_memory(current_usage, performance_metrics).await?
+                self.optimize_for_memory(current_usage, performance_metrics)
+                    .await?
             }
             ResourceOptimizationStrategy::EnergyEfficiency => {
-                self.optimize_for_energy(current_usage, performance_metrics).await?
+                self.optimize_for_energy(current_usage, performance_metrics)
+                    .await?
             }
             ResourceOptimizationStrategy::CostOptimization => {
-                self.optimize_for_cost(current_usage, performance_metrics).await?
+                self.optimize_for_cost(current_usage, performance_metrics)
+                    .await?
             }
         };
-        
+
         self.current_allocation = new_allocation.clone();
         Ok(new_allocation)
     }
-    
+
     async fn optimize_for_throughput(
         &self,
         current_usage: &ResourceUsage,
         performance_metrics: &PerformanceMetrics,
     ) -> Result<ResourceAllocation> {
         let mut new_allocation = self.current_allocation.clone();
-        
+
         // Increase batch size if GPU utilization is low
         if current_usage.gpu_utilization < 0.7 {
             new_allocation.batch_size = (new_allocation.batch_size as f32 * 1.2) as usize;
         }
-        
+
         // Increase workers if CPU utilization is low
         if current_usage.cpu_utilization < 0.6 {
             new_allocation.num_workers = (new_allocation.num_workers + 1).min(16);
         }
-        
+
         Ok(new_allocation)
     }
-    
+
     async fn optimize_for_latency(
         &self,
         current_usage: &ResourceUsage,
         performance_metrics: &PerformanceMetrics,
     ) -> Result<ResourceAllocation> {
         let mut new_allocation = self.current_allocation.clone();
-        
+
         // Reduce batch size for lower latency
         if performance_metrics.inference_latency > 100.0 {
             new_allocation.batch_size = (new_allocation.batch_size as f32 * 0.8) as usize;
         }
-        
+
         // Increase memory allocation for caching
         if current_usage.memory_usage < 0.8 {
             new_allocation.memory_mb = (new_allocation.memory_mb as f32 * 1.1) as usize;
         }
-        
+
         Ok(new_allocation)
     }
-    
+
     async fn optimize_for_memory(
         &self,
         current_usage: &ResourceUsage,
         performance_metrics: &PerformanceMetrics,
     ) -> Result<ResourceAllocation> {
         let mut new_allocation = self.current_allocation.clone();
-        
+
         // Reduce batch size if memory usage is high
         if current_usage.memory_usage > 0.9 {
             new_allocation.batch_size = (new_allocation.batch_size as f32 * 0.8) as usize;
         }
-        
+
         // Reduce GPU memory allocation if not fully utilized
         if current_usage.gpu_memory_usage < 0.7 {
             new_allocation.gpu_memory_mb = (new_allocation.gpu_memory_mb as f32 * 0.9) as usize;
         }
-        
+
         Ok(new_allocation)
     }
-    
+
     async fn optimize_for_energy(
         &self,
         current_usage: &ResourceUsage,
         performance_metrics: &PerformanceMetrics,
     ) -> Result<ResourceAllocation> {
         let mut new_allocation = self.current_allocation.clone();
-        
+
         // Reduce CPU cores if utilization is low
         if current_usage.cpu_utilization < 0.5 {
             new_allocation.cpu_cores = (new_allocation.cpu_cores.saturating_sub(1)).max(1);
         }
-        
+
         // Optimize batch size for energy efficiency
         let optimal_batch_size = self.calculate_energy_optimal_batch_size(current_usage);
         new_allocation.batch_size = optimal_batch_size;
-        
+
         Ok(new_allocation)
     }
-    
+
     async fn optimize_for_cost(
         &self,
         current_usage: &ResourceUsage,
         performance_metrics: &PerformanceMetrics,
     ) -> Result<ResourceAllocation> {
         let mut new_allocation = self.current_allocation.clone();
-        
+
         // Balance performance and resource usage for cost optimization
         let efficiency_ratio = performance_metrics.throughput / current_usage.gpu_utilization;
-        
+
         if efficiency_ratio < 100.0 {
             // Poor efficiency, reduce resource allocation
             new_allocation.gpu_memory_mb = (new_allocation.gpu_memory_mb as f32 * 0.9) as usize;
@@ -1040,16 +1093,17 @@ impl ResourceOptimizer {
             // Good efficiency, can afford slight increase
             new_allocation.batch_size = (new_allocation.batch_size as f32 * 1.05) as usize;
         }
-        
+
         Ok(new_allocation)
     }
-    
+
     fn calculate_energy_optimal_batch_size(&self, current_usage: &ResourceUsage) -> usize {
         // Calculate optimal batch size for energy efficiency
         // This is a simplified calculation
         let base_batch_size = self.current_allocation.batch_size;
-        let utilization_factor = (current_usage.gpu_utilization + current_usage.cpu_utilization) / 2.0;
-        
+        let utilization_factor =
+            (current_usage.gpu_utilization + current_usage.cpu_utilization) / 2.0;
+
         (base_batch_size as f32 * utilization_factor * 1.2) as usize
     }
 }
@@ -1081,36 +1135,43 @@ impl OptimizationHistory {
             resource_history: VecDeque::new(),
         }
     }
-    
+
     /// Record optimization action
     pub fn record_optimization_action(&mut self, action: OptimizationAction) {
         self.optimization_actions.push_back(action);
-        
+
         // Keep only recent actions
         while self.optimization_actions.len() > 200 {
             self.optimization_actions.pop_front();
         }
     }
-    
+
     /// Get optimization summary
     pub fn get_optimization_summary(&self) -> OptimizationSummary {
         OptimizationSummary {
             total_optimizations: self.optimization_actions.len(),
-            successful_optimizations: self.optimization_actions.iter()
+            successful_optimizations: self
+                .optimization_actions
+                .iter()
                 .filter(|a| a.actual_improvement.unwrap_or(0.0) > 0.0)
                 .count(),
-            average_improvement: self.optimization_actions.iter()
+            average_improvement: self
+                .optimization_actions
+                .iter()
                 .filter_map(|a| a.actual_improvement)
-                .sum::<f32>() / self.optimization_actions.len() as f32,
+                .sum::<f32>()
+                / self.optimization_actions.len() as f32,
             optimization_efficiency: self.calculate_optimization_efficiency(),
         }
     }
-    
+
     fn calculate_optimization_efficiency(&self) -> f32 {
-        let successful = self.optimization_actions.iter()
+        let successful = self
+            .optimization_actions
+            .iter()
             .filter(|a| a.actual_improvement.unwrap_or(0.0) > 0.0)
             .count() as f32;
-        
+
         successful / self.optimization_actions.len() as f32
     }
 }
@@ -1131,24 +1192,26 @@ impl RealTimeOptimizer {
             current_baseline: Arc::new(Mutex::new(PerformanceMetrics::default())),
             window_size: config.performance_window_size,
         };
-        
-        let learning_rate_scheduler = AdaptiveLearningRateScheduler::new(
-            0.001,
-            LearningRateStrategy::PerformanceBased,
-        );
-        
+
+        let learning_rate_scheduler =
+            AdaptiveLearningRateScheduler::new(0.001, LearningRateStrategy::PerformanceBased);
+
         let architecture_optimizer = DynamicArchitectureOptimizer::new(
             ArchitectureConfig {
                 embedding_dim: 256,
                 num_layers: 3,
                 hidden_dims: vec![512, 256, 128],
-                activations: vec!["relu".to_string(), "relu".to_string(), "sigmoid".to_string()],
+                activations: vec![
+                    "relu".to_string(),
+                    "relu".to_string(),
+                    "sigmoid".to_string(),
+                ],
                 dropout_rates: vec![0.1, 0.2, 0.1],
                 normalizations: vec!["batch".to_string(), "batch".to_string(), "none".to_string()],
             },
             ArchitectureOptimizationStrategy::EvolutionarySearch,
         );
-        
+
         let online_learning_manager = OnlineLearningManager::new(OnlineLearningConfig {
             buffer_size: 1000,
             update_frequency: 100,
@@ -1156,7 +1219,7 @@ impl RealTimeOptimizer {
             enable_ewc: true,
             replay_buffer_size: 5000,
         });
-        
+
         let resource_optimizer = ResourceOptimizer::new(
             ResourceAllocation {
                 cpu_cores: 4,
@@ -1167,7 +1230,7 @@ impl RealTimeOptimizer {
             },
             ResourceOptimizationStrategy::ThroughputMaximization,
         );
-        
+
         Self {
             config,
             performance_monitor,
@@ -1178,39 +1241,39 @@ impl RealTimeOptimizer {
             optimization_history: OptimizationHistory::new(),
         }
     }
-    
+
     /// Start real-time optimization loop
     pub async fn start_optimization_loop<M: EmbeddingModel + Send + 'static>(
         &mut self,
         model: Arc<Mutex<M>>,
     ) -> Result<()> {
         info!("Starting real-time optimization loop");
-        
+
         loop {
             // Collect current performance metrics
             let current_metrics = self.collect_performance_metrics(&model).await?;
-            
+
             // Record metrics
             self.record_performance_metrics(current_metrics.clone());
-            
+
             // Perform optimizations based on configuration
             if self.config.enable_adaptive_lr {
                 self.optimize_learning_rate(&current_metrics).await?;
             }
-            
+
             if self.config.enable_architecture_opt {
                 self.optimize_architecture(&current_metrics, &model).await?;
             }
-            
+
             if self.config.enable_resource_opt {
                 self.optimize_resources(&current_metrics).await?;
             }
-            
+
             // Sleep until next optimization cycle
             sleep(Duration::from_secs(self.config.optimization_frequency)).await;
         }
     }
-    
+
     async fn collect_performance_metrics<M: EmbeddingModel>(
         &self,
         model: &Arc<Mutex<M>>,
@@ -1229,48 +1292,57 @@ impl RealTimeOptimizer {
             model_complexity: 0.5 + rand::random::<f32>() * 0.3,
         })
     }
-    
+
     fn record_performance_metrics(&mut self, metrics: PerformanceMetrics) {
         let mut history = self.performance_monitor.metrics_history.lock().unwrap();
         history.push_back(metrics.clone());
-        
+
         // Maintain window size
         while history.len() > self.performance_monitor.window_size {
             history.pop_front();
         }
-        
+
         // Update baseline
         *self.performance_monitor.current_baseline.lock().unwrap() = metrics;
     }
-    
+
     async fn optimize_learning_rate(&mut self, current_metrics: &PerformanceMetrics) -> Result<()> {
         let history = self.performance_monitor.metrics_history.lock().unwrap();
         let recent_metrics: Vec<_> = history.iter().cloned().collect();
         drop(history);
-        
-        let new_lr = self.learning_rate_scheduler.adjust_learning_rate(current_metrics, &recent_metrics)?;
-        
-        info!("Learning rate adjusted: {:.6} -> {:.6}", current_metrics.learning_rate, new_lr);
-        
+
+        let new_lr = self
+            .learning_rate_scheduler
+            .adjust_learning_rate(current_metrics, &recent_metrics)?;
+
+        info!(
+            "Learning rate adjusted: {:.6} -> {:.6}",
+            current_metrics.learning_rate, new_lr
+        );
+
         Ok(())
     }
-    
+
     async fn optimize_architecture<M: EmbeddingModel>(
         &mut self,
         current_metrics: &PerformanceMetrics,
         model: &Arc<Mutex<M>>,
     ) -> Result<()> {
         let model_guard = model.lock().unwrap();
-        let new_architecture = self.architecture_optimizer
+        let new_architecture = self
+            .architecture_optimizer
             .optimize_architecture(current_metrics, &*model_guard)
             .await?;
         drop(model_guard);
-        
-        info!("Architecture optimization completed: {:?}", new_architecture);
-        
+
+        info!(
+            "Architecture optimization completed: {:?}",
+            new_architecture
+        );
+
         Ok(())
     }
-    
+
     async fn optimize_resources(&mut self, current_metrics: &PerformanceMetrics) -> Result<()> {
         let current_usage = ResourceUsage {
             timestamp: chrono::Utc::now(),
@@ -1281,16 +1353,17 @@ impl RealTimeOptimizer {
             throughput: current_metrics.throughput,
             latency: current_metrics.inference_latency,
         };
-        
-        let new_allocation = self.resource_optimizer
+
+        let new_allocation = self
+            .resource_optimizer
             .optimize_resources(&current_usage, current_metrics)
             .await?;
-        
+
         info!("Resource allocation optimized: {:?}", new_allocation);
-        
+
         Ok(())
     }
-    
+
     /// Get optimization summary
     pub fn get_optimization_summary(&self) -> OptimizationSummary {
         self.optimization_history.get_optimization_summary()

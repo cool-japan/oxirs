@@ -236,25 +236,25 @@ impl UncertaintyQuantifier {
         query: &str,
     ) -> Result<UncertaintyResults> {
         info!("Estimating uncertainty for query: {}", query);
-        
+
         let mut predictions = Vec::new();
-        
+
         // Monte Carlo sampling
         for _ in 0..self.mc_samples {
             // In a real implementation, this would enable dropout and sample
             let prediction = self.sample_prediction(model, query).await?;
             predictions.push(prediction);
         }
-        
+
         // Calculate uncertainty metrics
         let epistemic_uncertainty = self.calculate_epistemic_uncertainty(&predictions);
         let aleatoric_uncertainty = self.calculate_aleatoric_uncertainty(&predictions);
         let total_uncertainty = epistemic_uncertainty + aleatoric_uncertainty;
-        
+
         let calibration_error = self.calculate_calibration_error(&predictions);
         let uncertainty_coverage = self.calculate_uncertainty_coverage(&predictions);
         let expected_calibration_error = self.calculate_expected_calibration_error(&predictions);
-        
+
         Ok(UncertaintyResults {
             epistemic_uncertainty,
             aleatoric_uncertainty,
@@ -264,63 +264,62 @@ impl UncertaintyQuantifier {
             expected_calibration_error,
         })
     }
-    
-    async fn sample_prediction<M: EmbeddingModel>(
-        &self,
-        model: &M,
-        query: &str,
-    ) -> Result<f32> {
+
+    async fn sample_prediction<M: EmbeddingModel>(&self, model: &M, query: &str) -> Result<f32> {
         // Simplified prediction sampling
         // In practice, this would use the actual model with dropout enabled
         Ok(0.5 + (rand::random::<f32>() - 0.5) * 0.2)
     }
-    
+
     fn calculate_epistemic_uncertainty(&self, predictions: &[f32]) -> f32 {
         let mean = predictions.iter().sum::<f32>() / predictions.len() as f32;
-        let variance = predictions.iter()
-            .map(|p| (p - mean).powi(2))
-            .sum::<f32>() / predictions.len() as f32;
+        let variance =
+            predictions.iter().map(|p| (p - mean).powi(2)).sum::<f32>() / predictions.len() as f32;
         variance.sqrt()
     }
-    
+
     fn calculate_aleatoric_uncertainty(&self, predictions: &[f32]) -> f32 {
         // Simplified aleatoric uncertainty calculation
         predictions.iter().map(|p| p * (1.0 - p)).sum::<f32>() / predictions.len() as f32
     }
-    
+
     fn calculate_calibration_error(&self, predictions: &[f32]) -> f32 {
         // Expected calibration error calculation
         let mut total_error = 0.0;
         let bin_size = 0.1;
-        
+
         for i in 0..10 {
             let bin_lower = i as f32 * bin_size;
             let bin_upper = (i + 1) as f32 * bin_size;
-            
-            let bin_predictions: Vec<_> = predictions.iter()
+
+            let bin_predictions: Vec<_> = predictions
+                .iter()
                 .filter(|&&p| p >= bin_lower && p < bin_upper)
                 .collect();
-                
+
             if !bin_predictions.is_empty() {
                 let bin_accuracy = bin_predictions.len() as f32 / predictions.len() as f32;
-                let bin_confidence = bin_predictions.iter().map(|&&p| p).sum::<f32>() / bin_predictions.len() as f32;
+                let bin_confidence =
+                    bin_predictions.iter().map(|&&p| p).sum::<f32>() / bin_predictions.len() as f32;
                 total_error += (bin_accuracy - bin_confidence).abs() * bin_predictions.len() as f32;
             }
         }
-        
+
         total_error / predictions.len() as f32
     }
-    
+
     fn calculate_uncertainty_coverage(&self, predictions: &[f32]) -> f32 {
         // Coverage probability calculation
         let confidence_interval = 0.95;
         let threshold = (1.0 - confidence_interval) / 2.0;
-        
-        predictions.iter()
+
+        predictions
+            .iter()
             .filter(|&&p| p >= threshold && p <= 1.0 - threshold)
-            .count() as f32 / predictions.len() as f32
+            .count() as f32
+            / predictions.len() as f32
     }
-    
+
     fn calculate_expected_calibration_error(&self, predictions: &[f32]) -> f32 {
         // More sophisticated ECE calculation
         self.calculate_calibration_error(predictions)
@@ -337,8 +336,8 @@ pub struct AdversarialAttackGenerator {
 
 #[derive(Debug, Clone)]
 pub enum AdversarialAttackType {
-    FGSM,      // Fast Gradient Sign Method
-    PGD,       // Projected Gradient Descent
+    FGSM, // Fast Gradient Sign Method
+    PGD,  // Projected Gradient Descent
     CarliniWagner,
     DeepFool,
     GraphAttack,
@@ -355,52 +354,58 @@ impl AdversarialAttackGenerator {
             ],
         }
     }
-    
+
     /// Generate adversarial examples and test robustness
     pub async fn test_robustness<M: EmbeddingModel>(
         &self,
         model: &M,
         test_data: &[(String, String, f32)],
     ) -> Result<AdversarialResults> {
-        info!("Testing adversarial robustness with {} attack types", self.attack_types.len());
-        
+        info!(
+            "Testing adversarial robustness with {} attack types",
+            self.attack_types.len()
+        );
+
         let mut total_accuracy = 0.0;
         let mut successful_attacks = 0;
         let mut total_perturbation = 0.0;
-        
+
         for (entity1, entity2, expected_score) in test_data {
             for attack_type in &self.attack_types {
                 let perturbed_data = self.generate_attack(entity1, entity2, attack_type).await?;
-                let adversarial_score = self.evaluate_perturbed_data(model, &perturbed_data).await?;
-                
+                let adversarial_score =
+                    self.evaluate_perturbed_data(model, &perturbed_data).await?;
+
                 // Check if attack was successful
                 if (adversarial_score - expected_score).abs() > 0.1 {
                     successful_attacks += 1;
                 } else {
                     total_accuracy += 1.0;
                 }
-                
+
                 total_perturbation += self.calculate_perturbation_magnitude(&perturbed_data);
             }
         }
-        
+
         let total_tests = test_data.len() * self.attack_types.len();
         let adversarial_accuracy = total_accuracy / total_tests as f32;
         let attack_success_rate = successful_attacks as f32 / total_tests as f32;
         let avg_perturbation = total_perturbation / total_tests as f32;
-        
+
         Ok(AdversarialResults {
             adversarial_accuracy,
             robustness_score: 1.0 - attack_success_rate,
             attack_success_rate,
             perturbation_magnitude: avg_perturbation,
             certified_radius: self.calculate_certified_radius(adversarial_accuracy),
-            attack_types: self.attack_types.iter()
+            attack_types: self
+                .attack_types
+                .iter()
                 .map(|t| format!("{:?}", t))
                 .collect(),
         })
     }
-    
+
     async fn generate_attack(
         &self,
         entity1: &str,
@@ -414,7 +419,7 @@ impl AdversarialAttackGenerator {
             _ => Ok((entity1.to_string(), entity2.to_string())),
         }
     }
-    
+
     async fn fgsm_attack(&self, entity1: &str, entity2: &str) -> Result<(String, String)> {
         // Fast Gradient Sign Method attack
         // In practice, this would perturb the embeddings using gradient information
@@ -422,21 +427,21 @@ impl AdversarialAttackGenerator {
         let perturbed_entity2 = format!("{}_perturbed", entity2);
         Ok((perturbed_entity1, perturbed_entity2))
     }
-    
+
     async fn pgd_attack(&self, entity1: &str, entity2: &str) -> Result<(String, String)> {
         // Projected Gradient Descent attack
         let perturbed_entity1 = format!("{}_pgd", entity1);
         let perturbed_entity2 = format!("{}_pgd", entity2);
         Ok((perturbed_entity1, perturbed_entity2))
     }
-    
+
     async fn graph_attack(&self, entity1: &str, entity2: &str) -> Result<(String, String)> {
         // Graph-specific attack (edge addition/removal)
         let perturbed_entity1 = format!("{}_graph_attack", entity1);
         let perturbed_entity2 = format!("{}_graph_attack", entity2);
         Ok((perturbed_entity1, perturbed_entity2))
     }
-    
+
     async fn evaluate_perturbed_data<M: EmbeddingModel>(
         &self,
         _model: &M,
@@ -446,13 +451,13 @@ impl AdversarialAttackGenerator {
         // In practice, this would use the actual model evaluation
         Ok(0.5 + (rand::random::<f32>() - 0.5) * 0.3)
     }
-    
+
     fn calculate_perturbation_magnitude(&self, perturbed_data: &(String, String)) -> f32 {
         // Calculate L2 norm of perturbation
         // Simplified calculation
         0.1 * rand::random::<f32>()
     }
-    
+
     fn calculate_certified_radius(&self, adversarial_accuracy: f32) -> f32 {
         // Calculate certified robustness radius
         adversarial_accuracy * self.attack_budget
@@ -488,22 +493,26 @@ impl FairnessAssessment {
             protected_attributes,
         }
     }
-    
+
     /// Assess fairness of the model
     pub async fn assess_fairness<M: EmbeddingModel>(
         &self,
         model: &M,
         test_data: &[(String, HashMap<String, String>, f32)],
     ) -> Result<FairnessResults> {
-        info!("Assessing fairness across {} protected attributes", self.protected_attributes.len());
-        
+        info!(
+            "Assessing fairness across {} protected attributes",
+            self.protected_attributes.len()
+        );
+
         let demographic_parity = self.calculate_demographic_parity(test_data).await?;
         let equal_opportunity = self.calculate_equal_opportunity(test_data).await?;
         let equalized_odds = self.calculate_equalized_odds(test_data).await?;
         let individual_fairness = self.calculate_individual_fairness(model, test_data).await?;
         let group_fairness = (demographic_parity + equal_opportunity + equalized_odds) / 3.0;
-        let bias_mitigation_score = 1.0 - (demographic_parity + equal_opportunity).max(equalized_odds);
-        
+        let bias_mitigation_score =
+            1.0 - (demographic_parity + equal_opportunity).max(equalized_odds);
+
         Ok(FairnessResults {
             demographic_parity,
             equal_opportunity,
@@ -513,7 +522,7 @@ impl FairnessAssessment {
             bias_mitigation_score,
         })
     }
-    
+
     async fn calculate_demographic_parity(
         &self,
         test_data: &[(String, HashMap<String, String>, f32)],
@@ -522,7 +531,7 @@ impl FairnessAssessment {
         // Simplified calculation
         Ok(0.05 + rand::random::<f32>() * 0.1)
     }
-    
+
     async fn calculate_equal_opportunity(
         &self,
         test_data: &[(String, HashMap<String, String>, f32)],
@@ -530,7 +539,7 @@ impl FairnessAssessment {
         // Calculate equal opportunity difference
         Ok(0.03 + rand::random::<f32>() * 0.08)
     }
-    
+
     async fn calculate_equalized_odds(
         &self,
         test_data: &[(String, HashMap<String, String>, f32)],
@@ -538,7 +547,7 @@ impl FairnessAssessment {
         // Calculate equalized odds difference
         Ok(0.04 + rand::random::<f32>() * 0.09)
     }
-    
+
     async fn calculate_individual_fairness<M: EmbeddingModel>(
         &self,
         model: &M,
@@ -574,22 +583,30 @@ impl ExplanationQualityEvaluator {
             ],
         }
     }
-    
+
     /// Evaluate explanation quality
     pub async fn evaluate_explanations<M: EmbeddingModel>(
         &self,
         model: &M,
         test_data: &[(String, String, f32)],
     ) -> Result<ExplanationResults> {
-        info!("Evaluating explanation quality with {} methods", self.explanation_methods.len());
-        
+        info!(
+            "Evaluating explanation quality with {} methods",
+            self.explanation_methods.len()
+        );
+
         let fidelity = self.calculate_fidelity(model, test_data).await?;
         let stability = self.calculate_stability(model, test_data).await?;
         let comprehensibility = self.calculate_comprehensibility(test_data).await?;
-        let feature_importance_consistency = self.calculate_feature_consistency(model, test_data).await?;
-        let counterfactual_validity = self.calculate_counterfactual_validity(model, test_data).await?;
-        let local_global_consistency = self.calculate_local_global_consistency(model, test_data).await?;
-        
+        let feature_importance_consistency =
+            self.calculate_feature_consistency(model, test_data).await?;
+        let counterfactual_validity = self
+            .calculate_counterfactual_validity(model, test_data)
+            .await?;
+        let local_global_consistency = self
+            .calculate_local_global_consistency(model, test_data)
+            .await?;
+
         Ok(ExplanationResults {
             fidelity,
             stability,
@@ -599,7 +616,7 @@ impl ExplanationQualityEvaluator {
             local_global_consistency,
         })
     }
-    
+
     async fn calculate_fidelity<M: EmbeddingModel>(
         &self,
         model: &M,
@@ -608,7 +625,7 @@ impl ExplanationQualityEvaluator {
         // Calculate explanation fidelity
         Ok(0.85 + rand::random::<f32>() * 0.1)
     }
-    
+
     async fn calculate_stability<M: EmbeddingModel>(
         &self,
         model: &M,
@@ -617,7 +634,7 @@ impl ExplanationQualityEvaluator {
         // Calculate explanation stability
         Ok(0.8 + rand::random::<f32>() * 0.15)
     }
-    
+
     async fn calculate_comprehensibility(
         &self,
         test_data: &[(String, String, f32)],
@@ -625,7 +642,7 @@ impl ExplanationQualityEvaluator {
         // Calculate explanation comprehensibility
         Ok(0.75 + rand::random::<f32>() * 0.2)
     }
-    
+
     async fn calculate_feature_consistency<M: EmbeddingModel>(
         &self,
         model: &M,
@@ -634,7 +651,7 @@ impl ExplanationQualityEvaluator {
         // Calculate feature importance consistency
         Ok(0.82 + rand::random::<f32>() * 0.12)
     }
-    
+
     async fn calculate_counterfactual_validity<M: EmbeddingModel>(
         &self,
         model: &M,
@@ -643,7 +660,7 @@ impl ExplanationQualityEvaluator {
         // Calculate counterfactual validity
         Ok(0.78 + rand::random::<f32>() * 0.15)
     }
-    
+
     async fn calculate_local_global_consistency<M: EmbeddingModel>(
         &self,
         model: &M,
@@ -662,11 +679,12 @@ impl AdvancedEvaluator {
         } else {
             None
         };
-        
+
         let adversarial_generator = AdversarialAttackGenerator::new(config.attack_budget);
-        let fairness_engine = FairnessAssessment::new(vec!["gender".to_string(), "race".to_string()]);
+        let fairness_engine =
+            FairnessAssessment::new(vec!["gender".to_string(), "race".to_string()]);
         let explanation_evaluator = ExplanationQualityEvaluator::new();
-        
+
         Self {
             config,
             uncertainty_model,
@@ -675,7 +693,7 @@ impl AdvancedEvaluator {
             explanation_evaluator,
         }
     }
-    
+
     /// Run comprehensive evaluation
     pub async fn comprehensive_evaluation<M: EmbeddingModel>(
         &self,
@@ -683,52 +701,70 @@ impl AdvancedEvaluator {
         test_data: &[(String, String, f32)],
     ) -> Result<AdvancedEvaluationResults> {
         info!("Starting comprehensive advanced evaluation");
-        
+
         // Basic metrics
         let basic_metrics = self.calculate_basic_metrics(model, test_data).await?;
-        
+
         // Uncertainty quantification
         let uncertainty_results = if self.config.enable_uncertainty {
             if let Some(ref uncertainty_model) = self.uncertainty_model {
-                Some(uncertainty_model.estimate_uncertainty(model, "test_query").await?)
+                Some(
+                    uncertainty_model
+                        .estimate_uncertainty(model, "test_query")
+                        .await?,
+                )
             } else {
                 None
             }
         } else {
             None
         };
-        
+
         // Adversarial robustness
         let adversarial_results = if self.config.enable_adversarial {
-            let adversarial_test_data: Vec<_> = test_data.iter()
+            let adversarial_test_data: Vec<_> = test_data
+                .iter()
                 .map(|(e1, e2, score)| (e1.clone(), e2.clone(), *score))
                 .collect();
-            Some(self.adversarial_generator.test_robustness(model, &adversarial_test_data).await?)
+            Some(
+                self.adversarial_generator
+                    .test_robustness(model, &adversarial_test_data)
+                    .await?,
+            )
         } else {
             None
         };
-        
+
         // Fairness assessment
         let fairness_results = if self.config.enable_fairness {
-            let fairness_test_data: Vec<_> = test_data.iter()
+            let fairness_test_data: Vec<_> = test_data
+                .iter()
                 .map(|(e1, e2, score)| {
                     let mut attrs = HashMap::new();
                     attrs.insert("entity".to_string(), e1.clone());
                     (e1.clone(), attrs, *score)
                 })
                 .collect();
-            Some(self.fairness_engine.assess_fairness(model, &fairness_test_data).await?)
+            Some(
+                self.fairness_engine
+                    .assess_fairness(model, &fairness_test_data)
+                    .await?,
+            )
         } else {
             None
         };
-        
+
         // Explanation quality
         let explanation_results = if self.config.enable_explanation_quality {
-            Some(self.explanation_evaluator.evaluate_explanations(model, test_data).await?)
+            Some(
+                self.explanation_evaluator
+                    .evaluate_explanations(model, test_data)
+                    .await?,
+            )
         } else {
             None
         };
-        
+
         // Calculate overall score
         let overall_score = self.calculate_overall_score(
             &basic_metrics,
@@ -737,7 +773,7 @@ impl AdvancedEvaluator {
             &fairness_results,
             &explanation_results,
         );
-        
+
         Ok(AdvancedEvaluationResults {
             basic_metrics,
             uncertainty_results,
@@ -750,7 +786,7 @@ impl AdvancedEvaluator {
             timestamp: chrono::Utc::now(),
         })
     }
-    
+
     async fn calculate_basic_metrics<M: EmbeddingModel>(
         &self,
         model: &M,
@@ -761,7 +797,7 @@ impl AdvancedEvaluator {
         hits_at_k.insert(1, 0.45);
         hits_at_k.insert(3, 0.72);
         hits_at_k.insert(10, 0.89);
-        
+
         Ok(BasicMetrics {
             mrr: 0.65,
             hits_at_k,
@@ -772,7 +808,7 @@ impl AdvancedEvaluator {
             f1_score: 0.76,
         })
     }
-    
+
     fn calculate_overall_score(
         &self,
         basic_metrics: &BasicMetrics,
@@ -782,51 +818,48 @@ impl AdvancedEvaluator {
         explanation_results: &Option<ExplanationResults>,
     ) -> f32 {
         let mut score = basic_metrics.f1_score * 0.3;
-        
+
         if let Some(uncertainty) = uncertainty_results {
             score += (1.0 - uncertainty.total_uncertainty) * 0.2;
         }
-        
+
         if let Some(adversarial) = adversarial_results {
             score += adversarial.robustness_score * 0.2;
         }
-        
+
         if let Some(fairness) = fairness_results {
             score += (1.0 - fairness.group_fairness) * 0.15;
         }
-        
+
         if let Some(explanation) = explanation_results {
             score += explanation.fidelity * 0.15;
         }
-        
+
         score.min(1.0).max(0.0)
     }
-    
+
     /// Generate negative samples for evaluation
-    pub fn generate_negative_samples<M: EmbeddingModel>(
-        &mut self,
-        model: &M,
-    ) -> Result<()> {
+    pub fn generate_negative_samples<M: EmbeddingModel>(&mut self, model: &M) -> Result<()> {
         info!("Generating negative samples for evaluation");
         // In a real implementation, this would generate hard negative samples
         // for link prediction and other tasks
         Ok(())
     }
-    
+
     /// Evaluate the model using comprehensive metrics
     pub async fn evaluate<M: EmbeddingModel>(
         &self,
         model: &M,
     ) -> Result<AdvancedEvaluationResults> {
         info!("Running comprehensive model evaluation");
-        
+
         // Create test data for evaluation
         let test_data = vec![
             ("entity1".to_string(), "entity2".to_string(), 0.8),
             ("entity3".to_string(), "entity4".to_string(), 0.6),
             ("entity5".to_string(), "entity6".to_string(), 0.9),
         ];
-        
+
         // Run comprehensive evaluation
         self.comprehensive_evaluation(model, &test_data).await
     }

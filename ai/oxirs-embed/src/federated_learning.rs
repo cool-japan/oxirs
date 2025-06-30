@@ -9,7 +9,7 @@
 //! - Local adaptation and personalized models
 //! - Communication-efficient training protocols
 
-use crate::{EmbeddingModel, ModelConfig, TrainingStats, Vector, Triple};
+use crate::{EmbeddingModel, ModelConfig, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -999,7 +999,9 @@ pub enum DataSelectionStrategy {
     /// Random sampling
     RandomSample { sample_ratio: f64 },
     /// Stratified sampling
-    StratifiedSample { strata_weights: HashMap<String, f64> },
+    StratifiedSample {
+        strata_weights: HashMap<String, f64>,
+    },
     /// Time-based selection
     TimeBased { time_window: String },
     /// Quality-based selection
@@ -1077,13 +1079,13 @@ impl CompressionEngine {
     /// Compress parameters for transmission
     pub fn compress(&mut self, parameters: &HashMap<String, Array2<f32>>) -> Result<Vec<u8>> {
         let start_time = std::time::Instant::now();
-        
+
         // Serialize parameters
-        let serialized = bincode::serialize(parameters)
-            .map_err(|e| anyhow!("Serialization failed: {}", e))?;
-        
+        let serialized =
+            bincode::serialize(parameters).map_err(|e| anyhow!("Serialization failed: {}", e))?;
+
         let original_size = serialized.len() as u64;
-        
+
         // Apply compression based on algorithm
         let compressed = match self.config.algorithm {
             CompressionAlgorithm::None => serialized,
@@ -1093,37 +1095,37 @@ impl CompressionEngine {
             CompressionAlgorithm::Quantization => self.quantize(parameters)?,
             CompressionAlgorithm::Sketching => self.sketch(parameters)?,
         };
-        
+
         let compressed_size = compressed.len() as u64;
         let compression_time = start_time.elapsed().as_millis() as f64;
-        
+
         // Update statistics
         self.stats.original_size = original_size;
         self.stats.compressed_size = compressed_size;
         self.stats.compression_ratio = original_size as f64 / compressed_size as f64;
         self.stats.compression_time_ms = compression_time;
-        
+
         Ok(compressed)
     }
 
     /// Decompress parameters from transmission
     pub fn decompress(&mut self, compressed_data: &[u8]) -> Result<HashMap<String, Array2<f32>>> {
         let start_time = std::time::Instant::now();
-        
+
         // Decompress based on algorithm
         let decompressed = match self.config.algorithm {
             CompressionAlgorithm::None => compressed_data.to_vec(),
             CompressionAlgorithm::Gzip => self.gzip_decompress(compressed_data)?,
             _ => compressed_data.to_vec(), // Simplified for other algorithms
         };
-        
+
         // Deserialize parameters
         let parameters: HashMap<String, Array2<f32>> = bincode::deserialize(&decompressed)
             .map_err(|e| anyhow!("Deserialization failed: {}", e))?;
-        
+
         let decompression_time = start_time.elapsed().as_millis() as f64;
         self.stats.decompression_time_ms = decompression_time;
-        
+
         Ok(parameters)
     }
 
@@ -1279,7 +1281,7 @@ impl FederatedCoordinator {
     /// Create new federated learning coordinator
     pub fn new(config: FederatedConfig) -> Self {
         let coordinator_id = Uuid::new_v4();
-        
+
         let aggregation_engine = AggregationEngine {
             strategy: config.aggregation_strategy.clone(),
             parameters: HashMap::new(),
@@ -1291,7 +1293,7 @@ impl FederatedCoordinator {
                 outlier_action: OutlierAction::ReduceWeight,
             },
         };
-        
+
         let privacy_engine = PrivacyEngine {
             config: config.privacy_config.clone(),
             privacy_accountant: PrivacyAccountant {
@@ -1312,7 +1314,7 @@ impl FederatedCoordinator {
                 adaptive_clipping: false,
             },
         };
-        
+
         let communication_manager = CommunicationManager {
             config: config.communication_config.clone(),
             active_connections: HashMap::new(),
@@ -1333,7 +1335,7 @@ impl FederatedCoordinator {
                 },
             },
         };
-        
+
         let security_manager = SecurityManager {
             config: config.security_config.clone(),
             key_manager: KeyManager {
@@ -1355,7 +1357,7 @@ impl FederatedCoordinator {
                 signature_cache: HashMap::new(),
             },
         };
-        
+
         Self {
             config,
             coordinator_id,
@@ -1380,16 +1382,20 @@ impl FederatedCoordinator {
     pub fn register_participant(&mut self, participant: Participant) -> Result<()> {
         // Validate participant credentials
         self.validate_participant(&participant)?;
-        
+
         // Initialize privacy budget for participant
-        self.privacy_engine.privacy_accountant.participant_budgets.insert(
-            participant.participant_id,
-            self.config.privacy_config.local_epsilon,
-        );
-        
+        self.privacy_engine
+            .privacy_accountant
+            .participant_budgets
+            .insert(
+                participant.participant_id,
+                self.config.privacy_config.local_epsilon,
+            );
+
         // Add to participants
-        self.participants.insert(participant.participant_id, participant);
-        
+        self.participants
+            .insert(participant.participant_id, participant);
+
         Ok(())
     }
 
@@ -1399,38 +1405,42 @@ impl FederatedCoordinator {
         if participant.capabilities.available_memory_gb < 1.0 {
             return Err(anyhow!("Insufficient memory"));
         }
-        
+
         if participant.capabilities.network_bandwidth_mbps < 1.0 {
             return Err(anyhow!("Insufficient bandwidth"));
         }
-        
+
         // Verify trust score
         if participant.trust_score < 0.5 {
             return Err(anyhow!("Insufficient trust score"));
         }
-        
+
         Ok(())
     }
 
     /// Start a new federated learning round
     pub async fn start_round(&mut self) -> Result<usize> {
         // Check if we have enough participants
-        let active_participants: Vec<_> = self.participants
+        let active_participants: Vec<_> = self
+            .participants
             .values()
             .filter(|p| p.status == ParticipantStatus::Active)
             .collect();
-        
+
         if active_participants.len() < self.config.min_participants {
             return Err(anyhow!("Not enough active participants"));
         }
-        
+
         // Create new round
         let round_number = self.round_history.len() + 1;
         let mut round = FederatedRound {
             round_number,
             start_time: Utc::now(),
             end_time: None,
-            participants: active_participants.iter().map(|p| p.participant_id).collect(),
+            participants: active_participants
+                .iter()
+                .map(|p| p.participant_id)
+                .collect(),
             global_parameters: self.global_model.parameters.clone(),
             aggregated_updates: HashMap::new(),
             metrics: RoundMetrics {
@@ -1451,7 +1461,7 @@ impl FederatedCoordinator {
             },
             status: RoundStatus::Initializing,
         };
-        
+
         // Send round initialization to participants
         let training_config = TrainingConfig {
             local_epochs: self.config.local_epochs,
@@ -1465,21 +1475,22 @@ impl FederatedCoordinator {
                 clipping_threshold: self.config.privacy_config.clipping_threshold,
             },
         };
-        
+
         let init_message = FederatedMessage::RoundInit {
             round_number,
             global_parameters: self.global_model.parameters.clone(),
             training_config,
         };
-        
+
         // Send to all participants (simplified - would use actual networking)
         for participant_id in &round.participants {
-            self.send_message(*participant_id, init_message.clone()).await?;
+            self.send_message(*participant_id, init_message.clone())
+                .await?;
         }
-        
+
         round.status = RoundStatus::Training;
         self.current_round = Some(round);
-        
+
         Ok(round_number)
     }
 
@@ -1487,10 +1498,10 @@ impl FederatedCoordinator {
     pub async fn process_local_update(&mut self, update: LocalUpdate) -> Result<()> {
         // Verify the update
         self.verify_local_update(&update)?;
-        
+
         // Apply privacy mechanisms
         let private_update = self.apply_privacy_mechanisms(&update)?;
-        
+
         // Store the update for aggregation
         let should_aggregate = if let Some(ref mut round) = self.current_round {
             round.metrics.total_samples += update.num_samples;
@@ -1499,11 +1510,11 @@ impl FederatedCoordinator {
         } else {
             false
         };
-        
+
         if should_aggregate {
             self.aggregate_updates().await?;
         }
-        
+
         Ok(())
     }
 
@@ -1513,42 +1524,47 @@ impl FederatedCoordinator {
         if !self.participants.contains_key(&update.participant_id) {
             return Err(anyhow!("Unknown participant"));
         }
-        
+
         // Verify round number
         if let Some(ref round) = self.current_round {
             if update.round_number != round.round_number {
                 return Err(anyhow!("Invalid round number"));
             }
         }
-        
+
         // Verify signature (simplified)
         if update.signature.is_empty() {
             return Err(anyhow!("Missing signature"));
         }
-        
+
         // Check privacy budget
-        let remaining_budget = self.privacy_engine.privacy_accountant
+        let remaining_budget = self
+            .privacy_engine
+            .privacy_accountant
             .participant_budgets
             .get(&update.participant_id)
             .unwrap_or(&0.0);
-        
+
         if *remaining_budget < update.local_stats.privacy_metrics.epsilon_used {
             return Err(anyhow!("Insufficient privacy budget"));
         }
-        
+
         Ok(())
     }
 
     /// Apply privacy mechanisms to local update
     fn apply_privacy_mechanisms(&mut self, update: &LocalUpdate) -> Result<LocalUpdate> {
         let mut private_update = update.clone();
-        
+
         // Apply gradient clipping
         for (param_name, params) in &mut private_update.parameter_updates {
-            let clipped = self.privacy_engine.clipping_mechanisms.clip_gradients(params);
+            let clipped = self
+                .privacy_engine
+                .clipping_mechanisms
+                .clip_gradients(params);
             *params = clipped;
         }
-        
+
         // Add differential privacy noise
         if self.privacy_engine.config.enable_differential_privacy {
             for (param_name, params) in &mut private_update.parameter_updates {
@@ -1556,14 +1572,17 @@ impl FederatedCoordinator {
                 *params = noisy;
             }
         }
-        
+
         // Update privacy budget
-        if let Some(budget) = self.privacy_engine.privacy_accountant
+        if let Some(budget) = self
+            .privacy_engine
+            .privacy_accountant
             .participant_budgets
-            .get_mut(&update.participant_id) {
+            .get_mut(&update.participant_id)
+        {
             *budget -= update.local_stats.privacy_metrics.epsilon_used;
         }
-        
+
         Ok(private_update)
     }
 
@@ -1580,7 +1599,7 @@ impl FederatedCoordinator {
         } else {
             None
         };
-        
+
         if let Some((round, strategy)) = round_data {
             // Perform aggregation based on strategy
             let aggregated_params = match strategy {
@@ -1588,91 +1607,114 @@ impl FederatedCoordinator {
                 AggregationStrategy::WeightedAveraging => self.weighted_averaging(&round).await?,
                 AggregationStrategy::SecureAggregation => self.secure_aggregation(&round).await?,
                 AggregationStrategy::RobustAggregation => self.robust_aggregation(&round).await?,
-                AggregationStrategy::PersonalizedAggregation => self.personalized_aggregation(&round).await?,
-                AggregationStrategy::HierarchicalAggregation => self.hierarchical_aggregation(&round).await?,
+                AggregationStrategy::PersonalizedAggregation => {
+                    self.personalized_aggregation(&round).await?
+                }
+                AggregationStrategy::HierarchicalAggregation => {
+                    self.hierarchical_aggregation(&round).await?
+                }
             };
-            
+
             // Update global model
             self.global_model.parameters = aggregated_params;
             self.global_model.version += 1;
             self.global_model.last_update = Utc::now();
-            
+
             // Create completion message
             let complete_message = FederatedMessage::AggregationComplete {
                 round_number: round.round_number,
                 new_global_parameters: self.global_model.parameters.clone(),
                 round_metrics: round.metrics.clone(),
             };
-            
+
             // Send to participants
             for participant_id in &round.participants {
-                self.send_message(*participant_id, complete_message.clone()).await?;
+                self.send_message(*participant_id, complete_message.clone())
+                    .await?;
             }
-            
+
             // Complete the round
             if let Some(ref mut current_round) = self.current_round {
                 current_round.end_time = Some(Utc::now());
                 current_round.status = RoundStatus::Completed;
                 current_round.aggregated_updates = self.global_model.parameters.clone();
             }
-            
+
             // Move round to history
             if let Some(completed_round) = self.current_round.take() {
                 self.round_history.push(completed_round);
             }
         }
-        
+
         Ok(())
     }
 
     /// Federated averaging aggregation
-    async fn federated_averaging(&self, round: &FederatedRound) -> Result<HashMap<String, Array2<f32>>> {
+    async fn federated_averaging(
+        &self,
+        round: &FederatedRound,
+    ) -> Result<HashMap<String, Array2<f32>>> {
         // Simplified federated averaging
         let mut aggregated = HashMap::new();
-        
+
         // Initialize with zeros
         for (param_name, params) in &self.global_model.parameters {
             aggregated.insert(param_name.clone(), Array2::zeros(params.raw_dim()));
         }
-        
+
         // Average parameters (simplified - would use actual received updates)
         let num_participants = round.participants.len() as f32;
-        
+
         // Create a new map to avoid borrow conflicts
         let mut result = HashMap::new();
         for (param_name, params) in aggregated {
             result.insert(param_name, params / num_participants);
         }
-        
+
         Ok(result)
     }
 
     /// Weighted averaging aggregation
-    async fn weighted_averaging(&self, round: &FederatedRound) -> Result<HashMap<String, Array2<f32>>> {
+    async fn weighted_averaging(
+        &self,
+        round: &FederatedRound,
+    ) -> Result<HashMap<String, Array2<f32>>> {
         // Simplified weighted averaging based on sample size
         self.federated_averaging(round).await
     }
 
     /// Secure aggregation with cryptographic protocols
-    async fn secure_aggregation(&self, round: &FederatedRound) -> Result<HashMap<String, Array2<f32>>> {
+    async fn secure_aggregation(
+        &self,
+        round: &FederatedRound,
+    ) -> Result<HashMap<String, Array2<f32>>> {
         // Simplified secure aggregation
         self.federated_averaging(round).await
     }
 
     /// Robust aggregation against Byzantine participants
-    async fn robust_aggregation(&self, round: &FederatedRound) -> Result<HashMap<String, Array2<f32>>> {
+    async fn robust_aggregation(
+        &self,
+        round: &FederatedRound,
+    ) -> Result<HashMap<String, Array2<f32>>> {
         // Simplified robust aggregation
         self.federated_averaging(round).await
     }
 
     /// Personalized aggregation for individual models
-    async fn personalized_aggregation(&self, round: &FederatedRound) -> Result<HashMap<String, Array2<f32>>> {
+    async fn personalized_aggregation(
+        &self,
+        round: &FederatedRound,
+    ) -> Result<HashMap<String, Array2<f32>>> {
         // Simplified personalized aggregation
         self.federated_averaging(round).await
     }
 
     /// Hierarchical aggregation for multi-level federation
-    async fn hierarchical_aggregation(&self, round: &FederatedRound) -> Result<HashMap<String, Array2<f32>>> {
+    async fn hierarchical_aggregation(
+        &self,
+        round: &FederatedRound,
+    ) -> Result<HashMap<String, Array2<f32>>> {
         // Simplified hierarchical aggregation
         self.federated_averaging(round).await
     }
@@ -1680,7 +1722,10 @@ impl FederatedCoordinator {
     /// Send message to participant
     async fn send_message(&self, participant_id: Uuid, message: FederatedMessage) -> Result<()> {
         // In a real implementation, this would use actual networking
-        println!("Sending message to participant {}: {:?}", participant_id, message);
+        println!(
+            "Sending message to participant {}: {:?}",
+            participant_id, message
+        );
         Ok(())
     }
 
@@ -1688,16 +1733,21 @@ impl FederatedCoordinator {
     pub fn get_federation_stats(&self) -> FederationStats {
         FederationStats {
             total_participants: self.participants.len(),
-            active_participants: self.participants.values()
+            active_participants: self
+                .participants
+                .values()
                 .filter(|p| p.status == ParticipantStatus::Active)
                 .count(),
             total_rounds: self.round_history.len(),
             current_round: self.current_round.as_ref().map(|r| r.round_number),
             global_model_version: self.global_model.version,
             total_privacy_budget_used: self.privacy_engine.privacy_accountant.used_epsilon,
-            average_round_duration: self.round_history.iter()
+            average_round_duration: self
+                .round_history
+                .iter()
                 .map(|r| r.metrics.duration_seconds)
-                .sum::<f64>() / self.round_history.len().max(1) as f64,
+                .sum::<f64>()
+                / self.round_history.len().max(1) as f64,
         }
     }
 }
@@ -1757,7 +1807,7 @@ impl FederatedEmbeddingModel {
     /// Create new federated embedding model
     pub fn new(config: FederatedConfig) -> Self {
         let model_id = Uuid::new_v4();
-        
+
         Self {
             config,
             model_id,
@@ -1803,30 +1853,33 @@ impl FederatedEmbeddingModel {
         if let Some(ref mut coordinator) = self.coordinator {
             for round in 0..self.config.communication_rounds {
                 coordinator.start_round().await?;
-                
+
                 // Wait for round completion (simplified)
                 tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
             }
         } else {
             return Err(anyhow!("Not a coordinator"));
         }
-        
+
         self.is_trained = true;
         Ok(())
     }
 
     /// Participate in federated training (participant only)
-    pub async fn participate_in_training(&mut self, global_params: HashMap<String, Array2<f32>>) -> Result<LocalUpdate> {
+    pub async fn participate_in_training(
+        &mut self,
+        global_params: HashMap<String, Array2<f32>>,
+    ) -> Result<LocalUpdate> {
         if self.participant_info.is_none() {
             return Err(anyhow!("Not a participant"));
         }
-        
+
         // Update local model with global parameters
         self.local_model.parameters = global_params;
-        
+
         // Perform local training
         let local_stats = self.local_training().await?;
-        
+
         // Create local update
         let update = LocalUpdate {
             participant_id: self.participant_info.as_ref().unwrap().participant_id,
@@ -1838,14 +1891,14 @@ impl FederatedEmbeddingModel {
             signature: "signature".to_string(), // Simplified
             is_compressed: false,
         };
-        
+
         Ok(update)
     }
 
     /// Perform local training
     async fn local_training(&mut self) -> Result<LocalTrainingStats> {
         let start_time = std::time::Instant::now();
-        
+
         // Simulate local training
         for epoch in 0..self.config.local_epochs {
             // Training logic would go here
@@ -1854,11 +1907,11 @@ impl FederatedEmbeddingModel {
                 *params = params.mapv(|x| x + 0.01); // Simplified update
             }
         }
-        
+
         let training_time = start_time.elapsed().as_secs_f64();
-        
+
         let stats = LocalTrainingStats {
-            final_loss: 0.1, // Simplified
+            final_loss: 0.1,        // Simplified
             training_accuracy: 0.9, // Simplified
             local_epochs: self.config.local_epochs,
             training_time_seconds: training_time,
@@ -1868,10 +1921,11 @@ impl FederatedEmbeddingModel {
                 delta_used: self.config.privacy_config.delta,
                 noise_variance: 1.0,
                 gradient_clipped: true,
-                privacy_budget_remaining: self.config.privacy_config.local_epsilon - self.config.privacy_config.local_epsilon,
+                privacy_budget_remaining: self.config.privacy_config.local_epsilon
+                    - self.config.privacy_config.local_epsilon,
             },
         };
-        
+
         self.local_model.training_history.push(stats.clone());
         Ok(stats)
     }
@@ -1902,9 +1956,11 @@ impl EmbeddingModel for FederatedEmbeddingModel {
         if self.coordinator.is_some() {
             self.start_federated_training().await?;
         } else {
-            return Err(anyhow!("Cannot train without being coordinator or having global parameters"));
+            return Err(anyhow!(
+                "Cannot train without being coordinator or having global parameters"
+            ));
         }
-        
+
         Ok(self.training_stats.clone())
     }
 
@@ -1934,7 +1990,12 @@ impl EmbeddingModel for FederatedEmbeddingModel {
         Ok(0.5) // Simplified
     }
 
-    fn predict_objects(&self, _subject: &str, _predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        _subject: &str,
+        _predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
         for i in 0..k {
             predictions.push((format!("object_{}", i), 0.8 - i as f64 * 0.1));
@@ -1942,7 +2003,12 @@ impl EmbeddingModel for FederatedEmbeddingModel {
         Ok(predictions)
     }
 
-    fn predict_subjects(&self, _predicate: &str, _object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        _predicate: &str,
+        _object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
         for i in 0..k {
             predictions.push((format!("subject_{}", i), 0.8 - i as f64 * 0.1));
@@ -1950,7 +2016,12 @@ impl EmbeddingModel for FederatedEmbeddingModel {
         Ok(predictions)
     }
 
-    fn predict_relations(&self, _subject: &str, _object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        _subject: &str,
+        _object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
         for i in 0..k {
             predictions.push((format!("relation_{}", i), 0.8 - i as f64 * 0.1));
@@ -2040,7 +2111,7 @@ mod tests {
     async fn test_participant_registration() {
         let config = FederatedConfig::default();
         let mut coordinator = FederatedCoordinator::new(config);
-        
+
         let participant = Participant {
             participant_id: Uuid::new_v4(),
             name: "test_participant".to_string(),
@@ -2065,7 +2136,7 @@ mod tests {
             last_communication: Utc::now(),
             status: ParticipantStatus::Active,
         };
-        
+
         coordinator.register_participant(participant).unwrap();
         assert_eq!(coordinator.participants.len(), 1);
     }
@@ -2077,10 +2148,10 @@ mod tests {
             scale: 1.0,
             seed: Some(42),
         };
-        
+
         let params = Array2::ones((3, 3));
         let noisy_params = noise_gen.add_noise(&params);
-        
+
         // Check that noise was added (values should be different)
         assert_ne!(params, noisy_params);
         assert_eq!(params.raw_dim(), noisy_params.raw_dim());
@@ -2093,10 +2164,10 @@ mod tests {
             method: ClippingMethod::L2Norm,
             adaptive_clipping: false,
         };
-        
+
         let gradients = Array2::from_elem((2, 2), 5.0); // Large gradients
         let clipped = clipping.clip_gradients(&gradients);
-        
+
         // Check that gradients were clipped
         let norm = clipped.iter().map(|x| x * x).sum::<f32>().sqrt();
         assert!(norm <= 1.0 + 1e-6); // Allow for floating point precision
@@ -2119,13 +2190,13 @@ mod tests {
                 decompression_time_ms: 0.0,
             },
         };
-        
+
         let mut params = HashMap::new();
         params.insert("test".to_string(), Array2::ones((5, 5)));
-        
+
         let compressed = compression.compress(&params).unwrap();
         let decompressed = compression.decompress(&compressed).unwrap();
-        
+
         assert_eq!(params.len(), decompressed.len());
         assert!(compressed.len() > 0);
     }
@@ -2134,7 +2205,7 @@ mod tests {
     async fn test_federated_embedding_model_creation() {
         let config = FederatedConfig::default();
         let model = FederatedEmbeddingModel::new(config);
-        
+
         assert_eq!(model.model_type(), "federated-embedding");
         assert!(!model.is_trained());
         assert!(model.coordinator.is_none());
@@ -2145,7 +2216,7 @@ mod tests {
     async fn test_coordinator_initialization() {
         let config = FederatedConfig::default();
         let model = FederatedEmbeddingModel::new(config).as_coordinator();
-        
+
         assert!(model.coordinator.is_some());
         assert_eq!(model.coordinator.as_ref().unwrap().participants.len(), 0);
     }
@@ -2177,21 +2248,37 @@ mod tests {
             last_communication: Utc::now(),
             status: ParticipantStatus::Active,
         };
-        
+
         let model = FederatedEmbeddingModel::new(config).as_participant(participant_info.clone());
-        
+
         assert!(model.participant_info.is_some());
-        assert_eq!(model.participant_info.unwrap().participant_id, participant_info.participant_id);
+        assert_eq!(
+            model.participant_info.unwrap().participant_id,
+            participant_info.participant_id
+        );
     }
 
     #[tokio::test]
     async fn test_privacy_budget_tracking() {
         let config = FederatedConfig::default();
         let coordinator = FederatedCoordinator::new(config);
-        
-        assert_eq!(coordinator.privacy_engine.privacy_accountant.used_epsilon, 0.0);
-        assert_eq!(coordinator.privacy_engine.privacy_accountant.total_epsilon, 1.0);
-        assert_eq!(coordinator.privacy_engine.privacy_accountant.participant_budgets.len(), 0);
+
+        assert_eq!(
+            coordinator.privacy_engine.privacy_accountant.used_epsilon,
+            0.0
+        );
+        assert_eq!(
+            coordinator.privacy_engine.privacy_accountant.total_epsilon,
+            1.0
+        );
+        assert_eq!(
+            coordinator
+                .privacy_engine
+                .privacy_accountant
+                .participant_budgets
+                .len(),
+            0
+        );
     }
 
     #[tokio::test]
@@ -2212,9 +2299,12 @@ mod tests {
                 estimated_rounds_to_convergence: Some(10),
             },
         };
-        
+
         assert_eq!(metrics.num_participants, 5);
         assert_eq!(metrics.total_samples, 10000);
-        assert!(matches!(metrics.convergence_metrics.convergence_status, ConvergenceStatus::Progressing));
+        assert!(matches!(
+            metrics.convergence_metrics.convergence_status,
+            ConvergenceStatus::Progressing
+        ));
     }
 }

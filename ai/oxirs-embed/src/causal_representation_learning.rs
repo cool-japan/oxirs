@@ -4,11 +4,11 @@
 //! causal structures in embedding spaces with interventional learning, structural
 //! causal models, and counterfactual reasoning capabilities.
 
-use crate::{EmbeddingModel, ModelConfig, TrainingStats, Vector, Triple, NamedNode};
+use crate::{EmbeddingModel, ModelConfig, NamedNode, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{Array1, Array2, Array3, Array4, Axis, s};
+use ndarray::{s, Array1, Array2, Array3, Array4, Axis};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
@@ -531,7 +531,12 @@ impl CausalGraph {
         true
     }
 
-    fn has_cycle_dfs(&self, node: usize, visited: &mut Vec<bool>, rec_stack: &mut Vec<bool>) -> bool {
+    fn has_cycle_dfs(
+        &self,
+        node: usize,
+        visited: &mut Vec<bool>,
+        rec_stack: &mut Vec<bool>,
+    ) -> bool {
         visited[node] = true;
         rec_stack[node] = true;
 
@@ -612,7 +617,11 @@ pub struct Intervention {
 }
 
 impl Intervention {
-    pub fn new(targets: Vec<String>, values: Array1<f32>, intervention_type: InterventionType) -> Self {
+    pub fn new(
+        targets: Vec<String>,
+        values: Array1<f32>,
+        intervention_type: InterventionType,
+    ) -> Self {
         Self {
             targets,
             values,
@@ -638,30 +647,30 @@ pub struct CounterfactualQuery {
 pub struct CausalRepresentationModel {
     pub config: CausalRepresentationConfig,
     pub model_id: Uuid,
-    
+
     /// Learned causal graph
     pub causal_graph: CausalGraph,
     /// Structural equations
     pub structural_equations: HashMap<String, StructuralEquation>,
-    
+
     /// Embeddings for variables
     pub variable_embeddings: HashMap<String, Array1<f32>>,
     /// Latent factors (disentangled representations)
     pub latent_factors: Array2<f32>,
-    
+
     /// Twin network for counterfactuals
     pub factual_network: Array2<f32>,
     pub counterfactual_network: Array2<f32>,
     pub shared_network: Array2<f32>,
-    
+
     /// Training data storage
     pub observational_data: Vec<HashMap<String, f32>>,
     pub interventional_data: Vec<(HashMap<String, f32>, Intervention)>,
-    
+
     /// Entity and relation mappings
     pub entities: HashMap<String, usize>,
     pub relations: HashMap<String, usize>,
-    
+
     /// Training state
     pub training_stats: Option<TrainingStats>,
     pub is_trained: bool,
@@ -672,7 +681,7 @@ impl CausalRepresentationModel {
     pub fn new(config: CausalRepresentationConfig) -> Self {
         let model_id = Uuid::new_v4();
         let dimensions = config.base_config.dimensions;
-        
+
         Self {
             config,
             model_id,
@@ -680,9 +689,15 @@ impl CausalRepresentationModel {
             structural_equations: HashMap::new(),
             variable_embeddings: HashMap::new(),
             latent_factors: Array2::zeros((0, dimensions)),
-            factual_network: Array2::from_shape_fn((dimensions, dimensions), |_| rand::random::<f32>() * 0.1),
-            counterfactual_network: Array2::from_shape_fn((dimensions, dimensions), |_| rand::random::<f32>() * 0.1),
-            shared_network: Array2::from_shape_fn((dimensions, dimensions), |_| rand::random::<f32>() * 0.1),
+            factual_network: Array2::from_shape_fn((dimensions, dimensions), |_| {
+                rand::random::<f32>() * 0.1
+            }),
+            counterfactual_network: Array2::from_shape_fn((dimensions, dimensions), |_| {
+                rand::random::<f32>() * 0.1
+            }),
+            shared_network: Array2::from_shape_fn((dimensions, dimensions), |_| {
+                rand::random::<f32>() * 0.1
+            }),
             observational_data: Vec::new(),
             interventional_data: Vec::new(),
             entities: HashMap::new(),
@@ -698,7 +713,11 @@ impl CausalRepresentationModel {
     }
 
     /// Add interventional data
-    pub fn add_interventional_data(&mut self, data: HashMap<String, f32>, intervention: Intervention) {
+    pub fn add_interventional_data(
+        &mut self,
+        data: HashMap<String, f32>,
+        intervention: Intervention,
+    ) {
         self.interventional_data.push((data, intervention));
     }
 
@@ -724,7 +743,7 @@ impl CausalRepresentationModel {
 
         // Phase 1: Remove edges based on independence tests
         for i in 0..variables.len() {
-            for j in (i+1)..variables.len() {
+            for j in (i + 1)..variables.len() {
                 if self.independence_test(&variables[i], &variables[j], &[])? {
                     // Independent, so no edge
                     continue;
@@ -811,7 +830,7 @@ impl CausalRepresentationModel {
     fn run_notears_algorithm(&mut self) -> Result<()> {
         // Simplified NOTEARS implementation
         // In practice, this would involve continuous optimization with acyclicity constraints
-        
+
         if self.observational_data.is_empty() {
             return Ok(());
         }
@@ -852,12 +871,16 @@ impl CausalRepresentationModel {
     /// Test independence between two variables
     fn independence_test(&self, var1: &str, var2: &str, conditioning_set: &[&str]) -> Result<bool> {
         // Extract data for variables
-        let data1: Vec<f32> = self.observational_data.iter()
+        let data1: Vec<f32> = self
+            .observational_data
+            .iter()
             .filter_map(|row| row.get(var1))
             .cloned()
             .collect();
-        
-        let data2: Vec<f32> = self.observational_data.iter()
+
+        let data2: Vec<f32> = self
+            .observational_data
+            .iter()
             .filter_map(|row| row.get(var2))
             .cloned()
             .collect();
@@ -869,7 +892,7 @@ impl CausalRepresentationModel {
         // Simple correlation test (in practice would use proper conditional independence test)
         let correlation = self.compute_correlation(&data1, &data2);
         let threshold = self.config.causal_discovery.significance_threshold;
-        
+
         Ok(correlation.abs() < threshold)
     }
 
@@ -905,14 +928,17 @@ impl CausalRepresentationModel {
     fn orient_edges(&mut self) -> Result<()> {
         // Simplified edge orientation (in practice would use proper orientation rules)
         let n = self.causal_graph.variables.len();
-        
+
         for i in 0..n {
             for j in 0..n {
-                if i != j && self.causal_graph.adjacency[[i, j]] > 0.0 && self.causal_graph.adjacency[[j, i]] > 0.0 {
+                if i != j
+                    && self.causal_graph.adjacency[[i, j]] > 0.0
+                    && self.causal_graph.adjacency[[j, i]] > 0.0
+                {
                     // Both directions exist, choose one based on some criteria
                     let score_ij = self.compute_edge_score(i, j)?;
                     let score_ji = self.compute_edge_score(j, i)?;
-                    
+
                     if score_ij > score_ji {
                         self.causal_graph.remove_edge(j, i);
                     } else {
@@ -921,7 +947,7 @@ impl CausalRepresentationModel {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -931,20 +957,24 @@ impl CausalRepresentationModel {
         if from >= self.causal_graph.variables.len() || to >= self.causal_graph.variables.len() {
             return Ok(0.0);
         }
-        
+
         let var1 = &self.causal_graph.variables[from];
         let var2 = &self.causal_graph.variables[to];
-        
-        let data1: Vec<f32> = self.observational_data.iter()
+
+        let data1: Vec<f32> = self
+            .observational_data
+            .iter()
             .filter_map(|row| row.get(var1))
             .cloned()
             .collect();
-        
-        let data2: Vec<f32> = self.observational_data.iter()
+
+        let data2: Vec<f32> = self
+            .observational_data
+            .iter()
             .filter_map(|row| row.get(var2))
             .cloned()
             .collect();
-        
+
         Ok(self.compute_correlation(&data1, &data2))
     }
 
@@ -953,11 +983,11 @@ impl CausalRepresentationModel {
         let n_samples = self.observational_data.len() as f32;
         let n_variables = self.causal_graph.variables.len() as f32;
         let n_edges = self.causal_graph.adjacency.sum();
-        
+
         // Simplified BIC computation
         let log_likelihood = self.compute_log_likelihood()?;
         let penalty = (n_edges * n_variables.ln()) / 2.0;
-        
+
         Ok(log_likelihood - penalty)
     }
 
@@ -965,26 +995,26 @@ impl CausalRepresentationModel {
     fn compute_log_likelihood(&self) -> Result<f32> {
         // Simplified log-likelihood computation
         let mut total_likelihood = 0.0;
-        
+
         for data_point in &self.observational_data {
             let mut point_likelihood = 0.0;
-            
+
             for (var, &value) in data_point {
                 // Simple Gaussian likelihood
                 let variance = 1.0; // Assume unit variance
                 point_likelihood += -0.5 * (value * value / variance + variance.ln());
             }
-            
+
             total_likelihood += point_likelihood;
         }
-        
+
         Ok(total_likelihood)
     }
 
     /// Compute likelihood loss for NOTEARS
     fn compute_likelihood_loss(&self, weights: &Array2<f32>) -> Result<f32> {
         let mut loss = 0.0;
-        
+
         for data_point in &self.observational_data {
             for (i, var) in self.causal_graph.variables.iter().enumerate() {
                 if let Some(&value) = data_point.get(var) {
@@ -995,13 +1025,13 @@ impl CausalRepresentationModel {
                             predicted += weights[[j, i]] * parent_value;
                         }
                     }
-                    
+
                     let error = value - predicted;
                     loss += error * error;
                 }
             }
         }
-        
+
         Ok(loss)
     }
 
@@ -1017,20 +1047,21 @@ impl CausalRepresentationModel {
     pub fn learn_structural_equations(&mut self) -> Result<()> {
         for (i, variable) in self.causal_graph.variables.iter().enumerate() {
             let parents = self.causal_graph.get_parents(i);
-            let parent_names: Vec<String> = parents.iter()
+            let parent_names: Vec<String> = parents
+                .iter()
                 .map(|&p| self.causal_graph.variables[p].clone())
                 .collect();
-            
+
             let mut equation = StructuralEquation::new(variable.clone(), parent_names.clone());
-            
+
             // Learn coefficients from data
             if !parent_names.is_empty() {
                 self.fit_structural_equation(&mut equation)?;
             }
-            
+
             self.structural_equations.insert(variable.clone(), equation);
         }
-        
+
         Ok(())
     }
 
@@ -1039,12 +1070,12 @@ impl CausalRepresentationModel {
         // Simple linear regression
         let mut X = Vec::new();
         let mut y = Vec::new();
-        
+
         for data_point in &self.observational_data {
             if let Some(&target_value) = data_point.get(&equation.target) {
                 let mut parent_values = Vec::new();
                 let mut all_parents_present = true;
-                
+
                 for parent in &equation.parents {
                     if let Some(&parent_value) = data_point.get(parent) {
                         parent_values.push(parent_value);
@@ -1053,64 +1084,64 @@ impl CausalRepresentationModel {
                         break;
                     }
                 }
-                
+
                 if all_parents_present {
                     X.push(parent_values);
                     y.push(target_value);
                 }
             }
         }
-        
+
         if !X.is_empty() && !X[0].is_empty() {
             // Simple least squares solution
             let n_samples = X.len();
             let n_features = X[0].len();
-            
+
             // Convert to matrices
             let X_matrix = Array2::from_shape_fn((n_samples, n_features), |(i, j)| X[i][j]);
             let y_vector = Array1::from_vec(y);
-            
+
             // Solve normal equations: (X^T X)^{-1} X^T y
             // Simplified version - in practice would use proper linear algebra
             let mut coefficients = Array1::zeros(n_features);
             for j in 0..n_features {
                 let mut numerator = 0.0;
                 let mut denominator = 0.0;
-                
+
                 for i in 0..n_samples {
                     numerator += X_matrix[[i, j]] * y_vector[i];
                     denominator += X_matrix[[i, j]] * X_matrix[[i, j]];
                 }
-                
+
                 if denominator > 0.0 {
                     coefficients[j] = numerator / denominator;
                 }
             }
-            
+
             equation.linear_coefficients = coefficients;
         }
-        
+
         Ok(())
     }
 
     /// Perform intervention
     pub fn intervene(&self, intervention: &Intervention) -> Result<HashMap<String, f32>> {
         let mut result = HashMap::new();
-        
+
         // Start with intervention values for target variables
         for (i, target) in intervention.targets.iter().enumerate() {
             if i < intervention.values.len() {
                 result.insert(target.clone(), intervention.values[i]);
             }
         }
-        
+
         // Compute values for non-intervened variables using structural equations
         for variable in &self.causal_graph.variables {
             if !intervention.targets.contains(variable) {
                 if let Some(equation) = self.structural_equations.get(variable) {
                     let mut parent_values = Array1::zeros(equation.parents.len());
                     let mut all_parents_available = true;
-                    
+
                     for (i, parent) in equation.parents.iter().enumerate() {
                         if let Some(&value) = result.get(parent) {
                             parent_values[i] = value;
@@ -1119,7 +1150,7 @@ impl CausalRepresentationModel {
                             break;
                         }
                     }
-                    
+
                     if all_parents_available {
                         let value = equation.evaluate(&parent_values);
                         result.insert(variable.clone(), value);
@@ -1127,21 +1158,24 @@ impl CausalRepresentationModel {
                 }
             }
         }
-        
+
         Ok(result)
     }
 
     /// Answer counterfactual query
-    pub fn answer_counterfactual(&self, query: &CounterfactualQuery) -> Result<HashMap<String, f32>> {
+    pub fn answer_counterfactual(
+        &self,
+        query: &CounterfactualQuery,
+    ) -> Result<HashMap<String, f32>> {
         // Step 1: Abduction - infer latent variables from factual evidence
         let latent_values = self.abduction(&query.factual_evidence)?;
-        
+
         // Step 2: Action - apply intervention
         let intervened_values = self.intervene(&query.intervention)?;
-        
+
         // Step 3: Prediction - compute counterfactual outcomes
         let mut counterfactual_values = intervened_values;
-        
+
         // Use twin network for counterfactual reasoning
         for query_var in &query.query_variables {
             if let Some(var_embedding) = self.variable_embeddings.get(query_var) {
@@ -1151,7 +1185,7 @@ impl CausalRepresentationModel {
                 counterfactual_values.insert(query_var.clone(), counterfactual_value);
             }
         }
-        
+
         Ok(counterfactual_values)
     }
 
@@ -1160,31 +1194,40 @@ impl CausalRepresentationModel {
         // Simplified abduction - infer latent noise variables
         let latent_dim = self.config.disentanglement_config.num_factors;
         let mut latent_values = Array1::zeros(latent_dim);
-        
+
         // Use evidence to infer latent values (simplified)
         for (i, (var, &value)) in evidence.iter().enumerate() {
             if i < latent_dim {
                 latent_values[i] = value;
             }
         }
-        
+
         Ok(latent_values)
     }
 
     /// Generate causal explanation
-    pub fn generate_explanation(&self, query_var: &str, evidence: &HashMap<String, f32>) -> Result<String> {
+    pub fn generate_explanation(
+        &self,
+        query_var: &str,
+        evidence: &HashMap<String, f32>,
+    ) -> Result<String> {
         let mut explanation = String::new();
-        
+
         // Find causal path to query variable
-        if let Some(var_idx) = self.causal_graph.variables.iter().position(|v| v == query_var) {
+        if let Some(var_idx) = self
+            .causal_graph
+            .variables
+            .iter()
+            .position(|v| v == query_var)
+        {
             let parents = self.causal_graph.get_parents(var_idx);
-            
+
             explanation.push_str(&format!("The value of {} is caused by:\n", query_var));
-            
+
             for &parent_idx in &parents {
                 let parent_var = &self.causal_graph.variables[parent_idx];
                 let causal_strength = self.causal_graph.edge_weights[[parent_idx, var_idx]];
-                
+
                 if let Some(&parent_value) = evidence.get(parent_var) {
                     explanation.push_str(&format!(
                         "- {} (value: {:.2}, causal strength: {:.2})\n",
@@ -1193,7 +1236,7 @@ impl CausalRepresentationModel {
                 }
             }
         }
-        
+
         Ok(explanation)
     }
 
@@ -1211,13 +1254,13 @@ impl CausalRepresentationModel {
     fn learn_beta_vae(&mut self) -> Result<()> {
         let num_factors = self.config.disentanglement_config.num_factors;
         let beta = self.config.disentanglement_config.beta;
-        
+
         // Initialize latent factors
-        self.latent_factors = Array2::from_shape_fn(
-            (self.observational_data.len(), num_factors),
-            |_| rand::random::<f32>()
-        );
-        
+        self.latent_factors =
+            Array2::from_shape_fn((self.observational_data.len(), num_factors), |_| {
+                rand::random::<f32>()
+            });
+
         // Simplified beta-VAE training
         for _epoch in 0..100 {
             for (i, data_point) in self.observational_data.iter().enumerate() {
@@ -1228,12 +1271,12 @@ impl CausalRepresentationModel {
                         latent_sample[j] = value; // Simplified encoding
                     }
                 }
-                
+
                 // Update latent factors
                 self.latent_factors.row_mut(i).assign(&latent_sample);
             }
         }
-        
+
         Ok(())
     }
 
@@ -1246,16 +1289,16 @@ impl CausalRepresentationModel {
     /// Learn ICA representations
     fn learn_ica(&mut self) -> Result<()> {
         let num_factors = self.config.disentanglement_config.num_factors;
-        
+
         // FastICA algorithm (simplified)
-        self.latent_factors = Array2::from_shape_fn(
-            (self.observational_data.len(), num_factors),
-            |_| rand::random::<f32>()
-        );
-        
+        self.latent_factors =
+            Array2::from_shape_fn((self.observational_data.len(), num_factors), |_| {
+                rand::random::<f32>()
+            });
+
         // Whitening and ICA iterations would go here
         // For simplicity, using random initialization
-        
+
         Ok(())
     }
 }
@@ -1287,7 +1330,9 @@ impl EmbeddingModel for CausalRepresentationModel {
 
         // Add relation
         let next_relation_id = self.relations.len();
-        self.relations.entry(predicate_str).or_insert(next_relation_id);
+        self.relations
+            .entry(predicate_str)
+            .or_insert(next_relation_id);
 
         Ok(())
     }
@@ -1354,8 +1399,11 @@ impl EmbeddingModel for CausalRepresentationModel {
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         // Use causal relationships for scoring
         if let (Some(subject_idx), Some(object_idx)) = (
-            self.causal_graph.variables.iter().position(|v| v == subject),
-            self.causal_graph.variables.iter().position(|v| v == object)
+            self.causal_graph
+                .variables
+                .iter()
+                .position(|v| v == subject),
+            self.causal_graph.variables.iter().position(|v| v == object),
         ) {
             let causal_strength = self.causal_graph.edge_weights[[subject_idx, object_idx]];
             Ok(causal_strength as f64)
@@ -1364,7 +1412,12 @@ impl EmbeddingModel for CausalRepresentationModel {
         }
     }
 
-    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for variable in &self.causal_graph.variables {
@@ -1380,7 +1433,12 @@ impl EmbeddingModel for CausalRepresentationModel {
         Ok(scores)
     }
 
-    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for variable in &self.causal_graph.variables {
@@ -1396,7 +1454,12 @@ impl EmbeddingModel for CausalRepresentationModel {
         Ok(scores)
     }
 
-    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
         for relation in self.relations.keys() {
@@ -1427,7 +1490,11 @@ impl EmbeddingModel for CausalRepresentationModel {
             is_trained: self.is_trained,
             model_type: self.model_type().to_string(),
             creation_time: Utc::now(),
-            last_training_time: if self.is_trained { Some(Utc::now()) } else { None },
+            last_training_time: if self.is_trained {
+                Some(Utc::now())
+            } else {
+                None
+            },
         }
     }
 
@@ -1461,7 +1528,9 @@ impl EmbeddingModel for CausalRepresentationModel {
         for text in texts {
             let mut embedding = vec![0.0f32; self.config.base_config.dimensions];
             for (i, c) in text.chars().enumerate() {
-                if i >= self.config.base_config.dimensions { break; }
+                if i >= self.config.base_config.dimensions {
+                    break;
+                }
                 embedding[i] = (c as u8 as f32) / 255.0;
             }
             results.push(embedding);
@@ -1478,7 +1547,10 @@ mod tests {
     #[test]
     fn test_causal_representation_config_default() {
         let config = CausalRepresentationConfig::default();
-        assert!(matches!(config.causal_discovery.algorithm, CausalDiscoveryAlgorithm::PC));
+        assert!(matches!(
+            config.causal_discovery.algorithm,
+            CausalDiscoveryAlgorithm::PC
+        ));
         assert_eq!(config.causal_discovery.significance_threshold, 0.05);
     }
 
@@ -1486,10 +1558,10 @@ mod tests {
     fn test_causal_graph_creation() {
         let variables = vec!["X".to_string(), "Y".to_string(), "Z".to_string()];
         let mut graph = CausalGraph::new(variables);
-        
+
         graph.add_edge(0, 1, 0.5);
         graph.add_edge(1, 2, 0.8);
-        
+
         assert_eq!(graph.get_children(0), vec![1]);
         assert_eq!(graph.get_parents(1), vec![0]);
         assert!(graph.is_acyclic());
@@ -1497,11 +1569,8 @@ mod tests {
 
     #[test]
     fn test_structural_equation_creation() {
-        let equation = StructuralEquation::new(
-            "Y".to_string(),
-            vec!["X".to_string()]
-        );
-        
+        let equation = StructuralEquation::new("Y".to_string(), vec!["X".to_string()]);
+
         assert_eq!(equation.target, "Y");
         assert_eq!(equation.parents, vec!["X".to_string()]);
     }
@@ -1511,18 +1580,21 @@ mod tests {
         let intervention = Intervention::new(
             vec!["X".to_string()],
             Array1::from_vec(vec![1.0]),
-            InterventionType::Do
+            InterventionType::Do,
         );
-        
+
         assert_eq!(intervention.targets, vec!["X".to_string()]);
-        assert!(matches!(intervention.intervention_type, InterventionType::Do));
+        assert!(matches!(
+            intervention.intervention_type,
+            InterventionType::Do
+        ));
     }
 
     #[test]
     fn test_causal_representation_model_creation() {
         let config = CausalRepresentationConfig::default();
         let model = CausalRepresentationModel::new(config);
-        
+
         assert_eq!(model.entities.len(), 0);
         assert_eq!(model.causal_graph.variables.len(), 0);
         assert!(!model.is_trained);
@@ -1532,13 +1604,13 @@ mod tests {
     async fn test_causal_training() {
         let config = CausalRepresentationConfig::default();
         let mut model = CausalRepresentationModel::new(config);
-        
+
         // Add some observational data
         let mut data1 = HashMap::new();
         data1.insert("X".to_string(), 1.0);
         data1.insert("Y".to_string(), 2.0);
         model.add_observational_data(data1);
-        
+
         let stats = model.train(Some(5)).await.unwrap();
         assert_eq!(stats.epochs_completed, 5);
         assert!(model.is_trained());
@@ -1548,13 +1620,13 @@ mod tests {
     fn test_causal_discovery() {
         let config = CausalRepresentationConfig::default();
         let mut model = CausalRepresentationModel::new(config);
-        
+
         // Add sample data
         let mut data = HashMap::new();
         data.insert("X".to_string(), 1.0);
         data.insert("Y".to_string(), 2.0);
         model.add_observational_data(data);
-        
+
         let result = model.discover_causal_structure();
         assert!(result.is_ok());
     }
@@ -1563,22 +1635,22 @@ mod tests {
     fn test_counterfactual_query() {
         let config = CausalRepresentationConfig::default();
         let model = CausalRepresentationModel::new(config);
-        
+
         let mut evidence = HashMap::new();
         evidence.insert("X".to_string(), 1.0);
-        
+
         let intervention = Intervention::new(
             vec!["X".to_string()],
             Array1::from_vec(vec![2.0]),
-            InterventionType::Do
+            InterventionType::Do,
         );
-        
+
         let query = CounterfactualQuery {
             factual_evidence: evidence,
             intervention,
             query_variables: vec!["Y".to_string()],
         };
-        
+
         let result = model.answer_counterfactual(&query);
         assert!(result.is_ok());
     }

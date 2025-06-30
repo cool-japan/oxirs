@@ -7,11 +7,11 @@
 //! - Geometric deep learning approaches
 //! - Quantum-inspired embedding methods
 
-use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Vector, Triple, NamedNode};
+use crate::{EmbeddingModel, ModelConfig, ModelStats, NamedNode, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{Array1, Array2, Array3, s, Axis};
+use ndarray::{s, Array1, Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -793,7 +793,7 @@ impl NovelArchitectureModel {
     pub fn new(config: NovelArchitectureConfig) -> Self {
         let model_id = Uuid::new_v4();
         let dimensions = config.base_config.dimensions;
-        
+
         Self {
             config,
             model_id,
@@ -842,23 +842,19 @@ impl NovelArchitectureModel {
     fn initialize_graph_transformer(&mut self) -> Result<()> {
         let params = &self.config.architecture_params.transformer_params;
         let num_entities = self.entities.len();
-        
+
         if num_entities > 0 {
-            let attention_weights = Array3::zeros((
-                params.num_layers,
-                num_entities,
-                num_entities
-            ));
-            
-            let structural_features = Array2::from_shape_fn(
-                (num_entities, params.structural_dim),
-                |_| rand::random::<f64>()
-            );
-            
+            let attention_weights = Array3::zeros((params.num_layers, num_entities, num_entities));
+
+            let structural_features =
+                Array2::from_shape_fn((num_entities, params.structural_dim), |_| {
+                    rand::random::<f64>()
+                });
+
             let position_encodings = if params.use_positional_encoding {
                 Some(Array2::from_shape_fn(
                     (num_entities, params.attention_dim),
-                    |_| rand::random::<f64>()
+                    |_| rand::random::<f64>(),
                 ))
             } else {
                 None
@@ -871,7 +867,7 @@ impl NovelArchitectureModel {
                 position_encodings,
             });
         }
-        
+
         Ok(())
     }
 
@@ -879,12 +875,11 @@ impl NovelArchitectureModel {
     fn initialize_neural_ode(&mut self) -> Result<()> {
         let params = &self.config.architecture_params.ode_params;
         let dimensions = self.config.base_config.dimensions;
-        
-        let ode_params = Array2::from_shape_fn(
-            (dimensions, params.hidden_dims[0]),
-            |_| rand::random::<f64>()
-        );
-        
+
+        let ode_params = Array2::from_shape_fn((dimensions, params.hidden_dims[0]), |_| {
+            rand::random::<f64>()
+        });
+
         self.architecture_state.ode_state = Some(NeuralODEState {
             current_time: 0.0,
             trajectory: Vec::new(),
@@ -897,7 +892,7 @@ impl NovelArchitectureModel {
                 final_error: 0.0,
             },
         });
-        
+
         Ok(())
     }
 
@@ -905,21 +900,20 @@ impl NovelArchitectureModel {
     fn initialize_hyperbolic(&mut self) -> Result<()> {
         let params = &self.config.architecture_params.hyperbolic_params;
         let num_entities = self.entities.len();
-        
+
         if num_entities > 0 {
             let manifold_embeddings = match params.initialization {
                 HyperbolicInit::RandomNormal => {
-                    Array2::from_shape_fn(
-                        (num_entities, params.manifold_dim),
-                        |_| rand::random::<f64>()
-                    )
+                    Array2::from_shape_fn((num_entities, params.manifold_dim), |_| {
+                        rand::random::<f64>()
+                    })
                 }
                 HyperbolicInit::UniformHyperbolic => {
                     // Initialize uniformly on hyperbolic space
-                    let mut embeddings = Array2::from_shape_fn(
-                        (num_entities, params.manifold_dim),
-                        |_| rand::random::<f64>() * 2.0 - 1.0
-                    );
+                    let mut embeddings =
+                        Array2::from_shape_fn((num_entities, params.manifold_dim), |_| {
+                            rand::random::<f64>() * 2.0 - 1.0
+                        });
                     // Project to Poincaré ball
                     for mut row in embeddings.rows_mut() {
                         let norm = row.mapv(|x| x * x).sum().sqrt();
@@ -929,15 +923,15 @@ impl NovelArchitectureModel {
                     }
                     embeddings
                 }
-                _ => Array2::from_shape_fn(
-                    (num_entities, params.manifold_dim),
-                    |_| rand::random::<f64>()
-                ),
+                _ => Array2::from_shape_fn((num_entities, params.manifold_dim), |_| {
+                    rand::random::<f64>()
+                }),
             };
-            
+
             let tangent_vectors = Array2::zeros((num_entities, params.manifold_dim));
-            let metric_tensor = Array3::zeros((num_entities, params.manifold_dim, params.manifold_dim));
-            
+            let metric_tensor =
+                Array3::zeros((num_entities, params.manifold_dim, params.manifold_dim));
+
             self.architecture_state.hyperbolic_state = Some(HyperbolicState {
                 manifold_embeddings,
                 curvature: params.curvature,
@@ -945,7 +939,7 @@ impl NovelArchitectureModel {
                 metric_tensor,
             });
         }
-        
+
         Ok(())
     }
 
@@ -953,24 +947,22 @@ impl NovelArchitectureModel {
     fn initialize_geometric(&mut self) -> Result<()> {
         let params = &self.config.architecture_params.geometric_params;
         let dimensions = self.config.base_config.dimensions;
-        
-        let connection = Array3::from_shape_fn(
-            (dimensions, dimensions, dimensions),
-            |_| rand::random::<f64>()
-        );
-        
-        let curvature_tensor = Array3::from_shape_fn(
-            (dimensions, dimensions, dimensions),
-            |_| rand::random::<f64>()
-        );
-        
+
+        let connection = Array3::from_shape_fn((dimensions, dimensions, dimensions), |_| {
+            rand::random::<f64>()
+        });
+
+        let curvature_tensor = Array3::from_shape_fn((dimensions, dimensions, dimensions), |_| {
+            rand::random::<f64>()
+        });
+
         self.architecture_state.geometric_state = Some(GeometricState {
             connection,
             curvature_tensor,
             transport_maps: HashMap::new(),
             equivariance_maps: Vec::new(),
         });
-        
+
         Ok(())
     }
 
@@ -978,25 +970,25 @@ impl NovelArchitectureModel {
     fn initialize_quantum(&mut self) -> Result<()> {
         let params = &self.config.architecture_params.quantum_params;
         let state_dim = 2_usize.pow(params.num_qubits as u32);
-        
+
         // Initialize quantum state vector (normalized)
         let mut state_vector = Array1::from_shape_fn(state_dim, |_| rand::random::<f64>());
         let norm = state_vector.mapv(|x| x * x).sum().sqrt();
         state_vector /= norm;
-        
+
         // Initialize quantum gates
         let gates = vec![
             Array2::eye(state_dim), // Identity gate
-            // Add more gates as needed
+                                    // Add more gates as needed
         ];
-        
+
         self.architecture_state.quantum_state = Some(QuantumState {
             state_vector,
             gates,
             measurements: Vec::new(),
             entanglement: 0.0,
         });
-        
+
         Ok(())
     }
 
@@ -1009,20 +1001,25 @@ impl NovelArchitectureModel {
 
     /// Compute hyperbolic distance in Poincaré ball
     pub fn poincare_distance(&self, x: &Array1<f64>, y: &Array1<f64>) -> f64 {
-        let curvature = self.config.architecture_params.hyperbolic_params.curvature.abs();
-        
+        let curvature = self
+            .config
+            .architecture_params
+            .hyperbolic_params
+            .curvature
+            .abs();
+
         let diff = x - y;
         let norm_diff_sq = diff.mapv(|v| v * v).sum();
         let norm_x_sq = x.mapv(|v| v * v).sum();
         let norm_y_sq = y.mapv(|v| v * v).sum();
-        
+
         let numerator = norm_diff_sq;
         let denominator = (1.0 - norm_x_sq) * (1.0 - norm_y_sq);
-        
+
         if denominator <= 0.0 {
             return f64::INFINITY;
         }
-        
+
         let ratio = numerator / denominator;
         (curvature.sqrt()) * (1.0 + 2.0 * ratio).ln()
     }
@@ -1036,13 +1033,13 @@ impl NovelArchitectureModel {
         adjacency: &Array2<f64>,
     ) -> Result<Array2<f64>> {
         let attention_scores = queries.dot(keys);
-        
+
         // Apply structural bias
         let masked_scores = &attention_scores * adjacency;
-        
+
         // Apply softmax
         let softmax_scores = self.softmax_2d(&masked_scores);
-        
+
         // Apply to values
         Ok(softmax_scores.dot(values))
     }
@@ -1062,31 +1059,35 @@ impl NovelArchitectureModel {
     }
 
     /// Solve Neural ODE using Runge-Kutta method
-    pub fn solve_neural_ode(&mut self, initial_state: &Array2<f64>, time_span: (f64, f64)) -> Result<Array2<f64>> {
+    pub fn solve_neural_ode(
+        &mut self,
+        initial_state: &Array2<f64>,
+        time_span: (f64, f64),
+    ) -> Result<Array2<f64>> {
         let (t_start, t_end) = time_span;
         let params = &self.config.architecture_params.ode_params;
         let dt = (t_end - t_start) / params.time_steps as f64;
-        
+
         let mut state = initial_state.clone();
         let mut t = t_start;
-        
+
         // Store trajectory and update stats
         let mut trajectory = Vec::new();
         trajectory.push(state.clone());
-        
+
         for _ in 0..params.time_steps {
             // Runge-Kutta 4th order step
             let k1 = self.ode_function(&state, t)?;
             let k2 = self.ode_function(&(&state + &(&k1 * (dt / 2.0))), t + dt / 2.0)?;
             let k3 = self.ode_function(&(&state + &(&k2 * (dt / 2.0))), t + dt / 2.0)?;
             let k4 = self.ode_function(&(&state + &(&k3 * dt)), t + dt)?;
-            
+
             state = &state + &((&k1 + &(&k2 * 2.0) + &(&k3 * 2.0) + &k4) * (dt / 6.0));
             t += dt;
-            
+
             trajectory.push(state.clone());
         }
-        
+
         // Update ODE state after computation
         if let Some(ref mut ode_state) = self.architecture_state.ode_state {
             ode_state.trajectory = trajectory;
@@ -1094,7 +1095,7 @@ impl NovelArchitectureModel {
             ode_state.integration_stats.function_evaluations += params.time_steps * 4;
             ode_state.current_time = t;
         }
-        
+
         Ok(state)
     }
 
@@ -1109,36 +1110,53 @@ impl NovelArchitectureModel {
         }
     }
 
-    /// Compute quantum circuit output
+    /// Compute quantum circuit output using advanced quantum circuits
     pub fn quantum_forward(&self, input: &Array1<f64>) -> Result<Array1<f64>> {
+        use crate::quantum_circuits::{QuantumCircuit, QuantumGate, QuantumSimulator, QNNLayerType, QuantumNeuralNetworkLayer};
+
         if let Some(ref quantum_state) = self.architecture_state.quantum_state {
-            // Encode classical input into quantum state
-            let mut encoded_state = quantum_state.state_vector.clone();
+            let params = &self.config.architecture_params.quantum_params;
             
-            // Apply rotation gates based on input
-            for (i, &val) in input.iter().enumerate() {
-                if i < quantum_state.state_vector.len() {
-                    // Simple rotation encoding
-                    encoded_state[i] *= (val * std::f64::consts::PI).cos();
-                }
+            // Create quantum neural network layer for input encoding
+            let encoding_layer = QuantumNeuralNetworkLayer::new(
+                params.num_qubits, 
+                QNNLayerType::AngleEmbedding
+            );
+            
+            // Create variational circuit layer
+            let variational_layer = QuantumNeuralNetworkLayer::new(
+                params.num_qubits,
+                QNNLayerType::StronglyEntangling
+            );
+
+            // Build combined circuit
+            let mut circuit = QuantumCircuit::new(params.num_qubits);
+
+            // Add encoding gates
+            let input_normalized: Vec<f64> = input.iter().map(|&x| x as f64).collect();
+            let encoding_circuit = encoding_layer.build_circuit(Some(&input_normalized));
+            for gate in encoding_circuit.gates {
+                circuit.add_gate(gate);
             }
-            
-            // Apply quantum gates
-            for gate in &quantum_state.gates {
-                encoded_state = gate.dot(&encoded_state);
+
+            // Add variational gates
+            let variational_circuit = variational_layer.build_circuit(None);
+            for gate in variational_circuit.gates {
+                circuit.add_gate(gate);
             }
-            
-            // Measure and return classical output
-            let output_dim = input.len().min(encoded_state.len());
+
+            // Execute circuit
+            let mut simulator = QuantumSimulator::new(params.num_qubits);
+            simulator.execute_circuit(&circuit)?;
+
+            // Measure all qubits and return expectation values
+            let output_dim = input.len().min(params.num_qubits);
             let mut output = Array1::zeros(output_dim);
-            
+
             for i in 0..output_dim {
-                output[i] = encoded_state[i].abs().powi(2); // Measurement probability
+                output[i] = simulator.expectation_z(i);
             }
-            
-            // Note: In a real implementation, measurements would be stored
-            // but for now we skip this to avoid mutable borrow
-            
+
             Ok(output)
         } else {
             Err(anyhow!("Quantum state not initialized"))
@@ -1159,11 +1177,13 @@ impl EmbeddingModel for NovelArchitectureModel {
     fn model_type(&self) -> &'static str {
         match self.config.architecture {
             ArchitectureType::GraphTransformer => "NovelArchitecture::GraphTransformer",
-            ArchitectureType::NeuralODE => "NovelArchitecture::NeuralODE", 
+            ArchitectureType::NeuralODE => "NovelArchitecture::NeuralODE",
             ArchitectureType::HyperbolicEmbedding => "NovelArchitecture::HyperbolicEmbedding",
             ArchitectureType::GeometricDeepLearning => "NovelArchitecture::GeometricDeepLearning",
             ArchitectureType::QuantumInspired => "NovelArchitecture::QuantumInspired",
-            ArchitectureType::ContinuousNormalizingFlow => "NovelArchitecture::ContinuousNormalizingFlow",
+            ArchitectureType::ContinuousNormalizingFlow => {
+                "NovelArchitecture::ContinuousNormalizingFlow"
+            }
         }
     }
 
@@ -1176,20 +1196,26 @@ impl EmbeddingModel for NovelArchitectureModel {
         let next_entity_id = self.entities.len();
         let subject_id = *self.entities.entry(subject_str).or_insert(next_entity_id);
         if subject_id == next_entity_id {
-            self.entity_embeddings = self.resize_embeddings(&self.entity_embeddings, self.entities.len());
+            self.entity_embeddings =
+                self.resize_embeddings(&self.entity_embeddings, self.entities.len());
         }
 
         let next_entity_id = self.entities.len();
         let object_id = *self.entities.entry(object_str).or_insert(next_entity_id);
         if object_id == next_entity_id {
-            self.entity_embeddings = self.resize_embeddings(&self.entity_embeddings, self.entities.len());
+            self.entity_embeddings =
+                self.resize_embeddings(&self.entity_embeddings, self.entities.len());
         }
 
         // Add relation
         let next_relation_id = self.relations.len();
-        let _predicate_id = *self.relations.entry(predicate_str).or_insert(next_relation_id);
+        let _predicate_id = *self
+            .relations
+            .entry(predicate_str)
+            .or_insert(next_relation_id);
         if _predicate_id == next_relation_id {
-            self.relation_embeddings = self.resize_embeddings(&self.relation_embeddings, self.relations.len());
+            self.relation_embeddings =
+                self.resize_embeddings(&self.relation_embeddings, self.relations.len());
         }
 
         Ok(())
@@ -1204,7 +1230,7 @@ impl EmbeddingModel for NovelArchitectureModel {
 
         // Training loop with architecture-specific updates
         let mut loss_history = Vec::new();
-        
+
         for epoch in 0..epochs {
             let epoch_loss = match &self.config.architecture {
                 ArchitectureType::GraphTransformer => self.train_graph_transformer_epoch()?,
@@ -1214,9 +1240,9 @@ impl EmbeddingModel for NovelArchitectureModel {
                 ArchitectureType::QuantumInspired => self.train_quantum_epoch()?,
                 ArchitectureType::ContinuousNormalizingFlow => self.train_cnf_epoch()?,
             };
-            
+
             loss_history.push(epoch_loss);
-            
+
             // Early stopping check
             if epoch > 10 && epoch_loss < 1e-6 {
                 break;
@@ -1268,17 +1294,22 @@ impl EmbeddingModel for NovelArchitectureModel {
         match &self.config.architecture {
             ArchitectureType::HyperbolicEmbedding => {
                 // Use hyperbolic distance for scoring
-                let subject_arr = Array1::from_vec(subject_emb.values.iter().map(|&x| x as f64).collect());
-                let object_arr = Array1::from_vec(object_emb.values.iter().map(|&x| x as f64).collect());
+                let subject_arr =
+                    Array1::from_vec(subject_emb.values.iter().map(|&x| x as f64).collect());
+                let object_arr =
+                    Array1::from_vec(object_emb.values.iter().map(|&x| x as f64).collect());
                 let distance = self.poincare_distance(&subject_arr, &object_arr);
                 Ok(-distance) // Negative distance as score
             }
             _ => {
                 // Standard TransE-like scoring
-                let subject_arr = Array1::from_vec(subject_emb.values.iter().map(|&x| x as f64).collect());
-                let predicate_arr = Array1::from_vec(predicate_emb.values.iter().map(|&x| x as f64).collect());
-                let object_arr = Array1::from_vec(object_emb.values.iter().map(|&x| x as f64).collect());
-                
+                let subject_arr =
+                    Array1::from_vec(subject_emb.values.iter().map(|&x| x as f64).collect());
+                let predicate_arr =
+                    Array1::from_vec(predicate_emb.values.iter().map(|&x| x as f64).collect());
+                let object_arr =
+                    Array1::from_vec(object_emb.values.iter().map(|&x| x as f64).collect());
+
                 let predicted = &subject_arr + &predicate_arr;
                 let diff = &predicted - &object_arr;
                 let distance = diff.mapv(|x| x * x).sum().sqrt();
@@ -1287,49 +1318,64 @@ impl EmbeddingModel for NovelArchitectureModel {
         }
     }
 
-    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
-        
+
         for (entity, _) in &self.entities {
             if entity != subject {
                 let score = self.score_triple(subject, predicate, entity)?;
                 scores.push((entity.clone(), score));
             }
         }
-        
+
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
-    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
-        
+
         for (entity, _) in &self.entities {
             if entity != object {
                 let score = self.score_triple(entity, predicate, object)?;
                 scores.push((entity.clone(), score));
             }
         }
-        
+
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
-    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
-        
+
         for (relation, _) in &self.relations {
             let score = self.score_triple(subject, relation, object)?;
             scores.push((relation.clone(), score));
         }
-        
+
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
@@ -1350,7 +1396,11 @@ impl EmbeddingModel for NovelArchitectureModel {
             is_trained: self.is_trained,
             model_type: self.model_type().to_string(),
             creation_time: Utc::now(),
-            last_training_time: if self.is_trained { Some(Utc::now()) } else { None },
+            last_training_time: if self.is_trained {
+                Some(Utc::now())
+            } else {
+                None
+            },
         }
     }
 
@@ -1380,7 +1430,7 @@ impl EmbeddingModel for NovelArchitectureModel {
     async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         // Simple encoding for novel architectures
         let mut results = Vec::new();
-        
+
         for text in texts {
             match &self.config.architecture {
                 ArchitectureType::QuantumInspired => {
@@ -1389,14 +1439,16 @@ impl EmbeddingModel for NovelArchitectureModel {
                         text.chars()
                             .take(self.config.base_config.dimensions)
                             .map(|c| (c as u8 as f64) / 255.0)
-                            .collect()
+                            .collect(),
                     );
-                    
+
                     // Pad or truncate to required dimension
                     let mut padded_input = Array1::zeros(self.config.base_config.dimensions);
                     let copy_len = input.len().min(self.config.base_config.dimensions);
-                    padded_input.slice_mut(s![..copy_len]).assign(&input.slice(s![..copy_len]));
-                    
+                    padded_input
+                        .slice_mut(s![..copy_len])
+                        .assign(&input.slice(s![..copy_len]));
+
                     if let Ok(quantum_output) = self.quantum_forward(&padded_input) {
                         results.push(quantum_output.mapv(|x| x as f32).to_vec());
                     } else {
@@ -1407,14 +1459,16 @@ impl EmbeddingModel for NovelArchitectureModel {
                     // Standard text encoding
                     let mut embedding = vec![0.0f32; self.config.base_config.dimensions];
                     for (i, c) in text.chars().enumerate() {
-                        if i >= self.config.base_config.dimensions { break; }
+                        if i >= self.config.base_config.dimensions {
+                            break;
+                        }
                         embedding[i] = (c as u8 as f32) / 255.0;
                     }
                     results.push(embedding);
                 }
             }
         }
-        
+
         Ok(results)
     }
 }
@@ -1428,12 +1482,14 @@ impl NovelArchitectureModel {
             use rand::Rng;
             rng.gen_range(-1.0..1.0)
         });
-        
+
         let copy_rows = embeddings.nrows().min(new_size);
         if copy_rows > 0 {
-            new_embeddings.slice_mut(s![..copy_rows, ..]).assign(&embeddings.slice(s![..copy_rows, ..]));
+            new_embeddings
+                .slice_mut(s![..copy_rows, ..])
+                .assign(&embeddings.slice(s![..copy_rows, ..]));
         }
-        
+
         new_embeddings
     }
 
@@ -1442,23 +1498,28 @@ impl NovelArchitectureModel {
         if self.entities.is_empty() {
             return Ok(0.0);
         }
-        
+
         // Simulate graph transformer training
         let num_entities = self.entities.len();
         let adjacency = Array2::eye(num_entities); // Simple identity for now
-        
+
         if let Some(ref mut transformer_state) = self.architecture_state.transformer_state {
             // Update attention weights
             for layer in 0..transformer_state.attention_weights.shape()[0] {
-                let mut layer_attention = transformer_state.attention_weights.slice_mut(s![layer, .., ..]);
+                let mut layer_attention =
+                    transformer_state
+                        .attention_weights
+                        .slice_mut(s![layer, .., ..]);
                 layer_attention.assign(&adjacency);
             }
-            
+
             // Compute layer outputs
             transformer_state.layer_outputs.clear();
-            transformer_state.layer_outputs.push(self.entity_embeddings.clone());
+            transformer_state
+                .layer_outputs
+                .push(self.entity_embeddings.clone());
         }
-        
+
         Ok(0.1) // Return mock loss
     }
 
@@ -1467,11 +1528,11 @@ impl NovelArchitectureModel {
         if self.entities.is_empty() {
             return Ok(0.0);
         }
-        
+
         // Simulate Neural ODE training by solving ODE
         let embeddings = self.entity_embeddings.clone();
         let _final_state = self.solve_neural_ode(&embeddings, (0.0, 1.0))?;
-        
+
         Ok(0.1) // Return mock loss
     }
 
@@ -1480,7 +1541,7 @@ impl NovelArchitectureModel {
         if self.entities.is_empty() {
             return Ok(0.0);
         }
-        
+
         // Simulate hyperbolic training
         if let Some(ref mut hyperbolic_state) = self.architecture_state.hyperbolic_state {
             // Project embeddings to Poincaré ball
@@ -1491,7 +1552,7 @@ impl NovelArchitectureModel {
                 }
             }
         }
-        
+
         Ok(0.1) // Return mock loss
     }
 
@@ -1500,13 +1561,13 @@ impl NovelArchitectureModel {
         if self.entities.is_empty() {
             return Ok(0.0);
         }
-        
+
         // Simulate geometric training
         if let Some(ref mut geometric_state) = self.architecture_state.geometric_state {
             // Update connection coefficients
             geometric_state.connection *= 0.99; // Simple decay
         }
-        
+
         Ok(0.1) // Return mock loss
     }
 
@@ -1515,7 +1576,7 @@ impl NovelArchitectureModel {
         if self.entities.is_empty() {
             return Ok(0.0);
         }
-        
+
         // Simulate quantum training
         if let Some(ref mut quantum_state) = self.architecture_state.quantum_state {
             // Normalize quantum state
@@ -1524,7 +1585,7 @@ impl NovelArchitectureModel {
                 quantum_state.state_vector /= norm;
             }
         }
-        
+
         Ok(0.1) // Return mock loss
     }
 
@@ -1543,7 +1604,10 @@ mod tests {
     fn test_novel_architecture_config_default() {
         let config = NovelArchitectureConfig::default();
         assert_eq!(config.base_config.dimensions, 100);
-        assert!(matches!(config.architecture, ArchitectureType::GraphTransformer));
+        assert!(matches!(
+            config.architecture,
+            ArchitectureType::GraphTransformer
+        ));
     }
 
     #[test]
@@ -1582,7 +1646,7 @@ mod tests {
     fn test_novel_architecture_model_creation() {
         let config = NovelArchitectureConfig::default();
         let model = NovelArchitectureModel::new(config);
-        
+
         assert_eq!(model.entities.len(), 0);
         assert_eq!(model.relations.len(), 0);
         assert!(!model.is_trained);
@@ -1595,10 +1659,10 @@ mod tests {
             ..Default::default()
         };
         let model = NovelArchitectureModel::new(config);
-        
+
         let x = Array1::from_vec(vec![0.1, 0.2]);
         let y = Array1::from_vec(vec![0.3, 0.4]);
-        
+
         let distance = model.poincare_distance(&x, &y);
         assert!(distance > 0.0);
         assert!(distance.is_finite());
@@ -1611,13 +1675,13 @@ mod tests {
             ..Default::default()
         };
         let mut model = NovelArchitectureModel::new(config);
-        
+
         // Initialize quantum state
         model.initialize_architecture().unwrap();
-        
+
         let input = Array1::from_vec(vec![0.5, 0.3, 0.8]);
         let output = model.quantum_forward(&input).unwrap();
-        
+
         assert_eq!(output.len(), input.len());
         assert!(output.iter().all(|&x| x >= 0.0 && x <= 1.0));
     }
@@ -1626,7 +1690,7 @@ mod tests {
     async fn test_novel_architecture_training() {
         let config = NovelArchitectureConfig::default();
         let mut model = NovelArchitectureModel::new(config);
-        
+
         // Add some test data
         let triple = Triple::new(
             NamedNode::new("http://example.org/alice").unwrap(),
@@ -1634,7 +1698,7 @@ mod tests {
             NamedNode::new("http://example.org/bob").unwrap(),
         );
         model.add_triple(triple).unwrap();
-        
+
         let stats = model.train(Some(5)).await.unwrap();
         assert_eq!(stats.epochs_completed, 5);
         assert!(model.is_trained());
@@ -1644,10 +1708,10 @@ mod tests {
     fn test_softmax_2d() {
         let config = NovelArchitectureConfig::default();
         let model = NovelArchitectureModel::new(config);
-        
+
         let input = Array2::from_shape_vec((2, 3), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
         let output = model.softmax_2d(&input);
-        
+
         // Check that rows sum to 1
         for row in output.rows() {
             let sum: f64 = row.sum();
@@ -1661,7 +1725,7 @@ mod tests {
             architecture: ArchitectureType::GraphTransformer,
             ..Default::default()
         });
-        
+
         // Add entity first
         let triple = Triple::new(
             NamedNode::new("http://example.org/alice").unwrap(),
@@ -1669,7 +1733,7 @@ mod tests {
             NamedNode::new("http://example.org/bob").unwrap(),
         );
         model.add_triple(triple).unwrap();
-        
+
         model.initialize_architecture().unwrap();
         assert!(model.architecture_state.transformer_state.is_some());
     }
@@ -1682,10 +1746,10 @@ mod tests {
         };
         let mut model = NovelArchitectureModel::new(config);
         model.initialize_architecture().unwrap();
-        
+
         let texts = vec!["hello".to_string(), "world".to_string()];
         let embeddings = model.encode(&texts).await.unwrap();
-        
+
         assert_eq!(embeddings.len(), 2);
         assert_eq!(embeddings[0].len(), model.config.base_config.dimensions);
     }

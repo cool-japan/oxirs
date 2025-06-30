@@ -187,7 +187,7 @@ impl ReasoningTaskEvaluator {
     /// Evaluate a model on reasoning tasks
     pub async fn evaluate(&self, model: &dyn EmbeddingModel) -> Result<ReasoningEvaluationResults> {
         info!("Starting reasoning task evaluation");
-        
+
         // Placeholder implementation
         let results = ReasoningEvaluationResults {
             overall_accuracy: 0.75,
@@ -213,7 +213,10 @@ pub mod utils {
     use super::*;
 
     /// Generate reasoning tasks from rules
-    pub fn generate_reasoning_tasks(rules: &[ReasoningRule], num_tasks: usize) -> Vec<ReasoningChain> {
+    pub fn generate_reasoning_tasks(
+        rules: &[ReasoningRule],
+        num_tasks: usize,
+    ) -> Vec<ReasoningChain> {
         Vec::new()
     }
 
