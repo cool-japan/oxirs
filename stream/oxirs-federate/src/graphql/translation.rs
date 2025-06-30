@@ -261,7 +261,7 @@ impl GraphQLToSparqlTranslator {
     /// Process a GraphQL selection set recursively
     async fn process_selection_set(
         &self,
-        selection_set: &[GraphQLField],
+        selection_set: &[Selection],
         parent_subject: Option<&str>,
         sparql_builder: &mut SparqlQueryBuilder,
         variable_mappings: &mut HashMap<String, String>,
@@ -286,7 +286,7 @@ impl GraphQLToSparqlTranslator {
             sparql_builder.add_select_variable(&subject_var);
 
             // Get predicate mapping
-            let predicate = self.get_predicate_for_field(&field.name, &field.field_type)?;
+            let predicate = self.get_predicate_for_field(&field.name, "String")?;
 
             // Create object variable
             let object_var = format!("?{}_{}", field.name, depth);
@@ -306,9 +306,9 @@ impl GraphQLToSparqlTranslator {
             variable_mappings.insert(field.name.clone(), object_var.clone());
 
             // Process field arguments as filters
-            if let Some(args) = &field.arguments {
+            if !field.arguments.is_empty() {
                 self.process_field_arguments(
-                    args,
+                    &field.arguments,
                     &subject_var,
                     sparql_builder,
                     warnings,
@@ -318,7 +318,7 @@ impl GraphQLToSparqlTranslator {
 
             // Process nested fields
             if !field.selection_set.is_empty() {
-                self.process_selection_set(
+                Box::pin(self.process_selection_set(
                     &field.selection_set,
                     Some(&object_var),
                     sparql_builder,
@@ -326,7 +326,7 @@ impl GraphQLToSparqlTranslator {
                     triple_patterns,
                     warnings,
                     depth + 1,
-                )
+                ))
                 .await?;
             }
         }
@@ -342,7 +342,8 @@ impl GraphQLToSparqlTranslator {
         sparql_builder: &mut SparqlQueryBuilder,
         warnings: &mut Vec<String>,
     ) -> Result<()> {
-        for (arg_name, arg_value) in arguments {
+        for (arg_name, arg) in arguments {
+            let arg_value = arg; // arg is already the value
             match arg_name.as_str() {
                 "id" => {
                     // Handle ID equality filter
@@ -405,8 +406,8 @@ impl GraphQLToSparqlTranslator {
                 
                 let triple_pattern = TriplePattern {
                     subject: Some(subject_var.to_string()),
-                    predicate: Some(predicate),
-                    object: Some(object_value),
+                    predicate: Some(predicate.clone()),
+                    object: Some(object_value.clone()),
                     pattern_string: format!("{} {} {}", subject_var, predicate, object_value),
                 };
                 
@@ -434,7 +435,7 @@ impl GraphQLToSparqlTranslator {
         // Add basic triple pattern
         let triple_pattern = TriplePattern {
             subject: Some(subject_var.to_string()),
-            predicate: Some(predicate),
+            predicate: Some(predicate.clone()),
             object: Some(object_var.clone()),
             pattern_string: format!("{} {} {}", subject_var, predicate, object_var),
         };
@@ -477,7 +478,7 @@ impl GraphQLToSparqlTranslator {
     /// Process a mutation field
     async fn process_mutation_field(
         &self,
-        field: &GraphQLField,
+        field: &Selection,
         sparql_builder: &mut SparqlUpdateBuilder,
         variable_mappings: &mut HashMap<String, String>,
         triple_patterns: &mut Vec<TriplePattern>,
@@ -504,7 +505,7 @@ impl GraphQLToSparqlTranslator {
     /// Process CREATE mutation
     async fn process_create_mutation(
         &self,
-        field: &GraphQLField,
+        field: &Selection,
         sparql_builder: &mut SparqlUpdateBuilder,
         variable_mappings: &mut HashMap<String, String>,
         triple_patterns: &mut Vec<TriplePattern>,
@@ -512,9 +513,9 @@ impl GraphQLToSparqlTranslator {
         // Extract entity type from mutation name
         let entity_type = field.name.strip_prefix("create").unwrap_or(&field.name);
         
-        if let Some(args) = &field.arguments {
-            if let Some(data) = args.get("data") {
-                if let Some(data_obj) = data.as_object() {
+        if !field.arguments.is_empty() {
+            if let Some(data_arg) = field.arguments.get("data") {
+                if let Some(data_obj) = data_arg.as_object() {
                     // Generate URI for new entity
                     let entity_uri = format!("{}{}_{}",
                         self.config.default_namespace,
@@ -541,8 +542,8 @@ impl GraphQLToSparqlTranslator {
 
                         let property_triple = TriplePattern {
                             subject: Some(format!("<{}>", entity_uri)),
-                            predicate: Some(predicate),
-                            object: Some(object_value),
+                            predicate: Some(predicate.clone()),
+                            object: Some(object_value.clone()),
                             pattern_string: format!("<{}> {} {}", entity_uri, predicate, object_value),
                         };
                         triple_patterns.push(property_triple.clone());
@@ -560,12 +561,13 @@ impl GraphQLToSparqlTranslator {
     /// Process UPDATE mutation
     async fn process_update_mutation(
         &self,
-        field: &GraphQLField,
+        field: &Selection,
         sparql_builder: &mut SparqlUpdateBuilder,
         variable_mappings: &mut HashMap<String, String>,
         triple_patterns: &mut Vec<TriplePattern>,
     ) -> Result<()> {
-        if let Some(args) = &field.arguments {
+        let args = &field.arguments;
+        if !args.is_empty() {
             if let (Some(where_clause), Some(data)) = (args.get("where"), args.get("data")) {
                 // Process WHERE clause to identify entity
                 let entity_var = "?entity".to_string();
@@ -577,8 +579,8 @@ impl GraphQLToSparqlTranslator {
 
                         let where_triple = TriplePattern {
                             subject: Some(entity_var.clone()),
-                            predicate: Some(predicate),
-                            object: Some(object_value),
+                            predicate: Some(predicate.clone()),
+                            object: Some(object_value.clone()),
                             pattern_string: format!("{} {} {}", entity_var, predicate, object_value),
                         };
                         triple_patterns.push(where_triple.clone());
@@ -597,7 +599,7 @@ impl GraphQLToSparqlTranslator {
                         let delete_triple = TriplePattern {
                             subject: Some(entity_var.clone()),
                             predicate: Some(predicate.clone()),
-                            object: Some(old_value_var),
+                            object: Some(old_value_var.clone()),
                             pattern_string: format!("{} {} {}", entity_var, predicate, old_value_var),
                         };
                         sparql_builder.add_delete_triple(&delete_triple);
@@ -605,8 +607,8 @@ impl GraphQLToSparqlTranslator {
                         // INSERT new value
                         let insert_triple = TriplePattern {
                             subject: Some(entity_var.clone()),
-                            predicate: Some(predicate),
-                            object: Some(new_object_value),
+                            predicate: Some(predicate.clone()),
+                            object: Some(new_object_value.clone()),
                             pattern_string: format!("{} {} {}", entity_var, predicate, new_object_value),
                         };
                         sparql_builder.add_insert_triple(&insert_triple);
@@ -621,12 +623,13 @@ impl GraphQLToSparqlTranslator {
     /// Process DELETE mutation
     async fn process_delete_mutation(
         &self,
-        field: &GraphQLField,
+        field: &Selection,
         sparql_builder: &mut SparqlUpdateBuilder,
         variable_mappings: &mut HashMap<String, String>,
         triple_patterns: &mut Vec<TriplePattern>,
     ) -> Result<()> {
-        if let Some(args) = &field.arguments {
+        let args = &field.arguments;
+        if !args.is_empty() {
             if let Some(where_clause) = args.get("where") {
                 let entity_var = "?entity".to_string();
                 
@@ -637,8 +640,8 @@ impl GraphQLToSparqlTranslator {
 
                         let where_triple = TriplePattern {
                             subject: Some(entity_var.clone()),
-                            predicate: Some(predicate),
-                            object: Some(object_value),
+                            predicate: Some(predicate.clone()),
+                            object: Some(object_value.clone()),
                             pattern_string: format!("{} {} {}", entity_var, predicate, object_value),
                         };
                         triple_patterns.push(where_triple.clone());
@@ -766,7 +769,7 @@ impl GraphQLToSparqlTranslator {
     }
 
     /// Parse GraphQL selection set (simplified)
-    fn parse_selection_set(&self, content: &str) -> Result<Vec<GraphQLField>> {
+    fn parse_selection_set(&self, content: &str) -> Result<Vec<Selection>> {
         let mut fields = Vec::new();
         let lines: Vec<&str> = content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
 
@@ -780,7 +783,7 @@ impl GraphQLToSparqlTranslator {
     }
 
     /// Parse a single field line (simplified)
-    fn parse_field_line(&self, line: &str) -> Result<Option<GraphQLField>> {
+    fn parse_field_line(&self, line: &str) -> Result<Option<Selection>> {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             return Ok(None);
@@ -795,27 +798,26 @@ impl GraphQLToSparqlTranslator {
             trimmed
         };
 
-        Ok(Some(GraphQLField {
+        Ok(Some(Selection {
             name: field_name.to_string(),
-            field_type: "String".to_string(), // Simplified
-            arguments: None,
+            alias: None, // Simplified
+            arguments: HashMap::new(),
             selection_set: Vec::new(), // Simplified - would need recursive parsing
-            directives: Vec::new(),
         }))
     }
 
     /// Extract operation from parsed query
-    fn extract_operation(&self, parsed_query: &ParsedGraphQLQuery) -> Result<&GraphQLOperation> {
+    fn extract_operation<'a>(&self, parsed_query: &'a ParsedGraphQLQuery) -> Result<&'a GraphQLOperation> {
         Ok(&parsed_query.operation)
     }
 
     /// Count total fields in selection set
-    fn count_fields(&self, selection_set: &[GraphQLField]) -> usize {
+    fn count_fields(&self, selection_set: &[Selection]) -> usize {
         selection_set.iter().map(|field| 1 + self.count_fields(&field.selection_set)).sum()
     }
 
     /// Calculate maximum nesting depth
-    fn calculate_max_depth(&self, selection_set: &[GraphQLField]) -> usize {
+    fn calculate_max_depth(&self, selection_set: &[Selection]) -> usize {
         selection_set
             .iter()
             .map(|field| 1 + self.calculate_max_depth(&field.selection_set))
@@ -1032,7 +1034,7 @@ struct ParsedGraphQLQuery {
 struct GraphQLOperation {
     operation_type: String,
     operation_name: Option<String>,
-    selection_set: Vec<GraphQLField>,
+    selection_set: Vec<Selection>,
     variables: Option<HashMap<String, serde_json::Value>>,
 }
 

@@ -363,18 +363,19 @@ impl QueryDecomposer {
 
             steps.push(PlanStep {
                 service_id: service_id.clone(),
-                patterns,
+                patterns: patterns.clone(),
                 filters: Vec::new(),
                 estimated_cost: cost,
                 estimated_results: self.estimate_result_size(service, &patterns),
             });
         }
 
+        let requires_join = steps.len() > 1;
         Ok(ComponentPlan {
             strategy: PlanStrategy::CostBased,
             steps,
             total_cost,
-            requires_join: steps.len() > 1,
+            requires_join,
         })
     }
 

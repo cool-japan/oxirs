@@ -845,7 +845,7 @@ impl VectorAnalyticsEngine {
                             key
                         ));
                         prometheus_content.push_str(&format!(
-                            "vector_query_{{}} {} {}\n",
+                            "vector_query_{} {} {}\n",
                             key, num_val, timestamp
                         ));
                     }
@@ -867,7 +867,7 @@ impl VectorAnalyticsEngine {
                             key
                         ));
                         prometheus_content.push_str(&format!(
-                            "vector_system_{{}} {} {}\n",
+                            "vector_system_{} {} {}\n",
                             key, num_val, timestamp
                         ));
                     }
@@ -1685,45 +1685,8 @@ impl NotificationChannel for WebhookNotificationChannel {
         "webhook".to_string()
     }
 }
-    pub fn new(smtp_config: SmtpConfig) -> Self {
-        Self { smtp_config }
-    }
-}
 
-impl NotificationChannel for EmailNotificationChannel {
-    fn send_notification(&self, alert: &Alert) -> Result<()> {
-        // Email sending implementation would go here
-        println!("Sending email alert: {} - {}", alert.id, alert.message);
-        Ok(())
-    }
 
-    fn get_channel_type(&self) -> String {
-        "email".to_string()
-    }
-}
-
-/// Slack notification channel
-pub struct SlackNotificationChannel {
-    webhook_url: String,
-}
-
-impl SlackNotificationChannel {
-    pub fn new(webhook_url: String) -> Self {
-        Self { webhook_url }
-    }
-}
-
-impl NotificationChannel for SlackNotificationChannel {
-    fn send_notification(&self, alert: &Alert) -> Result<()> {
-        // Slack webhook implementation would go here
-        println!("Sending Slack alert: {} - {}", alert.id, alert.message);
-        Ok(())
-    }
-
-    fn get_channel_type(&self) -> String {
-        "slack".to_string()
-    }
-}
 
 #[cfg(test)]
 mod tests {

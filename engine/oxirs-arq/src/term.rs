@@ -562,6 +562,16 @@ impl Term {
             }
             AlgebraTerm::BlankNode(bn) => Term::blank_node(bn),
             AlgebraTerm::Variable(var) => Term::variable(var.as_str()),
+            AlgebraTerm::QuotedTriple(_) => {
+                // For now, serialize quoted triples as literals
+                // TODO: Implement proper quoted triple support in term representation
+                Term::literal("<< quoted triple >>")
+            }
+            AlgebraTerm::PropertyPath(_) => {
+                // For now, serialize property paths as literals
+                // TODO: Implement proper property path support in term representation
+                Term::literal("<< property path >>")
+            }
         }
     }
 

@@ -142,6 +142,16 @@ pub struct SparqlResultsData {
     pub bindings: Vec<SparqlBinding>,
 }
 
+impl SparqlResultsData {
+    pub fn len(&self) -> usize {
+        self.bindings.len()
+    }
+    
+    pub fn is_empty(&self) -> bool {
+        self.bindings.is_empty()
+    }
+}
+
 /// A single SPARQL binding (variable -> value mapping)
 pub type SparqlBinding = HashMap<String, SparqlValue>;
 

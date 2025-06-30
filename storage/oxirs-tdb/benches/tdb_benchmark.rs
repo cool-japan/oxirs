@@ -7,7 +7,8 @@ use criterion::{black_box, criterion_group, criterion_main, BatchSize, Benchmark
 use oxirs_tdb::{
     compression::{AdaptiveCompressor, ColumnStoreCompressor, RunLengthEncoder},
     nodes::NodeTableConfig,
-    TdbConfig, TdbStore, Term,
+    SimpleTdbConfig,
+    TdbStore, Term,
 };
 use rand::prelude::*;
 use std::sync::Arc;
@@ -38,7 +39,7 @@ fn bench_insertion(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let temp_dir = TempDir::new().unwrap();
-                    let config = TdbConfig {
+                    let config = SimpleTdbConfig {
                         location: temp_dir.path().to_string_lossy().to_string(),
                         ..Default::default()
                     };
@@ -78,7 +79,7 @@ fn bench_bulk_load_transactions(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let temp_dir = TempDir::new().unwrap();
-                    let config = TdbConfig {
+                    let config = SimpleTdbConfig {
                         location: temp_dir.path().to_string_lossy().to_string(),
                         ..Default::default()
                     };

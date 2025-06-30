@@ -923,6 +923,12 @@ impl<'a> UpdateExecutor<'a> {
             Term::Variable(_) => Err(OxirsError::Query(
                 "Variables not allowed in concrete data".to_string(),
             )),
+            Term::QuotedTriple(_) => Err(OxirsError::Query(
+                "Quoted triples not yet supported in concrete data".to_string(),
+            )),
+            Term::PropertyPath(_) => Err(OxirsError::Query(
+                "Property paths not allowed in concrete data".to_string(),
+            )),
         }
     }
 

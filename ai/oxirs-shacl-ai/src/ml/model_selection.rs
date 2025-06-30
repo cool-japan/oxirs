@@ -634,7 +634,7 @@ impl CrossValidator {
             use rand::SeedableRng;
             let mut rng = match self.random_state {
                 Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
-                None => rand::rngs::StdRng::from_entropy(),
+                None => rand::rngs::StdRng::from_seed(rand::random()),
             };
             indices.shuffle(&mut rng);
         }

@@ -8,6 +8,7 @@ use bytes::{Bytes, BytesMut};
 use flate2::{write::GzEncoder, Compression as GzCompression};
 use futures::stream::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::collections::HashMap;
 use std::io::Write;
 use std::pin::Pin;
@@ -57,7 +58,7 @@ pub struct StreamingConfig {
 }
 
 /// Supported compression algorithms
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum CompressionAlgorithm {
     None,
     Gzip,
@@ -234,10 +235,11 @@ impl ResultStreamingManager {
             compression_time
         );
 
+        let compressed_size = compressed_data.len();
         Ok(CompressedResult {
             data: Bytes::from(compressed_data),
             original_size: data.len(),
-            compressed_size: compressed_data.len(),
+            compressed_size,
             algorithm: self.config.compression_algorithm,
             level: self.config.compression_level,
             compression_time,
@@ -454,7 +456,7 @@ impl ResultStreamingManager {
                 // Simple CSV conversion for SPARQL results
                 match result {
                     QueryResult::Sparql(sparql_results) => {
-                        self.sparql_to_csv(sparql_results).await
+                        self.sparql_bindings_to_csv(sparql_results).await
                     }
                     QueryResult::GraphQL(_) => {
                         warn!("CSV format not suitable for GraphQL results, falling back to JSON");
@@ -467,6 +469,38 @@ impl ResultStreamingManager {
                 serde_json::to_vec(result).map_err(|e| anyhow!("JSON serialization failed: {}", e))
             }
         }
+    }
+
+    async fn sparql_bindings_to_csv(&self, bindings: &Vec<HashMap<String, oxirs_core::Term>>) -> Result<Vec<u8>> {
+        let mut csv_data = Vec::new();
+        
+        if bindings.is_empty() {
+            return Ok(csv_data);
+        }
+        
+        // Extract variable names from the first binding
+        let vars: Vec<String> = bindings[0].keys().cloned().collect();
+        
+        // Write header
+        let header = vars.join(",");
+        csv_data.extend_from_slice(header.as_bytes());
+        csv_data.push(b'\n');
+        
+        // Write data rows
+        for binding in bindings {
+            let row: Vec<String> = vars
+                .iter()
+                .map(|var| {
+                    binding.get(var)
+                        .map(|term| format!("\"{}\"", term.to_string().replace('"', "\"\"")))
+                        .unwrap_or_default()
+                })
+                .collect();
+            csv_data.extend_from_slice(row.join(",").as_bytes());
+            csv_data.push(b'\n');
+        }
+        
+        Ok(csv_data)
     }
 
     async fn sparql_to_csv(&self, results: &SparqlResults) -> Result<Vec<u8>> {

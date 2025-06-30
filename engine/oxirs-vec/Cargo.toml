@@ -20,7 +20,7 @@ thiserror.workspace = true
 tracing.workspace = true
 hnsw_rs = { workspace = true, optional = true }
 zstd = { version = "0.13", default-features = false }
-rand = "0.9"
+rand = "0.8"
 rand_distr = "0.4"
 half = "2.5"
 memmap2 = "0.9"

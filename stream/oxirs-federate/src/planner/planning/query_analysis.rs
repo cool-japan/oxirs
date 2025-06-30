@@ -10,6 +10,7 @@ use tracing::{debug, info, warn};
 use super::types::*;
 
 /// Query analysis utilities
+#[derive(Debug)]
 pub struct QueryAnalyzer;
 
 impl QueryAnalyzer {

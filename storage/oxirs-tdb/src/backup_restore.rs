@@ -878,11 +878,31 @@ impl BackupRestoreManager {
 
     /// Generate backup ID
     fn generate_backup_id(&self, prefix: &str) -> String {
-        let timestamp = SystemTime::now()
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        use std::sync::atomic::{AtomicU64, Ordering};
+        
+        // Static counter to ensure uniqueness even within the same nanosecond
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        
+        let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        format!("{}_{}", prefix, timestamp)
+            .unwrap();
+        
+        // Use nanoseconds for higher precision
+        let timestamp_nanos = now.as_nanos();
+        
+        // Get unique counter value
+        let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+        
+        // Add a random component by hashing the thread ID, timestamp, and counter
+        let mut hasher = DefaultHasher::new();
+        std::thread::current().id().hash(&mut hasher);
+        timestamp_nanos.hash(&mut hasher);
+        counter.hash(&mut hasher);
+        let random_component = hasher.finish() & 0xFFFF; // Use lower 16 bits for compactness
+        
+        format!("{}_{:x}_{:x}_{:04x}", prefix, timestamp_nanos, counter, random_component)
     }
 
     /// Get chain info for a backup
@@ -1069,6 +1089,28 @@ mod tests {
         assert_ne!(id1, id2);
         assert!(id1.starts_with("FULL_"));
         assert!(id2.starts_with("FULL_"));
+    }
+
+    #[test]
+    fn test_backup_id_uniqueness() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = BackupConfig {
+            backup_directory: temp_dir.path().to_path_buf(),
+            ..Default::default()
+        };
+
+        let manager = BackupRestoreManager::new(config).unwrap();
+        
+        // Generate multiple IDs rapidly to test uniqueness
+        let mut ids = std::collections::HashSet::new();
+        for _ in 0..100 {
+            let id = manager.generate_backup_id("TEST");
+            assert!(ids.insert(id.clone()), "Duplicate ID generated: {}", id);
+            assert!(id.starts_with("TEST_"));
+        }
+        
+        // Ensure all IDs are unique
+        assert_eq!(ids.len(), 100);
     }
 
     #[test]

@@ -169,19 +169,13 @@ impl FederatedExecutor {
             error: result.error,
             execution_time: duration,
             service_id: result.service_id,
-            memory_used: memory_delta,
+            memory_used: memory_delta as usize,
             result_size: result.result_size,
             success: result.success,
             error_message: result.error_message,
             service_response_time: result.service_response_time,
             cache_hit: result.cache_hit,
         })
-    }
-
-    /// Get current memory usage
-    pub fn get_current_memory_usage(&self) -> u64 {
-        // Simplified memory tracking - in practice would use system APIs
-        std::process::id() as u64 * 1024 // Placeholder
     }
 }
 

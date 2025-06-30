@@ -9,7 +9,7 @@ use std::time::Instant;
 use tracing::{debug, info, warn};
 
 use super::types::*;
-use crate::planner::planning::{QueryInfo, TriplePattern};
+use crate::planner::planning::types::{QueryInfo, TriplePattern};
 use crate::ServiceRegistry;
 
 /// Query rewriter that utilizes materialized views
@@ -268,11 +268,11 @@ impl QueryRewriter {
     }
 
     /// Find views that might be candidates for rewriting
-    async fn find_candidate_views(
+    async fn find_candidate_views<'a>(
         &self,
         query_info: &QueryInfo,
-        available_views: &[MaterializedView],
-    ) -> Result<Vec<&MaterializedView>> {
+        available_views: &'a [MaterializedView],
+    ) -> Result<Vec<&'a MaterializedView>> {
         let mut candidates = Vec::new();
 
         for view in available_views {

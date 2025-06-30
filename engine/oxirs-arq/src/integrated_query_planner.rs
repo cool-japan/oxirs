@@ -771,15 +771,20 @@ impl IntegratedQueryPlanner {
                     subject_selectivity: 1.0,
                     predicate_selectivity: 1.0,
                     object_selectivity: 1.0,
-                    index_selectivity: 1.0,
+                    index_factor: 1.0,
+                    distribution_factor: 1.0,
                 },
             };
             pattern_selectivity.push(pattern_sel);
 
             // Determine index usage for this pattern
             let index_hint = self.suggest_index_for_pattern(pattern);
-            if let Some(index) = index_hint {
-                pattern_indexes.push(index);
+            if let Some((pattern_idx, index_type)) = index_hint {
+                pattern_indexes.push(crate::bgp_optimizer::IndexAssignment {
+                    pattern_idx,
+                    index_type,
+                    scan_cost: selectivity * 5.0, // Estimated scan cost
+                });
             }
 
             total_cost += selectivity * 10.0; // Base cost per pattern
@@ -799,7 +804,7 @@ impl IntegratedQueryPlanner {
         }
 
         // Calculate overall selectivity
-        let overall_selectivity = pattern_selectivity.iter().product::<f64>()
+        let overall_selectivity = pattern_selectivity.iter().map(|p| p.selectivity).product::<f64>()
             * join_selectivity.values().product::<f64>();
 
         Ok(OptimizedBGP {
@@ -1020,11 +1025,12 @@ impl IntegratedQueryPlanner {
         }
 
         // Update statistics collector with actual execution data
-        self.statistics_collector.update_execution_statistics(
-            record.actual_duration,
-            record.actual_cardinality,
-            record.memory_used,
-        );
+        // TODO: Implement update_execution_statistics method on StatisticsCollector
+        // self.statistics_collector.update_execution_statistics(
+        //     record.actual_duration,
+        //     record.actual_cardinality,
+        //     record.memory_used,
+        // );
 
         debug!("Updated cost model with execution feedback");
         Ok(())
@@ -1083,7 +1089,7 @@ impl IntegratedQueryPlanner {
     /// Estimate selectivity of a triple pattern
     fn estimate_pattern_selectivity(&self, pattern: &TriplePattern) -> f64 {
         // Basic selectivity estimation based on pattern structure
-        let mut selectivity = 1.0;
+        let mut selectivity: f64 = 1.0;
 
         // Reduce selectivity for each concrete term (non-variable)
         if !matches!(pattern.subject, Term::Variable(_)) {

@@ -4,7 +4,7 @@
 //! pruning, knowledge distillation, and neural architecture search.
 
 use anyhow::{anyhow, Result};
-use ndarray::{Array1, Array2, Array3};
+use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

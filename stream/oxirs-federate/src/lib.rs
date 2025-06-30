@@ -698,7 +698,7 @@ impl FederatedResult {
 }
 
 /// Enumeration of different query result types
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum QueryResult {
     Sparql(Vec<HashMap<String, Term>>),
     GraphQL(serde_json::Value),
@@ -785,7 +785,7 @@ pub struct HealthStatus {
 }
 
 /// Service status enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ServiceStatus {
     Healthy,
     Degraded,

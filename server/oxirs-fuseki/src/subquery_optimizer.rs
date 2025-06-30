@@ -553,11 +553,14 @@ impl AdvancedSubqueryOptimizer {
             });
         }
 
+        let total_cost = plan_steps.iter().map(|s| s.estimated_cost).sum();
+        let parallelization_opportunities = self.identify_parallelization(&plan_steps);
+        
         Ok(ExecutionPlan {
             query: query.to_string(),
             steps: plan_steps,
-            total_estimated_cost: plan_steps.iter().map(|s| s.estimated_cost).sum(),
-            parallelization_opportunities: self.identify_parallelization(&plan_steps),
+            total_estimated_cost: total_cost,
+            parallelization_opportunities,
         })
     }
 

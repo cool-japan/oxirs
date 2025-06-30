@@ -383,6 +383,21 @@ impl StreamingSolution {
             Term::Literal(lit) => lit.value.len() + lit.language.as_ref().map_or(0, |l| l.len()),
             Term::BlankNode(bn) => bn.len(),
             Term::Variable(var) => var.as_str().len(),
+            Term::QuotedTriple(triple) => {
+                // Estimate size of quoted triple as sum of its parts
+                self.estimate_term_size(&triple.subject) 
+                    + self.estimate_term_size(&triple.predicate)
+                    + self.estimate_term_size(&triple.object)
+                    + 6 // << >> brackets
+            },
+            Term::PropertyPath(path) => {
+                // Estimate property path size based on complexity
+                match path.complexity() {
+                    c if c < 10 => 20,
+                    c if c < 100 => 50,
+                    _ => 100,
+                }
+            },
         }
     }
 
@@ -658,6 +673,22 @@ impl SerializableTerm {
             },
             Term::BlankNode(bn) => Self::BlankNode(bn.clone()),
             Term::Variable(var) => Self::Variable(var.as_str().to_string()),
+            Term::QuotedTriple(triple) => {
+                // For quoted triples, serialize as a string representation
+                Self::Literal {
+                    value: format!("<<{} {} {}>>", triple.subject, triple.predicate, triple.object),
+                    language: None,
+                    datatype: Some("http://example.org/quoted-triple".to_string()),
+                }
+            },
+            Term::PropertyPath(path) => {
+                // For property paths, serialize as a string representation
+                Self::Literal {
+                    value: path.to_string(),
+                    language: None,
+                    datatype: Some("http://example.org/property-path".to_string()),
+                }
+            },
         }
     }
 
@@ -879,6 +910,8 @@ impl SpillableHashJoin {
                                 }
                                 Term::BlankNode(bn) => bn.len(),
                                 Term::Variable(var) => var.as_str().len(),
+                                Term::QuotedTriple(_) => 100, // Estimate for quoted triple
+                                Term::PropertyPath(_) => 50,  // Estimate for property path
                             };
                             var.as_str().len() + term_size
                         })
@@ -1009,6 +1042,8 @@ impl SpillableHashJoin {
             Term::Literal(lit) => lit.value.len() + lit.language.as_ref().map_or(0, |l| l.len()),
             Term::BlankNode(bn) => bn.len(),
             Term::Variable(var) => var.as_str().len(),
+            Term::QuotedTriple(_) => 100, // Estimate for quoted triple
+            Term::PropertyPath(_) => 50,  // Estimate for property path
         }
     }
 }

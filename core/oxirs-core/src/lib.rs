@@ -72,6 +72,8 @@ pub enum OxirsError {
     Serialize(String),
     #[error("IO error: {0}")]
     Io(String),
+    #[error("Concurrency error: {0}")]
+    ConcurrencyError(String),
     #[error("Quantum computing error: {0}")]
     QuantumError(String),
     #[error("Molecular optimization error: {0}")]

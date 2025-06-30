@@ -14,8 +14,9 @@ use serde::{Deserialize, Serialize};
 use tempfile::{NamedTempFile, TempDir};
 use tracing::{debug, info, span, warn, Level};
 
-use crate::algebra::{Algebra, BinaryOperator, Binding, Expression, Solution, Term, Variable};
+use crate::algebra::{Algebra, BinaryOperator, Binding, Expression, Solution, Term, TriplePattern, Variable};
 use crate::executor::{ExecutionContext, ExecutionStats};
+use oxirs_core::model::NamedNode;
 
 /// Streaming execution engine for large datasets
 pub struct StreamingExecutor {
@@ -1830,7 +1831,7 @@ impl StreamingPatternScan {
             let mut binding = Binding::new();
             
             for var in self.pattern.variables() {
-                let value = Term::Iri(format!("http://example.org/resource_{}", i));
+                let value = Term::Iri(NamedNode::new(&format!("http://example.org/resource_{}", i)).unwrap());
                 binding.insert(var, value);
             }
             
@@ -1852,8 +1853,7 @@ impl StreamingPatternScan {
     /// Spill current batch to disk
     fn spill_current_batch(&mut self) -> Result<()> {
         if !self.current_batch.is_empty() {
-            let spill_id = format!("pattern_scan_{}_{}", self.batch_index, self.total_results);
-            self.spill_manager.lock().unwrap().spill_data(&spill_id, &self.current_batch)?;
+            let spill_id = self.spill_manager.lock().unwrap().spill_data(&self.current_batch, SpillDataType::Solutions)?;
             self.spilled_batches.push(spill_id);
             self.current_batch.clear();
             
@@ -1914,11 +1914,12 @@ impl DataStream for StreamingPatternScan {
 
     fn get_stats(&self) -> StreamStats {
         StreamStats {
-            batches_processed: self.batch_index,
-            total_solutions: self.total_results,
-            memory_spilled: !self.spilled_batches.is_empty(),
-            spill_count: self.spilled_batches.len(),
-            ..Default::default()
+            rows_processed: self.total_results,
+            bytes_processed: 0, // Estimated
+            processing_time: Duration::from_secs(0), // Not tracked here
+            spill_operations: self.spilled_batches.len(),
+            cache_hits: 0,
+            cache_misses: 0,
         }
     }
 }
@@ -1967,7 +1968,7 @@ impl BufferedPatternScan {
             let mut binding = Binding::new();
             
             for var in self.pattern.variables() {
-                let value = Term::Iri(format!("http://example.org/item_{}", i));
+                let value = Term::Iri(NamedNode::new(&format!("http://example.org/item_{}", i)).unwrap());
                 binding.insert(var, value);
             }
             
@@ -2013,11 +2014,12 @@ impl DataStream for BufferedPatternScan {
 
     fn get_stats(&self) -> StreamStats {
         StreamStats {
-            batches_processed: (self.current_index + self.batch_size - 1) / self.batch_size,
-            total_solutions: self.solutions.len(),
-            memory_spilled: false,
-            spill_count: 0,
-            ..Default::default()
+            rows_processed: self.solutions.len(),
+            bytes_processed: 0, // Estimated
+            processing_time: Duration::from_secs(0), // Not tracked here
+            spill_operations: 0,
+            cache_hits: 0,
+            cache_misses: 0,
         }
     }
 }

@@ -204,7 +204,7 @@ impl ExplainableAI {
             explanation_id: Uuid::new_v4(),
             quantum_states: quantum_patterns
                 .iter()
-                .map(|p| p.quantum_state.clone())
+                .map(|p| format!("{:?}", p.quantum_state))
                 .collect(),
             superposition_analysis: self
                 .analyze_superposition_contributions(quantum_patterns)
@@ -384,11 +384,14 @@ impl ExplainableAI {
             leaf_explanation: None,
         };
 
+        let depth = self.calculate_tree_depth(&root_node);
+        let total_nodes = self.count_tree_nodes(&root_node);
+        
         Ok(DecisionTree {
             tree_id: Uuid::new_v4(),
+            depth,
             root_node,
-            depth: self.calculate_tree_depth(&root_node),
-            total_nodes: self.count_tree_nodes(&root_node),
+            total_nodes,
         })
     }
 
@@ -1502,7 +1505,7 @@ impl SHAPExplainer {
             let mut marginal_contributions = Vec::new();
 
             // Iterate through all possible coalitions
-            for coalition_mask in 0..(1 << num_features) {
+            for coalition_mask in 0u32..(1u32 << num_features) {
                 if (coalition_mask & (1 << feature_idx)) != 0 {
                     continue; // Skip coalitions that already include this feature
                 }
@@ -1929,6 +1932,8 @@ impl IntegratedGradientsExplainer {
             .check_convergence(&integrated_gradients, input, &baseline, gradient_function)
             .await?;
 
+        let attribution_magnitude = integrated_gradients.iter().map(|x| x.abs()).sum();
+        
         Ok(IntegratedGradientsExplanation {
             explanation_id: Uuid::new_v4(),
             input: input.to_vec(),
@@ -1937,7 +1942,7 @@ impl IntegratedGradientsExplainer {
             noise_tunnel_attributions,
             convergence_delta,
             num_steps: self.num_steps,
-            attribution_magnitude: integrated_gradients.iter().map(|x| x.abs()).sum(),
+            attribution_magnitude,
             timestamp: SystemTime::now(),
         })
     }
@@ -2210,10 +2215,13 @@ impl AttentionVisualizer {
             }
         }
 
+        let total_flow: f64 = flow_matrix.iter().flatten().sum();
+        let max_flow_path = self.find_max_flow_path(&flow_matrix);
+        
         Ok(AttentionFlow {
             flow_matrix,
-            total_flow: flow_matrix.iter().flatten().sum(),
-            max_flow_path: self.find_max_flow_path(&flow_matrix),
+            total_flow,
+            max_flow_path,
         })
     }
 
@@ -2390,7 +2398,7 @@ impl AttentionVisualizer {
     }
 
     fn calculate_broadcast_strength(&self, weights: &[Vec<f64>]) -> f64 {
-        let mut max_row_variance = 0.0;
+        let mut max_row_variance = 0.0_f64;
 
         for row in weights {
             let mean = row.iter().sum::<f64>() / row.len() as f64;
@@ -2437,7 +2445,7 @@ impl AttentionVisualizer {
         let mut targets = Vec::new();
 
         for (i, row) in weights.iter().enumerate() {
-            let max_weight = row.iter().fold(0.0, |a, &b| a.max(b));
+            let max_weight = row.iter().fold(0.0_f64, |a, &b| a.max(b));
             if max_weight > 0.5 {
                 if let Some(target) = row.iter().position(|&x| x == max_weight) {
                     targets.push(target);
@@ -2506,7 +2514,7 @@ impl AttentionVisualizer {
         let mut max_weights = Vec::new();
 
         for layer_weights in &attention_weights.weights {
-            let mut layer_max = 0.0;
+            let mut layer_max = 0.0_f64;
             for head_weights in layer_weights {
                 for row in head_weights {
                     for &weight in row {

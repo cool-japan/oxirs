@@ -10,6 +10,7 @@ use tracing::{debug, info, warn};
 use super::types::*;
 
 /// Schema introspection utilities
+#[derive(Debug)]
 pub struct SchemaIntrospector;
 
 impl SchemaIntrospector {

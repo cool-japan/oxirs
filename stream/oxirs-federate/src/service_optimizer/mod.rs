@@ -31,7 +31,7 @@ mod tests {
     #[test]
     fn test_service_optimizer_creation() {
         let optimizer = ServiceOptimizer::new();
-        assert!(optimizer.config.enable_pattern_grouping);
+        assert!(optimizer.config().enable_pattern_grouping);
     }
 
     #[test]

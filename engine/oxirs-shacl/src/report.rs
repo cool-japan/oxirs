@@ -1112,7 +1112,7 @@ impl ValidationReport {
         // Overall status banner
         let status_class = if self.conforms { "status-pass" } else { "status-fail" };
         let status_icon = if self.conforms { "✅" } else { "❌" };
-        let status_text = if self.conforms { "CONFORMS" } else { "VIOLATIONS FOUND" };
+        let status_text = if self.conforms { "Conforms" } else { "Violations Found" };
         
         html.push_str(&format!(
             "<div class=\"status-banner {}\">\n                <div class=\"status-icon\">{}</div>\n                <div class=\"status-text\">{}</div>\n            </div>\n",
@@ -1786,7 +1786,7 @@ impl ReportMetadata {
     pub fn formatted_timestamp(&self) -> String {
         use std::time::{Duration, SystemTime, UNIX_EPOCH};
         
-        if let Ok(datetime) = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(self.timestamp)) {
+        if let Some(datetime) = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(self.timestamp)) {
             // For now, use a simple ISO 8601-like format
             // In a full implementation, you'd want to use chrono or time crate
             format!("{:?}", datetime)

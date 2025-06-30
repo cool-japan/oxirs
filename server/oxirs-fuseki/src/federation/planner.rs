@@ -187,6 +187,7 @@ pub struct ServiceStatistics {
 }
 
 /// Default service discovery implementation using SPARQL service description
+#[derive(Debug)]
 pub struct DefaultServiceDiscovery {
     http_client: reqwest::Client,
     known_endpoints: HashSet<String>,

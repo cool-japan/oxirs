@@ -226,6 +226,9 @@ impl From<crate::OxirsError> for RdfParseError {
             crate::OxirsError::NeuralSymbolicError(msg) => {
                 Self::internal(format!("Neural-symbolic error: {}", msg))
             }
+            crate::OxirsError::ConcurrencyError(msg) => {
+                Self::internal(format!("Concurrency error: {}", msg))
+            }
         }
     }
 }

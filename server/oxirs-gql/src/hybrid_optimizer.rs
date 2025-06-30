@@ -574,12 +574,20 @@ impl HybridQueryOptimizer {
     ) -> Result<()> {
         // Create training sample for ML optimizer
         let metrics = crate::performance::OperationMetrics {
-            operation_name: "hybrid_optimization".to_string(),
+            operation_name: Some("hybrid_optimization".to_string()),
             operation_type: crate::ast::OperationType::Query,
+            query_hash: 0, // Would be computed from the document
             execution_time,
+            parsing_time: Duration::from_millis(0),
+            validation_time: Duration::from_millis(0),
+            planning_time: Duration::from_millis(0),
+            field_count: 0, // Would be computed from the document
+            depth: 0, // Would be computed from the document
+            complexity_score: 0, // Would be computed from the document
             cache_hit: false,
             error_count: if success { 0 } else { 1 },
             timestamp: std::time::SystemTime::now(),
+            client_info: crate::performance::ClientInfo::default(),
         };
 
         self.ml_optimizer

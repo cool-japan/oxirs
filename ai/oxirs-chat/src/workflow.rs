@@ -392,6 +392,19 @@ pub enum ReportFormat {
     Markdown,
 }
 
+impl std::fmt::Display for ReportFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReportFormat::PDF => write!(f, "PDF"),
+            ReportFormat::HTML => write!(f, "HTML"),
+            ReportFormat::CSV => write!(f, "CSV"),
+            ReportFormat::JSON => write!(f, "JSON"),
+            ReportFormat::Excel => write!(f, "Excel"),
+            ReportFormat::Markdown => write!(f, "Markdown"),
+        }
+    }
+}
+
 /// Data export types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportRequest {
@@ -432,6 +445,18 @@ pub enum ExportFormat {
     XML,
 }
 
+impl std::fmt::Display for ExportFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExportFormat::JSON => write!(f, "JSON"),
+            ExportFormat::CSV => write!(f, "CSV"),
+            ExportFormat::Parquet => write!(f, "Parquet"),
+            ExportFormat::Avro => write!(f, "Avro"),
+            ExportFormat::XML => write!(f, "XML"),
+        }
+    }
+}
+
 /// Approval workflow types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalRequest {
@@ -449,7 +474,7 @@ pub struct ApprovalRequest {
     pub metadata: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ApprovalId(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

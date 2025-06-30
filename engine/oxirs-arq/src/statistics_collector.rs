@@ -156,6 +156,7 @@ pub struct AdaptiveConfig {
 }
 
 /// Advanced statistics collector
+#[derive(Debug, Clone)]
 pub struct StatisticsCollector {
     /// Current statistics
     stats: Statistics,
@@ -520,7 +521,7 @@ impl StatisticsCollector {
     }
 
     /// Build joint distribution histogram for two predicates
-    fn build_joint_distribution(&self, pred1: &str, pred2: &str) -> Result<HashMap<String, usize>> {
+    fn build_joint_distribution(&self, pred1: &str, pred2: &str) -> Result<HashMap<(String, String), usize>> {
         let mut joint_dist = HashMap::new();
         
         // Get histograms for both predicates
@@ -533,7 +534,7 @@ impl StatisticsCollector {
                 for (i, &freq1) in h1.frequencies.iter().enumerate() {
                     for (j, &freq2) in h2.frequencies.iter().enumerate() {
                         if i < h1.boundaries.len() && j < h2.boundaries.len() {
-                            let joint_key = format!("{}:{}", h1.boundaries[i], h2.boundaries[j]);
+                            let joint_key = (h1.boundaries[i].clone(), h2.boundaries[j].clone());
                             let joint_freq = ((freq1 as f64 * freq2 as f64).sqrt() as usize).max(1);
                             joint_dist.insert(joint_key, joint_freq);
                         }
@@ -542,7 +543,7 @@ impl StatisticsCollector {
             }
             _ => {
                 // Fallback: create minimal joint distribution
-                joint_dist.insert("unknown:unknown".to_string(), 1);
+                joint_dist.insert(("unknown".to_string(), "unknown".to_string()), 1);
             }
         }
         
@@ -731,7 +732,10 @@ impl StatisticsCollector {
     fn adapt_histogram_buckets(&mut self) -> Result<()> {
         let mut histograms_to_rebuild = Vec::new();
         
-        for (predicate, histogram) in &mut self.histograms {
+        // First collect predicates that need histogram rebuilding
+        let predicates_and_histograms: Vec<_> = self.histograms.iter().collect();
+        
+        for (predicate, histogram) in predicates_and_histograms {
             // Check if histogram needs more buckets for better resolution
             let avg_bucket_size = histogram.total_count / histogram.frequencies.len().max(1);
             
@@ -739,8 +743,9 @@ impl StatisticsCollector {
             // 1. Average bucket size is too large (poor resolution)
             // 2. We haven't reached the maximum bucket limit
             // 3. There's significant skew in bucket distribution
+            let has_skew = Self::has_significant_skew_static(histogram);
             if (avg_bucket_size > 1000 && histogram.frequencies.len() < self.max_histogram_buckets) 
-                || self.has_significant_skew(histogram) {
+                || has_skew {
                 
                 tracing::debug!("Adapting histogram for {} (avg bucket size: {}, buckets: {})", 
                     predicate, avg_bucket_size, histogram.frequencies.len());
@@ -757,6 +762,28 @@ impl StatisticsCollector {
         Ok(())
     }
     
+    /// Check if histogram has significant skew requiring redistribution (static version)
+    fn has_significant_skew_static(histogram: &Histogram) -> bool {
+        if histogram.frequencies.len() < 3 {
+            return false;
+        }
+        
+        // Calculate coefficient of variation for bucket sizes
+        let mean = histogram.total_count as f64 / histogram.frequencies.len() as f64;
+        let variance: f64 = histogram.frequencies.iter()
+            .map(|&count| {
+                let diff = count as f64 - mean;
+                diff * diff
+            })
+            .sum::<f64>() / histogram.frequencies.len() as f64;
+        
+        let std_dev = variance.sqrt();
+        let coefficient_of_variation = if mean > 0.0 { std_dev / mean } else { 0.0 };
+        
+        // Significant skew if CV > 1.5 (high variability in bucket sizes)
+        coefficient_of_variation > 1.5
+    }
+
     /// Check if histogram has significant skew requiring redistribution
     fn has_significant_skew(&self, histogram: &Histogram) -> bool {
         if histogram.frequencies.len() < 3 {

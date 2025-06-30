@@ -12,7 +12,7 @@ categories.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-oxirs-core = { path = "../../core/oxirs-core" }
+oxirs-core = { path = "../../core/oxirs-core", features = ["serde"] }
 oxirs-gql = { path = "../../server/oxirs-gql" }
 tokio = { version = "1.42", features = ["full"] }
 hyper = { version = "1.6", features = ["full"] }

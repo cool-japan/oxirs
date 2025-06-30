@@ -1019,7 +1019,7 @@ impl ResultDispatcher {
             retry_config: crate::RetryConfig::default(),
             circuit_breaker: crate::CircuitBreakerConfig::default(),
             security: crate::SecurityConfig::default(),
-            performance: crate::PerformanceConfig::default(),
+            performance: crate::StreamPerformanceConfig::default(),
             monitoring: crate::MonitoringConfig::default(),
         };
 

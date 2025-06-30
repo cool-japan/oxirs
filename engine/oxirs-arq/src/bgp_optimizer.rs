@@ -343,6 +343,14 @@ impl<'a> BGPOptimizer<'a> {
                 // Blank nodes have moderate selectivity
                 Ok(0.01)
             }
+            Term::QuotedTriple(_) => {
+                // Quoted triples are rare and specific
+                Ok(0.0001)
+            }
+            Term::PropertyPath(_) => {
+                // Property paths have variable selectivity
+                Ok(0.1)
+            }
         }
     }
 
@@ -2292,6 +2300,8 @@ impl AdaptiveIndexSelector {
             Term::Iri(_) => "IRI",
             Term::Literal(_) => "LIT",
             Term::BlankNode(_) => "BN",
+            Term::QuotedTriple(_) => "QT",
+            Term::PropertyPath(_) => "PP",
         }
     }
 

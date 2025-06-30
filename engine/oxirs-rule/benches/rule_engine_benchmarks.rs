@@ -174,10 +174,10 @@ fn benchmark_rete_network(c: &mut Criterion) {
 
                     // Process facts
                     for fact in facts.iter() {
-                        rete.assert_fact(fact.clone()).unwrap();
+                        rete.add_fact(fact.clone()).unwrap();
                     }
 
-                    rete.get_inferred_facts()
+                    rete.get_facts()
                 });
             },
         );
@@ -311,12 +311,12 @@ fn benchmark_memory_usage(c: &mut Criterion) {
 
             // Build RETE network
             for rule in rules {
-                rete.add_rule(rule).unwrap();
+                rete.add_rule(&rule).unwrap();
             }
 
             // Process all facts
             for fact in facts {
-                rete.assert_fact(fact).unwrap();
+                rete.add_fact(fact).unwrap();
             }
         });
     });

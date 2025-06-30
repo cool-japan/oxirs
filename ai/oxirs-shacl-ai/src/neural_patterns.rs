@@ -1914,7 +1914,7 @@ impl NeuralPatternRecognizer {
 
     /// Advanced transformer clustering using hierarchical attention
     fn advanced_transformer_clustering(
-        &self,
+        &mut self,
         embeddings: &[Array1<f64>],
     ) -> Result<Vec<Vec<usize>>> {
         // Enhanced clustering with transformer-specific features
@@ -2488,9 +2488,9 @@ impl VariationalEncoder {
     pub fn new(config: &VAEConfig) -> Result<Self> {
         Ok(Self {
             hidden_layers: Vec::new(),
-            mu_layer: Array2::zeros((config.hidden_dims.last().unwrap_or(&128), config.latent_dim)),
+            mu_layer: Array2::zeros((*config.hidden_dims.last().unwrap_or(&128), config.latent_dim)),
             logvar_layer: Array2::zeros((
-                config.hidden_dims.last().unwrap_or(&128),
+                *config.hidden_dims.last().unwrap_or(&128),
                 config.latent_dim,
             )),
             layer_norms: Vec::new(),

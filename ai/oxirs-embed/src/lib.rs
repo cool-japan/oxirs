@@ -115,12 +115,16 @@
 
 #[cfg(feature = "api-server")]
 pub mod api;
+pub mod application_tasks;
 pub mod batch_processing;
 pub mod biomedical_embeddings;
 pub mod caching;
 pub mod cloud_integration;
 pub mod compression;
+pub mod contextual_embeddings;
+pub mod cross_domain_transfer;
 pub mod delta;
+pub mod federated_learning;
 pub mod enterprise_knowledge;
 pub mod evaluation;
 pub mod gpu_acceleration;
@@ -131,10 +135,12 @@ pub mod model_registry;
 pub mod models;
 pub mod monitoring;
 pub mod multimodal;
+pub mod novel_architectures;
 pub mod persistence;
 pub mod research_networks;
 pub mod training;
 pub mod utils;
+pub mod vision_language_graph;
 
 // Local type definitions (normally would import from oxirs-core and oxirs-vec)
 use anyhow::Result;
@@ -144,7 +150,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Vector for embeddings
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Vector {
     pub values: Vec<f32>,
     pub dimensions: usize,
@@ -342,6 +348,21 @@ pub struct ModelStats {
     pub last_training_time: Option<DateTime<Utc>>,
 }
 
+impl Default for ModelStats {
+    fn default() -> Self {
+        Self {
+            num_entities: 0,
+            num_relations: 0,
+            num_triples: 0,
+            dimensions: 0,
+            is_trained: false,
+            model_type: "unknown".to_string(),
+            creation_time: Utc::now(),
+            last_training_time: None,
+        }
+    }
+}
+
 /// Embedding errors
 #[derive(Debug, thiserror::Error)]
 pub enum EmbeddingError {
@@ -424,9 +445,31 @@ pub use compression::{
     ModelCompressionManager, NASConfig, OptimizationTarget, PruningConfig, PruningMethod,
     QuantizationConfig, QuantizationMethod,
 };
+pub use contextual_embeddings::{
+    AdaptationEngine, AdaptationRecord, AdaptationState, AdaptationStrategy, AdaptationType,
+    ContextualConfig, ContextualEmbeddingModel, ContextCache, ContextFusionMethod, ContextProcessor,
+    ContextType, EmbeddingContext, ExpertiseLevel, FeedbackAggregation, FusionNetwork,
+    InteractiveConfig, PerformanceRequirements, QueryComplexity, QueryContext, QueryIntent,
+    TaskContext, TaskType, TemporalConfig, TemporalContext, UserContext, UserPreferences,
+};
 pub use delta::{
     ChangeRecord, ChangeStatistics, ChangeType, DeltaConfig, DeltaManager, DeltaResult, DeltaStats,
     IncrementalStrategy,
+};
+pub use federated_learning::{
+    AggregationEngine, AggregationStrategy, AuthenticationConfig, AuthenticationMethod,
+    CertificateConfig, ClippingMechanisms, ClippingMethod, CommunicationConfig, CommunicationManager,
+    CommunicationProtocol, CompressionAlgorithm, CompressionConfig, CompressionEngine,
+    ConvergenceMetrics, ConvergenceStatus, 
+    DataSelectionStrategy, DataStatistics, EncryptionScheme, FederatedConfig, FederatedCoordinator, 
+    FederatedEmbeddingModel, FederatedMessage, FederatedRound, FederationStats, GlobalModelState, 
+    HardwareAccelerator, KeyManager, LocalModelState, LocalTrainingStats, LocalUpdate, 
+    MetaLearningConfig, NoiseMechanism, NoiseGenerator, OutlierAction, 
+    OutlierDetection, OutlierDetectionMethod, Participant, ParticipantCapabilities, ParticipantStatus,
+    PersonalizationConfig, PersonalizationStrategy, PrivacyAccountant, PrivacyConfig,
+    PrivacyEngine, PrivacyMetrics, PrivacyParams, RoundMetrics, RoundStatus, SecurityConfig,
+    SecurityFeature, SecurityManager, TrainingConfig, VerificationEngine, VerificationMechanism,
+    VerificationResult, WeightingScheme,
 };
 pub use enterprise_knowledge::{
     BehaviorMetrics, CareerPredictions, Category, CategoryHierarchy, CategoryPerformance,
@@ -443,34 +486,18 @@ pub use enterprise_knowledge::{
 pub use evaluation::{
     BenchmarkReport,
     BenchmarkSuite,
-    ConsoleAlertHandler,
     DriftAlert,
     DriftDetector,
     DriftDetectorConfig,
     DriftThresholds,
-    // Outlier detection exports
-    EmbeddingSnapshot,
     EvaluationConfig,
     EvaluationMetric,
     EvaluationResults,
     EvaluationSuite,
     ModelComparison,
-    OutlierDetailedAnalysis,
-    OutlierDetectionConfig,
-    OutlierDetectionMethod,
-    OutlierDetectionResults,
-    OutlierDetectionStats,
-    OutlierDetector,
-    OutlierInstance,
-    OutlierScoreDistribution,
-    OutlierSummary,
-    OutlierThresholds,
-    OutlierType,
     QualityMonitor,
     QualityMonitorConfig,
     QualitySnapshot,
-    RootCause,
-    TemporalPattern,
     TripleEvaluationResult,
 };
 pub use gpu_acceleration::{
@@ -500,6 +527,27 @@ pub use research_networks::{
     AuthorEmbedding, Citation, CitationNetwork, CitationType, Collaboration, CollaborationNetwork,
     NetworkMetrics, PaperSection, PublicationEmbedding, PublicationType, ResearchCommunity,
     ResearchNetworkAnalyzer, ResearchNetworkConfig, TopicModel, TopicModelingConfig,
+};
+pub use novel_architectures::{
+    ActivationType, ArchitectureParams, ArchitectureState, ArchitectureType, AttentionMechanism,
+    CurvatureComputation, CurvatureMethod, CurvatureType, DynamicsConfig, EntanglementStructure,
+    EquivarianceGroup, FlowType, GeometricConfig, GeometricParams, GeometricSpace, GeometricState,
+    GraphTransformerParams, GraphTransformerState, HyperbolicDistance, HyperbolicInit,
+    HyperbolicManifold, HyperbolicParams, HyperbolicState, IntegrationScheme, IntegrationStats,
+    ManifoldLearning, ManifoldMethod, ManifoldOptimizer, NeuralODEParams, NeuralODEState,
+    NovelArchitectureConfig, NovelArchitectureModel, ODERegularization, ODESolverType,
+    ParallelTransport, QuantumGateSet, QuantumMeasurement, QuantumNoise, QuantumParams,
+    QuantumState, StabilityConstraints, StructuralBias, TimeEvolution, TransportMethod,
+};
+pub use vision_language_graph::{
+    AggregationFunction, CNNConfig, CrossAttentionConfig, DomainAdaptationConfig, DomainAdaptationMethod,
+    EpisodeConfig, FewShotConfig, FewShotMethod, FusionStrategy, GraphArchitecture, GraphEncoder,
+    GraphEncoderConfig, JointTrainingConfig, LanguageArchitecture, LanguageEncoder, LanguageEncoderConfig,
+    LanguageTransformerConfig, MetaLearner, ModalityEncoding,
+    MultiModalTransformer, MultiModalTransformerConfig, NormalizationType, PoolingType, PositionEncodingType,
+    ReadoutFunction, TaskCategory, TaskSpecificParams, TrainingObjective, TransferLearningConfig,
+    TransferStrategy, VisionArchitecture, VisionEncoder, VisionEncoderConfig, VisionLanguageGraphConfig,
+    VisionLanguageGraphModel, VisionLanguageGraphStats, ViTConfig, ZeroShotConfig, ZeroShotMethod,
 };
 
 #[cfg(feature = "tucker")]

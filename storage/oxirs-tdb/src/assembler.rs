@@ -260,6 +260,14 @@ impl Assembler {
 
         let operation = match op_type {
             OperationType::Load => {
+                if bytecode.len() < offset + 12 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for Load operation: need {} bytes, got {}",
+                        offset + 12,
+                        bytecode.len()
+                    ));
+                }
+                
                 let address = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -282,6 +290,14 @@ impl Assembler {
             }
 
             OperationType::Store => {
+                if bytecode.len() < offset + 12 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for Store operation header: need {} bytes, got {}",
+                        offset + 12,
+                        bytecode.len()
+                    ));
+                }
+                
                 let address = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -300,12 +316,29 @@ impl Assembler {
                     bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
+                
+                if bytecode.len() < offset + data_len {
+                    return Err(anyhow!(
+                        "Insufficient bytes for Store operation data: need {} bytes, got {}",
+                        offset + data_len,
+                        bytecode.len()
+                    ));
+                }
+                
                 let data = bytecode[offset..offset + data_len].to_vec();
                 offset += data_len;
                 Operation::Store { address, data }
             }
 
             OperationType::TripleInsert => {
+                if bytecode.len() < offset + 24 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for TripleInsert operation: need {} bytes, got {}",
+                        offset + 24,
+                        bytecode.len()
+                    ));
+                }
+                
                 let subject = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -347,6 +380,14 @@ impl Assembler {
             }
 
             OperationType::Index => {
+                if bytecode.len() < offset + 4 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for Index operation key length: need {} bytes, got {}",
+                        offset + 4,
+                        bytecode.len()
+                    ));
+                }
+                
                 let key_len = u32::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -354,9 +395,26 @@ impl Assembler {
                     bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
+                
+                if bytecode.len() < offset + key_len {
+                    return Err(anyhow!(
+                        "Insufficient bytes for Index operation key data: need {} bytes, got {}",
+                        offset + key_len,
+                        bytecode.len()
+                    ));
+                }
+                
                 let key = String::from_utf8(bytecode[offset..offset + key_len].to_vec())
                     .map_err(|e| anyhow!("Invalid UTF-8 in index key: {}", e))?;
                 offset += key_len;
+
+                if bytecode.len() < offset + 4 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for Index operation value length: need {} bytes, got {}",
+                        offset + 4,
+                        bytecode.len()
+                    ));
+                }
 
                 let value_len = u32::from_le_bytes([
                     bytecode[offset],
@@ -365,6 +423,15 @@ impl Assembler {
                     bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
+                
+                if bytecode.len() < offset + value_len {
+                    return Err(anyhow!(
+                        "Insufficient bytes for Index operation value data: need {} bytes, got {}",
+                        offset + value_len,
+                        bytecode.len()
+                    ));
+                }
+                
                 let value = String::from_utf8(bytecode[offset..offset + value_len].to_vec())
                     .map_err(|e| anyhow!("Invalid UTF-8 in index value: {}", e))?;
                 offset += value_len;
@@ -373,6 +440,14 @@ impl Assembler {
             }
 
             OperationType::Query => {
+                if bytecode.len() < offset + 4 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for Query operation pattern length: need {} bytes, got {}",
+                        offset + 4,
+                        bytecode.len()
+                    ));
+                }
+                
                 let pattern_len = u32::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -380,6 +455,15 @@ impl Assembler {
                     bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
+                
+                if bytecode.len() < offset + pattern_len {
+                    return Err(anyhow!(
+                        "Insufficient bytes for Query operation pattern data: need {} bytes, got {}",
+                        offset + pattern_len,
+                        bytecode.len()
+                    ));
+                }
+                
                 let pattern = String::from_utf8(bytecode[offset..offset + pattern_len].to_vec())
                     .map_err(|e| anyhow!("Invalid UTF-8 in query pattern: {}", e))?;
                 offset += pattern_len;
@@ -388,6 +472,14 @@ impl Assembler {
             }
 
             OperationType::TripleDelete => {
+                if bytecode.len() < offset + 24 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for TripleDelete operation: need {} bytes, got {}",
+                        offset + 24,
+                        bytecode.len()
+                    ));
+                }
+                
                 let subject = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -429,6 +521,14 @@ impl Assembler {
             }
 
             OperationType::TripleQuery => {
+                if bytecode.len() < offset + 24 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for TripleQuery operation: need {} bytes, got {}",
+                        offset + 24,
+                        bytecode.len()
+                    ));
+                }
+                
                 let subject_raw = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -487,6 +587,14 @@ impl Assembler {
             }
 
             OperationType::IndexScan => {
+                if bytecode.len() < offset + 49 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for IndexScan operation: need {} bytes, got {}",
+                        offset + 49,
+                        bytecode.len()
+                    ));
+                }
+                
                 let index_type = match bytecode[offset] {
                     0 => IndexScanType::SPO,
                     1 => IndexScanType::POS,
@@ -516,6 +624,14 @@ impl Assembler {
             }
 
             OperationType::PageRead => {
+                if bytecode.len() < offset + 8 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for PageRead operation: need {} bytes, got {}",
+                        offset + 8,
+                        bytecode.len()
+                    ));
+                }
+                
                 let page_id = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -531,6 +647,14 @@ impl Assembler {
             }
 
             OperationType::PageWrite => {
+                if bytecode.len() < offset + 12 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for PageWrite operation header: need {} bytes, got {}",
+                        offset + 12,
+                        bytecode.len()
+                    ));
+                }
+                
                 let page_id = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -549,6 +673,15 @@ impl Assembler {
                     bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
+                
+                if bytecode.len() < offset + data_len {
+                    return Err(anyhow!(
+                        "Insufficient bytes for PageWrite operation data: need {} bytes, got {}",
+                        offset + data_len,
+                        bytecode.len()
+                    ));
+                }
+                
                 let data = bytecode[offset..offset + data_len].to_vec();
                 offset += data_len;
 
@@ -556,6 +689,14 @@ impl Assembler {
             }
 
             OperationType::Transaction => {
+                if bytecode.len() < offset + 9 {
+                    return Err(anyhow!(
+                        "Insufficient bytes for Transaction operation: need {} bytes, got {}",
+                        offset + 9,
+                        bytecode.len()
+                    ));
+                }
+                
                 let transaction_id = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],

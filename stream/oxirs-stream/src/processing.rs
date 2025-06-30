@@ -329,7 +329,8 @@ impl EventProcessor {
             | StreamEvent::QueryResultRemoved { metadata, .. }
             | StreamEvent::QueryCompleted { metadata, .. }
             | StreamEvent::SchemaUpdated { metadata, .. }
-            | StreamEvent::ShapeUpdated { metadata, .. } => metadata.timestamp,
+            | StreamEvent::ShapeUpdated { metadata, .. }
+            | StreamEvent::ErrorOccurred { metadata, .. } => metadata.timestamp,
             StreamEvent::Heartbeat { timestamp, .. } => *timestamp,
         }
     }
@@ -726,6 +727,7 @@ impl EventWindow {
             StreamEvent::SchemaUpdated { .. } => "schema_updated".to_string(),
             StreamEvent::ShapeUpdated { .. } => "shape_updated".to_string(),
             StreamEvent::Heartbeat { .. } => "heartbeat".to_string(),
+            StreamEvent::ErrorOccurred { .. } => "error_occurred".to_string(),
         }
     }
 
@@ -770,7 +772,8 @@ impl EventWindow {
             | StreamEvent::QueryResultRemoved { metadata, .. }
             | StreamEvent::QueryCompleted { metadata, .. }
             | StreamEvent::SchemaUpdated { metadata, .. }
-            | StreamEvent::ShapeUpdated { metadata, .. } => metadata.source.clone(),
+            | StreamEvent::ShapeUpdated { metadata, .. }
+            | StreamEvent::ErrorOccurred { metadata, .. } => metadata.source.clone(),
             StreamEvent::Heartbeat { source, .. } => source.clone(),
         }
     }
@@ -1230,6 +1233,7 @@ impl ComplexEventProcessor {
             StreamEvent::SchemaUpdated { .. } => "schema_updated",
             StreamEvent::ShapeUpdated { .. } => "shape_updated",
             StreamEvent::Heartbeat { .. } => "heartbeat",
+            StreamEvent::ErrorOccurred { .. } => "error_occurred",
         };
         event_type == expected_type
     }

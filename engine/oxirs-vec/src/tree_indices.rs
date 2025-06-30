@@ -887,7 +887,7 @@ impl RandomProjectionTree {
         dimensions: usize,
         rng: &mut impl rand::Rng,
     ) -> Result<RpNode> {
-        use rand::distributions::{Distribution, Standard};
+        use rand::Rng;
 
         if indices.len() <= self.config.max_leaf_size {
             return Ok(RpNode {
@@ -900,11 +900,15 @@ impl RandomProjectionTree {
         }
 
         // Generate random projection vector
-        let projection: Vec<f32> = Standard.sample_iter(&mut *rng).take(dimensions).collect();
+        let projection: Vec<f32> = (0..dimensions).map(|_| rng.gen_range(-1.0..1.0)).collect();
 
         // Normalize projection vector
-        let norm = f32::norm(&projection);
-        let projection: Vec<f32> = projection.iter().map(|&x| x / norm).collect();
+        let norm = (projection.iter().map(|&x| x * x).sum::<f32>()).sqrt();
+        let projection: Vec<f32> = if norm > 0.0 {
+            projection.iter().map(|&x| x / norm).collect()
+        } else {
+            projection
+        };
 
         // Project all points
         let mut projections: Vec<(f32, usize)> = indices

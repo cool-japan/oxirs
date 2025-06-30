@@ -817,7 +817,7 @@ impl AdvancedByzantineFaultTolerance {
         Ok(ByzantineVerificationResult {
             verified: byzantine_resilient,
             valid_signatures,
-            byzantine_nodes,
+            byzantine_nodes: byzantine_nodes.clone(),
             threshold_met: valid_signatures >= self.threshold,
             byzantine_tolerance: byzantine_nodes.len() <= self.total_nodes / 3,
         })

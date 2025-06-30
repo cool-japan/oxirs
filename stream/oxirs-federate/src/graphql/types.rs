@@ -19,7 +19,7 @@ pub struct EntityData {
 }
 
 /// Composed schema for federation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComposedSchema {
     pub types: HashMap<String, GraphQLType>,
     pub query_type: String,
@@ -31,7 +31,7 @@ pub struct ComposedSchema {
 }
 
 /// GraphQL type definition
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphQLType {
     pub name: String,
     pub kind: GraphQLTypeKind,
@@ -39,7 +39,7 @@ pub struct GraphQLType {
 }
 
 /// GraphQL type kinds
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GraphQLTypeKind {
     Object,
     Interface,
@@ -50,15 +50,16 @@ pub enum GraphQLTypeKind {
 }
 
 /// GraphQL field definition
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphQLField {
     pub name: String,
     pub field_type: String,
     pub arguments: HashMap<String, GraphQLArgument>,
+    pub selection_set: Vec<GraphQLField>,
 }
 
 /// GraphQL argument definition
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphQLArgument {
     pub name: String,
     pub argument_type: String,
@@ -66,7 +67,7 @@ pub struct GraphQLArgument {
 }
 
 /// Entity type information for federation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityTypeInfo {
     pub key_fields: Vec<String>,
     pub owning_service: String,
@@ -74,7 +75,7 @@ pub struct EntityTypeInfo {
 }
 
 /// Field ownership types for federation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FieldOwnershipType {
     Owned(String),
     External,
@@ -83,7 +84,7 @@ pub enum FieldOwnershipType {
 }
 
 /// GraphQL directive
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Directive {
     pub name: String,
     pub arguments: HashMap<String, serde_json::Value>,
@@ -99,7 +100,7 @@ pub struct EntityReference {
 }
 
 /// Schema capabilities discovered through introspection
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaCapabilities {
     pub supports_federation: bool,
     pub supports_subscriptions: bool,
@@ -111,7 +112,7 @@ pub struct SchemaCapabilities {
 }
 
 /// Result of dynamic schema update
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaUpdateResult {
     pub service_id: String,
     pub update_successful: bool,
@@ -121,7 +122,7 @@ pub struct SchemaUpdateResult {
 }
 
 /// Breaking change detected during schema update
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BreakingChange {
     pub change_type: BreakingChangeType,
     pub description: String,
@@ -129,7 +130,7 @@ pub struct BreakingChange {
 }
 
 /// Types of breaking changes
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BreakingChangeType {
     TypeRemoved,
     FieldRemoved,
@@ -140,7 +141,7 @@ pub enum BreakingChangeType {
 }
 
 /// Severity of breaking changes
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BreakingChangeSeverity {
     Low,
     Medium,
@@ -149,7 +150,7 @@ pub enum BreakingChangeSeverity {
 }
 
 /// GraphQL type definition with federation support
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphQLTypeDefinition {
     pub name: String,
     pub kind: String,
@@ -158,7 +159,7 @@ pub struct GraphQLTypeDefinition {
 }
 
 /// GraphQL field definition with federation support
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphQLFieldDefinition {
     pub name: String,
     pub field_type: String,
@@ -167,7 +168,7 @@ pub struct GraphQLFieldDefinition {
 }
 
 /// Entity resolution context
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolutionContext {
     pub request_id: String,
     pub user_id: Option<String>,
@@ -176,21 +177,21 @@ pub struct ResolutionContext {
 }
 
 /// Entity dependency graph for resolution planning
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityDependencyGraph {
     pub nodes: HashMap<EntityReference, usize>,
     pub edges: Vec<(usize, usize)>,
 }
 
 /// Entity resolution plan for federation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityResolutionPlan {
     pub steps: Vec<EntityResolutionStep>,
     pub dependencies: HashMap<String, Vec<String>>,
 }
 
 /// A step in entity resolution
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityResolutionStep {
     pub service_name: String,
     pub entity_type: String,
@@ -216,7 +217,7 @@ pub struct GraphQLFederation {
 }
 
 /// Federated schema definition
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederatedSchema {
     pub service_id: String,
     pub types: HashMap<String, TypeDefinition>,
@@ -227,7 +228,7 @@ pub struct FederatedSchema {
 }
 
 /// Unified schema combining all federated schemas
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnifiedSchema {
     pub types: HashMap<String, TypeDefinition>,
     pub queries: HashMap<String, FieldDefinition>,
@@ -238,7 +239,7 @@ pub struct UnifiedSchema {
 }
 
 /// Type definition in schema
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TypeDefinition {
     pub name: String,
     pub description: Option<String>,
@@ -247,7 +248,7 @@ pub struct TypeDefinition {
 }
 
 /// Different kinds of GraphQL types
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TypeKind {
     Object {
         fields: HashMap<String, FieldDefinition>,
@@ -268,7 +269,7 @@ pub enum TypeKind {
 }
 
 /// Field definition in schema
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FieldDefinition {
     pub name: String,
     pub description: Option<String>,
@@ -278,7 +279,7 @@ pub struct FieldDefinition {
 }
 
 /// Argument definition for fields
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArgumentDefinition {
     pub name: String,
     pub description: Option<String>,
@@ -288,7 +289,7 @@ pub struct ArgumentDefinition {
 }
 
 /// Input field definition
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InputFieldDefinition {
     pub name: String,
     pub description: Option<String>,
@@ -298,7 +299,7 @@ pub struct InputFieldDefinition {
 }
 
 /// Enum value definition
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnumValueDefinition {
     pub name: String,
     pub description: Option<String>,
@@ -308,7 +309,7 @@ pub struct EnumValueDefinition {
 }
 
 /// Directive definition
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DirectiveDefinition {
     pub name: String,
     pub description: Option<String>,
@@ -318,7 +319,7 @@ pub struct DirectiveDefinition {
 }
 
 /// Valid locations for directives
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DirectiveLocation {
     Query,
     Mutation,
@@ -423,7 +424,7 @@ pub struct Selection {
 }
 
 /// Variable definition in GraphQL query
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VariableDefinition {
     pub name: String,
     pub variable_type: String,

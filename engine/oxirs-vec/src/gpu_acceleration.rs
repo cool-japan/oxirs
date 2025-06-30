@@ -1897,7 +1897,7 @@ impl GpuAccelerator {
         // Tune number of streams based on device capabilities
         let optimal_streams = std::cmp::min(
             self.config.stream_count,
-            device_props.max_threads_per_block / 256,
+            (device_props.max_threads_per_block / 256) as usize,
         );
 
         if optimal_streams != self.config.stream_count {
@@ -2053,7 +2053,7 @@ pub struct GpuMemoryPool {
     allocation_stats: Arc<Mutex<MemoryAllocationStats>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct MemoryAllocationStats {
     total_allocations: u64,
     total_deallocations: u64,
@@ -2074,14 +2074,14 @@ impl GpuMemoryPool {
     }
 
     pub fn allocate_buffer(&self, size: usize) -> Result<GpuBuffer> {
-        let mut available = self.available_buffers.lock();
+        let mut available = self.available_buffers.lock().unwrap();
 
         // Try to reuse an existing buffer of appropriate size
         if let Some(pos) = available.iter().position(|buf| buf.size >= size) {
             let buffer = available.remove(pos);
 
             // Update stats
-            let mut stats = self.allocation_stats.lock();
+            let mut stats = self.allocation_stats.lock().unwrap();
             stats.total_allocations += 1;
             stats.current_usage += size;
             if stats.current_usage > stats.peak_usage {
@@ -2095,16 +2095,16 @@ impl GpuMemoryPool {
         let buffer = GpuBuffer::new(size, self.device_id)?;
 
         // Update allocation tracking
-        let mut total = self.total_allocated.lock();
+        let mut total = self.total_allocated.lock().unwrap();
         if *total + size > self.pool_size {
-            let mut stats = self.allocation_stats.lock();
+            let mut stats = self.allocation_stats.lock().unwrap();
             stats.allocation_failures += 1;
             return Err(anyhow!("Memory pool exhausted"));
         }
 
         *total += size;
 
-        let mut stats = self.allocation_stats.lock();
+        let mut stats = self.allocation_stats.lock().unwrap();
         stats.total_allocations += 1;
         stats.current_usage += size;
         if stats.current_usage > stats.peak_usage {
@@ -2118,27 +2118,27 @@ impl GpuMemoryPool {
         let size = buffer.size;
 
         // Return buffer to pool for reuse
-        let mut available = self.available_buffers.lock();
+        let mut available = self.available_buffers.lock().unwrap();
         available.push(buffer);
 
         // Update stats
-        let mut stats = self.allocation_stats.lock();
+        let mut stats = self.allocation_stats.lock().unwrap();
         stats.total_deallocations += 1;
         stats.current_usage = stats.current_usage.saturating_sub(size);
     }
 
     pub fn get_stats(&self) -> MemoryAllocationStats {
-        self.allocation_stats.lock().clone()
+        self.allocation_stats.lock().unwrap().clone()
     }
 
     pub fn clear_pool(&self) {
-        let mut available = self.available_buffers.lock();
+        let mut available = self.available_buffers.lock().unwrap();
         available.clear();
 
-        let mut total = self.total_allocated.lock();
+        let mut total = self.total_allocated.lock().unwrap();
         *total = 0;
 
-        let mut stats = self.allocation_stats.lock();
+        let mut stats = self.allocation_stats.lock().unwrap();
         stats.current_usage = 0;
     }
 }

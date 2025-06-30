@@ -1196,8 +1196,12 @@ impl GeneticOptimizer {
 
         for generation in 0..self.max_generations {
             // Evaluate fitness for all chromosomes
-            for chromosome in &mut self.population {
-                chromosome.fitness = self.evaluate_fitness(chromosome, &objective).await?;
+            let mut fitness_values = Vec::new();
+            for chromosome in &self.population {
+                fitness_values.push(self.evaluate_fitness(chromosome, &objective).await?);
+            }
+            for (chromosome, fitness) in self.population.iter_mut().zip(fitness_values) {
+                chromosome.fitness = fitness;
             }
 
             // Track best solution
@@ -1365,8 +1369,8 @@ impl GeneticOptimizer {
 
         // Mutate parallelization parameters
         if fastrand::f64() < 0.3 {
-            chromosome.parallelization_config.max_parallel_threads =
-                (chromosome.parallelization_config.max_parallel_threads
+            chromosome.parallelization_config.max_parallel_constraints =
+                (chromosome.parallelization_config.max_parallel_constraints
                     + fastrand::i8(-2..=2) as usize)
                     .max(1)
                     .min(16);
@@ -1586,8 +1590,13 @@ impl ParticleSwarmOptimizer {
 
         for iteration in 0..self.max_iterations {
             // Evaluate all particles
-            for particle in &mut self.particles {
-                particle.fitness = self.evaluate_particle(particle).await?;
+            let mut fitness_values = Vec::new();
+            for particle in &self.particles {
+                fitness_values.push(self.evaluate_particle(particle).await?);
+            }
+            
+            for (particle, fitness) in self.particles.iter_mut().zip(fitness_values) {
+                particle.fitness = fitness;
 
                 // Update personal best
                 if particle.fitness > particle.personal_best_fitness {
@@ -1604,9 +1613,9 @@ impl ParticleSwarmOptimizer {
             }
 
             // Update particle velocities and positions
-            for particle in &mut self.particles {
-                self.update_particle_velocity(particle)?;
-                self.update_particle_position(particle, search_space)?;
+            for i in 0..self.particles.len() {
+                self.update_particle_velocity_by_index(i)?;
+                self.update_particle_position_by_index(i, search_space)?;
             }
 
             // Decay inertia weight
@@ -1704,6 +1713,82 @@ impl ParticleSwarmOptimizer {
         particle: &mut OptimizationParticle,
         search_space: &OptimizationSearchSpace,
     ) -> Result<()> {
+        // Update position
+        particle.position.execution_time_weight = (particle.position.execution_time_weight
+            + particle.velocity.execution_time_weight)
+            .clamp(
+                search_space.execution_time_range.0,
+                search_space.execution_time_range.1,
+            );
+
+        particle.position.memory_usage_weight =
+            (particle.position.memory_usage_weight + particle.velocity.memory_usage_weight).clamp(
+                search_space.memory_usage_range.0,
+                search_space.memory_usage_range.1,
+            );
+
+        particle.position.cache_efficiency_weight = (particle.position.cache_efficiency_weight
+            + particle.velocity.cache_efficiency_weight)
+            .clamp(
+                search_space.cache_efficiency_range.0,
+                search_space.cache_efficiency_range.1,
+            );
+
+        Ok(())
+    }
+
+    /// Update particle velocity by index to avoid borrowing conflicts
+    fn update_particle_velocity_by_index(&mut self, index: usize) -> Result<()> {
+        if let Some(global_best) = self.global_best.clone() {
+            let particle = &mut self.particles[index];
+            let r1 = fastrand::f64();
+            let r2 = fastrand::f64();
+
+            // Update velocity components
+            particle.velocity.execution_time_weight = self.inertia_weight
+                * particle.velocity.execution_time_weight
+                + self.cognitive_coefficient
+                    * r1
+                    * (particle.personal_best_position.execution_time_weight
+                        - particle.position.execution_time_weight)
+                + self.social_coefficient
+                    * r2
+                    * (global_best.position.execution_time_weight
+                        - particle.position.execution_time_weight);
+
+            particle.velocity.memory_usage_weight = self.inertia_weight
+                * particle.velocity.memory_usage_weight
+                + self.cognitive_coefficient
+                    * r1
+                    * (particle.personal_best_position.memory_usage_weight
+                        - particle.position.memory_usage_weight)
+                + self.social_coefficient
+                    * r2
+                    * (global_best.position.memory_usage_weight
+                        - particle.position.memory_usage_weight);
+
+            particle.velocity.cache_efficiency_weight = self.inertia_weight
+                * particle.velocity.cache_efficiency_weight
+                + self.cognitive_coefficient
+                    * r1
+                    * (particle.personal_best_position.cache_efficiency_weight
+                        - particle.position.cache_efficiency_weight)
+                + self.social_coefficient
+                    * r2
+                    * (global_best.position.cache_efficiency_weight
+                        - particle.position.cache_efficiency_weight);
+        }
+        Ok(())
+    }
+
+    /// Update particle position by index to avoid borrowing conflicts
+    fn update_particle_position_by_index(
+        &mut self,
+        index: usize,
+        search_space: &OptimizationSearchSpace,
+    ) -> Result<()> {
+        let particle = &mut self.particles[index];
+        
         // Update position
         particle.position.execution_time_weight = (particle.position.execution_time_weight
             + particle.velocity.execution_time_weight)
@@ -1850,7 +1935,11 @@ impl BayesianOptimizer {
     }
 
     fn normal_cdf(&self, x: f64) -> f64 {
-        0.5 * (1.0 + erf::erf(x / std::f64::consts::SQRT_2))
+        // Simple erf approximation
+        let t = 1.0 / (1.0 + 0.3275911 * x.abs());
+        let poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+        let erf_approx = if x >= 0.0 { 1.0 - poly * (-x * x).exp() } else { poly * (-x * x).exp() - 1.0 };
+        0.5 * (1.0 + erf_approx)
     }
 
     fn normal_pdf(&self, x: f64) -> f64 {
@@ -2094,8 +2183,12 @@ impl MultiObjectiveOptimizer {
 
         for generation in 0..self.max_generations {
             // Evaluate objectives for all solutions
-            for solution in &mut self.population {
-                solution.objective_values = self.evaluate_objectives(solution, &objectives).await?;
+            let mut objective_values = Vec::new();
+            for solution in &self.population {
+                objective_values.push(self.evaluate_objectives(solution, &objectives).await?);
+            }
+            for (solution, values) in self.population.iter_mut().zip(objective_values) {
+                solution.objective_values = values;
             }
 
             // Non-dominated sorting
@@ -2117,7 +2210,7 @@ impl MultiObjectiveOptimizer {
         let pareto_front = fronts.into_iter().next().unwrap_or_default();
 
         Ok(ParetoFront {
-            solutions: pareto_front,
+            solutions: pareto_front.clone(),
             hypervolume: self.calculate_hypervolume(&pareto_front),
             generation: self.max_generations,
         })

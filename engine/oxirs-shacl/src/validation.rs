@@ -227,7 +227,7 @@ impl<'a> ValidationEngine<'a> {
     }
 
     /// Validate a specific node against a shape
-    fn validate_node_against_shape(
+    pub fn validate_node_against_shape(
         &mut self,
         store: &Store,
         shape: &Shape,
@@ -2411,7 +2411,7 @@ impl<'a> ValidationEngine<'a> {
         
         match constraint {
             Constraint::Class(c) => {
-                if let Err(e) = self.iri_resolver.validate_iri(&c.class_iri) {
+                if let Err(e) = self.iri_resolver.validate_iri(c.class_iri.as_str()) {
                     warnings.push(format!(
                         "Invalid class IRI '{}' in sh:class constraint: {}",
                         c.class_iri, e
@@ -2419,7 +2419,7 @@ impl<'a> ValidationEngine<'a> {
                 }
             }
             Constraint::Datatype(c) => {
-                if let Err(e) = self.iri_resolver.validate_iri(&c.datatype_iri) {
+                if let Err(e) = self.iri_resolver.validate_iri(c.datatype_iri.as_str()) {
                     warnings.push(format!(
                         "Invalid datatype IRI '{}' in sh:datatype constraint: {}",
                         c.datatype_iri, e
@@ -2445,8 +2445,10 @@ impl<'a> ValidationEngine<'a> {
 
         // Resolve property path IRIs if present
         if let Some(path) = &shape.path {
-            if let Some(path_iri) = path.as_iri_string() {
-                if let Ok(resolved) = self.iri_resolver.resolve_iri(&path_iri) {
+            // Extract IRI from simple predicate paths
+            if let PropertyPath::Predicate(named_node) = path {
+                let path_iri = named_node.as_str();
+                if let Ok(resolved) = self.iri_resolver.resolve_iri(path_iri) {
                     resolved_iris.insert("property_path".to_string(), resolved);
                 }
             }
@@ -2456,22 +2458,22 @@ impl<'a> ValidationEngine<'a> {
         for (index, target) in shape.targets.iter().enumerate() {
             match target {
                 Target::Class(class_iri) => {
-                    if let Ok(resolved) = self.iri_resolver.resolve_iri(class_iri) {
+                    if let Ok(resolved) = self.iri_resolver.resolve_iri(class_iri.as_str()) {
                         resolved_iris.insert(format!("target_class_{}", index), resolved);
                     }
                 }
                 Target::Node(node_iri) => {
-                    if let Ok(resolved) = self.iri_resolver.resolve_iri(node_iri) {
+                    if let Ok(resolved) = self.iri_resolver.resolve_iri(&node_iri.to_string()) {
                         resolved_iris.insert(format!("target_node_{}", index), resolved);
                     }
                 }
                 Target::ObjectsOf(prop_iri) => {
-                    if let Ok(resolved) = self.iri_resolver.resolve_iri(prop_iri) {
+                    if let Ok(resolved) = self.iri_resolver.resolve_iri(prop_iri.as_str()) {
                         resolved_iris.insert(format!("target_objects_of_{}", index), resolved);
                     }
                 }
                 Target::SubjectsOf(prop_iri) => {
-                    if let Ok(resolved) = self.iri_resolver.resolve_iri(prop_iri) {
+                    if let Ok(resolved) = self.iri_resolver.resolve_iri(prop_iri.as_str()) {
                         resolved_iris.insert(format!("target_subjects_of_{}", index), resolved);
                     }
                 }
@@ -2498,7 +2500,7 @@ impl<'a> ValidationEngine<'a> {
             }
 
             // Validate IRIs in shape's constraints
-            for constraint in &shape.constraints {
+            for (_, constraint) in &shape.constraints {
                 match self.validate_iri_constraints(constraint, 
                     &ConstraintContext::new(
                         Term::NamedNode(NamedNode::new("urn:dummy").unwrap()), 
@@ -2517,7 +2519,7 @@ impl<'a> ValidationEngine<'a> {
             for target in &shape.targets {
                 match target {
                     Target::Class(class_iri) => {
-                        if let Err(e) = self.iri_resolver.validate_iri(class_iri) {
+                        if let Err(e) = self.iri_resolver.validate_iri(class_iri.as_str()) {
                             all_warnings.push(format!(
                                 "Invalid target class IRI '{}' in shape '{}': {}",
                                 class_iri, shape.id.as_str(), e
@@ -2525,7 +2527,7 @@ impl<'a> ValidationEngine<'a> {
                         }
                     }
                     Target::Node(node_iri) => {
-                        if let Err(e) = self.iri_resolver.validate_iri(node_iri) {
+                        if let Err(e) = self.iri_resolver.validate_iri(&node_iri.to_string()) {
                             all_warnings.push(format!(
                                 "Invalid target node IRI '{}' in shape '{}': {}",
                                 node_iri, shape.id.as_str(), e
@@ -2533,7 +2535,7 @@ impl<'a> ValidationEngine<'a> {
                         }
                     }
                     Target::ObjectsOf(prop_iri) => {
-                        if let Err(e) = self.iri_resolver.validate_iri(prop_iri) {
+                        if let Err(e) = self.iri_resolver.validate_iri(prop_iri.as_str()) {
                             all_warnings.push(format!(
                                 "Invalid target objectsOf IRI '{}' in shape '{}': {}",
                                 prop_iri, shape.id.as_str(), e
@@ -2541,7 +2543,7 @@ impl<'a> ValidationEngine<'a> {
                         }
                     }
                     Target::SubjectsOf(prop_iri) => {
-                        if let Err(e) = self.iri_resolver.validate_iri(prop_iri) {
+                        if let Err(e) = self.iri_resolver.validate_iri(prop_iri.as_str()) {
                             all_warnings.push(format!(
                                 "Invalid target subjectsOf IRI '{}' in shape '{}': {}",
                                 prop_iri, shape.id.as_str(), e

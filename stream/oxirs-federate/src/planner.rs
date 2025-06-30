@@ -31,8 +31,8 @@ impl QueryPlanner {
     pub fn new() -> Self {
         Self {
             inner: FederatedQueryPlanner::new(),
-            decomposer: QueryDecomposer::new(DecomposerConfig::default()),
-            optimizer: ServiceOptimizer::new(ServiceOptimizerConfig::default()),
+            decomposer: QueryDecomposer::new(),
+            optimizer: ServiceOptimizer::new(),
         }
     }
 
@@ -40,8 +40,8 @@ impl QueryPlanner {
     pub fn with_config(config: PlannerConfig) -> Self {
         Self {
             inner: FederatedQueryPlanner::with_config(config),
-            decomposer: QueryDecomposer::new(DecomposerConfig::default()),
-            optimizer: ServiceOptimizer::new(ServiceOptimizerConfig::default()),
+            decomposer: QueryDecomposer::new(),
+            optimizer: ServiceOptimizer::new(),
         }
     }
 
@@ -259,6 +259,7 @@ impl QueryPlanner {
             planning_time: std::time::Duration::from_millis(10),
             cache_key: None,
             metadata: std::collections::HashMap::new(),
+            parallelizable_steps: vec![],
         }
     }
 

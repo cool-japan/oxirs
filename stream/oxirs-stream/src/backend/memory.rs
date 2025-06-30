@@ -14,10 +14,20 @@ use crate::error::{StreamError, StreamResult};
 use crate::event::StreamEvent;
 use crate::types::{Offset, PartitionId, StreamPosition, TopicName};
 
-/// In-memory stream storage
-#[derive(Clone)]
-struct MemoryStorage {
-    topics: Arc<DashMap<TopicName, Arc<RwLock<TopicData>>>>,
+// Global shared storage for memory backend
+static MEMORY_STORAGE: std::sync::OnceLock<Arc<DashMap<TopicName, Arc<RwLock<TopicData>>>>> =
+    std::sync::OnceLock::new();
+
+fn get_memory_storage() -> Arc<DashMap<TopicName, Arc<RwLock<TopicData>>>> {
+    MEMORY_STORAGE
+        .get_or_init(|| Arc::new(DashMap::new()))
+        .clone()
+}
+
+/// Clear all memory storage (for testing)
+pub async fn clear_memory_storage() {
+    let storage = get_memory_storage();
+    storage.clear();
 }
 
 #[derive(Clone)]
@@ -27,24 +37,14 @@ struct TopicData {
     consumer_offsets: HashMap<String, u64>,
 }
 
-impl Default for MemoryStorage {
-    fn default() -> Self {
-        Self {
-            topics: Arc::new(DashMap::new()),
-        }
-    }
-}
-
 /// Memory backend for testing
 pub struct MemoryBackend {
-    storage: MemoryStorage,
     connected: bool,
 }
 
 impl MemoryBackend {
     pub fn new() -> Self {
         Self {
-            storage: MemoryStorage::default(),
             connected: false,
         }
     }
@@ -73,7 +73,8 @@ impl StreamBackend for MemoryBackend {
     }
 
     async fn create_topic(&self, topic: &TopicName, _partitions: u32) -> StreamResult<()> {
-        self.storage.topics.entry(topic.clone()).or_insert_with(|| {
+        let storage = get_memory_storage();
+        storage.entry(topic.clone()).or_insert_with(|| {
             Arc::new(RwLock::new(TopicData {
                 events: VecDeque::new(),
                 next_offset: 0,
@@ -84,23 +85,20 @@ impl StreamBackend for MemoryBackend {
     }
 
     async fn delete_topic(&self, topic: &TopicName) -> StreamResult<()> {
-        self.storage.topics.remove(topic);
+        get_memory_storage().remove(topic);
         Ok(())
     }
 
     async fn list_topics(&self) -> StreamResult<Vec<TopicName>> {
-        Ok(self
-            .storage
-            .topics
+        Ok(get_memory_storage()
             .iter()
             .map(|entry| entry.key().clone())
             .collect())
     }
 
     async fn send_event(&self, topic: &TopicName, event: StreamEvent) -> StreamResult<Offset> {
-        let topic_data = self
-            .storage
-            .topics
+        let storage = get_memory_storage();
+        let topic_data = storage
             .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
@@ -137,9 +135,8 @@ impl StreamBackend for MemoryBackend {
         position: StreamPosition,
         max_events: usize,
     ) -> StreamResult<Vec<(StreamEvent, Offset)>> {
-        let topic_data = self
-            .storage
-            .topics
+        let storage = get_memory_storage();
+        let topic_data = storage
             .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
@@ -187,9 +184,8 @@ impl StreamBackend for MemoryBackend {
         _partition: PartitionId,
         offset: Offset,
     ) -> StreamResult<()> {
-        let topic_data = self
-            .storage
-            .topics
+        let storage = get_memory_storage();
+        let topic_data = storage
             .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
@@ -206,9 +202,8 @@ impl StreamBackend for MemoryBackend {
         _partition: PartitionId,
         position: StreamPosition,
     ) -> StreamResult<()> {
-        let topic_data = self
-            .storage
-            .topics
+        let storage = get_memory_storage();
+        let topic_data = storage
             .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
@@ -230,9 +225,8 @@ impl StreamBackend for MemoryBackend {
         topic: &TopicName,
         consumer_group: &ConsumerGroup,
     ) -> StreamResult<HashMap<PartitionId, u64>> {
-        let topic_data = self
-            .storage
-            .topics
+        let storage = get_memory_storage();
+        let topic_data = storage
             .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
@@ -251,9 +245,8 @@ impl StreamBackend for MemoryBackend {
     }
 
     async fn get_topic_metadata(&self, topic: &TopicName) -> StreamResult<HashMap<String, String>> {
-        let topic_data = self
-            .storage
-            .topics
+        let storage = get_memory_storage();
+        let topic_data = storage
             .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 

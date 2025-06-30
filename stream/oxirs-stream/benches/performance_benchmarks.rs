@@ -1,6 +1,7 @@
 use chrono::Utc;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_stream::*;
+use oxirs_stream::processing::{EventProcessor, WindowConfig, WindowType, AggregateFunction, WindowTrigger};
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 

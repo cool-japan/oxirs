@@ -99,7 +99,7 @@ pub struct ServiceConnectionPool {
 }
 
 /// Pool metrics for monitoring and optimization
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PoolMetrics {
     pub pools_created: u64,
     pub total_connections_acquired: u64,
@@ -199,7 +199,7 @@ impl ConnectionPoolManager {
     }
 
     /// Acquire a connection permit from the pool
-    pub async fn acquire_connection(&self, service_id: &str) -> Result<ConnectionPermit> {
+    pub async fn acquire_connection(&self, service_id: &str) -> Result<Arc<ServiceConnectionPool>> {
         let pools = self.pools.read().await;
         let pool = pools
             .get(service_id)
@@ -208,25 +208,25 @@ impl ConnectionPoolManager {
         drop(pools);
 
         let start_time = Instant::now();
-        let permit = pool.acquire_connection().await?;
+        let _permit = pool.acquire_connection().await?;
         let wait_time = start_time.elapsed();
+        drop(_permit);
 
         // Update metrics
-        let mut pool_metrics = pool.metrics.write().await;
-        pool_metrics.total_acquisitions += 1;
-        pool_metrics.average_wait_time = 
-            (pool_metrics.average_wait_time + wait_time) / 2;
+        {
+            let mut pool_metrics = pool.metrics.write().await;
+            pool_metrics.total_acquisitions += 1;
+            pool_metrics.average_wait_time = 
+                (pool_metrics.average_wait_time + wait_time) / 2;
+        }
 
-        let mut global_metrics = self.metrics.write().await;
-        global_metrics.total_connections_acquired += 1;
-        global_metrics.total_wait_time += wait_time;
+        {
+            let mut global_metrics = self.metrics.write().await;
+            global_metrics.total_connections_acquired += 1;
+            global_metrics.total_wait_time += wait_time;
+        }
 
-        Ok(ConnectionPermit {
-            permit,
-            service_id: service_id.to_string(),
-            pool: pool.clone(),
-            acquired_at: Instant::now(),
-        })
+        Ok(pool)
     }
 
     /// Optimize pool sizes based on current metrics
@@ -582,14 +582,14 @@ impl PoolOptimizer {
 }
 
 /// Connection permit with automatic release tracking
-pub struct ConnectionPermit {
-    permit: SemaphorePermit<'static>,
+pub struct ConnectionPermit<'a> {
+    permit: SemaphorePermit<'a>,
     service_id: String,
     pool: Arc<ServiceConnectionPool>,
     acquired_at: Instant,
 }
 
-impl Drop for ConnectionPermit {
+impl<'a> Drop for ConnectionPermit<'a> {
     fn drop(&mut self) {
         // Update metrics when permit is released
         let pool = self.pool.clone();

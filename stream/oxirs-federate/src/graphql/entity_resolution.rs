@@ -834,6 +834,7 @@ impl GraphQLFederation {
                             name: field_def.name.clone(),
                             field_type: field_def.field_type.clone(),
                             arguments: HashMap::new(), // Simplified
+                            selection_set: Vec::new(),
                         },
                     );
                 }

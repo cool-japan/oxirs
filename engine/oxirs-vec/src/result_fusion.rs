@@ -4,7 +4,7 @@
 //! multiple sources, including federated endpoints, different similarity metrics,
 //! and heterogeneous scoring schemes.
 
-use crate::{Vector, VectorServiceResult};
+use crate::{Vector, sparql_integration::VectorServiceResult};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -86,6 +86,12 @@ pub enum FusionAlgorithm {
     Condorcet,
     /// Machine learning-based fusion
     MLFusion,
+}
+
+impl Default for FusionAlgorithm {
+    fn default() -> Self {
+        FusionAlgorithm::CombSum
+    }
 }
 
 /// A single result from a vector search

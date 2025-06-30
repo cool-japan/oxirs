@@ -168,24 +168,24 @@ impl GraphQLFederation {
             ),
         };
 
-        let result_size = data.as_ref().map(|d| d.estimated_size()).unwrap_or(0);
+        let result_size = data.as_ref().map(|d| self.estimate_result_size(d)).unwrap_or(0);
 
         // Calculate memory usage before moving data
         let memory_used = data
             .as_ref()
-            .map(|d| self.estimate_memory_usage(d, result_size))
+            .map(|d| self.estimate_memory_usage(d, result_size as usize))
             .unwrap_or(0);
 
         Ok(StepResult {
             step_id: step.step_id.clone(),
             step_type: step.step_type,
-            status,
+            status: status.clone(),
             data,
             error: error.clone(),
             execution_time,
             service_id: step.service_id.clone(),
-            memory_used: memory_used as u64,
-            result_size,
+            memory_used: memory_used,
+            result_size: result_size as usize,
             success: matches!(status, crate::executor::ExecutionStatus::Success),
             error_message: error,
             service_response_time: execution_time, // TODO: Track service-specific response time
@@ -423,6 +423,28 @@ impl GraphQLFederation {
         } else {
             // Assume it's a string without quotes
             Ok(serde_json::Value::String(value.to_string()))
+        }
+    }
+
+    /// Estimate the result size of query result data
+    fn estimate_result_size(&self, data: &QueryResultData) -> u64 {
+        match data {
+            QueryResultData::Sparql(sparql_results) => {
+                // Estimate based on number of results and variables
+                sparql_results.results.len() as u64 * 10 // Simple heuristic
+            }
+            QueryResultData::GraphQL(graphql_response) => {
+                // Estimate based on JSON serialization size
+                serde_json::to_string(&graphql_response.data)
+                    .map(|s| s.len() as u64)
+                    .unwrap_or(100)
+            }
+            QueryResultData::ServiceResult(service_result) => {
+                // Estimate based on JSON value size
+                serde_json::to_string(service_result)
+                    .map(|s| s.len() as u64)
+                    .unwrap_or(50)
+            }
         }
     }
 }

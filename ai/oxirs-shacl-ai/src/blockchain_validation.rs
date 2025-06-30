@@ -179,7 +179,7 @@ impl BlockchainValidator {
 
         // Retrieve SHACL constraints from smart contract
         let contract_constraints = contract_manager
-            .get_constraints(contract_address, &connector)
+            .get_constraints(contract_address, connector.as_ref())
             .await?;
 
         // Convert RDF data to blockchain-compatible format
@@ -465,7 +465,7 @@ impl BlockchainValidator {
 
         while attempts < max_attempts {
             if let Some(result) = consensus_engine
-                .check_consensus(transaction_id, &connector)
+                .check_consensus(transaction_id, connector.as_ref())
                 .await?
             {
                 return Ok(result);
@@ -598,6 +598,8 @@ impl BlockchainValidator {
         let total_networks = results.len();
         let successful_validations = results.values().filter(|r| r.validation_outcome).count();
 
+        let strategy_clone = strategy.clone();
+        
         let final_outcome = match strategy {
             CrossChainAggregation::Unanimous => successful_validations == total_networks,
             CrossChainAggregation::Majority => successful_validations > total_networks / 2,
@@ -611,7 +613,7 @@ impl BlockchainValidator {
         Ok(CrossChainValidationResult {
             validation_id: Uuid::new_v4(),
             networks_participated: results.keys().cloned().collect(),
-            aggregation_strategy: strategy,
+            aggregation_strategy: strategy_clone,
             final_validation_outcome: final_outcome,
             network_results: results.clone(),
             consensus_statistics: CrossChainConsensusStats {
@@ -657,7 +659,7 @@ impl BlockchainValidator {
         let mut constraints = Vec::new();
         for shape in shapes {
             constraints.push(ShapeConstraint {
-                shape_id: shape.id().to_string(),
+                shape_id: shape.id.to_string(),
                 constraint_type: "NodeShape".to_string(),
                 target_count: 1,
             });
@@ -1873,11 +1875,6 @@ impl PrivacyProtocol for HomomorphicProtocol {
 
 // Error handling for blockchain operations
 
-impl From<ShaclAiError> for ShaclAiError {
-    fn from(error: ShaclAiError) -> Self {
-        error
-    }
-}
 
 impl ShaclAiError {
     pub fn BlockchainTimeout(message: String) -> Self {

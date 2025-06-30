@@ -221,6 +221,7 @@ pub enum Token {
     Dot,
     Semicolon,
     Comma,
+    Colon,
 
     // Literals
     Iri(String),
@@ -313,6 +314,20 @@ impl QueryParser {
                 ',' => {
                     chars.next();
                     tokens.push(Token::Comma);
+                }
+                ':' => {
+                    chars.next();
+                    // Check if this is a standalone colon or part of a prefixed name
+                    if chars.peek().map_or(true, |c| !c.is_ascii_alphanumeric() && *c != '_') {
+                        // Standalone colon (like in default namespace declarations)
+                        tokens.push(Token::Colon);
+                    } else {
+                        // This colon is part of a prefixed name, handle it differently
+                        // Put back the colon and parse as identifier
+                        let mut id = ":".to_string();
+                        id.push_str(&self.parse_identifier(&mut chars));
+                        tokens.push(self.classify_identifier(&id));
+                    }
                 }
                 '=' => {
                     chars.next();
@@ -566,6 +581,10 @@ impl QueryParser {
                     let prefix = identifier[..colon_pos].to_string();
                     let local = identifier[colon_pos + 1..].to_string();
                     Token::PrefixedName(prefix, local)
+                } else if identifier.starts_with(':') {
+                    // Default namespace (starts with colon)
+                    let local = identifier[1..].to_string();
+                    Token::PrefixedName("".to_string(), local)
                 } else {
                     // Assume it's an identifier that could be a function name
                     Token::PrefixedName("".to_string(), identifier.to_string())
@@ -630,7 +649,38 @@ impl QueryParser {
             match token {
                 Token::Prefix => {
                     self.advance(); // consume PREFIX
-                    let prefix = self.expect_prefixed_name()?.0;
+                    
+                    // Handle both default namespace (:) and named prefixes (prefix:)
+                    let prefix = match self.peek() {
+                        Some(Token::PrefixedName(prefix, local)) => {
+                            if prefix.is_empty() && local.is_empty() {
+                                // This is just ":" which represents the default namespace
+                                self.advance();
+                                String::new()
+                            } else if local.is_empty() {
+                                // This is a named prefix like "foaf:" where local part is empty
+                                let p = prefix.clone();
+                                self.advance();
+                                p
+                            } else {
+                                // This is a named prefix like "ex:"
+                                let p = prefix.clone();
+                                self.advance();
+                                p
+                            }
+                        }
+                        Some(Token::Colon) => {
+                            // Handle standalone colon for default namespace
+                            self.advance();
+                            String::new()
+                        }
+                        _ => {
+                            // Debug: print what token we actually got
+                            eprintln!("Debug: Got token: {:?}", self.peek());
+                            bail!("Expected prefix name or colon after PREFIX")
+                        }
+                    };
+                    
                     let iri = self.expect_iri()?;
                     query.prefixes.insert(prefix.clone(), iri.clone());
                     self.prefixes.insert(prefix, iri);
@@ -640,6 +690,9 @@ impl QueryParser {
                     let iri = self.expect_iri()?;
                     query.base_iri = Some(iri.clone());
                     self.base_iri = Some(iri);
+                }
+                Token::Newline => {
+                    self.advance(); // skip newlines
                 }
                 _ => break,
             }
@@ -771,8 +824,36 @@ impl QueryParser {
         }
         Ok(())
     }
+    
+    /// Check if the current pattern contains UNION by looking ahead
+    fn has_union_pattern(&self) -> bool {
+        let mut pos = self.position;
+        let mut brace_depth = 0;
+        
+        while pos < self.tokens.len() {
+            match &self.tokens[pos] {
+                Token::LeftBrace => brace_depth += 1,
+                Token::RightBrace => {
+                    if brace_depth == 0 {
+                        break;
+                    }
+                    brace_depth -= 1;
+                }
+                Token::Union if brace_depth == 0 => return true,
+                _ => {}
+            }
+            pos += 1;
+        }
+        false
+    }
 
     fn parse_group_graph_pattern(&mut self) -> Result<Algebra> {
+        // For union patterns, we want to parse the entire union sequence as one unit
+        // Check if we have a simple union pattern by looking ahead
+        if self.has_union_pattern() {
+            return self.parse_graph_pattern_or_union();
+        }
+        
         let mut patterns = Vec::new();
 
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
@@ -814,6 +895,9 @@ impl QueryParser {
     }
 
     fn parse_graph_pattern(&mut self) -> Result<Algebra> {
+        // Skip whitespace and newlines before determining pattern type
+        self.skip_whitespace_and_newlines();
+        
         match self.peek() {
             Some(Token::Optional) => self.parse_optional_pattern(),
             Some(Token::Union) => self.parse_union_pattern(),
@@ -836,7 +920,21 @@ impl QueryParser {
     fn parse_basic_graph_pattern(&mut self) -> Result<Algebra> {
         let mut triples = Vec::new();
 
-        while !self.is_at_end() && !self.is_pattern_end() {
+        while !self.is_at_end() {
+            // Skip whitespace/newlines before checking for pattern end
+            self.skip_whitespace_and_newlines();
+            
+            // Check if we've reached the end of the pattern
+            if self.is_pattern_end() {
+                break;
+            }
+            
+            // Skip any additional newlines that might appear
+            if matches!(self.peek(), Some(Token::Newline)) {
+                self.advance();
+                continue;
+            }
+            
             let triple = self.parse_triple_pattern()?;
             triples.push(triple);
 
@@ -2159,6 +2257,8 @@ mod tests {
     #[test]
     fn test_union_query() {
         let query_str = r#"
+            PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             SELECT ?name WHERE {
                 { ?person foaf:name ?name }
                 UNION
@@ -2166,7 +2266,15 @@ mod tests {
             }
         "#;
 
-        let query = parse_query(query_str).unwrap();
+        // Debug tokenization first
+        let mut parser = QueryParser::new();
+        parser.tokenize(query_str).unwrap();
+        println!("Union query tokens: {:?}", parser.tokens);
+
+        let query = parse_query(query_str).map_err(|e| {
+            eprintln!("Parse error: {}", e);
+            e
+        }).unwrap();
         assert_eq!(query.query_type, QueryType::Select);
         assert_eq!(query.select_variables, vec![Variable::new("name").unwrap()]);
 
@@ -2219,6 +2327,7 @@ mod tests {
     #[test]
     fn test_multiple_union_query() {
         let query_str = r#"
+            PREFIX : <http://example.org/>
             SELECT ?x WHERE {
                 { ?x a :ClassA }
                 UNION

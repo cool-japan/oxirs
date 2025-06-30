@@ -260,6 +260,14 @@ pub enum StreamEvent {
         message: String,
         metadata: EventMetadata,
     },
+    
+    // Error Events
+    ErrorOccurred {
+        error_type: String,
+        error_message: String,
+        error_context: Option<String>,
+        metadata: EventMetadata,
+    },
 }
 
 impl StreamEvent {
@@ -307,6 +315,7 @@ impl StreamEvent {
             StreamEvent::ShapeValidationStarted { metadata, .. } => metadata.timestamp,
             StreamEvent::ShapeValidationCompleted { metadata, .. } => metadata.timestamp,
             StreamEvent::ShapeViolationDetected { metadata, .. } => metadata.timestamp,
+            StreamEvent::ErrorOccurred { metadata, .. } => metadata.timestamp,
         }
     }
 }
@@ -436,6 +445,7 @@ pub enum StreamEventType {
     QueryResultRemoved,
     QueryCompleted,
     Heartbeat,
+    ErrorOccurred,
 }
 
 /// Query result placeholder (to be imported from store integration)
@@ -491,6 +501,7 @@ impl StreamEvent {
             StreamEvent::QueryResultRemoved { metadata, .. } => metadata,
             StreamEvent::QueryCompleted { metadata, .. } => metadata,
             StreamEvent::Heartbeat { metadata, .. } => metadata,
+            StreamEvent::ErrorOccurred { metadata, .. } => metadata,
         }
     }
 
@@ -720,6 +731,8 @@ impl StreamEvent {
             | StreamEvent::QueryCompleted { .. } => EventCategory::Query,
 
             StreamEvent::Heartbeat { .. } => EventCategory::Data,
+            
+            StreamEvent::ErrorOccurred { .. } => EventCategory::Data,
         }
     }
 
@@ -771,6 +784,7 @@ impl StreamEvent {
             StreamEvent::QueryResultRemoved { .. } => StreamEventType::QueryResultRemoved,
             StreamEvent::QueryCompleted { .. } => StreamEventType::QueryCompleted,
             StreamEvent::Heartbeat { .. } => StreamEventType::Heartbeat,
+            StreamEvent::ErrorOccurred { .. } => StreamEventType::ErrorOccurred,
         }
     }
 

@@ -41,6 +41,12 @@ pub struct SamlConfig {
     pub session: SessionConfig,
 }
 
+/// Type alias for handler compatibility
+pub type SamlSpConfig = ServiceProviderConfig;
+
+/// Type alias for handler compatibility  
+pub type SamlAttributeMappings = AttributeMapping;
+
 /// Service Provider configuration
 #[derive(Debug, Clone)]
 pub struct ServiceProviderConfig {

@@ -787,8 +787,13 @@ impl PropertyPathEvaluator {
 
         tracing::debug!("Executing path query: {}", query);
 
+        // Parse the query string into a Query object
+        let parser = oxirs_core::query::parser::SparqlParser::new();
+        let parsed_query = parser.parse(query)
+            .map_err(|e| ShaclError::PropertyPath(format!("Query parsing failed: {}", e)))?;
+        
         let result = query_engine
-            .execute_query(store, query)
+            .execute_query(&parsed_query, store)
             .map_err(|e| ShaclError::PropertyPath(format!("Path query execution failed: {}", e)))?;
 
         Ok(result)
@@ -1055,8 +1060,10 @@ impl PropertyPathEvaluator {
         };
         query_parts.push(select_clause.to_string());
 
-        // Special handling for alternative paths - use UNION for better optimization
-        let where_clause = if matches!(path, PropertyPath::Alternative(_)) {
+        // Special handling for sequence paths - use intermediate variables for better debugging
+        let where_clause = if let PropertyPath::Sequence(paths) = path {
+            return self.generate_sequence_sparql_query(start_node, paths, graph_name, optimization_hints);
+        } else if matches!(path, PropertyPath::Alternative(_)) {
             self.generate_union_based_alternative_query(start_node, path, graph_name)?
         } else {
             let sparql_path = path.to_sparql_path()?;
@@ -1725,21 +1732,6 @@ impl PathEvaluationStats {
     }
 }
 
-/// Format a term for use in SPARQL queries
-fn format_term_for_sparql(term: &Term) -> Result<String> {
-    match term {
-        Term::NamedNode(node) => Ok(format!("<{}>", node.as_str())),
-        Term::BlankNode(node) => Ok(node.as_str().to_string()),
-        Term::Literal(literal) => {
-            // TODO: Proper literal formatting with datatype and language
-            Ok(format!("\"{}\"", literal.as_str().replace('"', "\\\"")))
-        }
-        Term::Variable(var) => Ok(format!("?{}", var.name())),
-        Term::QuotedTriple(_) => Err(ShaclError::PropertyPath(
-            "Quoted triples not supported in property paths".to_string(),
-        )),
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -2001,17 +1993,12 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
             // Format literal with proper escaping and datatype/language tags
             let value = literal.value().replace('\\', "\\\\").replace('"', "\\\"");
             
-            if let Some(datatype) = literal.datatype() {
-                if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
-                    // Simple string literals don't need datatype annotation
-                    Ok(format!("\"{}\"", value))
-                } else {
-                    Ok(format!("\"{}\"^^<{}>", value, datatype.as_str()))
-                }
-            } else if let Some(language) = literal.language() {
-                Ok(format!("\"{}\"@{}", value, language))
-            } else {
+            let datatype = literal.datatype();
+            if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
+                // Simple string literals don't need datatype annotation
                 Ok(format!("\"{}\"", value))
+            } else {
+                Ok(format!("\"{}\"^^<{}>", value, datatype.as_str()))
             }
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),

@@ -347,7 +347,7 @@ fn benchmark_rule_conversion(c: &mut Criterion) {
 
     group.bench_function("swrl_to_internal_conversion", |b| {
         b.iter(|| {
-            let engine = SwrlEngine::new();
+            let mut engine = SwrlEngine::new();
 
             for rule in &swrl_rules {
                 // This tests the internal conversion process

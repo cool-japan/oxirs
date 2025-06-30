@@ -19,7 +19,7 @@ use tokio::sync::{broadcast, RwLock};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    CompressionType, MonitoringConfig, PerformanceConfig, RetryConfig, SaslConfig, SecurityConfig,
+    CompressionType, MonitoringConfig, StreamPerformanceConfig, RetryConfig, SaslConfig, SecurityConfig,
     StreamBackendType, StreamConfig,
 };
 
@@ -385,7 +385,7 @@ impl TlsManager {
 pub struct PerformanceProfile {
     pub name: String,
     pub description: String,
-    pub settings: PerformanceConfig,
+    pub settings: StreamPerformanceConfig,
     pub recommended_for: Vec<String>,
 }
 
@@ -436,7 +436,7 @@ impl ConfigManager {
             PerformanceProfile {
                 name: "low-latency".to_string(),
                 description: "Optimized for minimal latency".to_string(),
-                settings: PerformanceConfig {
+                settings: StreamPerformanceConfig {
                     enable_batching: false,
                     enable_pipelining: true,
                     buffer_size: 4096,
@@ -456,7 +456,7 @@ impl ConfigManager {
             PerformanceProfile {
                 name: "high-throughput".to_string(),
                 description: "Optimized for maximum throughput".to_string(),
-                settings: PerformanceConfig {
+                settings: StreamPerformanceConfig {
                     enable_batching: true,
                     enable_pipelining: true,
                     buffer_size: 65536,
@@ -476,7 +476,7 @@ impl ConfigManager {
             PerformanceProfile {
                 name: "balanced".to_string(),
                 description: "Balanced between latency and throughput".to_string(),
-                settings: PerformanceConfig::default(),
+                settings: StreamPerformanceConfig::default(),
                 recommended_for: vec!["general".to_string(), "web-services".to_string()],
             },
         );
@@ -487,7 +487,7 @@ impl ConfigManager {
             PerformanceProfile {
                 name: "resource-constrained".to_string(),
                 description: "Optimized for limited resources".to_string(),
-                settings: PerformanceConfig {
+                settings: StreamPerformanceConfig {
                     enable_batching: true,
                     enable_pipelining: false,
                     buffer_size: 2048,

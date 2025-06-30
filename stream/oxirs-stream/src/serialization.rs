@@ -369,6 +369,7 @@ impl EventSerializer {
             StreamEvent::SchemaUpdated { .. } => 40,
             StreamEvent::ShapeUpdated { .. } => 41,
             StreamEvent::Heartbeat { .. } => 13,
+            StreamEvent::ErrorOccurred { .. } => 42,
         };
         buffer.push(event_type);
 

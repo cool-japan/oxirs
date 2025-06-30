@@ -312,6 +312,11 @@ pub async fn execute_filter(
             warn!("GraphQL filter execution not fully implemented, passing through data");
             Ok(QueryResultData::GraphQL(graphql_response))
         }
+        QueryResultData::ServiceResult(service_result) => {
+            // Pass through service results without filtering for now
+            warn!("Service result filter execution not implemented, passing through data");
+            Ok(QueryResultData::ServiceResult(service_result))
+        }
     }
 }
 
@@ -377,6 +382,11 @@ pub async fn execute_aggregate(
             warn!("GraphQL aggregation not implemented, passing through data");
             Ok(input_data)
         }
+        QueryResultData::ServiceResult(_) => {
+            // Service result aggregation not implemented, pass through
+            warn!("Service result aggregation not implemented, passing through data");
+            Ok(input_data)
+        }
     }
 }
 
@@ -409,6 +419,11 @@ pub async fn execute_sort(
             // GraphQL sorting is typically handled at the field level
             warn!("GraphQL sort execution not fully implemented, passing through data");
             Ok(QueryResultData::GraphQL(graphql_response))
+        }
+        QueryResultData::ServiceResult(service_result) => {
+            // Service result sorting not implemented, pass through
+            warn!("Service result sort execution not implemented, passing through data");
+            Ok(QueryResultData::ServiceResult(service_result))
         }
     }
 }

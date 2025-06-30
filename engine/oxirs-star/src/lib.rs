@@ -389,6 +389,24 @@ impl StarError {
 
         suggestions
     }
+
+    /// Create a resource error (backward compatibility)
+    pub fn resource_error(message: impl Into<String>) -> Self {
+        Self::ConfigurationError {
+            message: message.into(),
+            parameter: Some("resource".to_string()),
+            valid_range: None,
+        }
+    }
+
+    /// Create a processing error (backward compatibility)
+    pub fn processing_error(message: impl Into<String>) -> Self {
+        Self::ConfigurationError {
+            message: message.into(),
+            parameter: Some("processing".to_string()),
+            valid_range: None,
+        }
+    }
 }
 
 /// Configuration for RDF-star processing

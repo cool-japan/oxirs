@@ -183,7 +183,7 @@ impl ClusteringEngine {
         let mut rng = if let Some(seed) = self.config.random_seed {
             rand::rngs::StdRng::seed_from_u64(seed)
         } else {
-            rand::rngs::StdRng::from_entropy()
+            rand::rngs::StdRng::from_seed(rand::random())
         };
 
         // Initialize centroids using k-means++

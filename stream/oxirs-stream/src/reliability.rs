@@ -619,6 +619,7 @@ mod tests {
         let event = StreamEvent::Heartbeat {
             timestamp: Utc::now(),
             source: "test".to_string(),
+            metadata: crate::event::EventMetadata::default(),
         };
         
         // First message should succeed
@@ -642,6 +643,7 @@ mod tests {
         let event = StreamEvent::Heartbeat {
             timestamp: Utc::now(),
             source: "test".to_string(),
+            metadata: crate::event::EventMetadata::default(),
         };
         
         let mut message = ReliableMessage::new(event);
@@ -679,6 +681,7 @@ mod tests {
             let event = StreamEvent::Heartbeat {
                 timestamp: Utc::now(),
                 source: format!("test-{}", i),
+                metadata: crate::event::EventMetadata::default(),
             };
             
             let message = ReliableMessage::new(event);

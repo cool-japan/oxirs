@@ -28,6 +28,7 @@ mod tests {
     use crate::{
         FederatedService, ServiceCapability, ServiceRegistry,
         planner::{QueryInfo, QueryType, TriplePattern},
+        cost_estimation::OptimizationLevel,
     };
     use std::collections::HashSet;
 
@@ -54,12 +55,12 @@ mod tests {
                 TriplePattern {
                     subject: "?s".to_string(),
                     predicate: "rdf:type".to_string(),
-                    object: "foaf:Person".to_string(),
+                    object: Some("foaf:Person".to_string()),
                 },
                 TriplePattern {
                     subject: "?s".to_string(),
                     predicate: "foaf:name".to_string(),
-                    object: "?name".to_string(),
+                    object: Some("?name".to_string()),
                 },
             ],
             filters: vec![],
@@ -118,7 +119,7 @@ mod tests {
         let pattern = TriplePattern {
             subject: "?s".to_string(),
             predicate: "rdf:type".to_string(),
-            object: "foaf:Person".to_string(),
+            object: Some("foaf:Person".to_string()),
         };
         
         let cost = cost_estimator.estimate_single_pattern_cost(&service, &pattern);
@@ -131,7 +132,7 @@ mod tests {
         let pattern = TriplePattern {
             subject: "?s".to_string(),
             predicate: "rdf:type".to_string(),
-            object: "foaf:Person".to_string(),
+            object: Some("foaf:Person".to_string()),
         };
         
         let variables = decomposer.extract_pattern_variables(&pattern);
@@ -146,7 +147,7 @@ mod tests {
             (0, TriplePattern {
                 subject: "?s".to_string(),
                 predicate: "rdf:type".to_string(),
-                object: "foaf:Person".to_string(),
+                object: Some("foaf:Person".to_string()),
             }),
         ];
         
@@ -164,17 +165,17 @@ mod tests {
             (0, TriplePattern {
                 subject: "?s".to_string(),
                 predicate: "rdf:type".to_string(),
-                object: "foaf:Person".to_string(),
+                object: Some("foaf:Person".to_string()),
             }),
             (1, TriplePattern {
                 subject: "?s".to_string(),
                 predicate: "foaf:name".to_string(),
-                object: "?name".to_string(),
+                object: Some("?name".to_string()),
             }),
             (2, TriplePattern {
                 subject: "?s".to_string(),
                 predicate: "foaf:age".to_string(),
-                object: "?age".to_string(),
+                object: Some("?age".to_string()),
             }),
         ];
         

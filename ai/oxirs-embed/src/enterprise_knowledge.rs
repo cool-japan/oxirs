@@ -5,14 +5,13 @@
 //! recommendation systems for business applications.
 
 use crate::{EmbeddingModel, Vector};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use tokio::task::JoinHandle;
-use tracing::{debug, info, warn};
-use uuid::Uuid;
+use tracing::{debug, info};
 
 /// Enterprise knowledge graph analyzer and embedding generator
 pub struct EnterpriseKnowledgeAnalyzer {
@@ -326,7 +325,7 @@ pub struct ProjectParticipation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProjectOutcome {
     Successful,
-    Partially_Successful,
+    PartiallySuccessful,
     Failed,
     Cancelled,
     Ongoing,

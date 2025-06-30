@@ -112,7 +112,7 @@ impl AdvancedVisualizationEngine {
             .render(&data, &self.create_render_options(architecture_type))
             .await?;
 
-        self.register_active_visualization("neural_architecture", output.clone())
+        self.register_active_visualization("neural_architecture".to_string(), output.clone())
             .await?;
 
         Ok(output)
@@ -141,7 +141,7 @@ impl AdvancedVisualizationEngine {
             )
             .await?;
 
-        self.register_active_visualization("model_interpretability", output.clone())
+        self.register_active_visualization("model_interpretability".to_string(), output.clone())
             .await?;
         Ok(output)
     }
@@ -169,7 +169,7 @@ impl AdvancedVisualizationEngine {
             )
             .await?;
 
-        self.register_active_visualization("attention_flow", output.clone())
+        self.register_active_visualization("attention_flow".to_string(), output.clone())
             .await?;
         Ok(output)
     }
@@ -243,7 +243,7 @@ impl AdvancedVisualizationEngine {
             export_formats: vec![ExportFormat::HTML, ExportFormat::JSON],
         };
 
-        self.register_active_visualization("performance_debugger", debugger.clone())
+        self.register_active_visualization("performance_debugger".to_string(), debugger.clone())
             .await?;
         Ok(debugger)
     }
@@ -271,7 +271,7 @@ impl AdvancedVisualizationEngine {
             export_formats: vec![ExportFormat::HTML, ExportFormat::SVG],
         };
 
-        self.register_active_visualization("neural_explorer", explorer.clone())
+        self.register_active_visualization("neural_explorer".to_string(), explorer.clone())
             .await?;
         Ok(explorer)
     }
@@ -299,7 +299,7 @@ impl AdvancedVisualizationEngine {
             )
             .await?;
 
-        self.register_active_visualization("quantum_hybrid", output.clone())
+        self.register_active_visualization("quantum_hybrid".to_string(), output.clone())
             .await?;
         Ok(output)
     }
@@ -321,7 +321,7 @@ impl AdvancedVisualizationEngine {
             )
             .await?;
 
-        self.register_active_visualization("quantum_patterns", output.clone())
+        self.register_active_visualization("quantum_patterns".to_string(), output.clone())
             .await?;
 
         Ok(output)
@@ -339,7 +339,7 @@ impl AdvancedVisualizationEngine {
         let renderer = self.get_renderer("network_topology").await?;
         let output = renderer.render(&data, &RenderOptions::default()).await?;
 
-        self.register_active_visualization("federated_network", output.clone())
+        self.register_active_visualization("federated_network".to_string(), output.clone())
             .await?;
 
         Ok(output)
@@ -407,7 +407,7 @@ impl AdvancedVisualizationEngine {
             export_formats: vec![ExportFormat::SVG, ExportFormat::PNG, ExportFormat::HTML],
         };
 
-        self.register_active_visualization("performance_dashboard", dashboard.clone())
+        self.register_active_visualization("performance_dashboard".to_string(), dashboard.clone())
             .await?;
 
         Ok(dashboard)
@@ -425,7 +425,7 @@ impl AdvancedVisualizationEngine {
 
                 let visualizations = active_visualizations.read().await;
                 for (_, viz) in visualizations.iter() {
-                    if viz.metadata.real_time {
+                    if viz.output.metadata.real_time {
                         // Update real-time visualizations
                         if let Err(e) =
                             Self::update_real_time_visualization(&data_collectors, viz).await
@@ -483,12 +483,12 @@ impl AdvancedVisualizationEngine {
         collector_type: &str,
     ) -> Result<Arc<Box<dyn DataCollector>>> {
         let collectors = self.data_collectors.read().await;
-        collectors
+        Ok(collectors
             .get(collector_type)
-            .map(|c| Arc::new(c.clone()))
+            .map(|c| Arc::new((*c).clone()))
             .ok_or_else(|| {
                 ShaclAiError::Configuration(format!("Data collector not found: {}", collector_type))
-            })
+            })?)
     }
 
     async fn get_renderer(
@@ -496,12 +496,12 @@ impl AdvancedVisualizationEngine {
         renderer_type: &str,
     ) -> Result<Arc<Box<dyn VisualizationRenderer>>> {
         let renderers = self.renderers.read().await;
-        renderers
+        Ok(renderers
             .get(renderer_type)
-            .map(|r| Arc::new(r.clone()))
+            .map(|r| Arc::new((*r).clone()))
             .ok_or_else(|| {
                 ShaclAiError::Configuration(format!("Renderer not found: {}", renderer_type))
-            })
+            })?)
     }
 
     async fn register_active_visualization(
@@ -827,7 +827,7 @@ impl AdvancedVisualizationEngine {
                             has_details: true,
                             tooltip_data: serde_json::json!({
                                 "constraint_type": c.constraint_type,
-                                "confidence": c.confidence
+                                "confidence": c.neural_confidence
                             }),
                         },
                     })
@@ -953,7 +953,7 @@ impl AdvancedVisualizationEngine {
         // Simulate quantum advantage calculation
         let classical_score = neural.confidence * neural.complexity_score;
         let quantum_score =
-            quantum.quantum_state.coherence() * quantum.quantum_metrics.advantage_factor;
+            quantum.quantum_state.coherence() * quantum.fidelity;
 
         (quantum_score / classical_score.max(0.001)).min(10.0) // Cap at 10x advantage
     }
@@ -966,7 +966,7 @@ impl AdvancedVisualizationEngine {
         // Combine classical and quantum performance metrics
         let classical_performance = neural.confidence * (1.0 - neural.complexity_score);
         let quantum_performance =
-            quantum.quantum_state.coherence() * quantum.quantum_metrics.fidelity;
+            quantum.quantum_state.coherence() * quantum.fidelity;
 
         (classical_performance + quantum_performance) / 2.0
     }
@@ -1949,11 +1949,12 @@ impl Exporter for SVGExporter {
             visualization.output.metadata.title
         );
 
+        let size_bytes = svg_data.len();
         Ok(ExportResult {
             format: ExportFormat::SVG,
             data: svg_data.into_bytes(),
             filename: format!("{}.svg", visualization.output.id),
-            size_bytes: svg_data.len(),
+            size_bytes,
         })
     }
 }
@@ -2015,11 +2016,12 @@ impl Exporter for HTMLExporter {
             visualization.output.id
         );
 
+        let size_bytes = html_data.len();
         Ok(ExportResult {
             format: ExportFormat::HTML,
             data: html_data.into_bytes(),
             filename: format!("{}.html", visualization.output.id),
-            size_bytes: html_data.len(),
+            size_bytes,
         })
     }
 }
@@ -2063,11 +2065,12 @@ impl Exporter for JSONExporter {
         let json_data = serde_json::to_string_pretty(&visualization.output)
             .map_err(|e| ShaclAiError::Json(e))?;
 
+        let size_bytes = json_data.len();
         Ok(ExportResult {
             format: ExportFormat::JSON,
             data: json_data.into_bytes(),
             filename: format!("{}.json", visualization.output.id),
-            size_bytes: json_data.len(),
+            size_bytes,
         })
     }
 }

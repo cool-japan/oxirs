@@ -51,7 +51,7 @@ pub enum DocTheme {
 }
 
 /// Documentation output formats
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DocFormat {
     Html,
     Markdown,

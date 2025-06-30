@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use redis::{aio::Connection, Client};
+use redis::{Client, cmd};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -202,7 +202,7 @@ impl RedisDistributedCache {
         let mut redis_clients = Vec::new();
 
         for redis_url in &config.redis_urls {
-            let client = redis::Client::open(redis_url.as_str())
+            let client = Client::open(redis_url.as_str())
                 .map_err(|e| anyhow!("Failed to create Redis client: {}", e))?;
             redis_clients.push(client);
         }
@@ -235,7 +235,7 @@ impl RedisDistributedCache {
     }
 
     /// Get Redis client for a given key
-    async fn get_redis_client(&self, key: &str) -> Result<redis::Client> {
+    async fn get_redis_client(&self, key: &str) -> Result<Client> {
         let clients = self.redis_pool.read().await;
 
         if clients.is_empty() {
@@ -338,11 +338,11 @@ impl DistributedCache for RedisDistributedCache {
         // Check Redis
         let client = self.get_redis_client(key).await?;
         let mut connection = client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| anyhow!("Failed to get Redis connection: {}", e))?;
 
-        let redis_result: Option<Vec<u8>> = redis::cmd("GET")
+        let redis_result: Option<Vec<u8>> = cmd("GET")
             .arg(key)
             .query_async(&mut connection)
             .await
@@ -399,15 +399,15 @@ impl DistributedCache for RedisDistributedCache {
         // Store in Redis
         let client = self.get_redis_client(key).await?;
         let mut connection = client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| anyhow!("Failed to get Redis connection: {}", e))?;
 
-        redis::cmd("SETEX")
+        cmd("SETEX")
             .arg(key)
             .arg(ttl.as_secs())
             .arg(&processed_data)
-            .query_async::<_, ()>(&mut connection)
+            .exec_async(&mut connection)
             .await
             .map_err(|e| anyhow!("Redis SETEX failed: {}", e))?;
 
@@ -449,13 +449,13 @@ impl DistributedCache for RedisDistributedCache {
         // Remove from Redis
         let client = self.get_redis_client(key).await?;
         let mut connection = client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| anyhow!("Failed to get Redis connection: {}", e))?;
 
-        redis::cmd("DEL")
+        cmd("DEL")
             .arg(key)
-            .query_async::<_, ()>(&mut connection)
+            .query_async(&mut connection)
             .await
             .map_err(|e| anyhow!("Redis DEL failed: {}", e))?;
 
@@ -483,11 +483,11 @@ impl DistributedCache for RedisDistributedCache {
         // Check Redis
         let client = self.get_redis_client(key).await?;
         let mut connection = client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| anyhow!("Failed to get Redis connection: {}", e))?;
 
-        let exists: bool = redis::cmd("EXISTS")
+        let exists: bool = cmd("EXISTS")
             .arg(key)
             .query_async(&mut connection)
             .await
@@ -507,9 +507,9 @@ impl DistributedCache for RedisDistributedCache {
 
             let clients = self.redis_pool.read().await;
             for client in clients.iter() {
-                let mut connection = client.get_async_connection().await?;
+                let mut connection = client.get_multiplexed_async_connection().await?;
 
-                let keys: Vec<String> = redis::cmd("KEYS")
+                let keys: Vec<String> = cmd("KEYS")
                     .arg(&pattern)
                     .query_async(&mut connection)
                     .await?;
@@ -532,12 +532,12 @@ impl DistributedCache for RedisDistributedCache {
         let clients = self.redis_pool.read().await;
 
         for client in clients.iter() {
-            match client.get_async_connection().await {
+            match client.get_multiplexed_async_connection().await {
                 Ok(mut connection) => {
-                    if redis::cmd("PING")
-                        .query_async::<_, String>(&mut connection)
-                        .await
-                        .is_err()
+                    let result: Result<String, _> = cmd("PING")
+                        .query_async(&mut connection)
+                        .await;
+                    if result.is_err()
                     {
                         return Ok(false);
                     }
@@ -559,9 +559,9 @@ impl DistributedCache for RedisDistributedCache {
         // Clear Redis
         let clients = self.redis_pool.read().await;
         for client in clients.iter() {
-            let mut connection = client.get_async_connection().await?;
-            redis::cmd("FLUSHDB")
-                .query_async::<_, ()>(&mut connection)
+            let mut connection = client.get_multiplexed_async_connection().await?;
+            cmd("FLUSHDB")
+                .query_async(&mut connection)
                 .await?;
         }
 
@@ -740,9 +740,10 @@ mod tests {
     #[tokio::test]
     async fn test_gzip_compression() {
         let compression = GzipCompressionStrategy::new();
-        let original_data = b"Hello, World! This is a test string for compression.";
+        // Use a larger, more repetitive string that will actually compress well
+        let original_data = b"This is a test string for compression. ".repeat(100);
 
-        let compressed = compression.compress(original_data).await.unwrap();
+        let compressed = compression.compress(&original_data).await.unwrap();
         let decompressed = compression.decompress(&compressed).await.unwrap();
 
         assert_eq!(original_data.as_slice(), decompressed.as_slice());

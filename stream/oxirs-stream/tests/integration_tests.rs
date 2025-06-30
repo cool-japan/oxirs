@@ -6,6 +6,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use oxirs_stream::*;
+use oxirs_stream::performance_optimizer::PerformanceConfig;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -59,7 +60,7 @@ fn create_test_events(count: usize) -> Vec<StreamEvent> {
 }
 
 /// Test stream configuration
-fn create_test_stream_config(backend: StreamBackend) -> StreamConfig {
+fn create_test_stream_config(backend: StreamBackendType) -> StreamConfig {
     StreamConfig {
         backend,
         topic: format!("test-topic-{}", Uuid::new_v4()),
@@ -91,11 +92,11 @@ fn create_test_stream_config(backend: StreamBackend) -> StreamConfig {
             ca_cert_path: None,
             sasl_config: None,
         },
-        performance: PerformanceConfig {
+        performance: StreamPerformanceConfig {
             enable_batching: true,
-            enable_pipelining: false,
+            enable_pipelining: true,
             buffer_size: 1024,
-            prefetch_count: 100,
+            prefetch_count: 10,
             enable_zero_copy: false,
             enable_simd: false,
             parallel_processing: true,
@@ -123,7 +124,7 @@ mod memory_backend_tests {
         // Clear memory storage before test
         oxirs_stream::clear_memory_events().await;
 
-        let config = create_test_stream_config(StreamBackend::Memory {
+        let config = create_test_stream_config(StreamBackendType::Memory {
             max_size: None,
             persistence: false,
         });
@@ -204,7 +205,7 @@ mod memory_backend_tests {
 
     #[tokio::test]
     async fn test_memory_backend_high_throughput() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory {
+        let config = create_test_stream_config(StreamBackendType::Memory {
             max_size: None,
             persistence: false,
         });
@@ -650,7 +651,7 @@ mod rdf_patch_integration_tests {
 
     #[tokio::test]
     async fn test_rdf_patch_streaming() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory {
+        let config = create_test_stream_config(StreamBackendType::Memory {
             max_size: None,
             persistence: false,
         });
@@ -705,7 +706,7 @@ mod rdf_patch_integration_tests {
 
     #[tokio::test]
     async fn test_sparql_delta_streaming() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory {
+        let config = create_test_stream_config(StreamBackendType::Memory {
             max_size: None,
             persistence: false,
         });
@@ -863,7 +864,7 @@ mod performance_tests {
 
     #[tokio::test]
     async fn test_throughput_benchmark() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory {
+        let config = create_test_stream_config(StreamBackendType::Memory {
             max_size: None,
             persistence: false,
         });
@@ -919,25 +920,49 @@ mod performance_tests {
 
     #[tokio::test]
     async fn test_latency_benchmark() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory {
+        // Clear memory storage before test
+        oxirs_stream::clear_memory_events().await;
+
+        let config = create_test_stream_config(StreamBackendType::Memory {
             max_size: None,
             persistence: false,
         });
-        let mut producer = Stream::new(config.clone()).await?;
-        let mut consumer = Stream::new(config).await?;
+        let mut stream = Stream::new(config).await?;
 
         let mut latencies = Vec::new();
 
-        for _ in 0..100 {
+        for i in 0..100 {
             let start = std::time::Instant::now();
 
             let event = create_test_events(1)[0].clone();
-            producer.publish(event).await?;
+            stream.publish(event).await?;
+            stream.flush().await?; // Ensure event is published
 
-            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(1), consumer.consume()).await {
-                let latency = start.elapsed();
-                latencies.push(latency);
+            // Small delay to ensure event is available
+            tokio::time::sleep(Duration::from_millis(1)).await;
+
+            match timeout(Duration::from_secs(1), stream.consume()).await {
+                Ok(Ok(Some(_))) => {
+                    let latency = start.elapsed();
+                    latencies.push(latency);
+                }
+                Ok(Ok(None)) => {
+                    println!("No event received at iteration {}", i);
+                }
+                Ok(Err(e)) => {
+                    println!("Error consuming event at iteration {}: {}", i, e);
+                }
+                Err(_) => {
+                    println!("Timeout at iteration {}", i);
+                }
             }
+        }
+
+        println!("Successfully measured {} latency samples", latencies.len());
+
+        // Check that we got at least some latency measurements
+        if latencies.is_empty() {
+            panic!("No latency measurements were collected - all consume operations failed");
         }
 
         // Calculate latency percentiles
@@ -954,8 +979,7 @@ mod performance_tests {
             "P99 latency should be under 100ms"
         );
 
-        producer.close().await?;
-        consumer.close().await?;
+        stream.close().await?;
         Ok(())
     }
 }
@@ -966,7 +990,7 @@ mod circuit_breaker_tests {
 
     #[tokio::test]
     async fn test_circuit_breaker_integration() -> Result<()> {
-        let mut config = create_test_stream_config(StreamBackend::Memory {
+        let mut config = create_test_stream_config(StreamBackendType::Memory {
             max_size: None,
             persistence: false,
         });
@@ -994,7 +1018,7 @@ mod error_handling_tests {
 
     #[tokio::test]
     async fn test_connection_recovery() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory {
+        let config = create_test_stream_config(StreamBackendType::Memory {
             max_size: None,
             persistence: false,
         });
@@ -1018,7 +1042,7 @@ mod error_handling_tests {
 
     #[tokio::test]
     async fn test_invalid_event_handling() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory {
+        let config = create_test_stream_config(StreamBackendType::Memory {
             max_size: None,
             persistence: false,
         });

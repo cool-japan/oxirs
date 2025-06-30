@@ -415,7 +415,7 @@ impl Default for ShapeMetadata {
 }
 
 /// Violation severity levels
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Severity {
     Info,
     Warning,
@@ -1131,9 +1131,9 @@ impl Validator {
             constraints.get(&ConstraintComponentId::new("datatype")),
         ) {
             if let (Constraint::NodeKind(nk), Constraint::Datatype(_)) = (node_kind, datatype) {
-                use crate::constraints::value_constraints::NodeKindType;
+                use crate::constraints::value_constraints::NodeKind;
                 match nk.node_kind {
-                    NodeKindType::IRI | NodeKindType::BlankNode | NodeKindType::BlankNodeOrIRI => {
+                    NodeKind::Iri | NodeKind::BlankNode | NodeKind::BlankNodeOrIri => {
                         return Err(ShaclError::ShapeParsing(format!(
                             "Shape '{}' has conflicting nodeKind and datatype constraints - IRIs and blank nodes cannot have datatypes",
                             shape.id

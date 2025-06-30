@@ -45,13 +45,35 @@ pub use connection_pool::{
     ConnectionFactory, ConnectionPool, DetailedPoolMetrics, LoadBalancingStrategy, PoolConfig,
     PoolStatus,
 };
+pub use cqrs::{
+    CQRSConfig, CQRSSystem, Command, CommandBus, CommandHandler, CommandResult, Query, QueryBus,
+    QueryHandler, QueryResult as CQRSQueryResult, ReadModelManager, ReadModelProjection, RetryConfig as CQRSRetryConfig, QueryCacheConfig,
+    CommandBusMetrics, QueryBusMetrics, ReadModelMetrics, CQRSHealthStatus,
+};
 pub use delta::{BatchDeltaProcessor, DeltaComputer, DeltaProcessor};
 pub use event::{
-    EventCategory, EventMetadata, EventPriority, IsolationLevel, QueryResult, SchemaChangeType,
+    EventCategory, EventMetadata, EventPriority, IsolationLevel, QueryResult as EventQueryResult, SchemaChangeType,
     SchemaType, SparqlOperationType, StreamEvent,
 };
+pub use event_sourcing::{
+    EventQuery, EventSnapshot, EventStore, EventStoreConfig, PersistenceBackend, QueryOrder,
+    RetentionPolicy, SnapshotConfig, StoredEvent, TimeRange as EventSourcingTimeRange,
+};
 pub use failover::{ConnectionEndpoint, FailoverConfig, FailoverManager};
+pub use multi_region_replication::{
+    ConflictResolution, ConflictType, GeographicLocation, MultiRegionReplicationManager,
+    RegionConfig, RegionHealth, ReplicationConfig, ReplicationStats, ReplicationStrategy,
+    ReplicatedEvent, VectorClock,
+};
 pub use patch::{PatchParser, PatchSerializer};
+pub use performance_optimizer::{
+    AdaptiveBatcher, BatchingStats, MemoryPool, MemoryPoolStats, ParallelEventProcessor,
+    PerformanceConfig as OptimizerPerformanceConfig, ProcessingResult, ProcessingStats, ProcessingStatus, ZeroCopyEvent,
+};
+pub use schema_registry::{
+    CompatibilityMode, ExternalRegistryConfig, RegistryAuth, SchemaDefinition, SchemaFormat,
+    SchemaRegistry, SchemaRegistryConfig, ValidationResult, ValidationStats,
+};
 pub use sparql_streaming::{
     ContinuousQueryManager, QueryManagerConfig, QueryMetadata, QueryResultChannel,
     QueryResultUpdate, UpdateType,
@@ -65,6 +87,17 @@ pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
     WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata,
 };
+pub use time_travel::{
+    TimeTravelConfig, TimeTravelEngine, TemporalQuery, TimePoint, TimeRange as TimeTravelTimeRange, TemporalFilter,
+    TemporalProjection, TemporalOrdering, TemporalQueryResult, TemporalResultMetadata,
+    TemporalAggregations, TimelinePoint, TemporalStatistics, AggregationType, TimeTravelMetrics,
+};
+pub use security::{
+    SecurityConfig as StreamSecurityConfig, SecurityManager, SecurityContext, AuthConfig, AuthzConfig, EncryptionConfig,
+    AuditConfig, ThreatDetectionConfig, RateLimitConfig, SessionConfig, AuthMethod, Permission,
+    Credentials, AuditLogEntry, ThreatAlert, SecurityMetrics, AuthenticationProvider,
+    AuthorizationProvider, AuditLogger, ThreatDetector, RateLimiter,
+};
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -76,22 +109,30 @@ pub mod circuit_breaker;
 pub mod config;
 pub mod connection_pool;
 pub mod consumer;
+pub mod cqrs;
 pub mod delta;
 pub mod diagnostics;
 pub mod error;
 pub mod event;
+pub mod event_sourcing;
 pub mod failover;
 pub mod health_monitor;
 pub mod join;
 pub mod monitoring;
+pub mod multi_region_replication;
 pub mod patch;
+pub mod performance_optimizer;
 pub mod processing;
 pub mod producer;
 pub mod reconnect;
+pub mod reliability;
+pub mod schema_registry;
+pub mod security;
 pub mod serialization;
 pub mod sparql_streaming;
 pub mod state;
 pub mod store_integration;
+pub mod time_travel;
 pub mod types;
 pub mod webhook;
 
@@ -117,7 +158,7 @@ pub struct StreamConfig {
     /// Security configuration
     pub security: SecurityConfig,
     /// Performance tuning
-    pub performance: PerformanceConfig,
+    pub performance: StreamPerformanceConfig,
     /// Monitoring configuration
     pub monitoring: MonitoringConfig,
 }
@@ -182,7 +223,7 @@ pub enum SaslMechanism {
 
 /// Performance tuning configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PerformanceConfig {
+pub struct StreamPerformanceConfig {
     pub enable_batching: bool,
     pub enable_pipelining: bool,
     pub buffer_size: usize,
@@ -334,6 +375,8 @@ pub fn get_memory_events() -> Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>> {
 pub async fn clear_memory_events() {
     let events = get_memory_events();
     events.write().await.clear();
+    // Also clear the memory backend storage
+    backend::memory::clear_memory_storage().await;
 }
 
 struct MemoryProducer {
@@ -1483,7 +1526,7 @@ impl Default for StreamConfig {
             retry_config: RetryConfig::default(),
             circuit_breaker: CircuitBreakerConfig::default(),
             security: SecurityConfig::default(),
-            performance: PerformanceConfig::default(),
+            performance: StreamPerformanceConfig::default(),
             monitoring: MonitoringConfig::default(),
         }
     }
@@ -1526,7 +1569,7 @@ impl Default for SecurityConfig {
     }
 }
 
-impl Default for PerformanceConfig {
+impl Default for StreamPerformanceConfig {
     fn default() -> Self {
         Self {
             enable_batching: true,

@@ -211,6 +211,8 @@ pub struct QuantumNeuralPatternRecognizer {
     noise_level: f64,
     /// Performance metrics
     metrics: Arc<RwLock<QuantumMetrics>>,
+    /// Complexity threshold for quantum advantage
+    complexity_threshold: f64,
 }
 
 impl QuantumNeuralPatternRecognizer {
@@ -222,6 +224,7 @@ impl QuantumNeuralPatternRecognizer {
             num_qubits,
             noise_level: 0.01,
             metrics: Arc::new(RwLock::new(QuantumMetrics::default())),
+            complexity_threshold: 1000.0, // Default threshold for quantum advantage
         }
     }
 
@@ -580,22 +583,20 @@ impl QuantumTeleportation {
             }
             (true, false) => {
                 // Apply Pauli-X correction
-                for i in 0..pattern.quantum_state.amplitudes.len() / 2 {
+                let half_len = pattern.quantum_state.amplitudes.len() / 2;
+                for i in 0..half_len {
                     let temp = pattern.quantum_state.amplitudes[i];
-                    pattern.quantum_state.amplitudes[i] = pattern.quantum_state.amplitudes
-                        [i + pattern.quantum_state.amplitudes.len() / 2];
-                    pattern.quantum_state.amplitudes
-                        [i + pattern.quantum_state.amplitudes.len() / 2] = temp;
+                    pattern.quantum_state.amplitudes[i] = pattern.quantum_state.amplitudes[i + half_len];
+                    pattern.quantum_state.amplitudes[i + half_len] = temp;
                 }
             }
             (true, true) => {
                 // Apply Pauli-Y correction (combination of X and Z)
-                for i in 0..pattern.quantum_state.amplitudes.len() / 2 {
+                let half_len = pattern.quantum_state.amplitudes.len() / 2;
+                for i in 0..half_len {
                     let temp = pattern.quantum_state.amplitudes[i] * Complex64::new(-1.0, 0.0);
-                    pattern.quantum_state.amplitudes[i] = pattern.quantum_state.amplitudes
-                        [i + pattern.quantum_state.amplitudes.len() / 2];
-                    pattern.quantum_state.amplitudes
-                        [i + pattern.quantum_state.amplitudes.len() / 2] = temp;
+                    pattern.quantum_state.amplitudes[i] = pattern.quantum_state.amplitudes[i + half_len];
+                    pattern.quantum_state.amplitudes[i + half_len] = temp;
                 }
             }
         }
@@ -924,8 +925,14 @@ impl VariationalQuantumEigensolver {
     /// Update circuit parameters using gradient descent
     fn update_parameters(&mut self, pattern: &QuantumPattern, _current_energy: f64) -> Result<()> {
         // Simplified parameter update (in practice would use finite differences or parameter-shift rule)
-        for param in self.circuit_params.iter_mut() {
-            let gradient = self.estimate_gradient(pattern, *param)?;
+        // Calculate gradients first to avoid borrow conflicts
+        let gradients: Result<Vec<f64>> = self.circuit_params.iter()
+            .map(|&param| self.estimate_gradient(pattern, param))
+            .collect();
+        let gradients = gradients?;
+        
+        // Then update parameters
+        for (param, gradient) in self.circuit_params.iter_mut().zip(gradients.iter()) {
             *param -= self.learning_rate * gradient;
 
             // Keep parameters in [0, 2π] range
@@ -994,7 +1001,7 @@ impl QuantumSupremacyDetector {
             classical_complexity,
             quantum_complexity: patterns.len() as f64,
             verification_time: start_time.elapsed(),
-            test_results,
+            test_results: test_results.clone(),
             confidence_level: self.calculate_confidence(&test_results),
         })
     }
@@ -1113,7 +1120,7 @@ pub struct QuantumAdvantageAnalyzer {
     benchmark_suite: QuantumBenchmarkSuite,
 
     /// Entanglement entropy calculator
-    entanglement_calculator: EntanglementEntropyCalculator,
+    entanglement_calculator: EntanglementEntropyCalculyzer,
 
     /// Quantum volume estimator
     volume_estimator: QuantumVolumeEstimator,
@@ -1462,7 +1469,7 @@ impl QuantumNeuralPatternRecognizer {
     async fn analyze_quantum_errors(&self, patterns: &[QuantumPattern]) -> Result<ErrorAnalysis> {
         let mut gate_errors = 0.0;
         let mut readout_errors = 0.0;
-        let mut total_operations = 0;
+        let mut total_operations = 0.0;
 
         for pattern in patterns {
             // Estimate gate errors based on circuit complexity
@@ -1473,17 +1480,17 @@ impl QuantumNeuralPatternRecognizer {
             let measurement_count = pattern.quantum_state.amplitudes.len();
             readout_errors += measurement_count as f64 * self.noise_level * 2.0;
 
-            total_operations += gate_count + measurement_count;
+            total_operations += gate_count as f64 + measurement_count as f64;
         }
 
-        let gate_error_rate = if total_operations > 0 {
-            gate_errors / total_operations as f64
+        let gate_error_rate = if total_operations > 0.0 {
+            gate_errors / total_operations
         } else {
             0.0
         };
 
-        let readout_error_rate = if total_operations > 0 {
-            readout_errors / total_operations as f64
+        let readout_error_rate = if total_operations > 0.0 {
+            readout_errors / total_operations
         } else {
             0.0
         };
@@ -1652,6 +1659,225 @@ impl QuantumNeuralPatternRecognizer {
 
         Ok(overlap.norm_sqr())
     }
+
+    /// Analyze circuit complexity for quantum patterns
+    async fn analyze_circuit_complexity(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+        if patterns.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut total_complexity = 0.0;
+        
+        for pattern in patterns {
+            // Calculate complexity based on quantum state dimensions and entanglement
+            let state_complexity = pattern.quantum_state.amplitudes.len() as f64;
+            let entanglement_complexity = pattern.entanglement_scores.values().sum::<f64>();
+            let coherence_factor = pattern.fidelity; // Use fidelity as coherence measure
+            
+            // Combine factors to get circuit complexity estimate
+            let pattern_complexity = state_complexity.ln() + entanglement_complexity + (1.0 - coherence_factor);
+            total_complexity += pattern_complexity;
+        }
+
+        Ok(total_complexity / patterns.len() as f64)
+    }
+
+    /// Benchmark cross-entropy for quantum patterns
+    async fn benchmark_cross_entropy(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+        if patterns.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut total_cross_entropy = 0.0;
+        
+        for pattern in patterns {
+            let probabilities: Vec<f64> = pattern.quantum_state.amplitudes
+                .iter()
+                .map(|amp| amp.norm_sqr())
+                .collect();
+            
+            // Calculate cross-entropy with ideal distribution
+            let uniform_prob = 1.0 / probabilities.len() as f64;
+            let cross_entropy: f64 = probabilities.iter()
+                .filter(|&&p| p > 0.0)
+                .map(|&p| -uniform_prob * p.ln())
+                .sum();
+                
+            total_cross_entropy += cross_entropy;
+        }
+
+        Ok(total_cross_entropy / patterns.len() as f64)
+    }
+
+    /// Test Porter-Thomas distribution for quantum patterns
+    async fn test_porter_thomas_distribution(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+        if patterns.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut total_score = 0.0;
+        
+        for pattern in patterns {
+            let probabilities: Vec<f64> = pattern.quantum_state.amplitudes
+                .iter()
+                .map(|amp| amp.norm_sqr())
+                .collect();
+            
+            // Test fit to Porter-Thomas distribution
+            let mean_prob = probabilities.iter().sum::<f64>() / probabilities.len() as f64;
+            let variance = probabilities.iter()
+                .map(|&p| (p - mean_prob).powi(2))
+                .sum::<f64>() / probabilities.len() as f64;
+            
+            // Porter-Thomas distribution has specific mean-variance relationship
+            let expected_variance = mean_prob.powi(2);
+            let score = 1.0 - ((variance - expected_variance).abs() / expected_variance.max(1e-10));
+            total_score += score.max(0.0);
+        }
+
+        Ok(total_score / patterns.len() as f64)
+    }
+
+    /// Verify quantum supremacy for patterns
+    async fn verify_quantum_supremacy(&self, patterns: &[QuantumPattern]) -> Result<bool> {
+        let classical_complexity = self.estimate_classical_complexity(patterns).await?;
+        let quantum_complexity = self.estimate_quantum_complexity(patterns).await?;
+        
+        // Supremacy achieved if quantum has exponential advantage
+        Ok(classical_complexity / quantum_complexity.max(1e-10) > self.complexity_threshold)
+    }
+
+    /// Estimate quantum complexity for patterns
+    async fn estimate_quantum_complexity(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+        if patterns.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut total_complexity = 0.0;
+        
+        for pattern in patterns {
+            let num_qubits = (pattern.quantum_state.amplitudes.len() as f64).log2();
+            let circuit_depth = pattern.entanglement_scores.len() as f64;
+            let complexity = num_qubits * circuit_depth; // Linear for quantum
+            total_complexity += complexity;
+        }
+
+        Ok(total_complexity / patterns.len() as f64)
+    }
+
+    /// Estimate quantum pattern recognition time
+    async fn estimate_quantum_pattern_recognition_time(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+        if patterns.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut total_time = 0.0;
+        
+        for pattern in patterns {
+            let state_size = pattern.quantum_state.amplitudes.len() as f64;
+            let gate_count = pattern.entanglement_scores.len() as f64;
+            
+            // Quantum time scales polynomially
+            let pattern_time = (state_size.log2() + gate_count) * 1e-9; // nanoseconds
+            total_time += pattern_time;
+        }
+
+        Ok(total_time / patterns.len() as f64)
+    }
+
+    /// Calculate quantum pattern quality
+    async fn calculate_quantum_pattern_quality(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+        if patterns.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut total_quality = 0.0;
+        
+        for pattern in patterns {
+            let coherence_quality = pattern.fidelity;
+            let entanglement_quality = pattern.entanglement_scores.values().sum::<f64>() 
+                / pattern.entanglement_scores.len() as f64;
+            
+            let pattern_quality = (coherence_quality + entanglement_quality) / 2.0;
+            total_quality += pattern_quality;
+        }
+
+        Ok(total_quality / patterns.len() as f64)
+    }
+
+    /// Estimate quantum convergence rate
+    async fn estimate_quantum_convergence_rate(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+        if patterns.is_empty() {
+            return Ok(1.0);
+        }
+
+        let mut convergence_rates = Vec::new();
+        
+        for pattern in patterns {
+            // Estimate convergence based on quantum state properties
+            let amplitude_variance = self.calculate_amplitude_variance(&pattern.quantum_state.amplitudes);
+            let convergence_rate = 1.0 / (1.0 + amplitude_variance); // Higher variance = slower convergence
+            convergence_rates.push(convergence_rate);
+        }
+
+        Ok(convergence_rates.iter().sum::<f64>() / convergence_rates.len() as f64)
+    }
+
+    /// Helper method to calculate amplitude variance
+    fn calculate_amplitude_variance(&self, amplitudes: &[Complex64]) -> f64 {
+        let probabilities: Vec<f64> = amplitudes.iter().map(|amp| amp.norm_sqr()).collect();
+        let mean = probabilities.iter().sum::<f64>() / probabilities.len() as f64;
+        probabilities.iter()
+            .map(|&p| (p - mean).powi(2))
+            .sum::<f64>() / probabilities.len() as f64
+    }
+
+    /// Estimate gate count for a quantum state
+    fn estimate_gate_count(&self, quantum_state: &QuantumState) -> Result<f64> {
+        // Estimate based on state complexity and entanglement
+        let num_qubits = (quantum_state.amplitudes.len() as f64).log2();
+        let state_complexity = quantum_state.amplitudes.len() as f64;
+        
+        // Rough estimate: gates scale with state preparation complexity
+        let gate_count = num_qubits * state_complexity.log2();
+        Ok(gate_count)
+    }
+
+    /// Assess error mitigation effectiveness
+    async fn assess_error_mitigation_effectiveness(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+        if patterns.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut total_effectiveness = 0.0;
+        
+        for pattern in patterns {
+            // Use fidelity as a proxy for error mitigation effectiveness
+            let effectiveness = pattern.fidelity;
+            total_effectiveness += effectiveness;
+        }
+
+        Ok(total_effectiveness / patterns.len() as f64)
+    }
+
+    /// Estimate classical complexity for comparison
+    async fn estimate_classical_complexity(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+        if patterns.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut total_complexity = 0.0;
+        
+        for pattern in patterns {
+            let state_size = pattern.quantum_state.amplitudes.len() as f64;
+            // Classical simulation scales exponentially with number of qubits
+            let num_qubits = state_size.log2();
+            let classical_complexity = 2.0_f64.powf(num_qubits); // Exponential scaling
+            total_complexity += classical_complexity;
+        }
+
+        Ok(total_complexity / patterns.len() as f64)
+    }
 }
 
 /// Supporting data structures for advanced quantum advantage analysis
@@ -1764,4 +1990,102 @@ mod tests {
         assert_eq!(metrics.coherence, 0.0); // No patterns yet
         assert_eq!(metrics.fidelity, 0.0);
     }
+}
+
+// Missing type definitions for quantum neural patterns
+#[derive(Debug, Clone)]
+pub struct GateCountAnalyzer {
+    pub total_gates: usize,
+    pub gate_types: HashMap<String, usize>,
+    pub depth_analysis: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CircuitDepthAnalyzer {
+    pub total_depth: usize,
+    pub critical_path: Vec<String>,
+    pub parallelization_opportunities: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConnectivityAnalyzer {
+    pub connectivity_graph: HashMap<String, Vec<String>>,
+    pub routing_overhead: f64,
+    pub optimal_mapping: HashMap<String, usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RandomCircuitBenchmark {
+    pub circuit_depth: usize,
+    pub num_qubits: usize,
+    pub fidelity_scores: Vec<f64>,
+    pub execution_times: Vec<std::time::Duration>,
+}
+
+#[derive(Debug, Clone)]
+pub struct VerificationProtocol {
+    pub protocol_type: String,
+    pub verification_accuracy: f64,
+    pub confidence_interval: (f64, f64),
+}
+
+#[derive(Debug, Clone)]
+pub struct VonNeumannEntropyCalculator {
+    pub entropy_values: Vec<f64>,
+    pub subsystem_entropies: HashMap<String, f64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RenyiEntropyCalculator {
+    pub alpha_parameter: f64,
+    pub renyi_entropies: Vec<f64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SchmidtDecomposer {
+    pub schmidt_coefficients: Vec<f64>,
+    pub schmidt_rank: usize,
+    pub entanglement_entropy: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct IdealQuantumSimulator {
+    pub simulator_type: String,
+    pub max_qubits: usize,
+    pub supported_gates: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct QuantumNoiseModel {
+    pub noise_type: String,
+    pub error_rates: HashMap<String, f64>,
+    pub coherence_times: HashMap<String, std::time::Duration>,
+}
+
+#[derive(Debug, Clone)]
+pub struct VolumeMetrics {
+    pub quantum_volume: usize,
+    pub heavy_output_probability: f64,
+    pub circuit_fidelity: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ZeroNoiseExtrapolator {
+    pub extrapolation_method: String,
+    pub noise_levels: Vec<f64>,
+    pub extrapolated_result: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct SymmetryVerifier {
+    pub symmetry_type: String,
+    pub verification_result: bool,
+    pub confidence_score: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CliffordDataRegressor {
+    pub regression_model: String,
+    pub training_data_size: usize,
+    pub prediction_accuracy: f64,
 }

@@ -154,6 +154,7 @@ pub struct GraphQLField {
     pub name: String,
     pub field_type: String,
     pub arguments: HashMap<String, GraphQLArgument>,
+    pub selection_set: Vec<GraphQLField>,
 }
 
 /// GraphQL argument definition

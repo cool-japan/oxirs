@@ -138,11 +138,13 @@ impl QueryDecomposer {
     ) -> Result<ExecutionPlan> {
         let mut plan = ExecutionPlan {
             query_id: uuid::Uuid::new_v4().to_string(),
-            query_type: query_info.query_type,
             steps: Vec::new(),
-            estimated_duration: Duration::from_secs(0),
+            estimated_total_cost: 0.0,
+            max_parallelism: 1,
+            planning_time: Duration::from_millis(0),
+            cache_key: None,
+            metadata: HashMap::new(),
             parallelizable_steps: Vec::new(),
-            dependencies: HashMap::new(),
         };
 
         let mut step_ids_by_component = Vec::new();
@@ -157,12 +159,10 @@ impl QueryDecomposer {
                     step_type: StepType::ServiceQuery,
                     service_id: Some(plan_step.service_id.clone()),
                     query_fragment: self.build_step_query(plan_step)?,
-                    expected_variables: self.extract_step_variables(plan_step),
-                    estimated_duration: Duration::from_millis(
-                        (plan_step.estimated_cost * 10.0) as u64,
-                    ),
                     dependencies: Vec::new(),
-                    parallel_group: Some(comp_idx),
+                    estimated_cost: plan_step.estimated_cost,
+                    timeout: Duration::from_millis((plan_step.estimated_cost * 10.0) as u64),
+                    retry_config: None,
                 };
 
                 component_step_ids.push(step.step_id.clone());
@@ -176,10 +176,10 @@ impl QueryDecomposer {
                     step_type: StepType::Join,
                     service_id: None,
                     query_fragment: format!("-- Join {} results", comp_plan.steps.len()),
-                    expected_variables: HashSet::new(),
-                    estimated_duration: Duration::from_millis(50),
                     dependencies: component_step_ids.clone(),
-                    parallel_group: None,
+                    estimated_cost: 10.0,
+                    timeout: Duration::from_millis(50),
+                    retry_config: None,
                 };
 
                 let join_id = join_step.step_id.clone();
@@ -199,7 +199,7 @@ impl QueryDecomposer {
             .map(|cp| cp.steps.len() as u64 * 100) // Simple duration estimation
             .max()
             .unwrap_or(100);
-        plan.estimated_duration = Duration::from_millis(max_component_duration);
+        plan.planning_time = Duration::from_millis(max_component_duration);
 
         Ok(plan)
     }
@@ -214,7 +214,9 @@ impl QueryDecomposer {
         for (_, pattern) in &step.patterns {
             query_parts.push(format!(
                 "  {} {} {} .",
-                pattern.subject, pattern.predicate, pattern.object
+                pattern.subject.as_ref().unwrap_or(&"?s".to_string()),
+                pattern.predicate.as_ref().unwrap_or(&"?p".to_string()),
+                pattern.object.as_ref().unwrap_or(&"?o".to_string())
             ));
         }
 
@@ -233,14 +235,20 @@ impl QueryDecomposer {
         let mut variables = HashSet::new();
 
         for (_, pattern) in &step.patterns {
-            if pattern.subject.starts_with('?') {
-                variables.insert(pattern.subject.clone());
+            if let Some(ref subject) = pattern.subject {
+                if subject.starts_with('?') {
+                    variables.insert(subject.clone());
+                }
             }
-            if pattern.predicate.starts_with('?') {
-                variables.insert(pattern.predicate.clone());
+            if let Some(ref predicate) = pattern.predicate {
+                if predicate.starts_with('?') {
+                    variables.insert(predicate.clone());
+                }
             }
-            if pattern.object.starts_with('?') {
-                variables.insert(pattern.object.clone());
+            if let Some(ref object) = pattern.object {
+                if object.starts_with('?') {
+                    variables.insert(object.clone());
+                }
             }
         }
 

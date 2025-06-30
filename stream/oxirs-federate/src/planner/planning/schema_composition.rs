@@ -10,6 +10,7 @@ use tracing::{debug, info, warn};
 use super::types::*;
 
 /// Schema composition utilities
+#[derive(Debug)]
 pub struct SchemaComposer;
 
 impl SchemaComposer {

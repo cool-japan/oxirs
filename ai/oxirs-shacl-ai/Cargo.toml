@@ -23,7 +23,8 @@ chrono = "0.4.35"
 tokio.workspace = true
 num_cpus = "1.17"
 ndarray = "0.16"
-rand = "0.9"
+rand.workspace = true
+rand_distr = "0.5"
 regex = "1.11"
 indexmap = "2.10"
 uuid = { version = "1.17", features = ["v4", "serde"] }
@@ -36,8 +37,9 @@ dashmap = "6.1"
 datafusion = "48.0"  # Re-enabled with compatible version
 fastrand = "2.3"
 base64 = "0.22"
-url = "2.5"
+url = { version = "2.5", features = ["serde"] }
 tokio-stream = "0.1"
+libm = "0.2"  # For erf function
 
 [dev-dependencies]
 criterion.workspace = true

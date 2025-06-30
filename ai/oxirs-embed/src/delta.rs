@@ -3,10 +3,10 @@
 //! This module provides efficient incremental updates for embedding models,
 //! delta computation for changes, and change tracking for large-scale systems.
 
-use crate::{EmbeddingModel, Triple, Vector};
+use crate::{EmbeddingModel, Triple};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
-use ndarray::{Array1, Array2};
+use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};

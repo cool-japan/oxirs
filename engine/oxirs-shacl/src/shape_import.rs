@@ -10,12 +10,12 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use oxirs_core::{model::NamedNode, Store};
+use oxirs_core::{model::NamedNode, Store, Term, RdfTerm};
 
 use crate::{
     iri_resolver::{IriResolutionError, IriResolver},
     shapes::{object_to_term, ShapeParser},
-    Result, ShaclError, Shape, ShapeId,
+    Result, ShaclError, Shape, ShapeId, Target,
 };
 
 /// Shape import configuration
@@ -1023,7 +1023,7 @@ impl ShapeImportManager {
             Target::Node(node_iri) => {
                 if let Some(remapped) = self.remap_iri_string(node_iri.as_str(), target_namespace) {
                     if let Ok(new_node) = NamedNode::new(remapped) {
-                        *node_iri = new_node;
+                        *node_iri = Term::NamedNode(new_node);
                     }
                 }
             }
@@ -1045,6 +1045,13 @@ impl ShapeImportManager {
             Target::Sparql(_) => {
                 // Complex remapping for SPARQL targets would require SPARQL parsing
                 tracing::warn!("SPARQL target remapping not yet implemented");
+            }
+            Target::Implicit(implicit_iri) => {
+                if let Some(remapped) = self.remap_iri_string(implicit_iri.as_str(), target_namespace) {
+                    if let Ok(new_node) = NamedNode::new(remapped) {
+                        *implicit_iri = new_node;
+                    }
+                }
             }
         }
     }
@@ -1100,16 +1107,16 @@ impl ShapeImportManager {
             }
             Constraint::Class(class_constraint) => {
                 if let Some(remapped) =
-                    self.remap_iri_string(class_constraint.class.as_str(), target_namespace)
+                    self.remap_iri_string(class_constraint.class_iri.as_str(), target_namespace)
                 {
                     if let Ok(new_node) = NamedNode::new(remapped) {
-                        class_constraint.class = new_node;
+                        class_constraint.class_iri = new_node;
                     }
                 }
             }
             Constraint::In(in_constraint) => {
                 for value in &mut in_constraint.values {
-                    if let crate::constraints::ValueType::IRI(iri) = value {
+                    if let Term::NamedNode(iri) = value {
                         if let Some(remapped) =
                             self.remap_iri_string(iri.as_str(), target_namespace)
                         {

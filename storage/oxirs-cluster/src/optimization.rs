@@ -6,6 +6,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use zstd;
@@ -259,6 +260,42 @@ impl Drop for AtomicFileWriter {
     }
 }
 
+impl AsyncWrite for AtomicFileWriter {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        if let Some(ref mut file) = self.file {
+            let file_pin = std::pin::Pin::new(file);
+            file_pin.poll_write(cx, buf)
+        } else {
+            std::task::Poll::Ready(Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "File not open",
+            )))
+        }
+    }
+
+    fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+        if let Some(ref mut file) = self.file {
+            let file_pin = std::pin::Pin::new(file);
+            file_pin.poll_flush(cx)
+        } else {
+            std::task::Poll::Ready(Ok(()))
+        }
+    }
+
+    fn poll_shutdown(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+        if let Some(ref mut file) = self.file {
+            let file_pin = std::pin::Pin::new(file);
+            file_pin.poll_shutdown(cx)
+        } else {
+            std::task::Poll::Ready(Ok(()))
+        }
+    }
+}
+
 /// Corruption detector using checksums and integrity verification
 pub struct CorruptionDetector {
     enable_deep_scan: bool,
@@ -345,171 +382,14 @@ impl CorruptionDetector {
 
         Ok(false)
     }
-}
 
-impl BinarySerializer {
-    fn decompress_lz4(&self, data: &[u8]) -> Result<Vec<u8>> {
-        Ok(lz4_flex::decompress_size_prepended(data)?)
-    }
-
-    fn compress_zstd(&self, data: &[u8]) -> Result<Vec<u8>> {
-        Ok(zstd::bulk::compress(data, self.config.compression_level)?)
-    }
-
-    fn decompress_zstd(&self, data: &[u8]) -> Result<Vec<u8>> {
-        Ok(zstd::bulk::decompress(data, data.len() * 4)?)
-    }
-
-    fn compress_deflate(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::write::DeflateEncoder;
-        use flate2::Compression;
-
-        let mut encoder = DeflateEncoder::new(
-            Vec::new(),
-            Compression::new(self.config.compression_level as u32),
-        );
-        encoder.write_all(data)?;
-        Ok(encoder.finish()?)
-    }
-
-    fn decompress_deflate(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::read::DeflateDecoder;
-
-        let mut decoder = DeflateDecoder::new(data);
-        let mut result = Vec::new();
-        decoder.read_to_end(&mut result)?;
-        Ok(result)
+    /// Validate file using comprehensive checks
+    pub async fn validate_file<P: AsRef<Path>>(&self, path: P) -> Result<bool> {
+        self.verify_file_integrity(path).await
     }
 }
 
-/// Atomic file operations for crash safety
-pub struct AtomicFileWriter {
-    temp_path: std::path::PathBuf,
-    final_path: std::path::PathBuf,
-    file: Option<File>,
-}
 
-impl AtomicFileWriter {
-    /// Create a new atomic file writer
-    pub async fn new(path: impl AsRef<std::path::Path>) -> Result<Self> {
-        let final_path = path.as_ref().to_path_buf();
-        let temp_path = final_path.with_extension("tmp");
-
-        let file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&temp_path)
-            .await?;
-
-        Ok(Self {
-            temp_path,
-            final_path,
-            file: Some(file),
-        })
-    }
-
-    /// Write data to the temporary file
-    pub async fn write_all(&mut self, data: &[u8]) -> Result<()> {
-        if let Some(ref mut file) = self.file {
-            file.write_all(data).await?;
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("File already committed or aborted"))
-        }
-    }
-
-    /// Commit the write by atomically moving temp file to final location
-    pub async fn commit(mut self) -> Result<()> {
-        if let Some(mut file) = self.file.take() {
-            file.sync_all().await?;
-            drop(file);
-            tokio::fs::rename(&self.temp_path, &self.final_path).await?;
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("File already committed or aborted"))
-        }
-    }
-
-    /// Abort the write by deleting the temporary file
-    pub async fn abort(mut self) -> Result<()> {
-        self.file = None;
-        if self.temp_path.exists() {
-            tokio::fs::remove_file(&self.temp_path).await?;
-        }
-        Ok(())
-    }
-}
-
-impl Drop for AtomicFileWriter {
-    fn drop(&mut self) {
-        if self.file.is_some() && self.temp_path.exists() {
-            let _ = std::fs::remove_file(&self.temp_path);
-        }
-    }
-}
-
-/// Corruption detection and recovery utilities
-pub struct CorruptionDetector {
-    enable_validation: bool,
-}
-
-impl CorruptionDetector {
-    pub fn new(enable_validation: bool) -> Self {
-        Self { enable_validation }
-    }
-
-    /// Validate file integrity using checksums
-    pub async fn validate_file(&self, path: &std::path::Path) -> Result<bool> {
-        if !self.enable_validation {
-            return Ok(true);
-        }
-
-        let data = tokio::fs::read(path).await?;
-
-        // Check if file has expected format with checksum
-        if data.len() < 8 {
-            return Ok(false);
-        }
-
-        let stored_checksum = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-        let data_len = u32::from_le_bytes([data[4], data[5], data[6], data[7]]) as usize;
-
-        if data.len() < 8 + data_len {
-            return Ok(false);
-        }
-
-        let actual_data = &data[8..8 + data_len];
-        let computed_checksum = crc32fast::hash(actual_data);
-
-        Ok(stored_checksum == computed_checksum)
-    }
-
-    /// Attempt to recover corrupted file from backup
-    pub async fn recover_from_backup(&self, path: &std::path::Path) -> Result<bool> {
-        let backup_path = path.with_extension("backup");
-
-        if backup_path.exists() {
-            if self.validate_file(&backup_path).await? {
-                tokio::fs::copy(&backup_path, path).await?;
-                tracing::info!("Recovered {} from backup", path.display());
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
-    }
-
-    /// Create backup of file before modification
-    pub async fn create_backup(&self, path: &std::path::Path) -> Result<()> {
-        if path.exists() {
-            let backup_path = path.with_extension("backup");
-            tokio::fs::copy(path, &backup_path).await?;
-            tracing::debug!("Created backup: {}", backup_path.display());
-        }
-        Ok(())
-    }
-}
 
 /// Schema evolution support for backward compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]

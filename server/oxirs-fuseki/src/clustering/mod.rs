@@ -164,7 +164,7 @@ impl Default for ReplicationConfig {
 }
 
 /// Consistency level for operations
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ConsistencyLevel {
     /// One replica
     One,

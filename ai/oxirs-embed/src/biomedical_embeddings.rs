@@ -26,10 +26,10 @@ pub enum BiomedicalEntityType {
     Tissue,
     Organ,
     Phenotype,
-    GO_Term,
-    MESH_Term,
-    SNOMED_CT,
-    ICD_Code,
+    GoTerm,
+    MeshTerm,
+    SnomedCt,
+    IcdCode,
 }
 
 impl BiomedicalEntityType {
@@ -46,10 +46,10 @@ impl BiomedicalEntityType {
             BiomedicalEntityType::Tissue => "tissue",
             BiomedicalEntityType::Organ => "organ",
             BiomedicalEntityType::Phenotype => "phenotype",
-            BiomedicalEntityType::GO_Term => "go",
-            BiomedicalEntityType::MESH_Term => "mesh",
-            BiomedicalEntityType::SNOMED_CT => "snomed",
-            BiomedicalEntityType::ICD_Code => "icd",
+            BiomedicalEntityType::GoTerm => "go",
+            BiomedicalEntityType::MeshTerm => "mesh",
+            BiomedicalEntityType::SnomedCt => "snomed",
+            BiomedicalEntityType::IcdCode => "icd",
         }
     }
 
@@ -68,13 +68,13 @@ impl BiomedicalEntityType {
         } else if iri.contains("pathway") || iri.contains("KEGG") || iri.contains("Reactome") {
             Some(BiomedicalEntityType::Pathway)
         } else if iri.contains("GO:") {
-            Some(BiomedicalEntityType::GO_Term)
+            Some(BiomedicalEntityType::GoTerm)
         } else if iri.contains("MESH") {
-            Some(BiomedicalEntityType::MESH_Term)
+            Some(BiomedicalEntityType::MeshTerm)
         } else if iri.contains("SNOMED") {
-            Some(BiomedicalEntityType::SNOMED_CT)
+            Some(BiomedicalEntityType::SnomedCt)
         } else if iri.contains("ICD") {
-            Some(BiomedicalEntityType::ICD_Code)
+            Some(BiomedicalEntityType::IcdCode)
         } else {
             None
         }
@@ -1709,8 +1709,11 @@ impl PublicationNetworkAnalyzer {
 
         // Use biomedical text embedding
         let config = SpecializedTextEmbedding::scibert_config();
-        let model = SpecializedTextEmbedding::new(config);
-        let embedding = model.encode_text(&combined_text).await?;
+        let mut model = SpecializedTextEmbedding::new(config);
+        let embedding_array = model.encode_text(&combined_text).await?;
+        
+        // Convert ndarray to Vector
+        let embedding = Vector::new(embedding_array.to_vec());
 
         // Store in cache
         self.author_embeddings
@@ -1822,9 +1825,9 @@ impl PublicationNetworkAnalyzer {
         match (emb1, emb2) {
             (Some(e1), Some(e2)) => {
                 // Calculate cosine similarity
-                let dot_product: f32 = e1.iter().zip(e2.iter()).map(|(a, b)| a * b).sum();
-                let norm1: f32 = e1.iter().map(|x| x * x).sum::<f32>().sqrt();
-                let norm2: f32 = e2.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let dot_product: f32 = e1.values.iter().zip(e2.values.iter()).map(|(a, b)| a * b).sum();
+                let norm1: f32 = e1.values.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let norm2: f32 = e2.values.iter().map(|x| x * x).sum::<f32>().sqrt();
 
                 if norm1 > 0.0 && norm2 > 0.0 {
                     (dot_product / (norm1 * norm2)) as f64
@@ -1909,7 +1912,7 @@ mod publication_tests {
             .generate_author_embeddings("dr_smith", &publications)
             .await
             .unwrap();
-        assert_eq!(embedding.len(), 768); // SciBERT embedding dimension
+        assert_eq!(embedding.values.len(), 768); // SciBERT embedding dimension
         assert!(analyzer.author_embeddings.contains_key("dr_smith"));
     }
 

@@ -4,11 +4,11 @@
 //! including RDF triple storage, MVCC transactions, and querying.
 
 use anyhow::Result;
-use oxirs_tdb::{TdbConfig, TdbStore, Term, TripleStoreStats};
+use oxirs_tdb::{SimpleTdbConfig, TdbStore, Term, TripleStoreStats};
 
 fn main() -> Result<()> {
     // Create TDB store configuration
-    let config = TdbConfig {
+    let config = SimpleTdbConfig {
         location: "./example_tdb".to_string(),
         cache_size: 1024 * 1024 * 50, // 50MB cache
         enable_transactions: true,
@@ -154,7 +154,7 @@ mod tests {
     fn test_basic_example() {
         let temp_dir = TempDir::new().unwrap();
 
-        let config = TdbConfig {
+        let config = SimpleTdbConfig {
             location: temp_dir.path().to_string_lossy().to_string(),
             cache_size: 1024 * 1024, // 1MB for test
             enable_transactions: true,

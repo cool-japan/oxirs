@@ -23,6 +23,7 @@ rayon = { version = "1.9", optional = true }
 tokio = { version = "1.45", features = ["full"], optional = true }
 num_cpus = { version = "1.17", optional = true }
 rand.workspace = true
+fastrand = "2.2"
 regex = "1.11"
 md5 = "0.7"
 sha1 = "0.10"

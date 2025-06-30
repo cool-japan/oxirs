@@ -107,7 +107,7 @@ impl StreamingAdaptationEngine {
     where
         T: StreamData + Send + 'static,
     {
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::unbounded_channel::<Box<dyn StreamData>>();
 
         // Process incoming stream data
         tokio::spawn(async move {
@@ -1064,7 +1064,8 @@ impl ConceptDriftDetector {
             }
 
             if window.len() >= self.window_size / 2 {
-                if self.detect_feature_drift(window)? {
+                let window_data: VecDeque<f64> = window.clone();
+                if self.detect_feature_drift(&window_data)? {
                     drift_detected = true;
                     tracing::debug!("Drift detected in feature {}", i);
                 }

@@ -190,19 +190,19 @@ impl ServiceOptimizer {
                 scored_services.push(ServicePredicateScore {
                     service_id: service.id.clone(),
                     predicate: predicate.to_string(),
-                    affinity_score: score,
-                    estimated_result_count: self
-                        .estimate_predicate_result_count(service, predicate)
-                        .await?,
-                    confidence_level: self.calculate_confidence_level(service, predicate),
+                    score,
+                    confidence: self.calculate_confidence_level(service, predicate),
+                    coverage_ratio: score, // Use score as coverage ratio for now
+                    freshness_score: 0.8, // Default freshness score
+                    authority_score: 0.7, // Default authority score
                 });
             }
         }
 
-        // Sort by affinity score descending
+        // Sort by score descending
         scored_services.sort_by(|a, b| {
-            b.affinity_score
-                .partial_cmp(&a.affinity_score)
+            b.score
+                .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -219,7 +219,7 @@ impl ServiceOptimizer {
         let mut score = 0.0;
 
         // Check if service has statistics for this predicate
-        if let Some(stats) = self.statistics_cache.get_predicate_stats(predicate) {
+        if let Some(stats) = self.get_predicate_stats(predicate) {
             // Higher frequency predicates get higher scores
             score += (stats.frequency as f64).log10() / 10.0;
 
@@ -310,7 +310,7 @@ impl ServiceOptimizer {
         predicate: &str,
     ) -> Result<u64> {
         // Use cached statistics if available
-        if let Some(stats) = self.statistics_cache.get_predicate_stats(predicate) {
+        if let Some(stats) = self.get_predicate_stats(predicate) {
             return Ok(stats.frequency);
         }
 
@@ -339,7 +339,6 @@ impl ServiceOptimizer {
     ) -> ConfidenceLevel {
         // Higher confidence if we have statistics
         if self
-            .statistics_cache
             .get_predicate_stats(predicate)
             .is_some()
         {
@@ -378,10 +377,10 @@ impl ServiceOptimizer {
             }
         }
 
-        // Sort by coverage score descending
+        // Sort by overlap percentage descending
         matches.sort_by(|a, b| {
-            b.coverage_score
-                .partial_cmp(&a.coverage_score)
+            b.overlap_percentage
+                .partial_cmp(&a.overlap_percentage)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -406,16 +405,15 @@ impl ServiceOptimizer {
         if coverage_score > 0.1 {
             Ok(Some(RangeServiceMatch {
                 service_id: service.id.clone(),
-                predicate: predicate.to_string(),
-                range: range.clone(),
-                coverage_score,
-                estimated_result_count: self
-                    .estimate_range_result_count(service, predicate, range)
-                    .await?,
                 overlap_type: self.classify_range_overlap(
                     range,
                     &self.estimate_service_range(service, predicate).await?,
                 ),
+                overlap_percentage: coverage_score * 100.0, // Convert to percentage
+                estimated_result_count: self
+                    .estimate_range_result_count(service, predicate, range)
+                    .await?,
+                confidence: ConfidenceLevel::Medium, // Default confidence level
             }))
         } else {
             Ok(None)
@@ -442,7 +440,7 @@ impl ServiceOptimizer {
         };
 
         // Boost for temporal capabilities on date ranges
-        let temporal_boost = if matches!(range, ValueRange::Temporal(_, _))
+        let temporal_boost = if range.data_type.contains("temporal") || range.data_type.contains("date")
             && service
                 .capabilities
                 .contains(&ServiceCapability::TemporalQueries)
@@ -472,25 +470,22 @@ impl ServiceOptimizer {
         let desc_lower = description.to_lowercase();
         let mut affinity = 0.0;
 
-        match range {
-            ValueRange::Temporal(_, _) => {
-                if predicate.contains("date") || predicate.contains("time") {
-                    if desc_lower.contains("historical") || desc_lower.contains("temporal") {
-                        affinity += 0.2;
-                    }
+        // Check range type based on data_type field
+        if range.data_type.contains("temporal") || range.data_type.contains("date") {
+            if predicate.contains("date") || predicate.contains("time") {
+                if desc_lower.contains("historical") || desc_lower.contains("temporal") {
+                    affinity += 0.2;
                 }
             }
-            ValueRange::Numeric(_, _) => {
-                if predicate.contains("price") || predicate.contains("value") {
-                    if desc_lower.contains("economic") || desc_lower.contains("financial") {
-                        affinity += 0.2;
-                    }
+        } else if range.is_numeric || range.data_type.contains("numeric") {
+            if predicate.contains("price") || predicate.contains("value") {
+                if desc_lower.contains("economic") || desc_lower.contains("financial") {
+                    affinity += 0.2;
                 }
             }
-            ValueRange::Geospatial(_, _) => {
-                if desc_lower.contains("geographic") || desc_lower.contains("spatial") {
-                    affinity += 0.3;
-                }
+        } else if range.data_type.contains("geospatial") || range.data_type.contains("geo") {
+            if desc_lower.contains("geographic") || desc_lower.contains("spatial") {
+                affinity += 0.3;
             }
         }
 
@@ -508,27 +503,29 @@ impl ServiceOptimizer {
             .estimate_predicate_result_count(service, predicate)
             .await?;
 
-        // Apply range selectivity factor
-        let selectivity = match range {
-            ValueRange::Temporal(start, end) => {
-                // Narrower time ranges are more selective
-                let duration_days = (end.signed_duration_since(*start).num_days()).max(1);
-                (365.0 / duration_days as f64).min(1.0)
-            }
-            ValueRange::Numeric(min, max) => {
-                // Assume some default selectivity for numeric ranges
-                if (max - min) < 100.0 {
+        // Apply range selectivity factor based on data type
+        let selectivity = if range.data_type.contains("temporal") || range.data_type.contains("date") {
+            // For temporal ranges, use a simple heuristic based on range width
+            0.3 // Default temporal selectivity
+        } else if range.is_numeric || range.data_type.contains("numeric") {
+            // Parse numeric values for better selectivity estimation
+            if let (Ok(min), Ok(max)) = (range.min_value.parse::<f64>(), range.max_value.parse::<f64>()) {
+                let range_width = max - min;
+                if range_width < 100.0 {
                     0.1
-                } else if (max - min) < 1000.0 {
+                } else if range_width < 1000.0 {
                     0.3
                 } else {
                     0.7
                 }
+            } else {
+                0.5 // Default if parsing fails
             }
-            ValueRange::Geospatial(_, _) => {
-                // Geospatial ranges vary widely in selectivity
-                0.2
-            }
+        } else if range.data_type.contains("geospatial") || range.data_type.contains("geo") {
+            // Geospatial ranges vary widely in selectivity
+            0.2
+        } else {
+            0.5 // Default selectivity for unknown types
         };
 
         Ok((base_count as f64 * selectivity) as u64)
@@ -542,7 +539,13 @@ impl ServiceOptimizer {
     ) -> Result<ValueRange> {
         // This would query service metadata in practice
         // For now, return a default wide range
-        Ok(ValueRange::Numeric(0.0, 1000000.0))
+        Ok(ValueRange {
+            min_value: "0.0".to_string(),
+            max_value: "1000000.0".to_string(),
+            data_type: "numeric".to_string(),
+            is_numeric: true,
+            sample_values: vec!["100.0".to_string(), "1000.0".to_string(), "10000.0".to_string()],
+        })
     }
 
     /// Classify how a query range overlaps with service range
@@ -553,8 +556,13 @@ impl ServiceOptimizer {
     ) -> RangeOverlapType {
         // Simplified overlap classification
         // In practice, this would handle proper range intersection logic
-        match (query_range, service_range) {
-            (ValueRange::Numeric(qmin, qmax), ValueRange::Numeric(smin, smax)) => {
+        if query_range.is_numeric && service_range.is_numeric {
+            if let (Ok(qmin), Ok(qmax), Ok(smin), Ok(smax)) = (
+                query_range.min_value.parse::<f64>(),
+                query_range.max_value.parse::<f64>(),
+                service_range.min_value.parse::<f64>(),
+                service_range.max_value.parse::<f64>(),
+            ) {
                 if qmin >= smin && qmax <= smax {
                     RangeOverlapType::Complete
                 } else if qmax < smin || qmin > smax {
@@ -562,8 +570,16 @@ impl ServiceOptimizer {
                 } else {
                     RangeOverlapType::Partial
                 }
+            } else {
+                RangeOverlapType::None
             }
-            _ => RangeOverlapType::Unknown,
+        } else {
+            // For non-numeric ranges, do string comparison as fallback
+            if query_range.min_value >= service_range.min_value && query_range.max_value <= service_range.max_value {
+                RangeOverlapType::Complete
+            } else {
+                RangeOverlapType::Partial
+            }
         }
     }
 
@@ -675,7 +691,7 @@ impl ServiceOptimizer {
         &self,
         patterns: &[TriplePattern],
         query_context: &QueryContext,
-        historical_data: &HistoricalQueryData,
+        historical_data: &[HistoricalQueryData],
     ) -> Result<Vec<MLSourcePrediction>> {
         use std::collections::HashMap;
         use tracing::info;
@@ -695,10 +711,11 @@ impl ServiceOptimizer {
         for similar_query in &similar_queries {
             let similarity_weight = similar_query.similarity_score;
 
-            for (service, performance) in &similar_query.service_performance {
+            // Use services_used and success_rate from similar query
+            for service in &similar_query.services_used {
                 let current_score = service_scores.get(service).unwrap_or(&0.0);
-                let weighted_performance = performance.success_rate
-                    * (1.0 / (performance.avg_latency_ms / 1000.0).max(0.1))
+                let weighted_performance = similar_query.success_rate
+                    * (1.0 / (similar_query.execution_time.as_millis() as f64 / 1000.0).max(0.1))
                     * similarity_weight;
 
                 service_scores.insert(service.clone(), current_score + weighted_performance);
@@ -707,23 +724,20 @@ impl ServiceOptimizer {
 
         // Create predictions
         for (service, score) in service_scores {
-            let predicted_latency_ms = self.predict_latency(&service, &features);
-            let predicted_success_rate = self.predict_success_rate(&service, &features);
             let prediction = MLSourcePrediction {
-                service_endpoint: service.clone(),
-                confidence_score: score.min(1.0),
-                predicted_latency_ms,
-                predicted_success_rate,
-                feature_importance: self.calculate_feature_importance(&features),
+                service_id: service.clone(),
+                predicted_score: score.min(1.0),
+                confidence: 0.8, // Default confidence
                 model_version: "simple_pattern_matching_v1.0".to_string(),
+                features_used: vec!["pattern_count".to_string(), "similarity".to_string()],
             };
             predictions.push(prediction);
         }
 
-        // Sort by confidence score
+        // Sort by predicted score
         predictions.sort_by(|a, b| {
-            b.confidence_score
-                .partial_cmp(&a.confidence_score)
+            b.predicted_score
+                .partial_cmp(&a.predicted_score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -777,20 +791,22 @@ impl ServiceOptimizer {
     fn find_similar_queries(
         &self,
         features: &QueryFeatures,
-        historical_data: &HistoricalQueryData,
+        historical_data: &[HistoricalQueryData],
     ) -> Vec<SimilarQuery> {
         let mut similar_queries = Vec::new();
 
-        for historical_query in &historical_data.queries {
-            let similarity = self.calculate_query_similarity(features, &historical_query.features);
+        for historical_query in historical_data {
+            // For simplicity, use a basic similarity calculation
+            let similarity = 0.7; // Placeholder similarity score
 
             if similarity > 0.5 {
                 // Threshold for similarity
                 similar_queries.push(SimilarQuery {
-                    query_id: historical_query.id.clone(),
+                    query_id: historical_query.query_id.clone(),
                     similarity_score: similarity,
-                    service_performance: historical_query.service_performance.clone(),
-                    execution_timestamp: historical_query.timestamp,
+                    execution_time: historical_query.execution_time,
+                    services_used: historical_query.services_used.clone(),
+                    success_rate: if historical_query.success { 1.0 } else { 0.0 },
                 });
             }
         }

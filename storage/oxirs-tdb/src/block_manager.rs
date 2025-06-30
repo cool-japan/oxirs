@@ -374,10 +374,8 @@ impl BlockManager {
             stats.allocation_count += 1;
             stats.allocated_blocks += 1;
             stats.allocated_space += size as u64;
-            if stats.free_blocks > 0 {
-                stats.free_blocks -= 1;
-                stats.free_space -= size as u64;
-            }
+            // Note: free_blocks and free_space are updated by FreeBlockManager
+            // and refreshed in get_stats(), so we don't update them here
         }
 
         self.maybe_trigger_gc();
@@ -395,6 +393,8 @@ impl BlockManager {
                 metadata.allocate();
 
                 // If block is larger than needed, split it
+                println!("Checking if splitting is needed: metadata.size={}, size={}, min_block_size={}, condition: {}", 
+                         metadata.size, size, self.config.min_block_size, metadata.size > size + self.config.min_block_size);
                 if metadata.size > size + self.config.min_block_size {
                     let remaining_size = metadata.size - size;
                     let remaining_offset = metadata.offset + size as u64;
@@ -410,7 +410,15 @@ impl BlockManager {
                     let remaining_metadata =
                         BlockMetadata::new(remaining_id, remaining_offset, remaining_size);
 
-                    free_blocks.add_free_block(remaining_metadata);
+                    println!("Creating remaining block: id={}, size={}, offset={}", remaining_id, remaining_size, remaining_offset);
+                    free_blocks.add_free_block(remaining_metadata.clone());
+                    println!("Added remaining block to free_blocks");
+
+                    // Also add the remaining block to all_blocks
+                    {
+                        let mut all_blocks = self.all_blocks.write().unwrap();
+                        all_blocks.insert(remaining_id, remaining_metadata);
+                    }
 
                     // Update the allocated block size
                     metadata.size = size;
@@ -469,7 +477,14 @@ impl BlockManager {
                     let remaining_metadata =
                         BlockMetadata::new(remaining_id, remaining_offset, remaining_size);
 
-                    free_blocks.add_free_block(remaining_metadata);
+                    free_blocks.add_free_block(remaining_metadata.clone());
+
+                    // Also add the remaining block to all_blocks
+                    {
+                        let mut all_blocks = self.all_blocks.write().unwrap();
+                        all_blocks.insert(remaining_id, remaining_metadata);
+                    }
+
                     metadata.size = size;
                 }
 
@@ -511,7 +526,14 @@ impl BlockManager {
                             let remaining_metadata =
                                 BlockMetadata::new(remaining_id, remaining_offset, remaining_size);
 
-                            free_blocks.add_free_block(remaining_metadata);
+                            free_blocks.add_free_block(remaining_metadata.clone());
+
+                            // Also add the remaining block to all_blocks
+                            {
+                                let mut all_blocks = self.all_blocks.write().unwrap();
+                                all_blocks.insert(remaining_id, remaining_metadata);
+                            }
+
                             metadata.size = size;
                         }
 
@@ -575,7 +597,14 @@ impl BlockManager {
                     let remaining_metadata =
                         BlockMetadata::new(remaining_id, remaining_offset, remaining_size);
 
-                    free_blocks.add_free_block(remaining_metadata);
+                    free_blocks.add_free_block(remaining_metadata.clone());
+
+                    // Also add the remaining block to all_blocks
+                    {
+                        let mut all_blocks = self.all_blocks.write().unwrap();
+                        all_blocks.insert(remaining_id, remaining_metadata);
+                    }
+
                     metadata.size = size;
                 }
 
@@ -648,9 +677,9 @@ impl BlockManager {
                 let mut stats = self.stats.write().unwrap();
                 stats.deallocation_count += 1;
                 stats.allocated_blocks -= 1;
-                stats.free_blocks += 1;
                 stats.allocated_space -= size as u64;
-                stats.free_space += size as u64;
+                // Note: free_blocks and free_space are updated by FreeBlockManager
+                // and refreshed in get_stats(), so we don't update them here
             }
 
             // Try to coalesce adjacent free blocks
@@ -746,6 +775,9 @@ impl BlockManager {
         // Update derived statistics
         let free_blocks = self.free_blocks.read().unwrap();
         let (free_space, free_count, _) = free_blocks.get_stats();
+
+        println!("get_stats: FreeBlockTracker reports free_space={}, free_count={}", free_space, free_count);
+        println!("get_stats: Number of entries in free_blocks.block_metadata: {}", free_blocks.block_metadata.len());
 
         stats.free_space = free_space;
         stats.free_blocks = free_count;
@@ -869,7 +901,8 @@ impl BlockManager {
                 checksum: 0,
             };
             *next_id += 1;
-            free_blocks.add_free_block(free_block);
+            free_blocks.add_free_block(free_block.clone());
+            all_blocks.insert(free_block.id, free_block);
         }
 
         // Coalesce any remaining small free blocks
@@ -1097,17 +1130,50 @@ mod tests {
 
     #[test]
     fn test_block_splitting() {
-        let manager = BlockManager::new();
+        let config = BlockManagerConfig {
+            enable_compaction: false,
+            ..Default::default()
+        };
+        let manager = BlockManager::with_config(config);
 
         // Allocate a large block
         let large_block = manager.allocate_block(8192).unwrap();
+        println!("After allocating large block:");
+        let stats1 = manager.get_stats();
+        println!("  allocated_blocks: {}, free_blocks: {}", stats1.allocated_blocks, stats1.free_blocks);
+        
         manager.deallocate_block(large_block).unwrap();
+        println!("After deallocating large block:");
+        let stats2 = manager.get_stats();
+        println!("  allocated_blocks: {}, free_blocks: {}", stats2.allocated_blocks, stats2.free_blocks);
 
         // Allocate a smaller block (should split the large one)
+        println!("Before allocating small block - checking if there are free blocks:");
+        let stats_before = manager.get_stats();
+        println!("  free_blocks: {}, min_block_size: {}", stats_before.free_blocks, manager.config.min_block_size);
+        
         let _small_block = manager.allocate_block(1024).unwrap();
+        println!("After allocating small block:");
+        let stats3 = manager.get_stats();
+        println!("  allocated_blocks: {}, free_blocks: {}", stats3.allocated_blocks, stats3.free_blocks);
 
         let stats = manager.get_stats();
+        
+        // Debug: let's see what's actually in the free_blocks structure
+        {
+            let free_blocks = manager.free_blocks.read().unwrap();
+            println!("Final debug - free_blocks.block_metadata contents:");
+            for (id, metadata) in &free_blocks.block_metadata {
+                println!("  Block {}: size={}, status={:?}, offset={}", id, metadata.size, metadata.status, metadata.offset);
+            }
+            println!("Final debug - blocks_by_size contents:");
+            for (size, ids) in &free_blocks.blocks_by_size {
+                println!("  Size {}: {:?}", size, ids);
+            }
+        }
+        
         assert_eq!(stats.allocated_blocks, 1);
+        println!("Expected free_blocks=1, actual free_blocks={}", stats.free_blocks);
         assert_eq!(stats.free_blocks, 1); // Remaining part should be free
     }
 

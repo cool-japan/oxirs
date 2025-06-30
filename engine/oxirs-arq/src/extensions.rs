@@ -689,6 +689,8 @@ impl Value {
                 datatype: lit.datatype.as_ref().map(|dt| dt.as_str().to_string()),
             },
             Term::Variable(var) => Value::String(format!("?{}", var)),
+            Term::QuotedTriple(_) => Value::String("<<quoted triple>>".to_string()),
+            Term::PropertyPath(_) => Value::String("<property path>".to_string()),
         }
     }
 }

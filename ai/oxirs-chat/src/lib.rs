@@ -1415,7 +1415,7 @@ impl ChatSession {
                     knowledge
                         .triples
                         .iter()
-                        .map(|t| format!("{} {} {}", t.subject, t.predicate, t.object))
+                        .map(|t| format!("{} {} {}", t.subject(), t.predicate(), t.object()))
                         .collect(),
                 );
                 Some(knowledge)

@@ -721,57 +721,7 @@ impl ServiceOptimizer {
         service_clauses
     }
 
-    /// Extract variables from a triple pattern
-    pub fn extract_pattern_variables(&self, pattern: &TriplePattern) -> HashSet<String> {
-        let mut variables = HashSet::new();
 
-        // Check subject
-        if let Some(subject) = &pattern.subject {
-            if subject.starts_with('?') || subject.starts_with('$') {
-                variables.insert(subject.clone());
-            }
-        }
-
-        // Check predicate
-        if let Some(predicate) = &pattern.predicate {
-            if predicate.starts_with('?') || predicate.starts_with('$') {
-                variables.insert(predicate.clone());
-            }
-        }
-
-        // Check object
-        if let Some(object) = &pattern.object {
-            if object.starts_with('?') || object.starts_with('$') {
-                variables.insert(object.clone());
-            }
-        }
-
-        variables
-    }
-
-    /// Determine execution strategy for multiple optimized services
-    pub fn determine_execution_strategy(
-        &self,
-        services: &[OptimizedServiceClause],
-        joins: &[CrossServiceJoin],
-    ) -> ExecutionStrategy {
-        if services.len() <= 1 {
-            return ExecutionStrategy::Sequential;
-        }
-
-        // Check if there are cross-service joins
-        if !joins.is_empty() {
-            // If there are joins, we need to be careful about parallelization
-            return ExecutionStrategy::Pipeline;
-        }
-
-        // If services are independent, we can parallelize
-        if self.are_services_independent(services) {
-            ExecutionStrategy::Parallel
-        } else {
-            ExecutionStrategy::Sequential
-        }
-    }
 
     /// Check if services are independent (no shared variables)
     fn are_services_independent(&self, services: &[OptimizedServiceClause]) -> bool {
@@ -790,14 +740,33 @@ impl ServiceOptimizer {
     }
 
     /// Extract all variables used by a service
-    fn extract_service_variables(&self, service: &OptimizedServiceClause) -> HashSet<String> {
-        let mut variables = HashSet::new();
-        
-        for pattern in &service.patterns {
-            variables.extend(self.extract_pattern_variables(pattern));
-        }
-        
-        variables
+
+    /// Get predicate statistics from cache
+    pub fn get_predicate_stats(&self, predicate: &str) -> Option<PredicateStatistics> {
+        self.statistics_cache.get_predicate_stats(predicate)
+    }
+
+    /// Update service performance metrics
+    pub fn update_service_performance(&self, service_id: &str, metrics: &ServicePerformanceMetrics) {
+        // Note: Arc<StatisticsCache> doesn't allow mutable access, this is a design issue
+        // For now, we'll need to make StatisticsCache methods work with Arc/Mutex
+        // self.statistics_cache.update_service_performance(service_id, metrics);
+        debug!("Service performance update requested for {}", service_id);
+    }
+
+    /// Update service ranking
+    pub fn update_service_ranking(&self, service_id: &str, ranking: f64) {
+        // Note: Arc<StatisticsCache> doesn't allow mutable access, this is a design issue
+        // For now, we'll need to make StatisticsCache methods work with Arc/Mutex
+        // self.statistics_cache.update_service_ranking(service_id, ranking);
+        debug!("Service ranking update requested for {}: {}", service_id, ranking);
+    }
+
+    /// Estimate service cost for a pattern
+
+    /// Get the configuration
+    pub fn config(&self) -> &ServiceOptimizerConfig {
+        &self.config
     }
 }
 

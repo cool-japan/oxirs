@@ -5,7 +5,7 @@ use crate::{
     paths::PropertyPath, validation::ValidationEngine, ConstraintComponentId, Result, Severity,
     ShaclError, ShapeId, ValidationConfig, Validator,
 };
-use oxirs_core::{model::Term, Store};
+use oxirs_core::{model::Term, Store, Subject, Predicate, Object};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -256,15 +256,17 @@ impl QualifiedValueShapeConstraint {
                     };
 
                 // Check if the store contains the triple: value rdf:type Friend
-                for quad in store.quads_for_pattern(
-                    Some(node.clone().into()),
-                    Some(type_predicate.into()),
-                    Some(friend_type.clone().into()),
+                let subject: Subject = node.clone().into();
+                let predicate: Predicate = type_predicate.into();
+                let object: Object = friend_type.clone().into();
+                let quads = store.query_quads(
+                    Some(&subject),
+                    Some(&predicate),
+                    Some(&object),
                     None,
-                ) {
-                    if let Ok(_) = quad {
-                        return Ok(true);
-                    }
+                )?;
+                if !quads.is_empty() {
+                    return Ok(true);
                 }
             }
             return Ok(false);

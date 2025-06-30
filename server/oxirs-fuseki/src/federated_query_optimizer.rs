@@ -1018,7 +1018,7 @@ impl FederatedExecutor {
             .get("results")
             .and_then(|r| r.get("bindings"))
             .and_then(|b| b.as_array())
-            .ok_or_else(|| FusekiError::internal("Invalid SPARQL results format".into()))?;
+            .ok_or_else(|| FusekiError::internal("Invalid SPARQL results format"))?;
 
         let mut bindings = Vec::new();
         for result in results {

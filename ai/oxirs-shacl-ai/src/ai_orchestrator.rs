@@ -4,7 +4,7 @@
 //! comprehensive SHACL shape learning and validation optimization.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -1837,8 +1837,9 @@ impl AiOrchestrator {
         let mut total_weight = 0.0;
 
         // Calculate adaptive weights based on performance
-        for (model_type, shapes) in ensemble_results {
-            let base_weight = strategy.ensemble_weight / ensemble_results.len() as f64;
+        let ensemble_len = ensemble_results.len();
+        for (model_type, shapes) in &ensemble_results {
+            let base_weight = strategy.ensemble_weight / ensemble_len as f64;
             let performance_weight = if let Some(perf) = model_performances.get(&model_type) {
                 self.calculate_performance_weight(perf)
             } else {
@@ -1850,7 +1851,7 @@ impl AiOrchestrator {
 
             // Aggregate shapes with weighted confidence
             for shape in shapes {
-                let shape_key = format!("{:?}", shape.shape.id());
+                let shape_key = format!("{:?}", shape.shape.id);
 
                 if let Some(existing) = aggregated_shapes.get_mut(&shape_key) {
                     // Weighted confidence aggregation

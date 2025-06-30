@@ -573,15 +573,15 @@ impl RecursionMonitor {
 
     pub fn enter_shape(&mut self, shape_id: &str) -> Result<()> {
         let depth = self.visited_shapes.entry(shape_id.to_string()).or_insert(0);
-        *depth += 1;
-
-        if *depth > self.max_depth {
+        
+        if *depth >= self.max_depth {
             return Err(ShaclError::SecurityViolation(format!(
                 "Maximum recursion depth ({}) exceeded for shape {}",
                 self.max_depth, shape_id
             )));
         }
 
+        *depth += 1;
         Ok(())
     }
 

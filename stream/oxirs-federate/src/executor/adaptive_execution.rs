@@ -378,7 +378,7 @@ impl FederatedExecutor {
         let avg_parallel_time = performance_monitor.get_average_parallel_time();
         let avg_sequential_time = performance_monitor.get_average_sequential_time();
 
-        if avg_parallel_time > avg_sequential_time * adaptive_config.performance_threshold {
+        if avg_parallel_time.as_millis() as f64 > avg_sequential_time.as_millis() as f64 * adaptive_config.performance_threshold {
             // Parallel execution is not efficient
             if group_size >= adaptive_config.hybrid_batch_size {
                 return AdaptiveExecutionStrategy::Hybrid;
@@ -538,10 +538,10 @@ impl FederatedExecutor {
         let avg_parallel_time = performance_monitor.get_average_parallel_time();
         let avg_sequential_time = performance_monitor.get_average_sequential_time();
 
-        if avg_parallel_time > avg_sequential_time * 1.2 {
+        if avg_parallel_time.as_millis() as f64 > avg_sequential_time.as_millis() as f64 * 1.2 {
             // Parallel execution is not efficient, increase threshold
             adaptive_config.parallel_threshold += 1;
-        } else if avg_parallel_time < avg_sequential_time * 0.8 {
+        } else if (avg_parallel_time.as_millis() as f64) < avg_sequential_time.as_millis() as f64 * 0.8 {
             // Parallel execution is very efficient, decrease threshold
             adaptive_config.parallel_threshold =
                 adaptive_config.parallel_threshold.saturating_sub(1).max(2);

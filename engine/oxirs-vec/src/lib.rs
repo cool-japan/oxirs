@@ -36,6 +36,7 @@ use anyhow::Result;
 
 pub mod advanced_caching;
 pub mod advanced_metrics;
+pub mod advanced_result_merging;
 pub mod benchmarking;
 pub mod cache_friendly_index;
 pub mod clustering;
@@ -45,6 +46,7 @@ pub mod content_processing;
 pub mod cross_modal_embeddings;
 pub mod embedding_pipeline;
 pub mod embeddings;
+pub mod enhanced_performance_monitoring;
 pub mod gnn_embeddings;
 pub mod gpu_acceleration;
 pub mod graph_aware_search;
@@ -60,8 +62,10 @@ pub mod opq;
 pub mod pq;
 pub mod real_time_analytics;
 pub mod result_fusion;
+pub mod rdf_content_enhancement;
 pub mod similarity;
 pub mod sparql_integration;
+pub mod sparql_service_endpoint;
 pub mod sparse;
 pub mod storage_optimizations;
 pub mod structured_vectors;
@@ -74,10 +78,16 @@ pub use advanced_caching::{
     CacheInvalidator, CacheKey, CacheStats, CacheWarmer, EvictionPolicy, InvalidationStats,
     MultiLevelCache, MultiLevelCacheStats,
 };
+pub use advanced_result_merging::{
+    AdvancedResultMerger, ConfidenceInterval, DiversityConfig, DiversityMetric, FusionStatistics,
+    MergedResult, RankFusionAlgorithm, RankingFactor, ResultExplanation, ResultMergingConfig,
+    ResultMetadata, ScoreCombinationStrategy, ScoreNormalizationMethod, ScoredResult,
+    SourceContribution, SourceResult, SourceType,
+};
 pub use benchmarking::{
     BenchmarkConfig, BenchmarkDataset, BenchmarkOutputFormat, BenchmarkResult, BenchmarkRunner,
     BenchmarkSuite, BenchmarkTestCase, MemoryMetrics, PerformanceMetrics, PerformanceProfiler,
-    QualityMetrics, ScalabilityMetrics, SystemInfo,
+    QualityMetrics as BenchmarkQualityMetrics, ScalabilityMetrics, SystemInfo,
 };
 pub use cache_friendly_index::{CacheFriendlyVectorIndex, IndexConfig as CacheFriendlyIndexConfig};
 pub use compression::{create_compressor, CompressionMethod, VectorCompressor};
@@ -100,6 +110,14 @@ pub use embeddings::{
     EmbeddableContent, EmbeddingConfig, EmbeddingManager, EmbeddingStrategy, ModelDetails,
     OpenAIConfig, OpenAIEmbeddingGenerator, SentenceTransformerGenerator, TransformerModelType,
 };
+pub use enhanced_performance_monitoring::{
+    Alert, AlertManager, AlertSeverity, AlertThresholds, AlertType, AnalyticsEngine,
+    AnalyticsReport, DashboardData, EnhancedPerformanceMonitor, ExportConfig, ExportDestination,
+    ExportFormat, LatencyDistribution, MonitoringConfig, QualityMetrics, QualityMetricsCollector,
+    QualityStatistics, QueryInfo, QueryMetricsCollector, QueryStatistics, QueryType,
+    Recommendation, RecommendationCategory, RecommendationPriority, SystemMetrics,
+    SystemMetricsCollector, SystemStatistics, TrendData, TrendDirection,
+};
 pub use gnn_embeddings::{AggregatorType, GraphSAGE, GCN};
 pub use gpu_acceleration::{GpuAccelerator, GpuBuffer, GpuConfig, GpuDevice, GpuVectorIndex};
 pub use graph_indices::{
@@ -117,19 +135,31 @@ pub use lsh::{LshConfig, LshFamily, LshIndex, LshStats};
 pub use mmap_index::{MemoryMappedIndexStats, MemoryMappedVectorIndex};
 pub use pq::{PQConfig, PQIndex, PQStats};
 pub use real_time_analytics::{
-    AlertSeverity, AlertType, AnalyticsConfig, AnalyticsEvent, AnalyticsReport, DashboardData,
-    ExportFormat, MetricsCollector, PerformanceMonitor, QueryMetrics, SystemMetrics,
+    AlertSeverity as AnalyticsAlertSeverity, AlertType as AnalyticsAlertType, AnalyticsConfig, AnalyticsEvent, 
+    AnalyticsReport as RealTimeAnalyticsReport, DashboardData as RealTimeDashboardData,
+    ExportFormat as AnalyticsExportFormat, MetricsCollector, PerformanceMonitor, QueryMetrics, SystemMetrics as AnalyticsSystemMetrics,
     VectorAnalyticsEngine,
 };
 pub use result_fusion::{
     FusedResults, FusionAlgorithm, FusionConfig, FusionQualityMetrics, FusionStats,
     ResultFusionEngine, ScoreNormalizationStrategy, SourceResults, VectorSearchResult,
 };
+pub use rdf_content_enhancement::{
+    ComponentWeights, MultiLanguageProcessor, PathConstraint, PathDirection, PropertyAggregator,
+    PropertyPath, RdfContentConfig, RdfContentProcessor, RdfContext, RdfEntity, RdfValue,
+    TemporalInfo,
+};
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
     FederatedQueryResult, FederatedVectorService, HybridQuery, RetryConfig, ServiceHealthStatus,
     SparqlVectorService, VectorOperation, VectorQueryBuilder, VectorServiceConfig,
     VectorServiceRegistry,
+};
+pub use sparql_service_endpoint::{
+    AuthenticationInfo, AuthenticationType, CustomFunctionRegistry, FederatedOperation,
+    FederatedSearchResult, FederatedServiceEndpoint, FederatedVectorQuery, FunctionMetadata,
+    LoadBalancer, ParameterInfo, ParameterType, PartialSearchResult, QueryScope, ReturnType,
+    ServiceCapability, ServiceEndpointManager, ServiceType,
 };
 pub use sparse::{COOMatrix, CSRMatrix, SparseVector};
 pub use storage_optimizations::{

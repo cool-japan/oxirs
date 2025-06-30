@@ -12,6 +12,7 @@ use super::types::*;
 use crate::{ExecutionPlan, ExecutionStep, FederatedService, ServiceRegistry, StepResult};
 
 /// Entity resolution utilities
+#[derive(Debug)]
 pub struct EntityResolver;
 
 impl EntityResolver {

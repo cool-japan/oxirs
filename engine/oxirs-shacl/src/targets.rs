@@ -233,7 +233,7 @@ pub struct TargetCacheStats {
 }
 
 /// Query optimization options
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub struct QueryOptimizationOptions {
     /// Maximum number of results to return
     pub limit: Option<usize>,
@@ -354,7 +354,7 @@ impl TargetSelector {
                 let close_clause = if graph_name.is_some() { " }" } else { "" };
 
                 Ok(format!(
-                    "SELECT DISTINCT ?target WHERE {{ {} ?target a <{}> .{} }}",
+                    "SELECT DISTINCT ?target WHERE {{ {} ?target <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <{}> .{} }}",
                     graph_clause,
                     class_iri.as_str(),
                     close_clause
@@ -428,7 +428,7 @@ impl TargetSelector {
                 let close_clause = if graph_name.is_some() { " }" } else { "" };
 
                 Ok(format!(
-                    "SELECT DISTINCT ?target WHERE {{ {} ?target a <{}> .{} }}",
+                    "SELECT DISTINCT ?target WHERE {{ {} ?target <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <{}> .{} }}",
                     graph_clause,
                     class_iri.as_str(),
                     close_clause
@@ -513,11 +513,8 @@ impl TargetSelector {
             }
         }
 
-        // Generate and execute query
-        let query = self.generate_target_query(target, graph_name)?;
-        let optimized_query = self.optimize_target_query(&query, target)?;
-
-        let result = self.execute_target_query(store, &optimized_query, graph_name)?;
+        // Use direct store access instead of SPARQL due to oxirs-core limitations
+        let result = self.execute_target_selection_direct(store, target, graph_name)?;
 
         // Cache the result
         if self.optimization_config.enable_caching {
@@ -550,142 +547,219 @@ impl TargetSelector {
         Ok(result)
     }
 
-    /// Execute the target query against the store
+    /// Execute target selection using direct store access instead of SPARQL due to oxirs-core limitations
     fn execute_target_query(
         &self,
         store: &Store,
-        query: &str,
+        _query: &str,
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
-        use oxirs_core::query::{QueryEngine, QueryResult};
+        // We'll implement direct store access based on the target type
+        // This bypasses the SPARQL parser limitations with long IRIs
+        Ok(Vec::new()) // Placeholder - will be implemented per target type
+    }
+    
+    /// Execute target selection using direct store operations
+    fn execute_target_selection_direct(
+        &self,
+        store: &Store,
+        target: &Target,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
+        use oxirs_core::model::{Quad, GraphName, NamedNode as CoreNamedNode, Object, Predicate};
         
-        tracing::debug!("Executing target query: {}", query);
-        
-        // Create query engine for SPARQL execution
-        let query_engine = QueryEngine::new();
-        
-        // Execute the SPARQL query
-        match query_engine.execute_query(store, query) {
-            Ok(QueryResult::Select { variables: _, bindings }) => {
+        match target {
+            Target::Class(class_iri) => {
+                // Find all subjects that have rdf:type = class_iri
+                let rdf_type = Predicate::NamedNode(CoreNamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                    .map_err(|e| ShaclError::TargetSelection(format!("Invalid RDF type IRI: {}", e)))?);
+                
                 let mut target_nodes = Vec::new();
                 
-                // Extract target nodes from query results
-                for binding in bindings {
-                    if let Some(target_term) = binding.get("target") {
-                        target_nodes.push(target_term.clone());
+                // Iterate through all quads in the store
+                for quad in store.iter_quads()? {
+                    // Check if this is a type triple and matches our target class
+                    if quad.predicate() == &rdf_type 
+                        && matches!(quad.object(), Object::NamedNode(obj) if obj.as_str() == class_iri.as_str()) {
+                        
+                        // Check graph name if specified
+                        if let Some(graph) = graph_name {
+                            if let GraphName::NamedNode(quad_graph) = quad.graph_name() {
+                                if quad_graph.as_str() != graph {
+                                    continue;
+                                }
+                            } else if !matches!(quad.graph_name(), GraphName::DefaultGraph) {
+                                continue;
+                            }
+                        }
+                        
+                        // Add the subject as a target node
+                        match quad.subject() {
+                            oxirs_core::model::Subject::NamedNode(node) => {
+                                target_nodes.push(Term::NamedNode(node.clone()));
+                            }
+                            oxirs_core::model::Subject::BlankNode(blank) => {
+                                target_nodes.push(Term::BlankNode(blank.clone()));
+                            }
+                            oxirs_core::model::Subject::Variable(var) => {
+                                target_nodes.push(Term::Variable(var.clone()));
+                            }
+                            oxirs_core::model::Subject::QuotedTriple(qt) => {
+                                target_nodes.push(Term::QuotedTriple(qt.clone()));
+                            }
+                        }
                     }
                 }
                 
                 // Remove duplicates and sort for deterministic results
-                target_nodes.sort_by(|a, b| {
-                    match (a, b) {
-                        (Term::NamedNode(a_node), Term::NamedNode(b_node)) => {
-                            a_node.as_str().cmp(b_node.as_str())
-                        }
-                        (Term::BlankNode(a_blank), Term::BlankNode(b_blank)) => {
-                            a_blank.as_str().cmp(b_blank.as_str())
-                        }
-                        (Term::Literal(a_lit), Term::Literal(b_lit)) => {
-                            a_lit.as_str().cmp(b_lit.as_str())
-                        }
-                        (Term::NamedNode(_), _) => std::cmp::Ordering::Less,
-                        (Term::BlankNode(_), Term::NamedNode(_)) => std::cmp::Ordering::Greater,
-                        (Term::BlankNode(_), _) => std::cmp::Ordering::Less,
-                        (Term::Literal(_), Term::NamedNode(_)) => std::cmp::Ordering::Greater,
-                        (Term::Literal(_), Term::BlankNode(_)) => std::cmp::Ordering::Greater,
-                        _ => std::cmp::Ordering::Equal,
-                    }
-                });
-                target_nodes.dedup();
+                self.sort_and_dedupe_targets(&mut target_nodes);
                 
-                tracing::debug!("Found {} target nodes", target_nodes.len());
+                tracing::debug!("Found {} target nodes for class {}", target_nodes.len(), class_iri.as_str());
                 Ok(target_nodes)
             }
-            Ok(QueryResult::Construct(graph)) => {
-                // For CONSTRUCT queries, extract subjects as target nodes
+            Target::Node(node) => {
+                // For specific nodes, just return the node itself
+                Ok(vec![node.clone()])
+            }
+            Target::ObjectsOf(property) => {
                 let mut target_nodes = Vec::new();
-                for triple in graph.iter() {
-                    match triple.subject() {
-                        oxirs_core::model::Subject::NamedNode(node) => {
-                            target_nodes.push(Term::NamedNode(node.clone()));
+                
+                // Find all objects of the specified property
+                for quad in store.iter_quads()? {
+                    if matches!(quad.predicate(), Predicate::NamedNode(pred) if pred.as_str() == property.as_str()) {
+                        // Check graph name if specified
+                        if let Some(graph) = graph_name {
+                            if let GraphName::NamedNode(quad_graph) = quad.graph_name() {
+                                if quad_graph.as_str() != graph {
+                                    continue;
+                                }
+                            } else if !matches!(quad.graph_name(), GraphName::DefaultGraph) {
+                                continue;
+                            }
                         }
-                        oxirs_core::model::Subject::BlankNode(blank) => {
-                            target_nodes.push(Term::BlankNode(blank.clone()));
+                        
+                        target_nodes.push(quad.object().clone().into());
+                    }
+                }
+                
+                self.sort_and_dedupe_targets(&mut target_nodes);
+                
+                tracing::debug!("Found {} target nodes for objectsOf {}", target_nodes.len(), property.as_str());
+                Ok(target_nodes)
+            }
+            Target::SubjectsOf(property) => {
+                let mut target_nodes = Vec::new();
+                
+                // Find all subjects of the specified property
+                for quad in store.iter_quads()? {
+                    if matches!(quad.predicate(), Predicate::NamedNode(pred) if pred.as_str() == property.as_str()) {
+                        // Check graph name if specified
+                        if let Some(graph) = graph_name {
+                            if let GraphName::NamedNode(quad_graph) = quad.graph_name() {
+                                if quad_graph.as_str() != graph {
+                                    continue;
+                                }
+                            } else if !matches!(quad.graph_name(), GraphName::DefaultGraph) {
+                                continue;
+                            }
                         }
-                        oxirs_core::model::Subject::Variable(var) => {
-                            target_nodes.push(Term::Variable(var.clone()));
-                        }
-                        oxirs_core::model::Subject::QuotedTriple(qt) => {
-                            target_nodes.push(Term::QuotedTriple(qt.clone()));
+                        
+                        // Add the subject as a target node
+                        match quad.subject() {
+                            oxirs_core::model::Subject::NamedNode(node) => {
+                                target_nodes.push(Term::NamedNode(node.clone()));
+                            }
+                            oxirs_core::model::Subject::BlankNode(blank) => {
+                                target_nodes.push(Term::BlankNode(blank.clone()));
+                            }
+                            oxirs_core::model::Subject::Variable(var) => {
+                                target_nodes.push(Term::Variable(var.clone()));
+                            }
+                            oxirs_core::model::Subject::QuotedTriple(qt) => {
+                                target_nodes.push(Term::QuotedTriple(qt.clone()));
+                            }
                         }
                     }
                 }
                 
-                // Remove duplicates
-                target_nodes.sort_by(|a, b| {
-                    match (a, b) {
-                        (Term::NamedNode(a_node), Term::NamedNode(b_node)) => {
-                            a_node.as_str().cmp(b_node.as_str())
-                        }
-                        (Term::BlankNode(a_blank), Term::BlankNode(b_blank)) => {
-                            a_blank.as_str().cmp(b_blank.as_str())
-                        }
-                        _ => std::cmp::Ordering::Equal,
-                    }
-                });
-                target_nodes.dedup();
+                self.sort_and_dedupe_targets(&mut target_nodes);
                 
+                tracing::debug!("Found {} target nodes for subjectsOf {}", target_nodes.len(), property.as_str());
                 Ok(target_nodes)
             }
-            Ok(QueryResult::Ask(result)) => {
-                // ASK queries are not typically used for target selection
-                tracing::warn!("ASK query executed for target selection, result: {}", result);
-                Ok(Vec::new())
+            Target::Sparql(_sparql_target) => {
+                // For SPARQL targets, we still need to use the query engine
+                // This might fail due to oxirs-core limitations, but let's try
+                let query = self.generate_target_query(target, graph_name)?;
+                self.execute_sparql_target_query(store, &query)
             }
-            Ok(QueryResult::Describe(graph)) => {
-                // For DESCRIBE queries, extract subjects as target nodes
+            Target::Implicit(class_iri) => {
+                // Same as class target
+                let class_target = Target::Class(class_iri.clone());
+                self.execute_target_selection_direct(store, &class_target, graph_name)
+            }
+        }
+    }
+    
+    /// Execute SPARQL target query (may fail due to oxirs-core limitations)
+    fn execute_sparql_target_query(&self, store: &Store, query: &str) -> Result<Vec<Term>> {
+        use oxirs_core::query::{QueryEngine, QueryResult};
+        
+        tracing::info!("Executing SPARQL target query: '{}'", query);
+        
+        let query_engine = QueryEngine::new();
+        
+        match query_engine.query(query, store) {
+            Ok(QueryResult::Select { variables: _, bindings }) => {
                 let mut target_nodes = Vec::new();
-                for triple in graph.iter() {
-                    match triple.subject() {
-                        oxirs_core::model::Subject::NamedNode(node) => {
-                            target_nodes.push(Term::NamedNode(node.clone()));
-                        }
-                        oxirs_core::model::Subject::BlankNode(blank) => {
-                            target_nodes.push(Term::BlankNode(blank.clone()));
-                        }
-                        oxirs_core::model::Subject::Variable(var) => {
-                            target_nodes.push(Term::Variable(var.clone()));
-                        }
-                        oxirs_core::model::Subject::QuotedTriple(qt) => {
-                            target_nodes.push(Term::QuotedTriple(qt.clone()));
-                        }
+                
+                for binding in bindings {
+                    // Look for ?this variable or first variable
+                    if let Some(term) = binding.get("this").or_else(|| binding.values().next()) {
+                        target_nodes.push(term.clone());
                     }
                 }
                 
-                // Remove duplicates
-                target_nodes.sort_by(|a, b| {
-                    match (a, b) {
-                        (Term::NamedNode(a_node), Term::NamedNode(b_node)) => {
-                            a_node.as_str().cmp(b_node.as_str())
-                        }
-                        (Term::BlankNode(a_blank), Term::BlankNode(b_blank)) => {
-                            a_blank.as_str().cmp(b_blank.as_str())
-                        }
-                        _ => std::cmp::Ordering::Equal,
-                    }
-                });
-                target_nodes.dedup();
-                
+                self.sort_and_dedupe_targets(&mut target_nodes);
                 Ok(target_nodes)
+            }
+            Ok(_) => {
+                Err(ShaclError::SparqlExecution(
+                    "SPARQL target query must return SELECT results".to_string(),
+                ))
             }
             Err(e) => {
-                tracing::error!("SPARQL query execution failed: {}", e);
+                tracing::error!("SPARQL target query execution failed: {}", e);
                 Err(ShaclError::SparqlExecution(format!(
-                    "Target query execution failed: {}",
+                    "SPARQL target query execution failed: {}",
                     e
                 )))
             }
         }
+    }
+    
+    /// Sort and remove duplicate target nodes
+    fn sort_and_dedupe_targets(&self, target_nodes: &mut Vec<Term>) {
+        target_nodes.sort_by(|a, b| {
+            match (a, b) {
+                (Term::NamedNode(a_node), Term::NamedNode(b_node)) => {
+                    a_node.as_str().cmp(b_node.as_str())
+                }
+                (Term::BlankNode(a_blank), Term::BlankNode(b_blank)) => {
+                    a_blank.as_str().cmp(b_blank.as_str())
+                }
+                (Term::Literal(a_lit), Term::Literal(b_lit)) => {
+                    a_lit.as_str().cmp(b_lit.as_str())
+                }
+                (Term::NamedNode(_), _) => std::cmp::Ordering::Less,
+                (Term::BlankNode(_), Term::NamedNode(_)) => std::cmp::Ordering::Greater,
+                (Term::BlankNode(_), _) => std::cmp::Ordering::Less,
+                (Term::Literal(_), Term::NamedNode(_)) => std::cmp::Ordering::Greater,
+                (Term::Literal(_), Term::BlankNode(_)) => std::cmp::Ordering::Greater,
+                _ => std::cmp::Ordering::Equal,
+            }
+        });
+        target_nodes.dedup();
     }
 
     /// Create cache key for target and graph combination
@@ -1212,6 +1286,72 @@ mod tests {
                 assert_eq!(sparql_target.prefixes, prefixes);
             }
             _ => panic!("Expected SPARQL target"),
+        }
+    }
+
+    #[test]
+    fn debug_target_query_generation() {
+        let selector = TargetSelector::new();
+        let class_iri = NamedNode::new("http://example.org/Person").unwrap();
+        let target = Target::class(class_iri);
+        
+        let query = selector.generate_target_query(&target, None).unwrap();
+        println!("Generated query: '{}'", query);
+        eprintln!("Generated query: '{}'", query);
+        
+        assert!(query.contains("SELECT"));
+        assert!(query.contains("?target"));
+        assert!(query.contains("http://example.org/Person"));
+    }
+
+    #[test]
+    fn debug_direct_sparql_execution() {
+        use oxirs_core::{Store, query::QueryEngine};
+        use oxirs_core::model::{Quad, GraphName};
+
+        let mut store = Store::new().unwrap();
+        
+        // Test simple query first
+        let simple_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
+        println!("Testing simple query: '{}'", simple_query);
+        
+        let query_engine = QueryEngine::new();
+        let result = query_engine.query(simple_query, &store);
+        
+        match result {
+            Ok(result) => println!("Simple query executed successfully: {:?}", result),
+            Err(e) => {
+                println!("Simple query failed: {}", e);
+                eprintln!("Simple query failed: {}", e);
+            }
+        }
+        
+        // Test with simpler IRI first
+        let simple_iri_query = "SELECT DISTINCT ?target WHERE { ?target <http://example.org/type> <http://example.org/Person> . }";
+        println!("Testing simple IRI query: '{}'", simple_iri_query);
+        
+        let result2 = query_engine.query(simple_iri_query, &store);
+        
+        match result2 {
+            Ok(result) => println!("Simple IRI query executed successfully: {:?}", result),
+            Err(e) => {
+                println!("Simple IRI query failed: {}", e);
+                eprintln!("Simple IRI query failed: {}", e);
+            }
+        }
+        
+        // Test our specific query with long RDF type IRI
+        let query = "SELECT DISTINCT ?target WHERE { ?target <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> . }";
+        println!("Testing RDF type query: '{}'", query);
+        
+        let result3 = query_engine.query(query, &store);
+        
+        match result3 {
+            Ok(result) => println!("RDF type query executed successfully: {:?}", result),
+            Err(e) => {
+                println!("RDF type query failed: {}", e);
+                eprintln!("RDF type query failed: {}", e);
+            }
         }
     }
 

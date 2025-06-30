@@ -11,6 +11,8 @@
 //! - Digital signature verification
 //! - Metadata exchange
 
+#![cfg(feature = "saml")]
+
 use crate::{
     auth::{AuthResult, AuthService, Permission, SamlResponse, User},
     error::{FusekiError, FusekiResult},
@@ -207,7 +209,7 @@ pub async fn initiate_saml_sso(
     let auth_service = state
         .auth_service
         .as_ref()
-        .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
+        .ok_or(FusekiError::service_unavailable("Authentication service not available"))?;
 
     if !auth_service.is_saml_enabled() {
         return Err(FusekiError::service_unavailable(
@@ -253,7 +255,7 @@ pub async fn handle_saml_acs(
     let auth_service = state
         .auth_service
         .as_ref()
-        .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
+        .ok_or(FusekiError::service_unavailable("Authentication service not available"))?;
 
     debug!("Processing SAML ACS response");
 
@@ -321,7 +323,7 @@ pub async fn handle_saml_slo(
     let auth_service = state
         .auth_service
         .as_ref()
-        .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
+        .ok_or(FusekiError::service_unavailable("Authentication service not available"))?;
 
     if let Some(saml_request) = params.saml_request {
         // Handle SLO request from IdP
@@ -368,7 +370,7 @@ pub async fn get_saml_metadata(State(state): State<AppState>) -> Result<Response
     let auth_service = state
         .auth_service
         .as_ref()
-        .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
+        .ok_or(FusekiError::service_unavailable("Authentication service not available"))?;
 
     if !auth_service.is_saml_enabled() {
         return Err(FusekiError::service_unavailable(
@@ -376,11 +378,13 @@ pub async fn get_saml_metadata(State(state): State<AppState>) -> Result<Response
         ));
     }
 
-    let sp_config = auth_service
-        .get_saml_sp_config()
-        .ok_or_else(|| FusekiError::internal("SAML SP configuration not available"))?;
+    // Note: get_saml_sp_config() returns Result when SAML feature is disabled
+    let saml_config = match auth_service.get_saml_sp_config() {
+        Ok(config) => config,
+        Err(_) => return Err(FusekiError::internal("SAML SP configuration not available")),
+    };
 
-    let metadata_xml = generate_saml_metadata(&sp_config, &state.config)?;
+    let metadata_xml = generate_saml_metadata(&saml_config.sp)?;
 
     Ok((
         StatusCode::OK,
@@ -399,17 +403,21 @@ pub async fn initiate_saml_logout(
     let auth_service = state
         .auth_service
         .as_ref()
-        .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
+        .ok_or(FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Extract current session
     let session_id = extract_session_id_from_headers(&headers)?;
     let session = auth_service
-        .get_session(&session_id)
-        .await?
-        .ok_or_else(|| FusekiError::authentication("Invalid session"))?;
+        .validate_session(&session_id)
+        .await?;
+    
+    let user = match session {
+        crate::auth::AuthResult::Authenticated(user) => user,
+        _ => return Err(FusekiError::authentication("Invalid session")),
+    };
 
     // Generate SAML logout request
-    let slo_request = generate_saml_slo_request(&session.user, &session.session_id)?;
+    let slo_request = generate_saml_slo_request(&user, &session_id)?;
     let encoded_request = encode_saml_request(&slo_request)?;
 
     // Construct logout URL
@@ -421,7 +429,7 @@ pub async fn initiate_saml_logout(
     );
 
     // Invalidate local session
-    auth_service.invalidate_session(&session_id).await?;
+    auth_service.logout(&session_id).await?;
 
     Ok(Redirect::temporary(&logout_url).into_response())
 }
@@ -478,7 +486,8 @@ async fn validate_saml_assertion(
     let subject = extract_xml_value(response_xml, "saml:Subject")?;
     let issuer = extract_xml_value(response_xml, "saml:Issuer")?;
     let session_index = extract_xml_value(response_xml, "saml:AuthnStatement")
-        .and_then(|stmt| extract_attribute(&stmt, "SessionIndex"))
+        .and_then(|stmt| Ok(extract_attribute(&stmt, "SessionIndex")))
+        .unwrap_or_else(|_| None)
         .unwrap_or_else(|| "unknown".to_string());
 
     // Extract attributes
@@ -511,16 +520,14 @@ async fn map_saml_attributes_to_user(
     assertion: &ValidatedSamlAssertion,
     auth_service: &AuthService,
 ) -> FusekiResult<User> {
-    let attribute_mapping = auth_service
-        .get_saml_attribute_mapping()
-        .unwrap_or_default();
+    let attribute_mapping = auth_service.get_saml_attribute_mapping();
 
     let username = assertion.subject.clone();
-    let email = get_mapped_attribute(&assertion.attributes, &attribute_mapping, "email");
-    let full_name = get_mapped_attribute(&assertion.attributes, &attribute_mapping, "displayName");
+    let email = get_saml_mapped_attribute(&assertion.attributes, &attribute_mapping, "email");
+    let full_name = get_saml_mapped_attribute(&assertion.attributes, &attribute_mapping, "name");
 
     // Map roles from SAML attributes
-    let roles = get_mapped_attribute_list(&assertion.attributes, &attribute_mapping, "roles")
+    let roles = get_saml_mapped_attribute_list(&assertion.attributes, &attribute_mapping, "groups")
         .unwrap_or_else(|| vec!["user".to_string()]);
 
     // Generate permissions based on roles
@@ -550,8 +557,7 @@ fn extract_redirect_from_relay_state(relay_state: &Option<String>) -> Option<Str
 
 /// Generate SAML metadata XML
 fn generate_saml_metadata(
-    sp_config: &SamlSpConfig,
-    server_config: &crate::config::ServerConfig,
+    sp_config: &crate::auth::saml::ServiceProviderConfig,
 ) -> FusekiResult<String> {
     let metadata = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -615,21 +621,30 @@ fn generate_assertion_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
-fn get_mapped_attribute(
+fn get_saml_mapped_attribute(
     attributes: &HashMap<String, Vec<String>>,
-    mapping: &HashMap<String, String>,
-    key: &str,
+    mapping: &Option<&crate::config::SamlAttributeMappings>,
+    field: &str,
 ) -> Option<String> {
-    let attr_name = mapping.get(key)?;
+    let mapping = mapping?;
+    let attr_name = match field {
+        "email" => mapping.email_attribute.as_ref()?,
+        "name" => mapping.name_attribute.as_ref()?,
+        _ => return None,
+    };
     attributes.get(attr_name)?.first().cloned()
 }
 
-fn get_mapped_attribute_list(
+fn get_saml_mapped_attribute_list(
     attributes: &HashMap<String, Vec<String>>,
-    mapping: &HashMap<String, String>,
-    key: &str,
+    mapping: &Option<&crate::config::SamlAttributeMappings>,
+    field: &str,
 ) -> Option<Vec<String>> {
-    let attr_name = mapping.get(key)?;
+    let mapping = mapping?;
+    let attr_name = match field {
+        "groups" => mapping.groups_attribute.as_ref()?,
+        _ => return None,
+    };
     attributes.get(attr_name).cloned()
 }
 

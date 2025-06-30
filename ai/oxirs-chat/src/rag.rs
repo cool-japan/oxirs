@@ -11,11 +11,13 @@ use oxirs_core::{
 // Vector search integration now properly enabled
 use oxirs_embed::{
     models::{ComplEx, RotatE, TransE},
-    EmbeddingModel, Vector,
+    EmbeddingModel, Vector, ModelConfig, ModelStats, TrainingStats, Triple as EmbedTriple,
 };
-use oxirs_vec::VectorIndex;
+use uuid::Uuid;
+use async_trait::async_trait;
+use oxirs_vec::{VectorIndex, SearchResult as VectorSearchResult};
 use oxirs_vec::{
-    embeddings::{EmbeddingManager, EmbeddingStrategy},
+    embeddings::{EmbeddingManager, EmbeddingStrategy, EmbeddableContent},
     index::{
         AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType,
         SearchResult as VecSearchResult,
@@ -58,8 +60,8 @@ impl EnhancedVectorIndex {
             ..Default::default()
         };
 
-        let index = AdvancedVectorIndex::new(config)?;
-        let embedding_manager = EmbeddingManager::new(embedding_strategy);
+        let index = AdvancedVectorIndex::new(config);
+        let embedding_manager = EmbeddingManager::new(embedding_strategy, 1000)?;
 
         Ok(Self {
             index,
@@ -78,14 +80,10 @@ impl EnhancedVectorIndex {
         metadata: HashMap<String, String>,
     ) -> Result<()> {
         // Generate embedding for the content
-        let embedding = self.embedding_manager.encode(&[content.clone()]).await?;
-        let vector = embedding
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow!("Failed to generate embedding for content"))?;
+        let vector = self.embedding_manager.get_embedding(&EmbeddableContent::Text(content.clone()))?;
 
         // Add to vector index
-        self.index.add_vector(id.clone(), vector.clone())?;
+        self.index.insert(id.clone(), vector.clone())?;
 
         // Store document mapping
         let document = RagDocument {
@@ -93,7 +91,7 @@ impl EnhancedVectorIndex {
             content,
             triple: triple.clone(),
             metadata,
-            embedding: Some(vector),
+            embedding: Some(vector.as_f32()),
         };
         self.document_mapping.insert(id.clone(), document);
 
@@ -108,24 +106,20 @@ impl EnhancedVectorIndex {
     /// Search for similar documents using semantic similarity
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchDocument>> {
         // Generate embedding for query
-        let query_embedding = self.embedding_manager.encode(&[query.to_string()]).await?;
-        let query_vector = query_embedding
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow!("Failed to generate embedding for query"))?;
+        let query_vector = self.embedding_manager.get_embedding(&EmbeddableContent::Text(query.to_string()))?;
 
         // Search the vector index
-        let search_results: Vec<VecSearchResult> = self.index.search(&query_vector, limit)?;
+        let search_results: Vec<VecSearchResult> = self.index.search(&query_vector.as_f32(), limit)?;
 
         // Convert to SearchDocument
         let mut documents = Vec::new();
         for result in search_results {
-            if let Some(document) = self.document_mapping.get(&result.id) {
+            if let Some(document) = self.document_mapping.get(&result.uri) {
                 let search_doc = SearchDocument {
                     document: document.triple.clone().unwrap_or_else(|| {
                         // Create a default triple if none exists
                         Triple::new(
-                            Subject::NamedNode(NamedNode::new_unchecked(&result.id)),
+                            Subject::NamedNode(NamedNode::new_unchecked(&result.uri)),
                             NamedNode::new_unchecked("http://www.w3.org/2000/01/rdf-schema#label"),
                             Object::Literal(document.content.clone().into()),
                         )
@@ -279,15 +273,116 @@ impl EnhancedEmbeddingModel {
     }
 }
 
+#[async_trait]
 impl EmbeddingModel for EnhancedEmbeddingModel {
-    fn encode<'a>(
-        &'a self,
-        texts: &'a [String],
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send + 'a>,
-    > {
-        Box::pin(async move {
-            let mut results = Vec::with_capacity(texts.len());
+    fn config(&self) -> &ModelConfig {
+        // For now, return a default config since our struct uses EmbeddingConfig
+        // This is a temporary implementation
+        static DEFAULT_CONFIG: std::sync::OnceLock<ModelConfig> = std::sync::OnceLock::new();
+        DEFAULT_CONFIG.get_or_init(|| ModelConfig::default())
+    }
+
+    fn model_id(&self) -> &Uuid {
+        static DEFAULT_ID: std::sync::OnceLock<Uuid> = std::sync::OnceLock::new();
+        DEFAULT_ID.get_or_init(|| Uuid::new_v4())
+    }
+
+    fn model_type(&self) -> &'static str {
+        "enhanced_embedding"
+    }
+
+    fn add_triple(&mut self, _triple: EmbedTriple) -> Result<()> {
+        // For text embedding models, we don't typically add triples
+        // This is a no-op for this implementation
+        Ok(())
+    }
+
+    async fn train(&mut self, _epochs: Option<usize>) -> Result<TrainingStats> {
+        // For pre-trained embedding models, return default stats
+        Ok(TrainingStats {
+            epochs_completed: 0,
+            final_loss: 0.0,
+            training_time_seconds: 0.0,
+            convergence_achieved: true,
+            loss_history: vec![],
+        })
+    }
+
+    fn get_entity_embedding(&self, _entity: &str) -> Result<Vector> {
+        // For text embeddings, we could encode the entity as text
+        // This is a simplified implementation
+        Err(anyhow!("Entity embeddings not supported in this model"))
+    }
+
+    fn get_relation_embedding(&self, _relation: &str) -> Result<Vector> {
+        // For text embeddings, we could encode the relation as text
+        // This is a simplified implementation
+        Err(anyhow!("Relation embeddings not supported in this model"))
+    }
+
+    fn score_triple(&self, _subject: &str, _predicate: &str, _object: &str) -> Result<f64> {
+        // For text embedding models, triple scoring is not typically supported
+        Err(anyhow!("Triple scoring not supported in this model"))
+    }
+
+    fn predict_objects(&self, _subject: &str, _predicate: &str, _k: usize) -> Result<Vec<(String, f64)>> {
+        // For text embedding models, prediction is not typically supported
+        Ok(vec![])
+    }
+
+    fn predict_subjects(&self, _predicate: &str, _object: &str, _k: usize) -> Result<Vec<(String, f64)>> {
+        // For text embedding models, prediction is not typically supported
+        Ok(vec![])
+    }
+
+    fn predict_relations(&self, _subject: &str, _object: &str, _k: usize) -> Result<Vec<(String, f64)>> {
+        // For text embedding models, prediction is not typically supported
+        Ok(vec![])
+    }
+
+    fn get_entities(&self) -> Vec<String> {
+        // For text embedding models, we don't track entities
+        vec![]
+    }
+
+    fn get_relations(&self) -> Vec<String> {
+        // For text embedding models, we don't track relations
+        vec![]
+    }
+
+    fn get_stats(&self) -> ModelStats {
+        ModelStats {
+            num_entities: 0,
+            num_relations: 0,
+            num_triples: 0,
+            dimensions: self.dimension,
+        }
+    }
+
+    fn save(&self, _path: &str) -> Result<()> {
+        // For now, saving is not implemented
+        Err(anyhow!("Saving not supported for this model type"))
+    }
+
+    fn load(&mut self, _path: &str) -> Result<()> {
+        // For now, loading is not implemented
+        Err(anyhow!("Loading not supported for this model type"))
+    }
+
+    fn clear(&mut self) {
+        // Clear the cache
+        if let Ok(mut cache) = self.cache.try_write() {
+            cache.clear();
+        }
+    }
+
+    fn is_trained(&self) -> bool {
+        // Pre-trained models are always considered trained
+        true
+    }
+
+    async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        let mut results = Vec::with_capacity(texts.len());
             let mut cache_misses = Vec::new();
             let mut cache_miss_indices = Vec::new();
 
@@ -336,7 +431,6 @@ impl EmbeddingModel for EnhancedEmbeddingModel {
                 .collect();
 
             Ok(final_results)
-        })
     }
 }
 
@@ -611,19 +705,100 @@ impl SimpleEmbeddingModel {
     }
 }
 
+#[async_trait]
 impl EmbeddingModel for SimpleEmbeddingModel {
-    fn encode<'a>(
-        &'a self,
-        texts: &'a [String],
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send + 'a>,
-    > {
+    fn config(&self) -> &ModelConfig {
+        static DEFAULT_CONFIG: std::sync::OnceLock<ModelConfig> = std::sync::OnceLock::new();
+        DEFAULT_CONFIG.get_or_init(|| ModelConfig::default())
+    }
+
+    fn model_id(&self) -> &Uuid {
+        static DEFAULT_ID: std::sync::OnceLock<Uuid> = std::sync::OnceLock::new();
+        DEFAULT_ID.get_or_init(|| Uuid::new_v4())
+    }
+
+    fn model_type(&self) -> &'static str {
+        "simple_embedding"
+    }
+
+    fn add_triple(&mut self, _triple: EmbedTriple) -> Result<()> {
+        Ok(())
+    }
+
+    async fn train(&mut self, _epochs: Option<usize>) -> Result<TrainingStats> {
+        Ok(TrainingStats {
+            epochs_completed: 0,
+            final_loss: 0.0,
+            training_time_seconds: 0.0,
+            convergence_achieved: true,
+            loss_history: vec![],
+        })
+    }
+
+    fn get_entity_embedding(&self, _entity: &str) -> Result<Vector> {
+        Err(anyhow!("Entity embeddings not supported in this model"))
+    }
+
+    fn get_relation_embedding(&self, _relation: &str) -> Result<Vector> {
+        Err(anyhow!("Relation embeddings not supported in this model"))
+    }
+
+    fn score_triple(&self, _subject: &str, _predicate: &str, _object: &str) -> Result<f64> {
+        Err(anyhow!("Triple scoring not supported in this model"))
+    }
+
+    fn predict_objects(&self, _subject: &str, _predicate: &str, _k: usize) -> Result<Vec<(String, f64)>> {
+        Ok(vec![])
+    }
+
+    fn predict_subjects(&self, _predicate: &str, _object: &str, _k: usize) -> Result<Vec<(String, f64)>> {
+        Ok(vec![])
+    }
+
+    fn predict_relations(&self, _subject: &str, _object: &str, _k: usize) -> Result<Vec<(String, f64)>> {
+        Ok(vec![])
+    }
+
+    fn get_entities(&self) -> Vec<String> {
+        vec![]
+    }
+
+    fn get_relations(&self) -> Vec<String> {
+        vec![]
+    }
+
+    fn get_stats(&self) -> ModelStats {
+        ModelStats {
+            num_entities: 0,
+            num_relations: 0,
+            num_triples: 0,
+            dimensions: self.dimension,
+        }
+    }
+
+    fn save(&self, _path: &str) -> Result<()> {
+        Err(anyhow!("Saving not supported for this model type"))
+    }
+
+    fn load(&mut self, _path: &str) -> Result<()> {
+        Err(anyhow!("Loading not supported for this model type"))
+    }
+
+    fn clear(&mut self) {
+        // Nothing to clear for this simple model
+    }
+
+    fn is_trained(&self) -> bool {
+        true
+    }
+
+    async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let embeddings: Vec<Vec<f32>> = texts
             .iter()
             .map(|text| self.text_to_embedding(text))
             .collect();
 
-        Box::pin(async move { Ok(embeddings) })
+        Ok(embeddings)
     }
 }
 
@@ -899,7 +1074,7 @@ pub struct StructuredContext {
 pub struct RAGSystem {
     config: RAGConfig,
     store: Arc<Store>,
-    vector_index: Option<Arc<VectorIndex>>,
+    vector_index: Option<Arc<dyn VectorIndex>>,
     embedding_model: Option<Box<dyn EmbeddingModel + Send + Sync>>,
     entity_extractor: EntityExtractor,
     context_assembler: ContextAssembler,
@@ -909,7 +1084,7 @@ impl RAGSystem {
     pub fn new(
         config: RAGConfig,
         store: Arc<Store>,
-        vector_index: Option<Arc<VectorIndex>>,
+        vector_index: Option<Arc<dyn VectorIndex>>,
         embedding_model: Option<Box<dyn EmbeddingModel + Send + Sync>>,
     ) -> Self {
         Self {
@@ -929,7 +1104,14 @@ impl RAGSystem {
         embedding_dimension: usize,
     ) -> Result<Self> {
         let embedding_model = Box::new(SimpleEmbeddingModel::new(embedding_dimension));
-        let mut vector_index = VectorIndex::new(embedding_dimension);
+        let mut vector_index = AdvancedVectorIndex::new(IndexConfig {
+            index_type: IndexType::Hnsw,
+            max_connections: 32,
+            ef_construction: 100,
+            ef_search: 100,
+            distance_metric: DistanceMetric::Cosine,
+            parallel: true,
+        })?;
 
         // Build vector index from RDF store
         Self::populate_vector_index(&mut vector_index, &*store, &*embedding_model).await?;
@@ -954,7 +1136,15 @@ impl RAGSystem {
     ) -> Result<Self> {
         let enhanced_model = EnhancedEmbeddingModel::new(embedding_config).await?;
         let dimension = enhanced_model.dimension;
-        let mut vector_index = VectorIndex::new(dimension);
+        let index_config = IndexConfig {
+            index_type: IndexType::Hnsw,
+            max_connections: 16,
+            ef_construction: 200,
+            ef_search: 100,
+            distance_metric: DistanceMetric::Cosine,
+            parallel: true,
+        };
+        let vector_index = AdvancedVectorIndex::new(index_config)?;
 
         // Build vector index from RDF store with enhanced embeddings
         Self::populate_vector_index(&mut vector_index, &*store, &enhanced_model).await?;
@@ -965,7 +1155,7 @@ impl RAGSystem {
             vector_index: Some(Arc::new(vector_index)),
             embedding_model: Some(Box::new(enhanced_model)),
             entity_extractor: EntityExtractor::new(),
-            context_assembler: ContextAssembler::new(config.context),
+            context_assembler: ContextAssembler::new(config.context.clone()),
         };
 
         Ok(rag_system)
@@ -973,7 +1163,7 @@ impl RAGSystem {
 
     /// Populate a vector index with embeddings from RDF triples
     async fn populate_vector_index(
-        vector_index: &mut VectorIndex,
+        vector_index: &mut dyn VectorIndex,
         store: &Store,
         embedding_model: &dyn EmbeddingModel,
     ) -> Result<usize> {
@@ -1009,7 +1199,7 @@ impl RAGSystem {
                         let id = format!("triple_{}_{}", batch_idx, i);
                         let metadata = Self::create_triple_metadata(triple);
 
-                        if let Err(e) = vector_index.add(id, embedding, triple.clone(), metadata) {
+                        if let Err(e) = vector_index.insert(id, embedding) {
                             warn!("Failed to add triple to vector index: {}", e);
                         } else {
                             indexed_count += 1;
@@ -1168,7 +1358,7 @@ impl RAGSystem {
     async fn semantic_search(
         &self,
         query: &str,
-        vector_index: &VectorIndex,
+        vector_index: &dyn VectorIndex,
     ) -> Result<Vec<RagSearchResult>> {
         if let Some(ref embedding_model) = self.embedding_model {
             let query_embedding = embedding_model.encode(&[query.to_string()]).await?;
@@ -1192,7 +1382,7 @@ impl RAGSystem {
     async fn hybrid_search(
         &self,
         query: &str,
-        vector_index: &VectorIndex,
+        vector_index: &dyn VectorIndex,
     ) -> Result<Vec<RagSearchResult>> {
         // Semantic search
         let semantic_results = self.semantic_search(query, vector_index).await?;
@@ -1208,7 +1398,7 @@ impl RAGSystem {
     }
 
     /// BM25-inspired keyword search
-    async fn keyword_search(&self, query: &str) -> Result<Vec<SearchResult>> {
+    async fn keyword_search(&self, query: &str) -> Result<Vec<VectorSearchResult>> {
         let mut results = Vec::new();
         let query_lower = query.to_lowercase();
         let query_terms: Vec<&str> = query_lower
@@ -1333,7 +1523,7 @@ impl RAGSystem {
     }
 
     /// Enhanced graph traversal with multiple strategies
-    async fn graph_traversal(&self, entities: &[ExtractedEntity]) -> Result<Vec<SearchResult>> {
+    async fn graph_traversal(&self, entities: &[ExtractedEntity]) -> Result<Vec<VectorSearchResult>> {
         let mut results = Vec::new();
         let mut visited_entities = HashSet::new();
 
@@ -1519,7 +1709,7 @@ impl RAGSystem {
             }
         }
 
-        let mut final_results: Vec<SearchResult> = unique_results.into_values().collect();
+        let mut final_results: Vec<VectorSearchResult> = unique_results.into_values().collect();
 
         // Apply graph-specific ranking factors
         for result in &mut final_results {
@@ -1702,7 +1892,7 @@ impl RAGSystem {
             }
         }
 
-        let mut final_results: Vec<SearchResult> = unique_results.into_values().collect();
+        let mut final_results: Vec<VectorSearchResult> = unique_results.into_values().collect();
 
         // Sort by relevance score
         final_results.sort_by(|a, b| {

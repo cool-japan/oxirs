@@ -791,3 +791,403 @@ mod tests {
         assert_eq!(removed, 0);
     }
 }
+
+/// Thread-safe concurrent graph for multi-threaded access
+///
+/// This struct wraps the Graph in an Arc<RwLock<_>> to provide safe concurrent
+/// access across multiple threads. It implements reader-writer semantics where
+/// multiple readers can access the graph simultaneously, but only one writer
+/// can modify it at a time.
+#[derive(Debug, Clone)]
+pub struct ConcurrentGraph {
+    inner: Arc<parking_lot::RwLock<Graph>>,
+}
+
+impl ConcurrentGraph {
+    /// Create a new empty concurrent graph
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(parking_lot::RwLock::new(Graph::new())),
+        }
+    }
+
+    /// Create a concurrent graph from an existing graph
+    pub fn from_graph(graph: Graph) -> Self {
+        Self {
+            inner: Arc::new(parking_lot::RwLock::new(graph)),
+        }
+    }
+
+    /// Add a triple to the graph (thread-safe)
+    pub fn add_triple(&self, triple: Triple) -> bool {
+        self.inner.write().add_triple(triple)
+    }
+
+    /// Add multiple triples atomically
+    pub fn add_triples(&self, triples: Vec<Triple>) -> usize {
+        let mut graph = self.inner.write();
+        let mut added = 0;
+        for triple in triples {
+            if graph.add_triple(triple) {
+                added += 1;
+            }
+        }
+        added
+    }
+
+    /// Remove a triple from the graph (thread-safe)
+    pub fn remove_triple(&self, triple: &Triple) -> bool {
+        self.inner.write().remove_triple(triple)
+    }
+
+    /// Check if a triple exists in the graph (thread-safe read)
+    pub fn contains_triple(&self, triple: &Triple) -> bool {
+        self.inner.read().contains_triple(triple)
+    }
+
+    /// Query triples matching the given pattern (thread-safe read)
+    pub fn query_triples(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+    ) -> Vec<Triple> {
+        self.inner.read().query_triples(subject, predicate, object)
+    }
+
+    /// Get the number of triples (thread-safe read)
+    pub fn len(&self) -> usize {
+        self.inner.read().len()
+    }
+
+    /// Check if the graph is empty (thread-safe read)
+    pub fn is_empty(&self) -> bool {
+        self.inner.read().is_empty()
+    }
+
+    /// Get all triples as a vector (thread-safe read)
+    pub fn triples(&self) -> Vec<Triple> {
+        self.inner.read().triples()
+    }
+
+    /// Merge another graph into this one (thread-safe)
+    pub fn merge(&self, other: &Graph) {
+        self.inner.write().merge(other)
+    }
+
+    /// Merge another concurrent graph into this one (thread-safe)
+    pub fn merge_concurrent(&self, other: &ConcurrentGraph) {
+        let other_triples = other.triples();
+        let mut graph = self.inner.write();
+        for triple in other_triples {
+            graph.add_triple(triple);
+        }
+    }
+
+    /// Create a union with another graph (thread-safe read)
+    pub fn union(&self, other: &Graph) -> Graph {
+        self.inner.read().union(other)
+    }
+
+    /// Create an intersection with another graph (thread-safe read)
+    pub fn intersection(&self, other: &Graph) -> Graph {
+        self.inner.read().intersection(other)
+    }
+
+    /// Clear all triples from the graph (thread-safe)
+    pub fn clear(&self) {
+        self.inner.write().clear()
+    }
+
+    /// Execute a read operation with access to the underlying graph
+    pub fn with_read<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&Graph) -> R,
+    {
+        let graph = self.inner.read();
+        f(&*graph)
+    }
+
+    /// Execute a write operation with access to the underlying graph
+    pub fn with_write<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut Graph) -> R,
+    {
+        let mut graph = self.inner.write();
+        f(&mut *graph)
+    }
+
+    /// Parallel batch insert (thread-safe)
+    #[cfg(feature = "parallel")]
+    pub fn par_insert_batch(&self, triples: Vec<Triple>) -> Result<usize> {
+        self.inner.write().par_insert_batch(triples)
+    }
+
+    /// Parallel batch remove (thread-safe)
+    #[cfg(feature = "parallel")]
+    pub fn par_remove_batch(&self, triples: Vec<Triple>) -> Result<usize> {
+        self.inner.write().par_remove_batch(triples)
+    }
+
+    /// Parallel batch query (thread-safe read)
+    #[cfg(feature = "parallel")]
+    pub fn par_query_batch(
+        &self,
+        queries: Vec<(Option<Subject>, Option<Predicate>, Option<Object>)>,
+    ) -> Result<Vec<Vec<Triple>>> {
+        self.inner.read().par_query_batch(queries)
+    }
+
+    /// Get subjects concurrently
+    pub fn subjects(&self) -> BTreeSet<Subject> {
+        self.inner.read().subjects()
+    }
+
+    /// Get predicates concurrently
+    pub fn predicates(&self) -> BTreeSet<Predicate> {
+        self.inner.read().predicates()
+    }
+
+    /// Get objects concurrently
+    pub fn objects(&self) -> BTreeSet<Object> {
+        self.inner.read().objects()
+    }
+}
+
+impl Default for ConcurrentGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Thread pool for concurrent graph operations
+pub struct GraphThreadPool {
+    pool: rayon::ThreadPool,
+    max_batch_size: usize,
+}
+
+impl GraphThreadPool {
+    /// Create a new graph thread pool
+    pub fn new() -> Result<Self> {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_cpus::get())
+            .thread_name(|index| format!("oxirs-graph-{}", index))
+            .build()
+            .map_err(|e| crate::OxirsError::ConcurrencyError(e.to_string()))?;
+
+        Ok(Self {
+            pool,
+            max_batch_size: 10_000,
+        })
+    }
+
+    /// Create a thread pool with custom configuration
+    pub fn with_config(num_threads: usize, max_batch_size: usize) -> Result<Self> {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .thread_name(|index| format!("oxirs-graph-{}", index))
+            .build()
+            .map_err(|e| crate::OxirsError::ConcurrencyError(e.to_string()))?;
+
+        Ok(Self { pool, max_batch_size })
+    }
+
+    /// Process triples concurrently
+    pub fn process_triples<F, R>(&self, triples: Vec<Triple>, processor: F) -> Vec<R>
+    where
+        F: Fn(Triple) -> R + Sync + Send,
+        R: Send,
+    {
+        self.pool.install(|| {
+            triples.into_par_iter().map(processor).collect()
+        })
+    }
+
+    /// Process graph operations concurrently
+    pub fn process_graphs<F, R>(&self, graphs: Vec<Graph>, processor: F) -> Vec<R>
+    where
+        F: Fn(Graph) -> R + Sync + Send,
+        R: Send,
+    {
+        self.pool.install(|| {
+            graphs.into_par_iter().map(processor).collect()
+        })
+    }
+
+    /// Parallel merge multiple graphs
+    pub fn merge_graphs(&self, graphs: Vec<Graph>) -> Graph {
+        if graphs.is_empty() {
+            return Graph::new();
+        }
+
+        self.pool.install(|| {
+            graphs
+                .into_par_iter()
+                .reduce(Graph::new, |mut acc, graph| {
+                    acc.merge(&graph);
+                    acc
+                })
+        })
+    }
+
+    /// Get the underlying thread pool
+    pub fn inner(&self) -> &rayon::ThreadPool {
+        &self.pool
+    }
+}
+
+impl Default for GraphThreadPool {
+    fn default() -> Self {
+        Self::new().expect("Failed to create default thread pool")
+    }
+}
+
+#[cfg(test)]
+mod concurrent_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn test_concurrent_graph_basic_operations() {
+        let graph = ConcurrentGraph::new();
+        
+        let triple = Triple::new(
+            NamedNode::new("http://example.org/s").unwrap(),
+            NamedNode::new("http://example.org/p").unwrap(),
+            Literal::new("test"),
+        );
+
+        // Test basic operations
+        assert!(graph.add_triple(triple.clone()));
+        assert!(graph.contains_triple(&triple));
+        assert_eq!(graph.len(), 1);
+        assert!(!graph.is_empty());
+        
+        // Test removal
+        assert!(graph.remove_triple(&triple));
+        assert!(!graph.contains_triple(&triple));
+        assert_eq!(graph.len(), 0);
+        assert!(graph.is_empty());
+    }
+
+    #[test]
+    fn test_concurrent_access() {
+        let graph = ConcurrentGraph::new();
+        
+        let counter = Arc::new(AtomicUsize::new(0));
+
+        // Spawn multiple reader threads
+        let mut handles = vec![];
+        
+        for i in 0..10 {
+            let g = graph.clone();
+            let c = counter.clone();
+            
+            handles.push(thread::spawn(move || {
+                for j in 0..100 {
+                    let triple = Triple::new(
+                        NamedNode::new(&format!("http://example.org/s{}", i * 100 + j)).unwrap(),
+                        NamedNode::new("http://example.org/p").unwrap(),
+                        Literal::new(&format!("value{}", j)),
+                    );
+                    
+                    if g.add_triple(triple) {
+                        c.fetch_add(1, Ordering::Relaxed);
+                    }
+                    
+                    // Small delay to encourage interleaving
+                    thread::sleep(Duration::from_nanos(1));
+                }
+            }));
+        }
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Verify results
+        assert_eq!(counter.load(Ordering::Relaxed), 1000);
+        assert_eq!(graph.len(), 1000);
+    }
+
+    #[test]
+    fn test_concurrent_graph_merge() {
+        let graph1 = ConcurrentGraph::new();
+        let graph2 = ConcurrentGraph::new();
+
+        // Add different triples to each graph
+        for i in 0..100 {
+            let triple1 = Triple::new(
+                NamedNode::new(&format!("http://example.org/s1_{}", i)).unwrap(),
+                NamedNode::new("http://example.org/p").unwrap(),
+                Literal::new(&format!("value{}", i)),
+            );
+            graph1.add_triple(triple1);
+
+            let triple2 = Triple::new(
+                NamedNode::new(&format!("http://example.org/s2_{}", i)).unwrap(),
+                NamedNode::new("http://example.org/p").unwrap(),
+                Literal::new(&format!("value{}", i)),
+            );
+            graph2.add_triple(triple2);
+        }
+
+        // Merge graphs
+        graph1.merge_concurrent(&graph2);
+        
+        assert_eq!(graph1.len(), 200);
+        assert_eq!(graph2.len(), 100);
+    }
+
+    #[test]
+    fn test_graph_thread_pool() {
+        let pool = GraphThreadPool::new().unwrap();
+        
+        // Create test triples
+        let triples: Vec<Triple> = (0..1000)
+            .map(|i| {
+                Triple::new(
+                    NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
+                    NamedNode::new("http://example.org/p").unwrap(),
+                    Literal::new(&format!("value{}", i)),
+                )
+            })
+            .collect();
+
+        // Process triples concurrently
+        let results = pool.process_triples(triples.clone(), |triple| {
+            // Simulate some processing
+            triple.to_string().len()
+        });
+
+        assert_eq!(results.len(), 1000);
+        assert!(results.iter().all(|&len| len > 0));
+    }
+
+    #[test]
+    fn test_concurrent_with_operations() {
+        let graph = ConcurrentGraph::new();
+
+        // Test with_read
+        let initial_len = graph.with_read(|g| g.len());
+        assert_eq!(initial_len, 0);
+
+        // Test with_write
+        graph.with_write(|g| {
+            for i in 0..10 {
+                let triple = Triple::new(
+                    NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
+                    NamedNode::new("http://example.org/p").unwrap(),
+                    Literal::new(&format!("value{}", i)),
+                );
+                g.add_triple(triple);
+            }
+        });
+
+        let final_len = graph.with_read(|g| g.len());
+        assert_eq!(final_len, 10);
+    }
+}

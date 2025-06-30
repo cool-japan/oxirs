@@ -45,6 +45,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, instrument, warn};
 
+// SPARQL query parsing
+use oxirs_arq::query::parse_query;
+
 /// SPARQL query parameters for GET requests
 #[derive(Debug, Deserialize)]
 pub struct SparqlQueryParams {
@@ -79,7 +82,7 @@ pub struct SparqlQueryRequest {
 }
 
 /// SPARQL query execution result
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct QueryResult {
     pub query_type: String,
     pub execution_time_ms: u64,
@@ -924,11 +927,33 @@ impl ServiceDelegator {
     }
 
     pub async fn execute_federated_query(&self, query: &str) -> FusekiResult<QueryResult> {
+        // Parse query string
+        let parsed_query = parse_query(query)
+            .map_err(|e| crate::error::FusekiError::QueryParsing(e.to_string()))?;
+        
         // Plan federated execution
-        let plan = self.federation_planner.create_execution_plan(query).await?;
+        let plan = self.federation_planner.plan_federated_query(&parsed_query).await?;
 
         // Execute in parallel
-        let results = self.parallel_executor.execute_plan(&plan).await?;
+        let planner_results = self.federation_planner.execute_plan(&plan).await?;
+
+        // Convert planner results to sparql results
+        let results: Vec<QueryResult> = planner_results
+            .into_iter()
+            .map(|pr| QueryResult {
+                query_type: "SELECT".to_string(), // Default to SELECT
+                execution_time_ms: pr.execution_time.as_millis() as u64,
+                result_count: Some(pr.bindings.len()),
+                bindings: Some(pr.bindings.into_iter().map(|binding| {
+                    let mut map = HashMap::new();
+                    map.insert(binding.variable, serde_json::Value::String(binding.value));
+                    map
+                }).collect()),
+                boolean: None,
+                construct_graph: None,
+                describe_graph: None,
+            })
+            .collect();
 
         // Merge results
         let merged = self.result_merger.merge_results(results).await?;
@@ -1686,7 +1711,7 @@ async fn execute_federated_query(
     debug!("Processing federated query with advanced optimization");
 
     // Create federated query optimizer
-    let metrics = Arc::new(MetricsService::new());
+    let metrics = Arc::new(MetricsService::new(crate::config::MonitoringConfig::default())?);
     let optimizer = FederatedQueryOptimizer::new(metrics.clone());
 
     // Set timeout based on query complexity

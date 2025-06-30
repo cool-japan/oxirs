@@ -7,6 +7,7 @@ pub mod graph;
 pub mod ldap;
 pub mod mfa;
 pub mod oauth2;
+#[cfg(feature = "saml")]
 pub mod saml;
 pub mod sparql;
 pub mod websocket;
@@ -26,6 +27,7 @@ pub use oauth2::{
     get_oauth2_config, get_oauth2_user_info, handle_oauth2_callback, initiate_oauth2_flow,
     oauth2_discovery, refresh_oauth2_token, validate_oauth2_token,
 };
+#[cfg(feature = "saml")]
 pub use saml::{
     get_saml_metadata, handle_saml_acs, handle_saml_slo, initiate_saml_logout, initiate_saml_sso,
 };

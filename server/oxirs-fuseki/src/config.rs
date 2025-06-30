@@ -1,5 +1,7 @@
 //! Advanced server configuration management with validation and hot-reload
 
+#[cfg(feature = "saml")]
+use crate::auth::saml::SamlConfig;
 use crate::error::{FusekiError, FusekiResult};
 use figment::{
     providers::{Env, Format, Toml, Yaml},
@@ -146,7 +148,6 @@ pub struct AccessControlConfig {
 pub struct BackupConfig {
     pub enabled: bool,
 
-    #[validate(length(min = 1))]
     pub directory: PathBuf,
 
     #[validate(range(min = 1))]
@@ -201,6 +202,12 @@ pub struct SecurityConfig {
 
     #[validate(nested)]
     pub api_keys: Option<ApiKeyConfig>,
+
+    #[validate(nested)]
+    pub certificate: Option<CertificateConfig>,
+
+    #[validate(nested)]
+    pub saml: Option<SamlConfig>,
 }
 
 /// Authentication configuration
@@ -273,6 +280,174 @@ pub enum ApiKeyStorageBackend {
     Sqlite,
     Postgres,
     Redis,
+}
+
+/// Certificate authentication configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CertificateConfig {
+    /// Enable certificate authentication
+    pub enabled: bool,
+
+    /// Require client certificates for all connections
+    pub require_client_cert: bool,
+
+    /// Trust store configuration - paths to trusted CA certificates
+    pub trust_store: Vec<PathBuf>,
+
+    /// Certificate Revocation List (CRL) URLs or file paths
+    pub crl_sources: Vec<String>,
+
+    /// Enable CRL checking
+    pub check_crl: bool,
+
+    /// Enable OCSP checking
+    pub check_ocsp: bool,
+
+    /// Allow self-signed certificates (for development only)
+    pub allow_self_signed: bool,
+
+    /// Certificate to user mapping rules
+    pub user_mapping: CertificateUserMapping,
+
+    /// Maximum certificate chain length
+    #[validate(range(min = 1, max = 10))]
+    pub max_chain_length: u8,
+
+    /// Certificate validation strictness
+    pub validation_level: CertificateValidationLevel,
+}
+
+/// Certificate user mapping configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CertificateUserMapping {
+    /// How to extract username from certificate
+    pub username_source: CertificateUsernameSource,
+
+    /// Subject DN to username mapping rules
+    pub dn_mapping_rules: Vec<DnMappingRule>,
+
+    /// Default roles for certificate users
+    pub default_roles: Vec<String>,
+
+    /// OU to role mapping
+    pub ou_role_mapping: HashMap<String, Vec<String>>,
+}
+
+/// Source for extracting username from certificate
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CertificateUsernameSource {
+    /// Use Common Name (CN) from subject DN
+    CommonName,
+    /// Use entire subject DN
+    SubjectDn,
+    /// Use email from Subject Alternative Name
+    EmailSan,
+    /// Use custom regex pattern
+    CustomPattern(String),
+}
+
+/// Subject DN to username mapping rule
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct DnMappingRule {
+    /// Regex pattern to match against subject DN
+    #[validate(length(min = 1))]
+    pub pattern: String,
+
+    /// Replacement string (supports capture groups)
+    #[validate(length(min = 1))]
+    pub replacement: String,
+
+    /// Roles to assign to users matching this pattern
+    pub roles: Vec<String>,
+}
+
+/// Certificate validation strictness levels
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CertificateValidationLevel {
+    /// Strict validation - all checks must pass
+    Strict,
+    /// Moderate validation - allow some minor issues
+    Moderate,
+    /// Permissive validation - for development/testing
+    Permissive,
+}
+
+/// SAML authentication configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SamlConfig {
+    /// Enable SAML authentication
+    pub enabled: bool,
+
+    /// Service Provider (SP) entity ID
+    #[validate(length(min = 1))]
+    pub sp_entity_id: String,
+
+    /// SP X.509 certificate for signing
+    pub sp_cert_path: Option<PathBuf>,
+
+    /// SP private key for signing
+    pub sp_key_path: Option<PathBuf>,
+
+    /// Identity Provider (IdP) configuration
+    pub idp: SamlIdpConfig,
+
+    /// Assertion consumer service URL
+    #[validate(length(min = 1))]
+    pub acs_url: String,
+
+    /// Single logout service URL
+    pub slo_url: Option<String>,
+
+    /// SAML attribute mappings
+    pub attribute_mappings: SamlAttributeMappings,
+
+    /// Session timeout in seconds
+    #[validate(range(min = 300, max = 86400))]
+    pub session_timeout_secs: u64,
+}
+
+/// SAML Identity Provider configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SamlIdpConfig {
+    /// IdP entity ID
+    #[validate(length(min = 1))]
+    pub entity_id: String,
+
+    /// IdP SSO URL
+    #[validate(length(min = 1))]
+    pub sso_url: String,
+
+    /// IdP SLO URL
+    pub slo_url: Option<String>,
+
+    /// IdP X.509 certificate for verification
+    #[validate(custom(function = "validate_path"))]
+    pub cert_path: PathBuf,
+
+    /// IdP metadata URL (alternative to manual configuration)
+    pub metadata_url: Option<String>,
+}
+
+/// SAML attribute mapping configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SamlAttributeMappings {
+    /// SAML attribute name for username
+    #[validate(length(min = 1))]
+    pub username_attribute: String,
+
+    /// SAML attribute name for email
+    pub email_attribute: Option<String>,
+
+    /// SAML attribute name for full name
+    pub name_attribute: Option<String>,
+
+    /// SAML attribute name for groups/roles
+    pub groups_attribute: Option<String>,
+
+    /// Group to role mapping
+    pub group_role_mapping: HashMap<String, Vec<String>>,
 }
 
 /// JWT configuration
@@ -567,7 +742,6 @@ pub enum LogOutput {
 /// File logging configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct FileLogConfig {
-    #[validate(length(min = 1))]
     pub path: PathBuf,
 
     #[validate(range(min = 1))]
@@ -623,6 +797,8 @@ impl Default for ServerConfig {
                 },
                 authentication: AuthenticationConfig { enabled: false },
                 api_keys: None,
+                certificate: None,
+                saml: None,
             },
             monitoring: MonitoringConfig {
                 metrics: MetricsConfig {
@@ -878,6 +1054,51 @@ impl ServerConfig {
             Ok(())
         } else {
             Err(errors)
+        }
+    }
+}
+
+impl Default for MonitoringConfig {
+    fn default() -> Self {
+        Self {
+            metrics: MetricsConfig::default(),
+            health_checks: HealthCheckConfig::default(),
+            tracing: TracingConfig::default(),
+        }
+    }
+}
+
+impl Default for MetricsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: "/metrics".to_string(),
+            port: None,
+            namespace: "oxirs".to_string(),
+            collect_system_metrics: true,
+            histogram_buckets: vec![0.001, 0.01, 0.1, 1.0, 10.0],
+        }
+    }
+}
+
+impl Default for HealthCheckConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            interval_secs: 30,
+            timeout_secs: 5,
+            checks: vec!["database".to_string(), "memory".to_string()],
+        }
+    }
+}
+
+impl Default for TracingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: None,
+            service_name: "oxirs-fuseki".to_string(),
+            sample_rate: 1.0,
         }
     }
 }

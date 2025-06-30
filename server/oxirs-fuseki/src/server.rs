@@ -320,6 +320,7 @@ impl Runtime {
         }
 
         // SAML 2.0 authentication routes (if SAML is configured)
+        #[cfg(feature = "saml")]
         if self.config.security.saml.is_some() {
             app = app
                 .route("/auth/saml/login", get(handlers::saml::initiate_saml_sso))

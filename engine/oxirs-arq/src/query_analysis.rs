@@ -409,12 +409,12 @@ impl QueryAnalyzer {
         &self,
         algebra: &Algebra,
     ) -> Result<FilterSafetyAnalysis> {
-        let safety_map = self.analyze_filter_safety(algebra)?;
+        let safety_vec = self.analyze_filter_safety(algebra)?;
         let mut safe_filters = Vec::new();
         let mut unsafe_filters = Vec::new();
         let mut filter_dependencies = Vec::new();
 
-        for (expr, safety) in safety_map {
+        for (expr, safety) in safety_vec {
             match safety {
                 FilterSafety::Safe => safe_filters.push(expr.clone()),
                 _ => unsafe_filters.push(expr.clone()),
@@ -523,10 +523,10 @@ impl QueryAnalyzer {
                 self.collect_variables_from_expression(left, variables)?;
                 self.collect_variables_from_expression(right, variables)?;
             }
-            Expression::Unary { operand, .. } => {
-                self.collect_variables_from_expression(operand, variables)?;
+            Expression::Unary { expr, .. } => {
+                self.collect_variables_from_expression(expr, variables)?;
             }
-            Expression::FunctionCall { args, .. } => {
+            Expression::Function { args, .. } => {
                 for arg in args {
                     self.collect_variables_from_expression(arg, variables)?;
                 }
@@ -749,31 +749,31 @@ impl QueryAnalyzer {
     pub fn analyze_filter_safety(
         &self,
         algebra: &Algebra,
-    ) -> Result<HashMap<Expression, FilterSafety>> {
-        let mut safety_map = HashMap::new();
-        self.analyze_filter_safety_recursive(algebra, &mut safety_map)?;
-        Ok(safety_map)
+    ) -> Result<Vec<(Expression, FilterSafety)>> {
+        let mut safety_vec = Vec::new();
+        self.analyze_filter_safety_recursive(algebra, &mut safety_vec)?;
+        Ok(safety_vec)
     }
 
     /// Recursively analyze filter safety
     fn analyze_filter_safety_recursive(
         &self,
         algebra: &Algebra,
-        safety_map: &mut HashMap<Expression, FilterSafety>,
+        safety_vec: &mut Vec<(Expression, FilterSafety)>,
     ) -> Result<()> {
         match algebra {
             Algebra::Filter { pattern, condition } => {
                 let safety = self.determine_filter_safety(condition, pattern)?;
-                safety_map.insert(condition.clone(), safety);
-                self.analyze_filter_safety_recursive(pattern, safety_map)?;
+                safety_vec.push((condition.clone(), safety));
+                self.analyze_filter_safety_recursive(pattern, safety_vec)?;
             }
             Algebra::Join { left, right } => {
-                self.analyze_filter_safety_recursive(left, safety_map)?;
-                self.analyze_filter_safety_recursive(right, safety_map)?;
+                self.analyze_filter_safety_recursive(left, safety_vec)?;
+                self.analyze_filter_safety_recursive(right, safety_vec)?;
             }
             Algebra::Union { left, right } => {
-                self.analyze_filter_safety_recursive(left, safety_map)?;
-                self.analyze_filter_safety_recursive(right, safety_map)?;
+                self.analyze_filter_safety_recursive(left, safety_vec)?;
+                self.analyze_filter_safety_recursive(right, safety_vec)?;
             }
             _ => {} // Other types handled as needed
         }
@@ -809,7 +809,7 @@ impl QueryAnalyzer {
     /// Check if expression contains aggregate function
     fn contains_aggregate_function(&self, expr: &Expression) -> bool {
         match expr {
-            Expression::FunctionCall { name, .. } => {
+            Expression::Function { name, .. } => {
                 // Check if function name is an aggregate function
                 matches!(
                     name.as_str(),
@@ -819,7 +819,7 @@ impl QueryAnalyzer {
             Expression::Binary { left, right, .. } => {
                 self.contains_aggregate_function(left) || self.contains_aggregate_function(right)
             }
-            Expression::Unary { operand, .. } => self.contains_aggregate_function(operand),
+            Expression::Unary { expr, .. } => self.contains_aggregate_function(expr),
             _ => false,
         }
     }
@@ -958,7 +958,7 @@ impl QueryAnalyzer {
                 pattern_position: 0,
                 pattern_index: pattern_idx,
                 selectivity: 0.1, // Estimated
-                cost_estimate: CostEstimate::new(100.0, 10.0, 50.0),
+                cost_estimate: CostEstimate::new(100.0, 10.0, 50.0, 0.0, 1000),
                 io_pattern: IOPattern::Sequential,
                 improvement_ratio: 10.0,
             });
@@ -971,7 +971,7 @@ impl QueryAnalyzer {
                 pattern_position: 1,
                 pattern_index: pattern_idx,
                 selectivity: 0.05, // Predicates usually more selective
-                cost_estimate: CostEstimate::new(50.0, 5.0, 25.0),
+                cost_estimate: CostEstimate::new(50.0, 5.0, 25.0, 0.0, 500),
                 io_pattern: IOPattern::Random,
                 improvement_ratio: 20.0,
             });
@@ -981,8 +981,8 @@ impl QueryAnalyzer {
             .iter()
             .min_by(|a, b| {
                 a.cost_estimate
-                    .total_cost()
-                    .partial_cmp(&b.cost_estimate.total_cost())
+                    .total_cost
+                    .partial_cmp(&b.cost_estimate.total_cost)
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .cloned();
@@ -1005,7 +1005,7 @@ impl QueryAnalyzer {
             let order: Vec<usize> = (0..patterns.len()).collect();
             hints.push(JoinOrderHint {
                 pattern_order: order,
-                estimated_cost: CostEstimate::new(1000.0, 100.0, 500.0),
+                estimated_cost: CostEstimate::new(1000.0, 100.0, 500.0, 0.0, 1000),
                 reasoning: "Default left-deep join order".to_string(),
             });
         }
@@ -1244,7 +1244,7 @@ mod tests {
 
         // Check that index optimization hints were generated
         assert!(!analysis
-            .index_optimization
+            .index_hints
             .pattern_recommendations
             .is_empty());
 
@@ -1253,11 +1253,11 @@ mod tests {
 
         // Check that a pattern analysis was generated for pattern 0
         assert!(analysis
-            .index_optimization
+            .index_hints
             .pattern_recommendations
             .contains_key(&0));
 
-        let pattern_analysis = &analysis.index_optimization.pattern_recommendations[&0];
+        let pattern_analysis = &analysis.index_hints.pattern_recommendations[&0];
 
         // Should have some available indexes since we added one for this predicate
         assert!(!pattern_analysis.available_indexes.is_empty());
@@ -1267,11 +1267,11 @@ mod tests {
 
         // Check that execution strategy was determined
         matches!(
-            analysis.index_optimization.execution_strategy,
-            ExecutionStrategy::IndexNestedLoop
+            analysis.index_hints.execution_strategy,
+            ExecutionStrategy::IndexDriven
                 | ExecutionStrategy::HashJoin
                 | ExecutionStrategy::SortMergeJoin
-                | ExecutionStrategy::Hybrid
+                | ExecutionStrategy::Adaptive
                 | ExecutionStrategy::Parallel
         );
     }
@@ -1303,10 +1303,10 @@ mod tests {
         let analysis = analyzer.analyze(&algebra).unwrap();
 
         // Should have join order hints
-        assert!(!analysis.index_optimization.join_order_hints.is_empty());
+        assert!(!analysis.index_hints.join_order_hints.is_empty());
 
         // Should have estimated costs
-        let hint = &analysis.index_optimization.join_order_hints[0];
+        let hint = &analysis.index_hints.join_order_hints[0];
         assert!(hint.estimated_cost.total_cost > 0.0);
     }
 

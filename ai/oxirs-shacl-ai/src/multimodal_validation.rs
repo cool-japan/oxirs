@@ -17,7 +17,7 @@ use url::Url;
 use uuid::Uuid;
 
 use oxirs_core::{
-    model::{BlankNode, Literal, NamedNode, Term, Triple},
+    model::{BlankNode, Literal, NamedNode, Object, Term, Triple},
     Store,
 };
 use oxirs_shacl::{
@@ -206,7 +206,7 @@ impl MultiModalValidator {
         Ok(MultiModalValidationReport {
             conforms: violations.is_empty(),
             violations,
-            content_analyses,
+            content_analyses: content_analyses.clone(),
             semantic_insights,
             quality_metrics,
             validation_time: SystemTime::now(),
@@ -513,7 +513,7 @@ impl MultiModalValidator {
 
     async fn load_from_url(
         &self,
-        url: &Url,
+        url: &str,
         content_type: &ContentType,
     ) -> Result<MultiModalContent> {
         // Implementation would fetch content from URL
@@ -562,8 +562,8 @@ impl MultiModalValidator {
         content_type: &ContentType,
     ) -> Result<MultiModalContent> {
         // Extract content from RDF triple
-        let data = match &triple.object {
-            Term::Literal(literal) => literal.value().as_bytes().to_vec(),
+        let data = match triple.object() {
+            Object::Literal(literal) => literal.value().as_bytes().to_vec(),
             _ => Vec::new(),
         };
 
@@ -764,7 +764,7 @@ impl Default for MultiModalConfig {
     fn default() -> Self {
         Self {
             enable_caching: true,
-            cache_ttl: Duration::from_hours(1),
+            cache_ttl: Duration::from_secs(3600), // 1 hour
             max_content_size: 100 * 1024 * 1024, // 100MB
             parallel_processing: true,
             quality_threshold: 0.7,
@@ -784,7 +784,7 @@ pub struct MultiModalContentRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ContentSource {
-    Url(Url),
+    Url(String),
     FilePath(std::path::PathBuf),
     Base64Data(String),
     EmbeddedTriple(Triple),

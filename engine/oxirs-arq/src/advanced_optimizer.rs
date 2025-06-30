@@ -2579,7 +2579,10 @@ impl MLPredictor {
         for _ in 0..epochs {
             let mut total_loss = 0.0;
             
-            for example in &self.training_data {
+            // Collect training data to avoid borrow checker issues
+            let training_examples: Vec<_> = self.training_data.clone();
+            
+            for example in training_examples.iter() {
                 let prediction = self.forward_pass(&example.features, hidden_size)?;
                 let error = prediction - example.actual_cost;
                 total_loss += error * error;
@@ -2589,7 +2592,7 @@ impl MLPredictor {
             }
             
             // Early stopping if loss is small
-            if total_loss / self.training_data.len() as f64 < 0.01 {
+            if total_loss / (training_examples.len() as f64) < 0.01 {
                 break;
             }
         }
@@ -2744,9 +2747,9 @@ impl MLPredictor {
         }
         
         let n = self.training_data.len() as f64;
-        self.model.accuracy_metrics.mse = total_error / n;
-        self.model.accuracy_metrics.mae = total_absolute_error / n;
-        self.model.accuracy_metrics.accuracy = correct_predictions as f64 / n;
+        self.model.accuracy_metrics.root_mean_square_error = (total_error / n).sqrt();
+        self.model.accuracy_metrics.mean_absolute_error = total_absolute_error / n;
+        self.model.accuracy_metrics.prediction_confidence = correct_predictions as f64 / n;
         
         Ok(())
     }

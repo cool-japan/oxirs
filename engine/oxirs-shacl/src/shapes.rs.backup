@@ -2947,6 +2947,9 @@ impl ShapeValidator {
             Target::Sparql(sparql_target) => {
                 self.validate_sparql_target(sparql_target, report);
             }
+            Target::Implicit(_node) => {
+                // Implicit targets are valid by definition - no additional validation needed
+            }
         }
     }
 

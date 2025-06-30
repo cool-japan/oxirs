@@ -598,6 +598,7 @@ impl DiagnosticAnalyzer {
                 StreamEvent::ShapeValidationStarted { .. } => "shape_validation_started",
                 StreamEvent::ShapeValidationCompleted { .. } => "shape_validation_completed",
                 StreamEvent::ShapeViolationDetected { .. } => "shape_violation_detected",
+                StreamEvent::ErrorOccurred { .. } => "error_occurred",
             };
             *event_types.entry(event_type.to_string()).or_insert(0) += 1;
         }

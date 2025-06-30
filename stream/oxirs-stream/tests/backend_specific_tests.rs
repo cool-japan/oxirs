@@ -45,7 +45,7 @@ mod kafka_specific_tests {
     #[ignore] // Requires Kafka
     async fn test_kafka_partitioning() -> Result<()> {
         let config = StreamConfig {
-            backend: StreamBackend::Kafka {
+            backend: StreamBackendType::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
                 security_protocol: None,
                 sasl_config: None,
@@ -162,7 +162,7 @@ mod kafka_specific_tests {
     #[ignore] // Requires Kafka with SASL
     async fn test_kafka_sasl_authentication() -> Result<()> {
         let config = StreamConfig {
-            backend: StreamBackend::Kafka {
+            backend: StreamBackendType::Kafka {
                 brokers: vec!["localhost:9093".to_string()], // SASL port
                 security_protocol: Some("SASL_SSL".to_string()),
                 sasl_config: None, // Will be set below
@@ -238,7 +238,7 @@ mod kafka_specific_tests {
         // for Avro/JSON Schema validation of RDF events
 
         let config = StreamConfig {
-            backend: StreamBackend::Kafka {
+            backend: StreamBackendType::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
                 security_protocol: None,
                 sasl_config: None,
@@ -351,7 +351,7 @@ mod nats_specific_tests {
     #[ignore] // Requires NATS with JetStream
     async fn test_nats_jetstream_persistence() -> Result<()> {
         let config = StreamConfig {
-            backend: StreamBackend::Nats {
+            backend: StreamBackendType::Nats {
                 url: "nats://localhost:4222".to_string(),
                 cluster_urls: None,
                 jetstream_config: None,
@@ -446,7 +446,7 @@ mod nats_specific_tests {
     #[ignore] // Requires NATS cluster
     async fn test_nats_cluster_failover() -> Result<()> {
         let cluster_config = StreamConfig {
-            backend: StreamBackend::Nats {
+            backend: StreamBackendType::Nats {
                 url: "nats://localhost:4222".to_string(),
                 cluster_urls: Some(vec![
                     "nats://localhost:4223".to_string(),
@@ -535,7 +535,7 @@ mod nats_specific_tests {
     #[ignore] // Requires NATS with auth
     async fn test_nats_jwt_authentication() -> Result<()> {
         let jwt_config = StreamConfig {
-            backend: StreamBackend::Nats {
+            backend: StreamBackendType::Nats {
                 url: "nats://localhost:4222".to_string(),
                 cluster_urls: None,
                 jetstream_config: None,
@@ -613,7 +613,7 @@ mod redis_specific_tests {
     #[ignore] // Requires Redis with streams
     async fn test_redis_consumer_groups() -> Result<()> {
         let config = StreamConfig {
-            backend: StreamBackend::Redis {
+            backend: StreamBackendType::Redis {
                 url: "redis://localhost:6379".to_string(),
                 cluster_urls: None,
                 pool_size: Some(5),
@@ -717,7 +717,7 @@ mod redis_specific_tests {
     #[ignore] // Requires Redis Cluster
     async fn test_redis_cluster_sharding() -> Result<()> {
         let cluster_config = StreamConfig {
-            backend: StreamBackend::Redis {
+            backend: StreamBackendType::Redis {
                 url: "redis://localhost:7000".to_string(),
                 cluster_urls: Some(vec![
                     "redis://localhost:7001".to_string(),
@@ -810,7 +810,7 @@ mod pulsar_specific_tests {
     #[ignore] // Requires Pulsar
     async fn test_pulsar_namespace_isolation() -> Result<()> {
         let config1 = StreamConfig {
-            backend: StreamBackend::Pulsar {
+            backend: StreamBackendType::Pulsar {
                 service_url: "pulsar://localhost:6650".to_string(),
                 auth_config: None,
             },
@@ -866,7 +866,7 @@ mod pulsar_specific_tests {
         };
 
         let config2 = StreamConfig {
-            backend: StreamBackend::Pulsar {
+            backend: StreamBackendType::Pulsar {
                 service_url: "pulsar://localhost:6650".to_string(),
                 auth_config: None,
             },
@@ -907,7 +907,7 @@ mod pulsar_specific_tests {
     #[ignore] // Requires Pulsar with BookKeeper
     async fn test_pulsar_message_deduplication() -> Result<()> {
         let config = StreamConfig {
-            backend: StreamBackend::Pulsar {
+            backend: StreamBackendType::Pulsar {
                 service_url: "pulsar://localhost:6650".to_string(),
                 auth_config: None,
             },
@@ -1000,7 +1000,7 @@ mod kinesis_specific_tests {
     #[ignore] // Requires AWS credentials
     async fn test_kinesis_shard_scaling() -> Result<()> {
         let config = StreamConfig {
-            backend: StreamBackend::Kinesis {
+            backend: StreamBackendType::Kinesis {
                 region: "us-west-2".to_string(),
                 stream_name: "shard-scaling-test".to_string(),
                 credentials: None,
@@ -1088,7 +1088,7 @@ mod kinesis_specific_tests {
     #[ignore] // Requires AWS credentials and enhanced fan-out setup
     async fn test_kinesis_enhanced_fanout_multiple_consumers() -> Result<()> {
         let base_config = StreamConfig {
-            backend: StreamBackend::Kinesis {
+            backend: StreamBackendType::Kinesis {
                 region: "us-west-2".to_string(),
                 stream_name: "enhanced-fanout-test".to_string(),
                 credentials: None,

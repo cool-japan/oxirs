@@ -333,6 +333,61 @@ impl ProductCatalogEmbedder {
         vector
     }
 
+    /// Find similar products based on embeddings
+    pub async fn find_similar_products(&self, product_id: &str, k: usize) -> Result<Vec<(String, f64)>> {
+        if let Some(target_embedding) = self.product_embeddings.get(product_id) {
+            let mut similarities = Vec::new();
+            
+            for (other_id, other_embedding) in &self.product_embeddings {
+                if other_id != product_id {
+                    let similarity = self.cosine_similarity(target_embedding, other_embedding);
+                    similarities.push((other_id.clone(), similarity));
+                }
+            }
+            
+            // Sort by similarity and take top k
+            similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            similarities.truncate(k);
+            
+            Ok(similarities)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Generate product recommendations for a customer
+    pub async fn recommend_products(&self, customer_id: &str, k: usize) -> Result<Vec<(String, f64)>> {
+        // Get customer profile
+        if let Some(customer_profile) = self.customer_profiles.get(customer_id) {
+            let recommendations = self.recommender.generate_recommendations(
+                customer_id,
+                &customer_profile.preferences,
+                k
+            ).await?;
+            
+            Ok(recommendations)
+        } else {
+            // Generate recommendations based on popularity for new customers
+            self.generate_popular_recommendations(k).await
+        }
+    }
+
+    /// Analyze market trends for a product category
+    pub async fn analyze_market_trends(&self, category: &str) -> Result<MarketTrends> {
+        self.market_analyzer.analyze_category_trends(category).await
+    }
+
+    /// Generate popular product recommendations
+    async fn generate_popular_recommendations(&self, k: usize) -> Result<Vec<(String, f64)>> {
+        // Simplified: return random products with mock scores
+        let popular_products: Vec<(String, f64)> = self.product_embeddings.keys()
+            .take(k)
+            .map(|id| (id.clone(), 0.7 + (id.len() % 3) as f64 * 0.1))
+            .collect();
+        
+        Ok(popular_products)
+    }
+
     fn cosine_similarity(&self, v1: &Vector, v2: &Vector) -> f64 {
         let dot_product: f32 = v1.values.iter().zip(v2.values.iter()).map(|(a, b)| a * b).sum();
         let norm1: f32 = v1.values.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -365,6 +420,80 @@ pub struct ProductFeatures {
     pub brand: String,
     /// Additional attributes
     pub attributes: HashMap<String, String>,
+}
+
+/// Product interaction types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InteractionType {
+    View,
+    Purchase,
+    AddToCart,
+    Wishlist,
+    Rating,
+    Review,
+}
+
+/// Product interaction data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductInteraction {
+    pub product_id: String,
+    pub interaction_type: InteractionType,
+    pub rating: f64,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Market trends analysis result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketTrends {
+    pub category: String,
+    pub trend_direction: TrendDirection,
+    pub growth_rate: f64,
+    pub seasonal_patterns: Vec<SeasonalPattern>,
+    pub competitor_analysis: Vec<CompetitorData>,
+    pub price_trends: PriceTrends,
+    pub demand_forecast: Vec<DemandForecast>,
+}
+
+/// Trend direction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TrendDirection {
+    Growing,
+    Declining,
+    Stable,
+    Volatile,
+}
+
+/// Seasonal pattern data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SeasonalPattern {
+    pub month: u32,
+    pub multiplier: f64,
+    pub confidence: f64,
+}
+
+/// Competitor analysis data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompetitorData {
+    pub competitor_id: String,
+    pub market_share: f64,
+    pub average_price: f64,
+    pub product_count: usize,
+}
+
+/// Price trends
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PriceTrends {
+    pub average_price: f64,
+    pub price_change_rate: f64,
+    pub price_volatility: f64,
+}
+
+/// Demand forecast
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DemandForecast {
+    pub period: String,
+    pub demand_score: f64,
+    pub confidence: f64,
 }
 
 // =============================================================================
@@ -685,6 +814,27 @@ pub struct ResourceAllocation {
     pub end_date: DateTime<Utc>,
 }
 
+/// Process analysis result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessAnalysis {
+    pub process_id: String,
+    pub efficiency_score: f64,
+    pub bottlenecks: Vec<String>,
+    pub improvement_recommendations: Vec<ProcessImprovement>,
+    pub estimated_cost_reduction: f64,
+    pub implementation_timeline: u32, // days
+}
+
+/// Process improvement recommendation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessImprovement {
+    pub improvement_type: String,
+    pub description: String,
+    pub estimated_impact: f64,
+    pub implementation_cost: f64,
+    pub priority: Priority,
+}
+
 /// Performance prediction system
 #[derive(Debug, Clone)]
 pub struct PerformancePredictor {
@@ -930,6 +1080,78 @@ impl OrganizationalKGEmbedder {
     fn calculate_timeline_feasibility(&self, project: &Project) -> f64 {
         // Simplified timeline feasibility calculation
         0.80 // Placeholder
+    }
+
+    /// Analyze department collaboration patterns
+    pub async fn analyze_department_collaboration(&self) -> Result<HashMap<String, f64>> {
+        let mut collaboration_scores = HashMap::new();
+        
+        for (dept_id, _department) in &self.department_structure.departments {
+            let mut total_collaboration = 0.0;
+            let mut collaboration_count = 0;
+            
+            // Calculate collaboration with other departments
+            for other_dept_id in self.department_structure.departments.keys() {
+                if dept_id != other_dept_id {
+                    if let Some(collaboration_score) = self.department_structure.collaboration_matrix
+                        .get(&format!("{}_{}", dept_id, other_dept_id)) {
+                        total_collaboration += collaboration_score;
+                        collaboration_count += 1;
+                    }
+                }
+            }
+            
+            let avg_collaboration = if collaboration_count > 0 {
+                total_collaboration / collaboration_count as f64
+            } else {
+                0.0
+            };
+            
+            collaboration_scores.insert(dept_id.clone(), avg_collaboration);
+        }
+        
+        Ok(collaboration_scores)
+    }
+
+    /// Predict employee performance for a specific role
+    pub async fn predict_employee_performance(&self, employee_id: &str, role: &str) -> Result<f64> {
+        if let Some(employee_profile) = self.employee_skills.get(employee_id) {
+            // Calculate performance based on skill match and experience
+            let mut performance_score = 0.0;
+            let mut skill_count = 0;
+            
+            // Role-specific skill requirements (simplified)
+            let required_skills = self.get_role_requirements(role);
+            
+            for required_skill in &required_skills {
+                if let Some(experience) = employee_profile.experience_levels.get(required_skill) {
+                    performance_score += experience;
+                    skill_count += 1;
+                }
+            }
+            
+            let avg_performance = if skill_count > 0 {
+                performance_score / skill_count as f64
+            } else {
+                0.5 // Default moderate performance
+            };
+            
+            Ok(avg_performance.min(1.0).max(0.0))
+        } else {
+            Ok(0.5) // Default for unknown employees
+        }
+    }
+
+    /// Get role-specific skill requirements
+    fn get_role_requirements(&self, role: &str) -> Vec<String> {
+        // Simplified role requirements mapping
+        match role.to_lowercase().as_str() {
+            "software_engineer" => vec!["programming".to_string(), "problem_solving".to_string(), "testing".to_string()],
+            "project_manager" => vec!["management".to_string(), "communication".to_string(), "planning".to_string()],
+            "designer" => vec!["design".to_string(), "creativity".to_string(), "prototyping".to_string()],
+            "data_scientist" => vec!["programming".to_string(), "statistics".to_string(), "machine_learning".to_string()],
+            _ => vec!["communication".to_string(), "teamwork".to_string()],
+        }
     }
 
     fn cosine_similarity(&self, v1: &Vector, v2: &Vector) -> f64 {

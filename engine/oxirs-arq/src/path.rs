@@ -130,6 +130,20 @@ impl PropertyPathEvaluator {
         path: &PropertyPath,
         dataset: &dyn PathDataset,
     ) -> Result<Vec<Term>> {
+        // For direct property paths, only return directly reachable nodes
+        match path {
+            PropertyPath::Direct(predicate) => {
+                return dataset.find_outgoing(start, predicate);
+            }
+            PropertyPath::Inverse(inner_path) => {
+                if let PropertyPath::Direct(predicate) = inner_path.as_ref() {
+                    return dataset.find_incoming(predicate, start);
+                }
+            }
+            _ => {}
+        }
+
+        // For complex paths, do full transitive search
         let mut result = Vec::new();
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();

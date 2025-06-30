@@ -12,8 +12,13 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::{
-    planner::planning::{ExecutionStep, FilterExpression, TriplePattern},
-    service_optimizer::QueryInfo,
+    planner::planning::{ExecutionStep, FilterExpression as PlanningFilterExpression, TriplePattern},
+    service_optimizer::{
+        QueryInfo, StarJoinPattern, StarOptimizationType, ChainJoinPattern, ChainOptimizationType, 
+        CyclePattern, BushyTreeNode, BushyNodeType, JoinExecutionStrategy, JoinEdge,
+        JoinPlan, SpecialJoinPatterns, JoinExecutionResult, StrategyPerformance,
+        JoinOperation, JoinOperationType, JoinAlgorithm, ParallelizationOpportunity
+    },
     ServiceRegistry,
 };
 
@@ -70,7 +75,7 @@ impl DistributedJoinOptimizer {
     pub async fn optimize_join_order(
         &self,
         patterns: &[TriplePattern],
-        filters: &[FilterExpression],
+        filters: &[PlanningFilterExpression],
         registry: &ServiceRegistry,
     ) -> Result<JoinPlan> {
         info!("Optimizing join order for {} patterns", patterns.len());
@@ -120,12 +125,11 @@ impl DistributedJoinOptimizer {
     async fn build_join_graph(
         &self,
         patterns: &[TriplePattern],
-        filters: &[FilterExpression],
+        filters: &[PlanningFilterExpression],
     ) -> Result<JoinGraph> {
         let mut graph = JoinGraph {
-            nodes: HashMap::new(),
+            nodes: Vec::new(),
             edges: Vec::new(),
-            variables: HashSet::new(),
         };
 
         // Create nodes for each pattern
@@ -139,13 +143,13 @@ impl DistributedJoinOptimizer {
                 execution_cost: self.estimate_execution_cost(pattern).await?,
             };
 
-            graph.variables.extend(node.variables.clone());
-            graph.nodes.insert(node.id.clone(), node);
+            // Variables are now tracked per node
+            graph.nodes.push(node);
         }
 
         // Create edges for variable connections
-        for node1 in graph.nodes.values() {
-            for node2 in graph.nodes.values() {
+        for node1 in &graph.nodes {
+            for node2 in &graph.nodes {
                 if node1.id != node2.id {
                     let shared_vars = node1
                         .variables
@@ -159,10 +163,10 @@ impl DistributedJoinOptimizer {
                             to_node: node2.id.clone(),
                             shared_variables: shared_vars,
                             join_selectivity: self
-                                .estimate_join_selectivity(&node1.pattern, &node2.pattern)
+                                .estimate_join_selectivity(&node1, &node2)
                                 .await?,
                             estimated_cost: self
-                                .estimate_join_cost(&node1.pattern, &node2.pattern)
+                                .estimate_join_cost(1000, 1000) // placeholder values
                                 .await?,
                         };
                         graph.edges.push(edge);
@@ -212,12 +216,12 @@ impl DistributedJoinOptimizer {
     async fn detect_star_joins(&self, graph: &JoinGraph) -> Result<Vec<StarJoinPattern>> {
         let mut star_patterns = Vec::new();
 
-        for (node_id, node) in &graph.nodes {
+        for node in &graph.nodes {
             // Count connections to this node
             let connections: Vec<&JoinEdge> = graph
                 .edges
                 .iter()
-                .filter(|e| e.from_node == *node_id || e.to_node == *node_id)
+                .filter(|e| e.from_node == node.id || e.to_node == node.id)
                 .collect();
 
             // A star join has one central node connected to multiple others
@@ -225,7 +229,7 @@ impl DistributedJoinOptimizer {
                 let connected_nodes: Vec<String> = connections
                     .iter()
                     .map(|e| {
-                        if e.from_node == *node_id {
+                        if e.from_node == node.id {
                             e.to_node.clone()
                         } else {
                             e.from_node.clone()
@@ -234,9 +238,9 @@ impl DistributedJoinOptimizer {
                     .collect();
 
                 let star_pattern = StarJoinPattern {
-                    center_node: node_id.clone(),
+                    center_node: node.id.clone(),
                     connected_nodes,
-                    estimated_benefit: self.calculate_star_join_benefit(node, &connections).await?,
+                    estimated_benefit: self.calculate_star_join_benefit_from_edges(node, &connections).await?,
                     optimization_type: StarOptimizationType::MultiWayJoin,
                 };
 
@@ -260,12 +264,12 @@ impl DistributedJoinOptimizer {
         let mut chain_patterns = Vec::new();
         let mut visited = HashSet::new();
 
-        for (start_node_id, _) in &graph.nodes {
-            if visited.contains(start_node_id) {
+        for start_node in &graph.nodes {
+            if visited.contains(&start_node.id) {
                 continue;
             }
 
-            let chain = self.find_longest_chain(graph, start_node_id, &mut visited).await?;
+            let chain = self.find_longest_chain(graph, &start_node.id, &mut visited).await?;
 
             if chain.len() >= 3 {
                 // Only consider chains of length 3 or more
@@ -289,11 +293,11 @@ impl DistributedJoinOptimizer {
         let mut visited = HashSet::new();
         let mut rec_stack = HashSet::new();
 
-        for (node_id, _) in &graph.nodes {
-            if !visited.contains(node_id) {
+        for node in &graph.nodes {
+            if !visited.contains(&node.id) {
                 self.dfs_cycle_detection(
                     graph,
-                    node_id,
+                    &node.id,
                     &mut visited,
                     &mut rec_stack,
                     &mut cycles,
@@ -366,7 +370,7 @@ impl DistributedJoinOptimizer {
     ) -> Result<JoinPlan> {
         debug!("Optimizing with bushy tree algorithm");
 
-        let patterns: Vec<TriplePattern> = graph.nodes.values().map(|n| n.pattern.clone()).collect();
+        let patterns: Vec<TriplePattern> = graph.nodes.iter().map(|n| n.pattern.clone()).collect();
 
         if patterns.is_empty() {
             return Err(anyhow!("Cannot optimize empty pattern set"));
@@ -579,66 +583,80 @@ impl DistributedJoinOptimizer {
         debug!("Recommended strategy: {:?}", best_strategy);
         Ok(best_strategy)
     }
-                        .variables
-                        .intersection(&node2.variables)
-                        .collect::<Vec<_>>();
-                    if !shared_vars.is_empty() {
+
+    /// Build a join graph from query patterns (compatibility method)
+    async fn build_join_graph_from_patterns(&self, patterns: &[TriplePattern]) -> Result<JoinGraph> {
+        let mut graph = JoinGraph {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+        };
+
+        // Create nodes for each pattern
+        for (i, pattern) in patterns.iter().enumerate() {
+            let variables = self.get_pattern_variables(pattern);
+            let node = JoinNode {
+                id: format!("pattern_{}", i),
+                pattern: pattern.clone(),
+                variables,
+                estimated_cardinality: self.estimate_pattern_cardinality(pattern).await?,
+                selectivity: self.estimate_pattern_selectivity(pattern).await?,
+                execution_cost: self.estimate_pattern_cost(pattern).await?,
+            };
+            graph.nodes.push(node);
+        }
+
+        // Create edges between nodes that share variables
+        for i in 0..graph.nodes.len() {
+            for j in i + 1..graph.nodes.len() {
+                let node1 = &graph.nodes[i];
+                let node2 = &graph.nodes[j];
+                let shared_vars: Vec<String> = node1
+                    .variables
+                    .intersection(&node2.variables)
+                    .cloned()
+                    .collect();
+                if !shared_vars.is_empty() {
                         let edge = JoinEdge {
-                            from: node1.id.clone(),
-                            to: node2.id.clone(),
-                            join_variables: shared_vars.into_iter().cloned().collect(),
+                            from_node: node1.id.clone(),
+                            to_node: node2.id.clone(),
+                            shared_variables: shared_vars,
                             join_selectivity: self
                                 .estimate_join_selectivity(&node1, &node2)
                                 .await?,
-                            estimated_result_size: self
-                                .estimate_join_result_size(&node1, &node2)
+                            estimated_cost: self
+                                .estimate_join_cost(node1.estimated_cardinality, node2.estimated_cardinality)
                                 .await?,
                         };
                         graph.edges.push(edge);
                     }
-                }
             }
         }
 
         Ok(graph)
     }
 
-    /// Detect special join patterns (star, chain, etc.)
-    async fn detect_special_patterns(&self, graph: &JoinGraph) -> Result<SpecialJoinPatterns> {
-        let mut patterns = SpecialJoinPatterns {
-            has_star_join: false,
-            star_center: None,
-            has_chain_join: false,
-            chain_sequence: Vec::new(),
-            has_complex_graph: false,
-            complexity_score: 0.0,
+    /// Detect special join patterns (star, chain, etc.) - compatibility method
+    async fn detect_special_patterns_compatibility(&self, graph: &JoinGraph) -> Result<SpecialJoinPatterns> {
+        let star_joins = if self.config.enable_star_join_detection {
+            self.detect_star_joins(graph).await?
+        } else {
+            Vec::new()
         };
 
-        // Detect star join pattern
-        if let Some(center_var) = self.detect_star_center(graph).await? {
-            patterns.has_star_join = true;
-            patterns.star_center = Some(center_var);
-            info!(
-                "Detected star join pattern with center variable: {}",
-                patterns.star_center.as_ref().unwrap()
-            );
-        }
+        let chain_joins = if self.config.enable_chain_optimization {
+            self.detect_chain_joins(graph).await?
+        } else {
+            Vec::new()
+        };
 
-        // Detect chain join pattern
-        if let Some(chain) = self.detect_chain_pattern(graph).await? {
-            patterns.has_chain_join = true;
-            patterns.chain_sequence = chain;
-            info!(
-                "Detected chain join pattern with {} nodes",
-                patterns.chain_sequence.len()
-            );
-        }
+        let cycles = self.detect_cycles(graph).await?;
 
-        // Calculate complexity score
-        patterns.complexity_score = self.calculate_graph_complexity(graph).await?;
-        patterns.has_complex_graph = patterns.complexity_score > 10.0;
-
-        Ok(patterns)
+        Ok(SpecialJoinPatterns {
+            star_joins,
+            chain_joins,
+            cycles,
+            total_patterns: graph.nodes.len(),
+        })
     }
 
     /// Detect star join center variable
@@ -646,7 +664,7 @@ impl DistributedJoinOptimizer {
         let mut variable_counts: HashMap<String, usize> = HashMap::new();
 
         // Count how many patterns each variable appears in
-        for node in graph.nodes.values() {
+        for node in &graph.nodes {
             for var in &node.variables {
                 *variable_counts.entry(var.clone()).or_insert(0) += 1;
             }
@@ -674,8 +692,8 @@ impl DistributedJoinOptimizer {
         }
 
         // Try to find a linear chain
-        for start_node_id in graph.nodes.keys() {
-            if let Some(chain) = self.find_chain_from_node(graph, start_node_id).await? {
+        for start_node in &graph.nodes {
+            if let Some(chain) = self.find_chain_from_node(graph, &start_node.id).await? {
                 if chain.len() == graph.nodes.len() {
                     return Ok(Some(chain));
                 }
@@ -706,11 +724,11 @@ impl DistributedJoinOptimizer {
             // Find next node with exactly one unvisited connection
             let mut next_candidates = Vec::new();
             for edge in &graph.edges {
-                if edge.from == current && !visited.contains(&edge.to) {
-                    next_candidates.push(edge.to.clone());
+                if edge.from_node == current && !visited.contains(&edge.to_node) {
+                    next_candidates.push(edge.to_node.clone());
                 }
-                if edge.to == current && !visited.contains(&edge.from) {
-                    next_candidates.push(edge.from.clone());
+                if edge.to_node == current && !visited.contains(&edge.from_node) {
+                    next_candidates.push(edge.from_node.clone());
                 }
             }
 
@@ -732,7 +750,10 @@ impl DistributedJoinOptimizer {
     async fn calculate_graph_complexity(&self, graph: &JoinGraph) -> Result<f64> {
         let node_count = graph.nodes.len() as f64;
         let edge_count = graph.edges.len() as f64;
-        let variable_count = graph.variables.len() as f64;
+        let all_variables: HashSet<String> = graph.nodes.iter()
+            .flat_map(|node| node.variables.iter().cloned())
+            .collect();
+        let variable_count = all_variables.len() as f64;
 
         // Complexity is based on graph density and variable sharing
         let density = edge_count / (node_count * (node_count - 1.0) / 2.0);
@@ -746,11 +767,11 @@ impl DistributedJoinOptimizer {
         &self,
         patterns: &SpecialJoinPatterns,
     ) -> Result<JoinOptimizationStrategy> {
-        if patterns.has_star_join && self.config.enable_star_join_detection {
+        if !patterns.star_joins.is_empty() && self.config.enable_star_join_detection {
             Ok(JoinOptimizationStrategy::StarJoin)
-        } else if patterns.has_chain_join && self.config.enable_chain_optimization {
+        } else if !patterns.chain_joins.is_empty() && self.config.enable_chain_optimization {
             Ok(JoinOptimizationStrategy::ChainJoin)
-        } else if self.config.enable_bushy_trees && patterns.complexity_score > 5.0 {
+        } else if self.config.enable_bushy_trees && patterns.total_patterns > 5 {
             Ok(JoinOptimizationStrategy::BushyTree)
         } else {
             Ok(JoinOptimizationStrategy::Dynamic)
@@ -767,7 +788,7 @@ impl DistributedJoinOptimizer {
 
         let mut operations = Vec::new();
 
-        if let Some(center_var) = &graph.nodes.values().next() {
+        if let Some(center_var) = graph.nodes.first() {
             // Step 1: Execute the most selective pattern first (center)
             let center_op = JoinOperation {
                 id: "star_center".to_string(),
@@ -783,7 +804,7 @@ impl DistributedJoinOptimizer {
             operations.push(center_op);
 
             // Step 2: Join remaining patterns to the center
-            for (idx, node) in graph.nodes.values().skip(1).enumerate() {
+            for (idx, node) in graph.nodes.iter().skip(1).enumerate() {
                 let join_op = JoinOperation {
                     id: format!("star_join_{}", idx),
                     operation_type: JoinOperationType::Join,
@@ -820,14 +841,14 @@ impl DistributedJoinOptimizer {
 
         // Calculate values before moving operations
         let estimated_total_cost: f64 = operations.iter().map(|op| op.estimated_cost).sum();
-        let expected_parallelism = self.calculate_parallelism(&operations).await?;
+        let expected_parallelism = self.calculate_parallelization_opportunities_for_operations(&operations).await?;
         let memory_requirements = self.estimate_memory_requirements(&operations).await?;
 
         Ok(JoinPlan {
-            strategy: JoinOptimizationStrategy::StarJoin,
             operations,
-            estimated_total_cost,
-            expected_parallelism,
+            estimated_cost: estimated_total_cost,
+            parallelization_opportunities: expected_parallelism,
+            execution_strategy: JoinExecutionStrategy::StarJoin,
             memory_requirements,
         })
     }
@@ -843,7 +864,7 @@ impl DistributedJoinOptimizer {
         let mut operations = Vec::new();
 
         // For chain joins, use left-deep tree with most selective joins first
-        let mut sorted_nodes: Vec<_> = graph.nodes.values().collect();
+        let mut sorted_nodes: Vec<_> = graph.nodes.iter().collect();
         sorted_nodes.sort_by(|a, b| a.selectivity.partial_cmp(&b.selectivity).unwrap());
 
         if let Some(first_node) = sorted_nodes.first() {
@@ -899,65 +920,14 @@ impl DistributedJoinOptimizer {
         let memory_requirements = self.estimate_memory_requirements(&operations).await?;
 
         Ok(JoinPlan {
-            strategy: JoinOptimizationStrategy::ChainJoin,
             operations,
-            estimated_total_cost,
-            expected_parallelism: 1.0, // Chain joins are sequential
+            estimated_cost: estimated_total_cost,
+            parallelization_opportunities: vec![], // Chain joins are sequential
+            execution_strategy: JoinExecutionStrategy::ChainJoin,
             memory_requirements,
         })
     }
 
-    /// Optimize bushy tree structure
-    async fn optimize_bushy_tree(
-        &self,
-        graph: &JoinGraph,
-        registry: &ServiceRegistry,
-    ) -> Result<JoinPlan> {
-        info!("Applying bushy tree optimization");
-
-        // Use dynamic programming for optimal bushy tree construction
-        let join_order = self.enumerate_join_orders(graph).await?;
-        let optimal_order = self.select_optimal_join_order(join_order).await?;
-
-        let mut operations = Vec::new();
-
-        // Build bushy tree based on optimal order
-        for (idx, join_pair) in optimal_order.iter().enumerate() {
-            let join_op = JoinOperation {
-                id: format!("bushy_join_{}", idx),
-                operation_type: if idx == 0 {
-                    JoinOperationType::InitialScan
-                } else {
-                    JoinOperationType::Join
-                },
-                left_input: if idx > 0 {
-                    Some(format!("bushy_join_{}", idx - 1))
-                } else {
-                    None
-                },
-                right_input: Some(join_pair.right_node.clone()),
-                join_algorithm: self.select_optimal_join_algorithm(join_pair).await?,
-                join_variables: join_pair.join_variables.clone(),
-                estimated_cost: join_pair.estimated_cost,
-                estimated_cardinality: join_pair.estimated_cardinality,
-                parallelizable: true,
-            };
-            operations.push(join_op);
-        }
-
-        // Calculate values before moving operations
-        let estimated_total_cost: f64 = operations.iter().map(|op| op.estimated_cost).sum();
-        let expected_parallelism = self.calculate_parallelism(&operations).await?;
-        let memory_requirements = self.estimate_memory_requirements(&operations).await?;
-
-        Ok(JoinPlan {
-            strategy: JoinOptimizationStrategy::BushyTree,
-            operations,
-            estimated_total_cost,
-            expected_parallelism,
-            memory_requirements,
-        })
-    }
 
     /// Dynamic join optimization based on runtime statistics
     async fn dynamic_join_optimization(
@@ -971,7 +941,7 @@ impl DistributedJoinOptimizer {
         let mut operations = Vec::new();
 
         // Create a flexible join plan that can adapt at runtime
-        let nodes: Vec<_> = graph.nodes.values().collect();
+        let nodes: Vec<_> = graph.nodes.iter().collect();
 
         for (idx, node) in nodes.iter().enumerate() {
             let join_op = JoinOperation {
@@ -998,14 +968,14 @@ impl DistributedJoinOptimizer {
 
         // Calculate values before moving operations
         let estimated_total_cost: f64 = operations.iter().map(|op| op.estimated_cost).sum();
-        let expected_parallelism = self.calculate_parallelism(&operations).await?;
+        let expected_parallelism = self.calculate_parallelization_opportunities_for_operations(&operations).await?;
         let memory_requirements = self.estimate_memory_requirements(&operations).await?;
 
         Ok(JoinPlan {
-            strategy: JoinOptimizationStrategy::Dynamic,
             operations,
-            estimated_total_cost,
-            expected_parallelism,
+            estimated_cost: estimated_total_cost,
+            parallelization_opportunities: expected_parallelism,
+            execution_strategy: JoinExecutionStrategy::Dynamic,
             memory_requirements,
         })
     }
@@ -1026,7 +996,7 @@ impl DistributedJoinOptimizer {
         }
 
         // Add monitoring and reoptimization triggers
-        plan.expected_parallelism *= self.config.parallelism_factor;
+        // Note: parallelization_opportunities is a Vec, not a scalar value to multiply
 
         Ok(plan)
     }
@@ -1122,18 +1092,24 @@ impl DistributedJoinOptimizer {
         let mut options = Vec::new();
 
         for edge in &graph.edges {
-            options.push(JoinOrderOption {
-                left_node: edge.from.clone(),
-                right_node: edge.to.clone(),
-                join_variables: edge.join_variables.clone(),
-                estimated_cost: self
-                    .estimate_join_cost(
-                        graph.nodes[&edge.from].estimated_cardinality,
-                        graph.nodes[&edge.to].estimated_cardinality,
-                    )
-                    .await?,
-                estimated_cardinality: edge.estimated_result_size,
-            });
+            // Find nodes by ID in the Vec
+            let from_node = graph.nodes.iter().find(|n| n.id == edge.from_node);
+            let to_node = graph.nodes.iter().find(|n| n.id == edge.to_node);
+            
+            if let (Some(from), Some(to)) = (from_node, to_node) {
+                options.push(JoinOrderOption {
+                    left_node: edge.from_node.clone(),
+                    right_node: edge.to_node.clone(),
+                    join_variables: edge.shared_variables.iter().cloned().collect(),
+                    estimated_cost: self
+                        .estimate_join_cost(
+                            from.estimated_cardinality,
+                            to.estimated_cardinality,
+                        )
+                        .await?,
+                    estimated_cardinality: (edge.estimated_cost * 1000.0) as u64, // Convert cost to cardinality estimate
+                });
+            }
         }
 
         Ok(options)
@@ -1165,6 +1141,42 @@ impl DistributedJoinOptimizer {
         Ok(parallelizable_ops as f64 / operations.len() as f64)
     }
 
+    /// Calculate parallelization opportunities for operations
+    async fn calculate_parallelization_opportunities_for_operations(
+        &self,
+        operations: &[JoinOperation],
+    ) -> Result<Vec<ParallelizationOpportunity>> {
+        let mut opportunities = Vec::new();
+        
+        // Find groups of parallelizable operations
+        let parallelizable_ops: Vec<_> = operations
+            .iter()
+            .filter(|op| op.parallelizable)
+            .collect();
+        
+        if !parallelizable_ops.is_empty() {
+            let op_ids: Vec<String> = parallelizable_ops
+                .iter()
+                .map(|op| op.id.clone())
+                .collect();
+            
+            let total_memory: u64 = parallelizable_ops
+                .iter()
+                .map(|op| op.estimated_cardinality * 100) // Estimate memory per row
+                .sum();
+            
+            let parallelism_factor = parallelizable_ops.len() as f64 / operations.len() as f64;
+            
+            opportunities.push(ParallelizationOpportunity {
+                operation_ids: op_ids,
+                parallelism_factor,
+                memory_requirements: total_memory,
+            });
+        }
+        
+        Ok(opportunities)
+    }
+
     async fn estimate_memory_requirements(&self, operations: &[JoinOperation]) -> Result<u64> {
         let total_cardinality: u64 = operations.iter().map(|op| op.estimated_cardinality).sum();
         Ok(total_cardinality * 100) // Assume 100 bytes per row
@@ -1173,17 +1185,38 @@ impl DistributedJoinOptimizer {
     fn extract_variables(&self, pattern: &TriplePattern) -> HashSet<String> {
         let mut variables = HashSet::new();
 
-        if pattern.subject.starts_with('?') {
-            variables.insert(pattern.subject.clone());
+        if let Some(ref subject) = pattern.subject {
+            if subject.starts_with('?') {
+                variables.insert(subject.clone());
+            }
         }
-        if pattern.predicate.starts_with('?') {
-            variables.insert(pattern.predicate.clone());
+        if let Some(ref predicate) = pattern.predicate {
+            if predicate.starts_with('?') {
+                variables.insert(predicate.clone());
+            }
         }
-        if pattern.object.starts_with('?') {
-            variables.insert(pattern.object.clone());
+        if let Some(ref object) = pattern.object {
+            if object.starts_with('?') {
+                variables.insert(object.clone());
+            }
         }
 
         variables
+    }
+
+    /// Extract variables from TriplePattern for compatibility
+    fn get_pattern_variables(&self, pattern: &TriplePattern) -> HashSet<String> {
+        self.extract_variables(pattern)
+    }
+
+    /// Estimate pattern cardinality compatibility method
+    async fn estimate_pattern_cardinality(&self, pattern: &TriplePattern) -> Result<u64> {
+        self.estimate_cardinality(pattern).await
+    }
+
+    /// Estimate pattern selectivity compatibility method
+    async fn estimate_pattern_selectivity(&self, pattern: &TriplePattern) -> Result<f64> {
+        self.estimate_selectivity(pattern).await
     }
 
     fn find_common_variables(
@@ -1192,6 +1225,536 @@ impl DistributedJoinOptimizer {
         vars2: &HashSet<String>,
     ) -> HashSet<String> {
         vars1.intersection(vars2).cloned().collect()
+    }
+
+    /// Analyze filter pushdown opportunities for improved performance
+    async fn analyze_filter_pushdown(
+        &self,
+        graph: &mut JoinGraph,
+        filter: &PlanningFilterExpression,
+    ) -> Result<()> {
+        debug!("Analyzing filter pushdown for filter expression");
+
+        // Parse the filter to identify variables and selectivity
+        let filter_variables = self.extract_filter_variables_from_expression(filter);
+        let filter_selectivity = self.estimate_filter_selectivity_from_expression(filter).await?;
+
+        // Find nodes that can benefit from early filtering
+        for node in graph.nodes.iter_mut() {
+            // Check if any filter variables overlap with node variables
+            let overlap: HashSet<_> = filter_variables
+                .intersection(&node.variables)
+                .cloned()
+                .collect();
+
+            if !overlap.is_empty() {
+                // Update node selectivity with filter benefit
+                let original_cardinality = node.estimated_cardinality;
+                node.estimated_cardinality = 
+                    (original_cardinality as f64 * filter_selectivity) as u64;
+                
+                // Reduce execution cost due to early filtering
+                node.execution_cost *= filter_selectivity;
+                
+                info!(
+                    "Applied filter pushdown to node {}: cardinality {} -> {}, cost reduction: {:.2}%",
+                    node.id,
+                    original_cardinality,
+                    node.estimated_cardinality,
+                    (1.0 - filter_selectivity) * 100.0
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Calculate the potential benefit of star join optimization
+    async fn calculate_star_join_benefit(
+        &self,
+        center_node: &JoinNode,
+        connected_nodes: &[&JoinNode],
+    ) -> Result<f64> {
+        if connected_nodes.is_empty() {
+            return Ok(0.0);
+        }
+
+        // Calculate cost without star optimization (linear joins)
+        let mut linear_cost = center_node.execution_cost;
+        let mut current_cardinality = center_node.estimated_cardinality;
+
+        for node in connected_nodes {
+            // Sequential join cost
+            let join_cost = self.estimate_join_cost(current_cardinality, node.estimated_cardinality).await?;
+            linear_cost += join_cost + node.execution_cost;
+            
+            // Update cardinality for next join
+            current_cardinality = self.estimate_join_result_cardinality(
+                current_cardinality,
+                node.estimated_cardinality
+            ).await?;
+        }
+
+        // Calculate cost with star optimization (parallel execution possible)
+        let mut star_cost = center_node.execution_cost;
+        
+        // All leaf nodes can be executed in parallel with the center
+        let max_leaf_cost = connected_nodes
+            .iter()
+            .map(|n| n.execution_cost)
+            .fold(0.0, f64::max);
+        
+        star_cost += max_leaf_cost; // Parallel execution
+
+        // Join cost for star pattern (can also be parallelized)
+        let total_join_cost: f64 = connected_nodes
+            .iter()
+            .map(|node| {
+                // Each node joins with center result
+                let join_cost = futures::executor::block_on(
+                    self.estimate_join_cost(center_node.estimated_cardinality, node.estimated_cardinality)
+                );
+                join_cost.unwrap_or(1000.0) // Fallback cost
+            })
+            .sum();
+
+        star_cost += total_join_cost / connected_nodes.len() as f64; // Parallel join execution
+
+        // Calculate benefit as cost reduction percentage
+        let benefit = if linear_cost > 0.0 {
+            (linear_cost - star_cost) / linear_cost
+        } else {
+            0.0
+        };
+
+        debug!(
+            "Star join benefit calculation: linear_cost={:.2}, star_cost={:.2}, benefit={:.2}%",
+            linear_cost,
+            star_cost,
+            benefit * 100.0
+        );
+
+        Ok(benefit.max(0.0)) // Ensure non-negative benefit
+    }
+
+    /// Extract variables from a FilterExpression
+    fn extract_filter_variables_from_expression(&self, _filter: &PlanningFilterExpression) -> HashSet<String> {
+        // Simplified implementation - in a real scenario this would parse the filter
+        // For now, return empty set since the specific FilterExpression structure is unclear
+        HashSet::new()
+    }
+
+    /// Extract variables from a pattern
+    fn extract_variables_from_pattern(&self, _pattern: &str) -> HashSet<String> {
+        // Simplified pattern variable extraction
+        let mut variables = HashSet::new();
+        // TODO: Implement proper pattern parsing
+        variables
+    }
+
+    /// Extract variables from a term
+    fn extract_variables_from_term(&self, term: &str) -> HashSet<String> {
+        let mut variables = HashSet::new();
+        if term.starts_with('?') {
+            variables.insert(term.to_string());
+        }
+        variables
+    }
+
+    /// Estimate the selectivity of a FilterExpression
+    async fn estimate_filter_selectivity_from_expression(&self, _filter: &PlanningFilterExpression) -> Result<f64> {
+        // Simplified implementation - default selectivity
+        // In a real scenario this would analyze the filter structure
+        let selectivity: f64 = 0.5; // Default medium selectivity
+
+        debug!("Estimated filter selectivity: {:.2}", selectivity);
+        Ok(selectivity.min(1.0).max(0.001)) // Clamp between 0.001 and 1.0
+    }
+
+    /// Calculate the potential benefit of star join optimization from edges
+    async fn calculate_star_join_benefit_from_edges(
+        &self,
+        center_node: &JoinNode,
+        connections: &[&JoinEdge],
+    ) -> Result<f64> {
+        if connections.is_empty() {
+            return Ok(0.0);
+        }
+
+        // Extract connected node IDs from edges
+        let connected_node_ids: Vec<String> = connections
+            .iter()
+            .map(|edge| {
+                if edge.from_node == center_node.id {
+                    edge.to_node.clone()
+                } else {
+                    edge.from_node.clone()
+                }
+            })
+            .collect();
+
+        // For simplification, assume all connected nodes have similar characteristics
+        // In a real implementation, you would look up actual node statistics
+        let estimated_connected_cardinality = 1000u64; // Default estimate
+        let estimated_connected_cost = 50.0; // Default estimate
+
+        // Calculate cost without star optimization (linear joins)
+        let mut linear_cost = center_node.execution_cost;
+        let mut current_cardinality = center_node.estimated_cardinality;
+
+        for _ in &connected_node_ids {
+            // Sequential join cost
+            let join_cost = self.estimate_join_cost(current_cardinality, estimated_connected_cardinality).await?;
+            linear_cost += join_cost + estimated_connected_cost;
+            
+            // Update cardinality for next join
+            current_cardinality = self.estimate_join_result_cardinality(
+                current_cardinality,
+                estimated_connected_cardinality
+            ).await?;
+        }
+
+        // Calculate cost with star optimization (parallel execution possible)
+        let mut star_cost = center_node.execution_cost;
+        
+        // All leaf nodes can be executed in parallel with the center
+        star_cost += estimated_connected_cost; // Parallel execution
+
+        // Join cost for star pattern (can also be parallelized)
+        let total_join_cost: f64 = connected_node_ids
+            .iter()
+            .map(|_| {
+                // Each node joins with center result
+                let join_cost = futures::executor::block_on(
+                    self.estimate_join_cost(center_node.estimated_cardinality, estimated_connected_cardinality)
+                );
+                join_cost.unwrap_or(1000.0) // Fallback cost
+            })
+            .sum();
+
+        star_cost += total_join_cost / connected_node_ids.len() as f64; // Parallel join execution
+
+        // Calculate benefit as cost reduction percentage
+        let benefit = if linear_cost > 0.0 {
+            (linear_cost - star_cost) / linear_cost
+        } else {
+            0.0
+        };
+
+        debug!(
+            "Star join benefit calculation: linear_cost={:.2}, star_cost={:.2}, benefit={:.2}%",
+            linear_cost,
+            star_cost,
+            benefit * 100.0
+        );
+
+        Ok(benefit.max(0.0)) // Ensure non-negative benefit
+    }
+
+    /// Extract variables from a filter expression (legacy string-based method)
+    fn extract_filter_variables(&self, filter: &str) -> HashSet<String> {
+        let mut variables = HashSet::new();
+        
+        // Simple regex-based variable extraction (variables start with ?)
+        for part in filter.split_whitespace() {
+            if part.starts_with('?') {
+                variables.insert(part.trim_matches(|c: char| !c.is_alphanumeric() && c != '_').to_string());
+            }
+        }
+        
+        variables
+    }
+
+    /// Estimate the selectivity of a filter (legacy string-based method)
+    async fn estimate_filter_selectivity(&self, filter: &str) -> Result<f64> {
+        // Simplified selectivity estimation based on filter patterns
+        let selectivity = if filter.contains("=") {
+            // Equality filters are typically very selective
+            0.1
+        } else if filter.contains("REGEX") || filter.contains("CONTAINS") {
+            // String pattern filters have medium selectivity
+            0.3
+        } else if filter.contains(">") || filter.contains("<") {
+            // Range filters have variable selectivity
+            0.5
+        } else {
+            // Default selectivity for unknown filter types
+            0.8
+        };
+
+        debug!("Estimated filter selectivity for '{}': {:.2}", filter, selectivity);
+        Ok(selectivity)
+    }
+
+    /// Find the longest chain starting from a specific node
+    async fn find_longest_chain(
+        &self,
+        graph: &JoinGraph,
+        start_id: &str,
+        visited: &mut HashSet<String>,
+    ) -> Result<Vec<String>> {
+        let mut chain = Vec::new();
+        let mut current_id = start_id.to_string();
+        
+        while !visited.contains(&current_id) {
+            visited.insert(current_id.clone());
+            chain.push(current_id.clone());
+            
+            // Find next node in chain
+            let mut next_candidates = Vec::new();
+            for edge in &graph.edges {
+                if edge.from_node == current_id && !visited.contains(&edge.to_node) {
+                    next_candidates.push(edge.to_node.clone());
+                } else if edge.to_node == current_id && !visited.contains(&edge.from_node) {
+                    next_candidates.push(edge.from_node.clone());
+                }
+            }
+            
+            if next_candidates.len() == 1 {
+                current_id = next_candidates[0].clone();
+            } else {
+                break;
+            }
+        }
+        
+        Ok(chain)
+    }
+
+    /// Calculate the benefit of chain join optimization
+    async fn calculate_chain_join_benefit(&self, chain: &[String]) -> Result<f64> {
+        if chain.len() < 3 {
+            return Ok(0.0);
+        }
+        let base_cost = chain.len() as f64 * 1000.0;
+        let optimized_cost = chain.len() as f64 * 500.0;
+        let benefit = (base_cost - optimized_cost) / base_cost;
+        Ok(benefit.max(0.0))
+    }
+
+    /// Convert bushy tree to execution operations
+    async fn tree_to_execution_operations(&self, tree: &BushyTreeNode) -> Result<Vec<JoinOperation>> {
+        let mut operations = Vec::new();
+        let mut counter = 0;
+        self.tree_to_operations_recursive(tree, &mut operations, &mut counter).await?;
+        Ok(operations)
+    }
+    
+    fn tree_to_operations_recursive<'a>(
+        &'a self,
+        node: &'a BushyTreeNode,
+        operations: &'a mut Vec<JoinOperation>,
+        counter: &'a mut usize,
+    ) -> futures::future::BoxFuture<'a, Result<String>> {
+        Box::pin(async move {
+        match &node.node_type {
+            BushyNodeType::Leaf => {
+                let op_id = format!("scan_{}", counter);
+                *counter += 1;
+                // Use first pattern as identifier
+                let pattern_id = if !node.patterns.is_empty() {
+                    format!("pattern_{}", counter)
+                } else {
+                    format!("unknown_pattern_{}", counter)
+                };
+                let operation = JoinOperation {
+                    id: op_id.clone(),
+                    operation_type: JoinOperationType::InitialScan,
+                    left_input: None,
+                    right_input: Some(pattern_id),
+                    join_algorithm: JoinAlgorithm::HashJoin,
+                    join_variables: HashSet::new(),
+                    estimated_cost: node.total_cost,
+                    estimated_cardinality: 1000, // Default cardinality
+                    parallelizable: false,
+                };
+                operations.push(operation);
+                Ok(op_id)
+            }
+            BushyNodeType::InnerJoin => {
+                if let (Some(left), Some(right)) = (&node.left_child, &node.right_child) {
+                    let left_id = self.tree_to_operations_recursive(left, operations, counter).await?;
+                    let right_id = self.tree_to_operations_recursive(right, operations, counter).await?;
+                    let op_id = format!("join_{}", counter);
+                    *counter += 1;
+                    let operation = JoinOperation {
+                        id: op_id.clone(),
+                        operation_type: JoinOperationType::Join,
+                        left_input: Some(left_id),
+                        right_input: Some(right_id),
+                        join_algorithm: JoinAlgorithm::HashJoin,
+                        join_variables: HashSet::new(), // Would need to extract from patterns
+                        estimated_cost: node.total_cost,
+                        estimated_cardinality: 1000, // Default cardinality
+                        parallelizable: true,
+                    };
+                    operations.push(operation);
+                    Ok(op_id)
+                } else {
+                    Err(anyhow!("InnerJoin node missing children"))
+                }
+            }
+            BushyNodeType::LeftJoin => {
+                if let (Some(left), Some(right)) = (&node.left_child, &node.right_child) {
+                    let left_id = self.tree_to_operations_recursive(left, operations, counter).await?;
+                    let right_id = self.tree_to_operations_recursive(right, operations, counter).await?;
+                    let op_id = format!("left_join_{}", counter);
+                    *counter += 1;
+                    let operation = JoinOperation {
+                        id: op_id.clone(),
+                        operation_type: JoinOperationType::Join,
+                        left_input: Some(left_id),
+                        right_input: Some(right_id),
+                        join_algorithm: JoinAlgorithm::HashJoin,
+                        join_variables: HashSet::new(),
+                        estimated_cost: node.total_cost,
+                        estimated_cardinality: 1000,
+                        parallelizable: true,
+                    };
+                    operations.push(operation);
+                    Ok(op_id)
+                } else {
+                    Err(anyhow!("LeftJoin node missing children"))
+                }
+            }
+            BushyNodeType::Union => {
+                if let (Some(left), Some(right)) = (&node.left_child, &node.right_child) {
+                    let left_id = self.tree_to_operations_recursive(left, operations, counter).await?;
+                    let right_id = self.tree_to_operations_recursive(right, operations, counter).await?;
+                    let op_id = format!("union_{}", counter);
+                    *counter += 1;
+                    let operation = JoinOperation {
+                        id: op_id.clone(),
+                        operation_type: JoinOperationType::Union,
+                        left_input: Some(left_id),
+                        right_input: Some(right_id),
+                        join_algorithm: JoinAlgorithm::HashJoin,
+                        join_variables: HashSet::new(),
+                        estimated_cost: node.total_cost,
+                        estimated_cardinality: 1000,
+                        parallelizable: true,
+                    };
+                    operations.push(operation);
+                    Ok(op_id)
+                } else {
+                    Err(anyhow!("Union node missing children"))
+                }
+            }
+        }
+        })
+    }
+
+    /// Identify parallelization opportunities in bushy tree
+    async fn identify_parallelization_opportunities(&self, tree: &BushyTreeNode) -> Result<Vec<ParallelizationOpportunity>> {
+        let mut opportunities = Vec::new();
+        self.collect_parallelization_opportunities(tree, &mut opportunities).await?;
+        Ok(opportunities)
+    }
+    
+    fn collect_parallelization_opportunities<'a>(
+        &'a self,
+        node: &'a BushyTreeNode,
+        opportunities: &'a mut Vec<ParallelizationOpportunity>,
+    ) -> futures::future::BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+        match &node.node_type {
+            BushyNodeType::Leaf => {
+                // Leaf nodes can be executed in parallel
+                opportunities.push(ParallelizationOpportunity {
+                    operation_ids: vec![format!("leaf_{}", node.patterns.len())],
+                    parallelism_factor: node.parallelization_factor,
+                    memory_requirements: (node.total_cost * 1000.0) as u64,
+                });
+            }
+            BushyNodeType::InnerJoin => {
+                // Check left and right children
+                if let Some(left) = &node.left_child {
+                    self.collect_parallelization_opportunities(left, opportunities).await?;
+                }
+                if let Some(right) = &node.right_child {
+                    self.collect_parallelization_opportunities(right, opportunities).await?;
+                }
+                
+                // Add parallelization opportunity for large joins
+                if node.total_cost > 10000.0 {
+                    opportunities.push(ParallelizationOpportunity {
+                        operation_ids: vec![format!("parallel_join_{}", opportunities.len())],
+                        parallelism_factor: node.parallelization_factor,
+                        memory_requirements: (node.total_cost * 500.0) as u64,
+                    });
+                }
+            }
+            BushyNodeType::LeftJoin => {
+                // Handle left join parallelization
+                if let Some(left) = &node.left_child {
+                    self.collect_parallelization_opportunities(left, opportunities).await?;
+                }
+                if let Some(right) = &node.right_child {
+                    self.collect_parallelization_opportunities(right, opportunities).await?;
+                }
+            }
+            BushyNodeType::Union => {
+                // Union operations are naturally parallelizable
+                opportunities.push(ParallelizationOpportunity {
+                    operation_ids: vec![format!("union_{}", opportunities.len())],
+                    parallelism_factor: 2.0, // Can execute both sides in parallel
+                    memory_requirements: (node.total_cost * 200.0) as u64,
+                });
+                
+                if let Some(left) = &node.left_child {
+                    self.collect_parallelization_opportunities(left, opportunities).await?;
+                }
+                if let Some(right) = &node.right_child {
+                    self.collect_parallelization_opportunities(right, opportunities).await?;
+                }
+            }
+        }
+        Ok(())
+        })
+    }
+
+    /// Calculate memory requirements for the tree
+    async fn calculate_memory_requirements(&self, tree: &BushyTreeNode) -> Result<u64> {
+        // Use total_cost as proxy for memory requirements since estimated_cardinality doesn't exist
+        Ok((tree.total_cost * 100.0) as u64)
+    }
+
+    /// Estimate pattern cost
+    async fn estimate_pattern_cost(&self, pattern: &TriplePattern) -> Result<f64> {
+        let cardinality = self.estimate_cardinality(pattern).await?;
+        Ok(cardinality as f64 * 0.001)
+    }
+
+    /// Estimate bushy join cost
+    async fn estimate_bushy_join_cost(&self, left: &BushyTreeNode, right: &BushyTreeNode, _registry: &ServiceRegistry) -> Result<f64> {
+        // Use total_cost since estimated_cardinality doesn't exist
+        Ok((left.total_cost + right.total_cost) * 0.001)
+    }
+
+    /// Calculate parallelization factor
+    async fn calculate_parallelization_factor(&self, left: &BushyTreeNode, right: &BushyTreeNode) -> Result<f64> {
+        Ok((left.parallelization_factor + right.parallelization_factor) / 2.0)
+    }
+
+    /// Calculate cardinality match score
+    async fn calculate_cardinality_match_score(&self, target: u64, samples: &[u64]) -> Result<f64> {
+        if samples.is_empty() {
+            return Ok(0.0);
+        }
+        let avg: f64 = samples.iter().map(|&x| x as f64).sum::<f64>() / samples.len() as f64;
+        let diff = (target as f64 - avg).abs();
+        let score = 1.0 / (1.0 + diff / avg);
+        Ok(score)
+    }
+
+    /// Heuristic strategy selection
+    async fn heuristic_strategy_selection(&self, patterns: &[TriplePattern], cardinality: u64) -> Result<JoinExecutionStrategy> {
+        if patterns.len() <= 2 {
+            Ok(JoinExecutionStrategy::Sequential)
+        } else if cardinality > 100000 {
+            Ok(JoinExecutionStrategy::Parallel)
+        } else {
+            Ok(JoinExecutionStrategy::Dynamic)
+        }
     }
 }
 
@@ -1251,16 +1814,24 @@ impl AdaptiveExecutionController {
     pub fn get_statistics(&self, operation_id: &str) -> Option<&RuntimeStatistics> {
         self.runtime_statistics.get(operation_id)
     }
+
+    /// Analyze statistics and adapt configuration
+    pub async fn analyze_and_adapt(&mut self, _stats: &JoinStatistics) -> Result<()> {
+        // Placeholder for adaptive logic
+        debug!("Analyzing and adapting execution strategies");
+        Ok(())
+    }
 }
 
 // Supporting data structures
 
 #[derive(Debug, Clone)]
 pub struct JoinGraph {
-    pub nodes: HashMap<String, JoinNode>,
+    pub nodes: Vec<JoinNode>,
     pub edges: Vec<JoinEdge>,
-    pub variables: HashSet<String>,
 }
+
+// Pattern types imported from service_optimizer::types
 
 #[derive(Debug, Clone)]
 pub struct JoinNode {
@@ -1272,24 +1843,7 @@ pub struct JoinNode {
     pub execution_cost: f64,
 }
 
-#[derive(Debug, Clone)]
-pub struct JoinEdge {
-    pub from: String,
-    pub to: String,
-    pub join_variables: HashSet<String>,
-    pub join_selectivity: f64,
-    pub estimated_result_size: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct SpecialJoinPatterns {
-    pub has_star_join: bool,
-    pub star_center: Option<String>,
-    pub has_chain_join: bool,
-    pub chain_sequence: Vec<String>,
-    pub has_complex_graph: bool,
-    pub complexity_score: f64,
-}
+// JoinEdge and SpecialJoinPatterns imported from service_optimizer
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum JoinOptimizationStrategy {
@@ -1299,44 +1853,9 @@ pub enum JoinOptimizationStrategy {
     Dynamic,
 }
 
-#[derive(Debug, Clone)]
-pub struct JoinPlan {
-    pub strategy: JoinOptimizationStrategy,
-    pub operations: Vec<JoinOperation>,
-    pub estimated_total_cost: f64,
-    pub expected_parallelism: f64,
-    pub memory_requirements: u64,
-}
+// JoinPlan imported from service_optimizer
 
-#[derive(Debug, Clone)]
-pub struct JoinOperation {
-    pub id: String,
-    pub operation_type: JoinOperationType,
-    pub left_input: Option<String>,
-    pub right_input: Option<String>,
-    pub join_algorithm: JoinAlgorithm,
-    pub join_variables: HashSet<String>,
-    pub estimated_cost: f64,
-    pub estimated_cardinality: u64,
-    pub parallelizable: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum JoinOperationType {
-    InitialScan,
-    Join,
-    Union,
-    Filter,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum JoinAlgorithm {
-    HashJoin,
-    SortMergeJoin,
-    NestedLoopJoin,
-    StreamingJoin,
-    Adaptive,
-}
+// JoinOperation, JoinOperationType, and JoinAlgorithm imported from service_optimizer::types
 
 #[derive(Debug, Clone)]
 pub struct JoinOrderOption {
@@ -1361,8 +1880,10 @@ impl JoinCostModel {
 #[derive(Debug, Default)]
 pub struct JoinStatistics {
     pub total_joins_executed: u64,
+    pub total_executions: u64,
     pub average_join_cost: f64,
     pub join_algorithm_performance: HashMap<JoinAlgorithm, f64>,
+    pub strategy_performance: HashMap<JoinExecutionStrategy, StrategyPerformance>,
 }
 
 #[derive(Debug)]

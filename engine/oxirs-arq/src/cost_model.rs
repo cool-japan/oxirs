@@ -193,6 +193,7 @@ pub enum MemoryAccessPattern {
 }
 
 /// Cost model for query optimization
+#[derive(Debug, Clone)]
 pub struct CostModel {
     config: CostModelConfig,
     statistics: Option<StatisticsCollector>,

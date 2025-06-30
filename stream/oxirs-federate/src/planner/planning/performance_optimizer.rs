@@ -4,6 +4,7 @@
 //! and adaptive reoptimization based on execution metrics.
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{debug, info, warn};
@@ -12,6 +13,7 @@ use super::query_analysis::{QueryComplexity, QueryInfo};
 use super::types::*;
 
 /// Performance optimizer for federated queries
+#[derive(Debug)]
 pub struct PerformanceOptimizer {
     historical_performance: HistoricalPerformance,
     optimization_config: OptimizationConfig,
@@ -326,7 +328,7 @@ impl PerformanceOptimizer {
 
         // Check memory efficiency
         let total_memory = join_metrics.left_result_size + join_metrics.right_result_size;
-        if total_memory > self.optimization_config.high_memory_threshold_mb * 1024 * 1024 {
+        if total_memory > (self.optimization_config.high_memory_threshold_mb * 1024 * 1024) as usize {
             advice.memory_efficient = false;
             advice
                 .suggestions
@@ -459,7 +461,7 @@ impl Default for PerformanceOptimizer {
 }
 
 /// Configuration for performance optimization
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OptimizationConfig {
     pub reoptimization_threshold: f64,
     pub slow_service_threshold_ms: u128,

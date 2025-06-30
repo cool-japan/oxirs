@@ -4,7 +4,7 @@
 //! rule-based and cost-based optimization passes.
 
 use crate::algebra::{
-    Algebra, BinaryOperator, Expression, Term, TriplePattern, UnaryOperator, Variable,
+    Algebra, BinaryOperator, Expression, Literal, Term, TriplePattern, UnaryOperator, Variable,
 };
 use crate::bgp_optimizer::{BGPOptimizer, OptimizedBGP};
 use crate::statistics_collector::{
@@ -2335,11 +2335,11 @@ impl QueryOptimizer {
     ) -> Option<crate::bgp_optimizer::IndexIntersection> {
         // Create intersection metadata
         Some(crate::bgp_optimizer::IndexIntersection {
-            left_pattern_idx: i,
-            right_pattern_idx: j,
-            intersection_variable: shared_vars.first()?.clone(),
-            estimated_benefit: 2.0, // Simplified benefit estimation
-            intersection_type: crate::bgp_optimizer::IntersectionType::VariableJoin,
+            pattern_idx: i,
+            primary_index: crate::optimizer::IndexType::BTree,
+            secondary_indexes: vec![crate::optimizer::IndexType::Hash],
+            selectivity_improvement: 2.0, // Simplified benefit estimation
+            intersection_algorithm: crate::bgp_optimizer::IntersectionAlgorithm::Hash,
         })
     }
 
@@ -2371,12 +2371,12 @@ impl QueryOptimizer {
         left_patterns: &[TriplePattern],
         right_patterns: &[TriplePattern],
     ) -> Result<IndexUnionPlan> {
-        let left_indexes = left_patterns
+        let left_indexes: Vec<_> = left_patterns
             .iter()
             .filter_map(|p| self.select_single_optimal_index(p).map(|(idx, _)| idx))
             .collect();
 
-        let right_indexes = right_patterns
+        let right_indexes: Vec<_> = right_patterns
             .iter()
             .filter_map(|p| self.select_single_optimal_index(p).map(|(idx, _)| idx))
             .collect();
@@ -2424,7 +2424,7 @@ impl QueryOptimizer {
             // Wrap with index scan hints for better execution
             Ok(Algebra::Filter {
                 pattern: Box::new(union),
-                condition: Expression::Bound(true),
+                condition: Expression::Literal(Literal::boolean(true)),
             })
         } else {
             Ok(union)
@@ -2445,53 +2445,53 @@ impl QueryOptimizer {
                 IndexType::SPO => {
                     // Create subject-predicate-object optimized pattern
                     patterns.push(TriplePattern {
-                        subject: Term::Variable(Variable::new("s")),
-                        predicate: Term::Variable(Variable::new("p")),
-                        object: Term::Variable(Variable::new("o")),
+                        subject: Term::Variable(Variable::new("s").unwrap()),
+                        predicate: Term::Variable(Variable::new("p").unwrap()),
+                        object: Term::Variable(Variable::new("o").unwrap()),
                     });
                 }
                 IndexType::PSO => {
                     // Create predicate-subject-object optimized pattern
                     patterns.push(TriplePattern {
-                        subject: Term::Variable(Variable::new("s")),
-                        predicate: Term::Variable(Variable::new("p")),
-                        object: Term::Variable(Variable::new("o")),
+                        subject: Term::Variable(Variable::new("s").unwrap()),
+                        predicate: Term::Variable(Variable::new("p").unwrap()),
+                        object: Term::Variable(Variable::new("o").unwrap()),
                     });
                 }
                 IndexType::SubjectPredicate => {
                     patterns.push(TriplePattern {
-                        subject: Term::Variable(Variable::new("s")),
-                        predicate: Term::Variable(Variable::new("p")),
-                        object: Term::Variable(Variable::new("o")),
+                        subject: Term::Variable(Variable::new("s").unwrap()),
+                        predicate: Term::Variable(Variable::new("p").unwrap()),
+                        object: Term::Variable(Variable::new("o").unwrap()),
                     });
                 }
                 IndexType::PredicateObject => {
                     patterns.push(TriplePattern {
-                        subject: Term::Variable(Variable::new("s")),
-                        predicate: Term::Variable(Variable::new("p")),
-                        object: Term::Variable(Variable::new("o")),
+                        subject: Term::Variable(Variable::new("s").unwrap()),
+                        predicate: Term::Variable(Variable::new("p").unwrap()),
+                        object: Term::Variable(Variable::new("o").unwrap()),
                     });
                 }
                 _ => {
                     // Default pattern for other index types
                     patterns.push(TriplePattern {
-                        subject: Term::Variable(Variable::new("s")),
-                        predicate: Term::Variable(Variable::new("p")),
-                        object: Term::Variable(Variable::new("o")),
+                        subject: Term::Variable(Variable::new("s").unwrap()),
+                        predicate: Term::Variable(Variable::new("p").unwrap()),
+                        object: Term::Variable(Variable::new("o").unwrap()),
                     });
                 }
             }
         }
         
         if patterns.len() == 1 {
-            Ok(Algebra::TriplePattern(patterns[0].clone()))
+            Ok(Algebra::bgp(vec![patterns[0].clone()]))
         } else {
             // Create efficient join structure for multiple patterns
-            let mut bgp = Algebra::TriplePattern(patterns[0].clone());
+            let mut bgp = Algebra::bgp(vec![patterns[0].clone()]);
             for pattern in patterns.iter().skip(1) {
                 bgp = Algebra::Join {
                     left: Box::new(bgp),
-                    right: Box::new(Algebra::TriplePattern(pattern.clone())),
+                    right: Box::new(Algebra::bgp(vec![pattern.clone()])),
                 };
             }
             Ok(bgp)

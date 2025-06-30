@@ -166,8 +166,8 @@ pub use federated_learning::{
     FederationStats, PrivacyLevel as FederatedPrivacyLevel,
 };
 pub use multimodal_validation::{
-    ContentType, CrossModalValidation, MultiModalConfig, MultiModalReport, MultiModalValidator,
-    QualityAssessment, ValidationMode,
+    ContentType, MultiModalConfig, MultiModalValidator, MultiModalValidationReport,
+    ValidationIssue,
 };
 pub use streaming_adaptation::{
     AdaptationEvent, AdaptationEventType, RealTimeAdaptationStats, RealTimeMetrics, StreamType,

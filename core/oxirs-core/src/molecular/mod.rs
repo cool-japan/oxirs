@@ -4,10 +4,9 @@
 //! and molecular processes for ultra-efficient RDF data storage and processing.
 
 use crate::error::OxirsResult;
-use crate::model::{Quad, Term, Triple};
-use std::cell::RefCell;
+use crate::model::{Term, Triple};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// DNA-inspired data structure for RDF storage
@@ -903,7 +902,7 @@ pub enum HistoneModificationType {
     Phosphorylation,
     Ubiquitination,
     Sumoylation,
-    ADP_Ribosylation,
+    AdpRibosylation,
 }
 
 /// Cohesin complex

@@ -1,11 +1,11 @@
 use anyhow::Result;
-use oxirs_tdb::{TdbConfig, TdbStore, Term, Transaction};
+use oxirs_tdb::{SimpleTdbConfig, TdbStore, Term, Transaction};
 use tempfile::TempDir;
 
 /// Helper to create a test TDB store
 fn create_test_store() -> Result<(TdbStore, TempDir)> {
     let temp_dir = TempDir::new()?;
-    let config = TdbConfig {
+    let config = SimpleTdbConfig {
         location: temp_dir.path().to_string_lossy().to_string(),
         cache_size: 1024 * 1024 * 10, // 10MB for tests
         enable_transactions: true,
@@ -280,7 +280,7 @@ fn test_backup_and_integrity() -> Result<()> {
 
     // Test metadata operations
     let metadata = store.get_database_metadata();
-    assert!(metadata.created_at > 0, "Invalid creation timestamp");
+    assert!(metadata.created_timestamp > 0, "Invalid creation timestamp");
 
     Ok(())
 }
@@ -514,7 +514,7 @@ fn test_clear_and_compact() -> Result<()> {
 }
 
 #[test]
-fn test_concurrent_operations() -> Result<()> {
+fn test_multithreaded_operations() -> Result<()> {
     use std::sync::Arc;
     use std::thread;
 

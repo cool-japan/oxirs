@@ -1,7 +1,9 @@
 //! Logical constraint implementations with performance optimizations for negation and deep nesting
 
+use oxirs_core::{Subject, Predicate, Object};
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
 use super::constraint_types::Constraint;
+use super::shape_constraints::EvaluationComplexity;
 use crate::{
     ConstraintComponentId, 
     Result, 
@@ -207,15 +209,17 @@ impl NotConstraint {
                 };
 
                 // Check if the store contains the triple: value rdf:type Friend
-                for quad in store.quads_for_pattern(
-                    Some(node.clone().into()),
-                    Some(type_predicate.into()),
-                    Some(friend_type.clone().into()),
+                let subject: Subject = node.clone().into();
+                let predicate: Predicate = type_predicate.into();
+                let object: Object = friend_type.clone().into();
+                let quads = store.query_quads(
+                    Some(&subject),
+                    Some(&predicate),
+                    Some(&object),
                     None,
-                ) {
-                    if let Ok(_) = quad {
-                        return Ok(true);
-                    }
+                )?;
+                if !quads.is_empty() {
+                    return Ok(true);
                 }
             }
             return Ok(false);
@@ -462,15 +466,17 @@ impl AndConstraint {
                     Err(_) => return Ok(false),
                 };
 
-                for quad in store.quads_for_pattern(
-                    Some(node.clone().into()),
-                    Some(type_predicate.into()),
-                    Some(friend_type.clone().into()),
+                let subject: Subject = node.clone().into();
+                let predicate: Predicate = type_predicate.into();
+                let object: Object = friend_type.clone().into();
+                let quads = store.query_quads(
+                    Some(&subject),
+                    Some(&predicate),
+                    Some(&object),
                     None,
-                ) {
-                    if let Ok(_) = quad {
-                        return Ok(true);
-                    }
+                )?;
+                if !quads.is_empty() {
+                    return Ok(true);
                 }
             }
             return Ok(false);
@@ -758,15 +764,17 @@ impl OrConstraint {
                     Err(_) => return Ok(false),
                 };
 
-                for quad in store.quads_for_pattern(
-                    Some(node.clone().into()),
-                    Some(type_predicate.into()),
-                    Some(friend_type.clone().into()),
+                let subject: Subject = node.clone().into();
+                let predicate: Predicate = type_predicate.into();
+                let object: Object = friend_type.clone().into();
+                let quads = store.query_quads(
+                    Some(&subject),
+                    Some(&predicate),
+                    Some(&object),
                     None,
-                ) {
-                    if let Ok(_) = quad {
-                        return Ok(true);
-                    }
+                )?;
+                if !quads.is_empty() {
+                    return Ok(true);
                 }
             }
             return Ok(false);
@@ -1104,15 +1112,17 @@ impl XoneConstraint {
                     Err(_) => return Ok(false),
                 };
 
-                for quad in store.quads_for_pattern(
-                    Some(node.clone().into()),
-                    Some(type_predicate.into()),
-                    Some(friend_type.clone().into()),
+                let subject: Subject = node.clone().into();
+                let predicate: Predicate = type_predicate.into();
+                let object: Object = friend_type.clone().into();
+                let quads = store.query_quads(
+                    Some(&subject),
+                    Some(&predicate),
+                    Some(&object),
                     None,
-                ) {
-                    if let Ok(_) = quad {
-                        return Ok(true);
-                    }
+                )?;
+                if !quads.is_empty() {
+                    return Ok(true);
                 }
             }
             return Ok(false);
