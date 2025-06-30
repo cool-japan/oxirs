@@ -13,11 +13,11 @@ use tracing::{debug, info, warn};
 
 use crate::ast::Document;
 use crate::distributed_cache::{CacheConfig, GraphQLQueryCache};
-use crate::federation::{EnhancedFederationManager, EnhancedFederationConfig};
-use crate::hybrid_optimizer::{HybridQueryOptimizer, HybridOptimizerConfig};
-use crate::ml_optimizer::{MLQueryOptimizer, MLOptimizerConfig};
+use crate::federation::{EnhancedFederationConfig, EnhancedFederationManager};
+use crate::hybrid_optimizer::{HybridOptimizerConfig, HybridQueryOptimizer};
+use crate::ml_optimizer::{MLOptimizerConfig, MLQueryOptimizer};
 use crate::performance::PerformanceTracker;
-use crate::quantum_optimizer::{QuantumQueryOptimizer, QuantumOptimizerConfig};
+use crate::quantum_optimizer::{QuantumOptimizerConfig, QuantumQueryOptimizer};
 
 /// Benchmarking configuration
 #[derive(Debug, Clone)]
@@ -54,12 +54,8 @@ impl Default for BenchmarkConfig {
                 OptimizationStrategy::Quantum,
                 OptimizationStrategy::Hybrid,
             ],
-            cache_configurations: vec![
-                CacheConfig::default(),
-            ],
-            federation_configurations: vec![
-                EnhancedFederationConfig::default(),
-            ],
+            cache_configurations: vec![CacheConfig::default()],
+            federation_configurations: vec![EnhancedFederationConfig::default()],
         }
     }
 }
@@ -289,13 +285,15 @@ impl PerformanceBenchmarkSuite {
     /// Run warmup period
     async fn run_warmup(&self) -> Result<()> {
         let warmup_queries = self.generate_test_queries(&TestScenario::SimpleQuery, 50);
-        
+
         let warmup_start = Instant::now();
         while warmup_start.elapsed() < self.config.warmup_duration {
             for query in &warmup_queries {
                 // Execute query without recording results
-                let _ = self.execute_query_with_strategy(query, &OptimizationStrategy::None).await;
-                
+                let _ = self
+                    .execute_query_with_strategy(query, &OptimizationStrategy::None)
+                    .await;
+
                 // Small delay to avoid overwhelming the system
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
@@ -326,7 +324,7 @@ impl PerformanceBenchmarkSuite {
         for user_id in 0..self.config.concurrent_users {
             let queries_clone = queries.clone();
             let strategy_clone = strategy.clone();
-            
+
             let task = {
                 let suite = self;
                 async move {
@@ -336,7 +334,10 @@ impl PerformanceBenchmarkSuite {
 
                     for query in queries_clone {
                         let start = Instant::now();
-                        match suite.execute_query_with_strategy(&query, &strategy_clone).await {
+                        match suite
+                            .execute_query_with_strategy(&query, &strategy_clone)
+                            .await
+                        {
                             Ok(_) => {
                                 user_successful += 1;
                                 user_response_times.push(start.elapsed());
@@ -370,14 +371,16 @@ impl PerformanceBenchmarkSuite {
         let total_time = test_start.elapsed();
 
         // Calculate statistics
-        let result = self.calculate_benchmark_result(
-            scenario,
-            strategy,
-            &response_times,
-            successful_requests,
-            failed_requests,
-            total_time,
-        ).await?;
+        let result = self
+            .calculate_benchmark_result(
+                scenario,
+                strategy,
+                &response_times,
+                successful_requests,
+                failed_requests,
+                total_time,
+            )
+            .await?;
 
         Ok(result)
     }
@@ -504,12 +507,24 @@ impl PerformanceBenchmarkSuite {
     }
 
     /// Create other query types (simplified implementations)
-    fn create_deep_nested_query(&self, id: usize) -> Document { self.create_simple_query(id) }
-    fn create_federated_query(&self, id: usize) -> Document { self.create_simple_query(id) }
-    fn create_aggregation_query(&self, id: usize) -> Document { self.create_simple_query(id) }
-    fn create_subscription_query(&self, id: usize) -> Document { self.create_simple_query(id) }
-    fn create_bulk_operation_query(&self, id: usize) -> Document { self.create_simple_query(id) }
-    fn create_stress_test_query(&self, id: usize) -> Document { self.create_simple_query(id) }
+    fn create_deep_nested_query(&self, id: usize) -> Document {
+        self.create_simple_query(id)
+    }
+    fn create_federated_query(&self, id: usize) -> Document {
+        self.create_simple_query(id)
+    }
+    fn create_aggregation_query(&self, id: usize) -> Document {
+        self.create_simple_query(id)
+    }
+    fn create_subscription_query(&self, id: usize) -> Document {
+        self.create_simple_query(id)
+    }
+    fn create_bulk_operation_query(&self, id: usize) -> Document {
+        self.create_simple_query(id)
+    }
+    fn create_stress_test_query(&self, id: usize) -> Document {
+        self.create_simple_query(id)
+    }
 
     /// Calculate benchmark result statistics
     async fn calculate_benchmark_result(
@@ -549,17 +564,27 @@ impl PerformanceBenchmarkSuite {
         sorted_times.sort();
 
         let total_requests = successful_requests + failed_requests;
-        let average_response_time = response_times.iter().sum::<Duration>() / response_times.len() as u32;
+        let average_response_time =
+            response_times.iter().sum::<Duration>() / response_times.len() as u32;
         let min_response_time = *sorted_times.first().unwrap_or(&Duration::from_millis(0));
         let max_response_time = *sorted_times.last().unwrap_or(&Duration::from_millis(0));
-        
+
         let p50_index = (sorted_times.len() as f64 * 0.5) as usize;
         let p95_index = (sorted_times.len() as f64 * 0.95) as usize;
         let p99_index = (sorted_times.len() as f64 * 0.99) as usize;
-        
-        let p50_response_time = sorted_times.get(p50_index).copied().unwrap_or(Duration::from_millis(0));
-        let p95_response_time = sorted_times.get(p95_index).copied().unwrap_or(Duration::from_millis(0));
-        let p99_response_time = sorted_times.get(p99_index).copied().unwrap_or(Duration::from_millis(0));
+
+        let p50_response_time = sorted_times
+            .get(p50_index)
+            .copied()
+            .unwrap_or(Duration::from_millis(0));
+        let p95_response_time = sorted_times
+            .get(p95_index)
+            .copied()
+            .unwrap_or(Duration::from_millis(0));
+        let p99_response_time = sorted_times
+            .get(p99_index)
+            .copied()
+            .unwrap_or(Duration::from_millis(0));
 
         let requests_per_second = if total_time.as_secs_f64() > 0.0 {
             successful_requests as f64 / total_time.as_secs_f64()
@@ -603,8 +628,8 @@ impl PerformanceBenchmarkSuite {
             p99_response_time,
             requests_per_second,
             throughput_mbps: requests_per_second * 0.001, // Simplified calculation
-            memory_usage_mb: 0.0, // Would require actual memory monitoring
-            cpu_usage_percent: 0.0, // Would require actual CPU monitoring
+            memory_usage_mb: 0.0,                         // Would require actual memory monitoring
+            cpu_usage_percent: 0.0,                       // Would require actual CPU monitoring
             cache_hit_rate,
             error_rate,
             detailed_metrics: None, // Could be populated if enabled
@@ -628,32 +653,28 @@ impl PerformanceBenchmarkSuite {
 
         // Calculate rankings
         let mut strategy_rankings = Vec::new();
-        let strategies: std::collections::HashSet<String> = results
-            .iter()
-            .map(|r| r.strategy.clone())
-            .collect();
+        let strategies: std::collections::HashSet<String> =
+            results.iter().map(|r| r.strategy.clone()).collect();
 
         for strategy in strategies {
-            let strategy_results: Vec<_> = results
-                .iter()
-                .filter(|r| r.strategy == strategy)
-                .collect();
+            let strategy_results: Vec<_> =
+                results.iter().filter(|r| r.strategy == strategy).collect();
 
             if !strategy_results.is_empty() {
                 let avg_response_time = strategy_results
                     .iter()
                     .map(|r| r.average_response_time.as_millis() as f64)
-                    .sum::<f64>() / strategy_results.len() as f64;
+                    .sum::<f64>()
+                    / strategy_results.len() as f64;
 
                 let avg_throughput = strategy_results
                     .iter()
                     .map(|r| r.requests_per_second)
-                    .sum::<f64>() / strategy_results.len() as f64;
+                    .sum::<f64>()
+                    / strategy_results.len() as f64;
 
-                let avg_error_rate = strategy_results
-                    .iter()
-                    .map(|r| r.error_rate)
-                    .sum::<f64>() / strategy_results.len() as f64;
+                let avg_error_rate = strategy_results.iter().map(|r| r.error_rate).sum::<f64>()
+                    / strategy_results.len() as f64;
 
                 // Simple scoring algorithm (lower is better for response time and error rate)
                 let score = avg_response_time + (100.0 - avg_throughput) + avg_error_rate;
@@ -713,7 +734,8 @@ impl PerformanceBenchmarkSuite {
         let mut recommendations = Vec::new();
 
         // Analyze results and generate recommendations
-        let avg_error_rate = results.iter().map(|r| r.error_rate).sum::<f64>() / results.len() as f64;
+        let avg_error_rate =
+            results.iter().map(|r| r.error_rate).sum::<f64>() / results.len() as f64;
         if avg_error_rate > 5.0 {
             recommendations.push(PerformanceRecommendation {
                 category: "Reliability".to_string(),
@@ -723,13 +745,17 @@ impl PerformanceBenchmarkSuite {
             });
         }
 
-        let avg_response_time = results.iter()
+        let avg_response_time = results
+            .iter()
             .map(|r| r.average_response_time.as_millis() as f64)
-            .sum::<f64>() / results.len() as f64;
+            .sum::<f64>()
+            / results.len() as f64;
         if avg_response_time > 1000.0 {
             recommendations.push(PerformanceRecommendation {
                 category: "Performance".to_string(),
-                recommendation: "Response times are high. Consider implementing hybrid optimization strategies.".to_string(),
+                recommendation:
+                    "Response times are high. Consider implementing hybrid optimization strategies."
+                        .to_string(),
                 impact: "Medium".to_string(),
                 priority: "High".to_string(),
             });
@@ -737,10 +763,9 @@ impl PerformanceBenchmarkSuite {
 
         let cache_results: Vec<_> = results.iter().filter(|r| r.cache_hit_rate > 0.0).collect();
         if !cache_results.is_empty() {
-            let avg_cache_hit_rate = cache_results.iter()
-                .map(|r| r.cache_hit_rate)
-                .sum::<f64>() / cache_results.len() as f64;
-            
+            let avg_cache_hit_rate = cache_results.iter().map(|r| r.cache_hit_rate).sum::<f64>()
+                / cache_results.len() as f64;
+
             if avg_cache_hit_rate < 50.0 {
                 recommendations.push(PerformanceRecommendation {
                     category: "Caching".to_string(),
@@ -809,7 +834,10 @@ impl PerformanceBenchmarkSuite {
         html.push_str("<!DOCTYPE html><html><head><title>Benchmark Report</title></head><body>");
         html.push_str("<h1>Performance Benchmark Report</h1>");
         html.push_str(&format!("<p>Generated at: {:?}</p>", report.generated_at));
-        html.push_str(&format!("<p>Best Strategy: {}</p>", report.summary.best_strategy));
+        html.push_str(&format!(
+            "<p>Best Strategy: {}</p>",
+            report.summary.best_strategy
+        ));
         html.push_str("<table border='1'><tr><th>Scenario</th><th>Strategy</th><th>Avg Response Time</th><th>Requests/sec</th><th>Error Rate</th></tr>");
 
         for result in &report.results {
@@ -862,29 +890,27 @@ mod tests {
         let config = BenchmarkConfig::default();
         let suite = PerformanceBenchmarkSuite::new(config);
 
-        let results = vec![
-            BenchmarkResult {
-                scenario: "SimpleQuery".to_string(),
-                strategy: "ML".to_string(),
-                configuration: "default".to_string(),
-                total_requests: 100,
-                successful_requests: 95,
-                failed_requests: 5,
-                average_response_time: Duration::from_millis(150),
-                min_response_time: Duration::from_millis(50),
-                max_response_time: Duration::from_millis(300),
-                p50_response_time: Duration::from_millis(140),
-                p95_response_time: Duration::from_millis(250),
-                p99_response_time: Duration::from_millis(290),
-                requests_per_second: 50.0,
-                throughput_mbps: 1.5,
-                memory_usage_mb: 128.0,
-                cpu_usage_percent: 25.0,
-                cache_hit_rate: 75.0,
-                error_rate: 5.0,
-                detailed_metrics: None,
-            },
-        ];
+        let results = vec![BenchmarkResult {
+            scenario: "SimpleQuery".to_string(),
+            strategy: "ML".to_string(),
+            configuration: "default".to_string(),
+            total_requests: 100,
+            successful_requests: 95,
+            failed_requests: 5,
+            average_response_time: Duration::from_millis(150),
+            min_response_time: Duration::from_millis(50),
+            max_response_time: Duration::from_millis(300),
+            p50_response_time: Duration::from_millis(140),
+            p95_response_time: Duration::from_millis(250),
+            p99_response_time: Duration::from_millis(290),
+            requests_per_second: 50.0,
+            throughput_mbps: 1.5,
+            memory_usage_mb: 128.0,
+            cpu_usage_percent: 25.0,
+            cache_hit_rate: 75.0,
+            error_rate: 5.0,
+            detailed_metrics: None,
+        }];
 
         let csv = suite.results_to_csv(&results).unwrap();
         assert!(csv.contains("SimpleQuery"));

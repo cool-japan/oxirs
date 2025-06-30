@@ -116,11 +116,13 @@ impl QueryGraph {
         variable_node: NodeIndex,
         role: VariableRole,
     ) {
-        self.graph.add_edge(pattern_node, variable_node, EdgeType::Variable(role));
+        self.graph
+            .add_edge(pattern_node, variable_node, EdgeType::Variable(role));
     }
 
     pub fn connect_filter_to_pattern(&mut self, filter_node: NodeIndex, pattern_node: NodeIndex) {
-        self.graph.add_edge(filter_node, pattern_node, EdgeType::Dependency);
+        self.graph
+            .add_edge(filter_node, pattern_node, EdgeType::Dependency);
     }
 
     pub fn pattern_nodes(&self) -> &[NodeIndex] {
@@ -135,7 +137,11 @@ impl QueryGraph {
         self.graph.node_weight(node)
     }
 
-    pub fn pattern_binds_variable(&self, _pattern_node: NodeIndex, _variable_node: NodeIndex) -> bool {
+    pub fn pattern_binds_variable(
+        &self,
+        _pattern_node: NodeIndex,
+        _variable_node: NodeIndex,
+    ) -> bool {
         // Implementation would check if pattern binds the variable
         true
     }
@@ -269,16 +275,16 @@ impl CostEstimator {
         pattern: &TriplePattern,
     ) -> f64 {
         let mut cost = self.base_cost;
-        
+
         // Add network latency cost
         cost += self.network_cost_factor;
-        
+
         // Add pattern complexity cost
         let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
             .iter()
             .filter(|p| p.as_ref().map_or(false, |s| s.starts_with('?')))
             .count();
-            
+
         cost += match var_count {
             0 => 10.0,  // All constants - very fast
             1 => 25.0,  // One variable
@@ -286,12 +292,12 @@ impl CostEstimator {
             3 => 100.0, // All variables - expensive
             _ => 100.0,
         };
-        
+
         // Service-specific adjustments
         if service.endpoint.contains("localhost") {
             cost *= 0.5; // Local services are faster
         }
-        
+
         cost
     }
 
@@ -305,7 +311,7 @@ impl CostEstimator {
         // Simple network cost model
         let latency_factor = 10.0;
         let processing_factor = 5.0;
-        
+
         (latency_factor + processing_factor) * self.network_cost_factor
     }
 }
@@ -453,7 +459,7 @@ impl ServiceBloomFilter {
             capacity,
         }
     }
-    
+
     pub fn insert(&mut self, item: &str) {
         for i in 0..self.hash_functions {
             let hash = self.hash(item, i);
@@ -461,7 +467,7 @@ impl ServiceBloomFilter {
             self.bits[index] = true;
         }
     }
-    
+
     pub fn contains(&self, item: &str) -> bool {
         for i in 0..self.hash_functions {
             let hash = self.hash(item, i);
@@ -472,11 +478,11 @@ impl ServiceBloomFilter {
         }
         true
     }
-    
+
     fn hash(&self, item: &str, seed: usize) -> usize {
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
-        
+        use std::hash::{Hash, Hasher};
+
         let mut hasher = DefaultHasher::new();
         item.hash(&mut hasher);
         seed.hash(&mut hasher);

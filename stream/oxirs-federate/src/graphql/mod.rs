@@ -11,17 +11,17 @@
 //! - `entity_resolution`: Entity resolution, dependency graphs, and advanced federation operations
 //! - `translation`: GraphQL to SPARQL translation layer for hybrid query processing
 
-pub mod types;
 pub mod core;
-pub mod schema_management;
-pub mod query_processing;
 pub mod entity_resolution;
+pub mod query_processing;
+pub mod schema_management;
 pub mod translation;
+pub mod types;
 
 // Re-export main types and structs for public API
-pub use types::*;
 pub use core::*;
 pub use entity_resolution::*;
+pub use types::*;
 
 #[cfg(test)]
 mod tests {
@@ -94,7 +94,10 @@ mod tests {
         assert!(parsed_result.is_ok());
 
         let parsed_query = parsed_result.unwrap();
-        assert!(matches!(parsed_query.operation_type, GraphQLOperationType::Query));
+        assert!(matches!(
+            parsed_query.operation_type,
+            GraphQLOperationType::Query
+        ));
         assert_eq!(parsed_query.operation_name, Some("GetUser".to_string()));
         assert!(!parsed_query.selection_set.is_empty());
     }
@@ -106,34 +109,30 @@ mod tests {
         let query = ParsedQuery {
             operation_type: GraphQLOperationType::Query,
             operation_name: Some("TestQuery".to_string()),
-            selection_set: vec![
-                Selection {
-                    name: "user".to_string(),
-                    alias: None,
-                    arguments: HashMap::new(),
-                    selection_set: vec![
-                        Selection {
-                            name: "id".to_string(),
+            selection_set: vec![Selection {
+                name: "user".to_string(),
+                alias: None,
+                arguments: HashMap::new(),
+                selection_set: vec![
+                    Selection {
+                        name: "id".to_string(),
+                        alias: None,
+                        arguments: HashMap::new(),
+                        selection_set: Vec::new(),
+                    },
+                    Selection {
+                        name: "profile".to_string(),
+                        alias: None,
+                        arguments: HashMap::new(),
+                        selection_set: vec![Selection {
+                            name: "bio".to_string(),
                             alias: None,
                             arguments: HashMap::new(),
                             selection_set: Vec::new(),
-                        },
-                        Selection {
-                            name: "profile".to_string(),
-                            alias: None,
-                            arguments: HashMap::new(),
-                            selection_set: vec![
-                                Selection {
-                                    name: "bio".to_string(),
-                                    alias: None,
-                                    arguments: HashMap::new(),
-                                    selection_set: Vec::new(),
-                                },
-                            ],
-                        },
-                    ],
-                },
-            ],
+                        }],
+                    },
+                ],
+            }],
             variables: HashMap::new(),
         };
 
@@ -161,7 +160,10 @@ mod tests {
                     name: "key".to_string(),
                     arguments: {
                         let mut args = HashMap::new();
-                        args.insert("fields".to_string(), serde_json::Value::String("id".to_string()));
+                        args.insert(
+                            "fields".to_string(),
+                            serde_json::Value::String("id".to_string()),
+                        );
                         args
                     },
                 },
@@ -245,11 +247,11 @@ mod tests {
 
         let queries = service_queries.unwrap();
         assert_eq!(queries.len(), 2);
-        
+
         let user_query = queries.iter().find(|q| q.service_id == "user-service");
         assert!(user_query.is_some());
         assert!(user_query.unwrap().query.contains("user"));
-        
+
         let product_query = queries.iter().find(|q| q.service_id == "product-service");
         assert!(product_query.is_some());
         assert!(product_query.unwrap().query.contains("product"));
@@ -263,46 +265,58 @@ mod tests {
             service_id: "test-service".to_string(),
             types: {
                 let mut types = HashMap::new();
-                types.insert("User".to_string(), TypeDefinition {
-                    name: "User".to_string(),
-                    description: None,
-                    kind: TypeKind::Object { fields: HashMap::new() },
-                    directives: vec![
-                        Directive {
+                types.insert(
+                    "User".to_string(),
+                    TypeDefinition {
+                        name: "User".to_string(),
+                        description: None,
+                        kind: TypeKind::Object {
+                            fields: HashMap::new(),
+                        },
+                        directives: vec![Directive {
                             name: "key".to_string(),
                             arguments: HashMap::new(),
-                        },
-                    ],
-                });
+                        }],
+                    },
+                );
                 types
             },
             queries: HashMap::new(),
             mutations: HashMap::new(),
             subscriptions: {
                 let mut subs = HashMap::new();
-                subs.insert("userUpdated".to_string(), FieldDefinition {
-                    name: "userUpdated".to_string(),
-                    description: None,
-                    field_type: "User".to_string(),
-                    arguments: HashMap::new(),
-                    directives: Vec::new(),
-                });
+                subs.insert(
+                    "userUpdated".to_string(),
+                    FieldDefinition {
+                        name: "userUpdated".to_string(),
+                        description: None,
+                        field_type: "User".to_string(),
+                        arguments: HashMap::new(),
+                        directives: Vec::new(),
+                    },
+                );
                 subs
             },
             directives: {
                 let mut dirs = HashMap::new();
-                dirs.insert("key".to_string(), DirectiveDefinition {
-                    name: "key".to_string(),
-                    description: None,
-                    locations: vec![DirectiveLocation::Object],
-                    arguments: HashMap::new(),
-                    repeatable: false,
-                });
+                dirs.insert(
+                    "key".to_string(),
+                    DirectiveDefinition {
+                        name: "key".to_string(),
+                        description: None,
+                        locations: vec![DirectiveLocation::Object],
+                        arguments: HashMap::new(),
+                        repeatable: false,
+                    },
+                );
                 dirs
             },
         };
 
-        federation.register_schema("test-service".to_string(), schema).await.unwrap();
+        federation
+            .register_schema("test-service".to_string(), schema)
+            .await
+            .unwrap();
 
         let capabilities = federation.analyze_schema_capabilities("test-service").await;
         assert!(capabilities.is_ok());

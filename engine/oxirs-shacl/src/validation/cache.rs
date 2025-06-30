@@ -1,13 +1,11 @@
 //! Caching functionality for validation operations
 
-use std::collections::HashMap;
-use std::cell::RefCell;
 use indexmap::IndexMap;
+use std::cell::RefCell;
+use std::collections::HashMap;
 
+use crate::{Constraint, ConstraintComponentId, PropertyPath, ShapeId};
 use oxirs_core::model::Term;
-use crate::{
-    Constraint, ConstraintComponentId, PropertyPath, ShapeId,
-};
 
 use super::{ConstraintCacheKey, ConstraintEvaluationResult};
 
@@ -61,7 +59,7 @@ impl ConstraintCache {
         let hits = *self.hits.borrow();
         let misses = *self.misses.borrow();
         let total = hits + misses;
-        
+
         if total == 0 {
             0.0
         } else {
@@ -104,7 +102,11 @@ impl InheritanceCache {
     }
 
     /// Cache inherited constraints for a shape
-    pub fn insert(&self, shape_id: ShapeId, constraints: IndexMap<ConstraintComponentId, Constraint>) {
+    pub fn insert(
+        &self,
+        shape_id: ShapeId,
+        constraints: IndexMap<ConstraintComponentId, Constraint>,
+    ) {
         let mut cache = self.cache.borrow_mut();
         cache.insert(shape_id, constraints);
     }
@@ -126,7 +128,10 @@ impl InheritanceCache {
     }
 
     /// Remove a specific entry from the cache
-    pub fn remove(&self, shape_id: &ShapeId) -> Option<IndexMap<ConstraintComponentId, Constraint>> {
+    pub fn remove(
+        &self,
+        shape_id: &ShapeId,
+    ) -> Option<IndexMap<ConstraintComponentId, Constraint>> {
         self.cache.borrow_mut().remove(shape_id)
     }
 }
@@ -201,7 +206,7 @@ impl CacheManager {
     /// Get overall cache statistics
     pub fn statistics(&self) -> CacheStatistics {
         let (constraint_hits, constraint_misses) = self.constraint_cache.stats();
-        
+
         CacheStatistics {
             constraint_cache_size: self.constraint_cache.size(),
             inheritance_cache_size: self.inheritance_cache.size(),

@@ -35,6 +35,8 @@
 use anyhow::Result;
 
 pub mod adaptive_compression;
+pub mod advanced_analytics;
+pub mod advanced_benchmarking;
 pub mod advanced_caching;
 pub mod advanced_metrics;
 pub mod advanced_result_merging;
@@ -45,40 +47,71 @@ pub mod compression;
 #[cfg(feature = "content-processing")]
 pub mod content_processing;
 pub mod cross_modal_embeddings;
+pub mod distributed_vector_search;
 pub mod embedding_pipeline;
 pub mod embeddings;
 pub mod enhanced_performance_monitoring;
+pub mod faiss_compatibility;
+pub mod faiss_integration;
+pub mod faiss_native_integration;
+pub mod faiss_migration_tools;
+pub mod faiss_gpu_integration;
+pub mod oxirs_arq_integration;
 pub mod gnn_embeddings;
-pub mod gpu_acceleration;
+pub mod gpu;
 pub mod graph_aware_search;
 pub mod graph_indices;
 pub mod hierarchical_similarity;
 pub mod hnsw;
 pub mod index;
 pub mod ivf;
+pub mod joint_embedding_spaces;
 pub mod kg_embeddings;
 pub mod lsh;
 pub mod mmap_advanced;
 pub mod mmap_index;
 pub mod opq;
 pub mod pq;
-pub mod real_time_analytics;
-pub mod result_fusion;
 pub mod rdf_content_enhancement;
 pub mod rdf_integration;
+pub mod real_time_analytics;
+pub mod real_time_embedding_pipeline;
+pub mod real_time_updates;
+pub mod result_fusion;
 pub mod similarity;
 pub mod sparql_integration;
 pub mod sparql_service_endpoint;
 pub mod sparse;
 pub mod storage_optimizations;
+pub mod store_integration;
 pub mod structured_vectors;
 pub mod tree_indices;
 pub mod word2vec;
+
+// Python bindings module
+#[cfg(feature = "python")]
+pub mod python_bindings;
 
 // Re-export commonly used types
 pub use adaptive_compression::{
     AdaptiveCompressor, CompressionMetrics, CompressionPriorities, MultiLevelCompression,
     VectorStats,
+};
+pub use advanced_analytics::{
+    AnomalyDetection, AnomalyDetector, AnomalyType, BottleneckInsight, BottleneckSeverity,
+    CachingStatistics, DerivationPath, DerivationStep, ImplementationEffort,
+    OptimizationRecommendation, PerformanceTrends, Priority, QualityAspect, QualityRecommendation,
+    QueryAnalytics, QueryAnomaly, RecommendationType, TraceAction, TraceEntry,
+    VectorAnalyticsEngine, VectorDistributionAnalysis, VectorQualityAssessment,
+};
+pub use advanced_benchmarking::{
+    AdvancedBenchmarkConfig, AdvancedBenchmarkResult, AdvancedBenchmarkSuite, AlgorithmParameters,
+    BenchmarkAlgorithm, BuildTimeMetrics, CacheMetrics, DatasetQualityMetrics, DatasetStatistics,
+    DistanceStatistics, EnhancedBenchmarkDataset, HyperparameterTuner, IndexSizeMetrics,
+    LatencyMetrics, MemoryMetrics, ObjectiveFunction, OptimizationStrategy, ParameterSpace,
+    ParameterType, ParameterValue, ParallelBenchmarkConfig, PerformanceMetrics,
+    PerformanceProfiler, QualityDegradation, QualityMetrics, ScalabilityMetrics,
+    StatisticalAnalyzer, StatisticalMetrics, ThroughputMetrics,
 };
 pub use advanced_caching::{
     BackgroundCacheWorker, CacheAnalysisReport, CacheAnalyzer, CacheConfig, CacheEntry,
@@ -109,6 +142,11 @@ pub use cross_modal_embeddings::{
     FusionStrategy, GraphData, GraphEncoder, ImageData, ImageEncoder, Modality, ModalityData,
     MultiModalContent, TextEncoder, VideoData, VideoEncoder,
 };
+pub use distributed_vector_search::{
+    DistributedVectorSearch, DistributedNodeConfig, DistributedQuery, DistributedSearchResponse,
+    NodeHealthStatus, ConsistencyLevel, PartitioningStrategy, LoadBalancingAlgorithm,
+    QueryExecutionStrategy, DistributedClusterStats,
+};
 pub use embedding_pipeline::{
     DimensionalityReduction, EmbeddingPipeline, NormalizationConfig, PostprocessingPipeline,
     PreprocessingPipeline, TokenizerConfig, VectorNormalization,
@@ -125,8 +163,13 @@ pub use enhanced_performance_monitoring::{
     Recommendation, RecommendationCategory, RecommendationPriority, SystemMetrics,
     SystemMetricsCollector, SystemStatistics, TrendData, TrendDirection,
 };
+pub use faiss_compatibility::{
+    FaissCompatibility, FaissIndexType, FaissIndexMetadata, FaissMetricType, FaissParameter,
+    FaissExportConfig, FaissImportConfig, ConversionResult, ConversionMetrics, CompressionLevel,
+    SimpleVectorIndex,
+};
 pub use gnn_embeddings::{AggregatorType, GraphSAGE, GCN};
-pub use gpu_acceleration::{GpuAccelerator, GpuBuffer, GpuConfig, GpuDevice, GpuVectorIndex};
+pub use gpu::{GpuAccelerator, GpuBuffer, GpuConfig, GpuDevice, GpuExecutionConfig, create_default_accelerator, create_performance_accelerator, create_memory_optimized_accelerator, is_gpu_available};
 pub use graph_indices::{
     DelaunayGraph, GraphIndex, GraphIndexConfig, GraphType, NSWGraph, ONNGGraph, PANNGGraph,
     RNGGraph,
@@ -139,6 +182,12 @@ pub use hierarchical_similarity::{
 pub use hnsw::{HnswConfig, HnswIndex};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use ivf::{IvfConfig, IvfIndex, IvfStats, QuantizationStrategy};
+pub use joint_embedding_spaces::{
+    ActivationFunction, AlignmentPair, CLIPAligner, ContrastiveOptimizer, CrossModalAttention,
+    CurriculumLearning, DataAugmentation, DifficultySchedule, DomainAdapter, DomainStatistics,
+    JointEmbeddingConfig, JointEmbeddingSpace, LearningRateSchedule, LinearProjector,
+    PacingFunction, ScheduleType, TemperatureScheduler, TrainingStatistics,
+};
 pub use kg_embeddings::{
     ComplEx, KGEmbedding, KGEmbeddingConfig, KGEmbeddingModel as KGModel, KGEmbeddingModelType,
     RotatE, TransE, Triple,
@@ -146,16 +195,6 @@ pub use kg_embeddings::{
 pub use lsh::{LshConfig, LshFamily, LshIndex, LshStats};
 pub use mmap_index::{MemoryMappedIndexStats, MemoryMappedVectorIndex};
 pub use pq::{PQConfig, PQIndex, PQStats};
-pub use real_time_analytics::{
-    AlertSeverity as AnalyticsAlertSeverity, AlertType as AnalyticsAlertType, AnalyticsConfig, AnalyticsEvent, 
-    AnalyticsReport as RealTimeAnalyticsReport, DashboardData as RealTimeDashboardData,
-    ExportFormat as AnalyticsExportFormat, MetricsCollector, PerformanceMonitor, QueryMetrics, SystemMetrics as AnalyticsSystemMetrics,
-    VectorAnalyticsEngine,
-};
-pub use result_fusion::{
-    FusedResults, FusionAlgorithm, FusionConfig, FusionQualityMetrics, FusionStats,
-    ResultFusionEngine, ScoreNormalizationStrategy, SourceResults, VectorSearchResult,
-};
 pub use rdf_content_enhancement::{
     ComponentWeights, MultiLanguageProcessor, PathConstraint, PathDirection, PropertyAggregator,
     PropertyPath, RdfContentConfig, RdfContentProcessor, RdfContext, RdfEntity, RdfValue,
@@ -165,11 +204,31 @@ pub use rdf_integration::{
     RdfIntegrationStats, RdfTermMapping, RdfTermMetadata, RdfTermType, RdfVectorConfig,
     RdfVectorIntegration, RdfVectorSearchResult, SearchMetadata,
 };
+pub use real_time_analytics::{
+    AlertSeverity as AnalyticsAlertSeverity, AlertType as AnalyticsAlertType, AnalyticsConfig,
+    AnalyticsEvent, AnalyticsReport as RealTimeAnalyticsReport,
+    DashboardData as RealTimeDashboardData, ExportFormat as AnalyticsExportFormat,
+    MetricsCollector, PerformanceMonitor, QueryMetrics, SystemMetrics as AnalyticsSystemMetrics,
+    VectorAnalyticsEngine,
+};
+pub use real_time_embedding_pipeline::{
+    RealTimeEmbeddingPipeline, RealTimeEmbeddingConfig, ContentItem, ProcessingPriority,
+    ProcessingResult, ProcessingStatus, PipelineStats, VersioningStrategy, MonitoringConfig,
+    AlertThresholds, AutoScalingConfig, CompressionConfig,
+};
+pub use real_time_updates::{
+    RealTimeVectorUpdater, RealTimeVectorSearch, UpdateOperation, UpdateBatch, UpdatePriority,
+    RealTimeConfig, UpdateStats, BatchProcessor,
+};
+pub use result_fusion::{
+    FusedResults, FusionAlgorithm, FusionConfig, FusionQualityMetrics, FusionStats,
+    ResultFusionEngine, ScoreNormalizationStrategy, SourceResults, VectorSearchResult,
+};
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
-    FederatedQueryResult, FederatedVectorService, HybridQuery, RetryConfig, ServiceHealthStatus,
-    SparqlVectorService, VectorOperation, VectorQueryBuilder, VectorServiceConfig,
-    VectorServiceRegistry,
+    FederatedQueryResult, SparqlVectorService, VectorServiceConfig, VectorQuery, 
+    VectorQueryResult, VectorServiceArg, VectorServiceResult, PerformanceMonitor,
+    CrossLanguageProcessor, QueryExecutor, SparqlVectorFunctions,
 };
 pub use sparql_service_endpoint::{
     AuthenticationInfo, AuthenticationType, CustomFunctionRegistry, FederatedOperation,
@@ -192,6 +251,32 @@ pub use tree_indices::{
 pub use word2vec::{
     AggregationMethod, OovStrategy, Word2VecConfig, Word2VecEmbeddingGenerator, Word2VecFormat,
 };
+
+/// Vector identifier type
+pub type VectorId = String;
+
+/// Trait for vector store implementations
+pub trait VectorStoreTrait: Send + Sync {
+    /// Insert a vector with metadata
+    fn insert_vector(&mut self, id: VectorId, vector: Vector) -> Result<()>;
+
+    /// Get a vector by its ID
+    fn get_vector(&self, id: &VectorId) -> Result<Option<Vector>>;
+
+    /// Search for similar vectors
+    fn search_similar(&self, query: &Vector, k: usize) -> Result<Vec<(VectorId, f32)>>;
+
+    /// Remove a vector by ID
+    fn remove_vector(&mut self, id: &VectorId) -> Result<bool>;
+
+    /// Get the number of vectors stored
+    fn len(&self) -> usize;
+
+    /// Check if the store is empty
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
 
 /// Precision types for vectors
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -909,6 +994,33 @@ impl VectorStore {
 impl Default for VectorStore {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl VectorStoreTrait for VectorStore {
+    fn insert_vector(&mut self, id: VectorId, vector: Vector) -> Result<()> {
+        self.index.insert(id, vector)
+    }
+
+    fn get_vector(&self, id: &VectorId) -> Result<Option<Vector>> {
+        Ok(self.index.get_vector(id).cloned())
+    }
+
+    fn search_similar(&self, query: &Vector, k: usize) -> Result<Vec<(VectorId, f32)>> {
+        self.index.search_knn(query, k)
+    }
+
+    fn remove_vector(&mut self, id: &VectorId) -> Result<bool> {
+        // VectorIndex trait doesn't have remove, so we'll return false for now
+        // This could be enhanced in the future if needed
+        let _ = id;
+        Ok(false)
+    }
+
+    fn len(&self) -> usize {
+        // VectorIndex trait doesn't have len, so we'll return 0 for now
+        // This could be enhanced in the future if needed
+        0
     }
 }
 

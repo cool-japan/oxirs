@@ -1,12 +1,14 @@
 //! DNA replication machinery for data copying and validation
 
-use crate::error::OxirsResult;
-use super::types::*;
 use super::dna_structures::{NucleotideData, SpecialMarker};
+use super::types::*;
+use crate::error::OxirsResult;
+use crate::model::{NamedNode, Term};
+use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
 /// Replication machinery for data copying
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplicationMachinery {
     /// DNA polymerase for strand synthesis
     pub polymerase: DnaPolymerase,
@@ -21,7 +23,7 @@ pub struct ReplicationMachinery {
 }
 
 /// DNA polymerase for data synthesis
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DnaPolymerase {
     /// Synthesis rate (nucleotides per second)
     pub synthesis_rate: f64,
@@ -34,7 +36,7 @@ pub struct DnaPolymerase {
 }
 
 /// Helicase for strand unwinding
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Helicase {
     /// Unwinding rate (base pairs per second)
     pub unwinding_rate: f64,
@@ -45,7 +47,7 @@ pub struct Helicase {
 }
 
 /// Ligase for joining DNA fragments
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ligase {
     /// Ligation efficiency
     pub efficiency: f64,
@@ -54,7 +56,7 @@ pub struct Ligase {
 }
 
 /// Primase for primer synthesis
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Primase {
     /// Primer length
     pub primer_length: usize,
@@ -63,7 +65,7 @@ pub struct Primase {
 }
 
 /// Proofreading system for error detection and correction
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofreadingSystem {
     /// Exonuclease activity for error removal
     pub exonuclease: ExonucleaseActivity,
@@ -76,7 +78,7 @@ pub struct ProofreadingSystem {
 }
 
 /// Exonuclease activity for error correction
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExonucleaseActivity {
     /// Activity level (0.0 - 1.0)
     pub activity_level: f64,
@@ -85,14 +87,14 @@ pub struct ExonucleaseActivity {
 }
 
 /// Exonuclease direction
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExonucleaseDirection {
     ThreePrimeToFivePrime,
     FivePrimeToThreePrime,
 }
 
 /// Mismatch detector for finding replication errors
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MismatchDetector {
     /// Detection accuracy
     pub accuracy: f64,
@@ -101,7 +103,19 @@ pub struct MismatchDetector {
     /// False positive rate
     pub false_positive_rate: f64,
     /// Last scan time
+    #[serde(skip)]
     pub last_scan: Option<Instant>,
+}
+
+impl Default for MismatchDetector {
+    fn default() -> Self {
+        Self {
+            accuracy: 0.95,
+            scanning_speed: 1000.0,
+            false_positive_rate: 0.01,
+            last_scan: None,
+        }
+    }
 }
 
 impl ReplicationMachinery {
@@ -117,12 +131,15 @@ impl ReplicationMachinery {
     }
 
     /// Replicate a DNA strand
-    pub fn replicate_strand(&mut self, template: &[NucleotideData]) -> OxirsResult<Vec<NucleotideData>> {
+    pub fn replicate_strand(
+        &mut self,
+        template: &[NucleotideData],
+    ) -> OxirsResult<Vec<NucleotideData>> {
         let mut new_strand = Vec::with_capacity(template.len());
-        
+
         // Initialize replication
         self.helicase.unwind_start()?;
-        
+
         // Synthesize primer
         let primer = self.primase.synthesize_primer()?;
         new_strand.extend(primer);
@@ -130,13 +147,16 @@ impl ReplicationMachinery {
         // Main synthesis loop
         for (i, nucleotide) in template.iter().enumerate() {
             self.helicase.advance_position(i)?;
-            
+
             // Synthesize complementary nucleotide
             let complement = self.polymerase.synthesize_complement(nucleotide)?;
-            
+
             // Proofreading check
             if self.proofreading.should_proofread(i) {
-                if let Some(corrected) = self.proofreading.check_and_correct(&complement, nucleotide)? {
+                if let Some(corrected) = self
+                    .proofreading
+                    .check_and_correct(&complement, nucleotide)?
+                {
                     new_strand.push(corrected);
                 } else {
                     new_strand.push(complement);
@@ -144,7 +164,7 @@ impl ReplicationMachinery {
             } else {
                 new_strand.push(complement);
             }
-            
+
             // Update polymerase position
             self.polymerase.advance()?;
         }
@@ -170,7 +190,7 @@ impl ReplicationMachinery {
     fn calculate_efficiency(&self) -> f64 {
         let error_rate = self.polymerase.error_rate;
         let correction_efficiency = self.proofreading.correction_efficiency;
-        
+
         (1.0 - error_rate) * correction_efficiency
     }
 }
@@ -189,12 +209,16 @@ impl DnaPolymerase {
     /// Synthesize complement of a nucleotide
     pub fn synthesize_complement(&self, template: &NucleotideData) -> OxirsResult<NucleotideData> {
         // Simulate synthesis time
-        std::thread::sleep(Duration::from_nanos((1_000_000_000.0 / self.synthesis_rate) as u64));
-        
+        std::thread::sleep(Duration::from_nanos(
+            (1_000_000_000.0 / self.synthesis_rate) as u64,
+        ));
+
         let complement = match template {
             NucleotideData::Adenine(term) => NucleotideData::Thymine(term.clone()),
             NucleotideData::Thymine(term) => NucleotideData::Adenine(term.clone()),
-            NucleotideData::Guanine(term) => NucleotideData::Cytosine(SpecialMarker::Enhancer(term.to_string())),
+            NucleotideData::Guanine(term) => {
+                NucleotideData::Cytosine(SpecialMarker::Enhancer(term.to_string()))
+            }
             NucleotideData::Cytosine(marker) => {
                 // Handle special markers appropriately
                 match marker {
@@ -234,7 +258,7 @@ impl Helicase {
     /// Create new helicase
     pub fn new() -> Self {
         Self {
-            unwinding_rate: 500.0, // base pairs per second
+            unwinding_rate: 500.0,   // base pairs per second
             energy_consumption: 2.0, // ATP per base pair
             position: 0,
         }
@@ -252,7 +276,7 @@ impl Helicase {
         let distance = new_position.saturating_sub(self.position);
         let unwind_time = distance as f64 / self.unwinding_rate;
         std::thread::sleep(Duration::from_nanos((unwind_time * 1_000_000_000.0) as u64));
-        
+
         self.position = new_position;
         Ok(())
     }
@@ -287,14 +311,20 @@ impl Primase {
     /// Synthesize RNA primer
     pub fn synthesize_primer(&self) -> OxirsResult<Vec<NucleotideData>> {
         let mut primer = Vec::with_capacity(self.primer_length);
-        
+
         // Create simple primer sequence
         for i in 0..self.primer_length {
             let nucleotide = match i % 4 {
                 0 => NucleotideData::Cytosine(SpecialMarker::StartCodon),
-                1 => NucleotideData::Adenine(std::sync::Arc::new(crate::model::Term::NamedNode(crate::model::NamedNode::new(&format!("primer:{}", i)).unwrap()))),
-                2 => NucleotideData::Thymine(std::sync::Arc::new(crate::model::Term::NamedNode(crate::model::NamedNode::new(&format!("primer:{}", i)).unwrap()))),
-                3 => NucleotideData::Guanine(std::sync::Arc::new(crate::model::Term::NamedNode(crate::model::NamedNode::new(&format!("primer:{}", i)).unwrap()))),
+                1 => NucleotideData::Adenine(crate::model::Term::NamedNode(
+                    crate::model::NamedNode::new(&format!("primer:{}", i)).unwrap(),
+                )),
+                2 => NucleotideData::Thymine(crate::model::Term::NamedNode(
+                    crate::model::NamedNode::new(&format!("primer:{}", i)).unwrap(),
+                )),
+                3 => NucleotideData::Guanine(crate::model::Term::NamedNode(
+                    crate::model::NamedNode::new(&format!("primer:{}", i)).unwrap(),
+                )),
                 _ => unreachable!(),
             };
             primer.push(nucleotide);
@@ -327,7 +357,10 @@ impl ProofreadingSystem {
         synthesized: &NucleotideData,
         template: &NucleotideData,
     ) -> OxirsResult<Option<NucleotideData>> {
-        if self.mismatch_detector.detect_mismatch(synthesized, template)? {
+        if self
+            .mismatch_detector
+            .detect_mismatch(synthesized, template)?
+        {
             // Attempt correction
             if fastrand::f64() < self.correction_efficiency {
                 return Ok(Some(self.correct_nucleotide(template)?));
@@ -342,7 +375,9 @@ impl ProofreadingSystem {
         match template {
             NucleotideData::Adenine(term) => Ok(NucleotideData::Thymine(term.clone())),
             NucleotideData::Thymine(term) => Ok(NucleotideData::Adenine(term.clone())),
-            NucleotideData::Guanine(term) => Ok(NucleotideData::Cytosine(SpecialMarker::Enhancer(term.to_string()))),
+            NucleotideData::Guanine(term) => Ok(NucleotideData::Cytosine(SpecialMarker::Enhancer(
+                term.to_string(),
+            ))),
             NucleotideData::Cytosine(marker) => Ok(template.clone()),
         }
     }
@@ -383,7 +418,7 @@ impl MismatchDetector {
     ) -> OxirsResult<bool> {
         // Simplified mismatch detection logic
         let is_mismatch = !self.is_valid_pair(nucleotide1, nucleotide2);
-        
+
         // Apply detection accuracy and false positive rate
         if is_mismatch {
             Ok(fastrand::f64() < self.accuracy)
@@ -396,10 +431,10 @@ impl MismatchDetector {
     fn is_valid_pair(&self, n1: &NucleotideData, n2: &NucleotideData) -> bool {
         matches!(
             (n1, n2),
-            (NucleotideData::Adenine(_), NucleotideData::Thymine(_)) |
-            (NucleotideData::Thymine(_), NucleotideData::Adenine(_)) |
-            (NucleotideData::Guanine(_), NucleotideData::Cytosine(_)) |
-            (NucleotideData::Cytosine(_), NucleotideData::Guanine(_))
+            (NucleotideData::Adenine(_), NucleotideData::Thymine(_))
+                | (NucleotideData::Thymine(_), NucleotideData::Adenine(_))
+                | (NucleotideData::Guanine(_), NucleotideData::Cytosine(_))
+                | (NucleotideData::Cytosine(_), NucleotideData::Guanine(_))
         )
     }
 }
@@ -465,8 +500,10 @@ mod tests {
     #[test]
     fn test_polymerase_complement_synthesis() {
         let polymerase = DnaPolymerase::new();
-        let adenine = NucleotideData::Adenine(std::sync::Arc::new(Term::NamedNode("test".into())));
-        
+        let adenine = NucleotideData::Adenine(std::sync::Arc::new(Term::NamedNode(
+            NamedNode::new("test").unwrap(),
+        )));
+
         if let Ok(NucleotideData::Thymine(_)) = polymerase.synthesize_complement(&adenine) {
             // Test passed
         } else {
@@ -477,9 +514,13 @@ mod tests {
     #[test]
     fn test_mismatch_detection() {
         let detector = MismatchDetector::new();
-        let adenine = NucleotideData::Adenine(std::sync::Arc::new(Term::NamedNode("test".into())));
-        let thymine = NucleotideData::Thymine(std::sync::Arc::new(Term::NamedNode("test".into())));
-        
+        let adenine = NucleotideData::Adenine(std::sync::Arc::new(Term::NamedNode(
+            NamedNode::new("test").unwrap(),
+        )));
+        let thymine = NucleotideData::Thymine(std::sync::Arc::new(Term::NamedNode(
+            NamedNode::new("test").unwrap(),
+        )));
+
         // This should generally not be detected as a mismatch (valid pair)
         let result = detector.detect_mismatch(&adenine, &thymine).unwrap();
         // Due to false positive rate, we can't assert exact result, but it should work

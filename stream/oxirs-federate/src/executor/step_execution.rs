@@ -18,7 +18,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     planner::{ExecutionPlan, ExecutionStep, StepType},
     service_client::GraphQLRequest,
-    QueryResultData, StepResult, FederatedService,
+    FederatedService, QueryResultData, StepResult,
 };
 
 use super::types::*;
@@ -719,7 +719,7 @@ pub fn perform_group_by_aggregation(results: &SparqlResults, expr: &str) -> Resu
 /// Perform COUNT aggregation
 pub fn perform_count_aggregation(results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
     let count = results.results.bindings.len();
-    
+
     let count_binding = {
         let mut binding = HashMap::new();
         binding.insert(

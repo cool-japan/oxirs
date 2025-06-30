@@ -763,8 +763,12 @@ impl QueryRouter {
     ) -> Result<Vec<algebra::TriplePattern>, OxirsError> {
         match pattern {
             GraphPattern::Bgp(patterns) => {
-                // Use algebra patterns directly for better performance
-                Ok(patterns.clone())
+                // Convert algebra patterns to model patterns
+                let model_patterns: Vec<algebra::TriplePattern> = patterns
+                    .iter()
+                    .filter_map(|p| self.convert_algebra_to_model_pattern(p))
+                    .collect();
+                Ok(model_patterns)
             }
             GraphPattern::Join(left, right) => {
                 let mut left_patterns = self.extract_patterns_from_graph_pattern(left)?;
@@ -839,11 +843,39 @@ impl QueryRouter {
             }
         };
 
-        Ok(algebra::TriplePattern {
-            subject,
-            predicate,
-            object,
-        })
+        Ok(algebra::TriplePattern::new(
+            Some(subject.into()),
+            Some(predicate.into()),
+            Some(object.into()),
+        ))
+    }
+
+    /// Convert AlgebraTriplePattern to model TriplePattern
+    fn convert_algebra_to_model_pattern(&self, algebra_pattern: &AlgebraTriplePattern) -> Option<algebra::TriplePattern> {
+        use crate::model::pattern::{SubjectPattern, PredicatePattern, ObjectPattern};
+        
+        let subject = match &algebra_pattern.subject {
+            algebra::TermPattern::NamedNode(n) => Some(SubjectPattern::NamedNode(n.clone())),
+            algebra::TermPattern::BlankNode(b) => Some(SubjectPattern::BlankNode(b.clone())),
+            algebra::TermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
+            _ => None,
+        };
+        
+        let predicate = match &algebra_pattern.predicate {
+            algebra::TermPattern::NamedNode(n) => Some(PredicatePattern::NamedNode(n.clone())),
+            algebra::TermPattern::Variable(v) => Some(PredicatePattern::Variable(v.clone())),
+            _ => None,
+        };
+        
+        let object = match &algebra_pattern.object {
+            algebra::TermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
+            algebra::TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
+            algebra::TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
+            algebra::TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
+            _ => None,
+        };
+        
+        Some(algebra::TriplePattern::new(subject, predicate, object))
     }
 
     /// Extract variables from query

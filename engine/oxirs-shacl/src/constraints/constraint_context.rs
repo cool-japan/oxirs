@@ -3,9 +3,9 @@
 use indexmap::IndexMap;
 use std::collections::HashMap;
 
-use oxirs_core::model::{Term, NamedNode};
+use oxirs_core::model::{NamedNode, Term};
 
-use crate::{PropertyPath, ShapeId, ValidationViolation, Severity};
+use crate::{PropertyPath, Severity, ShapeId, ValidationViolation};
 
 /// Constraint evaluation context
 #[derive(Debug, Clone)]
@@ -157,18 +157,22 @@ impl ConstraintEvaluationResult {
 
     pub fn into_violation(self) -> Option<ValidationViolation> {
         match self {
-            ConstraintEvaluationResult::Violated { violating_value, message, details } => {
-                Some(ValidationViolation {
-                    value_node: violating_value.unwrap_or_else(|| Term::NamedNode(NamedNode::new("http://example.org/unknown").unwrap())),
-                    source_constraint: NamedNode::new("http://example.org/constraint").unwrap(),
-                    source_shape: NamedNode::new("http://example.org/shape").unwrap(),
-                    focus_node: Term::NamedNode(NamedNode::new("http://example.org/focus").unwrap()),
-                    result_path: None,
-                    severity: Severity::Violation,
-                    message: message.unwrap_or_else(|| "Constraint violation".to_string()),
-                    detail: details.get("detail").cloned(),
-                })
-            }
+            ConstraintEvaluationResult::Violated {
+                violating_value,
+                message,
+                details,
+            } => Some(ValidationViolation {
+                value_node: violating_value.unwrap_or_else(|| {
+                    Term::NamedNode(NamedNode::new("http://example.org/unknown").unwrap())
+                }),
+                source_constraint: NamedNode::new("http://example.org/constraint").unwrap(),
+                source_shape: NamedNode::new("http://example.org/shape").unwrap(),
+                focus_node: Term::NamedNode(NamedNode::new("http://example.org/focus").unwrap()),
+                result_path: None,
+                severity: Severity::Violation,
+                message: message.unwrap_or_else(|| "Constraint violation".to_string()),
+                detail: details.get("detail").cloned(),
+            }),
             _ => None,
         }
     }

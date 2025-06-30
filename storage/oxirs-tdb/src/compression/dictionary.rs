@@ -1,10 +1,10 @@
 //! Adaptive dictionary compression implementation
 
-use anyhow::{anyhow, Result};
 use crate::compression::{
-    AdvancedCompressionType, CompressionAlgorithm, CompressionMetadata, CompressedData,
-    MAX_DICTIONARY_SIZE
+    AdvancedCompressionType, CompressedData, CompressionAlgorithm, CompressionMetadata,
+    MAX_DICTIONARY_SIZE,
 };
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -68,10 +68,10 @@ impl AdaptiveDictionary {
         }
 
         let mut compressed = Vec::new();
-        
+
         // Simple word-based compression (split on whitespace)
         let mut current_word = Vec::new();
-        
+
         for &byte in data {
             if byte.is_ascii_whitespace() {
                 if !current_word.is_empty() {
@@ -109,7 +109,7 @@ impl AdaptiveDictionary {
 
         for chunk in compressed.chunks_exact(4) {
             let id = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-            
+
             if id > u32::MAX - 256 {
                 // It's a whitespace character
                 let byte = (u32::MAX - id) as u8;
@@ -130,7 +130,7 @@ impl AdaptiveDictionary {
     /// Serialize dictionary for storage
     pub fn serialize_dictionary(&self) -> Vec<u8> {
         let mut serialized = Vec::new();
-        
+
         // Store dictionary size
         let size = self.id_to_string.len() as u32;
         serialized.extend_from_slice(&size.to_le_bytes());
@@ -165,12 +165,18 @@ impl AdaptiveDictionary {
             }
 
             let id = u32::from_le_bytes([
-                data[offset], data[offset + 1], data[offset + 2], data[offset + 3]
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
             ]);
             offset += 4;
 
             let len = u32::from_le_bytes([
-                data[offset], data[offset + 1], data[offset + 2], data[offset + 3]
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
             ]) as usize;
             offset += 4;
 
@@ -194,11 +200,10 @@ impl AdaptiveDictionary {
         let mut stats = HashMap::new();
         stats.insert("entries".to_string(), self.string_to_id.len().to_string());
         stats.insert("next_id".to_string(), self.next_id.to_string());
-        
+
         if !self.id_to_string.is_empty() {
-            let avg_length: f64 = self.id_to_string.values()
-                .map(|v| v.len())
-                .sum::<usize>() as f64 / self.id_to_string.len() as f64;
+            let avg_length: f64 = self.id_to_string.values().map(|v| v.len()).sum::<usize>() as f64
+                / self.id_to_string.len() as f64;
             stats.insert("avg_entry_length".to_string(), format!("{:.2}", avg_length));
         }
 
@@ -290,11 +295,11 @@ mod tests {
     #[test]
     fn test_dictionary_basic() {
         let mut dict = AdaptiveDictionary::new();
-        
+
         let id1 = dict.add_string(b"hello").unwrap();
         let id2 = dict.add_string(b"world").unwrap();
         let id3 = dict.add_string(b"hello").unwrap(); // Should reuse
-        
+
         assert_eq!(id1, id3);
         assert_ne!(id1, id2);
         assert_eq!(dict.get_string(id1), Some(&b"hello"[..]));
@@ -305,10 +310,13 @@ mod tests {
     fn test_compression_algorithm_trait() {
         let dict = AdaptiveDictionary::new();
         let data = b"hello world hello world";
-        
+
         let compressed = dict.compress(data).unwrap();
-        assert_eq!(compressed.metadata.algorithm, AdvancedCompressionType::AdaptiveDictionary);
-        
+        assert_eq!(
+            compressed.metadata.algorithm,
+            AdvancedCompressionType::AdaptiveDictionary
+        );
+
         let decompressed = dict.decompress(&compressed).unwrap();
         assert_eq!(data, decompressed.as_slice());
     }
@@ -318,12 +326,12 @@ mod tests {
         let mut dict = AdaptiveDictionary::new();
         dict.add_string(b"test").unwrap();
         dict.add_string(b"data").unwrap();
-        
+
         let serialized = dict.serialize_dictionary();
-        
+
         let mut new_dict = AdaptiveDictionary::new();
         new_dict.deserialize_dictionary(&serialized).unwrap();
-        
+
         assert_eq!(dict.get_id(b"test"), new_dict.get_id(b"test"));
         assert_eq!(dict.get_id(b"data"), new_dict.get_id(b"data"));
     }

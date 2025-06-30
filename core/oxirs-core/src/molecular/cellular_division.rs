@@ -1,8 +1,8 @@
 //! Cellular division processes for data partitioning and distribution
 
-use crate::error::OxirsResult;
-use super::types::*;
 use super::dna_structures::DnaDataStructure;
+use super::types::*;
+use crate::error::OxirsResult;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -337,10 +337,10 @@ pub struct MicrotubuleAttachment {
 
 #[derive(Debug, Clone)]
 pub enum AttachmentType {
-    Amphitelic,    // Correct bi-orientation
-    Syntelic,      // Both sister kinetochores to same pole
-    Merotelic,     // One kinetochore to both poles
-    Monotelic,     // One kinetochore attached, other free
+    Amphitelic, // Correct bi-orientation
+    Syntelic,   // Both sister kinetochores to same pole
+    Merotelic,  // One kinetochore to both poles
+    Monotelic,  // One kinetochore attached, other free
 }
 
 #[derive(Debug, Clone)]
@@ -427,13 +427,13 @@ impl CellularDivision {
                 // Replicate DNA
                 self.replicate_dna()?;
                 self.cycle_state = CellCycleState::G2;
-            },
+            }
             CellCycleState::G2 => {
                 // Check for DNA damage
                 if self.checkpoint_system.check_dna_integrity()? {
                     self.cycle_state = CellCycleState::M(MitosisPhase::Prophase);
                 }
-            },
+            }
             _ => {
                 // Already in appropriate phase
             }
@@ -454,28 +454,30 @@ impl CellularDivision {
             MitosisPhase::Prophase => {
                 self.mitotic_apparatus.prepare_spindle()?;
                 MitosisPhase::Prometaphase
-            },
+            }
             MitosisPhase::Prometaphase => {
                 self.mitotic_apparatus.attach_chromosomes()?;
                 MitosisPhase::Metaphase
-            },
+            }
             MitosisPhase::Metaphase => {
-                if self.checkpoint_system.spindle_checkpoint.check_alignment()? {
+                if self
+                    .checkpoint_system
+                    .spindle_checkpoint
+                    .check_alignment()?
+                {
                     MitosisPhase::Anaphase(AnaphaseStage::A)
                 } else {
                     MitosisPhase::Metaphase
                 }
-            },
-            MitosisPhase::Anaphase(stage) => {
-                match stage {
-                    AnaphaseStage::A => {
-                        self.separate_chromosomes()?;
-                        MitosisPhase::Anaphase(AnaphaseStage::B)
-                    },
-                    AnaphaseStage::B => {
-                        self.elongate_spindle()?;
-                        MitosisPhase::Telophase
-                    }
+            }
+            MitosisPhase::Anaphase(stage) => match stage {
+                AnaphaseStage::A => {
+                    self.separate_chromosomes()?;
+                    MitosisPhase::Anaphase(AnaphaseStage::B)
+                }
+                AnaphaseStage::B => {
+                    self.elongate_spindle()?;
+                    MitosisPhase::Telophase
                 }
             },
             MitosisPhase::Telophase => {
@@ -497,27 +499,28 @@ impl CellularDivision {
     fn complete_division(&mut self) -> OxirsResult<()> {
         // Reset mitotic apparatus
         self.mitotic_apparatus.reset()?;
-        
+
         // Distribute DNA content to daughter cells
         let (daughter1, daughter2) = self.distribute_dna_content()?;
-        
+
         // For simulation, we keep one daughter cell's content
         self.dna_content = daughter1;
-        
+
         Ok(())
     }
 
     /// Replicate DNA content
     fn replicate_dna(&mut self) -> OxirsResult<()> {
         let mut replicated = Vec::new();
-        
+
         for dna in &self.dna_content {
             let mut copy = dna.clone();
             // Trigger replication machinery
-            copy.replication_machinery.replicate_strand(&dna.primary_strand)?;
+            copy.replication_machinery
+                .replicate_strand(&dna.primary_strand)?;
             replicated.push(copy);
         }
-        
+
         self.dna_content.extend(replicated);
         Ok(())
     }
@@ -527,7 +530,7 @@ impl CellularDivision {
         // Simulate chromosome separation
         for kinetochore in &mut self.mitotic_apparatus.kinetochores {
             kinetochore.tension = 0.0; // Release tension
-            
+
             // Degrade cohesin proteins (simulated)
             for attachment in &mut kinetochore.microtubule_attachments {
                 if matches!(attachment.attachment_type, AttachmentType::Amphitelic) {
@@ -556,7 +559,9 @@ impl CellularDivision {
     }
 
     /// Distribute DNA content to daughter cells
-    fn distribute_dna_content(&self) -> OxirsResult<(Vec<DnaDataStructure>, Vec<DnaDataStructure>)> {
+    fn distribute_dna_content(
+        &self,
+    ) -> OxirsResult<(Vec<DnaDataStructure>, Vec<DnaDataStructure>)> {
         let midpoint = self.dna_content.len() / 2;
         let daughter1 = self.dna_content[..midpoint].to_vec();
         let daughter2 = self.dna_content[midpoint..].to_vec();
@@ -588,30 +593,37 @@ impl MitoticApparatus {
     /// Prepare spindle apparatus
     pub fn prepare_spindle(&mut self) -> OxirsResult<()> {
         self.division_state = DivisionState::Mitosis(MitosisPhase::Prophase);
-        
+
         // Separate centrosomes
-        self.centrosomes.0.position = Position3D { x: -10.0, y: 0.0, z: 0.0 };
-        self.centrosomes.1.position = Position3D { x: 10.0, y: 0.0, z: 0.0 };
-        
+        self.centrosomes.0.position = Position3D {
+            x: -10.0,
+            y: 0.0,
+            z: 0.0,
+        };
+        self.centrosomes.1.position = Position3D {
+            x: 10.0,
+            y: 0.0,
+            z: 0.0,
+        };
+
         // Nucleate microtubules
         self.spindle_apparatus.nucleate_microtubules()?;
-        
+
         Ok(())
     }
 
     /// Attach chromosomes to spindle
     pub fn attach_chromosomes(&mut self) -> OxirsResult<()> {
         // Create kinetochores for chromosome attachment
-        for i in 0..10 { // Simulate 10 chromosomes
+        for i in 0..10 {
+            // Simulate 10 chromosomes
             let kinetochore = Kinetochore {
                 chromosome_attachment: true,
-                microtubule_attachments: vec![
-                    MicrotubuleAttachment {
-                        microtubule_id: format!("mt_{}", i),
-                        attachment_strength: 1.0,
-                        attachment_type: AttachmentType::Amphitelic,
-                    }
-                ],
+                microtubule_attachments: vec![MicrotubuleAttachment {
+                    microtubule_id: format!("mt_{}", i),
+                    attachment_strength: 1.0,
+                    attachment_type: AttachmentType::Amphitelic,
+                }],
                 tension: 0.5,
             };
             self.kinetochores.push(kinetochore);
@@ -673,8 +685,8 @@ impl CheckpointSystem {
 
     /// Check DNA integrity
     pub fn check_dna_integrity(&self) -> OxirsResult<bool> {
-        let damage_level = self.dna_damage_checkpoint.atm_activity + 
-                          self.dna_damage_checkpoint.atr_activity;
+        let damage_level =
+            self.dna_damage_checkpoint.atm_activity + self.dna_damage_checkpoint.atr_activity;
         Ok(damage_level < 0.1) // Low damage threshold
     }
 }
@@ -684,12 +696,28 @@ impl SpindleCheckpoint {
     pub fn new() -> Self {
         Self {
             mad_proteins: vec![
-                MadProtein { protein_type: MadProteinType::Mad1, activity_level: 1.0, localization: ProteinLocalization::Kinetochore },
-                MadProtein { protein_type: MadProteinType::Mad2, activity_level: 1.0, localization: ProteinLocalization::Kinetochore },
+                MadProtein {
+                    protein_type: MadProteinType::Mad1,
+                    activity_level: 1.0,
+                    localization: ProteinLocalization::Kinetochore,
+                },
+                MadProtein {
+                    protein_type: MadProteinType::Mad2,
+                    activity_level: 1.0,
+                    localization: ProteinLocalization::Kinetochore,
+                },
             ],
             bub_proteins: vec![
-                BubProtein { protein_type: BubProteinType::Bub1, activity_level: 1.0, kinetochore_binding: true },
-                BubProtein { protein_type: BubProteinType::Bub3, activity_level: 1.0, kinetochore_binding: true },
+                BubProtein {
+                    protein_type: BubProteinType::Bub1,
+                    activity_level: 1.0,
+                    kinetochore_binding: true,
+                },
+                BubProtein {
+                    protein_type: BubProteinType::Bub3,
+                    activity_level: 1.0,
+                    kinetochore_binding: true,
+                },
             ],
             apc_c_regulation: ApcCRegulation {
                 cdc20_level: 0.5,
@@ -717,7 +745,11 @@ impl Centrosome {
                 pericentrin: 1.0,
                 ninein: 1.0,
             },
-            position: Position3D { x: 0.0, y: 0.0, z: 0.0 },
+            position: Position3D {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
         }
     }
 }
@@ -733,7 +765,11 @@ impl Centriole {
             triplets: Vec::new(),
             orientation: Orientation {
                 angle: 0.0,
-                axis: Vec3D { x: 0.0, y: 0.0, z: 1.0 },
+                axis: Vec3D {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.0,
+                },
             },
         }
     }
@@ -805,7 +841,10 @@ mod tests {
     #[test]
     fn test_mitotic_apparatus() {
         let apparatus = MitoticApparatus::new();
-        assert!(matches!(apparatus.division_state, DivisionState::Interphase));
+        assert!(matches!(
+            apparatus.division_state,
+            DivisionState::Interphase
+        ));
         assert_eq!(apparatus.kinetochores.len(), 0);
     }
 

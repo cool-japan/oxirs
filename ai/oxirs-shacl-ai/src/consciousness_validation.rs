@@ -360,7 +360,9 @@ impl ConsciousnessValidator {
         let emotional_context = self.emotional_context.read().await.clone();
 
         // Adapt validation strategy based on consciousness
-        let validation_strategy = self.adapt_validation_strategy(consciousness_level, &emotional_context).await?;
+        let validation_strategy = self
+            .adapt_validation_strategy(consciousness_level, &emotional_context)
+            .await?;
 
         // Start background dream processing if enabled
         if self.config.enable_dream_processing {
@@ -368,20 +370,24 @@ impl ConsciousnessValidator {
         }
 
         // Perform validation with consciousness enhancement
-        let enhanced_validation = self.enhance_validation_with_consciousness(
-            store,
-            shapes,
-            config,
-            &validation_strategy,
-            consciousness_level,
-        ).await?;
+        let enhanced_validation = self
+            .enhance_validation_with_consciousness(
+                store,
+                shapes,
+                config,
+                &validation_strategy,
+                consciousness_level,
+            )
+            .await?;
 
         // Apply intuitive pattern recognition
-        let intuitive_insights = if self.config.enable_intuitive_patterns && consciousness_level.has_intuition() {
-            self.apply_intuitive_pattern_recognition(&enhanced_validation).await?
-        } else {
-            Vec::new()
-        };
+        let intuitive_insights =
+            if self.config.enable_intuitive_patterns && consciousness_level.has_intuition() {
+                self.apply_intuitive_pattern_recognition(&enhanced_validation)
+                    .await?
+            } else {
+                Vec::new()
+            };
 
         // Collect dream insights
         let dream_insights = self.dream_state.read().await.dream_insights.clone();
@@ -414,7 +420,8 @@ impl ConsciousnessValidator {
 
         // Apply emotional bias
         let emotion_bias = emotional_context.primary_emotion.validation_bias();
-        let enhanced_strategy = self.apply_emotional_bias(strategy, emotion_bias, emotional_context.intensity);
+        let enhanced_strategy =
+            self.apply_emotional_bias(strategy, emotion_bias, emotional_context.intensity);
 
         Ok(enhanced_strategy)
     }
@@ -452,7 +459,8 @@ impl ConsciousnessValidator {
 
         // Perform traditional validation with enhancements
         let validator = Validator::new();
-        let mut validation_report = validator.validate_store(store, Some(enhanced_config))
+        let mut validation_report = validator
+            .validate_store(store, Some(enhanced_config))
             .map_err(|e| ShaclAiError::ValidationPrediction(format!("Validation failed: {}", e)))?;
 
         // Apply consciousness-specific enhancements
@@ -478,18 +486,23 @@ impl ConsciousnessValidator {
 
         // Adjust validation parameters based on consciousness level
         let multiplier = consciousness_level.processing_multiplier();
-        
+
         // Enhanced processing allows for more thorough validation
         if multiplier > 1.0 {
             // More comprehensive validation at higher consciousness levels
-            enhanced_config.max_validation_errors = Some((enhanced_config.max_validation_errors.unwrap_or(100) as f64 * multiplier) as usize);
+            enhanced_config.max_validation_errors = Some(
+                (enhanced_config.max_validation_errors.unwrap_or(100) as f64 * multiplier) as usize,
+            );
         }
 
         enhanced_config
     }
 
     /// Apply creative enhancements to validation
-    async fn apply_creative_enhancements(&self, mut report: ValidationReport) -> Result<ValidationReport> {
+    async fn apply_creative_enhancements(
+        &self,
+        mut report: ValidationReport,
+    ) -> Result<ValidationReport> {
         info!("Applying creative consciousness enhancements to validation");
 
         // Creative consciousness can generate alternative validation approaches
@@ -503,7 +516,10 @@ impl ConsciousnessValidator {
     }
 
     /// Apply transcendent reasoning to validation
-    async fn apply_transcendent_reasoning(&self, mut report: ValidationReport) -> Result<ValidationReport> {
+    async fn apply_transcendent_reasoning(
+        &self,
+        mut report: ValidationReport,
+    ) -> Result<ValidationReport> {
         info!("Applying transcendent consciousness reasoning to validation");
 
         // Transcendent reasoning can see beyond immediate validation results
@@ -521,7 +537,8 @@ impl ConsciousnessValidator {
 
         // Start dreams for each scenario
         for scenario in scenarios {
-            if dream_state.active_dreams.len() < dream_state.processing_params.max_concurrent_dreams {
+            if dream_state.active_dreams.len() < dream_state.processing_params.max_concurrent_dreams
+            {
                 let dream = ValidationDream {
                     dream_id: format!("dream_{}", uuid::Uuid::new_v4()),
                     scenario,
@@ -534,25 +551,38 @@ impl ConsciousnessValidator {
             }
         }
 
-        info!("Started {} validation dreams", dream_state.active_dreams.len());
+        info!(
+            "Started {} validation dreams",
+            dream_state.active_dreams.len()
+        );
         Ok(())
     }
 
     /// Create dream scenarios for validation exploration
-    async fn create_dream_scenarios(&self, store: &Store, shapes: &[Shape]) -> Result<Vec<ValidationScenario>> {
+    async fn create_dream_scenarios(
+        &self,
+        store: &Store,
+        shapes: &[Shape],
+    ) -> Result<Vec<ValidationScenario>> {
         let mut scenarios = Vec::new();
 
         // Create scenarios based on current validation challenges
         scenarios.push(ValidationScenario {
             name: "Edge Case Exploration".to_string(),
-            data_patterns: vec!["unusual_cardinalities".to_string(), "rare_property_combinations".to_string()],
+            data_patterns: vec![
+                "unusual_cardinalities".to_string(),
+                "rare_property_combinations".to_string(),
+            ],
             shape_constraints: vec!["complex_interdependencies".to_string()],
             expected_outcomes: vec!["novel_constraint_patterns".to_string()],
         });
 
         scenarios.push(ValidationScenario {
             name: "Performance Optimization".to_string(),
-            data_patterns: vec!["large_graph_patterns".to_string(), "complex_queries".to_string()],
+            data_patterns: vec![
+                "large_graph_patterns".to_string(),
+                "complex_queries".to_string(),
+            ],
             shape_constraints: vec!["computationally_expensive".to_string()],
             expected_outcomes: vec!["optimization_insights".to_string()],
         });
@@ -588,15 +618,26 @@ impl ConsciousnessValidator {
         let mut current_level = self.consciousness_level.write().await;
 
         let new_level = match *current_level {
-            ConsciousnessLevel::Unconscious if complexity_factor > 0.3 => ConsciousnessLevel::Subconscious,
-            ConsciousnessLevel::Subconscious if complexity_factor > 0.6 => ConsciousnessLevel::Conscious,
-            ConsciousnessLevel::Conscious if complexity_factor > 0.8 => ConsciousnessLevel::Superconscious,
-            ConsciousnessLevel::Superconscious if complexity_factor > 0.95 => ConsciousnessLevel::Cosmic,
+            ConsciousnessLevel::Unconscious if complexity_factor > 0.3 => {
+                ConsciousnessLevel::Subconscious
+            }
+            ConsciousnessLevel::Subconscious if complexity_factor > 0.6 => {
+                ConsciousnessLevel::Conscious
+            }
+            ConsciousnessLevel::Conscious if complexity_factor > 0.8 => {
+                ConsciousnessLevel::Superconscious
+            }
+            ConsciousnessLevel::Superconscious if complexity_factor > 0.95 => {
+                ConsciousnessLevel::Cosmic
+            }
             _ => *current_level,
         };
 
         if new_level != *current_level {
-            info!("Consciousness level elevated from {:?} to {:?}", *current_level, new_level);
+            info!(
+                "Consciousness level elevated from {:?} to {:?}",
+                *current_level, new_level
+            );
             *current_level = new_level;
         }
 
@@ -604,7 +645,11 @@ impl ConsciousnessValidator {
     }
 
     /// Update emotional context based on validation outcomes
-    pub async fn update_emotional_context(&self, validation_success: bool, user_feedback: Option<f64>) -> Result<()> {
+    pub async fn update_emotional_context(
+        &self,
+        validation_success: bool,
+        user_feedback: Option<f64>,
+    ) -> Result<()> {
         let mut emotional_context = self.emotional_context.write().await;
 
         // Adapt emotions based on validation success and user feedback
@@ -730,7 +775,7 @@ mod tests {
     fn test_emotional_context() {
         let emotion = Emotion::Curiosity;
         assert_eq!(emotion.validation_bias(), ValidationBias::Exploratory);
-        
+
         let emotion = Emotion::Empathy;
         assert_eq!(emotion.validation_bias(), ValidationBias::UserCentric);
     }
@@ -760,7 +805,7 @@ mod tests {
             ValidationStrategy::Creative,
             ValidationStrategy::Transcendent,
         ];
-        
+
         assert_eq!(strategies.len(), 5);
     }
 }

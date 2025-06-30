@@ -4,11 +4,11 @@
 //! used throughout the GraphQL federation system.
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::{executor::GraphQLResponse, QueryResultData, StepResult};

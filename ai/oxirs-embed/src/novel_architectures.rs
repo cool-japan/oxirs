@@ -1150,11 +1150,14 @@ impl NovelArchitectureModel {
             simulator.execute_circuit(&circuit)?;
 
             // Measure all qubits and return expectation values
-            let output_dim = input.len().min(params.num_qubits);
-            let mut output = Array1::zeros(output_dim);
+            let target_dim = self.config.base_config.dimensions;
+            let quantum_dim = params.num_qubits;
+            let mut output = Array1::zeros(target_dim);
 
-            for i in 0..output_dim {
-                output[i] = simulator.expectation_z(i);
+            // Fill with quantum measurements, repeating if necessary
+            for i in 0..target_dim {
+                let qubit_idx = i % quantum_dim;
+                output[i] = simulator.expectation_z(qubit_idx);
             }
 
             Ok(output)
@@ -1683,7 +1686,7 @@ mod tests {
         let output = model.quantum_forward(&input).unwrap();
 
         assert_eq!(output.len(), input.len());
-        assert!(output.iter().all(|&x| x >= 0.0 && x <= 1.0));
+        assert!(output.iter().all(|&x| x >= -1.0 && x <= 1.0));
     }
 
     #[tokio::test]
@@ -1742,6 +1745,10 @@ mod tests {
     async fn test_novel_architecture_encoding() {
         let config = NovelArchitectureConfig {
             architecture: ArchitectureType::QuantumInspired,
+            base_config: crate::ModelConfig {
+                dimensions: 16, // Use smaller dimensions for quantum operations
+                ..Default::default()
+            },
             ..Default::default()
         };
         let mut model = NovelArchitectureModel::new(config);

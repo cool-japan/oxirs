@@ -586,7 +586,8 @@ impl QuantumTeleportation {
                 let half_len = pattern.quantum_state.amplitudes.len() / 2;
                 for i in 0..half_len {
                     let temp = pattern.quantum_state.amplitudes[i];
-                    pattern.quantum_state.amplitudes[i] = pattern.quantum_state.amplitudes[i + half_len];
+                    pattern.quantum_state.amplitudes[i] =
+                        pattern.quantum_state.amplitudes[i + half_len];
                     pattern.quantum_state.amplitudes[i + half_len] = temp;
                 }
             }
@@ -595,7 +596,8 @@ impl QuantumTeleportation {
                 let half_len = pattern.quantum_state.amplitudes.len() / 2;
                 for i in 0..half_len {
                     let temp = pattern.quantum_state.amplitudes[i] * Complex64::new(-1.0, 0.0);
-                    pattern.quantum_state.amplitudes[i] = pattern.quantum_state.amplitudes[i + half_len];
+                    pattern.quantum_state.amplitudes[i] =
+                        pattern.quantum_state.amplitudes[i + half_len];
                     pattern.quantum_state.amplitudes[i + half_len] = temp;
                 }
             }
@@ -926,11 +928,13 @@ impl VariationalQuantumEigensolver {
     fn update_parameters(&mut self, pattern: &QuantumPattern, _current_energy: f64) -> Result<()> {
         // Simplified parameter update (in practice would use finite differences or parameter-shift rule)
         // Calculate gradients first to avoid borrow conflicts
-        let gradients: Result<Vec<f64>> = self.circuit_params.iter()
+        let gradients: Result<Vec<f64>> = self
+            .circuit_params
+            .iter()
             .map(|&param| self.estimate_gradient(pattern, param))
             .collect();
         let gradients = gradients?;
-        
+
         // Then update parameters
         for (param, gradient) in self.circuit_params.iter_mut().zip(gradients.iter()) {
             *param -= self.learning_rate * gradient;
@@ -1667,15 +1671,16 @@ impl QuantumNeuralPatternRecognizer {
         }
 
         let mut total_complexity = 0.0;
-        
+
         for pattern in patterns {
             // Calculate complexity based on quantum state dimensions and entanglement
             let state_complexity = pattern.quantum_state.amplitudes.len() as f64;
             let entanglement_complexity = pattern.entanglement_scores.values().sum::<f64>();
             let coherence_factor = pattern.fidelity; // Use fidelity as coherence measure
-            
+
             // Combine factors to get circuit complexity estimate
-            let pattern_complexity = state_complexity.ln() + entanglement_complexity + (1.0 - coherence_factor);
+            let pattern_complexity =
+                state_complexity.ln() + entanglement_complexity + (1.0 - coherence_factor);
             total_complexity += pattern_complexity;
         }
 
@@ -1689,20 +1694,23 @@ impl QuantumNeuralPatternRecognizer {
         }
 
         let mut total_cross_entropy = 0.0;
-        
+
         for pattern in patterns {
-            let probabilities: Vec<f64> = pattern.quantum_state.amplitudes
+            let probabilities: Vec<f64> = pattern
+                .quantum_state
+                .amplitudes
                 .iter()
                 .map(|amp| amp.norm_sqr())
                 .collect();
-            
+
             // Calculate cross-entropy with ideal distribution
             let uniform_prob = 1.0 / probabilities.len() as f64;
-            let cross_entropy: f64 = probabilities.iter()
+            let cross_entropy: f64 = probabilities
+                .iter()
                 .filter(|&&p| p > 0.0)
                 .map(|&p| -uniform_prob * p.ln())
                 .sum();
-                
+
             total_cross_entropy += cross_entropy;
         }
 
@@ -1716,19 +1724,23 @@ impl QuantumNeuralPatternRecognizer {
         }
 
         let mut total_score = 0.0;
-        
+
         for pattern in patterns {
-            let probabilities: Vec<f64> = pattern.quantum_state.amplitudes
+            let probabilities: Vec<f64> = pattern
+                .quantum_state
+                .amplitudes
                 .iter()
                 .map(|amp| amp.norm_sqr())
                 .collect();
-            
+
             // Test fit to Porter-Thomas distribution
             let mean_prob = probabilities.iter().sum::<f64>() / probabilities.len() as f64;
-            let variance = probabilities.iter()
+            let variance = probabilities
+                .iter()
                 .map(|&p| (p - mean_prob).powi(2))
-                .sum::<f64>() / probabilities.len() as f64;
-            
+                .sum::<f64>()
+                / probabilities.len() as f64;
+
             // Porter-Thomas distribution has specific mean-variance relationship
             let expected_variance = mean_prob.powi(2);
             let score = 1.0 - ((variance - expected_variance).abs() / expected_variance.max(1e-10));
@@ -1742,7 +1754,7 @@ impl QuantumNeuralPatternRecognizer {
     async fn verify_quantum_supremacy(&self, patterns: &[QuantumPattern]) -> Result<bool> {
         let classical_complexity = self.estimate_classical_complexity(patterns).await?;
         let quantum_complexity = self.estimate_quantum_complexity(patterns).await?;
-        
+
         // Supremacy achieved if quantum has exponential advantage
         Ok(classical_complexity / quantum_complexity.max(1e-10) > self.complexity_threshold)
     }
@@ -1754,7 +1766,7 @@ impl QuantumNeuralPatternRecognizer {
         }
 
         let mut total_complexity = 0.0;
-        
+
         for pattern in patterns {
             let num_qubits = (pattern.quantum_state.amplitudes.len() as f64).log2();
             let circuit_depth = pattern.entanglement_scores.len() as f64;
@@ -1766,17 +1778,20 @@ impl QuantumNeuralPatternRecognizer {
     }
 
     /// Estimate quantum pattern recognition time
-    async fn estimate_quantum_pattern_recognition_time(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+    async fn estimate_quantum_pattern_recognition_time(
+        &self,
+        patterns: &[QuantumPattern],
+    ) -> Result<f64> {
         if patterns.is_empty() {
             return Ok(0.0);
         }
 
         let mut total_time = 0.0;
-        
+
         for pattern in patterns {
             let state_size = pattern.quantum_state.amplitudes.len() as f64;
             let gate_count = pattern.entanglement_scores.len() as f64;
-            
+
             // Quantum time scales polynomially
             let pattern_time = (state_size.log2() + gate_count) * 1e-9; // nanoseconds
             total_time += pattern_time;
@@ -1792,12 +1807,12 @@ impl QuantumNeuralPatternRecognizer {
         }
 
         let mut total_quality = 0.0;
-        
+
         for pattern in patterns {
             let coherence_quality = pattern.fidelity;
-            let entanglement_quality = pattern.entanglement_scores.values().sum::<f64>() 
+            let entanglement_quality = pattern.entanglement_scores.values().sum::<f64>()
                 / pattern.entanglement_scores.len() as f64;
-            
+
             let pattern_quality = (coherence_quality + entanglement_quality) / 2.0;
             total_quality += pattern_quality;
         }
@@ -1812,10 +1827,11 @@ impl QuantumNeuralPatternRecognizer {
         }
 
         let mut convergence_rates = Vec::new();
-        
+
         for pattern in patterns {
             // Estimate convergence based on quantum state properties
-            let amplitude_variance = self.calculate_amplitude_variance(&pattern.quantum_state.amplitudes);
+            let amplitude_variance =
+                self.calculate_amplitude_variance(&pattern.quantum_state.amplitudes);
             let convergence_rate = 1.0 / (1.0 + amplitude_variance); // Higher variance = slower convergence
             convergence_rates.push(convergence_rate);
         }
@@ -1827,9 +1843,11 @@ impl QuantumNeuralPatternRecognizer {
     fn calculate_amplitude_variance(&self, amplitudes: &[Complex64]) -> f64 {
         let probabilities: Vec<f64> = amplitudes.iter().map(|amp| amp.norm_sqr()).collect();
         let mean = probabilities.iter().sum::<f64>() / probabilities.len() as f64;
-        probabilities.iter()
+        probabilities
+            .iter()
             .map(|&p| (p - mean).powi(2))
-            .sum::<f64>() / probabilities.len() as f64
+            .sum::<f64>()
+            / probabilities.len() as f64
     }
 
     /// Estimate gate count for a quantum state
@@ -1837,20 +1855,23 @@ impl QuantumNeuralPatternRecognizer {
         // Estimate based on state complexity and entanglement
         let num_qubits = (quantum_state.amplitudes.len() as f64).log2();
         let state_complexity = quantum_state.amplitudes.len() as f64;
-        
+
         // Rough estimate: gates scale with state preparation complexity
         let gate_count = num_qubits * state_complexity.log2();
         Ok(gate_count)
     }
 
     /// Assess error mitigation effectiveness
-    async fn assess_error_mitigation_effectiveness(&self, patterns: &[QuantumPattern]) -> Result<f64> {
+    async fn assess_error_mitigation_effectiveness(
+        &self,
+        patterns: &[QuantumPattern],
+    ) -> Result<f64> {
         if patterns.is_empty() {
             return Ok(0.0);
         }
 
         let mut total_effectiveness = 0.0;
-        
+
         for pattern in patterns {
             // Use fidelity as a proxy for error mitigation effectiveness
             let effectiveness = pattern.fidelity;
@@ -1867,7 +1888,7 @@ impl QuantumNeuralPatternRecognizer {
         }
 
         let mut total_complexity = 0.0;
-        
+
         for pattern in patterns {
             let state_size = pattern.quantum_state.amplitudes.len() as f64;
             // Classical simulation scales exponentially with number of qubits

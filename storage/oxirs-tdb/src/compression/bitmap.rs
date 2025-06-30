@@ -1,10 +1,10 @@
 //! Bitmap compression implementations (WAH and Roaring)
 
-use anyhow::{anyhow, Result};
 use crate::compression::{
-    AdvancedCompressionType, CompressionAlgorithm, CompressionMetadata, CompressedData,
-    MAX_COMPRESSION_INPUT_SIZE, MAX_BLOCK_COUNT
+    AdvancedCompressionType, CompressedData, CompressionAlgorithm, CompressionMetadata,
+    MAX_BLOCK_COUNT, MAX_COMPRESSION_INPUT_SIZE,
 };
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -133,7 +133,7 @@ impl BitmapWAHEncoder {
         // Simple heuristic: count runs of bits
         let mut runs = 0;
         let mut current_bit = data[0] & 1;
-        
+
         for &byte in data {
             for i in 0..8 {
                 let bit = (byte >> i) & 1;
@@ -209,7 +209,7 @@ impl BitmapRoaringEncoder {
 
         // Convert to set of integers for sparse representation
         let mut integers = Vec::new();
-        
+
         for (byte_idx, &byte) in data.iter().enumerate() {
             for bit_idx in 0..8 {
                 if (byte >> bit_idx) & 1 == 1 {
@@ -220,10 +220,10 @@ impl BitmapRoaringEncoder {
 
         // Simple Roaring-style encoding: just store the integers
         let mut encoded = Vec::new();
-        
+
         // Store count
         encoded.extend_from_slice(&(integers.len() as u32).to_le_bytes());
-        
+
         // Store integers
         for integer in integers {
             encoded.extend_from_slice(&integer.to_le_bytes());
@@ -242,9 +242,8 @@ impl BitmapRoaringEncoder {
             return Err(anyhow!("Invalid Roaring compressed data"));
         }
 
-        let count = u32::from_le_bytes([
-            compressed[0], compressed[1], compressed[2], compressed[3]
-        ]) as usize;
+        let count = u32::from_le_bytes([compressed[0], compressed[1], compressed[2], compressed[3]])
+            as usize;
 
         if compressed.len() != 4 + count * 4 {
             return Err(anyhow!("Invalid Roaring compressed data length"));
@@ -253,7 +252,8 @@ impl BitmapRoaringEncoder {
         if count > MAX_BLOCK_COUNT {
             return Err(anyhow!(
                 "Too many integers in compressed data: {} (max: {})",
-                count, MAX_BLOCK_COUNT
+                count,
+                MAX_BLOCK_COUNT
             ));
         }
 
@@ -267,9 +267,9 @@ impl BitmapRoaringEncoder {
         // Find maximum bit position to determine output size
         let max_bit = integers.iter().max().copied().unwrap_or(0);
         let byte_count = ((max_bit / 8) + 1) as usize;
-        
+
         let mut bytes = vec![0u8; byte_count];
-        
+
         // Set bits
         for integer in integers {
             let byte_idx = (integer / 8) as usize;
@@ -308,11 +308,13 @@ impl CompressionAlgorithm for BitmapRoaringEncoder {
 
         // Count set bits for metadata
         let set_bits: u32 = data.iter().map(|b| b.count_ones()).sum();
-        
+
         let mut metadata_map = HashMap::new();
         metadata_map.insert("set_bits".to_string(), set_bits.to_string());
-        metadata_map.insert("sparsity".to_string(), 
-            format!("{:.4}", set_bits as f64 / (data.len() * 8) as f64));
+        metadata_map.insert(
+            "sparsity".to_string(),
+            format!("{:.4}", set_bits as f64 / (data.len() * 8) as f64),
+        );
 
         let metadata = CompressionMetadata {
             algorithm: AdvancedCompressionType::BitmapRoaring,
@@ -353,7 +355,7 @@ mod tests {
         let data = vec![0xFF, 0x00, 0xFF]; // Alternating pattern
         let encoded = BitmapWAHEncoder::encode(&data).unwrap();
         let decoded = BitmapWAHEncoder::decode(&encoded).unwrap();
-        
+
         // Should at least preserve essential bit patterns
         assert!(!encoded.is_empty());
         assert!(!decoded.is_empty());
@@ -362,7 +364,7 @@ mod tests {
     #[test]
     fn test_bitmap_roaring_sparse() {
         let mut sparse_bitmap = vec![0u8; 100];
-        
+
         // Set some specific bits by setting bytes to 1 (bit 0 of each byte)
         sparse_bitmap[10] = 1; // Sets bit 80
         sparse_bitmap[20] = 1; // Sets bit 160
@@ -381,7 +383,7 @@ mod tests {
         let data = vec![];
         let wah_encoded = BitmapWAHEncoder::encode(&data).unwrap();
         let roaring_encoded = BitmapRoaringEncoder::encode(&data).unwrap();
-        
+
         assert!(wah_encoded.is_empty());
         assert!(roaring_encoded.is_empty());
     }
@@ -390,10 +392,13 @@ mod tests {
     fn test_compression_algorithm_trait_wah() {
         let encoder = BitmapWAHEncoder;
         let data = vec![0xFF, 0x00, 0xFF];
-        
+
         let compressed = encoder.compress(&data).unwrap();
-        assert_eq!(compressed.metadata.algorithm, AdvancedCompressionType::BitmapWAH);
-        
+        assert_eq!(
+            compressed.metadata.algorithm,
+            AdvancedCompressionType::BitmapWAH
+        );
+
         let _decompressed = encoder.decompress(&compressed).unwrap();
         // Just verify it doesn't crash
     }
@@ -402,10 +407,13 @@ mod tests {
     fn test_compression_algorithm_trait_roaring() {
         let encoder = BitmapRoaringEncoder;
         let data = vec![1, 0, 1, 0, 1];
-        
+
         let compressed = encoder.compress(&data).unwrap();
-        assert_eq!(compressed.metadata.algorithm, AdvancedCompressionType::BitmapRoaring);
-        
+        assert_eq!(
+            compressed.metadata.algorithm,
+            AdvancedCompressionType::BitmapRoaring
+        );
+
         let decompressed = encoder.decompress(&compressed).unwrap();
         assert!(!decompressed.is_empty());
     }

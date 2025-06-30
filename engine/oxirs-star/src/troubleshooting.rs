@@ -817,15 +817,20 @@ impl MigrationAssistant {
     }
 
     /// Analyze source data for migration planning
-    pub fn analyze_source(&self, source_file: &str, format: MigrationSourceFormat) -> crate::StarResult<SourceAnalysis> {
+    pub fn analyze_source(
+        &self,
+        source_file: &str,
+        format: MigrationSourceFormat,
+    ) -> crate::StarResult<SourceAnalysis> {
         use std::fs;
-        
-        let content = fs::read_to_string(source_file)
-            .map_err(|e| crate::StarError::parse_error(format!("Failed to read source file: {}", e)))?;
-        
+
+        let content = fs::read_to_string(source_file).map_err(|e| {
+            crate::StarError::parse_error(format!("Failed to read source file: {}", e))
+        })?;
+
         let mut issues = Vec::new();
         let mut data_characteristics = std::collections::HashMap::new();
-        
+
         // Basic analysis based on format
         match format {
             MigrationSourceFormat::StandardRdf => {
@@ -838,7 +843,7 @@ impl MigrationAssistant {
                 self.analyze_generic_rdf(&content, &mut issues, &mut data_characteristics);
             }
         }
-        
+
         Ok(SourceAnalysis {
             format: format,
             total_triples: self.count_triples(&content),
@@ -852,58 +857,82 @@ impl MigrationAssistant {
     }
 
     /// Create a migration plan based on analysis
-    pub fn create_migration_plan(&self, analysis: &SourceAnalysis) -> crate::StarResult<MigrationPlan> {
+    pub fn create_migration_plan(
+        &self,
+        analysis: &SourceAnalysis,
+    ) -> crate::StarResult<MigrationPlan> {
         let mut plan = self.generate_plan();
-        
+
         // Customize plan based on analysis
         if analysis.reified_statements > 0 {
-            plan.steps.insert(1, MigrationStep {
-                order: 2,
-                title: "Convert Reified Statements".to_string(),
-                description: format!("Convert {} reified statements to quoted triples", analysis.reified_statements),
-                command: Some("oxirs-star convert --from-reified --to quoted-triples".to_string()),
-                validation: Some("Verify all reified statements converted".to_string()),
-                rollback: Some("Restore original reified format".to_string()),
-            });
+            plan.steps.insert(
+                1,
+                MigrationStep {
+                    order: 2,
+                    title: "Convert Reified Statements".to_string(),
+                    description: format!(
+                        "Convert {} reified statements to quoted triples",
+                        analysis.reified_statements
+                    ),
+                    command: Some(
+                        "oxirs-star convert --from-reified --to quoted-triples".to_string(),
+                    ),
+                    validation: Some("Verify all reified statements converted".to_string()),
+                    rollback: Some("Restore original reified format".to_string()),
+                },
+            );
         }
-        
+
         // Adjust estimated duration based on data size
         let base_duration = plan.estimated_duration.as_secs();
         let size_factor = (analysis.total_triples as f64 / 1000.0).max(1.0);
-        plan.estimated_duration = std::time::Duration::from_secs((base_duration as f64 * size_factor) as u64);
-        
+        plan.estimated_duration =
+            std::time::Duration::from_secs((base_duration as f64 * size_factor) as u64);
+
         Ok(plan)
     }
 
+
     /// Execute the migration with the given plan
-    pub fn execute_migration(&self, source_file: &str, output_file: &str, plan: &MigrationPlan) -> crate::StarResult<MigrationResult> {
+    pub fn execute_migration(
+        &self,
+        source_file: &str,
+        output_file: &str,
+        plan: &MigrationPlan,
+    ) -> crate::StarResult<MigrationResult> {
         use std::fs;
-        
+
         let mut executed_steps = Vec::new();
         let start_time = std::time::Instant::now();
-        
+
         // For now, do a basic conversion
-        let content = fs::read_to_string(source_file)
-            .map_err(|e| crate::StarError::parse_error(format!("Failed to read source file: {}", e)))?;
-        
+        let content = fs::read_to_string(source_file).map_err(|e| {
+            crate::StarError::parse_error(format!("Failed to read source file: {}", e))
+        })?;
+
         // Basic conversion logic (placeholder)
         let converted_content = self.perform_basic_conversion(&content)?;
-        
-        fs::write(output_file, converted_content)
-            .map_err(|e| crate::StarError::serialization_error(format!("Failed to write output file: {}", e)))?;
-        
+
+        fs::write(output_file, converted_content).map_err(|e| {
+            crate::StarError::serialization_error(format!("Failed to write output file: {}", e))
+        })?;
+
         let elapsed = start_time.elapsed();
-        
+
         for (i, step) in plan.steps.iter().enumerate() {
             executed_steps.push(ExecutedStep {
                 step: step.clone(),
-                status: if i < 3 { StepStatus::Completed } else { StepStatus::Skipped },
+                status: if i < 3 {
+                    StepStatus::Completed
+                } else {
+                    StepStatus::Skipped
+                },
                 execution_time: std::time::Duration::from_millis(100),
                 output: Some(format!("Step {} completed successfully", step.order)),
                 error: None,
             });
         }
-        
+
         Ok(MigrationResult {
             success: true,
             executed_steps,
@@ -915,28 +944,52 @@ impl MigrationAssistant {
     }
 
     // Helper methods for analysis
-    fn analyze_standard_rdf(&self, _content: &str, issues: &mut Vec<String>, _data_characteristics: &mut std::collections::HashMap<String, String>) {
-        issues.push("Consider adding RDF-star annotations for better semantic representation".to_string());
+    fn analyze_standard_rdf(
+        &self,
+        _content: &str,
+        issues: &mut Vec<String>,
+        _data_characteristics: &mut std::collections::HashMap<String, String>,
+    ) {
+        issues.push(
+            "Consider adding RDF-star annotations for better semantic representation".to_string(),
+        );
     }
 
-    fn analyze_jena_format(&self, _content: &str, issues: &mut Vec<String>, _data_characteristics: &mut std::collections::HashMap<String, String>) {
+    fn analyze_jena_format(
+        &self,
+        _content: &str,
+        issues: &mut Vec<String>,
+        _data_characteristics: &mut std::collections::HashMap<String, String>,
+    ) {
         issues.push("Jena-specific extensions may need conversion".to_string());
     }
 
-    fn analyze_generic_rdf(&self, _content: &str, issues: &mut Vec<String>, _data_characteristics: &mut std::collections::HashMap<String, String>) {
+    fn analyze_generic_rdf(
+        &self,
+        _content: &str,
+        issues: &mut Vec<String>,
+        _data_characteristics: &mut std::collections::HashMap<String, String>,
+    ) {
         issues.push("Generic RDF format detected - manual review recommended".to_string());
     }
 
     fn count_triples(&self, content: &str) -> usize {
-        content.lines().filter(|line| !line.trim().is_empty() && !line.trim_start().starts_with('#')).count()
+        content
+            .lines()
+            .filter(|line| !line.trim().is_empty() && !line.trim_start().starts_with('#'))
+            .count()
     }
 
     fn count_reified_statements(&self, content: &str) -> usize {
-        content.matches("rdf:type").filter(|_| content.contains("rdf:Statement")).count()
+        content
+            .matches("rdf:type")
+            .filter(|_| content.contains("rdf:Statement"))
+            .count()
     }
 
     fn extract_namespaces(&self, content: &str) -> Vec<String> {
-        content.lines()
+        content
+            .lines()
             .filter_map(|line| {
                 if line.trim_start().starts_with("@prefix") {
                     Some(line.trim().to_string())
@@ -1212,19 +1265,27 @@ impl DiagnosticAnalyzer {
     }
 
     /// Run comprehensive analysis on a file
-    pub fn run_comprehensive_analysis(&self, input_file: &str) -> crate::StarResult<DiagnosticResult> {
+    pub fn run_comprehensive_analysis(
+        &self,
+        input_file: &str,
+    ) -> crate::StarResult<DiagnosticResult> {
         use std::fs;
-        
-        let content = fs::read_to_string(input_file)
-            .map_err(|e| crate::StarError::parse_error(format!("Failed to read input file: {}", e)))?;
-        
+
+        let content = fs::read_to_string(input_file).map_err(|e| {
+            crate::StarError::parse_error(format!("Failed to read input file: {}", e))
+        })?;
+
         self.analyze_content(&content, None)
     }
 
     /// Apply automatic fixes for diagnostic issues
-    pub fn apply_automatic_fixes(&self, _input_file: &str, issues: &[DiagnosticIssue]) -> crate::StarResult<Vec<String>> {
+    pub fn apply_automatic_fixes(
+        &self,
+        _input_file: &str,
+        issues: &[DiagnosticIssue],
+    ) -> crate::StarResult<Vec<String>> {
         let mut applied_fixes = Vec::new();
-        
+
         for issue in issues {
             match issue.severity {
                 IssueSeverity::Warning | IssueSeverity::Info => {
@@ -1237,7 +1298,7 @@ impl DiagnosticAnalyzer {
                 }
             }
         }
-        
+
         Ok(applied_fixes)
     }
 }

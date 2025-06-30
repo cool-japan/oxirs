@@ -43,6 +43,7 @@ flate2 = "1.1.1"
 
 # WebSocket support for subscriptions
 tokio-tungstenite.workspace = true
+tokio-stream.workspace = true
 futures-util.workspace = true
 futures.workspace = true
 

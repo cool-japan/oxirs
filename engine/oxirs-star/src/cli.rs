@@ -9,16 +9,19 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{anyhow, Context, Result};
+use chrono;
 use clap::{Arg, ArgMatches, Command};
 use serde_json;
 use tracing::{debug, error, info, warn};
 
 use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::parser::{ParseError, StarFormat, StarParser};
+use crate::profiling::{ProfilingConfig, StarProfiler};
 use crate::serializer::{SerializationOptions, StarSerializer};
 use crate::store::StarStore;
 use crate::troubleshooting::{
-    DiagnosticAnalyzer, MigrationAssistant, MigrationSourceFormat, TroubleshootingGuide, TroubleshootingIssue,
+    DiagnosticAnalyzer, MigrationAssistant, MigrationSourceFormat, TroubleshootingGuide,
+    TroubleshootingIssue,
 };
 use crate::{StarConfig, StarError, StarResult};
 
@@ -59,6 +62,8 @@ impl StarCli {
             Some(("troubleshoot", sub_matches)) => self.troubleshoot_command(sub_matches),
             Some(("migrate", sub_matches)) => self.migrate_command(sub_matches),
             Some(("doctor", sub_matches)) => self.doctor_command(sub_matches),
+            Some(("profile", sub_matches)) => self.profile_command(sub_matches),
+            Some(("profile-report", sub_matches)) => self.profile_report_command(sub_matches),
             _ => {
                 eprintln!("No command specified. Use --help for usage information.");
                 std::process::exit(1);
@@ -315,6 +320,64 @@ impl StarCli {
                             .long("fix")
                             .help("Attempt to automatically fix issues")
                             .action(clap::ArgAction::SetTrue),
+                    ),
+            )
+            .subcommand(
+                Command::new("profile")
+                    .about("Profile RDF-star operations with advanced analytics")
+                    .arg(
+                        Arg::new("input")
+                            .help("Input file to profile")
+                            .required(true)
+                            .value_name("FILE"),
+                    )
+                    .arg(
+                        Arg::new("operations")
+                            .short('o')
+                            .long("operations")
+                            .help("Operations to profile (parse,serialize,query,all)")
+                            .value_name("OPS")
+                            .default_value("all"),
+                    )
+                    .arg(
+                        Arg::new("iterations")
+                            .short('n')
+                            .long("iterations")
+                            .help("Number of profiling iterations")
+                            .value_name("N")
+                            .default_value("10"),
+                    )
+                    .arg(
+                        Arg::new("output")
+                            .short('r')
+                            .long("report")
+                            .help("Output profiling report to file")
+                            .value_name("REPORT_FILE"),
+                    ),
+            )
+            .subcommand(
+                Command::new("profile-report")
+                    .about("Generate comprehensive profiling reports from collected data")
+                    .arg(
+                        Arg::new("data")
+                            .help("Profiling data file (JSON format)")
+                            .required(true)
+                            .value_name("DATA_FILE"),
+                    )
+                    .arg(
+                        Arg::new("output")
+                            .short('o')
+                            .long("output")
+                            .help("Output report file")
+                            .value_name("OUTPUT_FILE"),
+                    )
+                    .arg(
+                        Arg::new("format")
+                            .short('f')
+                            .long("format")
+                            .help("Report format (json,html,text)")
+                            .value_name("FORMAT")
+                            .default_value("text"),
                     ),
             )
     }
@@ -778,11 +841,11 @@ impl StarCli {
 
         // Simple query execution placeholder
         let duration = start_time.elapsed();
-        
+
         if !self.quiet {
             println!("Query executed in {:?}", duration);
         }
-        
+
         println!("Query: {}", query_text);
         println!("Store contains {} triples", store.len());
 
@@ -1058,7 +1121,7 @@ impl StarCli {
         let migration_format = source_format
             .parse::<MigrationSourceFormat>()
             .map_err(|_| anyhow!("Unsupported source format: {}", source_format))?;
-        
+
         let config = crate::StarConfig::default();
         let mut assistant = MigrationAssistant::new(migration_format.clone(), config);
 
@@ -1169,8 +1232,12 @@ impl StarCli {
             ---------------\n{}",
             input_file,
             duration,
-            diagnostic_result.performance_metrics.estimated_parse_time_ms,
-            diagnostic_result.performance_metrics.estimated_memory_usage_mb,
+            diagnostic_result
+                .performance_metrics
+                .estimated_parse_time_ms,
+            diagnostic_result
+                .performance_metrics
+                .estimated_memory_usage_mb,
             diagnostic_result.performance_metrics.complexity_score,
             diagnostic_result.issues_found.len(),
             diagnostic_result.recommendations.len(),
@@ -1192,7 +1259,8 @@ impl StarCli {
 
         // Apply automatic fixes if requested
         if auto_fix {
-            let fixes = analyzer.apply_automatic_fixes(input_file, &diagnostic_result.issues_found)?;
+            let fixes =
+                analyzer.apply_automatic_fixes(input_file, &diagnostic_result.issues_found)?;
             fixes_applied = fixes.len();
 
             if !self.quiet && fixes_applied > 0 {
@@ -1251,13 +1319,14 @@ impl StarCli {
     /// Run performance analysis on a file
     fn run_performance_analysis(&self, input_file: &str) -> StarResult<PerformanceAnalysis> {
         use std::fs;
-        
-        let metadata = fs::metadata(input_file)
-            .map_err(|e| crate::StarError::parse_error(format!("Failed to read file metadata: {}", e)))?;
-        
+
+        let metadata = fs::metadata(input_file).map_err(|e| {
+            crate::StarError::parse_error(format!("Failed to read file metadata: {}", e))
+        })?;
+
         let file_size = metadata.len();
         let estimated_parse_time = (file_size as f64 / 1024.0) * 0.1; // rough estimate
-        
+
         Ok(PerformanceAnalysis {
             file_size_bytes: file_size,
             estimated_parse_time_ms: estimated_parse_time,
@@ -1267,6 +1336,235 @@ impl StarCli {
                 "Enable indexing for better query performance".to_string(),
             ],
         })
+    }
+
+    /// Profile RDF-star operations with advanced analytics
+    fn profile_command(&self, matches: &ArgMatches) -> Result<()> {
+        let input_path = matches.get_one::<String>("input").unwrap();
+        let operations = matches.get_one::<String>("operations").unwrap();
+        let iterations: usize = matches.get_one::<String>("iterations").unwrap().parse()?;
+        let report_path = matches.get_one::<String>("output");
+
+        info!("Profiling RDF-star file: {} (operations: {}, iterations: {})", input_path, operations, iterations);
+
+        let mut profiler = StarProfiler::with_config(ProfilingConfig {
+            track_memory: true,
+            track_timing: true,
+            sample_rate: 1.0,
+            max_samples: iterations * 10,
+            enable_statistics: true,
+        });
+
+        let start_time = Instant::now();
+
+        // Read the input file
+        let input_data = fs::read_to_string(input_path)
+            .with_context(|| format!("Failed to read input file: {}", input_path))?;
+        let input_size = input_data.len();
+
+        // Detect format
+        let format = self.detect_format(input_path, &input_data)?;
+
+        // Profile parsing operations
+        if operations == "all" || operations.contains("parse") {
+            for i in 0..iterations {
+                info!("Profiling parsing iteration {}/{}", i + 1, iterations);
+                profiler.profile_parsing(format, input_size, || {
+                    let mut parser = StarParser::new();
+                    let _ = parser.parse_str(&input_data, format);
+                });
+            }
+        }
+
+        // Profile serialization operations
+        if operations == "all" || operations.contains("serialize") {
+            // Parse once to get data for serialization
+            let mut parser = StarParser::new();
+            if let Ok(graph) = parser.parse_str(&input_data, format) {
+                let triple_count = graph.len();
+                for i in 0..iterations {
+                    info!("Profiling serialization iteration {}/{}", i + 1, iterations);
+                    profiler.profile_serialization(format, triple_count, || {
+                        let serializer = StarSerializer::new();
+                        let _ = serializer.serialize_graph(&graph, format, &SerializationOptions::default());
+                    });
+                }
+            }
+        }
+
+        let duration = start_time.elapsed();
+        info!("Profiling completed in {:?}", duration);
+
+        // Generate and display report
+        let report = profiler.generate_report();
+        
+        if !self.quiet {
+            self.display_profiling_summary(&report);
+        }
+
+        // Save detailed report if requested
+        if let Some(report_path) = report_path {
+            let report_json = serde_json::to_string_pretty(&report)?;
+            fs::write(report_path, report_json)
+                .with_context(|| format!("Failed to write profiling report: {}", report_path))?;
+            info!("Detailed profiling report saved to: {}", report_path);
+        }
+
+        Ok(())
+    }
+
+    /// Generate comprehensive profiling reports from collected data
+    fn profile_report_command(&self, matches: &ArgMatches) -> Result<()> {
+        let data_path = matches.get_one::<String>("data").unwrap();
+        let output_path = matches.get_one::<String>("output");
+        let format = matches.get_one::<String>("format").unwrap();
+
+        info!("Generating profiling report from: {}", data_path);
+
+        // Load profiling data
+        let data_content = fs::read_to_string(data_path)
+            .with_context(|| format!("Failed to read profiling data: {}", data_path))?;
+        
+        let mut profiler = StarProfiler::new();
+        profiler.import_json(&data_content)
+            .with_context(|| "Failed to parse profiling data")?;
+
+        let report = profiler.generate_report();
+
+        match format {
+            "json" => {
+                let report_json = serde_json::to_string_pretty(&report)?;
+                if let Some(output_path) = output_path {
+                    fs::write(output_path, report_json)
+                        .with_context(|| format!("Failed to write JSON report: {}", output_path))?;
+                    info!("JSON report saved to: {}", output_path);
+                } else {
+                    println!("{}", report_json);
+                }
+            },
+            "html" => {
+                let html_report = self.generate_html_report(&report)?;
+                if let Some(output_path) = output_path {
+                    fs::write(output_path, html_report)
+                        .with_context(|| format!("Failed to write HTML report: {}", output_path))?;
+                    info!("HTML report saved to: {}", output_path);
+                } else {
+                    println!("{}", html_report);
+                }
+            },
+            "text" | _ => {
+                let text_report = self.generate_text_report(&report)?;
+                if let Some(output_path) = output_path {
+                    fs::write(output_path, text_report)
+                        .with_context(|| format!("Failed to write text report: {}", output_path))?;
+                    info!("Text report saved to: {}", output_path);
+                } else {
+                    println!("{}", text_report);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Display profiling summary
+    fn display_profiling_summary(&self, report: &crate::profiling::ProfilingReport) {
+        println!("\n=== Profiling Summary ===");
+        println!("Total Duration: {:?}", report.total_duration);
+        println!("Total Samples: {}", report.total_samples);
+        
+        println!("\n=== Operation Statistics ===");
+        for (operation, stats) in &report.operation_stats {
+            println!("{}:", operation);
+            println!("  Count: {}", stats.count);
+            println!("  Average: {:?}", stats.average_duration);
+            println!("  Min: {:?}", stats.min_duration);
+            println!("  Max: {:?}", stats.max_duration);
+            println!("  Ops/sec: {:.2}", stats.ops_per_second);
+            if let Some(bytes_per_sec) = stats.bytes_per_second {
+                println!("  MB/sec: {:.2}", bytes_per_sec / 1_000_000.0);
+            }
+        }
+
+        if !report.bottlenecks.is_empty() {
+            println!("\n=== Performance Bottlenecks ===");
+            for bottleneck in &report.bottlenecks {
+                println!("{}: {:.1}% - {}", bottleneck.operation, bottleneck.time_percentage, bottleneck.description);
+                for suggestion in &bottleneck.suggestions {
+                    println!("  → {}", suggestion);
+                }
+            }
+        }
+
+        if let Some(memory) = &report.memory_patterns {
+            println!("\n=== Memory Analysis ===");
+            println!("Peak Memory: {:.2} MB", memory.peak_memory as f64 / 1_000_000.0);
+            println!("Average Memory: {:.2} MB", memory.average_memory as f64 / 1_000_000.0);
+            println!("Efficiency Ratio: {:.2}", memory.efficiency_ratio);
+            if !memory.potential_leaks.is_empty() {
+                println!("Potential Issues:");
+                for leak in &memory.potential_leaks {
+                    println!("  ⚠ {}", leak);
+                }
+            }
+        }
+    }
+
+    /// Generate HTML profiling report
+    fn generate_html_report(&self, report: &crate::profiling::ProfilingReport) -> Result<String> {
+        let mut html = String::new();
+        html.push_str("<!DOCTYPE html><html><head><title>RDF-star Profiling Report</title></head><body>");
+        html.push_str("<h1>RDF-star Profiling Report</h1>");
+        html.push_str(&format!("<p>Generated: {}</p>", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+        html.push_str(&format!("<p>Total Duration: {:?}</p>", report.total_duration));
+        html.push_str(&format!("<p>Total Samples: {}</p>", report.total_samples));
+        
+        html.push_str("<h2>Operation Statistics</h2><table border='1'>");
+        html.push_str("<tr><th>Operation</th><th>Count</th><th>Average</th><th>Min</th><th>Max</th><th>Ops/sec</th></tr>");
+        for (operation, stats) in &report.operation_stats {
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{:?}</td><td>{:?}</td><td>{:?}</td><td>{:.2}</td></tr>",
+                operation, stats.count, stats.average_duration, stats.min_duration, stats.max_duration, stats.ops_per_second
+            ));
+        }
+        html.push_str("</table>");
+        html.push_str("</body></html>");
+        Ok(html)
+    }
+
+    /// Generate text profiling report
+    fn generate_text_report(&self, report: &crate::profiling::ProfilingReport) -> Result<String> {
+        let mut text = String::new();
+        text.push_str("RDF-star Profiling Report\n");
+        text.push_str("========================\n\n");
+        text.push_str(&format!("Generated: {}\n", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+        text.push_str(&format!("Total Duration: {:?}\n", report.total_duration));
+        text.push_str(&format!("Total Samples: {}\n\n", report.total_samples));
+        
+        text.push_str("Operation Statistics\n");
+        text.push_str("-------------------\n");
+        for (operation, stats) in &report.operation_stats {
+            text.push_str(&format!("{}:\n", operation));
+            text.push_str(&format!("  Count: {}\n", stats.count));
+            text.push_str(&format!("  Average: {:?}\n", stats.average_duration));
+            text.push_str(&format!("  Min: {:?}\n", stats.min_duration));
+            text.push_str(&format!("  Max: {:?}\n", stats.max_duration));
+            text.push_str(&format!("  Ops/sec: {:.2}\n\n", stats.ops_per_second));
+        }
+        
+        if !report.bottlenecks.is_empty() {
+            text.push_str("Performance Bottlenecks\n");
+            text.push_str("----------------------\n");
+            for bottleneck in &report.bottlenecks {
+                text.push_str(&format!("{}: {:.1}% - {}\n", bottleneck.operation, bottleneck.time_percentage, bottleneck.description));
+                for suggestion in &bottleneck.suggestions {
+                    text.push_str(&format!("  → {}\n", suggestion));
+                }
+                text.push_str("\n");
+            }
+        }
+        
+        Ok(text)
     }
 }
 

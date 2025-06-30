@@ -661,7 +661,10 @@ impl SubscriptionManager {
             // Evaluate subscriptions in parallel
             let futures: Vec<_> = subscription_ids
                 .into_iter()
-                .map(|id: String| self.evaluate_subscription(&id))
+                .map(|id: String| {
+                    let id_clone = id.clone();
+                    self.evaluate_subscription(&id_clone)
+                })
                 .collect();
 
             let results = futures::future::join_all(futures).await;

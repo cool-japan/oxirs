@@ -6,7 +6,7 @@
 use crate::indexing::IndexStats;
 use crate::model::Variable;
 use crate::query::algebra::{
-    GraphPattern, Query as AlgebraQuery, QueryForm, TermPattern, TriplePattern,
+    AlgebraTriplePattern, GraphPattern, Query as AlgebraQuery, QueryForm, TermPattern,
 };
 use crate::query::plan::{ExecutionPlan, QueryPlanner};
 use crate::OxirsError;
@@ -260,7 +260,7 @@ impl AIQueryOptimizer {
     }
 
     /// Determine join type between triple patterns
-    fn get_join_type(&self, left: &TriplePattern, right: &TriplePattern) -> Option<JoinType> {
+    fn get_join_type(&self, left: &AlgebraTriplePattern, right: &AlgebraTriplePattern) -> Option<JoinType> {
         // Check if subjects match
         if self.patterns_match(&left.subject, &right.subject) {
             return Some(JoinType::SubjectSubject);
@@ -291,6 +291,7 @@ impl AIQueryOptimizer {
             _ => false,
         }
     }
+
 
     /// Check if pattern has filters
     fn has_filter(&self, pattern: &GraphPattern) -> bool {
@@ -333,7 +334,7 @@ impl AIQueryOptimizer {
     }
 
     /// Generate different join orders for optimization
-    fn generate_join_orders(&self, patterns: &[TriplePattern]) -> Vec<Vec<usize>> {
+    fn generate_join_orders(&self, patterns: &[AlgebraTriplePattern]) -> Vec<Vec<usize>> {
         let mut orders = Vec::new();
 
         // Original order
@@ -350,7 +351,7 @@ impl AIQueryOptimizer {
     }
 
     /// Estimate selectivity of a triple pattern  
-    fn estimate_selectivity(&self, pattern: &TriplePattern) -> i64 {
+    fn estimate_selectivity(&self, pattern: &AlgebraTriplePattern) -> i64 {
         // Lower score = more selective (better to execute first)
         let mut score = 0;
 
@@ -371,7 +372,7 @@ impl AIQueryOptimizer {
     /// Create execution plan with specific join order
     fn create_plan_with_order(
         &self,
-        patterns: &[TriplePattern],
+        patterns: &[AlgebraTriplePattern],
         order: &[usize],
     ) -> Result<ExecutionPlan, OxirsError> {
         if order.is_empty() {
@@ -379,12 +380,12 @@ impl AIQueryOptimizer {
         }
 
         let mut plan = ExecutionPlan::TripleScan {
-            pattern: crate::query::plan::convert_triple_pattern(&patterns[order[0]]),
+            pattern: crate::query::plan::convert_algebra_triple_pattern(&patterns[order[0]]),
         };
 
         for &idx in &order[1..] {
             let right_plan = ExecutionPlan::TripleScan {
-                pattern: crate::query::plan::convert_triple_pattern(&patterns[idx]),
+                pattern: crate::query::plan::convert_algebra_triple_pattern(&patterns[idx]),
             };
 
             plan = ExecutionPlan::HashJoin {

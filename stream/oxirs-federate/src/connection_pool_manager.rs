@@ -123,7 +123,7 @@ pub struct ServicePoolMetrics {
     pub peak_usage: usize,
     pub last_resize_time: Option<Instant>,
     pub connection_errors: u64,
-    pub request_rate: f64, // requests per second
+    pub request_rate: f64,     // requests per second
     pub utilization_rate: f64, // 0.0 - 1.0
 }
 
@@ -186,14 +186,14 @@ impl ConnectionPoolManager {
 
         // Create new pool
         let pool = self.create_pool_for_service(service).await?;
-        
+
         let mut pools = self.pools.write().await;
         pools.insert(service.id.clone(), pool.clone());
-        
+
         // Update metrics
         let mut metrics = self.metrics.write().await;
         metrics.pools_created += 1;
-        
+
         info!("Created connection pool for service: {}", service.id);
         Ok(pool)
     }
@@ -216,8 +216,7 @@ impl ConnectionPoolManager {
         {
             let mut pool_metrics = pool.metrics.write().await;
             pool_metrics.total_acquisitions += 1;
-            pool_metrics.average_wait_time = 
-                (pool_metrics.average_wait_time + wait_time) / 2;
+            pool_metrics.average_wait_time = (pool_metrics.average_wait_time + wait_time) / 2;
         }
 
         {
@@ -253,13 +252,13 @@ impl ConnectionPoolManager {
         for (service_id, pool) in pools.iter() {
             total_count += 1;
             let is_healthy = pool.health_checker.check_health().await?;
-            
+
             if is_healthy {
                 healthy_count += 1;
             } else {
                 warn!("Health check failed for service pool: {}", service_id);
             }
-            
+
             results.push(ServiceHealthStatus {
                 service_id: service_id.clone(),
                 is_healthy,
@@ -534,7 +533,8 @@ impl PoolOptimizer {
         // High utilization - consider increasing pool size
         if utilization > 0.8 && avg_wait_time > Duration::from_millis(100) {
             let old_size = metrics.max_pool_size;
-            let new_size = ((old_size as f64) * (1.0 + self.config.size_adjustment_factor)) as usize;
+            let new_size =
+                ((old_size as f64) * (1.0 + self.config.size_adjustment_factor)) as usize;
             let new_size = new_size.min(self.config.default_max_connections * 2); // Cap at 2x default
 
             drop(metrics); // Release read lock before write operation
@@ -556,7 +556,8 @@ impl PoolOptimizer {
         // Low utilization - consider decreasing pool size
         if utilization < 0.2 && metrics.max_pool_size > self.config.min_connections {
             let old_size = metrics.max_pool_size;
-            let new_size = ((old_size as f64) * (1.0 - self.config.size_adjustment_factor)) as usize;
+            let new_size =
+                ((old_size as f64) * (1.0 - self.config.size_adjustment_factor)) as usize;
             let new_size = new_size.max(self.config.min_connections);
 
             if new_size < old_size {
@@ -594,7 +595,7 @@ impl<'a> Drop for ConnectionPermit<'a> {
         // Update metrics when permit is released
         let pool = self.pool.clone();
         let duration = self.acquired_at.elapsed();
-        
+
         tokio::spawn(async move {
             let mut metrics = pool.metrics.write().await;
             metrics.connections_in_use = metrics.connections_in_use.saturating_sub(1);
@@ -703,7 +704,7 @@ mod tests {
 
         let _pool = manager.get_pool(&service).await.unwrap();
         let adjustments = manager.optimize_pools().await.unwrap();
-        
+
         // Should handle optimization without errors
         assert!(adjustments.len() >= 0);
     }
@@ -722,7 +723,7 @@ mod tests {
 
         let _pool = manager.get_pool(&service).await.unwrap();
         let health_result = manager.health_check().await.unwrap();
-        
+
         assert_eq!(health_result.total_services, 1);
         assert!(health_result.overall_healthy);
     }

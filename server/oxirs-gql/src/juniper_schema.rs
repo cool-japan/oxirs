@@ -3,19 +3,19 @@
 //! This module provides a proper Juniper implementation that integrates with the RDF model,
 //! offering both auto-generated schemas from RDF ontologies and direct RDF access via GraphQL.
 
-use juniper::{
-    EmptyMutation, EmptySubscription, FieldResult, GraphQLObject, GraphQLScalar, 
-    GraphQLUnion, GraphQLEnum, RootNode, GraphQLInputObject, ID, Value,
-    ScalarValue, DefaultScalarValue, InputValue, ScalarToken, ParseScalarResult,
-    ParseScalarValue
-};
-use juniper::GraphQLScalar as GraphQLScalarTrait;
 use crate::RdfStore;
-use std::sync::Arc;
 use anyhow::Result;
+use juniper::{
+    DefaultScalarValue, EmptyMutation, EmptySubscription, FieldResult, GraphQLEnum,
+    GraphQLInputObject, GraphQLObject, GraphQLScalar, GraphQLUnion, InputValue, ParseScalarResult,
+    ParseScalarValue, RootNode, ScalarToken, ScalarValue, Value, ID,
+};
+use oxirs_core::model::{
+    BlankNode as OxiBlankNode, Literal as OxiLiteral, NamedNode as OxiNamedNode, Term, Variable,
+};
 use oxirs_core::query::QueryResults;
-use oxirs_core::model::{Term, NamedNode as OxiNamedNode, Literal as OxiLiteral, BlankNode as OxiBlankNode, Variable};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Custom scalar type for RDF IRIs
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -32,24 +32,23 @@ impl IRI {
     }
 }
 
-impl<S> GraphQLScalarTrait<S> for IRI
-where
-    S: ScalarValue,
-{
-    fn resolve(&self) -> Value<S> {
+juniper::graphql_scalar!(IRI {
+    description: "A valid IRI (Internationalized Resource Identifier)"
+
+    resolve(&self) -> Value {
         Value::scalar(self.0.clone())
     }
 
-    fn from_input_value(v: &InputValue<S>) -> Result<IRI, String> {
+    from_input_value(v: &InputValue) -> Result<IRI, String> {
         v.as_string_value()
             .ok_or_else(|| format!("Expected `String`, found: {}", v))
             .and_then(|s| Self::new(s.to_string()))
     }
 
-    fn from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a, S> {
-        <String as ParseScalarValue<S>>::from_str(value)
+    from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a> {
+        <String as ParseScalarValue>::from_str(value)
     }
-}
+});
 
 // For now, use a simple string representation - proper IRI scalar can be added later
 impl From<String> for IRI {
@@ -80,7 +79,7 @@ impl RdfLiteral {
             datatype: None,
         }
     }
-    
+
     pub fn with_language(value: String, language: String) -> Self {
         Self {
             value,
@@ -88,7 +87,7 @@ impl RdfLiteral {
             datatype: None,
         }
     }
-    
+
     pub fn with_datatype(value: String, datatype: String) -> Self {
         Self {
             value,
@@ -96,23 +95,27 @@ impl RdfLiteral {
             datatype: Some(datatype),
         }
     }
-
 }
 
-impl<S> GraphQLScalarTrait<S> for RdfLiteral
-where
-    S: ScalarValue,
-{
-    fn resolve(&self) -> Value<S> {
+juniper::graphql_scalar!(RdfLiteral {
+    description: "An RDF literal with optional language tag and datatype"
+
+    resolve(&self) -> Value {
         Value::scalar(format!(
             "{}{}{}",
             self.value,
-            self.language.as_ref().map(|l| format!("@{}", l)).unwrap_or_default(),
-            self.datatype.as_ref().map(|d| format!("^^{}", d)).unwrap_or_default()
+            self.language
+                .as_ref()
+                .map(|l| format!("@{}", l))
+                .unwrap_or_default(),
+            self.datatype
+                .as_ref()
+                .map(|d| format!("^^{}", d))
+                .unwrap_or_default()
         ))
     }
 
-    fn from_input_value(v: &InputValue<S>) -> Result<RdfLiteral, String> {
+    from_input_value(v: &InputValue) -> Result<RdfLiteral, String> {
         v.as_string_value()
             .ok_or_else(|| format!("Expected `String`, found: {}", v))
             .and_then(|s| {
@@ -141,10 +144,10 @@ where
             })
     }
 
-    fn from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a, S> {
-        <String as ParseScalarValue<S>>::from_str(value)
+    from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a> {
+        <String as ParseScalarValue>::from_str(value)
     }
-}
+});
 
 /// RDF Term union type representing any RDF term (IRI, Literal, or Blank Node)
 #[derive(Debug, Clone, GraphQLUnion)]
@@ -340,25 +343,28 @@ impl Query {
     }
 
     /// Get all triples matching optional filters
-    fn triples(context: &GraphQLContext, filter: Option<RdfQueryFilter>) -> FieldResult<Vec<RdfTriple>> {
+    fn triples(
+        context: &GraphQLContext,
+        filter: Option<RdfQueryFilter>,
+    ) -> FieldResult<Vec<RdfTriple>> {
         let filter = filter.unwrap_or_default();
-        
+
         // For now, return a simple query - in production, implement proper filtering
         let query = build_select_query(&filter);
         let results = context.store.query(&query)?;
-        
+
         match results {
             QueryResults::Solutions(solutions) => {
                 let mut triples = Vec::new();
                 let s_var = Variable::new("s")?;
                 let p_var = Variable::new("p")?;
                 let o_var = Variable::new("o")?;
-                
+
                 for solution in solutions {
                     if let (Some(s), Some(p), Some(o)) = (
                         solution.get(&s_var),
                         solution.get(&p_var),
-                        solution.get(&o_var)
+                        solution.get(&o_var),
                     ) {
                         triples.push(RdfTriple {
                             subject: convert_term_to_rdf_term(s.clone()),
@@ -377,30 +383,40 @@ impl Query {
     fn subjects(context: &GraphQLContext, limit: Option<i32>) -> FieldResult<Vec<RdfNamedNode>> {
         let limit_usize = limit.map(|l| l as usize);
         let subjects = context.store.get_subjects(limit_usize)?;
-        
-        Ok(subjects.into_iter().map(|s| RdfNamedNode {
-            iri: IRI(s.clone()),
-            label: None,
-            description: None,
-        }).collect())
+
+        Ok(subjects
+            .into_iter()
+            .map(|s| RdfNamedNode {
+                iri: IRI(s.clone()),
+                label: None,
+                description: None,
+            })
+            .collect())
     }
 
     /// Get all predicates in the store
     fn predicates(context: &GraphQLContext, limit: Option<i32>) -> FieldResult<Vec<RdfNamedNode>> {
         let limit_usize = limit.map(|l| l as usize);
         let predicates = context.store.get_predicates(limit_usize)?;
-        
-        Ok(predicates.into_iter().map(|p| RdfNamedNode {
-            iri: IRI(p.clone()),
-            label: None,
-            description: None,
-        }).collect())
+
+        Ok(predicates
+            .into_iter()
+            .map(|p| RdfNamedNode {
+                iri: IRI(p.clone()),
+                label: None,
+                description: None,
+            })
+            .collect())
     }
 
     /// Search for resources by label or IRI pattern
-    fn search(context: &GraphQLContext, pattern: String, limit: Option<i32>) -> FieldResult<Vec<RdfNamedNode>> {
+    fn search(
+        context: &GraphQLContext,
+        pattern: String,
+        limit: Option<i32>,
+    ) -> FieldResult<Vec<RdfNamedNode>> {
         let limit_clause = limit.map(|l| format!(" LIMIT {}", l)).unwrap_or_default();
-        
+
         let query = format!(
             r#"
             SELECT DISTINCT ?resource WHERE {{
@@ -415,7 +431,7 @@ impl Query {
             "#,
             pattern, pattern, limit_clause
         );
-        
+
         let results = context.store.query(&query)?;
         match results {
             QueryResults::Solutions(solutions) => {
@@ -452,7 +468,8 @@ pub struct StoreInfo {
 }
 
 /// Create the root schema
-pub type Schema = RootNode<'static, Query, EmptyMutation<GraphQLContext>, EmptySubscription<GraphQLContext>>;
+pub type Schema =
+    RootNode<'static, Query, EmptyMutation<GraphQLContext>, EmptySubscription<GraphQLContext>>;
 
 pub fn create_schema() -> Schema {
     Schema::new(Query, EmptyMutation::new(), EmptySubscription::new())
@@ -478,12 +495,12 @@ fn convert_sparql_results(results: QueryResults) -> Result<SparqlResult> {
         QueryResults::Solutions(solutions) => {
             let mut variables = Vec::new();
             let mut rows = Vec::new();
-            
+
             for solution in solutions {
                 if variables.is_empty() {
                     variables = solution.variables().map(|v| v.to_string()).collect();
                 }
-                
+
                 let mut bindings = Vec::new();
                 for var in solution.variables() {
                     if let Some(term) = solution.get(var) {
@@ -495,16 +512,14 @@ fn convert_sparql_results(results: QueryResults) -> Result<SparqlResult> {
                 }
                 rows.push(SparqlResultRow { bindings });
             }
-            
+
             Ok(SparqlResult::Solutions(SparqlSolutions {
                 variables,
                 count: rows.len() as i32,
                 rows,
             }))
         }
-        QueryResults::Boolean(b) => {
-            Ok(SparqlResult::Boolean(SparqlBoolean { result: b }))
-        }
+        QueryResults::Boolean(b) => Ok(SparqlResult::Boolean(SparqlBoolean { result: b })),
         QueryResults::Graph(_graph) => {
             // For now, return empty graph - in production, convert the graph properly
             Ok(SparqlResult::Graph(SparqlGraph {
@@ -526,13 +541,15 @@ fn convert_term_to_rdf_term(term: Term) -> RdfTerm {
             let rdf_literal = RdfLiteral {
                 value: literal.value().to_string(),
                 language: literal.language().map(|l| l.to_string()),
-                datatype: if literal.datatype().as_str() != "http://www.w3.org/2001/XMLSchema#string" {
+                datatype: if literal.datatype().as_str()
+                    != "http://www.w3.org/2001/XMLSchema#string"
+                {
                     Some(literal.datatype().to_string())
                 } else {
                     None
                 },
             };
-            
+
             RdfTerm::Literal(RdfLiteralNode {
                 literal: rdf_literal.clone(),
                 value: rdf_literal.value,
@@ -544,7 +561,7 @@ fn convert_term_to_rdf_term(term: Term) -> RdfTerm {
             id: ID::new(format!("_:{}", node)),
             label: format!("_:{}", node),
         }),
-        Term::Triple(_) => {
+        Term::QuotedTriple(_) => {
             // RDF-star support - for now, represent as a special named node
             RdfTerm::NamedNode(RdfNamedNode {
                 iri: IRI("rdf-star:triple".to_string()),
@@ -568,7 +585,7 @@ fn convert_named_node(term: Term) -> Result<RdfNamedNode> {
 
 fn build_select_query(filter: &RdfQueryFilter) -> String {
     let mut conditions = Vec::new();
-    
+
     if let Some(ref subject) = filter.subject {
         conditions.push(format!("CONTAINS(STR(?s), \"{}\")", subject));
     }
@@ -578,16 +595,22 @@ fn build_select_query(filter: &RdfQueryFilter) -> String {
     if let Some(ref object) = filter.object {
         conditions.push(format!("CONTAINS(STR(?o), \"{}\")", object));
     }
-    
+
     let filter_clause = if !conditions.is_empty() {
         format!("FILTER({})", conditions.join(" && "))
     } else {
         String::new()
     };
-    
-    let limit_clause = filter.limit.map(|l| format!(" LIMIT {}", l)).unwrap_or_default();
-    let offset_clause = filter.offset.map(|o| format!(" OFFSET {}", o)).unwrap_or_default();
-    
+
+    let limit_clause = filter
+        .limit
+        .map(|l| format!(" LIMIT {}", l))
+        .unwrap_or_default();
+    let offset_clause = filter
+        .offset
+        .map(|o| format!(" OFFSET {}", o))
+        .unwrap_or_default();
+
     format!(
         "SELECT ?s ?p ?o WHERE {{ ?s ?p ?o {} }}{}{}",
         filter_clause, limit_clause, offset_clause

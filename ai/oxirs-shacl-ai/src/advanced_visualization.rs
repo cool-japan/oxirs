@@ -952,8 +952,7 @@ impl AdvancedVisualizationEngine {
     fn calculate_quantum_advantage(&self, neural: &NeuralPattern, quantum: &QuantumPattern) -> f64 {
         // Simulate quantum advantage calculation
         let classical_score = neural.confidence * neural.complexity_score;
-        let quantum_score =
-            quantum.quantum_state.coherence() * quantum.fidelity;
+        let quantum_score = quantum.quantum_state.coherence() * quantum.fidelity;
 
         (quantum_score / classical_score.max(0.001)).min(10.0) // Cap at 10x advantage
     }
@@ -965,8 +964,7 @@ impl AdvancedVisualizationEngine {
     ) -> f64 {
         // Combine classical and quantum performance metrics
         let classical_performance = neural.confidence * (1.0 - neural.complexity_score);
-        let quantum_performance =
-            quantum.quantum_state.coherence() * quantum.fidelity;
+        let quantum_performance = quantum.quantum_state.coherence() * quantum.fidelity;
 
         (classical_performance + quantum_performance) / 2.0
     }

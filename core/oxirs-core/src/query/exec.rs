@@ -65,6 +65,11 @@ impl Solution {
     pub fn iter(&self) -> std::collections::hash_map::Iter<Variable, Term> {
         self.bindings.iter()
     }
+
+    /// Returns an iterator over the variables in this solution
+    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
+        self.bindings.keys()
+    }
 }
 
 /// Query results

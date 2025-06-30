@@ -166,10 +166,9 @@ impl ReliableMessage {
     pub fn next_retry_delay(&self, config: &ReliabilityConfig) -> Duration {
         let base_delay = config.initial_backoff.as_millis() as f64
             * config.backoff_multiplier.powi(self.retry_count as i32);
-        
-        let mut delay = Duration::from_millis(base_delay as u64)
-            .min(config.max_backoff);
-        
+
+        let mut delay = Duration::from_millis(base_delay as u64).min(config.max_backoff);
+
         // Add jitter if enabled
         if config.backoff_jitter {
             use rand::Rng;
@@ -177,7 +176,7 @@ impl ReliableMessage {
             let jitter = rng.gen_range(0.8..1.2);
             delay = Duration::from_millis((delay.as_millis() as f64 * jitter) as u64);
         }
-        
+
         delay
     }
 }
@@ -235,7 +234,7 @@ impl ReliabilityManager {
     pub fn new(config: ReliabilityConfig) -> Self {
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
         let in_flight_semaphore = Arc::new(Semaphore::new(config.max_in_flight));
-        
+
         Self {
             config,
             dedup_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -254,13 +253,13 @@ impl ReliabilityManager {
     pub async fn start(&self) -> Result<()> {
         // Start deduplication cache cleanup task
         self.start_dedup_cleanup_task().await;
-        
+
         // Start acknowledgment timeout checker
         self.start_ack_timeout_checker().await;
-        
+
         // Start retry processor
         self.start_retry_processor().await;
-        
+
         info!("Reliability manager started");
         Ok(())
     }
@@ -268,40 +267,44 @@ impl ReliabilityManager {
     /// Prepare message for reliable delivery
     pub async fn prepare_message(&self, event: StreamEvent) -> Result<ReliableMessage> {
         let mut message = ReliableMessage::new(event);
-        
+
         // Add sequence number if ordering is enabled
         if self.config.preserve_ordering {
             let mut counter = self.sequence_counter.write().await;
             *counter += 1;
             message.sequence_number = Some(*counter);
         }
-        
+
         // Check deduplication if enabled
         if self.config.enable_deduplication {
             if self.is_duplicate(&message.message_id).await? {
-                return Err(anyhow!("Duplicate message detected: {}", message.message_id));
+                return Err(anyhow!(
+                    "Duplicate message detected: {}",
+                    message.message_id
+                ));
             }
             self.record_message_id(&message.message_id).await?;
         }
-        
+
         // Acquire in-flight permit
-        let _permit = self.in_flight_semaphore
+        let _permit = self
+            .in_flight_semaphore
             .acquire()
             .await
             .map_err(|_| anyhow!("Failed to acquire in-flight permit"))?;
-        
+
         // Track in-flight message
-        self.in_flight.write().await.insert(
-            message.message_id.clone(),
-            message.clone(),
-        );
-        
+        self.in_flight
+            .write()
+            .await
+            .insert(message.message_id.clone(), message.clone());
+
         // Track for acknowledgment timeout
-        self.ack_tracker.write().await.insert(
-            message.message_id.clone(),
-            Instant::now(),
-        );
-        
+        self.ack_tracker
+            .write()
+            .await
+            .insert(message.message_id.clone(), Instant::now());
+
         Ok(message)
     }
 
@@ -309,27 +312,23 @@ impl ReliabilityManager {
     pub async fn record_delivery(&self, message_id: &str) -> Result<()> {
         // Remove from in-flight tracking
         self.in_flight.write().await.remove(message_id);
-        
+
         // Remove from ack tracker
         self.ack_tracker.write().await.remove(message_id);
-        
+
         // Release in-flight permit (implicitly done when permit is dropped)
-        
+
         debug!("Recorded successful delivery for message: {}", message_id);
         Ok(())
     }
 
     /// Record delivery failure
-    pub async fn record_failure(
-        &self,
-        message_id: &str,
-        error: String,
-    ) -> Result<DeliveryStatus> {
+    pub async fn record_failure(&self, message_id: &str, error: String) -> Result<DeliveryStatus> {
         let mut in_flight = self.in_flight.write().await;
-        
+
         if let Some(mut message) = in_flight.remove(message_id) {
             message.add_error(error.clone());
-            
+
             if message.should_retry(self.config.max_retries) {
                 // Add to retry queue
                 self.retry_queue.lock().await.push_back(message);
@@ -348,7 +347,10 @@ impl ReliabilityManager {
                 }
             }
         } else {
-            Err(anyhow!("Message not found in in-flight tracking: {}", message_id))
+            Err(anyhow!(
+                "Message not found in in-flight tracking: {}",
+                message_id
+            ))
         }
     }
 
@@ -360,21 +362,22 @@ impl ReliabilityManager {
 
     /// Record message ID for deduplication
     async fn record_message_id(&self, message_id: &str) -> Result<()> {
-        let expiry = Utc::now() + ChronoDuration::from_std(self.config.deduplication_window)
-            .map_err(|e| anyhow!("Invalid deduplication window: {}", e))?;
-        
-        self.dedup_cache.write().await.insert(
-            message_id.to_string(),
-            expiry,
-        );
-        
+        let expiry = Utc::now()
+            + ChronoDuration::from_std(self.config.deduplication_window)
+                .map_err(|e| anyhow!("Invalid deduplication window: {}", e))?;
+
+        self.dedup_cache
+            .write()
+            .await
+            .insert(message_id.to_string(), expiry);
+
         Ok(())
     }
 
     /// Send message to DLQ
     async fn send_to_dlq(&self, message: ReliableMessage) -> Result<()> {
         let mut dlq = self.dlq.lock().await;
-        
+
         // Check DLQ size limit
         if let Some(dlq_config) = &self.config.dlq_config {
             if dlq.len() >= dlq_config.max_size {
@@ -382,11 +385,13 @@ impl ReliabilityManager {
                 dlq.pop_front();
             }
         }
-        
+
         dlq.push_back(message.clone());
-        info!("Message {} sent to DLQ after {} retries", 
-              message.message_id, message.retry_count);
-        
+        info!(
+            "Message {} sent to DLQ after {} retries",
+            message.message_id, message.retry_count
+        );
+
         Ok(())
     }
 
@@ -424,10 +429,10 @@ impl ReliabilityManager {
         let cache = Arc::clone(&self.dedup_cache);
         let interval = Duration::from_secs(60); // Cleanup every minute
         let shutdown_rx = Arc::clone(&self.shutdown_rx);
-        
+
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(interval);
-            
+
             loop {
                 // Check for shutdown
                 if let Ok(mut rx) = shutdown_rx.try_lock() {
@@ -437,15 +442,18 @@ impl ReliabilityManager {
                         }
                     }
                 }
-                
+
                 interval_timer.tick().await;
-                
+
                 // Clean expired entries
                 let now = Utc::now();
                 let mut cache_write = cache.write().await;
                 cache_write.retain(|_, expiry| *expiry > now);
-                
-                debug!("Dedup cache cleanup: {} entries remaining", cache_write.len());
+
+                debug!(
+                    "Dedup cache cleanup: {} entries remaining",
+                    cache_write.len()
+                );
             }
         });
     }
@@ -457,10 +465,10 @@ impl ReliabilityManager {
         let retry_queue = Arc::clone(&self.retry_queue);
         let timeout = self.config.ack_timeout;
         let shutdown_rx = Arc::clone(&self.shutdown_rx);
-        
+
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(Duration::from_secs(5));
-            
+
             loop {
                 // Check for shutdown
                 if let Ok(mut rx) = shutdown_rx.try_lock() {
@@ -470,12 +478,12 @@ impl ReliabilityManager {
                         }
                     }
                 }
-                
+
                 interval_timer.tick().await;
-                
+
                 let now = Instant::now();
                 let mut expired_messages = Vec::new();
-                
+
                 // Find expired messages
                 {
                     let tracker = ack_tracker.read().await;
@@ -485,14 +493,14 @@ impl ReliabilityManager {
                         }
                     }
                 }
-                
+
                 // Handle expired messages
                 for message_id in expired_messages {
                     warn!("Message {} timed out, adding to retry queue", message_id);
-                    
+
                     // Remove from trackers
                     ack_tracker.write().await.remove(&message_id);
-                    
+
                     // Move to retry queue
                     if let Some(message) = in_flight.write().await.remove(&message_id) {
                         retry_queue.lock().await.push_back(message);
@@ -509,7 +517,7 @@ impl ReliabilityManager {
         let ack_tracker = Arc::clone(&self.ack_tracker);
         let config = self.config.clone();
         let shutdown_rx = Arc::clone(&self.shutdown_rx);
-        
+
         tokio::spawn(async move {
             loop {
                 // Check for shutdown
@@ -520,31 +528,35 @@ impl ReliabilityManager {
                         }
                     }
                 }
-                
+
                 // Process retry queue
                 let message = retry_queue.lock().await.pop_front();
-                
+
                 if let Some(mut msg) = message {
                     // Calculate retry delay
                     let delay = msg.next_retry_delay(&config);
-                    
-                    info!("Retrying message {} after {:?} (attempt {})", 
-                          msg.message_id, delay, msg.retry_count + 1);
-                    
+
+                    info!(
+                        "Retrying message {} after {:?} (attempt {})",
+                        msg.message_id,
+                        delay,
+                        msg.retry_count + 1
+                    );
+
                     // Wait for retry delay
                     tokio::time::sleep(delay).await;
-                    
+
                     // Re-add to in-flight tracking
-                    in_flight.write().await.insert(
-                        msg.message_id.clone(),
-                        msg.clone(),
-                    );
-                    
+                    in_flight
+                        .write()
+                        .await
+                        .insert(msg.message_id.clone(), msg.clone());
+
                     // Update ack tracker
-                    ack_tracker.write().await.insert(
-                        msg.message_id.clone(),
-                        Instant::now(),
-                    );
+                    ack_tracker
+                        .write()
+                        .await
+                        .insert(msg.message_id.clone(), Instant::now());
                 } else {
                     // No messages to retry, wait a bit
                     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -558,7 +570,7 @@ impl ReliabilityManager {
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(()).await;
         }
-        
+
         info!("Reliability manager shutdown");
         Ok(())
     }
@@ -578,14 +590,11 @@ pub struct ReliabilityStats {
 #[async_trait::async_trait]
 pub trait ReliablePublisher: Send + Sync {
     /// Publish message with reliability guarantees
-    async fn publish_reliable(
-        &self,
-        message: ReliableMessage,
-    ) -> Result<DeliveryConfirmation>;
-    
+    async fn publish_reliable(&self, message: ReliableMessage) -> Result<DeliveryConfirmation>;
+
     /// Check if publisher supports idempotency
     fn supports_idempotency(&self) -> bool;
-    
+
     /// Get publisher reliability capabilities
     fn reliability_capabilities(&self) -> PublisherCapabilities;
 }
@@ -612,19 +621,19 @@ mod tests {
             deduplication_window: Duration::from_secs(60),
             ..Default::default()
         };
-        
+
         let manager = ReliabilityManager::new(config);
-        
+
         // Create test event
         let event = StreamEvent::Heartbeat {
             timestamp: Utc::now(),
             source: "test".to_string(),
             metadata: crate::event::EventMetadata::default(),
         };
-        
+
         // First message should succeed
         let msg1 = manager.prepare_message(event.clone()).await.unwrap();
-        
+
         // Duplicate with same ID should fail
         manager.record_message_id(&msg1.message_id).await.unwrap();
         assert!(manager.is_duplicate(&msg1.message_id).await.unwrap());
@@ -639,24 +648,33 @@ mod tests {
             backoff_jitter: false,
             ..Default::default()
         };
-        
+
         let event = StreamEvent::Heartbeat {
             timestamp: Utc::now(),
             source: "test".to_string(),
             metadata: crate::event::EventMetadata::default(),
         };
-        
+
         let mut message = ReliableMessage::new(event);
-        
+
         // Test exponential backoff
-        assert_eq!(message.next_retry_delay(&config), Duration::from_millis(100));
-        
+        assert_eq!(
+            message.next_retry_delay(&config),
+            Duration::from_millis(100)
+        );
+
         message.retry_count = 1;
-        assert_eq!(message.next_retry_delay(&config), Duration::from_millis(200));
-        
+        assert_eq!(
+            message.next_retry_delay(&config),
+            Duration::from_millis(200)
+        );
+
         message.retry_count = 2;
-        assert_eq!(message.next_retry_delay(&config), Duration::from_millis(400));
-        
+        assert_eq!(
+            message.next_retry_delay(&config),
+            Duration::from_millis(400)
+        );
+
         // Test max backoff cap
         message.retry_count = 10;
         assert_eq!(message.next_retry_delay(&config), Duration::from_secs(10));
@@ -673,9 +691,9 @@ mod tests {
             }),
             ..Default::default()
         };
-        
+
         let manager = ReliabilityManager::new(config);
-        
+
         // Create test messages
         for i in 0..3 {
             let event = StreamEvent::Heartbeat {
@@ -683,11 +701,11 @@ mod tests {
                 source: format!("test-{}", i),
                 metadata: crate::event::EventMetadata::default(),
             };
-            
+
             let message = ReliableMessage::new(event);
             manager.send_to_dlq(message).await.unwrap();
         }
-        
+
         // Check DLQ size limit
         let dlq_messages = manager.get_dlq_messages(10).await;
         assert_eq!(dlq_messages.len(), 2);

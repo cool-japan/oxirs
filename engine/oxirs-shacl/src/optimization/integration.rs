@@ -5,6 +5,7 @@
 
 use crate::{
     constraints::{ConstraintContext, ConstraintEvaluationResult},
+    iri_resolver::IriResolver,
     optimization::{
         AdvancedConstraintEvaluator, ConstraintCache, IncrementalValidationEngine,
         OptimizationConfig, StreamingValidationEngine, ValidationOptimizationEngine,
@@ -13,7 +14,6 @@ use crate::{
     report::ValidationReport,
     sparql::SparqlConstraintExecutor,
     targets::TargetSelector,
-    iri_resolver::IriResolver,
     Constraint, ConstraintComponentId, PropertyPath, Result, ShaclError, Shape, ShapeId,
     ValidationConfig,
 };
@@ -119,11 +119,10 @@ impl OptimizedValidationEngine {
             // Handle implicit targets for node shapes
             if target_nodes.is_empty() && shape.is_node_shape() {
                 if let Ok(shape_iri) = oxirs_core::model::NamedNode::new(shape_id.as_str()) {
-                    let implicit_target =
-                        crate::targets::Target::implicit(shape_iri);
-                    let nodes = self
-                        .target_selector
-                        .select_targets(store, &implicit_target, None)?;
+                    let implicit_target = crate::targets::Target::implicit(shape_iri);
+                    let nodes =
+                        self.target_selector
+                            .select_targets(store, &implicit_target, None)?;
                     target_nodes.extend(nodes);
                 }
             }
@@ -163,8 +162,8 @@ impl OptimizedValidationEngine {
         // Convert results to validation report
         for (result, context) in results.iter().zip(all_constraints_with_contexts.iter()) {
             if result.is_violated() {
-                if let crate::constraints::constraint_context::ConstraintEvaluationResult::Violated { 
-                    violating_value, message, details 
+                if let crate::constraints::constraint_context::ConstraintEvaluationResult::Violated {
+                    violating_value, message, details
                 } = result {
                     let violation = crate::validation::ValidationViolation {
                         focus_node: context.1.focus_node.clone(),
@@ -381,8 +380,8 @@ impl OptimizedValidationEngine {
         // Update timing metrics using exponential moving average
         let alpha = 0.1;
         let new_time_us = validation_time.as_micros() as f64;
-        self.metrics.avg_constraint_time_us = alpha * new_time_us
-            + (1.0 - alpha) * self.metrics.avg_constraint_time_us;
+        self.metrics.avg_constraint_time_us =
+            alpha * new_time_us + (1.0 - alpha) * self.metrics.avg_constraint_time_us;
     }
 
     /// Check if optimization is enabled for a specific feature
@@ -498,16 +497,17 @@ impl OptimizedValidationEngine {
                             vec![focus_node.clone()]
                         };
 
-                        let mut context = ConstraintContext::new(focus_node.clone(), shape_id.clone())
-                            .with_values(values);
+                        let mut context =
+                            ConstraintContext::new(focus_node.clone(), shape_id.clone())
+                                .with_values(values);
                         if let Some(path) = &shape.path {
                             context = context.with_path(path.clone());
                         }
 
                         let result = constraint.evaluate(store, &context)?;
                         if result.is_violated() {
-                            if let crate::constraints::constraint_context::ConstraintEvaluationResult::Violated { 
-                                violating_value, message, details 
+                            if let crate::constraints::constraint_context::ConstraintEvaluationResult::Violated {
+                                violating_value, message, details
                             } = result {
                                 let violation = crate::validation::ValidationViolation {
                                     focus_node: context.focus_node.clone(),

@@ -267,7 +267,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let address = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -297,7 +297,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let address = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -316,7 +316,7 @@ impl Assembler {
                     bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
-                
+
                 if bytecode.len() < offset + data_len {
                     return Err(anyhow!(
                         "Insufficient bytes for Store operation data: need {} bytes, got {}",
@@ -324,7 +324,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let data = bytecode[offset..offset + data_len].to_vec();
                 offset += data_len;
                 Operation::Store { address, data }
@@ -338,7 +338,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let subject = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -387,7 +387,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let key_len = u32::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -395,7 +395,7 @@ impl Assembler {
                     bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
-                
+
                 if bytecode.len() < offset + key_len {
                     return Err(anyhow!(
                         "Insufficient bytes for Index operation key data: need {} bytes, got {}",
@@ -403,7 +403,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let key = String::from_utf8(bytecode[offset..offset + key_len].to_vec())
                     .map_err(|e| anyhow!("Invalid UTF-8 in index key: {}", e))?;
                 offset += key_len;
@@ -423,7 +423,7 @@ impl Assembler {
                     bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
-                
+
                 if bytecode.len() < offset + value_len {
                     return Err(anyhow!(
                         "Insufficient bytes for Index operation value data: need {} bytes, got {}",
@@ -431,7 +431,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let value = String::from_utf8(bytecode[offset..offset + value_len].to_vec())
                     .map_err(|e| anyhow!("Invalid UTF-8 in index value: {}", e))?;
                 offset += value_len;
@@ -447,7 +447,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let pattern_len = u32::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -455,7 +455,7 @@ impl Assembler {
                     bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
-                
+
                 if bytecode.len() < offset + pattern_len {
                     return Err(anyhow!(
                         "Insufficient bytes for Query operation pattern data: need {} bytes, got {}",
@@ -463,7 +463,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let pattern = String::from_utf8(bytecode[offset..offset + pattern_len].to_vec())
                     .map_err(|e| anyhow!("Invalid UTF-8 in query pattern: {}", e))?;
                 offset += pattern_len;
@@ -479,7 +479,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let subject = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -528,7 +528,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let subject_raw = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -594,7 +594,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let index_type = match bytecode[offset] {
                     0 => IndexScanType::SPO,
                     1 => IndexScanType::POS,
@@ -631,7 +631,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let page_id = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -654,7 +654,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let page_id = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],
@@ -673,7 +673,7 @@ impl Assembler {
                     bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
-                
+
                 if bytecode.len() < offset + data_len {
                     return Err(anyhow!(
                         "Insufficient bytes for PageWrite operation data: need {} bytes, got {}",
@@ -681,7 +681,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let data = bytecode[offset..offset + data_len].to_vec();
                 offset += data_len;
 
@@ -696,7 +696,7 @@ impl Assembler {
                         bytecode.len()
                     ));
                 }
-                
+
                 let transaction_id = u64::from_le_bytes([
                     bytecode[offset],
                     bytecode[offset + 1],

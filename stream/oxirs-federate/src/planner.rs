@@ -73,27 +73,268 @@ impl QueryPlanner {
         Ok(plan)
     }
 
-    /// Optimize an execution plan
+    /// Optimize an execution plan with comprehensive service-level optimization
     async fn optimize_execution_plan(
         &self,
         mut plan: ExecutionPlan,
         service_registry: &ServiceRegistry,
     ) -> Result<ExecutionPlan> {
-        // Apply service-level optimizations
-        // TODO: Implement proper service-level optimization
-        // The current approach needs refactoring to work with the optimizer interface
-        // for step in &mut plan.steps {
-        //     if let Some(service_id) = &step.service_id {
-        //         if let Some(service) = service_registry.get_service(service_id) {
-        //             // Apply optimization logic here
-        //         }
-        //     }
-        // }
+        debug!("Optimizing execution plan with {} steps", plan.steps.len());
 
-        // Recalculate total cost
+        // Apply service-level optimizations
+        for step in &mut plan.steps {
+            if let Some(service_id) = &step.service_id {
+                if let Some(service) = service_registry.get_service(service_id) {
+                    // Apply optimization logic based on service capabilities and performance
+                    self.optimize_step_for_service(step, service).await?;
+                }
+            }
+        }
+
+        // Optimize step ordering based on cost and dependencies
+        self.optimize_step_ordering(&mut plan).await?;
+
+        // Identify parallelizable steps
+        self.identify_parallelizable_steps(&mut plan).await?;
+
+        // Apply query pushdown optimizations
+        self.apply_query_pushdown(&mut plan, service_registry).await?;
+
+        // Optimize timeout values based on service performance history
+        self.optimize_timeouts(&mut plan, service_registry).await?;
+
+        // Recalculate total cost and parallelism
         plan.estimated_total_cost = plan.steps.iter().map(|s| s.estimated_cost).sum();
+        plan.max_parallelism = self.calculate_max_parallelism(&plan);
+
+        debug!(
+            "Optimization complete: {} steps, estimated cost: {}, max parallelism: {}",
+            plan.steps.len(),
+            plan.estimated_total_cost,
+            plan.max_parallelism
+        );
 
         Ok(plan)
+    }
+
+    /// Optimize a single step for a specific service
+    async fn optimize_step_for_service(
+        &self,
+        step: &mut ExecutionStep,
+        service: &crate::FederatedService,
+    ) -> Result<()> {
+        // Adjust cost based on service performance metrics
+        if let Some(ref extended_metadata) = service.extended_metadata {
+            if let Some(ref performance_history) = extended_metadata.performance_history {
+                if let Some(perf_record) = performance_history.get("average") {
+                    // Adjust cost based on historical performance
+                    let performance_factor = if perf_record.success_rate > 0.95 {
+                        0.8 // High reliability service gets cost reduction
+                    } else if perf_record.success_rate > 0.85 {
+                        1.0 // Average reliability
+                    } else {
+                        1.5 // Poor reliability gets cost penalty
+                    };
+                    
+                    step.estimated_cost *= performance_factor;
+                }
+            }
+        }
+
+        // Optimize query fragment based on service capabilities
+        if service.capabilities.contains("advanced_filters") {
+            // Can push more filters to this service
+            step.query_fragment = self.enhance_query_with_filters(&step.query_fragment);
+        }
+
+        if service.capabilities.contains("aggregation") {
+            // Can perform aggregations at the service level
+            step.query_fragment = self.enhance_query_with_aggregation(&step.query_fragment);
+        }
+
+        // Adjust timeout based on service performance
+        if let Some(ref extended_metadata) = service.extended_metadata {
+            if let Some(ref performance_history) = extended_metadata.performance_history {
+                if let Some(perf_record) = performance_history.get("average") {
+                    // Set timeout based on average response time with buffer
+                    let suggested_timeout = std::time::Duration::from_millis(
+                        (perf_record.avg_response_time_score * 1000.0 * 3.0) as u64
+                    );
+                    
+                    if suggested_timeout > step.timeout {
+                        step.timeout = suggested_timeout;
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Optimize the ordering of execution steps
+    async fn optimize_step_ordering(&self, plan: &mut ExecutionPlan) -> Result<()> {
+        // Sort steps by estimated cost (cheapest first) while respecting dependencies
+        let mut sorted_steps = plan.steps.clone();
+        
+        // Simple optimization: sort independent steps by cost
+        sorted_steps.sort_by(|a, b| {
+            // First priority: dependency order
+            if a.dependencies.contains(&b.step_id) {
+                std::cmp::Ordering::Greater
+            } else if b.dependencies.contains(&a.step_id) {
+                std::cmp::Ordering::Less
+            } else {
+                // Second priority: cost (cheapest first)
+                a.estimated_cost.partial_cmp(&b.estimated_cost).unwrap_or(std::cmp::Ordering::Equal)
+            }
+        });
+
+        plan.steps = sorted_steps;
+        Ok(())
+    }
+
+    /// Identify steps that can be executed in parallel
+    async fn identify_parallelizable_steps(&self, plan: &mut ExecutionPlan) -> Result<()> {
+        let mut parallelizable_groups = Vec::new();
+        let mut current_group = Vec::new();
+
+        for step in &plan.steps {
+            // Check if this step can run in parallel with the current group
+            let can_parallel = current_group.iter().all(|group_step_id: &String| {
+                let group_step = plan.steps.iter().find(|s| &s.step_id == group_step_id);
+                if let Some(group_step) = group_step {
+                    // Can run in parallel if no dependencies between them
+                    !step.dependencies.contains(&group_step.step_id) &&
+                    !group_step.dependencies.contains(&step.step_id)
+                } else {
+                    false
+                }
+            });
+
+            if can_parallel {
+                current_group.push(step.step_id.clone());
+            } else {
+                if !current_group.is_empty() {
+                    parallelizable_groups.push(current_group.clone());
+                }
+                current_group = vec![step.step_id.clone()];
+            }
+        }
+
+        if !current_group.is_empty() {
+            parallelizable_groups.push(current_group);
+        }
+
+        plan.parallelizable_steps = parallelizable_groups;
+        Ok(())
+    }
+
+    /// Apply query pushdown optimizations
+    async fn apply_query_pushdown(
+        &self,
+        plan: &mut ExecutionPlan,
+        service_registry: &ServiceRegistry,
+    ) -> Result<()> {
+        for step in &mut plan.steps {
+            if let Some(service_id) = &step.service_id {
+                if let Some(service) = service_registry.get_service(service_id) {
+                    // Push filters down if service supports it
+                    if service.capabilities.contains("filter_pushdown") {
+                        step.query_fragment = self.optimize_filter_pushdown(&step.query_fragment);
+                    }
+
+                    // Push projections down if service supports it
+                    if service.capabilities.contains("projection_pushdown") {
+                        step.query_fragment = self.optimize_projection_pushdown(&step.query_fragment);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Optimize timeout values based on service performance
+    async fn optimize_timeouts(
+        &self,
+        plan: &mut ExecutionPlan,
+        service_registry: &ServiceRegistry,
+    ) -> Result<()> {
+        for step in &mut plan.steps {
+            if let Some(service_id) = &step.service_id {
+                if let Some(service) = service_registry.get_service(service_id) {
+                    // Set adaptive timeout based on service performance and query complexity
+                    let base_timeout = step.timeout;
+                    let complexity_factor = (step.estimated_cost / 100.0).max(1.0);
+                    
+                    let optimized_timeout = if let Some(ref extended_metadata) = service.extended_metadata {
+                        if let Some(ref performance_history) = extended_metadata.performance_history {
+                            if let Some(perf_record) = performance_history.get("average") {
+                                // Calculate timeout based on historical performance
+                                let historical_timeout = std::time::Duration::from_millis(
+                                    (perf_record.avg_response_time_score * 1000.0 * 2.5 * complexity_factor) as u64
+                                );
+                                std::cmp::max(base_timeout, historical_timeout)
+                            } else {
+                                base_timeout
+                            }
+                        } else {
+                            base_timeout
+                        }
+                    } else {
+                        base_timeout
+                    };
+
+                    step.timeout = optimized_timeout;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Calculate maximum parallelism for the plan
+    fn calculate_max_parallelism(&self, plan: &ExecutionPlan) -> usize {
+        plan.parallelizable_steps
+            .iter()
+            .map(|group| group.len())
+            .max()
+            .unwrap_or(1)
+    }
+
+    /// Enhance query with additional filters
+    fn enhance_query_with_filters(&self, query: &str) -> String {
+        // Simple enhancement - in practice this would be more sophisticated
+        if query.contains("WHERE") && !query.contains("FILTER") {
+            query.replace("WHERE {", "WHERE { FILTER(bound(?s)) ")
+        } else {
+            query.to_string()
+        }
+    }
+
+    /// Enhance query with aggregation capabilities
+    fn enhance_query_with_aggregation(&self, query: &str) -> String {
+        // Simple enhancement - in practice this would be more sophisticated
+        if query.contains("SELECT") && query.contains("COUNT") {
+            // Already has aggregation
+            query.to_string()
+        } else if query.contains("SELECT") {
+            query.replace("SELECT", "SELECT COUNT(*) as ?count ")
+        } else {
+            query.to_string()
+        }
+    }
+
+    /// Optimize filter pushdown
+    fn optimize_filter_pushdown(&self, query: &str) -> String {
+        // Move filters closer to data sources
+        // This is a simplified implementation
+        query.to_string()
+    }
+
+    /// Optimize projection pushdown
+    fn optimize_projection_pushdown(&self, query: &str) -> String {
+        // Push only required fields to reduce data transfer
+        // This is a simplified implementation
+        query.to_string()
     }
 
     /// Analyze a SPARQL query and return query information

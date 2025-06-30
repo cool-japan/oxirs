@@ -288,15 +288,16 @@ impl ExternalServicesManager {
     pub async fn translate(&self, text: &str, target_language: &str) -> Result<TranslationResult> {
         // First detect the source language
         let source_language = self.detect_language(text).await?;
-        self.translate_with_source(text, &source_language.language_code, target_language).await
+        self.translate_with_source(text, &source_language.language_code, target_language)
+            .await
     }
 
     /// Translate text with known source language
     pub async fn translate_with_source(
-        &self, 
-        text: &str, 
-        source_language: &str, 
-        target_language: &str
+        &self,
+        text: &str,
+        source_language: &str,
+        target_language: &str,
     ) -> Result<TranslationResult> {
         for trans_config in &self.config.translation_services {
             if !trans_config.enabled
@@ -342,7 +343,10 @@ impl ExternalServicesManager {
             match self.detect_text_language(trans_config, text).await {
                 Ok(result) => return Ok(result),
                 Err(e) => {
-                    warn!("Language detection service {} failed: {}", trans_config.name, e);
+                    warn!(
+                        "Language detection service {} failed: {}",
+                        trans_config.name, e
+                    );
                 }
             }
         }
@@ -352,12 +356,12 @@ impl ExternalServicesManager {
 
     /// Batch translate multiple texts
     pub async fn batch_translate(
-        &self, 
-        texts: &[String], 
-        target_language: &str
+        &self,
+        texts: &[String],
+        target_language: &str,
     ) -> Result<Vec<TranslationResult>> {
         let mut results = Vec::new();
-        
+
         for text in texts {
             match self.translate(text, target_language).await {
                 Ok(result) => results.push(result),
@@ -367,19 +371,19 @@ impl ExternalServicesManager {
                 }
             }
         }
-        
+
         Ok(results)
     }
 
     /// Get supported language pairs for translation
     pub fn get_supported_language_pairs(&self) -> Vec<LanguagePair> {
         let mut pairs = Vec::new();
-        
+
         for trans_config in &self.config.translation_services {
             if !trans_config.enabled {
                 continue;
             }
-            
+
             // Generate all possible pairs from supported languages
             for source in &trans_config.supported_languages {
                 for target in &trans_config.supported_languages {
@@ -393,16 +397,20 @@ impl ExternalServicesManager {
                 }
             }
         }
-        
+
         pairs
     }
 
     /// Check if a specific language pair is supported
     pub fn is_language_pair_supported(&self, source: &str, target: &str) -> bool {
         for trans_config in &self.config.translation_services {
-            if trans_config.enabled 
-                && trans_config.supported_languages.contains(&source.to_string())
-                && trans_config.supported_languages.contains(&target.to_string())
+            if trans_config.enabled
+                && trans_config
+                    .supported_languages
+                    .contains(&source.to_string())
+                && trans_config
+                    .supported_languages
+                    .contains(&target.to_string())
             {
                 return true;
             }
@@ -422,16 +430,17 @@ impl ExternalServicesManager {
             language_detection_mode: LanguageDetectionMode::None,
             audio_quality_enhancement: true,
         };
-        
-        self.speech_to_text_with_options(audio_data, language, &options).await
+
+        self.speech_to_text_with_options(audio_data, language, &options)
+            .await
     }
 
     /// Convert speech to text with custom processing options
     pub async fn speech_to_text_with_options(
-        &self, 
-        audio_data: &[u8], 
+        &self,
+        audio_data: &[u8],
         language: &str,
-        options: &SpeechProcessingOptions
+        options: &SpeechProcessingOptions,
     ) -> Result<SpeechResult> {
         for speech_config in &self.config.speech_services {
             if !speech_config.enabled
@@ -563,7 +572,7 @@ impl ExternalServicesManager {
                     speech_config
                         .voice_models
                         .iter()
-                        .filter(|v| v.language == language)
+                        .filter(|v| v.language == language),
                 );
             }
         }
@@ -582,12 +591,16 @@ impl ExternalServicesManager {
 
         // Filter by gender if specified
         if let Some(preferred_gender) = gender {
-            candidates.retain(|v| std::mem::discriminant(&v.gender) == std::mem::discriminant(&preferred_gender));
+            candidates.retain(|v| {
+                std::mem::discriminant(&v.gender) == std::mem::discriminant(&preferred_gender)
+            });
         }
 
         // Filter by voice type if specified
         if let Some(preferred_type) = voice_type {
-            candidates.retain(|v| std::mem::discriminant(&v.voice_type) == std::mem::discriminant(&preferred_type));
+            candidates.retain(|v| {
+                std::mem::discriminant(&v.voice_type) == std::mem::discriminant(&preferred_type)
+            });
         }
 
         // Prefer neural voices if requested
@@ -991,8 +1004,8 @@ pub struct SpeakerCharacteristics {
 pub struct EmotionAnalysis {
     pub primary_emotion: Emotion,
     pub emotion_scores: HashMap<Emotion, f32>,
-    pub valence: f32,  // Positive/negative sentiment
-    pub arousal: f32,  // Energy level
+    pub valence: f32, // Positive/negative sentiment
+    pub arousal: f32, // Energy level
     pub confidence: f32,
 }
 

@@ -17,22 +17,163 @@
 //! - Parallel validation support
 //! - Incremental validation capabilities
 //!
-//! ## Usage
+//! ## Basic Usage
 //!
 //! ```rust
-//! use oxirs_shacl::{Validator, ValidationConfig};
-//! use oxirs_core::Store;
+//! use oxirs_shacl::{ShaclValidator, ValidationConfig, ValidationStrategy};
+//! use oxirs_core::{Store, model::*};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let store = Store::new()?;
-//! let validator = Validator::new();
+//! // Create a new SHACL validator
+//! let mut validator = ShaclValidator::new();
 //!
-//! // Load SHACL shapes
-//! // validator.load_shapes_from_store(&store, "shapes_graph")?;
+//! // Load SHACL shapes from Turtle
+//! let shapes_ttl = r#"
+//! @prefix sh: <http://www.w3.org/ns/shacl#> .
+//! @prefix ex: <http://example.org/> .
+//! @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 //!
-//! // Validate data
-//! // let result = validator.validate_store(&store, ValidationConfig::default())?;
+//! ex:PersonShape
+//!     a sh:NodeShape ;
+//!     sh:targetClass ex:Person ;
+//!     sh:property [
+//!         sh:path ex:name ;
+//!         sh:datatype xsd:string ;
+//!         sh:maxCount 1 ;
+//!         sh:minCount 1 ;
+//!     ] ;
+//!     sh:property [
+//!         sh:path ex:age ;
+//!         sh:datatype xsd:integer ;
+//!         sh:minInclusive 0 ;
+//!         sh:maxInclusive 150 ;
+//!     ] .
+//! "#;
 //!
+//! validator.load_shapes_from_turtle(shapes_ttl)?;
+//!
+//! // Create test data
+//! let data_ttl = r#"
+//! @prefix ex: <http://example.org/> .
+//!
+//! ex:john a ex:Person ;
+//!     ex:name "John Doe" ;
+//!     ex:age 30 .
+//!
+//! ex:jane a ex:Person ;
+//!     ex:name "Jane Smith" ;
+//!     ex:age 200 .  # This violates the age constraint
+//! "#;
+//!
+//! // Validate the data
+//! let config = ValidationConfig::default()
+//!     .with_strategy(ValidationStrategy::Optimized)
+//!     .with_inference_enabled(true);
+//!
+//! let report = validator.validate_turtle(data_ttl, config)?;
+//!
+//! // Check results
+//! println!("Validation conforms: {}", report.conforms());
+//! for violation in report.violations() {
+//!     println!("Violation: {} at {}", 
+//!         violation.result_message.as_deref().unwrap_or("No message"),
+//!         violation.focus_node
+//!     );
+//! }
+//!
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Advanced Usage
+//!
+//! ### Custom Constraint Components
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, CustomConstraintComponent, ValidationConfig};
+//! use oxirs_core::model::*;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let mut validator = ShaclValidator::new();
+//!
+//! // Register a custom constraint component
+//! let email_constraint = CustomConstraintComponent::new(
+//!     "http://example.org/EmailConstraint",
+//!     vec!["http://example.org/emailPattern"],
+//!     |focus_node, params, data_graph| {
+//!         // Custom validation logic for email format
+//!         if let Term::Literal(lit) = focus_node {
+//!             let email_regex = regex::Regex::new(r"^[^@]+@[^@]+\.[^@]+$").unwrap();
+//!             if email_regex.is_match(&lit.value) {
+//!                 Ok(vec![]) // No violations
+//!             } else {
+//!                 Ok(vec![
+//!                     // Return validation violation
+//!                 ])
+//!             }
+//!         } else {
+//!             Ok(vec![]) // Non-literals are ignored
+//!         }
+//!     }
+//! );
+//!
+//! validator.register_custom_component(email_constraint)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Parallel Validation
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, ValidationConfig, ValidationStrategy};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let mut validator = ShaclValidator::new();
+//!
+//! // Configure for parallel validation of large datasets
+//! let config = ValidationConfig::default()
+//!     .with_strategy(ValidationStrategy::Parallel)
+//!     .with_batch_size(1000)
+//!     .with_thread_count(8)
+//!     .with_memory_limit_mb(2048);
+//!
+//! // Validate large RDF dataset
+//! // let report = validator.validate_large_dataset(&large_store, config)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Incremental Validation
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, ValidationConfig, ValidationStrategy};
+//! use oxirs_core::model::*;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let mut validator = ShaclValidator::new();
+//!
+//! // Enable incremental validation for real-time updates
+//! let config = ValidationConfig::default()
+//!     .with_strategy(ValidationStrategy::Incremental)
+//!     .with_change_tracking(true);
+//!
+//! // Initial validation
+//! // let initial_report = validator.validate_store(&store, config)?;
+//!
+//! // Add new data and validate only affected parts
+//! let new_triple = Triple::new(
+//!     NamedNode::new("http://example.org/newPerson")?,
+//!     NamedNode::new("http://example.org/name")?,
+//!     Literal::new_simple_literal("New Person")
+//! );
+//!
+//! // Incremental validation of just the new data
+//! // let incremental_report = validator.validate_incremental_change(
+//! //     &store, 
+//! //     vec![new_triple], 
+//! //     vec![], // no deletions
+//! //     config
+//! // )?;
 //! # Ok(())
 //! # }
 //! ```
@@ -53,8 +194,10 @@ use oxirs_core::{
 };
 
 pub mod analytics;
+pub mod builders;
 pub mod constraints;
 pub mod custom_components;
+pub mod federated_validation;
 pub mod iri_resolver;
 pub mod optimization;
 pub mod paths;
@@ -70,8 +213,10 @@ pub mod vocabulary;
 
 // Re-export key types for convenience
 pub use analytics::*;
+pub use builders::*;
 pub use constraints::*;
 pub use custom_components::*;
+pub use federated_validation::*;
 pub use iri_resolver::*;
 pub use optimization::*;
 pub use paths::*;
@@ -147,6 +292,24 @@ pub enum ShaclError {
 
     #[error("Shape validation error: {0}")]
     ShapeValidation(String),
+
+    #[error("Validation timeout: {0}")]
+    Timeout(String),
+
+    #[error("Memory limit exceeded: {0}")]
+    MemoryLimit(String),
+
+    #[error("Recursion limit exceeded: {0}")]
+    RecursionLimit(String),
+    
+    #[error("Memory pool error: {0}")]
+    MemoryPool(String),
+    
+    #[error("Memory optimization error: {0}")]
+    MemoryOptimization(String),
+    
+    #[error("Async operation error: {0}")]
+    AsyncOperation(String),
 }
 
 /// Result type alias for SHACL operations

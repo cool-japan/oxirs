@@ -4,8 +4,8 @@
 
 use oxirs_core::model::{Literal, NamedNode, Variable};
 use oxirs_core::query::{
-    AggregateExpression, BuiltInFunction, Expression, FunctionExpression, GraphPattern,
-    OrderExpression, PropertyPathExpression, Query, QueryDataset, TermPattern, TriplePattern,
+    AggregateExpression, AlgebraTriplePattern as TriplePattern, BuiltInFunction, Expression, FunctionExpression, GraphPattern,
+    OrderExpression, PropertyPathExpression, Query, QueryDataset, TermPattern,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

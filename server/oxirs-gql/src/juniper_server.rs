@@ -12,7 +12,7 @@ use juniper_hyper::playground;
 use anyhow::{Result, anyhow};
 use juniper_hyper::{graphql, graphiql};
 use hyper::{Method, Request, Response, StatusCode, body::Incoming};
-use hyper::body::{Bytes, Body};
+use hyper::body::Bytes;
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioIo, TokioExecutor};
 use hyper_util::server::conn::auto::Builder;
@@ -20,6 +20,7 @@ use tokio::net::TcpListener;
 use tracing::{info, warn, error, debug};
 use serde_json;
 use juniper::{execute, EmptyMutation, EmptySubscription};
+use chrono;
 
 /// Configuration for the GraphQL server
 #[derive(Debug, Clone)]
@@ -182,7 +183,7 @@ impl JuniperGraphQLServer {
         if method == Method::OPTIONS {
             return Ok(response_builder
                 .status(StatusCode::OK)
-                .body(Body::empty())?);
+                .body(String::new())?);
         }
 
         match (method, path) {
@@ -304,7 +305,7 @@ impl JuniperGraphQLServer {
                 Ok(response_builder
                     .status(StatusCode::OK)
                     .header("content-type", "text/plain")
-                    .body(sdl)?)
+                    .body(sdl.to_string())?)
             }
 
             // Root endpoint - redirect to GraphiQL or provide info
@@ -313,12 +314,12 @@ impl JuniperGraphQLServer {
                     Ok(Response::builder()
                         .status(StatusCode::FOUND)
                         .header("location", "/graphiql")
-                        .body(Body::empty())?)
+                        .body(String::new())?)
                 } else if config.enable_playground {
                     Ok(Response::builder()
                         .status(StatusCode::FOUND)
                         .header("location", "/playground")
-                        .body(Body::empty())?)
+                        .body(String::new())?)
                 } else {
                     let info = serde_json::json!({
                         "service": "OxiRS GraphQL Server",
@@ -356,7 +357,7 @@ impl JuniperGraphQLServer {
                 Ok(response_builder
                     .status(StatusCode::NOT_FOUND)
                     .header("content-type", "application/json")
-                    .body(error_response.to_string())?
+                    .body(error_response.to_string())?)
             }
         }
     }

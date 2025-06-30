@@ -25,6 +25,7 @@
 
 pub mod ai;
 pub mod concurrent;
+pub mod consciousness; // Consciousness-inspired computing for intuitive query optimization
 pub mod distributed;
 pub mod format; // Phase 3: Complete RDF format support with zero dependencies
 pub mod graph;
@@ -122,6 +123,12 @@ impl From<arrow::error::ArrowError> for OxirsError {
 impl From<parquet::errors::ParquetError> for OxirsError {
     fn from(err: parquet::errors::ParquetError) -> Self {
         OxirsError::Store(err.to_string())
+    }
+}
+
+impl From<std::time::SystemTimeError> for OxirsError {
+    fn from(err: std::time::SystemTimeError) -> Self {
+        OxirsError::Io(format!("System time error: {}", err))
     }
 }
 

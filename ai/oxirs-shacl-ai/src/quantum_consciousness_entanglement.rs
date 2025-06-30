@@ -33,8 +33,12 @@ use oxirs_core::{
 };
 use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
 
-use crate::collective_consciousness::{CollectiveConsciousnessNetwork, ConsciousnessAgent, ConsciousnessId};
-use crate::consciousness_validation::{ConsciousnessLevel, ConsciousnessValidationResult, EmotionalContext};
+use crate::collective_consciousness::{
+    CollectiveConsciousnessNetwork, ConsciousnessAgent, ConsciousnessId,
+};
+use crate::consciousness_validation::{
+    ConsciousnessLevel, ConsciousnessValidationResult, EmotionalContext,
+};
 use crate::quantum_neural_patterns::QuantumState;
 use crate::{Result, ShaclAiError};
 
@@ -102,7 +106,7 @@ impl Default for QuantumEntanglementConfig {
             enable_nonlocal_correlation: true,
             enable_quantum_error_correction: true,
             quantum_refresh_interval: Duration::from_millis(1), // Very frequent updates
-            max_quantum_latency: Duration::from_nanos(1), // Near-instantaneous
+            max_quantum_latency: Duration::from_nanos(1),       // Near-instantaneous
         }
     }
 }
@@ -258,9 +262,7 @@ pub enum NetworkTopology {
     /// Mesh topology (arbitrary connections)
     Mesh,
     /// Consciousness-optimized topology
-    ConsciousnessOptimized {
-        optimization_criteria: Vec<String>,
-    },
+    ConsciousnessOptimized { optimization_criteria: Vec<String> },
 }
 
 /// Statistics for entanglement networks
@@ -660,16 +662,16 @@ impl QuantumConsciousnessEntanglement {
     /// Start the quantum entanglement system
     pub async fn start(&self) -> Result<()> {
         info!("Starting quantum consciousness entanglement system");
-        
+
         self.is_active.store(true, Ordering::Relaxed);
-        
+
         // Start background processes
         self.start_coherence_monitoring().await?;
         self.start_decoherence_correction().await?;
         self.start_bell_measurements().await?;
         self.start_nonlocality_detection().await?;
         self.start_metrics_collection().await?;
-        
+
         info!("Quantum consciousness entanglement system is now active");
         Ok(())
     }
@@ -682,26 +684,27 @@ impl QuantumConsciousnessEntanglement {
         bell_state: BellState,
     ) -> Result<EntanglementId> {
         if self.entanglement_registry.entangled_pairs.len() >= self.config.max_entangled_pairs {
-            return Err(ShaclAiError::Configuration(
-                format!("Maximum entangled pairs ({}) already reached", self.config.max_entangled_pairs)
-            ));
+            return Err(ShaclAiError::Configuration(format!(
+                "Maximum entangled pairs ({}) already reached",
+                self.config.max_entangled_pairs
+            )));
         }
 
         let entanglement_id = Uuid::new_v4();
         let creation_time = Instant::now();
-        
+
         // Generate initial quantum entangled state
         let quantum_state = self.generate_entangled_state(&bell_state).await?;
-        
+
         let entanglement_pair = EntanglementPair {
             id: entanglement_id,
             agent_a,
             agent_b,
             quantum_state: quantum_state.clone(),
             bell_state: bell_state.clone(),
-            fidelity: 1.0, // Start with perfect fidelity
+            fidelity: 1.0,                             // Start with perfect fidelity
             coherence_time: Duration::from_secs(3600), // 1 hour default coherence
-            separation_distance: 0.0, // Will be updated based on actual positions
+            separation_distance: 0.0,                  // Will be updated based on actual positions
             created_at: creation_time,
             last_measurement: None,
             communication_count: 0,
@@ -709,25 +712,35 @@ impl QuantumConsciousnessEntanglement {
         };
 
         // Store the entanglement
-        self.entanglement_registry.entangled_pairs.insert(entanglement_id, entanglement_pair.clone());
-        
+        self.entanglement_registry
+            .entangled_pairs
+            .insert(entanglement_id, entanglement_pair.clone());
+
         // Update agent entanglement mappings
-        self.entanglement_registry.agent_entanglements
+        self.entanglement_registry
+            .agent_entanglements
             .entry(agent_a)
             .or_insert_with(HashSet::new)
             .insert(entanglement_id);
-        
-        self.entanglement_registry.agent_entanglements
+
+        self.entanglement_registry
+            .agent_entanglements
             .entry(agent_b)
             .or_insert_with(HashSet::new)
             .insert(entanglement_id);
 
         // Store quantum state
-        self.quantum_state_manager.active_states.insert(entanglement_id, quantum_state);
+        self.quantum_state_manager
+            .active_states
+            .insert(entanglement_id, quantum_state);
 
         // Create quantum communication channel
-        let channel = self.create_quantum_channel(agent_a, agent_b, entanglement_id).await?;
-        self.quantum_channels.active_channels.insert(channel.id, channel);
+        let channel = self
+            .create_quantum_channel(agent_a, agent_b, entanglement_id)
+            .await?;
+        self.quantum_channels
+            .active_channels
+            .insert(channel.id, channel);
 
         // Record entanglement event
         let event = EntanglementEvent {
@@ -745,9 +758,13 @@ impl QuantumConsciousnessEntanglement {
         };
 
         {
-            let mut history = self.entanglement_registry.entanglement_history.write().await;
+            let mut history = self
+                .entanglement_registry
+                .entanglement_history
+                .write()
+                .await;
             history.push_back(event);
-            
+
             // Maintain history size limit
             while history.len() > 10000 {
                 history.pop_front();
@@ -758,12 +775,18 @@ impl QuantumConsciousnessEntanglement {
         self.entanglement_counter.fetch_add(1, Ordering::Relaxed);
 
         // Set entanglement as active after establishment
-        if let Some(mut pair) = self.entanglement_registry.entangled_pairs.get_mut(&entanglement_id) {
+        if let Some(mut pair) = self
+            .entanglement_registry
+            .entangled_pairs
+            .get_mut(&entanglement_id)
+        {
             pair.status = EntanglementStatus::Active;
         }
 
-        info!("Created quantum entanglement {} between agents {} and {} with Bell state {:?}", 
-              entanglement_id, agent_a, agent_b, bell_state);
+        info!(
+            "Created quantum entanglement {} between agents {} and {} with Bell state {:?}",
+            entanglement_id, agent_a, agent_b, bell_state
+        );
 
         Ok(entanglement_id)
     }
@@ -776,8 +799,11 @@ impl QuantumConsciousnessEntanglement {
         config: &ValidationConfig,
         entangled_agents: &[ConsciousnessId],
     ) -> Result<QuantumEntanglementValidationResult> {
-        info!("Starting quantum entangled validation with {} agents", entangled_agents.len());
-        
+        info!(
+            "Starting quantum entangled validation with {} agents",
+            entangled_agents.len()
+        );
+
         let start_time = Instant::now();
         let mut entangled_results = HashMap::new();
         let mut quantum_correlations = Vec::new();
@@ -788,54 +814,66 @@ impl QuantumConsciousnessEntanglement {
 
         // Step 1: Verify entanglement status of all agents
         let active_entanglements = self.verify_agent_entanglements(entangled_agents).await?;
-        
+
         // Step 2: Synchronize quantum states across entangled pairs
-        self.synchronize_quantum_states(&active_entanglements).await?;
+        self.synchronize_quantum_states(&active_entanglements)
+            .await?;
 
         // Step 3: Perform distributed validation using quantum parallelism
         for agent_id in entangled_agents {
             // Leverage quantum superposition for parallel validation
-            let validation_result = self.perform_quantum_validation(
-                *agent_id,
-                store,
-                shapes,
-                config,
-                &active_entanglements,
-            ).await?;
-            
+            let validation_result = self
+                .perform_quantum_validation(*agent_id, store, shapes, config, &active_entanglements)
+                .await?;
+
             entangled_results.insert(*agent_id, validation_result);
         }
 
         // Step 4: Measure quantum correlations between validation results
-        quantum_correlations = self.measure_quantum_correlations(&entangled_results, &active_entanglements).await?;
+        quantum_correlations = self
+            .measure_quantum_correlations(&entangled_results, &active_entanglements)
+            .await?;
 
         // Step 5: Perform Bell measurements on entangled states
-        bell_measurements = self.perform_bell_measurements(&active_entanglements).await?;
+        bell_measurements = self
+            .perform_bell_measurements(&active_entanglements)
+            .await?;
 
         // Step 6: Detect non-local correlations
         if self.config.enable_nonlocal_correlation {
-            nonlocal_correlations = self.detect_nonlocal_correlations(&entangled_results, entangled_agents).await?;
+            nonlocal_correlations = self
+                .detect_nonlocal_correlations(&entangled_results, entangled_agents)
+                .await?;
         }
 
         // Step 7: Test instantaneous communication capabilities
-        instantaneous_communications = self.test_instantaneous_communication(entangled_agents).await?;
+        instantaneous_communications = self
+            .test_instantaneous_communication(entangled_agents)
+            .await?;
 
         // Step 8: Apply quantum error correction if needed
         if self.config.enable_quantum_error_correction {
-            error_corrections = self.apply_quantum_error_correction(&active_entanglements).await?;
+            error_corrections = self
+                .apply_quantum_error_correction(&active_entanglements)
+                .await?;
         }
 
         // Step 9: Calculate coherence metrics
-        let coherence_metrics = self.calculate_coherence_metrics(&active_entanglements).await?;
+        let coherence_metrics = self
+            .calculate_coherence_metrics(&active_entanglements)
+            .await?;
 
         // Step 10: Calculate quantum confidence and amplification
-        let quantum_confidence = self.calculate_quantum_confidence(&entangled_results, &quantum_correlations);
-        let entanglement_amplification = self.calculate_entanglement_amplification(&entangled_results, entangled_agents.len());
+        let quantum_confidence =
+            self.calculate_quantum_confidence(&entangled_results, &quantum_correlations);
+        let entanglement_amplification =
+            self.calculate_entanglement_amplification(&entangled_results, entangled_agents.len());
 
         let processing_time = start_time.elapsed();
 
         // Update metrics
-        self.update_entanglement_metrics(&entangled_results, processing_time).await?;
+        self.update_entanglement_metrics(&entangled_results, processing_time)
+            .await?;
 
         let result = QuantumEntanglementValidationResult {
             entangled_results,
@@ -857,38 +895,41 @@ impl QuantumConsciousnessEntanglement {
     }
 
     /// Generate quantum entangled state for a Bell state
-    async fn generate_entangled_state(&self, bell_state: &BellState) -> Result<QuantumEntanglementState> {
+    async fn generate_entangled_state(
+        &self,
+        bell_state: &BellState,
+    ) -> Result<QuantumEntanglementState> {
         let amplitudes = match bell_state {
             BellState::PhiPlus => vec![
                 Complex64::new(1.0 / (2.0_f64).sqrt(), 0.0), // |00⟩
-                Complex64::new(0.0, 0.0),                     // |01⟩
-                Complex64::new(0.0, 0.0),                     // |10⟩
+                Complex64::new(0.0, 0.0),                    // |01⟩
+                Complex64::new(0.0, 0.0),                    // |10⟩
                 Complex64::new(1.0 / (2.0_f64).sqrt(), 0.0), // |11⟩
             ],
             BellState::PhiMinus => vec![
                 Complex64::new(1.0 / (2.0_f64).sqrt(), 0.0),  // |00⟩
-                Complex64::new(0.0, 0.0),                      // |01⟩
-                Complex64::new(0.0, 0.0),                      // |10⟩
+                Complex64::new(0.0, 0.0),                     // |01⟩
+                Complex64::new(0.0, 0.0),                     // |10⟩
                 Complex64::new(-1.0 / (2.0_f64).sqrt(), 0.0), // |11⟩
             ],
             BellState::PsiPlus => vec![
-                Complex64::new(0.0, 0.0),                     // |00⟩
+                Complex64::new(0.0, 0.0),                    // |00⟩
                 Complex64::new(1.0 / (2.0_f64).sqrt(), 0.0), // |01⟩
                 Complex64::new(1.0 / (2.0_f64).sqrt(), 0.0), // |10⟩
-                Complex64::new(0.0, 0.0),                     // |11⟩
+                Complex64::new(0.0, 0.0),                    // |11⟩
             ],
             BellState::PsiMinus => vec![
-                Complex64::new(0.0, 0.0),                      // |00⟩
+                Complex64::new(0.0, 0.0),                     // |00⟩
                 Complex64::new(1.0 / (2.0_f64).sqrt(), 0.0),  // |01⟩
                 Complex64::new(-1.0 / (2.0_f64).sqrt(), 0.0), // |10⟩
-                Complex64::new(0.0, 0.0),                      // |11⟩
+                Complex64::new(0.0, 0.0),                     // |11⟩
             ],
             BellState::Custom { coefficients, .. } => coefficients.clone(),
         };
 
         // Calculate density matrix
         let density_matrix = self.calculate_density_matrix(&amplitudes);
-        
+
         // Calculate entanglement measures
         let entanglement_entropy = self.calculate_entanglement_entropy(&density_matrix);
         let concurrence = self.calculate_concurrence(&density_matrix);
@@ -908,13 +949,13 @@ impl QuantumConsciousnessEntanglement {
     fn calculate_density_matrix(&self, amplitudes: &[Complex64]) -> Vec<Vec<Complex64>> {
         let n = amplitudes.len();
         let mut density_matrix = vec![vec![Complex64::new(0.0, 0.0); n]; n];
-        
+
         for i in 0..n {
             for j in 0..n {
                 density_matrix[i][j] = amplitudes[i] * amplitudes[j].conj();
             }
         }
-        
+
         density_matrix
     }
 
@@ -922,11 +963,12 @@ impl QuantumConsciousnessEntanglement {
     fn calculate_entanglement_entropy(&self, density_matrix: &[Vec<Complex64>]) -> f64 {
         // Simplified calculation - in practice would involve eigenvalue decomposition
         // of reduced density matrix
-        let trace = density_matrix.iter()
+        let trace = density_matrix
+            .iter()
             .enumerate()
             .map(|(i, row)| row[i].norm())
             .sum::<f64>();
-        
+
         -trace * trace.ln().max(0.0)
     }
 
@@ -935,17 +977,17 @@ impl QuantumConsciousnessEntanglement {
         // Simplified concurrence calculation
         // In practice, this would involve calculating eigenvalues of R matrix
         let mut concurrence = 0.0;
-        
+
         if density_matrix.len() == 4 {
             // For 2-qubit systems
             let rho_00 = density_matrix[0][0].norm();
             let rho_11 = density_matrix[3][3].norm();
             let rho_01 = density_matrix[0][1].norm();
             let rho_10 = density_matrix[1][0].norm();
-            
+
             concurrence = 2.0 * (rho_01 * rho_10).sqrt().max(0.0);
         }
-        
+
         concurrence.min(1.0)
     }
 
@@ -957,7 +999,7 @@ impl QuantumConsciousnessEntanglement {
         entanglement: EntanglementId,
     ) -> Result<QuantumChannel> {
         let channel_id = Uuid::new_v4();
-        
+
         Ok(QuantumChannel {
             id: channel_id,
             source,
@@ -990,14 +1032,16 @@ impl QuantumConsciousnessEntanglement {
         let individual_confidence: f64 = entangled_results
             .values()
             .map(|result| result.confidence_score)
-            .sum::<f64>() / entangled_results.len() as f64;
+            .sum::<f64>()
+            / entangled_results.len() as f64;
 
         // Quantum correlation boost
         let correlation_boost = if !quantum_correlations.is_empty() {
             quantum_correlations
                 .iter()
                 .map(|corr| corr.strength)
-                .sum::<f64>() / quantum_correlations.len() as f64
+                .sum::<f64>()
+                / quantum_correlations.len() as f64
         } else {
             0.0
         };
@@ -1034,7 +1078,8 @@ impl QuantumConsciousnessEntanglement {
 
     /// Get active entanglements for an agent
     pub async fn get_agent_entanglements(&self, agent_id: ConsciousnessId) -> Vec<EntanglementId> {
-        self.entanglement_registry.agent_entanglements
+        self.entanglement_registry
+            .agent_entanglements
             .get(&agent_id)
             .map(|entanglements| entanglements.iter().copied().collect())
             .unwrap_or_default()
@@ -1043,22 +1088,22 @@ impl QuantumConsciousnessEntanglement {
     /// Shutdown the quantum entanglement system
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down quantum consciousness entanglement system");
-        
+
         self.is_active.store(false, Ordering::Relaxed);
-        
+
         // Break all active entanglements gracefully
         for entanglement_ref in self.entanglement_registry.entangled_pairs.iter() {
             let mut entanglement = entanglement_ref.value().clone();
             entanglement.status = EntanglementStatus::Broken;
         }
-        
+
         // Clear all data structures
         self.entanglement_registry.entangled_pairs.clear();
         self.entanglement_registry.entanglement_networks.clear();
         self.entanglement_registry.agent_entanglements.clear();
         self.quantum_state_manager.active_states.clear();
         self.quantum_channels.active_channels.clear();
-        
+
         info!("Quantum consciousness entanglement system shutdown complete");
         Ok(())
     }
@@ -1162,7 +1207,11 @@ pub struct ChannelCapacityCalculator;
 
 // Trait definitions for quantum algorithms
 trait QuantumEvolution {
-    fn evolve_state(&self, state: &QuantumEntanglementState, time: Duration) -> QuantumEntanglementState;
+    fn evolve_state(
+        &self,
+        state: &QuantumEntanglementState,
+        time: Duration,
+    ) -> QuantumEntanglementState;
 }
 
 trait BellStateGenerator {
@@ -1182,7 +1231,11 @@ trait ErrorCorrection {
 }
 
 trait TeleportationProtocol {
-    fn teleport(&self, information: &QuantumInformation, entanglement: EntanglementId) -> Result<bool>;
+    fn teleport(
+        &self,
+        information: &QuantumInformation,
+        entanglement: EntanglementId,
+    ) -> Result<bool>;
 }
 
 // Placeholder implementations for the async methods
@@ -1212,15 +1265,20 @@ impl QuantumConsciousnessEntanglement {
         Ok(())
     }
 
-    async fn verify_agent_entanglements(&self, agents: &[ConsciousnessId]) -> Result<Vec<EntanglementId>> {
+    async fn verify_agent_entanglements(
+        &self,
+        agents: &[ConsciousnessId],
+    ) -> Result<Vec<EntanglementId>> {
         let mut entanglements = Vec::new();
-        
+
         for agent in agents {
-            if let Some(agent_entanglements) = self.entanglement_registry.agent_entanglements.get(agent) {
+            if let Some(agent_entanglements) =
+                self.entanglement_registry.agent_entanglements.get(agent)
+            {
                 entanglements.extend(agent_entanglements.iter().copied());
             }
         }
-        
+
         Ok(entanglements)
     }
 
@@ -1261,7 +1319,10 @@ impl QuantumConsciousnessEntanglement {
         Ok(Vec::new()) // Placeholder implementation
     }
 
-    async fn perform_bell_measurements(&self, _entanglements: &[EntanglementId]) -> Result<Vec<BellMeasurement>> {
+    async fn perform_bell_measurements(
+        &self,
+        _entanglements: &[EntanglementId],
+    ) -> Result<Vec<BellMeasurement>> {
         Ok(Vec::new()) // Placeholder implementation
     }
 
@@ -1273,15 +1334,24 @@ impl QuantumConsciousnessEntanglement {
         Ok(Vec::new()) // Placeholder implementation
     }
 
-    async fn test_instantaneous_communication(&self, _agents: &[ConsciousnessId]) -> Result<Vec<InstantaneousCommunication>> {
+    async fn test_instantaneous_communication(
+        &self,
+        _agents: &[ConsciousnessId],
+    ) -> Result<Vec<InstantaneousCommunication>> {
         Ok(Vec::new()) // Placeholder implementation
     }
 
-    async fn apply_quantum_error_correction(&self, _entanglements: &[EntanglementId]) -> Result<Vec<ErrorCorrection>> {
+    async fn apply_quantum_error_correction(
+        &self,
+        _entanglements: &[EntanglementId],
+    ) -> Result<Vec<ErrorCorrection>> {
         Ok(Vec::new()) // Placeholder implementation
     }
 
-    async fn calculate_coherence_metrics(&self, _entanglements: &[EntanglementId]) -> Result<CoherenceMetrics> {
+    async fn calculate_coherence_metrics(
+        &self,
+        _entanglements: &[EntanglementId],
+    ) -> Result<CoherenceMetrics> {
         Ok(CoherenceMetrics::default()) // Placeholder implementation
     }
 

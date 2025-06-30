@@ -1,9 +1,9 @@
 //! Delta encoding for sequences
 
-use anyhow::{anyhow, Result};
 use crate::compression::{
-    AdvancedCompressionType, CompressionAlgorithm, CompressionMetadata, CompressedData
+    AdvancedCompressionType, CompressedData, CompressionAlgorithm, CompressionMetadata,
 };
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -50,8 +50,14 @@ impl DeltaEncoder {
 
         // First value
         let first_value = u64::from_le_bytes([
-            chunks[0][0], chunks[0][1], chunks[0][2], chunks[0][3],
-            chunks[0][4], chunks[0][5], chunks[0][6], chunks[0][7],
+            chunks[0][0],
+            chunks[0][1],
+            chunks[0][2],
+            chunks[0][3],
+            chunks[0][4],
+            chunks[0][5],
+            chunks[0][6],
+            chunks[0][7],
         ]);
         values.push(first_value);
 
@@ -60,8 +66,7 @@ impl DeltaEncoder {
         // Process deltas
         for chunk in &chunks[1..] {
             let encoded_delta = u64::from_le_bytes([
-                chunk[0], chunk[1], chunk[2], chunk[3],
-                chunk[4], chunk[5], chunk[6], chunk[7],
+                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
             ]);
 
             let is_negative = (encoded_delta & 1) == 1;
@@ -160,7 +165,10 @@ impl CompressionAlgorithm for DeltaEncoder {
         let mut metadata_map = HashMap::new();
         if !data.is_empty() {
             metadata_map.insert("first_value".to_string(), data[0].to_string());
-            metadata_map.insert("delta_count".to_string(), (data.len().saturating_sub(1)).to_string());
+            metadata_map.insert(
+                "delta_count".to_string(),
+                (data.len().saturating_sub(1)).to_string(),
+            );
         }
 
         let metadata = CompressionMetadata {
@@ -232,10 +240,13 @@ mod tests {
     fn test_compression_algorithm_trait() {
         let encoder = DeltaEncoder;
         let data = vec![10, 12, 15, 13, 20];
-        
+
         let compressed = encoder.compress(&data).unwrap();
-        assert_eq!(compressed.metadata.algorithm, AdvancedCompressionType::Delta);
-        
+        assert_eq!(
+            compressed.metadata.algorithm,
+            AdvancedCompressionType::Delta
+        );
+
         let decompressed = encoder.decompress(&compressed).unwrap();
         assert_eq!(data, decompressed);
     }

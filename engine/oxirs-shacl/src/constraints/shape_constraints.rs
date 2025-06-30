@@ -5,7 +5,7 @@ use crate::{
     paths::PropertyPath, validation::ValidationEngine, ConstraintComponentId, Result, Severity,
     ShaclError, ShapeId, ValidationConfig, Validator,
 };
-use oxirs_core::{model::Term, Store, Subject, Predicate, Object};
+use oxirs_core::{model::Term, Object, Predicate, Store, Subject};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -206,9 +206,9 @@ impl QualifiedValueShapeConstraint {
                 let config = ValidationConfig::default();
                 let mut temp_shapes = indexmap::IndexMap::new();
                 temp_shapes.insert(self.shape.clone(), shape_def.clone());
-                
+
                 let mut validator = ValidationEngine::new(&temp_shapes, config);
-                
+
                 // Validate the value against the shape
                 match validator.validate_node_against_shape(store, shape_def, value, None) {
                     Ok(report) => {
@@ -259,12 +259,8 @@ impl QualifiedValueShapeConstraint {
                 let subject: Subject = node.clone().into();
                 let predicate: Predicate = type_predicate.into();
                 let object: Object = friend_type.clone().into();
-                let quads = store.query_quads(
-                    Some(&subject),
-                    Some(&predicate),
-                    Some(&object),
-                    None,
-                )?;
+                let quads =
+                    store.query_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
                 if !quads.is_empty() {
                     return Ok(true);
                 }

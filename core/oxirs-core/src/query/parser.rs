@@ -4,7 +4,8 @@
 //! SPARQL 1.1 parsing capabilities in future iterations.
 
 use crate::model::{BlankNode, Literal, NamedNode, Variable};
-use crate::query::sparql_algebra::{GraphPattern, TermPattern, TriplePattern};
+use crate::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
+use crate::query::sparql_algebra::{GraphPattern, TriplePattern, TermPattern};
 use crate::query::sparql_query::Query;
 use crate::OxirsError;
 use std::collections::HashMap;
@@ -140,7 +141,7 @@ impl SparqlParser {
     fn parse_construct_template(
         &self,
         template_text: &str,
-    ) -> Result<Vec<TriplePattern>, OxirsError> {
+    ) -> Result<Vec<AlgebraTriplePattern>, OxirsError> {
         let content = template_text.trim();
         if !content.starts_with('{') || !content.ends_with('}') {
             return Err(OxirsError::Parse(
@@ -149,7 +150,7 @@ impl SparqlParser {
         }
 
         let content = content[1..content.len() - 1].trim();
-        let mut triple_patterns: Vec<TriplePattern> = Vec::new();
+        let mut triple_patterns: Vec<AlgebraTriplePattern> = Vec::new();
 
         // Split by periods (very naive approach)
         for triple_str in content.split('.') {
@@ -171,10 +172,37 @@ impl SparqlParser {
             let predicate = self.parse_term_pattern(parts[1])?;
             let object = self.parse_term_pattern(parts[2])?;
 
-            triple_patterns.push(TriplePattern::new(subject, predicate, object));
+            // Validate subject pattern (literals can't be subjects)
+            if matches!(subject, TermPattern::Literal(_)) {
+                return Err(OxirsError::Parse("Literals cannot be subjects".to_string()));
+            }
+
+            // Validate predicate pattern (only named nodes and variables allowed)
+            if !matches!(predicate, TermPattern::NamedNode(_) | TermPattern::Variable(_)) {
+                return Err(OxirsError::Parse("Predicates must be named nodes or variables".to_string()));
+            }
+
+            // Convert sparql_algebra::TermPattern to algebra::TermPattern
+            let algebra_subject = self.convert_to_algebra_term(&subject)?;
+            let algebra_predicate = self.convert_to_algebra_term(&predicate)?;
+            let algebra_object = self.convert_to_algebra_term(&object)?;
+
+            triple_patterns.push(AlgebraTriplePattern::new(algebra_subject, algebra_predicate, algebra_object));
         }
 
         Ok(triple_patterns)
+    }
+
+    // Helper method to convert sparql_algebra::TermPattern to algebra::TermPattern
+    fn convert_to_algebra_term(&self, term: &TermPattern) -> Result<AlgebraTermPattern, OxirsError> {
+        match term {
+            TermPattern::NamedNode(n) => Ok(AlgebraTermPattern::NamedNode(n.clone())),
+            TermPattern::BlankNode(b) => Ok(AlgebraTermPattern::BlankNode(b.clone())),
+            TermPattern::Literal(l) => Ok(AlgebraTermPattern::Literal(l.clone())),
+            TermPattern::Variable(v) => Ok(AlgebraTermPattern::Variable(v.clone())),
+            #[cfg(feature = "sparql-12")]
+            TermPattern::Triple(_) => Err(OxirsError::Parse("Quoted triples not supported in construct templates".to_string())),
+        }
     }
 
     fn parse_where_clause(&self, where_text: &str) -> Result<GraphPattern, OxirsError> {

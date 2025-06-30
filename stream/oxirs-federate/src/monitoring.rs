@@ -472,7 +472,9 @@ impl FederationMonitor {
             performance_summary: self.get_performance_summary(&metrics).await,
             bottlenecks: self.identify_bottlenecks(&metrics).await,
             performance_regressions: self.detect_performance_regressions(&metrics).await,
-            optimization_recommendations: self.generate_optimization_recommendations(&metrics).await,
+            optimization_recommendations: self
+                .generate_optimization_recommendations(&metrics)
+                .await,
         }
     }
 
@@ -525,7 +527,8 @@ impl FederationMonitor {
                     },
                     description: format!(
                         "Service {} has high error rate: {:.2}%",
-                        service_id, error_rate * 100.0
+                        service_id,
+                        error_rate * 100.0
                     ),
                     metric_value: error_rate * 100.0,
                     threshold: 5.0, // 5% error rate threshold
@@ -547,11 +550,13 @@ impl FederationMonitor {
                     },
                     description: format!(
                         "Cache {} has low hit rate: {:.2}%",
-                        cache_name, cache_metrics.hit_rate * 100.0
+                        cache_name,
+                        cache_metrics.hit_rate * 100.0
                     ),
                     metric_value: cache_metrics.hit_rate * 100.0,
                     threshold: 50.0, // 50% hit rate threshold
-                    impact_score: (1.0 - cache_metrics.hit_rate) * cache_metrics.total_requests as f64,
+                    impact_score: (1.0 - cache_metrics.hit_rate)
+                        * cache_metrics.total_requests as f64,
                 });
             }
         }
@@ -563,7 +568,10 @@ impl FederationMonitor {
     }
 
     /// Detect performance regressions
-    pub async fn detect_performance_regressions(&self, metrics: &FederationMetrics) -> Vec<RegressionReport> {
+    pub async fn detect_performance_regressions(
+        &self,
+        metrics: &FederationMetrics,
+    ) -> Vec<RegressionReport> {
         let mut regressions = Vec::new();
 
         // Analyze recent query performance compared to historical averages
@@ -585,19 +593,19 @@ impl FederationMonitor {
                 .collect();
 
             if recent_queries.len() >= 10 {
-                let recent_avg_duration: Duration = recent_queries
-                    .iter()
-                    .map(|q| q.duration)
-                    .sum::<Duration>() / recent_queries.len() as u32;
+                let recent_avg_duration: Duration =
+                    recent_queries.iter().map(|q| q.duration).sum::<Duration>()
+                        / recent_queries.len() as u32;
 
                 let historical_avg = type_metrics.avg_duration;
-                
+
                 // Check for significant performance degradation (>50% increase)
                 if recent_avg_duration > historical_avg + Duration::from_millis(500)
-                    && recent_avg_duration.as_millis() as f64 > historical_avg.as_millis() as f64 * 1.5
+                    && recent_avg_duration.as_millis() as f64
+                        > historical_avg.as_millis() as f64 * 1.5
                 {
-                    let degradation_factor = recent_avg_duration.as_millis() as f64 
-                        / historical_avg.as_millis() as f64;
+                    let degradation_factor =
+                        recent_avg_duration.as_millis() as f64 / historical_avg.as_millis() as f64;
 
                     regressions.push(RegressionReport {
                         component: format!("Query Type: {}", query_type),
@@ -621,10 +629,8 @@ impl FederationMonitor {
                 }
 
                 // Check for error rate increases
-                let recent_error_rate = recent_queries
-                    .iter()
-                    .filter(|q| !q.success)
-                    .count() as f64 / recent_queries.len() as f64;
+                let recent_error_rate = recent_queries.iter().filter(|q| !q.success).count() as f64
+                    / recent_queries.len() as f64;
 
                 let historical_error_rate = if type_metrics.total_count > 0 {
                     type_metrics.error_count as f64 / type_metrics.total_count as f64
@@ -632,8 +638,8 @@ impl FederationMonitor {
                     0.0
                 };
 
-                if recent_error_rate > historical_error_rate + 0.1 
-                    && recent_error_rate > historical_error_rate * 2.0 
+                if recent_error_rate > historical_error_rate + 0.1
+                    && recent_error_rate > historical_error_rate * 2.0
                 {
                     regressions.push(RegressionReport {
                         component: format!("Query Type: {}", query_type),
@@ -647,14 +653,15 @@ impl FederationMonitor {
                         },
                         description: format!(
                             "Query type {} error rate increased from {:.2}% to {:.2}%",
-                            query_type, 
+                            query_type,
                             historical_error_rate * 100.0,
                             recent_error_rate * 100.0
                         ),
                         historical_value: historical_error_rate * 100.0,
                         current_value: recent_error_rate * 100.0,
                         detected_at: current_time,
-                        confidence: self.calculate_regression_confidence(&recent_queries, type_metrics),
+                        confidence: self
+                            .calculate_regression_confidence(&recent_queries, type_metrics),
                     });
                 }
             }
@@ -664,7 +671,10 @@ impl FederationMonitor {
     }
 
     /// Generate optimization recommendations
-    pub async fn generate_optimization_recommendations(&self, metrics: &FederationMetrics) -> Vec<OptimizationRecommendation> {
+    pub async fn generate_optimization_recommendations(
+        &self,
+        metrics: &FederationMetrics,
+    ) -> Vec<OptimizationRecommendation> {
         let mut recommendations = Vec::new();
 
         // Analyze cache performance
@@ -681,7 +691,8 @@ impl FederationMonitor {
                     description: format!(
                         "Cache {} has a {:.1}% hit rate. Consider increasing cache size, \
                         improving cache key strategies, or extending TTL values.",
-                        cache_name, cache_metrics.hit_rate * 100.0
+                        cache_name,
+                        cache_metrics.hit_rate * 100.0
                     ),
                     estimated_impact: self.calculate_cache_improvement_impact(cache_metrics),
                     implementation_effort: ImplementationEffort::Low,
@@ -721,7 +732,9 @@ impl FederationMonitor {
             }
 
             // Check for load balancing opportunities
-            if service_metrics.total_requests > 1000 && service_metrics.avg_duration > Duration::from_millis(500) {
+            if service_metrics.total_requests > 1000
+                && service_metrics.avg_duration > Duration::from_millis(500)
+            {
                 recommendations.push(OptimizationRecommendation {
                     category: OptimizationCategory::Scaling,
                     priority: OptimizationPriority::Medium,
@@ -729,7 +742,9 @@ impl FederationMonitor {
                     description: format!(
                         "Service {} handles {} requests with {}ms average response time. \
                         Load balancing could improve performance and reliability.",
-                        service_id, service_metrics.total_requests, service_metrics.avg_duration.as_millis()
+                        service_id,
+                        service_metrics.total_requests,
+                        service_metrics.avg_duration.as_millis()
                     ),
                     estimated_impact: "20-40% performance improvement".to_string(),
                     implementation_effort: ImplementationEffort::High,
@@ -744,7 +759,9 @@ impl FederationMonitor {
 
         // Analyze query patterns
         for (query_type, type_metrics) in &metrics.query_type_metrics {
-            if type_metrics.avg_duration > Duration::from_millis(200) && type_metrics.total_count > 100 {
+            if type_metrics.avg_duration > Duration::from_millis(200)
+                && type_metrics.total_count > 100
+            {
                 recommendations.push(OptimizationRecommendation {
                     category: OptimizationCategory::QueryOptimization,
                     priority: OptimizationPriority::Medium,
@@ -787,7 +804,11 @@ impl FederationMonitor {
         duration_score * volume_score
     }
 
-    fn calculate_regression_confidence(&self, recent_queries: &[&QueryRecord], type_metrics: &QueryTypeMetrics) -> f64 {
+    fn calculate_regression_confidence(
+        &self,
+        recent_queries: &[&QueryRecord],
+        type_metrics: &QueryTypeMetrics,
+    ) -> f64 {
         let sample_size_score = (recent_queries.len() as f64 / 50.0).min(1.0); // Max confidence at 50 samples
         let historical_data_score = (type_metrics.total_count as f64 / 100.0).min(1.0); // Max confidence at 100 historical queries
         (sample_size_score + historical_data_score) / 2.0
@@ -796,11 +817,20 @@ impl FederationMonitor {
     fn calculate_cache_improvement_impact(&self, cache_metrics: &CacheMetrics) -> String {
         let potential_improvement = (0.8 - cache_metrics.hit_rate) * 100.0;
         if potential_improvement > 30.0 {
-            format!("High impact: Up to {:.0}% improvement in cache performance", potential_improvement)
+            format!(
+                "High impact: Up to {:.0}% improvement in cache performance",
+                potential_improvement
+            )
         } else if potential_improvement > 15.0 {
-            format!("Medium impact: Up to {:.0}% improvement in cache performance", potential_improvement)
+            format!(
+                "Medium impact: Up to {:.0}% improvement in cache performance",
+                potential_improvement
+            )
         } else {
-            format!("Low impact: Up to {:.0}% improvement in cache performance", potential_improvement)
+            format!(
+                "Low impact: Up to {:.0}% improvement in cache performance",
+                potential_improvement
+            )
         }
     }
 
@@ -826,6 +856,276 @@ impl FederationMonitor {
         } else {
             "Low impact: 5-15% performance improvement".to_string()
         }
+    }
+
+    /// Advanced distributed tracing correlation
+    pub async fn record_trace_span(
+        &self,
+        trace_id: &str,
+        span_id: &str,
+        operation_name: &str,
+        duration: Duration,
+        tags: Option<HashMap<String, String>>,
+    ) {
+        let mut metrics = self.metrics.write().await;
+
+        let trace_span = TraceSpan {
+            trace_id: trace_id.to_string(),
+            span_id: span_id.to_string(),
+            parent_span_id: None,
+            operation_name: operation_name.to_string(),
+            start_time: SystemTime::now(),
+            duration,
+            tags: tags.unwrap_or_default(),
+            service_id: None,
+        };
+
+        metrics.trace_spans.push(trace_span);
+
+        // Keep only recent spans (sliding window)
+        if metrics.trace_spans.len() > self.config.max_trace_spans {
+            metrics.trace_spans.remove(0);
+        }
+
+        // Update trace metrics
+        self.update_trace_metrics(&mut metrics, duration).await;
+
+        debug!(
+            "Recorded trace span: {} in trace {} with duration {:?}",
+            operation_name, trace_id, duration
+        );
+    }
+
+    /// Enhanced anomaly detection
+    pub async fn check_for_anomalies(&self) -> Vec<AnomalyReport> {
+        let metrics = self.metrics.read().await;
+        let mut anomalies = Vec::new();
+
+        // Check for error spikes
+        let recent_errors = metrics
+            .federation_events
+            .iter()
+            .rev()
+            .take(100)
+            .filter(|e| matches!(e.event_type, FederationEventType::Error | FederationEventType::ServiceFailure))
+            .count();
+
+        if recent_errors > 10 {
+            anomalies.push(AnomalyReport {
+                anomaly_type: AnomalyType::ErrorSpike,
+                detected_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                details: format!("High error frequency detected: {} errors in last 100 events", recent_errors),
+                severity: AnomalySeverity::High,
+                confidence: 0.9,
+            });
+        }
+
+        // Check for performance anomalies
+        for (query_type, type_metrics) in &metrics.query_type_metrics {
+            let recent_queries: Vec<&QueryRecord> = metrics
+                .recent_queries
+                .iter()
+                .filter(|q| q.query_type == *query_type)
+                .rev()
+                .take(20)
+                .collect();
+
+            if recent_queries.len() >= 10 {
+                let recent_avg_duration: Duration = recent_queries
+                    .iter()
+                    .map(|q| q.duration)
+                    .sum::<Duration>() / recent_queries.len() as u32;
+
+                // Check for significant performance degradation
+                if recent_avg_duration > type_metrics.avg_duration + Duration::from_millis(500) {
+                    let degradation_factor = recent_avg_duration.as_millis() as f64 
+                        / type_metrics.avg_duration.as_millis() as f64;
+
+                    if degradation_factor > 2.0 {
+                        anomalies.push(AnomalyReport {
+                            anomaly_type: AnomalyType::PerformanceDegradation,
+                            detected_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                            details: format!(
+                                "Performance degradation in {}: {:.1}x slower than baseline",
+                                query_type, degradation_factor
+                            ),
+                            severity: if degradation_factor > 5.0 {
+                                AnomalySeverity::Critical
+                            } else if degradation_factor > 3.0 {
+                                AnomalySeverity::High
+                            } else {
+                                AnomalySeverity::Medium
+                            },
+                            confidence: self.calculate_prediction_confidence(recent_queries.len(), type_metrics.total_count),
+                        });
+                    }
+                }
+            }
+        }
+
+        anomalies
+    }
+
+    /// Analyze cross-service latency patterns
+    pub async fn analyze_cross_service_latency(&self) -> CrossServiceLatencyAnalysis {
+        let metrics = self.metrics.read().await;
+        
+        let mut service_interactions: HashMap<(String, String), Vec<Duration>> = HashMap::new();
+        
+        // Simulate service interaction analysis from trace spans
+        for trace_span in &metrics.trace_spans {
+            if let Some(ref service_id) = trace_span.service_id {
+                // Group spans by service interactions (simplified)
+                let interaction_key = ("federation_gateway".to_string(), service_id.clone());
+                service_interactions
+                    .entry(interaction_key)
+                    .or_insert_with(Vec::new)
+                    .push(trace_span.duration);
+            }
+        }
+
+        // Calculate statistics for each service interaction
+        let mut interactions = Vec::new();
+        for ((from_service, to_service), durations) in service_interactions {
+            if !durations.is_empty() {
+                let avg_duration = durations.iter().sum::<Duration>() / durations.len() as u32;
+                let max_duration = *durations.iter().max().unwrap();
+                let min_duration = *durations.iter().min().unwrap();
+                
+                interactions.push(ServiceInteractionLatency {
+                    from_service,
+                    to_service,
+                    avg_latency: avg_duration,
+                    min_latency: min_duration,
+                    max_latency: max_duration,
+                    sample_count: durations.len(),
+                });
+            }
+        }
+
+        // Sort by average latency (highest first)
+        interactions.sort_by(|a, b| b.avg_latency.cmp(&a.avg_latency));
+
+        CrossServiceLatencyAnalysis {
+            interactions,
+            total_traces_analyzed: metrics.trace_spans.len(),
+            analysis_timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+        }
+    }
+
+    /// Predict performance issues using historical patterns
+    pub async fn predict_performance_issues(&self) -> Vec<PerformancePrediction> {
+        let metrics = self.metrics.read().await;
+        let mut predictions = Vec::new();
+
+        // Analyze query performance trends
+        for (query_type, type_metrics) in &metrics.query_type_metrics {
+            if type_metrics.total_count > 50 {
+                let recent_queries: Vec<&QueryRecord> = metrics
+                    .recent_queries
+                    .iter()
+                    .filter(|q| q.query_type == *query_type)
+                    .rev()
+                    .take(20)
+                    .collect();
+
+                if recent_queries.len() >= 10 {
+                    let recent_avg_duration: Duration = recent_queries
+                        .iter()
+                        .map(|q| q.duration)
+                        .sum::<Duration>() / recent_queries.len() as u32;
+
+                    // Predict performance degradation trend
+                    if recent_avg_duration > type_metrics.avg_duration + Duration::from_millis(100) {
+                        let degradation_trend = recent_avg_duration.as_millis() as f64 
+                            / type_metrics.avg_duration.as_millis() as f64;
+
+                        predictions.push(PerformancePrediction {
+                            prediction_type: PredictionType::PerformanceDegradation,
+                            component: format!("Query Type: {}", query_type),
+                            predicted_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                            confidence: self.calculate_prediction_confidence(recent_queries.len(), type_metrics.total_count),
+                            description: format!(
+                                "Query type {} showing {:.1}x performance degradation trend",
+                                query_type, degradation_trend
+                            ),
+                            recommended_actions: vec![
+                                "Monitor query complexity".to_string(),
+                                "Check service health".to_string(),
+                                "Consider query optimization".to_string(),
+                            ],
+                        });
+                    }
+                }
+            }
+        }
+
+        // Predict service capacity issues
+        for (service_id, service_metrics) in &metrics.service_metrics {
+            if service_metrics.total_requests > 100 {
+                let current_load = service_metrics.total_requests as f64 / 3600.0; // Requests per hour
+                
+                // Simple linear extrapolation
+                if current_load > 1000.0 { // High load threshold
+                    predictions.push(PerformancePrediction {
+                        prediction_type: PredictionType::CapacityIssue,
+                        component: format!("Service: {}", service_id),
+                        predicted_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                        confidence: 0.7,
+                        description: format!(
+                            "Service {} approaching capacity limits at {:.0} requests/hour",
+                            service_id, current_load
+                        ),
+                        recommended_actions: vec![
+                            "Scale service horizontally".to_string(),
+                            "Implement load balancing".to_string(),
+                            "Monitor resource utilization".to_string(),
+                        ],
+                    });
+                }
+            }
+        }
+
+        predictions
+    }
+
+    /// Update trace metrics for distributed tracing analysis
+    async fn update_trace_metrics(&self, metrics: &mut FederationMetrics, duration: Duration) {
+        metrics.trace_statistics.total_spans += 1;
+        metrics.trace_statistics.total_duration += duration;
+        if metrics.trace_statistics.total_spans > 0 {
+            metrics.trace_statistics.avg_span_duration = 
+                metrics.trace_statistics.total_duration / metrics.trace_statistics.total_spans as u32;
+        }
+
+        // Update span duration histogram
+        let millis = duration.as_millis() as u64;
+        let bucket = if millis < 1 {
+            "0-1ms"
+        } else if millis < 5 {
+            "1-5ms"
+        } else if millis < 10 {
+            "5-10ms"
+        } else if millis < 50 {
+            "10-50ms"
+        } else if millis < 100 {
+            "50-100ms"
+        } else if millis < 500 {
+            "100-500ms"
+        } else {
+            "500ms+"
+        };
+
+        *metrics.trace_statistics.span_duration_histogram
+            .entry(bucket.to_string())
+            .or_insert(0) += 1;
+    }
+
+    /// Calculate prediction confidence based on sample size and history
+    fn calculate_prediction_confidence(&self, recent_samples: usize, total_samples: u64) -> f64 {
+        let sample_confidence = (recent_samples as f64 / 50.0).min(1.0);
+        let history_confidence = (total_samples as f64 / 1000.0).min(1.0);
+        (sample_confidence + history_confidence) / 2.0
     }
 
     async fn get_top_errors(&self, metrics: &FederationMetrics) -> Vec<ErrorSummary> {
@@ -920,6 +1220,7 @@ pub struct FederationMonitorConfig {
     pub max_recent_events: usize,
     pub enable_prometheus_export: bool,
     pub health_check_interval: Duration,
+    pub max_trace_spans: usize,
 }
 
 impl Default for FederationMonitorConfig {
@@ -931,11 +1232,12 @@ impl Default for FederationMonitorConfig {
             max_recent_events: 500,
             enable_prometheus_export: true,
             health_check_interval: Duration::from_secs(30),
+            max_trace_spans: 10000,
         }
     }
 }
 
-/// Internal metrics storage
+/// Internal metrics storage with advanced observability features
 #[derive(Debug)]
 struct FederationMetrics {
     total_queries: u64,
@@ -948,6 +1250,12 @@ struct FederationMetrics {
     federation_events: Vec<FederationEvent>,
     event_type_counts: HashMap<FederationEventType, u64>,
     recent_queries: Vec<QueryRecord>,
+    /// Advanced distributed tracing spans
+    trace_spans: Vec<TraceSpan>,
+    /// Trace statistics for analysis
+    trace_statistics: TraceStatistics,
+    /// Anomaly reports for intelligent monitoring
+    anomalies: Vec<AnomalyReport>,
 }
 
 impl FederationMetrics {
@@ -963,6 +1271,9 @@ impl FederationMetrics {
             federation_events: Vec::new(),
             event_type_counts: HashMap::new(),
             recent_queries: Vec::new(),
+            trace_spans: Vec::new(),
+            trace_statistics: TraceStatistics::new(),
+            anomalies: Vec::new(),
         }
     }
 }
@@ -1049,6 +1360,9 @@ pub enum FederationEventType {
     CacheInvalidation,
     Error,
     Warning,
+    EntityUpdate,
+    SchemaChange,
+    ServiceAvailability,
 }
 
 /// Federation event record
@@ -1258,6 +1572,108 @@ pub enum ImplementationEffort {
     Low,    // Hours to 1 day
     Medium, // 1-3 days
     High,   // 1+ weeks
+}
+
+/// Distributed tracing span
+#[derive(Debug, Clone)]
+pub struct TraceSpan {
+    pub trace_id: String,
+    pub span_id: String,
+    pub parent_span_id: Option<String>,
+    pub operation_name: String,
+    pub start_time: SystemTime,
+    pub duration: Duration,
+    pub tags: HashMap<String, String>,
+    pub service_id: Option<String>,
+}
+
+/// Trace statistics for distributed tracing analysis
+#[derive(Debug, Clone)]
+pub struct TraceStatistics {
+    pub total_spans: u64,
+    pub total_duration: Duration,
+    pub avg_span_duration: Duration,
+    pub span_duration_histogram: HashMap<String, u64>,
+}
+
+impl TraceStatistics {
+    fn new() -> Self {
+        Self {
+            total_spans: 0,
+            total_duration: Duration::from_secs(0),
+            avg_span_duration: Duration::from_secs(0),
+            span_duration_histogram: HashMap::new(),
+        }
+    }
+}
+
+/// Anomaly detection report
+#[derive(Debug, Clone, Serialize)]
+pub struct AnomalyReport {
+    pub anomaly_type: AnomalyType,
+    pub detected_at: u64,
+    pub details: String,
+    pub severity: AnomalySeverity,
+    pub confidence: f64,
+}
+
+/// Types of anomalies that can be detected
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum AnomalyType {
+    ErrorSpike,
+    PerformanceDegradation,
+    UnusualTrafficPattern,
+    ServiceUnavailability,
+    MemoryLeak,
+    ResourceExhaustion,
+}
+
+/// Severity levels for anomalies
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum AnomalySeverity {
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    Critical = 4,
+}
+
+/// Performance prediction
+#[derive(Debug, Clone, Serialize)]
+pub struct PerformancePrediction {
+    pub prediction_type: PredictionType,
+    pub component: String,
+    pub predicted_at: u64,
+    pub confidence: f64,
+    pub description: String,
+    pub recommended_actions: Vec<String>,
+}
+
+/// Types of performance predictions
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum PredictionType {
+    PerformanceDegradation,
+    CapacityIssue,
+    ServiceFailure,
+    ResourceBottleneck,
+}
+
+/// Cross-service latency analysis
+#[derive(Debug, Clone, Serialize)]
+pub struct CrossServiceLatencyAnalysis {
+    pub interactions: Vec<ServiceInteractionLatency>,
+    pub total_traces_analyzed: usize,
+    pub analysis_timestamp: u64,
+}
+
+/// Latency metrics for service interactions
+#[derive(Debug, Clone, Serialize)]
+pub struct ServiceInteractionLatency {
+    pub from_service: String,
+    pub to_service: String,
+    pub avg_latency: Duration,
+    pub min_latency: Duration,
+    pub max_latency: Duration,
+    pub sample_count: usize,
 }
 
 #[cfg(test)]

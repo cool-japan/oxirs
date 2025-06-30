@@ -1,9 +1,9 @@
 //! Column-store compression implementation
 
-use anyhow::{anyhow, Result};
 use crate::compression::{
-    AdvancedCompressionType, CompressionAlgorithm, CompressionMetadata, CompressedData
+    AdvancedCompressionType, CompressedData, CompressionAlgorithm, CompressionMetadata,
 };
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -93,7 +93,7 @@ impl ColumnStoreCompressor {
         // Process each column
         for (col_idx, column) in self.columns.iter().enumerate() {
             let mut column_data = Vec::new();
-            
+
             // Extract column data from all rows
             for row in rows {
                 let cell_data = self.extract_cell_data(row, col_idx, &column.data_type)?;
@@ -102,7 +102,7 @@ impl ColumnStoreCompressor {
 
             // Compress column data
             let compressed_column = self.compress_column_data(&column_data, column.compression)?;
-            
+
             // Store compressed column
             compressed.extend_from_slice(&(compressed_column.len() as u32).to_le_bytes());
             compressed.extend_from_slice(&compressed_column);
@@ -121,13 +121,13 @@ impl ColumnStoreCompressor {
             return Err(anyhow!("Invalid compressed data"));
         }
 
-        let row_count = u32::from_le_bytes([
-            compressed[0], compressed[1], compressed[2], compressed[3]
-        ]) as usize;
+        let row_count =
+            u32::from_le_bytes([compressed[0], compressed[1], compressed[2], compressed[3]])
+                as usize;
 
-        let col_count = u32::from_le_bytes([
-            compressed[4], compressed[5], compressed[6], compressed[7]
-        ]) as usize;
+        let col_count =
+            u32::from_le_bytes([compressed[4], compressed[5], compressed[6], compressed[7]])
+                as usize;
 
         if col_count != self.columns.len() {
             return Err(anyhow!("Column count mismatch"));
@@ -143,8 +143,10 @@ impl ColumnStoreCompressor {
             }
 
             let column_size = u32::from_le_bytes([
-                compressed[offset], compressed[offset + 1], 
-                compressed[offset + 2], compressed[offset + 3]
+                compressed[offset],
+                compressed[offset + 1],
+                compressed[offset + 2],
+                compressed[offset + 3],
             ]) as usize;
             offset += 4;
 
@@ -153,7 +155,8 @@ impl ColumnStoreCompressor {
             }
 
             let compressed_column = &compressed[offset..offset + column_size];
-            let decompressed_column = self.decompress_column_data(compressed_column, column.compression)?;
+            let decompressed_column =
+                self.decompress_column_data(compressed_column, column.compression)?;
             column_data.push(decompressed_column);
             offset += column_size;
         }
@@ -163,7 +166,8 @@ impl ColumnStoreCompressor {
         for row_idx in 0..row_count {
             let mut row = Vec::new();
             for (col_idx, column) in self.columns.iter().enumerate() {
-                let cell_data = self.extract_row_cell(&column_data[col_idx], row_idx, &column.data_type)?;
+                let cell_data =
+                    self.extract_row_cell(&column_data[col_idx], row_idx, &column.data_type)?;
                 row.extend_from_slice(&cell_data);
             }
             rows.push(row);
@@ -173,7 +177,12 @@ impl ColumnStoreCompressor {
     }
 
     /// Extract cell data from row (simplified implementation)
-    fn extract_cell_data(&self, row: &[u8], col_idx: usize, data_type: &ColumnDataType) -> Result<Vec<u8>> {
+    fn extract_cell_data(
+        &self,
+        row: &[u8],
+        col_idx: usize,
+        data_type: &ColumnDataType,
+    ) -> Result<Vec<u8>> {
         let cell_size = match data_type {
             ColumnDataType::Int8 => 1,
             ColumnDataType::Int16 => 2,
@@ -194,7 +203,12 @@ impl ColumnStoreCompressor {
     }
 
     /// Extract cell data for specific row from column data
-    fn extract_row_cell(&self, column_data: &[u8], row_idx: usize, data_type: &ColumnDataType) -> Result<Vec<u8>> {
+    fn extract_row_cell(
+        &self,
+        column_data: &[u8],
+        row_idx: usize,
+        data_type: &ColumnDataType,
+    ) -> Result<Vec<u8>> {
         let cell_size = match data_type {
             ColumnDataType::Int8 => 1,
             ColumnDataType::Int16 => 2,
@@ -212,7 +226,11 @@ impl ColumnStoreCompressor {
     }
 
     /// Compress column data using specified compression
-    fn compress_column_data(&self, data: &[u8], compression: ColumnCompressionType) -> Result<Vec<u8>> {
+    fn compress_column_data(
+        &self,
+        data: &[u8],
+        compression: ColumnCompressionType,
+    ) -> Result<Vec<u8>> {
         match compression {
             ColumnCompressionType::None => Ok(data.to_vec()),
             ColumnCompressionType::RunLength => {
@@ -229,7 +247,11 @@ impl ColumnStoreCompressor {
     }
 
     /// Decompress column data
-    fn decompress_column_data(&self, compressed: &[u8], compression: ColumnCompressionType) -> Result<Vec<u8>> {
+    fn decompress_column_data(
+        &self,
+        compressed: &[u8],
+        compression: ColumnCompressionType,
+    ) -> Result<Vec<u8>> {
         match compression {
             ColumnCompressionType::None => Ok(compressed.to_vec()),
             ColumnCompressionType::RunLength => {
@@ -255,12 +277,14 @@ impl Default for ColumnStoreCompressor {
 impl CompressionAlgorithm for ColumnStoreCompressor {
     fn compress(&self, data: &[u8]) -> Result<CompressedData> {
         if self.columns.is_empty() {
-            return Err(anyhow!("No column definitions for column store compression"));
+            return Err(anyhow!(
+                "No column definitions for column store compression"
+            ));
         }
 
         // For simplicity, treat data as single row
         let rows = vec![data.to_vec()];
-        
+
         let start = Instant::now();
         let compressed_bytes = self.compress_rows(&rows)?;
         let compression_time = start.elapsed();
@@ -325,8 +349,11 @@ mod tests {
         // Create test data (2 columns x 8 bytes each = 16 bytes per row)
         let test_data = vec![0u8; 16];
         let compressed = compressor.compress(&test_data).unwrap();
-        assert_eq!(compressed.metadata.algorithm, AdvancedCompressionType::ColumnStore);
-        
+        assert_eq!(
+            compressed.metadata.algorithm,
+            AdvancedCompressionType::ColumnStore
+        );
+
         let decompressed = compressor.decompress(&compressed).unwrap();
         assert_eq!(test_data, decompressed);
     }
@@ -334,7 +361,7 @@ mod tests {
     #[test]
     fn test_column_definitions() {
         let mut compressor = ColumnStoreCompressor::new();
-        
+
         compressor.add_column(ColumnDefinition {
             name: "test".to_string(),
             data_type: ColumnDataType::Int32,

@@ -251,7 +251,8 @@ impl AIPlatform {
                 "protein:HER2".to_string(),
             ),
         ];
-        let evaluation_suite = AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
+        let evaluation_suite =
+            AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
         let benchmark_suite = HashMap::new();
         println!("   ✅ Evaluation framework initialized");
 

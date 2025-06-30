@@ -155,6 +155,42 @@ impl ObjectPattern {
     }
 }
 
+// Add From implementations for TermPattern conversions
+use crate::query::algebra::TermPattern;
+
+impl From<TermPattern> for SubjectPattern {
+    fn from(term: TermPattern) -> Self {
+        match term {
+            TermPattern::NamedNode(n) => SubjectPattern::NamedNode(n),
+            TermPattern::BlankNode(b) => SubjectPattern::BlankNode(b),
+            TermPattern::Variable(v) => SubjectPattern::Variable(v),
+            TermPattern::Literal(_) => panic!("Literals cannot be subjects"),
+        }
+    }
+}
+
+impl From<TermPattern> for PredicatePattern {
+    fn from(term: TermPattern) -> Self {
+        match term {
+            TermPattern::NamedNode(n) => PredicatePattern::NamedNode(n),
+            TermPattern::Variable(v) => PredicatePattern::Variable(v),
+            TermPattern::BlankNode(_) => panic!("Blank nodes cannot be predicates"),
+            TermPattern::Literal(_) => panic!("Literals cannot be predicates"),
+        }
+    }
+}
+
+impl From<TermPattern> for ObjectPattern {
+    fn from(term: TermPattern) -> Self {
+        match term {
+            TermPattern::NamedNode(n) => ObjectPattern::NamedNode(n),
+            TermPattern::BlankNode(b) => ObjectPattern::BlankNode(b),
+            TermPattern::Literal(l) => ObjectPattern::Literal(l),
+            TermPattern::Variable(v) => ObjectPattern::Variable(v),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

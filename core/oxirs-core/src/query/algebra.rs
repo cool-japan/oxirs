@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 
+// Re-export TriplePattern from model for public access
+pub use crate::model::pattern::TriplePattern;
+
 /// A property path expression for navigating RDF graphs
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PropertyPath {
@@ -183,12 +186,62 @@ pub enum Function {
     Custom(NamedNode),
 }
 
-/// A triple pattern in a graph pattern
+/// A triple pattern in SPARQL algebra (all positions must be specified)
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TriplePattern {
+pub struct AlgebraTriplePattern {
     pub subject: TermPattern,
     pub predicate: TermPattern,
     pub object: TermPattern,
+}
+
+impl AlgebraTriplePattern {
+    /// Create a new algebra triple pattern
+    pub fn new(subject: TermPattern, predicate: TermPattern, object: TermPattern) -> Self {
+        Self { subject, predicate, object }
+    }
+
+    /// Formats using the SPARQL S-Expression syntax
+    pub fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        f.write_str("(triple ")?;
+        self.subject.fmt_sse(f)?;
+        f.write_str(" ")?;
+        self.predicate.fmt_sse(f)?;
+        f.write_str(" ")?;
+        self.object.fmt_sse(f)?;
+        f.write_str(")")
+    }
+}
+
+impl fmt::Display for AlgebraTriplePattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+    }
+}
+
+impl From<crate::model::pattern::TriplePattern> for Option<AlgebraTriplePattern> {
+    fn from(pattern: crate::model::pattern::TriplePattern) -> Self {
+        use crate::model::pattern::{SubjectPattern, PredicatePattern, ObjectPattern};
+        
+        let subject = match pattern.subject? {
+            SubjectPattern::NamedNode(n) => TermPattern::NamedNode(n),
+            SubjectPattern::BlankNode(b) => TermPattern::BlankNode(b),
+            SubjectPattern::Variable(v) => TermPattern::Variable(v),
+        };
+        
+        let predicate = match pattern.predicate? {
+            PredicatePattern::NamedNode(n) => TermPattern::NamedNode(n),
+            PredicatePattern::Variable(v) => TermPattern::Variable(v),
+        };
+        
+        let object = match pattern.object? {
+            ObjectPattern::NamedNode(n) => TermPattern::NamedNode(n),
+            ObjectPattern::BlankNode(b) => TermPattern::BlankNode(b),
+            ObjectPattern::Literal(l) => TermPattern::Literal(l),
+            ObjectPattern::Variable(v) => TermPattern::Variable(v),
+        };
+        
+        Some(AlgebraTriplePattern::new(subject, predicate, object))
+    }
 }
 
 /// A term pattern (can be a concrete term or variable)
@@ -229,6 +282,16 @@ impl TermPattern {
     pub fn is_variable(&self) -> bool {
         matches!(self, TermPattern::Variable(_))
     }
+
+    /// Formats using the SPARQL S-Expression syntax
+    pub fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        match self {
+            TermPattern::NamedNode(node) => write!(f, "{}", node),
+            TermPattern::BlankNode(node) => write!(f, "{}", node),
+            TermPattern::Literal(literal) => write!(f, "{}", literal),
+            TermPattern::Variable(var) => write!(f, "{}", var),
+        }
+    }
 }
 
 impl fmt::Display for TermPattern {
@@ -246,7 +309,7 @@ impl fmt::Display for TermPattern {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum GraphPattern {
     /// Basic graph pattern (set of triple patterns)
-    Bgp(Vec<TriplePattern>),
+    Bgp(Vec<AlgebraTriplePattern>),
     /// Path pattern
     Path {
         subject: TermPattern,
@@ -380,7 +443,7 @@ pub enum QueryForm {
     /// CONSTRUCT query
     Construct {
         /// Template for constructing triples
-        template: Vec<TriplePattern>,
+        template: Vec<AlgebraTriplePattern>,
         /// WHERE clause pattern
         where_clause: GraphPattern,
         /// Solution modifiers

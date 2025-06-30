@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use oxirs_core::{model::NamedNode, Store, Term, RdfTerm};
+use oxirs_core::{model::NamedNode, RdfTerm, Store, Term};
 
 use crate::{
     iri_resolver::{IriResolutionError, IriResolver},
@@ -1047,7 +1047,9 @@ impl ShapeImportManager {
                 tracing::warn!("SPARQL target remapping not yet implemented");
             }
             Target::Implicit(implicit_iri) => {
-                if let Some(remapped) = self.remap_iri_string(implicit_iri.as_str(), target_namespace) {
+                if let Some(remapped) =
+                    self.remap_iri_string(implicit_iri.as_str(), target_namespace)
+                {
                     if let Ok(new_node) = NamedNode::new(remapped) {
                         *implicit_iri = new_node;
                     }

@@ -3,14 +3,11 @@
 //! This module provides sophisticated pattern analysis including selectivity estimation,
 //! join pattern detection, and predicate affinity analysis.
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
 
-use crate::{
-    FederatedService, ServiceCapability,
-    planner::TriplePattern,
-};
+use crate::{planner::TriplePattern, FederatedService, ServiceCapability};
 
 use super::types::*;
 
@@ -142,38 +139,46 @@ impl QueryDecomposer {
         // Check if there's a central variable that appears in most patterns
         let max_count = var_counts.values().max().unwrap_or(&0);
         let total_patterns = component.patterns.len();
-        
+
         *max_count >= (total_patterns * 2 / 3) // Central variable in at least 2/3 of patterns
     }
 
     /// Analyze join patterns in the component
-    pub fn analyze_join_patterns(&self, patterns: &[(usize, TriplePattern)]) -> JoinPatternAnalysis {
+    pub fn analyze_join_patterns(
+        &self,
+        patterns: &[(usize, TriplePattern)],
+    ) -> JoinPatternAnalysis {
         let mut analysis = JoinPatternAnalysis::new();
-        
+
         // Build variable-pattern mapping
         let mut var_to_patterns: HashMap<String, Vec<usize>> = HashMap::new();
         for (idx, pattern) in patterns {
             for var_ref in [&pattern.subject, &pattern.predicate, &pattern.object] {
                 if let Some(ref var_name) = var_ref {
                     if var_name.starts_with('?') {
-                        var_to_patterns.entry(var_name.clone()).or_default().push(*idx);
+                        var_to_patterns
+                            .entry(var_name.clone())
+                            .or_default()
+                            .push(*idx);
                     }
                 }
             }
         }
-        
+
         // Analyze join structure
         for (var, pattern_indices) in var_to_patterns {
             if pattern_indices.len() > 1 {
-                analysis.join_variables.insert(var.clone(), pattern_indices.clone());
-                
+                analysis
+                    .join_variables
+                    .insert(var.clone(), pattern_indices.clone());
+
                 if pattern_indices.len() > analysis.max_join_degree {
                     analysis.max_join_degree = pattern_indices.len();
                     analysis.central_variable = Some(var);
                 }
             }
         }
-        
+
         // Determine join pattern type
         analysis.pattern_type = if analysis.max_join_degree >= patterns.len() * 2 / 3 {
             JoinPattern::Star
@@ -182,7 +187,7 @@ impl QueryDecomposer {
         } else {
             JoinPattern::Complex
         };
-        
+
         analysis
     }
 
@@ -194,7 +199,7 @@ impl QueryDecomposer {
     ) -> Vec<Vec<(usize, TriplePattern)>> {
         let mut groups = Vec::new();
         let mut assigned = HashSet::new();
-        
+
         // Group patterns that share join variables
         for (var, pattern_indices) in &join_analysis.join_variables {
             if pattern_indices.len() >= 2 {
@@ -212,14 +217,14 @@ impl QueryDecomposer {
                 }
             }
         }
-        
+
         // Add remaining patterns as individual groups
         for pattern in patterns {
             if !assigned.contains(&pattern.0) {
                 groups.push(vec![pattern.clone()]);
             }
         }
-        
+
         groups
     }
 
@@ -227,7 +232,7 @@ impl QueryDecomposer {
     pub fn calculate_pattern_selectivity(&self, pattern: &TriplePattern) -> PatternSelectivity {
         let mut variable_count = 0;
         let mut constant_count = 0;
-        
+
         for term in [&pattern.subject, &pattern.predicate, &pattern.object] {
             if let Some(ref term_value) = term {
                 if term_value.starts_with('?') {
@@ -237,7 +242,7 @@ impl QueryDecomposer {
                 }
             }
         }
-        
+
         // Calculate selectivity score based on variable/constant ratio
         let selectivity_score = match (variable_count, constant_count) {
             (0, 3) => 0.001, // All constants - very selective
@@ -246,7 +251,7 @@ impl QueryDecomposer {
             (3, 0) => 1.0,   // All variables - least selective
             _ => 0.5,        // Default
         };
-        
+
         PatternSelectivity {
             pattern_index: 0, // Would be set by caller
             selectivity_score,
@@ -262,12 +267,12 @@ impl QueryDecomposer {
         services: &[&FederatedService],
     ) -> Vec<ServiceAffinity> {
         let mut affinities = Vec::new();
-        
+
         for service in services {
             let mut affinity_score = 0.0;
             let mut predicate_matches = Vec::new();
             let mut capability_matches = Vec::new();
-            
+
             // Check predicate matches
             for (_, pattern) in patterns {
                 if let Some(ref predicate) = pattern.predicate {
@@ -278,7 +283,7 @@ impl QueryDecomposer {
                     }
                 }
             }
-            
+
             // Check capability matches
             for capability in &service.capabilities {
                 match capability {
@@ -293,7 +298,7 @@ impl QueryDecomposer {
                     _ => {}
                 }
             }
-            
+
             affinities.push(ServiceAffinity {
                 service_id: service.id.clone(),
                 affinity_score,
@@ -301,10 +306,10 @@ impl QueryDecomposer {
                 capability_matches,
             });
         }
-        
+
         // Sort by affinity score (descending)
         affinities.sort_by(|a, b| b.affinity_score.partial_cmp(&a.affinity_score).unwrap());
-        
+
         affinities
     }
 
@@ -315,116 +320,131 @@ impl QueryDecomposer {
         services: &[&FederatedService],
     ) -> Vec<PatternCoverage> {
         let mut coverage_analysis = Vec::new();
-        
+
         for (pattern_idx, pattern) in patterns {
             let mut service_coverage = Vec::new();
-            
+
             for service in services {
                 let coverage_score = self.calculate_pattern_coverage_score(pattern, service);
                 let confidence = self.estimate_coverage_confidence(pattern, service);
-                
+
                 service_coverage.push(ServiceCoverage {
                     service_id: service.id.clone(),
                     coverage_score,
                     confidence,
-                    estimated_result_count: self.estimate_result_size(service, &[(*pattern_idx, pattern.clone())]),
+                    estimated_result_count: self
+                        .estimate_result_size(service, &[(*pattern_idx, pattern.clone())]),
                 });
             }
-            
+
             // Sort by coverage score (descending)
-            service_coverage.sort_by(|a, b| b.coverage_score.partial_cmp(&a.coverage_score).unwrap());
-            
+            service_coverage
+                .sort_by(|a, b| b.coverage_score.partial_cmp(&a.coverage_score).unwrap());
+
             coverage_analysis.push(PatternCoverage {
                 pattern_index: *pattern_idx,
                 pattern: pattern.clone(),
                 service_coverage,
             });
         }
-        
+
         coverage_analysis
     }
 
     /// Calculate pattern coverage score for a service
-    pub fn calculate_pattern_coverage_score(&self, pattern: &TriplePattern, service: &FederatedService) -> f64 {
+    pub fn calculate_pattern_coverage_score(
+        &self,
+        pattern: &TriplePattern,
+        service: &FederatedService,
+    ) -> f64 {
         let mut score = 0.0;
-        
+
         // Base score for service availability
         score += 1.0;
-        
+
         // Subject coverage analysis
         if let Some(ref subject) = pattern.subject {
             score += self.analyze_term_coverage(subject, service, "subject");
         }
-        
+
         // Predicate coverage analysis (most important)
         if let Some(ref predicate) = pattern.predicate {
             score += self.analyze_term_coverage(predicate, service, "predicate") * 2.0;
         }
-        
+
         // Object coverage analysis
         if let Some(ref object) = pattern.object {
             score += self.analyze_term_coverage(object, service, "object");
         }
-        
+
         // Normalize score
         score / 4.0
     }
 
     /// Analyze term coverage for a specific position
-    pub fn analyze_term_coverage(&self, term: &str, service: &FederatedService, position: &str) -> f64 {
+    pub fn analyze_term_coverage(
+        &self,
+        term: &str,
+        service: &FederatedService,
+        position: &str,
+    ) -> f64 {
         if term.starts_with('?') {
             // Variable - check if service supports variables in this position
             return 1.0;
         }
-        
+
         let mut score = 0.0;
-        
+
         // URI analysis
         if term.starts_with('<') && term.ends_with('>') {
-            let uri = &term[1..term.len()-1];
+            let uri = &term[1..term.len() - 1];
             score += self.analyze_uri_coverage(uri, service);
         }
-        
+
         // Namespace analysis
         if term.contains(':') {
             let namespace = term.split(':').next().unwrap_or("");
             score += self.analyze_namespace_coverage(namespace, service);
         }
-        
+
         // Literal analysis
         if term.starts_with('"') {
             score += self.analyze_literal_coverage(term, service);
         }
-        
+
         score.min(1.0)
     }
 
     /// Analyze URI coverage
     pub fn analyze_uri_coverage(&self, uri: &str, service: &FederatedService) -> f64 {
         let mut score = 0.0;
-        
+
         // Check if URI domain matches service domain
         if let Some(domain) = self.extract_domain(uri) {
             if service.endpoint.contains(&domain) {
                 score += 0.8;
             }
         }
-        
+
         // Check vocabulary alignment
         if uri.contains("foaf") && service.name.to_lowercase().contains("foaf") {
             score += 0.5;
         }
-        if uri.contains("geo") && service.capabilities.contains(&ServiceCapability::Geospatial) {
+        if uri.contains("geo")
+            && service
+                .capabilities
+                .contains(&ServiceCapability::Geospatial)
+        {
             score += 0.5;
         }
-        
+
         score
     }
 
     /// Analyze namespace coverage
     pub fn analyze_namespace_coverage(&self, namespace: &str, service: &FederatedService) -> f64 {
         let mut score = 0.0;
-        
+
         // Check common namespaces
         match namespace {
             "foaf" => {
@@ -433,7 +453,10 @@ impl QueryDecomposer {
                 }
             }
             "geo" => {
-                if service.capabilities.contains(&ServiceCapability::Geospatial) {
+                if service
+                    .capabilities
+                    .contains(&ServiceCapability::Geospatial)
+                {
                     score += 0.7;
                 }
             }
@@ -444,25 +467,28 @@ impl QueryDecomposer {
                 score += 0.1; // Unknown namespace
             }
         }
-        
+
         score
     }
 
     /// Analyze literal coverage
     pub fn analyze_literal_coverage(&self, literal: &str, service: &FederatedService) -> f64 {
         let mut score = 0.2; // Base score for literal support
-        
+
         // Check for full-text search capability
-        if service.capabilities.contains(&ServiceCapability::FullTextSearch) {
+        if service
+            .capabilities
+            .contains(&ServiceCapability::FullTextSearch)
+        {
             score += 0.3;
         }
-        
+
         // Check for specific data types
         if literal.contains("^^") {
             let datatype = literal.split("^^").nth(1).unwrap_or("");
             score += self.analyze_datatype_coverage(datatype, service);
         }
-        
+
         score
     }
 
@@ -472,7 +498,10 @@ impl QueryDecomposer {
             "xsd:string" | "xsd:integer" | "xsd:decimal" | "xsd:boolean" => 0.3,
             "xsd:dateTime" | "xsd:date" => 0.2,
             "geo:wktLiteral" => {
-                if service.capabilities.contains(&ServiceCapability::Geospatial) {
+                if service
+                    .capabilities
+                    .contains(&ServiceCapability::Geospatial)
+                {
                     0.5
                 } else {
                     0.0
@@ -494,24 +523,34 @@ impl QueryDecomposer {
     }
 
     /// Estimate coverage confidence
-    pub fn estimate_coverage_confidence(&self, pattern: &TriplePattern, service: &FederatedService) -> f64 {
+    pub fn estimate_coverage_confidence(
+        &self,
+        pattern: &TriplePattern,
+        service: &FederatedService,
+    ) -> f64 {
         let mut confidence = 0.5; // Base confidence
-        
+
         // Higher confidence for specific services
         if let Some(ref predicate) = pattern.predicate {
             if !predicate.starts_with('?') {
                 confidence += 0.3;
             }
         }
-        
+
         // Service-specific confidence factors
-        if service.capabilities.contains(&ServiceCapability::FullTextSearch) {
+        if service
+            .capabilities
+            .contains(&ServiceCapability::FullTextSearch)
+        {
             confidence += 0.1;
         }
-        if service.capabilities.contains(&ServiceCapability::Geospatial) {
+        if service
+            .capabilities
+            .contains(&ServiceCapability::Geospatial)
+        {
             confidence += 0.1;
         }
-        
+
         confidence.min(1.0)
     }
 
@@ -540,7 +579,7 @@ impl QueryDecomposer {
         range_info: &RangeInfo,
     ) -> Vec<RangeMatch> {
         let mut matches = Vec::new();
-        
+
         for service in services {
             let overlap = self.calculate_range_overlap(range_info, service);
             if overlap > 0.0 {
@@ -551,21 +590,28 @@ impl QueryDecomposer {
                 });
             }
         }
-        
+
         // Sort by overlap score (descending)
         matches.sort_by(|a, b| b.overlap_score.partial_cmp(&a.overlap_score).unwrap());
-        
+
         matches
     }
 
     /// Calculate range overlap between query and service
-    pub fn calculate_range_overlap(&self, range_info: &RangeInfo, service: &FederatedService) -> f64 {
+    pub fn calculate_range_overlap(
+        &self,
+        range_info: &RangeInfo,
+        service: &FederatedService,
+    ) -> f64 {
         // This is a simplified implementation
         // In practice, you'd need service metadata about data ranges
         match range_info.range_type {
             RangeType::Numeric => {
                 // Check if service has numeric data capabilities
-                if service.capabilities.contains(&ServiceCapability::Aggregation) {
+                if service
+                    .capabilities
+                    .contains(&ServiceCapability::Aggregation)
+                {
                     0.8
                 } else {
                     0.3
@@ -573,15 +619,19 @@ impl QueryDecomposer {
             }
             RangeType::Temporal => {
                 // Check if service has temporal data
-                if service.name.to_lowercase().contains("time") || 
-                   service.name.to_lowercase().contains("temporal") {
+                if service.name.to_lowercase().contains("time")
+                    || service.name.to_lowercase().contains("temporal")
+                {
                     0.9
                 } else {
                     0.2
                 }
             }
             RangeType::Spatial => {
-                if service.capabilities.contains(&ServiceCapability::Geospatial) {
+                if service
+                    .capabilities
+                    .contains(&ServiceCapability::Geospatial)
+                {
                     0.95
                 } else {
                     0.0
@@ -591,14 +641,21 @@ impl QueryDecomposer {
     }
 
     /// Estimate range coverage
-    pub fn estimate_range_coverage(&self, range_info: &RangeInfo, service: &FederatedService) -> f64 {
+    pub fn estimate_range_coverage(
+        &self,
+        range_info: &RangeInfo,
+        service: &FederatedService,
+    ) -> f64 {
         // Simplified coverage estimation
         let base_coverage = self.calculate_range_overlap(range_info, service);
-        
+
         // Adjust based on service capabilities
         let capability_factor = match range_info.range_type {
             RangeType::Numeric => {
-                if service.capabilities.contains(&ServiceCapability::Aggregation) {
+                if service
+                    .capabilities
+                    .contains(&ServiceCapability::Aggregation)
+                {
                     1.2
                 } else {
                     0.8
@@ -606,25 +663,32 @@ impl QueryDecomposer {
             }
             RangeType::Temporal => 1.0,
             RangeType::Spatial => {
-                if service.capabilities.contains(&ServiceCapability::Geospatial) {
+                if service
+                    .capabilities
+                    .contains(&ServiceCapability::Geospatial)
+                {
                     1.3
                 } else {
                     0.1
                 }
             }
         };
-        
+
         (base_coverage * capability_factor).min(1.0)
     }
 
     /// Create and use Bloom filter for membership testing
-    pub fn create_service_bloom_filter(&self, service: &FederatedService, capacity: usize) -> ServiceBloomFilter {
+    pub fn create_service_bloom_filter(
+        &self,
+        service: &FederatedService,
+        capacity: usize,
+    ) -> ServiceBloomFilter {
         let mut filter = ServiceBloomFilter::new(capacity);
-        
+
         // Add known predicates/terms to the filter
         // This would typically be populated from service metadata
         filter.insert(&format!("service:{}", service.id));
-        
+
         // Add capability-based entries
         for capability in &service.capabilities {
             match capability {
@@ -641,7 +705,7 @@ impl QueryDecomposer {
                 _ => {}
             }
         }
-        
+
         filter
     }
 
@@ -653,19 +717,19 @@ impl QueryDecomposer {
     ) -> bool {
         // Test if pattern elements might be present in the service
         let mut tests = Vec::new();
-        
+
         if let Some(ref predicate) = pattern.predicate {
             if !predicate.starts_with('?') {
                 tests.push(bloom_filter.contains(predicate));
             }
         }
-        
+
         if let Some(ref object) = pattern.object {
             if !object.starts_with('?') {
                 tests.push(bloom_filter.contains(object));
             }
         }
-        
+
         // If no specific tests, assume possible match
         if tests.is_empty() {
             true
@@ -682,17 +746,17 @@ impl QueryDecomposer {
         historical_data: &MLTrainingData,
     ) -> Vec<MLPrediction> {
         let mut predictions = Vec::new();
-        
+
         // Feature extraction
         let features = self.extract_ml_features(pattern);
-        
+
         for service in services {
             let service_features = self.extract_service_features(service);
             let combined_features = self.combine_features(&features, &service_features);
-            
+
             // Simple ML prediction (would use a trained model in practice)
             let confidence = self.simple_ml_predict(&combined_features, historical_data);
-            
+
             predictions.push(MLPrediction {
                 service_id: service.id.clone(),
                 confidence_score: confidence,
@@ -704,52 +768,132 @@ impl QueryDecomposer {
                 },
             });
         }
-        
+
         // Sort by confidence (descending)
         predictions.sort_by(|a, b| b.confidence_score.partial_cmp(&a.confidence_score).unwrap());
-        
+
         predictions
     }
 
     /// Extract ML features from a pattern
     pub fn extract_ml_features(&self, pattern: &TriplePattern) -> HashMap<String, f64> {
         let mut features = HashMap::new();
-        
+
         // Pattern structure features
-        features.insert("has_subject_var".to_string(), if pattern.subject.as_ref().map_or(false, |s| s.starts_with('?')) { 1.0 } else { 0.0 });
-        features.insert("has_predicate_var".to_string(), if pattern.predicate.as_ref().map_or(false, |p| p.starts_with('?')) { 1.0 } else { 0.0 });
-        features.insert("has_object_var".to_string(), if pattern.object.as_ref().map_or(false, |o| o.starts_with('?')) { 1.0 } else { 0.0 });
-        
+        features.insert(
+            "has_subject_var".to_string(),
+            if pattern
+                .subject
+                .as_ref()
+                .map_or(false, |s| s.starts_with('?'))
+            {
+                1.0
+            } else {
+                0.0
+            },
+        );
+        features.insert(
+            "has_predicate_var".to_string(),
+            if pattern
+                .predicate
+                .as_ref()
+                .map_or(false, |p| p.starts_with('?'))
+            {
+                1.0
+            } else {
+                0.0
+            },
+        );
+        features.insert(
+            "has_object_var".to_string(),
+            if pattern
+                .object
+                .as_ref()
+                .map_or(false, |o| o.starts_with('?'))
+            {
+                1.0
+            } else {
+                0.0
+            },
+        );
+
         // Vocabulary features
         if let Some(ref predicate) = pattern.predicate {
-            features.insert("is_foaf_predicate".to_string(), if predicate.contains("foaf:") { 1.0 } else { 0.0 });
-            features.insert("is_geo_predicate".to_string(), if predicate.contains("geo:") { 1.0 } else { 0.0 });
-            features.insert("is_rdf_predicate".to_string(), if predicate.contains("rdf:") || predicate.contains("rdfs:") { 1.0 } else { 0.0 });
+            features.insert(
+                "is_foaf_predicate".to_string(),
+                if predicate.contains("foaf:") {
+                    1.0
+                } else {
+                    0.0
+                },
+            );
+            features.insert(
+                "is_geo_predicate".to_string(),
+                if predicate.contains("geo:") { 1.0 } else { 0.0 },
+            );
+            features.insert(
+                "is_rdf_predicate".to_string(),
+                if predicate.contains("rdf:") || predicate.contains("rdfs:") {
+                    1.0
+                } else {
+                    0.0
+                },
+            );
         }
-        
+
         // Pattern complexity
         let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
             .iter()
             .filter(|term| term.as_ref().map_or(false, |s| s.starts_with('?')))
             .count();
         features.insert("variable_count".to_string(), var_count as f64);
-        
+
         features
     }
 
     /// Extract ML features from a service
     pub fn extract_service_features(&self, service: &FederatedService) -> HashMap<String, f64> {
         let mut features = HashMap::new();
-        
+
         // Capability features
-        features.insert("has_fulltext".to_string(), if service.capabilities.contains(&ServiceCapability::FullTextSearch) { 1.0 } else { 0.0 });
-        features.insert("has_geospatial".to_string(), if service.capabilities.contains(&ServiceCapability::Geospatial) { 1.0 } else { 0.0 });
-        features.insert("has_aggregation".to_string(), if service.capabilities.contains(&ServiceCapability::Aggregation) { 1.0 } else { 0.0 });
-        
+        features.insert(
+            "has_fulltext".to_string(),
+            if service
+                .capabilities
+                .contains(&ServiceCapability::FullTextSearch)
+            {
+                1.0
+            } else {
+                0.0
+            },
+        );
+        features.insert(
+            "has_geospatial".to_string(),
+            if service
+                .capabilities
+                .contains(&ServiceCapability::Geospatial)
+            {
+                1.0
+            } else {
+                0.0
+            },
+        );
+        features.insert(
+            "has_aggregation".to_string(),
+            if service
+                .capabilities
+                .contains(&ServiceCapability::Aggregation)
+            {
+                1.0
+            } else {
+                0.0
+            },
+        );
+
         // Service characteristics
         features.insert("service_reliability".to_string(), 0.8); // Would come from monitoring data
         features.insert("service_speed".to_string(), 0.7); // Would come from performance metrics
-        
+
         features
     }
 
@@ -760,32 +904,35 @@ impl QueryDecomposer {
         service_features: &HashMap<String, f64>,
     ) -> HashMap<String, f64> {
         let mut combined = HashMap::new();
-        
+
         // Add all pattern features
         for (key, value) in pattern_features {
             combined.insert(format!("pattern_{}", key), *value);
         }
-        
+
         // Add all service features
         for (key, value) in service_features {
             combined.insert(format!("service_{}", key), *value);
         }
-        
+
         // Add interaction features
         if let (Some(&pattern_geo), Some(&service_geo)) = (
             pattern_features.get("is_geo_predicate"),
-            service_features.get("has_geospatial")
+            service_features.get("has_geospatial"),
         ) {
             combined.insert("geo_match".to_string(), pattern_geo * service_geo);
         }
-        
+
         if let (Some(&pattern_foaf), Some(&service_reliability)) = (
             pattern_features.get("is_foaf_predicate"),
-            service_features.get("service_reliability")
+            service_features.get("service_reliability"),
         ) {
-            combined.insert("foaf_reliability".to_string(), pattern_foaf * service_reliability);
+            combined.insert(
+                "foaf_reliability".to_string(),
+                pattern_foaf * service_reliability,
+            );
         }
-        
+
         combined
     }
 
@@ -797,20 +944,20 @@ impl QueryDecomposer {
     ) -> f64 {
         // Simplified linear model (in practice, would use trained weights)
         let mut score = 0.5; // Base score
-        
+
         // Simple rules-based scoring
         if let Some(&geo_match) = features.get("geo_match") {
             score += geo_match * 0.3;
         }
-        
+
         if let Some(&service_reliability) = features.get("service_service_reliability") {
             score += service_reliability * 0.2;
         }
-        
+
         if let Some(&var_count) = features.get("pattern_variable_count") {
             score += (3.0 - var_count) * 0.1; // Prefer more specific patterns
         }
-        
+
         score.min(1.0).max(0.0)
     }
 }

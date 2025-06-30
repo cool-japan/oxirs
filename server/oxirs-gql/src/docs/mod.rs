@@ -229,27 +229,25 @@ impl DocGenerator {
         self.add_api_doc(ApiDoc {
             module: "GraphQL Core".to_string(),
             name: "GraphQLServer".to_string(),
-            description: "Main GraphQL server with RDF integration and optimization capabilities".to_string(),
-            parameters: vec![
-                Parameter {
-                    name: "store".to_string(),
-                    param_type: "Arc<RdfStore>".to_string(),
-                    description: "RDF data store for GraphQL operations".to_string(),
-                    required: true,
-                    default_value: None,
-                    constraints: None,
-                },
-            ],
+            description: "Main GraphQL server with RDF integration and optimization capabilities"
+                .to_string(),
+            parameters: vec![Parameter {
+                name: "store".to_string(),
+                param_type: "Arc<RdfStore>".to_string(),
+                description: "RDF data store for GraphQL operations".to_string(),
+                required: true,
+                default_value: None,
+                constraints: None,
+            }],
             returns: Some(ReturnType {
                 return_type: "GraphQLServer".to_string(),
                 description: "Configured GraphQL server instance".to_string(),
                 nullable: false,
             }),
-            examples: vec![
-                Example {
-                    title: "Basic Server Setup".to_string(),
-                    description: "Creating a basic GraphQL server with RDF store".to_string(),
-                    code: r#"
+            examples: vec![Example {
+                title: "Basic Server Setup".to_string(),
+                description: "Creating a basic GraphQL server with RDF store".to_string(),
+                code: r#"
 use oxirs_gql::{GraphQLServer, RdfStore};
 use std::sync::Arc;
 
@@ -261,19 +259,17 @@ async fn main() -> anyhow::Result<()> {
     server.start("127.0.0.1:4000").await?;
     Ok(())
 }
-"#.to_string(),
-                    language: "rust".to_string(),
-                    expected_output: Some("Server starting on 127.0.0.1:4000".to_string()),
-                },
-            ],
-            errors: vec![
-                ErrorDoc {
-                    error_type: "StoreCreationError".to_string(),
-                    description: "Failed to create RDF store".to_string(),
-                    when_occurs: "When RDF store initialization fails".to_string(),
-                    how_to_handle: "Check file permissions and disk space".to_string(),
-                },
-            ],
+"#
+                .to_string(),
+                language: "rust".to_string(),
+                expected_output: Some("Server starting on 127.0.0.1:4000".to_string()),
+            }],
+            errors: vec![ErrorDoc {
+                error_type: "StoreCreationError".to_string(),
+                description: "Failed to create RDF store".to_string(),
+                when_occurs: "When RDF store initialization fails".to_string(),
+                how_to_handle: "Check file permissions and disk space".to_string(),
+            }],
             since_version: "0.1.0".to_string(),
             deprecated: None,
         });
@@ -283,26 +279,23 @@ async fn main() -> anyhow::Result<()> {
             module: "Optimization".to_string(),
             name: "HybridQueryOptimizer".to_string(),
             description: "Advanced query optimizer combining quantum and ML techniques".to_string(),
-            parameters: vec![
-                Parameter {
-                    name: "config".to_string(),
-                    param_type: "HybridOptimizerConfig".to_string(),
-                    description: "Configuration for hybrid optimization strategies".to_string(),
-                    required: true,
-                    default_value: None,
-                    constraints: Some("Must have valid quantum and ML configurations".to_string()),
-                },
-            ],
+            parameters: vec![Parameter {
+                name: "config".to_string(),
+                param_type: "HybridOptimizerConfig".to_string(),
+                description: "Configuration for hybrid optimization strategies".to_string(),
+                required: true,
+                default_value: None,
+                constraints: Some("Must have valid quantum and ML configurations".to_string()),
+            }],
             returns: Some(ReturnType {
                 return_type: "HybridOptimizationResult".to_string(),
                 description: "Result of hybrid optimization with performance metrics".to_string(),
                 nullable: false,
             }),
-            examples: vec![
-                Example {
-                    title: "Hybrid Optimization".to_string(),
-                    description: "Using hybrid quantum-ML optimization for complex queries".to_string(),
-                    code: r#"
+            examples: vec![Example {
+                title: "Hybrid Optimization".to_string(),
+                description: "Using hybrid quantum-ML optimization for complex queries".to_string(),
+                code: r#"
 use oxirs_gql::{HybridQueryOptimizer, HybridOptimizerConfig};
 
 let config = HybridOptimizerConfig::default();
@@ -310,11 +303,11 @@ let optimizer = HybridQueryOptimizer::new(config, performance_tracker);
 
 let result = optimizer.optimize_query(&document).await?;
 println!("Optimization completed with confidence: {}", result.confidence_score);
-"#.to_string(),
-                    language: "rust".to_string(),
-                    expected_output: Some("Optimization completed with confidence: 0.85".to_string()),
-                },
-            ],
+"#
+                .to_string(),
+                language: "rust".to_string(),
+                expected_output: Some("Optimization completed with confidence: 0.85".to_string()),
+            }],
             errors: vec![],
             since_version: "0.1.0".to_string(),
             deprecated: None,
@@ -324,27 +317,26 @@ println!("Optimization completed with confidence: {}", result.confidence_score);
         self.add_api_doc(ApiDoc {
             module: "Federation".to_string(),
             name: "EnhancedFederationManager".to_string(),
-            description: "Advanced federation manager with real-time schema synchronization".to_string(),
-            parameters: vec![
-                Parameter {
-                    name: "config".to_string(),
-                    param_type: "EnhancedFederationConfig".to_string(),
-                    description: "Federation configuration with sync and load balancing settings".to_string(),
-                    required: true,
-                    default_value: None,
-                    constraints: None,
-                },
-            ],
+            description: "Advanced federation manager with real-time schema synchronization"
+                .to_string(),
+            parameters: vec![Parameter {
+                name: "config".to_string(),
+                param_type: "EnhancedFederationConfig".to_string(),
+                description: "Federation configuration with sync and load balancing settings"
+                    .to_string(),
+                required: true,
+                default_value: None,
+                constraints: None,
+            }],
             returns: Some(ReturnType {
                 return_type: "FederationResult".to_string(),
                 description: "Result of federated query execution".to_string(),
                 nullable: false,
             }),
-            examples: vec![
-                Example {
-                    title: "Federation Setup".to_string(),
-                    description: "Setting up federation with multiple GraphQL services".to_string(),
-                    code: r#"
+            examples: vec![Example {
+                title: "Federation Setup".to_string(),
+                description: "Setting up federation with multiple GraphQL services".to_string(),
+                code: r#"
 use oxirs_gql::federation::{EnhancedFederationManager, EnhancedFederationConfig};
 
 let config = EnhancedFederationConfig::default();
@@ -355,11 +347,11 @@ manager.start().await?;
 
 // Execute federated query
 let result = manager.execute_query(&document, variables, context).await?;
-"#.to_string(),
-                    language: "rust".to_string(),
-                    expected_output: None,
-                },
-            ],
+"#
+                .to_string(),
+                language: "rust".to_string(),
+                expected_output: None,
+            }],
             errors: vec![],
             since_version: "0.1.0".to_string(),
             deprecated: None,
@@ -393,23 +385,23 @@ let result = manager.execute_query(&document, variables, context).await?;
 OxiRS provides sophisticated query complexity analysis to prevent expensive operations.
 The system analyzes query depth, field count, and estimated result size to make 
 optimization decisions.
-"#.to_string(),
-                    code_examples: vec![
-                        Example {
-                            title: "Enabling Query Validation".to_string(),
-                            description: "Configure query complexity limits".to_string(),
-                            code: r#"
+"#
+                    .to_string(),
+                    code_examples: vec![Example {
+                        title: "Enabling Query Validation".to_string(),
+                        description: "Configure query complexity limits".to_string(),
+                        code: r#"
 let config = GraphQLConfig {
     max_query_depth: Some(10),
     max_query_complexity: Some(1000),
     enable_query_validation: true,
     ..Default::default()
 };
-"#.to_string(),
-                            language: "rust".to_string(),
-                            expected_output: None,
-                        },
-                    ],
+"#
+                        .to_string(),
+                        language: "rust".to_string(),
+                        expected_output: None,
+                    }],
                     tips: vec![
                         "Use pagination to limit result sizes".to_string(),
                         "Avoid deeply nested queries where possible".to_string(),
@@ -421,7 +413,8 @@ let config = GraphQLConfig {
                     content: r#"
 The hybrid optimizer combines quantum-inspired algorithms with machine learning
 to select the best optimization strategy for each query.
-"#.to_string(),
+"#
+                    .to_string(),
                     code_examples: vec![],
                     tips: vec![
                         "Enable adaptive strategy selection for best results".to_string(),
@@ -447,16 +440,16 @@ to select the best optimization strategy for each query.
                     configuration: "Quantum annealing with caching".to_string(),
                 },
             ],
-            recommendations: vec![
-                PerformanceRecommendation {
-                    title: "Enable Distributed Caching".to_string(),
-                    description: "Use Redis-based distributed caching for federated scenarios".to_string(),
-                    impact: "High".to_string(),
-                    difficulty: "Medium".to_string(),
-                    example: Some(Example {
-                        title: "Cache Configuration".to_string(),
-                        description: "Setup distributed caching".to_string(),
-                        code: r#"
+            recommendations: vec![PerformanceRecommendation {
+                title: "Enable Distributed Caching".to_string(),
+                description: "Use Redis-based distributed caching for federated scenarios"
+                    .to_string(),
+                impact: "High".to_string(),
+                difficulty: "Medium".to_string(),
+                example: Some(Example {
+                    title: "Cache Configuration".to_string(),
+                    description: "Setup distributed caching".to_string(),
+                    code: r#"
 let cache_config = CacheConfig {
     redis_urls: vec!["redis://localhost:6379".to_string()],
     default_ttl: Duration::from_secs(3600),
@@ -467,12 +460,12 @@ let cache_config = CacheConfig {
 let server = GraphQLServer::new(store)
     .with_distributed_cache(cache_config)
     .await?;
-"#.to_string(),
-                        language: "rust".to_string(),
-                        expected_output: None,
-                    }),
-                },
-            ],
+"#
+                    .to_string(),
+                    language: "rust".to_string(),
+                    expected_output: None,
+                }),
+            }],
         };
 
         self.performance_guides.push(optimization_guide);
@@ -534,7 +527,8 @@ match result.final_strategy {
     OptimizationStrategy::Hybrid => println!("Used hybrid approach"),
     _ => println!("Used adaptive strategy"),
 }
-"#.to_string(),
+"#
+                .to_string(),
                 language: "rust".to_string(),
                 expected_output: Some("Used hybrid approach".to_string()),
             },
@@ -794,7 +788,8 @@ Multiple load balancing strategies:
     async fn generate_index(&self) -> Result<()> {
         info!("Generating documentation index");
 
-        let index_content = format!(r#"
+        let index_content = format!(
+            r#"
 # OxiRS GraphQL Documentation
 
 Welcome to the comprehensive documentation for OxiRS GraphQL - an advanced GraphQL server with RDF integration, quantum-ML optimization, and federation capabilities.
@@ -879,10 +874,22 @@ For questions, issues, and contributions:
 - GitHub: [OxiRS Repository](https://github.com/cool-japan/oxirs)
 - Documentation: This comprehensive guide
 - Examples: Working code samples for all features
-"#, 
-            if self.config.formats.contains(&DocFormat::Html) { "html" } else { "md" },
-            if self.config.formats.contains(&DocFormat::Html) { "html" } else { "md" },
-            if self.config.formats.contains(&DocFormat::Html) { "html" } else { "md" }
+"#,
+            if self.config.formats.contains(&DocFormat::Html) {
+                "html"
+            } else {
+                "md"
+            },
+            if self.config.formats.contains(&DocFormat::Html) {
+                "html"
+            } else {
+                "md"
+            },
+            if self.config.formats.contains(&DocFormat::Html) {
+                "html"
+            } else {
+                "md"
+            }
         );
 
         let output_path = format!("{}/index.md", self.config.output_dir);
@@ -922,7 +929,8 @@ For questions, issues, and contributions:
 "#));
 
         for doc in &self.api_docs {
-            html.push_str(&format!(r#"
+            html.push_str(&format!(
+                r#"
     <div class="api-doc">
         <div class="module">{}</div>
         <div class="name">{}</div>
@@ -930,31 +938,44 @@ For questions, issues, and contributions:
         
         <div class="section">
             <div class="section-title">Parameters</div>
-"#, doc.module, doc.name, doc.description));
+"#,
+                doc.module, doc.name, doc.description
+            ));
 
             for param in &doc.parameters {
-                html.push_str(&format!(r#"
+                html.push_str(&format!(
+                    r#"
             <div class="parameter">
                 <strong>{}</strong> ({}){} - {}
             </div>
-"#, param.name, param.param_type, if param.required { " *required*" } else { "" }, param.description));
+"#,
+                    param.name,
+                    param.param_type,
+                    if param.required { " *required*" } else { "" },
+                    param.description
+                ));
             }
 
             html.push_str("</div>");
 
             if !doc.examples.is_empty() {
-                html.push_str(r#"
+                html.push_str(
+                    r#"
         <div class="section">
             <div class="section-title">Examples</div>
-"#);
+"#,
+                );
                 for example in &doc.examples {
-                    html.push_str(&format!(r#"
+                    html.push_str(&format!(
+                        r#"
             <div class="example">
                 <h4>{}</h4>
                 <p>{}</p>
                 <pre class="code">{}</pre>
             </div>
-"#, example.title, example.description, example.code));
+"#,
+                        example.title, example.description, example.code
+                    ));
                 }
                 html.push_str("</div>");
             }
@@ -978,15 +999,19 @@ For questions, issues, and contributions:
         for doc in &self.api_docs {
             markdown.push_str(&format!("## {} - {}\n\n", doc.module, doc.name));
             markdown.push_str(&format!("{}\n\n", doc.description));
-            
+
             if !doc.parameters.is_empty() {
                 markdown.push_str("### Parameters\n\n");
                 for param in &doc.parameters {
                     markdown.push_str(&format!(
-                        "- **{}** `{}` {} - {}\n", 
-                        param.name, 
+                        "- **{}** `{}` {} - {}\n",
+                        param.name,
                         param.param_type,
-                        if param.required { "(required)" } else { "(optional)" },
+                        if param.required {
+                            "(required)"
+                        } else {
+                            "(optional)"
+                        },
                         param.description
                     ));
                 }
@@ -996,8 +1021,14 @@ For questions, issues, and contributions:
             if !doc.examples.is_empty() {
                 markdown.push_str("### Examples\n\n");
                 for example in &doc.examples {
-                    markdown.push_str(&format!("#### {}\n\n{}\n\n", example.title, example.description));
-                    markdown.push_str(&format!("```{}\n{}\n```\n\n", example.language, example.code));
+                    markdown.push_str(&format!(
+                        "#### {}\n\n{}\n\n",
+                        example.title, example.description
+                    ));
+                    markdown.push_str(&format!(
+                        "```{}\n{}\n```\n\n",
+                        example.language, example.code
+                    ));
                 }
             }
 
@@ -1033,10 +1064,10 @@ For questions, issues, and contributions:
 
         for guide in &self.performance_guides {
             markdown.push_str(&format!("## {}\n\n{}\n\n", guide.title, guide.description));
-            
+
             for section in &guide.sections {
                 markdown.push_str(&format!("### {}\n\n{}\n\n", section.title, section.content));
-                
+
                 if !section.tips.is_empty() {
                     markdown.push_str("**Tips:**\n\n");
                     for tip in &section.tips {
@@ -1066,13 +1097,19 @@ For questions, issues, and contributions:
         markdown.push_str("# Examples\n\n");
 
         for example in &self.examples {
-            markdown.push_str(&format!("## {}\n\n{}\n\n", example.title, example.description));
-            markdown.push_str(&format!("```{}\n{}\n```\n\n", example.language, example.code));
-            
+            markdown.push_str(&format!(
+                "## {}\n\n{}\n\n",
+                example.title, example.description
+            ));
+            markdown.push_str(&format!(
+                "```{}\n{}\n```\n\n",
+                example.language, example.code
+            ));
+
             if let Some(output) = &example.expected_output {
                 markdown.push_str(&format!("**Expected Output:**\n```\n{}\n```\n\n", output));
             }
-            
+
             markdown.push_str("---\n\n");
         }
 

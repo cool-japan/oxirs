@@ -3,11 +3,9 @@
 //! This module provides handlers for plain text, HTML, XML, and Markdown documents.
 
 #[cfg(feature = "content-processing")]
-use crate::{
-    content_processing::{
-        ContentExtractionConfig, DocumentFormat, ExtractedContent, FormatHandler,
-        DocumentStructure, Heading, ContentLocation, ProcessingStats
-    }
+use crate::content_processing::{
+    ContentExtractionConfig, ContentLocation, DocumentFormat, DocumentStructure, ExtractedContent,
+    FormatHandler, Heading, ProcessingStats,
 };
 #[cfg(feature = "content-processing")]
 use anyhow::Result;
@@ -218,7 +216,9 @@ impl HtmlHandler {
         }
 
         // Extract meta tags
-        if let Ok(re) = regex::Regex::new(r#"<meta[^>]*name\s*=\s*["']([^"']*)["'][^>]*content\s*=\s*["']([^"']*)["'][^>]*>"#) {
+        if let Ok(re) = regex::Regex::new(
+            r#"<meta[^>]*name\s*=\s*["']([^"']*)["'][^>]*content\s*=\s*["']([^"']*)["'][^>]*>"#,
+        ) {
             for capture in re.captures_iter(html) {
                 if let (Some(name), Some(content)) = (capture.get(1), capture.get(2)) {
                     metadata.insert(name.as_str().to_string(), content.as_str().to_string());
@@ -242,10 +242,10 @@ impl FormatHandler for XmlHandler {
         _config: &ContentExtractionConfig,
     ) -> Result<ExtractedContent> {
         let xml = String::from_utf8_lossy(data);
-        
+
         // Basic XML text extraction
         let text = self.extract_text_from_xml(&xml);
-        
+
         Ok(ExtractedContent {
             format: DocumentFormat::Xml,
             text,
@@ -309,7 +309,7 @@ impl FormatHandler for MarkdownHandler {
         config: &ContentExtractionConfig,
     ) -> Result<ExtractedContent> {
         let markdown = String::from_utf8_lossy(data);
-        
+
         let text = self.extract_text_from_markdown(&markdown);
         let headings = self.extract_headings(&markdown);
         let links = if config.extract_links {
@@ -344,7 +344,10 @@ impl FormatHandler for MarkdownHandler {
     fn can_handle(&self, data: &[u8]) -> bool {
         let content = String::from_utf8_lossy(data);
         // Check for common markdown patterns
-        content.contains("#") || content.contains("*") || content.contains("```") || content.contains("[")
+        content.contains("#")
+            || content.contains("*")
+            || content.contains("```")
+            || content.contains("[")
     }
 
     fn supported_extensions(&self) -> Vec<&'static str> {

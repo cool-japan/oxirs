@@ -251,6 +251,7 @@ pub mod ast;
 pub mod execution;
 pub mod federation;
 pub mod hybrid_optimizer;
+pub mod intelligent_federation_gateway;
 pub mod introspection;
 pub mod mapping;
 pub mod ml_optimizer;
@@ -268,12 +269,14 @@ pub mod zero_trust_security;
 
 // Advanced performance modules
 pub mod advanced_cache;
+pub mod advanced_security_system;
 pub mod ai_query_predictor;
 pub mod async_streaming;
 pub mod benchmarking;
 pub mod dataloader;
 pub mod performance;
 pub mod predictive_analytics;
+pub mod quantum_real_time_analytics;
 
 // Organized module groups
 pub mod core;
@@ -285,12 +288,24 @@ pub mod rdf;
 
 // Juniper-based implementation with proper RDF integration (enabled)
 pub mod juniper_schema;
-// pub mod juniper_server; // Complex Hyper v1 version - temporarily disabled due to API issues
+pub mod juniper_server; // Complex Hyper v1 version - API issues fixed
 pub mod simple_juniper_server; // Simplified version
 
 // Juniper integration - comprehensive RDF GraphQL support
-pub use juniper_schema::{Schema as JuniperSchema, GraphQLContext, create_schema};
-pub use simple_juniper_server::{JuniperGraphQLServer, GraphQLServerConfig, GraphQLServerBuilder, start_graphql_server, start_graphql_server_with_config};
+pub use juniper_schema::{create_schema, GraphQLContext, Schema as JuniperSchema};
+pub use simple_juniper_server::{
+    start_graphql_server, start_graphql_server_with_config, GraphQLServerBuilder,
+    GraphQLServerConfig, JuniperGraphQLServer,
+};
+
+// Advanced Juniper server with full Hyper v1 support
+pub use juniper_server::{
+    JuniperGraphQLServer as AdvancedJuniperGraphQLServer,
+    GraphQLServerBuilder as AdvancedGraphQLServerBuilder,
+    GraphQLServerConfig as AdvancedGraphQLServerConfig,
+    start_graphql_server as start_advanced_graphql_server,
+    start_graphql_server_with_config as start_advanced_graphql_server_with_config,
+};
 
 #[cfg(test)]
 mod tests;

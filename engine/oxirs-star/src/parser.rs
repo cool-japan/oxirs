@@ -298,6 +298,19 @@ impl StarParser {
         self.config.strict_mode = strict;
     }
 
+    /// Set error recovery mode
+    pub fn set_error_recovery(&mut self, enabled: bool) {
+        // This is a no-op for now since error recovery is handled per-parse
+        // but we keep the method for API compatibility
+    }
+
+    /// Get parsing errors (returns empty for stateless parser)
+    pub fn get_errors(&self) -> Vec<StarError> {
+        // The current parser implementation doesn't store errors
+        // since they're returned through the Result type
+        Vec::new()
+    }
+
     /// Get parsing context configured for this parser
     fn create_parse_context(&self) -> ParseContext {
         ParseContext::with_config(self.config.strict_mode, true) // Enable error recovery by default

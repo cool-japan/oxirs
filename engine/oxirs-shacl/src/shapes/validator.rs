@@ -113,7 +113,9 @@ impl ShapeValidator {
             }
             crate::ShapeType::PropertyShape => {
                 if shape.path.is_none() {
-                    report.add_error("Property shapes must have exactly one sh:path property".to_string());
+                    report.add_error(
+                        "Property shapes must have exactly one sh:path property".to_string(),
+                    );
                 }
             }
         }
@@ -127,7 +129,9 @@ impl ShapeValidator {
     /// Validate shape targets
     fn validate_shape_targets(&self, shape: &Shape, report: &mut SingleShapeValidationReport) {
         if shape.is_node_shape() && shape.targets.is_empty() {
-            report.add_warning("Node shape has no targets - it will not validate any data".to_string());
+            report.add_warning(
+                "Node shape has no targets - it will not validate any data".to_string(),
+            );
         }
 
         for target in &shape.targets {
@@ -140,14 +144,20 @@ impl ShapeValidator {
     /// Validate a specific target
     fn validate_target(&self, target: &Target) -> Result<()> {
         match target {
-            Target::Class(_) | Target::Node(_) | Target::ObjectsOf(_) | Target::SubjectsOf(_) | Target::Implicit(_) => {
+            Target::Class(_)
+            | Target::Node(_)
+            | Target::ObjectsOf(_)
+            | Target::SubjectsOf(_)
+            | Target::Implicit(_) => {
                 // Basic validation passed
                 Ok(())
             }
             Target::Sparql(sparql_target) => {
                 // Basic SPARQL query validation
                 if sparql_target.query.trim().is_empty() {
-                    return Err(ShaclError::ShapeValidation("SPARQL target query cannot be empty".to_string()));
+                    return Err(ShaclError::ShapeValidation(
+                        "SPARQL target query cannot be empty".to_string(),
+                    ));
                 }
                 Ok(())
             }
@@ -170,7 +180,9 @@ impl ShapeValidator {
             PropertyPath::Inverse(inner) => self.validate_path_structure(inner),
             PropertyPath::Sequence(paths) => {
                 if paths.is_empty() {
-                    return Err(ShaclError::ShapeValidation("Sequence path cannot be empty".to_string()));
+                    return Err(ShaclError::ShapeValidation(
+                        "Sequence path cannot be empty".to_string(),
+                    ));
                 }
                 for p in paths {
                     self.validate_path_structure(p)?;
@@ -179,16 +191,18 @@ impl ShapeValidator {
             }
             PropertyPath::Alternative(paths) => {
                 if paths.len() < 2 {
-                    return Err(ShaclError::ShapeValidation("Alternative path must have at least 2 alternatives".to_string()));
+                    return Err(ShaclError::ShapeValidation(
+                        "Alternative path must have at least 2 alternatives".to_string(),
+                    ));
                 }
                 for p in paths {
                     self.validate_path_structure(p)?;
                 }
                 Ok(())
             }
-            PropertyPath::ZeroOrMore(inner) | PropertyPath::OneOrMore(inner) | PropertyPath::ZeroOrOne(inner) => {
-                self.validate_path_structure(inner)
-            }
+            PropertyPath::ZeroOrMore(inner)
+            | PropertyPath::OneOrMore(inner)
+            | PropertyPath::ZeroOrOne(inner) => self.validate_path_structure(inner),
         }
     }
 
@@ -208,7 +222,10 @@ impl ShapeValidator {
 
             // Validate constraint references to other shapes (if any)
             if let Err(e) = self.validate_constraint_references(constraint, shape_map, depth) {
-                report.add_error(format!("Invalid constraint reference in '{}': {}", component_id, e));
+                report.add_error(format!(
+                    "Invalid constraint reference in '{}': {}",
+                    component_id, e
+                ));
             }
         }
     }
@@ -318,7 +335,10 @@ impl ShapeValidator {
         for shape_id in shape_map.keys() {
             let mut visited = HashSet::new();
             if self.has_circular_dependency(shape_id, shape_map, &mut visited) {
-                report.add_global_error(format!("Circular dependency detected starting from shape '{}'", shape_id));
+                report.add_global_error(format!(
+                    "Circular dependency detected starting from shape '{}'",
+                    shape_id
+                ));
             }
         }
         Ok(())

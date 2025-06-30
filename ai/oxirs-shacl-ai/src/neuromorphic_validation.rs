@@ -141,12 +141,13 @@ impl ValidationNeuron {
     pub fn apply_plasticity(&mut self, pre_spike_time: Option<Instant>, reward: f64) {
         if let (Some(pre_time), Some(post_time)) = (pre_spike_time, self.last_spike) {
             let spike_time_diff = post_time.duration_since(pre_time).as_millis() as f64;
-            
+
             // Spike-timing dependent plasticity (STDP)
             let plasticity_window = 20.0; // ms
             if spike_time_diff < plasticity_window {
                 // Strengthen connection for temporally correlated spikes
-                let strengthening = self.learning_rate * reward * (-spike_time_diff / plasticity_window).exp();
+                let strengthening =
+                    self.learning_rate * reward * (-spike_time_diff / plasticity_window).exp();
                 self.threshold -= strengthening; // Lower threshold = easier to fire
                 self.threshold = self.threshold.max(0.1); // Minimum threshold
             }
@@ -426,10 +427,14 @@ impl NeuromorphicValidationNetwork {
         }
 
         // Create synaptic connections
-        self.create_synaptic_connections(&mut synapses, &neurons).await?;
+        self.create_synaptic_connections(&mut synapses, &neurons)
+            .await?;
 
-        info!("Initialized {} neurons and {} synapses", 
-              neurons.len(), synapses.len());
+        info!(
+            "Initialized {} neurons and {} synapses",
+            neurons.len(),
+            synapses.len()
+        );
 
         Ok(())
     }
@@ -505,8 +510,11 @@ impl NeuromorphicValidationNetwork {
 
         // Apply traditional validation for verification
         let validator = Validator::new();
-        let traditional_result = validator.validate_store(store, Some(config.clone()))
-            .map_err(|e| ShaclAiError::ValidationPrediction(format!("Traditional validation failed: {}", e)))?;
+        let traditional_result = validator
+            .validate_store(store, Some(config.clone()))
+            .map_err(|e| {
+                ShaclAiError::ValidationPrediction(format!("Traditional validation failed: {}", e))
+            })?;
 
         // Create neuromorphic result
         Ok(NeuromorphicValidationResult {
@@ -534,11 +542,11 @@ impl NeuromorphicValidationNetwork {
         for shape in shapes {
             if input_neuron_index < self.topology.input_neurons {
                 let neuron_id = format!("input_{}", input_neuron_index);
-                
+
                 // Create spike train based on shape complexity
                 let complexity = self.calculate_shape_complexity(shape);
                 let spike_interval = Duration::from_millis((100.0 / (complexity + 0.1)) as u64);
-                
+
                 for i in 0..((complexity * 10.0) as usize).min(20) {
                     spikes.push(SpikeEvent {
                         neuron_id: neuron_id.clone(),
@@ -547,7 +555,7 @@ impl NeuromorphicValidationNetwork {
                         validation_context: Some(shape.id.to_string()),
                     });
                 }
-                
+
                 input_neuron_index += 1;
             }
         }
@@ -560,7 +568,7 @@ impl NeuromorphicValidationNetwork {
         // Simple complexity metric based on shape properties
         let constraint_count = shape.property_constraints.len() as f64;
         let target_count = shape.targets.len() as f64;
-        
+
         (constraint_count + target_count * 0.5).min(10.0) / 10.0
     }
 
@@ -569,7 +577,7 @@ impl NeuromorphicValidationNetwork {
         let mut output_spikes = Vec::new();
         let simulation_duration = Duration::from_millis(100); // 100ms simulation
         let time_step = Duration::from_millis(self.config.time_step as u64);
-        
+
         let mut current_time = Instant::now();
         let end_time = current_time + simulation_duration;
 
@@ -585,7 +593,7 @@ impl NeuromorphicValidationNetwork {
         while current_time < end_time {
             // Process spikes for current time step
             output_spikes.extend(self.process_time_step(current_time).await?);
-            
+
             current_time += time_step;
         }
 
@@ -595,17 +603,17 @@ impl NeuromorphicValidationNetwork {
     /// Process one time step of neuromorphic simulation
     async fn process_time_step(&self, current_time: Instant) -> Result<Vec<SpikeEvent>> {
         let mut new_spikes = Vec::new();
-        
+
         // Process input spikes
         let input_currents = self.calculate_input_currents(current_time).await?;
-        
+
         // Update all neurons
         {
             let mut neurons = self.neurons.write().await;
             for (neuron_id, neuron) in neurons.iter_mut() {
                 let input_current = input_currents.get(neuron_id).unwrap_or(&0.0);
                 let fired = neuron.update(*input_current, self.config.time_step);
-                
+
                 if fired {
                     new_spikes.push(SpikeEvent {
                         neuron_id: neuron_id.clone(),
@@ -626,7 +634,10 @@ impl NeuromorphicValidationNetwork {
     }
 
     /// Calculate input currents for all neurons
-    async fn calculate_input_currents(&self, current_time: Instant) -> Result<HashMap<String, f64>> {
+    async fn calculate_input_currents(
+        &self,
+        current_time: Instant,
+    ) -> Result<HashMap<String, f64>> {
         let mut currents = HashMap::new();
         let synapses = self.synapses.read().await;
         let spike_queue = self.spike_queue.read().await;
@@ -644,8 +655,12 @@ impl NeuromorphicValidationNetwork {
             for synapse in synapses.values() {
                 if synapse.pre_neuron_id == spike.neuron_id {
                     let spike_time = spike.timestamp + synapse.delay;
-                    if spike_time <= current_time && current_time.duration_since(spike_time) < Duration::from_millis(5) {
-                        let current = currents.entry(synapse.post_neuron_id.clone()).or_insert(0.0);
+                    if spike_time <= current_time
+                        && current_time.duration_since(spike_time) < Duration::from_millis(5)
+                    {
+                        let current = currents
+                            .entry(synapse.post_neuron_id.clone())
+                            .or_insert(0.0);
                         *current += synapse.weight * spike.amplitude;
                     }
                 }
@@ -658,26 +673,32 @@ impl NeuromorphicValidationNetwork {
     /// Apply synaptic plasticity to network
     async fn apply_network_plasticity(&self, recent_spikes: &[SpikeEvent]) -> Result<()> {
         let mut synapses = self.synapses.write().await;
-        
+
         for synapse in synapses.values_mut() {
             // Find pre and post spikes
-            let pre_spike = recent_spikes.iter()
+            let pre_spike = recent_spikes
+                .iter()
                 .find(|spike| spike.neuron_id == synapse.pre_neuron_id)
                 .map(|spike| spike.timestamp);
-                
-            let post_spike = recent_spikes.iter()
+
+            let post_spike = recent_spikes
+                .iter()
                 .find(|spike| spike.neuron_id == synapse.post_neuron_id)
                 .map(|spike| spike.timestamp);
 
             // Apply STDP if both spikes occurred
             if let (Some(pre_time), Some(post_time)) = (pre_spike, post_spike) {
                 let time_diff = post_time.duration_since(pre_time).as_millis() as f64;
-                
-                if time_diff < 20.0 { // Plasticity window
-                    let weight_change = synapse.plasticity.learning_rate * (-time_diff / 20.0).exp();
+
+                if time_diff < 20.0 {
+                    // Plasticity window
+                    let weight_change =
+                        synapse.plasticity.learning_rate * (-time_diff / 20.0).exp();
                     synapse.weight += weight_change;
-                    synapse.weight = synapse.weight.max(synapse.plasticity.min_weight)
-                                                  .min(synapse.plasticity.max_weight);
+                    synapse.weight = synapse
+                        .weight
+                        .max(synapse.plasticity.min_weight)
+                        .min(synapse.plasticity.max_weight);
                 }
             }
         }
@@ -686,10 +707,13 @@ impl NeuromorphicValidationNetwork {
     }
 
     /// Decode validation output from spike patterns
-    async fn decode_validation_output(&self, output_spikes: Vec<SpikeEvent>) -> Result<ValidationDecision> {
+    async fn decode_validation_output(
+        &self,
+        output_spikes: Vec<SpikeEvent>,
+    ) -> Result<ValidationDecision> {
         // Count spikes from output neurons
         let mut output_spike_counts = HashMap::new();
-        
+
         for spike in output_spikes {
             if spike.neuron_id.starts_with("output_") {
                 *output_spike_counts.entry(spike.neuron_id).or_insert(0) += 1;
@@ -698,7 +722,8 @@ impl NeuromorphicValidationNetwork {
 
         // Simple decoding: high spike count = validation success
         let total_output_spikes: usize = output_spike_counts.values().sum();
-        let average_spikes = total_output_spikes as f64 / self.topology.output_neurons.max(1) as f64;
+        let average_spikes =
+            total_output_spikes as f64 / self.topology.output_neurons.max(1) as f64;
 
         let decision = if average_spikes > 5.0 {
             ValidationDecision::Valid
@@ -716,7 +741,8 @@ impl NeuromorphicValidationNetwork {
         SpikeStatistics {
             total_spikes: self.stats.total_spikes,
             spikes_by_neuron_type: self.stats.spikes_by_type.clone(),
-            average_firing_rate: self.stats.average_firing_rates.values().sum::<f64>() / self.stats.average_firing_rates.len().max(1) as f64,
+            average_firing_rate: self.stats.average_firing_rates.values().sum::<f64>()
+                / self.stats.average_firing_rates.len().max(1) as f64,
             network_activity: self.calculate_network_activity().await,
         }
     }
@@ -724,10 +750,11 @@ impl NeuromorphicValidationNetwork {
     /// Calculate current network activity
     async fn calculate_network_activity(&self) -> f64 {
         let neurons = self.neurons.read().await;
-        let active_neurons = neurons.values()
+        let active_neurons = neurons
+            .values()
             .filter(|neuron| matches!(neuron.state, NeuronState::Firing | NeuronState::Charging))
             .count();
-            
+
         active_neurons as f64 / neurons.len().max(1) as f64
     }
 
@@ -740,7 +767,7 @@ impl NeuromorphicValidationNetwork {
         } else {
             0.0
         };
-        
+
         spike_efficiency.min(1.0)
     }
 
@@ -750,7 +777,10 @@ impl NeuromorphicValidationNetwork {
             return Ok(());
         }
 
-        info!("Adapting neuromorphic network based on performance feedback: {}", performance_feedback);
+        info!(
+            "Adapting neuromorphic network based on performance feedback: {}",
+            performance_feedback
+        );
 
         // Adapt neuron thresholds
         if self.config.threshold_adaptation {
@@ -873,12 +903,12 @@ mod tests {
     #[test]
     fn test_neuron_update_and_firing() {
         let mut neuron = ValidationNeuron::new("test".to_string(), NeuronType::Hidden);
-        
+
         // Should not fire with small input
         let fired = neuron.update(0.1, 1.0);
         assert!(!fired);
         assert_eq!(neuron.state, NeuronState::Charging);
-        
+
         // Should fire with large input
         let fired = neuron.update(1.5, 1.0);
         assert!(fired);
@@ -893,7 +923,7 @@ mod tests {
             amplitude: 1.0,
             validation_context: Some("test_context".to_string()),
         };
-        
+
         assert_eq!(spike.neuron_id, "test_neuron");
         assert_eq!(spike.amplitude, 1.0);
         assert_eq!(spike.validation_context, Some("test_context".to_string()));
@@ -912,11 +942,11 @@ mod tests {
     async fn test_neuromorphic_network_creation() {
         let topology = NetworkTopology::default();
         let network = NeuromorphicValidationNetwork::new(topology);
-        
+
         // Test basic network creation
         let neurons = network.neurons.read().await;
         let synapses = network.synapses.read().await;
-        
+
         // Network should be empty before initialization
         assert_eq!(neurons.len(), 0);
         assert_eq!(synapses.len(), 0);
@@ -926,15 +956,21 @@ mod tests {
     async fn test_network_initialization() {
         let topology = NetworkTopology::default();
         let network = NeuromorphicValidationNetwork::new(topology.clone());
-        
+
         network.initialize_network().await.unwrap();
-        
+
         let neurons = network.neurons.read().await;
         let synapses = network.synapses.read().await;
-        
+
         // Should have created neurons
-        assert_eq!(neurons.len(), topology.input_neurons + topology.hidden_neurons + topology.output_neurons + topology.inhibitory_neurons);
-        
+        assert_eq!(
+            neurons.len(),
+            topology.input_neurons
+                + topology.hidden_neurons
+                + topology.output_neurons
+                + topology.inhibitory_neurons
+        );
+
         // Should have created some synapses
         assert!(synapses.len() > 0);
     }
@@ -946,7 +982,7 @@ mod tests {
             ValidationDecision::PartiallyValid,
             ValidationDecision::Invalid,
         ];
-        
+
         assert_eq!(decisions.len(), 3);
         assert_eq!(decisions[0], ValidationDecision::Valid);
     }

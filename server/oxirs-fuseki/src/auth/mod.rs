@@ -8,6 +8,8 @@ use crate::config::{JwtConfig, LdapConfig, OAuthConfig, SecurityConfig, UserConf
 use crate::error::{FusekiError, FusekiResult};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use pem;
+use regex;
 use axum::{
     extract::{FromRequestParts, State},
     http::{request::Parts, HeaderMap, StatusCode},
@@ -18,14 +20,14 @@ use axum_extra::headers::{authorization::Bearer, Authorization, HeaderMapExt};
 use chrono::{DateTime, Utc};
 use der_parser::oid::Oid;
 use oid_registry::{OID_X509_EXT_EXTENDED_KEY_USAGE, OID_X509_EXT_KEY_USAGE};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
-use x509_parser::prelude::*;
 use uuid::Uuid;
-use rand::Rng;
+use x509_parser::prelude::*;
 
 #[cfg(feature = "auth")]
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -827,8 +829,12 @@ impl AuthService {
 
         // Extract key usage
         let mut key_usage = Vec::new();
-        if let Some(ext) = cert.extensions().iter().find(|ext| ext.oid() == &OID_X509_EXT_KEY_USAGE) {
-            if let Ok(ku) = ext.parsed_extension::<x509_parser::extensions::KeyUsage>() {
+        if let Some(ext) = cert
+            .extensions()
+            .iter()
+            .find(|ext| ext.oid == &OID_X509_EXT_KEY_USAGE)
+        {
+            if let x509_parser::extensions::ParsedExtension::KeyUsage(ku) = ext.parsed_extension() {
                 if ku.digital_signature() {
                     key_usage.push("digitalSignature".to_string());
                 }
@@ -846,8 +852,12 @@ impl AuthService {
 
         // Extract extended key usage
         let mut extended_key_usage = Vec::new();
-        if let Some(ext) = cert.extensions().iter().find(|ext| ext.oid() == &OID_X509_EXT_EXTENDED_KEY_USAGE) {
-            if let Ok(eku) = ext.parsed_extension::<x509_parser::extensions::ExtendedKeyUsage>() {
+        if let Some(ext) = cert
+            .extensions()
+            .iter()
+            .find(|ext| ext.oid == &OID_X509_EXT_EXTENDED_KEY_USAGE)
+        {
+            if let x509_parser::extensions::ParsedExtension::ExtendedKeyUsage(eku) = ext.parsed_extension() {
                 for purpose in eku.any {
                     let purpose_str = purpose.to_string();
                     if purpose_str == "1.3.6.1.5.5.7.3.2" {
@@ -929,64 +939,268 @@ impl AuthService {
 
     /// Check if certificate is in the configured trust store
     async fn is_certificate_trusted(&self, cert_info: &CertificateAuth) -> FusekiResult<bool> {
-        // For now, implement a simple trust store based on issuer DN patterns
-        // In production, this would check against a proper PKCS#12 trust store
+        // Get certificate configuration
+        let cert_config = match &self.config.certificate {
+            Some(config) => config,
+            None => {
+                debug!("Certificate authentication not configured");
+                return Ok(false);
+            }
+        };
 
-        let trusted_issuers = vec![
-            "CN=Example Corp Root CA,O=Example Corp,C=US",
-            "CN=Internal CA,OU=IT Department,O=Example Corp,C=US",
-            // Add more trusted CAs as needed
-        ];
+        // Load trusted CA certificates from trust store
+        for trust_store_path in &cert_config.trust_store {
+            if let Ok(trusted_certs) = self.load_trust_store_certificates(trust_store_path).await {
+                for trusted_cert in trusted_certs {
+                    // Compare issuer DNs and verify certificate chain
+                    if trusted_cert.subject().to_string() == cert_info.issuer_dn {
+                        debug!("Certificate issuer found in trust store: {}", cert_info.issuer_dn);
+                        return Ok(true);
+                    }
+                    
+                    // Check for certificate fingerprint match (for pinned certificates)
+                    let trusted_fingerprint = self.compute_certificate_fingerprint(&trusted_cert)?;
+                    if trusted_fingerprint == cert_info.fingerprint {
+                        debug!("Certificate fingerprint match in trust store");
+                        return Ok(true);
+                    }
+                }
+            }
+        }
 
-        // Check if the issuer is in our trust list
-        let is_trusted = trusted_issuers.iter().any(|&issuer| {
-            cert_info.issuer_dn.contains(issuer) ||
-            // Allow partial matches for flexibility
-            self.is_issuer_pattern_match(&cert_info.issuer_dn, issuer)
-        });
+        // Fallback to issuer DN pattern matching if configured
+        let is_trusted = self.is_issuer_pattern_match(&cert_info.issuer_dn, cert_config);
 
         if is_trusted {
-            debug!("Certificate issuer is trusted: {}", cert_info.issuer_dn);
+            debug!("Certificate issuer is trusted by pattern: {}", cert_info.issuer_dn);
         } else {
-            debug!(
-                "Certificate issuer is not in trust store: {}",
-                cert_info.issuer_dn
-            );
+            debug!("Certificate issuer is not in trust store: {}", cert_info.issuer_dn);
         }
 
         Ok(is_trusted)
     }
 
+    /// Load trusted CA certificates from trust store file
+    async fn load_trust_store_certificates(
+        &self,
+        trust_store_path: &std::path::Path,
+    ) -> FusekiResult<Vec<X509Certificate<'static>>> {
+        use tokio::fs;
+        
+        let data = fs::read(trust_store_path).await.map_err(|e| {
+            FusekiError::authentication(format!(
+                "Failed to read trust store file {}: {}",
+                trust_store_path.display(),
+                e
+            ))
+        })?;
+
+        let mut certificates = Vec::new();
+
+        // Try to parse as PEM format first
+        if let Ok(pem_certs) = pem::parse_many(&data) {
+            for pem_cert in pem_certs {
+                if pem_cert.tag == "CERTIFICATE" {
+                    match X509Certificate::from_der(&pem_cert.contents) {
+                        Ok((_, cert)) => {
+                            // Convert to owned certificate
+                            let owned_cert = cert.to_owned();
+                            certificates.push(owned_cert);
+                        }
+                        Err(e) => {
+                            warn!("Failed to parse certificate in trust store: {}", e);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Try DER format
+            match X509Certificate::from_der(&data) {
+                Ok((_, cert)) => {
+                    let owned_cert = cert.to_owned();
+                    certificates.push(owned_cert);
+                }
+                Err(e) => {
+                    return Err(FusekiError::authentication(format!(
+                        "Failed to parse trust store certificate: {}",
+                        e
+                    )));
+                }
+            }
+        }
+
+        Ok(certificates)
+    }
+
+    /// Compute SHA-256 fingerprint of certificate
+    fn compute_certificate_fingerprint(&self, cert: &X509Certificate) -> FusekiResult<String> {
+        use sha2::{Digest, Sha256};
+        
+        let der_data = cert.raw;
+        let fingerprint = Sha256::digest(der_data)
+            .iter()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<_>>()
+            .join(":");
+
+        Ok(fingerprint)
+    }
+
     /// Check if issuer DN matches trusted patterns
-    fn is_issuer_pattern_match(&self, actual_issuer: &str, trusted_pattern: &str) -> bool {
-        // Simple pattern matching - in production you'd use proper DN parsing
-        actual_issuer.contains("Example Corp") && actual_issuer.contains("CA")
+    fn is_issuer_pattern_match(&self, actual_issuer: &str, cert_config: &crate::config::CertificateConfig) -> bool {
+        // Check OU role mappings for trusted organizational units
+        for (ou, _) in &cert_config.user_mapping.ou_role_mapping {
+            if actual_issuer.contains(&format!("OU={}", ou)) {
+                return true;
+            }
+        }
+
+        // Check DN mapping rules
+        for rule in &cert_config.user_mapping.dn_mapping_rules {
+            if let Ok(regex) = regex::Regex::new(&rule.pattern) {
+                if regex.is_match(actual_issuer) {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     /// Check certificate against Certificate Revocation List (CRL)
     async fn check_certificate_revocation(&self, cert_info: &CertificateAuth) -> FusekiResult<()> {
-        // In a real implementation, this would:
-        // 1. Download CRL from certificate's CRL distribution points
-        // 2. Parse the CRL
-        // 3. Check if the certificate serial number is in the revoked list
+        let cert_config = match &self.config.certificate {
+            Some(config) => config,
+            None => {
+                debug!("Certificate configuration not available for CRL check");
+                return Ok(());
+            }
+        };
 
-        debug!(
-            "CRL check not yet implemented for certificate: {}",
-            cert_info.serial_number
-        );
+        if !cert_config.check_crl {
+            debug!("CRL checking disabled in configuration");
+            return Ok(());
+        }
 
-        // For now, maintain a simple in-memory revocation list
-        let revoked_serials = vec![
-            "DEADBEEF12345678", // Example revoked certificate
-        ];
+        // Check configured CRL sources
+        for crl_source in &cert_config.crl_sources {
+            if let Err(e) = self.check_crl_source(crl_source, cert_info).await {
+                warn!("CRL check failed for source {}: {}", crl_source, e);
+                // Continue checking other sources
+                continue;
+            }
+        }
 
-        if revoked_serials.contains(&cert_info.serial_number.as_str()) {
+        // Check for OCSP if enabled
+        if cert_config.check_ocsp {
+            if let Err(e) = self.check_ocsp_status(cert_info).await {
+                warn!("OCSP check failed: {}", e);
+                // OCSP failure is not fatal - continue with CRL checks
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check a specific CRL source
+    async fn check_crl_source(&self, crl_source: &str, cert_info: &CertificateAuth) -> FusekiResult<()> {
+        let crl_data = if crl_source.starts_with("http://") || crl_source.starts_with("https://") {
+            // Download CRL from URL
+            self.download_crl(crl_source).await?
+        } else {
+            // Read CRL from local file
+            tokio::fs::read(crl_source).await.map_err(|e| {
+                FusekiError::authentication(format!("Failed to read CRL file {}: {}", crl_source, e))
+            })?
+        };
+
+        // Parse CRL and check for revoked certificate
+        self.parse_and_check_crl(&crl_data, cert_info).await
+    }
+
+    /// Download CRL from HTTP/HTTPS URL
+    async fn download_crl(&self, url: &str) -> FusekiResult<Vec<u8>> {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| FusekiError::authentication(format!("Failed to create HTTP client: {}", e)))?;
+
+        let response = client.get(url).send().await.map_err(|e| {
+            FusekiError::authentication(format!("Failed to download CRL from {}: {}", url, e))
+        })?;
+
+        if !response.status().is_success() {
             return Err(FusekiError::authentication(format!(
-                "Certificate is revoked: {}",
-                cert_info.serial_number
+                "CRL download failed with status: {}",
+                response.status()
             )));
         }
 
+        let crl_data = response.bytes().await.map_err(|e| {
+            FusekiError::authentication(format!("Failed to read CRL response body: {}", e))
+        })?;
+
+        Ok(crl_data.to_vec())
+    }
+
+    /// Parse CRL and check if certificate is revoked
+    async fn parse_and_check_crl(&self, crl_data: &[u8], cert_info: &CertificateAuth) -> FusekiResult<()> {
+        // Try to parse as DER format first
+        let crl = match x509_parser::crl::CertificateRevocationList::from_der(crl_data) {
+            Ok((_, crl)) => crl,
+            Err(_) => {
+                // Try PEM format
+                if let Ok(pem) = pem::parse(crl_data) {
+                    if pem.tag == "X509 CRL" {
+                        match x509_parser::crl::CertificateRevocationList::from_der(&pem.contents) {
+                            Ok((_, crl)) => crl,
+                            Err(e) => {
+                                return Err(FusekiError::authentication(format!(
+                                    "Failed to parse CRL: {}",
+                                    e
+                                )));
+                            }
+                        }
+                    } else {
+                        return Err(FusekiError::authentication("Invalid PEM CRL format".to_string()));
+                    }
+                } else {
+                    return Err(FusekiError::authentication("Failed to parse CRL data".to_string()));
+                }
+            }
+        };
+
+        // Check if our certificate serial number is in the revocation list
+        let cert_serial = cert_info.serial_number.replace(":", "");
+        
+        for revoked_cert in crl.iter_revoked_certificates() {
+            let revoked_serial = revoked_cert.user_certificate.to_str_radix(16).to_uppercase();
+            if revoked_serial == cert_serial {
+                return Err(FusekiError::authentication(format!(
+                    "Certificate is revoked (serial: {})",
+                    cert_info.serial_number
+                )));
+            }
+        }
+
+        debug!("Certificate not found in CRL - valid: {}", cert_info.serial_number);
+        Ok(())
+    }
+
+    /// Check OCSP status for certificate
+    async fn check_ocsp_status(&self, cert_info: &CertificateAuth) -> FusekiResult<()> {
+        // OCSP implementation would require:
+        // 1. Extract OCSP responder URL from certificate AIA extension
+        // 2. Build OCSP request
+        // 3. Send request to OCSP responder
+        // 4. Parse OCSP response
+        // 5. Check certificate status
+
+        debug!("OCSP checking not yet fully implemented for: {}", cert_info.serial_number);
+        
+        // For now, just log that OCSP would be checked
+        info!("OCSP status check would be performed for certificate: {}", cert_info.serial_number);
+        
         Ok(())
     }
 
@@ -1026,34 +1240,113 @@ impl AuthService {
 
     /// Check if self-signed certificates are allowed
     fn allow_self_signed_certificates(&self) -> bool {
-        // This would be configurable in SecurityConfig
-        // For development/testing purposes only
-        false
+        if let Some(cert_config) = &self.config.certificate {
+            cert_config.allow_self_signed
+        } else {
+            false
+        }
     }
 
     /// Map certificate to internal user
     async fn map_certificate_to_user(&self, cert_info: CertificateAuth) -> FusekiResult<User> {
-        // Extract Common Name from subject DN
-        let username = self
-            .extract_cn_from_dn(&cert_info.subject_dn)
-            .unwrap_or_else(|| cert_info.subject_dn.clone());
+        let cert_config = self.config.certificate.as_ref().ok_or_else(|| {
+            FusekiError::authentication("Certificate authentication not configured".to_string())
+        })?;
+
+        // Extract username based on configured source
+        let username = self.extract_username_from_certificate(&cert_info, cert_config)?;
 
         // Map certificate attributes to user roles
-        let roles = self.map_certificate_to_roles(&cert_info).await;
+        let roles = self.map_certificate_to_roles_enhanced(&cert_info, cert_config).await;
 
-        // Compute permissions
+        // Compute permissions based on roles
         let permissions = self.compute_user_permissions_for_roles(&roles).await;
+
+        // Extract email from Subject Alternative Names if available
+        let email = self.extract_email_from_certificate(&cert_info);
 
         let user = User {
             username,
             roles,
-            email: None, // Could extract from certificate Subject Alternative Names
-            full_name: Some(cert_info.subject_dn),
+            email,
+            full_name: Some(cert_info.subject_dn.clone()),
             last_login: Some(Utc::now()),
             permissions,
         };
 
+        info!("Successfully mapped certificate to user: {}", user.username);
         Ok(user)
+    }
+
+    /// Extract username from certificate based on configuration
+    fn extract_username_from_certificate(
+        &self,
+        cert_info: &CertificateAuth,
+        cert_config: &crate::config::CertificateConfig,
+    ) -> FusekiResult<String> {
+        use crate::config::CertificateUsernameSource;
+
+        let username = match &cert_config.user_mapping.username_source {
+            CertificateUsernameSource::CommonName => {
+                self.extract_cn_from_dn(&cert_info.subject_dn)
+                    .ok_or_else(|| FusekiError::authentication("No CN found in certificate subject DN".to_string()))?
+            }
+            CertificateUsernameSource::SubjectDn => cert_info.subject_dn.clone(),
+            CertificateUsernameSource::EmailSan => {
+                self.extract_email_from_certificate(cert_info)
+                    .ok_or_else(|| FusekiError::authentication("No email found in certificate SAN".to_string()))?
+            }
+            CertificateUsernameSource::CustomPattern(pattern) => {
+                self.apply_custom_pattern(&cert_info.subject_dn, pattern)?
+            }
+        };
+
+        // Apply DN mapping rules
+        for rule in &cert_config.user_mapping.dn_mapping_rules {
+            if let Ok(regex) = regex::Regex::new(&rule.pattern) {
+                if let Some(captures) = regex.captures(&cert_info.subject_dn) {
+                    // Replace with captured groups
+                    let mut replacement = rule.replacement.clone();
+                    for (i, capture) in captures.iter().enumerate() {
+                        if let Some(matched) = capture {
+                            replacement = replacement.replace(&format!("${}", i), matched.as_str());
+                        }
+                    }
+                    return Ok(replacement);
+                }
+            }
+        }
+
+        Ok(username)
+    }
+
+    /// Apply custom regex pattern to extract username
+    fn apply_custom_pattern(&self, subject_dn: &str, pattern: &str) -> FusekiResult<String> {
+        let regex = regex::Regex::new(pattern).map_err(|e| {
+            FusekiError::authentication(format!("Invalid regex pattern in certificate config: {}", e))
+        })?;
+
+        if let Some(captures) = regex.captures(subject_dn) {
+            if let Some(matched) = captures.get(1) {
+                Ok(matched.as_str().to_string())
+            } else {
+                Err(FusekiError::authentication(
+                    "Custom pattern did not capture any groups".to_string(),
+                ))
+            }
+        } else {
+            Err(FusekiError::authentication(
+                "Custom pattern did not match subject DN".to_string(),
+            ))
+        }
+    }
+
+    /// Extract email from certificate Subject Alternative Names
+    fn extract_email_from_certificate(&self, _cert_info: &CertificateAuth) -> Option<String> {
+        // TODO: Implement SAN parsing to extract email addresses
+        // This would require parsing the certificate's SAN extension
+        // For now, return None
+        None
     }
 
     /// Extract Common Name from Distinguished Name
@@ -1067,25 +1360,38 @@ impl AuthService {
         None
     }
 
-    /// Map certificate attributes to roles
-    async fn map_certificate_to_roles(&self, cert_info: &CertificateAuth) -> Vec<String> {
-        let mut roles = Vec::new();
+    /// Map certificate attributes to roles using enhanced configuration
+    async fn map_certificate_to_roles_enhanced(
+        &self,
+        cert_info: &CertificateAuth,
+        cert_config: &crate::config::CertificateConfig,
+    ) -> Vec<String> {
+        let mut roles = cert_config.user_mapping.default_roles.clone();
 
-        // Extract OU (Organizational Unit) from subject DN
+        // Extract OU (Organizational Unit) from subject DN and map to roles
         for component in cert_info.subject_dn.split(',') {
             let component = component.trim();
             if component.starts_with("OU=") {
                 let ou = &component[3..];
-                match ou.to_lowercase().as_str() {
-                    "engineering" | "developers" => roles.push("writer".to_string()),
-                    "management" | "admins" => roles.push("admin".to_string()),
-                    "users" => roles.push("reader".to_string()),
-                    _ => {}
+                if let Some(mapped_roles) = cert_config.user_mapping.ou_role_mapping.get(ou) {
+                    roles.extend(mapped_roles.clone());
                 }
             }
         }
 
-        // Default role if none found
+        // Apply DN mapping rules for role assignment
+        for rule in &cert_config.user_mapping.dn_mapping_rules {
+            if let Ok(regex) = regex::Regex::new(&rule.pattern) {
+                if regex.is_match(&cert_info.subject_dn) {
+                    roles.extend(rule.roles.clone());
+                }
+            }
+        }
+
+        // Remove duplicates and ensure at least one role
+        roles.sort();
+        roles.dedup();
+        
         if roles.is_empty() {
             roles.push("user".to_string());
         }
@@ -1350,21 +1656,25 @@ impl AuthService {
     }
 
     /// Create MFA challenge for user
-    pub async fn create_mfa_challenge(&self, username: &str, mfa_type: MfaType) -> FusekiResult<MfaChallenge> {
+    pub async fn create_mfa_challenge(
+        &self,
+        username: &str,
+        mfa_type: MfaType,
+    ) -> FusekiResult<MfaChallenge> {
         let challenge_id = uuid::Uuid::new_v4().to_string();
         let expires_at = Utc::now() + chrono::Duration::minutes(5); // 5 minute expiry
-        
+
         let challenge = MfaChallenge {
             challenge_id: challenge_id.clone(),
             challenge_type: mfa_type,
             expires_at,
             attempts_remaining: 3,
         };
-        
+
         // Store the challenge
         let mut challenges = self.mfa_challenges.write().await;
         challenges.insert(challenge_id.clone(), challenge.clone());
-        
+
         // Send the challenge based on type
         match &challenge.challenge_type {
             MfaType::Sms => {
@@ -1373,64 +1683,72 @@ impl AuthService {
                 } else {
                     return Err(FusekiError::authentication("SMS phone not configured"));
                 }
-            },
+            }
             MfaType::Email => {
                 if let Some(email) = self.get_user_mfa_email(username).await? {
-                    self.send_email_code(username, &email, &challenge_id).await?;
+                    self.send_email_code(username, &email, &challenge_id)
+                        .await?;
                 } else {
                     return Err(FusekiError::authentication("MFA email not configured"));
                 }
-            },
+            }
             MfaType::Totp => {
                 // TOTP doesn't need to send anything, user uses their app
-            },
+            }
             MfaType::Hardware | MfaType::Backup => {
                 // These don't need sending codes
-            },
+            }
         }
-        
-        info!("Created MFA challenge {} for user {}", challenge_id, username);
+
+        info!(
+            "Created MFA challenge {} for user {}",
+            challenge_id, username
+        );
         Ok(challenge)
     }
-    
+
     /// Verify MFA challenge response
-    pub async fn verify_mfa_challenge(&self, challenge_id: &str, response: &str, username: &str) -> FusekiResult<bool> {
+    pub async fn verify_mfa_challenge(
+        &self,
+        challenge_id: &str,
+        response: &str,
+        username: &str,
+    ) -> FusekiResult<bool> {
         let mut challenges = self.mfa_challenges.write().await;
-        
+
         if let Some(challenge) = challenges.get_mut(challenge_id) {
             // Check expiration
             if Utc::now() > challenge.expires_at {
                 challenges.remove(challenge_id);
                 return Ok(false);
             }
-            
+
             // Check attempts remaining
             if challenge.attempts_remaining == 0 {
                 challenges.remove(challenge_id);
                 return Ok(false);
             }
-            
+
             // Verify the response based on type
             let is_valid = match &challenge.challenge_type {
-                MfaType::Totp => {
-                    self.verify_totp_code(username, response).await?
-                },
+                MfaType::Totp => self.verify_totp_code(username, response).await?,
                 MfaType::Sms | MfaType::Email => {
                     // For demo purposes, accept 6-digit codes that match pattern
                     self.verify_sent_code(challenge_id, response).await?
-                },
-                MfaType::Backup => {
-                    self.verify_backup_code(username, response).await?
-                },
+                }
+                MfaType::Backup => self.verify_backup_code(username, response).await?,
                 MfaType::Hardware => {
                     // WebAuthn verification would go here
                     false // Not implemented yet
-                },
+                }
             };
-            
+
             if is_valid {
                 challenges.remove(challenge_id);
-                info!("MFA challenge {} verified for user {}", challenge_id, username);
+                info!(
+                    "MFA challenge {} verified for user {}",
+                    challenge_id, username
+                );
                 Ok(true)
             } else {
                 challenge.attempts_remaining -= 1;
@@ -1438,7 +1756,10 @@ impl AuthService {
                 if attempts_remaining == 0 {
                     challenges.remove(challenge_id);
                 }
-                warn!("Invalid MFA response for challenge {} (attempts remaining: {})", challenge_id, attempts_remaining);
+                warn!(
+                    "Invalid MFA response for challenge {} (attempts remaining: {})",
+                    challenge_id, attempts_remaining
+                );
                 Ok(false)
             }
         } else {
@@ -1451,10 +1772,10 @@ impl AuthService {
         // Store the challenge with expiration handling
         let mut challenges = self.mfa_challenges.write().await;
         challenges.insert(challenge.challenge_id.clone(), challenge.clone());
-        
+
         // Clean up expired challenges periodically
         challenges.retain(|_, ch| Utc::now() < ch.expires_at);
-        
+
         debug!("Updated MFA challenge: {}", challenge.challenge_id);
         Ok(())
     }
@@ -1462,11 +1783,11 @@ impl AuthService {
     /// Get user MFA status
     pub async fn get_user_mfa_status(&self, username: &str) -> FusekiResult<Option<MfaStatus>> {
         debug!("Getting MFA status for user: {}", username);
-        
+
         let secrets = self.mfa_secrets.read().await;
         if let Some(user_secrets) = secrets.get(username) {
             let mut methods = Vec::new();
-            
+
             if user_secrets.totp_secret.is_some() {
                 methods.push(MfaType::Totp);
             }
@@ -1479,10 +1800,10 @@ impl AuthService {
             if !user_secrets.webauthn_credentials.is_empty() {
                 methods.push(MfaType::Hardware);
             }
-            
+
             let backup_codes_generated = !user_secrets.backup_codes.is_empty();
             let enabled = !methods.is_empty();
-            
+
             Ok(Some(MfaStatus {
                 enabled,
                 methods,
@@ -1504,7 +1825,7 @@ impl AuthService {
         mfa_type: &MfaType,
     ) -> FusekiResult<bool> {
         debug!("Disabling MFA method {:?} for user: {}", mfa_type, username);
-        
+
         let mut secrets = self.mfa_secrets.write().await;
         if let Some(user_secrets) = secrets.get_mut(username) {
             match mfa_type {
@@ -1512,27 +1833,27 @@ impl AuthService {
                     user_secrets.totp_secret = None;
                     info!("Disabled TOTP for user: {}", username);
                     Ok(true)
-                },
+                }
                 MfaType::Sms => {
                     user_secrets.sms_phone = None;
                     info!("Disabled SMS MFA for user: {}", username);
                     Ok(true)
-                },
+                }
                 MfaType::Email => {
                     user_secrets.email = None;
                     info!("Disabled Email MFA for user: {}", username);
                     Ok(true)
-                },
+                }
                 MfaType::Hardware => {
                     user_secrets.webauthn_credentials.clear();
                     info!("Disabled Hardware MFA for user: {}", username);
                     Ok(true)
-                },
+                }
                 MfaType::Backup => {
                     user_secrets.backup_codes.clear();
                     info!("Disabled Backup codes for user: {}", username);
                     Ok(true)
-                },
+                }
             }
         } else {
             Ok(false)
@@ -1541,19 +1862,25 @@ impl AuthService {
 
     /// Store backup codes for a user
     pub async fn store_backup_codes(&self, username: &str, codes: &[String]) -> FusekiResult<()> {
-        debug!("Storing {} backup codes for user: {}", codes.len(), username);
-        
+        debug!(
+            "Storing {} backup codes for user: {}",
+            codes.len(),
+            username
+        );
+
         let mut secrets = self.mfa_secrets.write().await;
-        let user_secrets = secrets.entry(username.to_string()).or_insert_with(|| MfaSecrets {
-            totp_secret: None,
-            sms_phone: None,
-            email: None,
-            backup_codes: Vec::new(),
-            webauthn_credentials: Vec::new(),
-        });
-        
+        let user_secrets = secrets
+            .entry(username.to_string())
+            .or_insert_with(|| MfaSecrets {
+                totp_secret: None,
+                sms_phone: None,
+                email: None,
+                backup_codes: Vec::new(),
+                webauthn_credentials: Vec::new(),
+            });
+
         user_secrets.backup_codes = codes.to_vec();
-        
+
         info!("Stored {} backup codes for user: {}", codes.len(), username);
         Ok(())
     }
@@ -1561,18 +1888,20 @@ impl AuthService {
     /// Store TOTP secret for a user
     pub async fn store_totp_secret(&self, username: &str, secret: &str) -> FusekiResult<()> {
         debug!("Storing TOTP secret for user: {}", username);
-        
+
         let mut secrets = self.mfa_secrets.write().await;
-        let user_secrets = secrets.entry(username.to_string()).or_insert_with(|| MfaSecrets {
-            totp_secret: None,
-            sms_phone: None,
-            email: None,
-            backup_codes: Vec::new(),
-            webauthn_credentials: Vec::new(),
-        });
-        
+        let user_secrets = secrets
+            .entry(username.to_string())
+            .or_insert_with(|| MfaSecrets {
+                totp_secret: None,
+                sms_phone: None,
+                email: None,
+                backup_codes: Vec::new(),
+                webauthn_credentials: Vec::new(),
+            });
+
         user_secrets.totp_secret = Some(secret.to_string());
-        
+
         info!("Stored TOTP secret for user: {}", username);
         Ok(())
     }
@@ -1580,18 +1909,20 @@ impl AuthService {
     /// Store SMS phone number for a user
     pub async fn store_sms_phone(&self, username: &str, phone: &str) -> FusekiResult<()> {
         debug!("Storing SMS phone for user: {}", username);
-        
+
         let mut secrets = self.mfa_secrets.write().await;
-        let user_secrets = secrets.entry(username.to_string()).or_insert_with(|| MfaSecrets {
-            totp_secret: None,
-            sms_phone: None,
-            email: None,
-            backup_codes: Vec::new(),
-            webauthn_credentials: Vec::new(),
-        });
-        
+        let user_secrets = secrets
+            .entry(username.to_string())
+            .or_insert_with(|| MfaSecrets {
+                totp_secret: None,
+                sms_phone: None,
+                email: None,
+                backup_codes: Vec::new(),
+                webauthn_credentials: Vec::new(),
+            });
+
         user_secrets.sms_phone = Some(phone.to_string());
-        
+
         info!("Stored SMS phone for user: {}", username);
         Ok(())
     }
@@ -1599,18 +1930,20 @@ impl AuthService {
     /// Store MFA email address for a user
     pub async fn store_mfa_email(&self, username: &str, email: &str) -> FusekiResult<()> {
         debug!("Storing MFA email for user: {}", username);
-        
+
         let mut secrets = self.mfa_secrets.write().await;
-        let user_secrets = secrets.entry(username.to_string()).or_insert_with(|| MfaSecrets {
-            totp_secret: None,
-            sms_phone: None,
-            email: None,
-            backup_codes: Vec::new(),
-            webauthn_credentials: Vec::new(),
-        });
-        
+        let user_secrets = secrets
+            .entry(username.to_string())
+            .or_insert_with(|| MfaSecrets {
+                totp_secret: None,
+                sms_phone: None,
+                email: None,
+                backup_codes: Vec::new(),
+                webauthn_credentials: Vec::new(),
+            });
+
         user_secrets.email = Some(email.to_string());
-        
+
         info!("Stored MFA email for user: {}", username);
         Ok(())
     }
@@ -1629,7 +1962,7 @@ impl AuthService {
     /// Get user SMS phone number
     pub async fn get_user_sms_phone(&self, username: &str) -> FusekiResult<Option<String>> {
         debug!("Getting SMS phone for user: {}", username);
-        
+
         let secrets = self.mfa_secrets.read().await;
         Ok(secrets.get(username).and_then(|s| s.sms_phone.clone()))
     }
@@ -1637,7 +1970,7 @@ impl AuthService {
     /// Get user MFA email address
     pub async fn get_user_mfa_email(&self, username: &str) -> FusekiResult<Option<String>> {
         debug!("Getting MFA email for user: {}", username);
-        
+
         let secrets = self.mfa_secrets.read().await;
         Ok(secrets.get(username).and_then(|s| s.email.clone()))
     }
@@ -1649,7 +1982,10 @@ impl AuthService {
 
     /// Get SAML attribute mapping configuration
     pub fn get_saml_attribute_mapping(&self) -> Option<&crate::config::SamlAttributeMappings> {
-        self.config.saml.as_ref().map(|saml| &saml.attribute_mappings)
+        self.config
+            .saml
+            .as_ref()
+            .map(|saml| &saml.attribute_mappings)
     }
 
     /// Generate SAML authentication request
@@ -1736,7 +2072,7 @@ impl AuthService {
     /// Verify TOTP code using user's secret
     async fn verify_totp_code(&self, username: &str, code: &str) -> FusekiResult<bool> {
         let secrets = self.mfa_secrets.read().await;
-        
+
         if let Some(user_secrets) = secrets.get(username) {
             if let Some(totp_secret) = &user_secrets.totp_secret {
                 // In a real implementation, you'd use a proper TOTP library like `totp-lite`
@@ -1747,7 +2083,7 @@ impl AuthService {
                 }
             }
         }
-        
+
         debug!("TOTP code verification failed for user: {}", username);
         Ok(false)
     }
@@ -1755,15 +2091,19 @@ impl AuthService {
     /// Verify backup code (one-time use)
     async fn verify_backup_code(&self, username: &str, code: &str) -> FusekiResult<bool> {
         let mut secrets = self.mfa_secrets.write().await;
-        
+
         if let Some(user_secrets) = secrets.get_mut(username) {
             if let Some(index) = user_secrets.backup_codes.iter().position(|c| c == code) {
                 user_secrets.backup_codes.remove(index);
-                info!("Backup code used for user: {} (remaining: {})", username, user_secrets.backup_codes.len());
+                info!(
+                    "Backup code used for user: {} (remaining: {})",
+                    username,
+                    user_secrets.backup_codes.len()
+                );
                 return Ok(true);
             }
         }
-        
+
         debug!("Backup code verification failed for user: {}", username);
         Ok(false)
     }
@@ -1773,45 +2113,77 @@ impl AuthService {
         // In a real implementation, you'd store expected codes for each challenge
         // For demo purposes, accept any 6-digit numeric code
         if code.len() == 6 && code.chars().all(char::is_numeric) {
-            debug!("Sent code verification successful for challenge: {}", challenge_id);
+            debug!(
+                "Sent code verification successful for challenge: {}",
+                challenge_id
+            );
             Ok(true)
         } else {
-            debug!("Sent code verification failed for challenge: {}", challenge_id);
+            debug!(
+                "Sent code verification failed for challenge: {}",
+                challenge_id
+            );
             Ok(false)
         }
     }
 
     /// Send SMS verification code
-    async fn send_sms_code(&self, username: &str, phone: &str, challenge_id: &str) -> FusekiResult<()> {
+    async fn send_sms_code(
+        &self,
+        username: &str,
+        phone: &str,
+        challenge_id: &str,
+    ) -> FusekiResult<()> {
         // In a real implementation, you'd integrate with an SMS provider like Twilio
-        info!("SMS code sent to {} for user {} (challenge: {})", phone, username, challenge_id);
-        
+        info!(
+            "SMS code sent to {} for user {} (challenge: {})",
+            phone, username, challenge_id
+        );
+
         // For demo purposes, log the code that would be sent
         let verification_code = format!("{:06}", (challenge_id.len() * 123456) % 1000000);
-        debug!("SMS verification code for {}: {}", username, verification_code);
-        
+        debug!(
+            "SMS verification code for {}: {}",
+            username, verification_code
+        );
+
         Ok(())
     }
 
     /// Send email verification code
-    async fn send_email_code(&self, username: &str, email: &str, challenge_id: &str) -> FusekiResult<()> {
+    async fn send_email_code(
+        &self,
+        username: &str,
+        email: &str,
+        challenge_id: &str,
+    ) -> FusekiResult<()> {
         // In a real implementation, you'd integrate with an email provider like SendGrid
-        info!("Email code sent to {} for user {} (challenge: {})", email, username, challenge_id);
-        
+        info!(
+            "Email code sent to {} for user {} (challenge: {})",
+            email, username, challenge_id
+        );
+
         // For demo purposes, log the code that would be sent
         let verification_code = format!("{:06}", (challenge_id.len() * 654321) % 1000000);
-        debug!("Email verification code for {}: {}", username, verification_code);
-        
+        debug!(
+            "Email verification code for {}: {}",
+            username, verification_code
+        );
+
         Ok(())
     }
 
     /// Generate secure backup codes for a user
-    pub async fn generate_backup_codes(&self, username: &str, count: usize) -> FusekiResult<Vec<String>> {
+    pub async fn generate_backup_codes(
+        &self,
+        username: &str,
+        count: usize,
+    ) -> FusekiResult<Vec<String>> {
         use rand::Rng;
-        
+
         let mut rng = rand::thread_rng();
         let mut codes = Vec::with_capacity(count);
-        
+
         for _ in 0..count {
             // Generate 8-character alphanumeric codes
             let code: String = (0..8)
@@ -1822,10 +2194,10 @@ impl AuthService {
                 .collect();
             codes.push(code);
         }
-        
+
         // Store the backup codes
         self.store_backup_codes(username, &codes).await?;
-        
+
         info!("Generated {} backup codes for user: {}", count, username);
         Ok(codes)
     }
@@ -1833,18 +2205,18 @@ impl AuthService {
     /// Generate TOTP secret for a user  
     pub async fn generate_totp_secret(&self, username: &str) -> FusekiResult<String> {
         use rand::Rng;
-        
+
         // Generate a 160-bit (20 byte) secret encoded as base32
         let mut rng = rand::thread_rng();
         let secret_bytes: Vec<u8> = (0..20).map(|_| rng.gen()).collect();
-        
+
         // In a real implementation, use a proper base32 encoder
         // For demo purposes, create a mock secret
         let secret = format!("TOTP{:016X}", rng.gen::<u64>());
-        
+
         // Store the TOTP secret
         self.store_totp_secret(username, &secret).await?;
-        
+
         info!("Generated TOTP secret for user: {}", username);
         Ok(secret)
     }
@@ -2052,8 +2424,9 @@ where
     type Rejection = AuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let AuthUser(user) = AuthUser::from_request_parts(parts, state).await
-            .map_err(|_| AuthError::Unauthorized("Authentication required".to_string()))?;
+        let AuthUser(user) = AuthUser::from_request_parts(parts, state)
+            .await
+            .map_err(|_| AuthError::MissingToken)?;
 
         // For now, we'll extract the required permission from the request path
         // In a real implementation, this would be more sophisticated
@@ -2134,7 +2507,8 @@ pub enum PasswordStrength {
 fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::error::Error + Send>> {
     use base64::{engine::general_purpose, Engine as _};
 
-    let decoded_bytes = general_purpose::STANDARD.decode(encoded)
+    let decoded_bytes = general_purpose::STANDARD
+        .decode(encoded)
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
     let decoded_str = String::from_utf8(decoded_bytes)
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
@@ -2144,7 +2518,10 @@ fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::err
         let password = decoded_str[colon_pos + 1..].to_string();
         Ok((username, password))
     } else {
-        Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid Basic auth format")))
+        Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Invalid Basic auth format",
+        )))
     }
 }
 

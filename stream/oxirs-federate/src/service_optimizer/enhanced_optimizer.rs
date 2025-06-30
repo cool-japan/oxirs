@@ -10,19 +10,19 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::{
+    planner::planning::{FilterExpression, TriplePattern},
     query_decomposition::advanced_pattern_analysis::{
-        AdvancedPatternAnalyzer, PatternAnalysisResult, AdvancedAnalysisConfig,
-        OptimizationOpportunity, ServiceRecommendation,
+        AdvancedAnalysisConfig, AdvancedPatternAnalyzer, OptimizationOpportunity,
+        PatternAnalysisResult, ServiceRecommendation,
     },
-    planner::planning::{TriplePattern, FilterExpression},
     service_optimizer::types::QueryFeatures,
     service_optimizer::{
-        ServiceOptimizer, ServiceOptimizerConfig,
         types::{
-            OptimizedQuery, OptimizedServiceClause, ServiceExecutionStrategy,
-            ExecutionStrategy, CrossServiceJoin, JoinType, PatternFeatures,
-            MLSourcePrediction, ServicePerformanceUpdate,
+            CrossServiceJoin, ExecutionStrategy, JoinType, MLSourcePrediction, OptimizedQuery,
+            OptimizedServiceClause, PatternFeatures, ServiceExecutionStrategy,
+            ServicePerformanceUpdate,
         },
+        ServiceOptimizer, ServiceOptimizerConfig,
     },
     FederatedService, ServiceCapability,
 };
@@ -75,8 +75,11 @@ impl EnhancedServiceOptimizer {
         filters: Vec<FilterExpression>,
         services: &[FederatedService],
     ) -> Result<EnhancedOptimizationResult> {
-        info!("Starting enhanced optimization for {} patterns across {} services", 
-              patterns.len(), services.len());
+        info!(
+            "Starting enhanced optimization for {} patterns across {} services",
+            patterns.len(),
+            services.len()
+        );
 
         // Check optimization cache first
         let cache_key = self.generate_cache_key(&patterns, &filters);
@@ -88,24 +91,31 @@ impl EnhancedServiceOptimizer {
         }
 
         // Perform advanced pattern analysis
-        let analysis_result = self.pattern_analyzer
+        let analysis_result = self
+            .pattern_analyzer
             .analyze_query_patterns(&patterns, &filters, services)
             .await?;
 
         // Apply ML-driven service selection
-        let ml_recommendations = self.apply_ml_recommendations(&analysis_result, services).await?;
+        let ml_recommendations = self
+            .apply_ml_recommendations(&analysis_result, services)
+            .await?;
 
         // Generate optimized query using enhanced strategies
-        let optimized_query = self.generate_enhanced_query(
-            patterns.clone(),
-            filters.clone(),
-            &analysis_result,
-            &ml_recommendations,
-            services,
-        ).await?;
+        let optimized_query = self
+            .generate_enhanced_query(
+                patterns.clone(),
+                filters.clone(),
+                &analysis_result,
+                &ml_recommendations,
+                services,
+            )
+            .await?;
 
         // Create execution plan with optimization recommendations
-        let execution_plan = self.create_execution_plan(&optimized_query, &analysis_result).await?;
+        let execution_plan = self
+            .create_execution_plan(&optimized_query, &analysis_result)
+            .await?;
 
         // Create comprehensive result
         let result = EnhancedOptimizationResult {
@@ -134,9 +144,10 @@ impl EnhancedServiceOptimizer {
 
         for service_rec in &analysis.service_recommendations {
             let pattern_id = &service_rec.pattern_id;
-            
+
             // Get the top recommended services for this pattern
-            let top_services: Vec<_> = service_rec.recommended_services
+            let top_services: Vec<_> = service_rec
+                .recommended_services
                 .iter()
                 .take(self.config.max_services_per_pattern)
                 .cloned()
@@ -147,7 +158,9 @@ impl EnhancedServiceOptimizer {
             if self.config.enable_ml_scoring {
                 for (service_id, base_score) in &top_services {
                     if let Some(service) = services.iter().find(|s| &s.id == service_id) {
-                        let ml_score = self.calculate_ml_score(service, pattern_id, *base_score).await?;
+                        let ml_score = self
+                            .calculate_ml_score(service, pattern_id, *base_score)
+                            .await?;
                         ml_scores.insert(service_id.clone(), ml_score);
                     }
                 }
@@ -158,7 +171,10 @@ impl EnhancedServiceOptimizer {
                 base_recommendations: top_services,
                 ml_enhanced_scores: ml_scores,
                 confidence: service_rec.confidence,
-                reasoning: self.enhance_reasoning(&service_rec.reasoning, &analysis.optimization_opportunities),
+                reasoning: self.enhance_reasoning(
+                    &service_rec.reasoning,
+                    &analysis.optimization_opportunities,
+                ),
             });
         }
 
@@ -180,10 +196,13 @@ impl EnhancedServiceOptimizer {
         // Generate optimized service clauses based on ML recommendations
         for (pattern_idx, pattern) in patterns.iter().enumerate() {
             let pattern_id = format!("pattern_{}", pattern_idx);
-            
-            if let Some(ml_rec) = ml_recommendations.iter().find(|r| r.pattern_id == pattern_id) {
+
+            if let Some(ml_rec) = ml_recommendations
+                .iter()
+                .find(|r| r.pattern_id == pattern_id)
+            {
                 let best_service = self.select_best_service_for_pattern(ml_rec, services)?;
-                
+
                 let optimized_clause = OptimizedServiceClause {
                     service_id: best_service.id.clone(),
                     endpoint: best_service.endpoint.clone(),
@@ -200,10 +219,12 @@ impl EnhancedServiceOptimizer {
         }
 
         // Identify cross-service joins
-        cross_service_joins = self.identify_cross_service_joins(&optimized_services, &analysis.join_graph_analysis);
+        cross_service_joins =
+            self.identify_cross_service_joins(&optimized_services, &analysis.join_graph_analysis);
 
         // Determine overall execution strategy
-        let execution_strategy = self.determine_overall_execution_strategy(analysis, &optimized_services);
+        let execution_strategy =
+            self.determine_overall_execution_strategy(analysis, &optimized_services);
 
         // Calculate total estimated cost
         let estimated_cost: f64 = optimized_services.iter().map(|s| s.estimated_cost).sum();
@@ -234,7 +255,8 @@ impl EnhancedServiceOptimizer {
                 service_id: service_clause.service_id.clone(),
                 estimated_duration: self.estimate_step_duration(&service_clause),
                 dependencies: Vec::new(),
-                parallelizable: self.is_step_parallelizable(&service_clause, &optimized_query.cross_service_joins),
+                parallelizable: self
+                    .is_step_parallelizable(&service_clause, &optimized_query.cross_service_joins),
                 resource_requirements: self.estimate_resource_requirements(&service_clause),
                 optimization_hints: self.generate_optimization_hints(&service_clause, analysis),
             };
@@ -265,7 +287,7 @@ impl EnhancedServiceOptimizer {
         let total_duration = self.estimate_total_duration(&steps);
         let resource_requirements = self.aggregate_resource_requirements(&steps);
         let risk_assessment = self.assess_execution_risks(&steps);
-        
+
         Ok(EnhancedExecutionPlan {
             steps,
             parallelizable_groups,
@@ -296,11 +318,13 @@ impl EnhancedServiceOptimizer {
         }
 
         // Aggregate overall predictions
-        let total_estimated_time = service_predictions.values()
+        let total_estimated_time = service_predictions
+            .values()
             .map(|p| p.estimated_execution_time.as_secs_f64())
             .sum::<f64>();
 
-        let success_probability = service_predictions.values()
+        let success_probability = service_predictions
+            .values()
             .map(|p| p.success_probability)
             .fold(1.0, |acc, prob| acc * prob);
 
@@ -322,24 +346,31 @@ impl EnhancedServiceOptimizer {
         base_score: f64,
     ) -> Result<f64> {
         // Simplified ML scoring - in practice would use actual ML model
-        let performance_factor = (1000.0 - service.performance.avg_response_time_ms.min(1000.0)) / 1000.0;
+        let performance_factor =
+            (1000.0 - service.performance.avg_response_time_ms.min(1000.0)) / 1000.0;
         let reliability_factor = service.performance.reliability_score;
-        
+
         let ml_score = base_score * 0.5 + performance_factor * 0.3 + reliability_factor * 0.2;
         Ok(ml_score.min(1.0).max(0.0))
     }
 
-    fn enhance_reasoning(&self, base_reasoning: &str, opportunities: &[OptimizationOpportunity]) -> String {
+    fn enhance_reasoning(
+        &self,
+        base_reasoning: &str,
+        opportunities: &[OptimizationOpportunity],
+    ) -> String {
         let mut enhanced = base_reasoning.to_string();
-        
+
         if !opportunities.is_empty() {
             enhanced.push_str(" Additional optimization opportunities: ");
             for (idx, opp) in opportunities.iter().enumerate() {
-                if idx > 0 { enhanced.push_str(", "); }
+                if idx > 0 {
+                    enhanced.push_str(", ");
+                }
                 enhanced.push_str(&opp.description);
             }
         }
-        
+
         enhanced
     }
 
@@ -350,18 +381,21 @@ impl EnhancedServiceOptimizer {
     ) -> Result<FederatedService> {
         // Select based on ML-enhanced scores if available, otherwise use base recommendations
         let best_service_id = if !ml_rec.ml_enhanced_scores.is_empty() {
-            ml_rec.ml_enhanced_scores
+            ml_rec
+                .ml_enhanced_scores
                 .iter()
                 .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
                 .map(|(id, _)| id.clone())
         } else {
-            ml_rec.base_recommendations
+            ml_rec
+                .base_recommendations
                 .first()
                 .map(|(id, _)| id.clone())
         };
 
         if let Some(service_id) = best_service_id {
-            services.iter()
+            services
+                .iter()
                 .find(|s| s.id == service_id)
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("Service {} not found", service_id))
@@ -370,15 +404,24 @@ impl EnhancedServiceOptimizer {
         }
     }
 
-    fn extract_applicable_filters(&self, filters: &[FilterExpression], pattern: &TriplePattern) -> Vec<FilterExpression> {
+    fn extract_applicable_filters(
+        &self,
+        filters: &[FilterExpression],
+        pattern: &TriplePattern,
+    ) -> Vec<FilterExpression> {
         // Simple implementation - in practice would be more sophisticated
-        filters.iter()
+        filters
+            .iter()
             .filter(|filter| self.filter_applies_to_pattern(filter, pattern))
             .cloned()
             .collect()
     }
 
-    fn identify_pushdown_filters(&self, filters: &[FilterExpression], pattern: &TriplePattern) -> Vec<FilterExpression> {
+    fn identify_pushdown_filters(
+        &self,
+        filters: &[FilterExpression],
+        pattern: &TriplePattern,
+    ) -> Vec<FilterExpression> {
         // Identify filters that can be pushed down to the service
         self.extract_applicable_filters(filters, pattern)
             .into_iter()
@@ -397,7 +440,7 @@ impl EnhancedServiceOptimizer {
 
         ServiceExecutionStrategy {
             use_values_binding: has_high_selectivity && service.capabilities.contains(&ServiceCapability::SparqlValues),
-            stream_results: matches!(complexity, crate::query_decomposition::advanced_pattern_analysis::ComplexityLevel::High | 
+            stream_results: matches!(complexity, crate::query_decomposition::advanced_pattern_analysis::ComplexityLevel::High |
                                                crate::query_decomposition::advanced_pattern_analysis::ComplexityLevel::VeryHigh),
             use_subqueries: pattern.subject.is_none() && pattern.object.is_none(),
             batch_size: if has_high_selectivity { 50 } else { 100 },
@@ -405,7 +448,12 @@ impl EnhancedServiceOptimizer {
         }
     }
 
-    fn estimate_service_cost(&self, service: &FederatedService, pattern: &TriplePattern, analysis: &PatternAnalysisResult) -> f64 {
+    fn estimate_service_cost(
+        &self,
+        service: &FederatedService,
+        pattern: &TriplePattern,
+        analysis: &PatternAnalysisResult,
+    ) -> f64 {
         let base_cost = 10.0;
         let complexity_multiplier = match analysis.complexity_assessment.level {
             crate::query_decomposition::advanced_pattern_analysis::ComplexityLevel::Low => 0.5,
@@ -414,7 +462,7 @@ impl EnhancedServiceOptimizer {
             crate::query_decomposition::advanced_pattern_analysis::ComplexityLevel::VeryHigh => 4.0,
         };
         let performance_factor = service.performance.avg_response_time_ms / 1000.0;
-        
+
         base_cost * complexity_multiplier * (1.0 + performance_factor)
     }
 
@@ -430,7 +478,7 @@ impl EnhancedServiceOptimizer {
             if services.len() > edge.pattern1 && services.len() > edge.pattern2 {
                 let left_service = &services[edge.pattern1].service_id;
                 let right_service = &services[edge.pattern2].service_id;
-                
+
                 if left_service != right_service {
                     joins.push(CrossServiceJoin {
                         left_service: left_service.clone(),
@@ -462,14 +510,19 @@ impl EnhancedServiceOptimizer {
 
     fn identify_global_filters(&self, filters: &[FilterExpression]) -> Vec<FilterExpression> {
         // Filters that apply globally and cannot be pushed down
-        filters.iter()
+        filters
+            .iter()
             .filter(|filter| !self.can_pushdown_filter(filter))
             .cloned()
             .collect()
     }
 
     // Cache management
-    fn generate_cache_key(&self, patterns: &[TriplePattern], filters: &[FilterExpression]) -> String {
+    fn generate_cache_key(
+        &self,
+        patterns: &[TriplePattern],
+        filters: &[FilterExpression],
+    ) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -480,7 +533,7 @@ impl EnhancedServiceOptimizer {
         for filter in filters {
             filter.expression.hash(&mut hasher);
         }
-        
+
         format!("opt_{:x}", hasher.finish())
     }
 
@@ -491,11 +544,14 @@ impl EnhancedServiceOptimizer {
 
     async fn cache_optimization(&self, cache_key: &str, result: &EnhancedOptimizationResult) {
         let mut cache = self.optimization_cache.write().await;
-        cache.insert(cache_key.to_string(), CachedOptimization {
-            result: result.clone(),
-            cached_at: chrono::Utc::now(),
-            ttl: std::time::Duration::from_secs(3600), // 1 hour
-        });
+        cache.insert(
+            cache_key.to_string(),
+            CachedOptimization {
+                result: result.clone(),
+                cached_at: chrono::Utc::now(),
+                ttl: std::time::Duration::from_secs(3600), // 1 hour
+            },
+        );
 
         // Clean up old entries
         if cache.len() > self.config.max_cache_entries {
@@ -505,22 +561,80 @@ impl EnhancedServiceOptimizer {
     }
 
     // Placeholder implementations for helper methods
-    fn filter_applies_to_pattern(&self, _filter: &FilterExpression, _pattern: &TriplePattern) -> bool { true }
-    fn can_pushdown_filter(&self, _filter: &FilterExpression) -> bool { true }
-    fn estimate_step_duration(&self, _clause: &OptimizedServiceClause) -> std::time::Duration { std::time::Duration::from_millis(100) }
-    fn is_step_parallelizable(&self, _clause: &OptimizedServiceClause, _joins: &[CrossServiceJoin]) -> bool { true }
-    fn estimate_resource_requirements(&self, _clause: &OptimizedServiceClause) -> ResourceRequirements { ResourceRequirements::default() }
-    fn generate_optimization_hints(&self, _clause: &OptimizedServiceClause, _analysis: &PatternAnalysisResult) -> Vec<String> { vec![] }
-    fn estimate_join_duration(&self, _join: &CrossServiceJoin) -> std::time::Duration { std::time::Duration::from_millis(50) }
-    fn estimate_join_resource_requirements(&self, _join: &CrossServiceJoin) -> ResourceRequirements { ResourceRequirements::default() }
-    fn identify_parallelizable_groups(&self, _steps: &[ExecutionStep]) -> Vec<Vec<String>> { vec![] }
-    fn estimate_total_duration(&self, _steps: &[ExecutionStep]) -> std::time::Duration { std::time::Duration::from_secs(1) }
-    fn aggregate_resource_requirements(&self, _steps: &[ExecutionStep]) -> ResourceRequirements { ResourceRequirements::default() }
-    fn assess_execution_risks(&self, _steps: &[ExecutionStep]) -> RiskAssessment { RiskAssessment::default() }
-    fn generate_fallback_strategies(&self, _query: &OptimizedQuery) -> Vec<String> { vec![] }
-    async fn predict_service_performance(&self, _service: &FederatedService, _step: &ExecutionStep) -> Result<ServicePerformancePrediction> { Ok(ServicePerformancePrediction::default()) }
-    fn identify_bottlenecks(&self, _plan: &EnhancedExecutionPlan) -> BottleneckAnalysis { BottleneckAnalysis::default() }
-    fn create_optimization_metadata(&self, _patterns: &[TriplePattern], _filters: &[FilterExpression]) -> OptimizationMetadata { OptimizationMetadata::default() }
+    fn filter_applies_to_pattern(
+        &self,
+        _filter: &FilterExpression,
+        _pattern: &TriplePattern,
+    ) -> bool {
+        true
+    }
+    fn can_pushdown_filter(&self, _filter: &FilterExpression) -> bool {
+        true
+    }
+    fn estimate_step_duration(&self, _clause: &OptimizedServiceClause) -> std::time::Duration {
+        std::time::Duration::from_millis(100)
+    }
+    fn is_step_parallelizable(
+        &self,
+        _clause: &OptimizedServiceClause,
+        _joins: &[CrossServiceJoin],
+    ) -> bool {
+        true
+    }
+    fn estimate_resource_requirements(
+        &self,
+        _clause: &OptimizedServiceClause,
+    ) -> ResourceRequirements {
+        ResourceRequirements::default()
+    }
+    fn generate_optimization_hints(
+        &self,
+        _clause: &OptimizedServiceClause,
+        _analysis: &PatternAnalysisResult,
+    ) -> Vec<String> {
+        vec![]
+    }
+    fn estimate_join_duration(&self, _join: &CrossServiceJoin) -> std::time::Duration {
+        std::time::Duration::from_millis(50)
+    }
+    fn estimate_join_resource_requirements(
+        &self,
+        _join: &CrossServiceJoin,
+    ) -> ResourceRequirements {
+        ResourceRequirements::default()
+    }
+    fn identify_parallelizable_groups(&self, _steps: &[ExecutionStep]) -> Vec<Vec<String>> {
+        vec![]
+    }
+    fn estimate_total_duration(&self, _steps: &[ExecutionStep]) -> std::time::Duration {
+        std::time::Duration::from_secs(1)
+    }
+    fn aggregate_resource_requirements(&self, _steps: &[ExecutionStep]) -> ResourceRequirements {
+        ResourceRequirements::default()
+    }
+    fn assess_execution_risks(&self, _steps: &[ExecutionStep]) -> RiskAssessment {
+        RiskAssessment::default()
+    }
+    fn generate_fallback_strategies(&self, _query: &OptimizedQuery) -> Vec<String> {
+        vec![]
+    }
+    async fn predict_service_performance(
+        &self,
+        _service: &FederatedService,
+        _step: &ExecutionStep,
+    ) -> Result<ServicePerformancePrediction> {
+        Ok(ServicePerformancePrediction::default())
+    }
+    fn identify_bottlenecks(&self, _plan: &EnhancedExecutionPlan) -> BottleneckAnalysis {
+        BottleneckAnalysis::default()
+    }
+    fn create_optimization_metadata(
+        &self,
+        _patterns: &[TriplePattern],
+        _filters: &[FilterExpression],
+    ) -> OptimizationMetadata {
+        OptimizationMetadata::default()
+    }
 }
 
 impl Default for EnhancedServiceOptimizer {

@@ -44,6 +44,7 @@ rio_xml = "0.8"
 # Async runtime and HTTP
 tokio = { version = "1.0", features = ["full"] }
 tokio-util = "0.7"
+tokio-stream = "0.1"
 hyper = { version = "1.0", features = ["full"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }

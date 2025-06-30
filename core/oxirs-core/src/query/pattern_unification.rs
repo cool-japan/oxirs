@@ -5,7 +5,7 @@
 //! enabling seamless interoperability.
 
 use crate::model::*;
-use crate::query::algebra;
+use crate::query::algebra::{TermPattern as AlgebraTermPattern, AlgebraTriplePattern};
 use crate::OxirsError;
 use std::collections::HashSet;
 
@@ -50,29 +50,25 @@ impl UnifiedTriplePattern {
     }
 
     /// Convert to algebra TriplePattern
-    pub fn to_algebra_pattern(&self) -> Result<algebra::TriplePattern, OxirsError> {
+    pub fn to_algebra_pattern(&self) -> Result<AlgebraTriplePattern, OxirsError> {
         let subject = self.subject.to_algebra_term_pattern()?;
         let predicate = self.predicate.to_algebra_term_pattern()?;
         let object = self.object.to_algebra_term_pattern()?;
 
-        Ok(algebra::TriplePattern {
-            subject,
-            predicate,
-            object,
-        })
+        Ok(AlgebraTriplePattern::new(subject, predicate, object))
     }
 
     /// Convert to model TriplePattern
     pub fn to_model_pattern(&self) -> TriplePattern {
         let subject = self.subject.to_model_subject_pattern();
         let predicate = self.predicate.to_model_predicate_pattern();
-        let object = self.subject.to_model_object_pattern();
+        let object = self.object.to_model_object_pattern();
 
         TriplePattern::new(subject, predicate, object)
     }
 
     /// Create from algebra TriplePattern
-    pub fn from_algebra_pattern(pattern: &algebra::TriplePattern) -> Self {
+    pub fn from_algebra_pattern(pattern: &AlgebraTriplePattern) -> Self {
         Self {
             subject: UnifiedTermPattern::from_algebra_term(&pattern.subject),
             predicate: UnifiedTermPattern::from_algebra_term(&pattern.predicate),
@@ -135,12 +131,12 @@ impl UnifiedTriplePattern {
 
 impl UnifiedTermPattern {
     /// Convert to algebra TermPattern
-    pub fn to_algebra_term_pattern(&self) -> Result<algebra::TermPattern, OxirsError> {
+    pub fn to_algebra_term_pattern(&self) -> Result<AlgebraTermPattern, OxirsError> {
         match self {
-            UnifiedTermPattern::NamedNode(nn) => Ok(algebra::TermPattern::NamedNode(nn.clone())),
-            UnifiedTermPattern::BlankNode(bn) => Ok(algebra::TermPattern::BlankNode(bn.clone())),
-            UnifiedTermPattern::Literal(lit) => Ok(algebra::TermPattern::Literal(lit.clone())),
-            UnifiedTermPattern::Variable(var) => Ok(algebra::TermPattern::Variable(var.clone())),
+            UnifiedTermPattern::NamedNode(nn) => Ok(AlgebraTermPattern::NamedNode(nn.clone())),
+            UnifiedTermPattern::BlankNode(bn) => Ok(AlgebraTermPattern::BlankNode(bn.clone())),
+            UnifiedTermPattern::Literal(lit) => Ok(AlgebraTermPattern::Literal(lit.clone())),
+            UnifiedTermPattern::Variable(var) => Ok(AlgebraTermPattern::Variable(var.clone())),
             UnifiedTermPattern::Wildcard => Err(OxirsError::Query(
                 "Wildcard patterns cannot be converted to algebra representation".to_string(),
             )),
@@ -180,12 +176,12 @@ impl UnifiedTermPattern {
     }
 
     /// Create from algebra TermPattern
-    pub fn from_algebra_term(term: &algebra::TermPattern) -> Self {
+    pub fn from_algebra_term(term: &AlgebraTermPattern) -> Self {
         match term {
-            algebra::TermPattern::NamedNode(nn) => UnifiedTermPattern::NamedNode(nn.clone()),
-            algebra::TermPattern::BlankNode(bn) => UnifiedTermPattern::BlankNode(bn.clone()),
-            algebra::TermPattern::Literal(lit) => UnifiedTermPattern::Literal(lit.clone()),
-            algebra::TermPattern::Variable(var) => UnifiedTermPattern::Variable(var.clone()),
+            AlgebraTermPattern::NamedNode(nn) => UnifiedTermPattern::NamedNode(nn.clone()),
+            AlgebraTermPattern::BlankNode(bn) => UnifiedTermPattern::BlankNode(bn.clone()),
+            AlgebraTermPattern::Literal(lit) => UnifiedTermPattern::Literal(lit.clone()),
+            AlgebraTermPattern::Variable(var) => UnifiedTermPattern::Variable(var.clone()),
         }
     }
 
@@ -263,7 +259,7 @@ pub struct PatternConverter;
 
 impl PatternConverter {
     /// Convert a vector of algebra patterns to model patterns
-    pub fn algebra_to_model_patterns(patterns: &[algebra::TriplePattern]) -> Vec<TriplePattern> {
+    pub fn algebra_to_model_patterns(patterns: &[AlgebraTriplePattern]) -> Vec<TriplePattern> {
         patterns
             .iter()
             .map(|p| UnifiedTriplePattern::from_algebra_pattern(p).to_model_pattern())
@@ -273,7 +269,7 @@ impl PatternConverter {
     /// Convert a vector of model patterns to algebra patterns
     pub fn model_to_algebra_patterns(
         patterns: &[TriplePattern],
-    ) -> Result<Vec<algebra::TriplePattern>, OxirsError> {
+    ) -> Result<Vec<AlgebraTriplePattern>, OxirsError> {
         patterns
             .iter()
             .map(|p| UnifiedTriplePattern::from_model_pattern(p).to_algebra_pattern())
@@ -282,7 +278,7 @@ impl PatternConverter {
 
     /// Extract all variables from a set of algebra patterns
     pub fn extract_variables_from_algebra(
-        patterns: &[algebra::TriplePattern],
+        patterns: &[AlgebraTriplePattern],
     ) -> HashSet<Variable> {
         patterns
             .iter()
@@ -389,13 +385,13 @@ mod tests {
     #[test]
     fn test_unified_pattern_conversion() {
         // Create an algebra pattern
-        let algebra_pattern = algebra::TriplePattern {
-            subject: algebra::TermPattern::Variable(Variable::new("s").unwrap()),
-            predicate: algebra::TermPattern::NamedNode(
+        let algebra_pattern = AlgebraTriplePattern::new(
+            AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
+            AlgebraTermPattern::NamedNode(
                 NamedNode::new("http://example.org/pred").unwrap(),
             ),
-            object: algebra::TermPattern::Literal(Literal::new("test")),
-        };
+            AlgebraTermPattern::Literal(Literal::new("test"))
+        );
 
         // Convert to unified pattern
         let unified = UnifiedTriplePattern::from_algebra_pattern(&algebra_pattern);

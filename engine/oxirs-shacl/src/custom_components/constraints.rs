@@ -4,15 +4,17 @@
 //! including individual constraints and composite constraint composition.
 
 use crate::{
-    constraints::{ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator},
+    constraints::{
+        ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator,
+    },
     sparql::SparqlConstraint,
-    ConstraintComponentId, Result, ShaclError, Severity,
+    ConstraintComponentId, Result, Severity, ShaclError,
 };
 use oxirs_core::{model::Term, Store};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use super::performance::{ExecutionMetrics, ComponentExecutionContext};
+use super::performance::{ComponentExecutionContext, ExecutionMetrics};
 use super::security::SecurityViolation;
 
 /// Custom constraint implementation

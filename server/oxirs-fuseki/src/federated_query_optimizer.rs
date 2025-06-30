@@ -1481,7 +1481,9 @@ mod tests {
                 port: Some(9000),
                 namespace: "oxirs_fuseki".to_string(),
                 collect_system_metrics: true,
-                histogram_buckets: vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                histogram_buckets: vec![
+                    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+                ],
             },
             health_checks: crate::config::HealthCheckConfig {
                 enabled: false,
@@ -1536,7 +1538,9 @@ mod tests {
                 port: Some(9000),
                 namespace: "oxirs_fuseki".to_string(),
                 collect_system_metrics: true,
-                histogram_buckets: vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                histogram_buckets: vec![
+                    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+                ],
             },
             health_checks: crate::config::HealthCheckConfig {
                 enabled: false,

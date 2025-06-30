@@ -246,6 +246,9 @@ impl MetricsCollector {
         current_metrics.consumer_events_failed += metrics.events_failed;
         current_metrics.consumer_bytes_received += metrics.bytes_received;
         current_metrics.consumer_batches_received += metrics.batches_received;
+        
+        // Enhanced health assessment based on metrics trends
+        self.assess_system_health(&current_metrics).await;
 
         if metrics.processing_time_ms > 0.0 {
             current_metrics.consumer_average_processing_time_ms =
@@ -500,6 +503,67 @@ impl HealthChecker {
     /// Get current health status
     pub async fn get_health(&self) -> SystemHealth {
         self.health_status.read().await.clone()
+    }
+
+    /// Assess system health based on current metrics trends
+    async fn assess_system_health(&self, metrics: &StreamingMetrics) {
+        let mut health_alerts = Vec::new();
+        
+        // Producer health assessment
+        if metrics.producer_events_failed > 0 {
+            let failure_rate = metrics.producer_events_failed as f64 / 
+                (metrics.producer_events_published + metrics.producer_events_failed) as f64;
+            if failure_rate > 0.05 {
+                health_alerts.push(format!("High producer failure rate: {:.2}%", failure_rate * 100.0));
+            }
+        }
+        
+        // Consumer health assessment  
+        if metrics.consumer_events_failed > 0 {
+            let failure_rate = metrics.consumer_events_failed as f64 / 
+                metrics.consumer_events_consumed as f64;
+            if failure_rate > 0.05 {
+                health_alerts.push(format!("High consumer failure rate: {:.2}%", failure_rate * 100.0));
+            }
+        }
+        
+        // Performance health assessment
+        if metrics.producer_average_latency_ms > 1000.0 {
+            health_alerts.push(format!("High producer latency: {:.2}ms", metrics.producer_average_latency_ms));
+        }
+        
+        if metrics.consumer_average_processing_time_ms > 500.0 {
+            health_alerts.push(format!("High consumer processing time: {:.2}ms", metrics.consumer_average_processing_time_ms));
+        }
+        
+        // Update health status based on assessments
+        let health_status = if health_alerts.is_empty() {
+            HealthStatus::Healthy
+        } else if health_alerts.len() <= 2 {
+            HealthStatus::Warning
+        } else {
+            HealthStatus::Critical
+        };
+        
+        if !health_alerts.is_empty() {
+            warn!("System health alerts: {:?}", health_alerts);
+            
+            // Update health status
+            let system_health = SystemHealth {
+                status: health_status,
+                last_check: Utc::now(),
+                uptime: metrics.start_time.map(|st| Utc::now().signed_duration_since(st)).unwrap_or_default(),
+                issues: health_alerts,
+                resource_usage: ResourceUsage {
+                    cpu_percent: self.health_checker.get_system_metrics().await.cpu_usage,
+                    memory_percent: self.health_checker.get_system_metrics().await.memory_usage,
+                    disk_percent: self.health_checker.get_system_metrics().await.disk_usage,
+                    network_connections: self.health_checker.get_system_metrics().await.network_connections,
+                },
+            };
+            
+            *self.health_status.write().await = system_health;
+        }
     }
 }
 

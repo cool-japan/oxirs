@@ -13,9 +13,9 @@
 //! - Transaction support with ACID properties
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
-use std::sync::{Arc, RwLock, Mutex, Condvar};
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use oxirs_core::rdf_store::Store as CoreStore;
 use tracing::{debug, info, span, warn, Level};
@@ -214,7 +214,7 @@ impl ConnectionPool {
     /// Get a connection from the pool (blocks if none available)
     pub fn get_connection(&self) -> StarResult<PooledConnection> {
         let mut available = self.available_connections.lock().unwrap();
-        
+
         // Try to get an existing connection
         if let Some(store) = available.pop_front() {
             return Ok(PooledConnection::new(store, self.clone()));
@@ -226,7 +226,7 @@ impl ConnectionPool {
             *active_count += 1;
             drop(active_count);
             drop(available);
-            
+
             let store = Arc::new(StarStore::with_config(self.config.clone()));
             return Ok(PooledConnection::new(store, self.clone()));
         }
@@ -234,18 +234,20 @@ impl ConnectionPool {
         // Wait for a connection to become available
         drop(active_count);
         available = self.connection_available.wait(available).unwrap();
-        
+
         if let Some(store) = available.pop_front() {
             Ok(PooledConnection::new(store, self.clone()))
         } else {
-            Err(StarError::query_error("No connections available".to_string()))
+            Err(StarError::query_error(
+                "No connections available".to_string(),
+            ))
         }
     }
 
     /// Try to get a connection without blocking
     pub fn try_get_connection(&self) -> Option<PooledConnection> {
         let mut available = self.available_connections.lock().ok()?;
-        
+
         if let Some(store) = available.pop_front() {
             return Some(PooledConnection::new(store, self.clone()));
         }
@@ -255,7 +257,7 @@ impl ConnectionPool {
             *active_count += 1;
             drop(active_count);
             drop(available);
-            
+
             let store = Arc::new(StarStore::with_config(self.config.clone()));
             Some(PooledConnection::new(store, self.clone()))
         } else {
@@ -274,7 +276,7 @@ impl ConnectionPool {
     pub fn get_statistics(&self) -> PoolStatistics {
         let available = self.available_connections.lock().unwrap();
         let active_count = self.active_connections.lock().unwrap();
-        
+
         PoolStatistics {
             available_connections: available.len(),
             active_connections: *active_count,
@@ -413,21 +415,21 @@ impl StarCache {
         // Check triple cache first
         if let Some(results) = self.triple_cache.read().unwrap().get(key) {
             stats.hits += 1;
-            
+
             // Update access frequency
             let mut freq = self.access_frequency.write().unwrap();
             *freq.entry(key.to_string()).or_insert(0) += 1;
-            
+
             return Some(results.clone());
         }
 
         // Check pattern cache
         if let Some(results) = self.pattern_cache.read().unwrap().get(key) {
             stats.hits += 1;
-            
+
             let mut freq = self.access_frequency.write().unwrap();
             *freq.entry(key.to_string()).or_insert(0) += 1;
-            
+
             return Some(results.clone());
         }
 
@@ -1391,8 +1393,12 @@ impl StarStore {
         self.finalize_bulk_insert(config)?;
 
         let elapsed = start_time.elapsed();
-        info!("Bulk insertion completed in {:?} for {} triples", elapsed, triples.len());
-        
+        info!(
+            "Bulk insertion completed in {:?} for {} triples",
+            elapsed,
+            triples.len()
+        );
+
         // Update statistics
         {
             let mut stats = self.statistics.write().unwrap();
@@ -1403,7 +1409,11 @@ impl StarStore {
     }
 
     /// Sequential bulk insertion implementation
-    fn bulk_insert_sequential(&self, triples: &[StarTriple], config: &BulkInsertConfig) -> StarResult<()> {
+    fn bulk_insert_sequential(
+        &self,
+        triples: &[StarTriple],
+        config: &BulkInsertConfig,
+    ) -> StarResult<()> {
         for batch in triples.chunks(config.batch_size) {
             for triple in batch {
                 // Validate the triple
@@ -1444,7 +1454,11 @@ impl StarStore {
     }
 
     /// Parallel bulk insertion implementation
-    fn bulk_insert_parallel(&self, triples: &[StarTriple], config: &BulkInsertConfig) -> StarResult<()> {
+    fn bulk_insert_parallel(
+        &self,
+        triples: &[StarTriple],
+        config: &BulkInsertConfig,
+    ) -> StarResult<()> {
         let chunk_size = triples.len() / config.worker_threads;
         let mut handles = Vec::new();
 
@@ -1453,15 +1467,15 @@ impl StarStore {
             let store_clone = self.clone();
             let config_clone = config.clone();
 
-            let handle = thread::spawn(move || {
-                store_clone.bulk_insert_sequential(&chunk, &config_clone)
-            });
+            let handle =
+                thread::spawn(move || store_clone.bulk_insert_sequential(&chunk, &config_clone));
             handles.push(handle);
         }
 
         // Wait for all threads to complete
         for handle in handles {
-            handle.join()
+            handle
+                .join()
                 .map_err(|e| StarError::query_error(format!("Thread join error: {:?}", e)))??;
         }
 
@@ -1480,13 +1494,13 @@ impl StarStore {
 
         if !pending_triples.is_empty() {
             debug!("Flushing {} pending triples", pending_triples.len());
-            
+
             // Insert all pending triples into storage
             {
                 let mut star_triples = self.star_triples.write().unwrap();
                 let base_index = star_triples.len();
                 star_triples.extend(pending_triples.clone());
-                
+
                 // Build indices for the new triples
                 if !config.defer_index_updates {
                     let mut index = self.quoted_triple_index.write().unwrap();
@@ -1533,12 +1547,12 @@ impl StarStore {
             StarTerm::QuotedTriple(_) => 200, // Estimated overhead
             StarTerm::Variable(var) => var.name.len(),
         };
-        
+
         let predicate_size = match &triple.predicate {
             StarTerm::NamedNode(nn) => nn.iri.len(),
             _ => 50, // Default estimate
         };
-        
+
         let object_size = match &triple.object {
             StarTerm::NamedNode(nn) => nn.iri.len(),
             StarTerm::BlankNode(bn) => bn.id.len(),
@@ -1551,7 +1565,11 @@ impl StarStore {
     }
 
     /// Enable memory-mapped storage
-    pub fn enable_memory_mapping(&self, file_path: &str, enable_compression: bool) -> StarResult<()> {
+    pub fn enable_memory_mapping(
+        &self,
+        file_path: &str,
+        enable_compression: bool,
+    ) -> StarResult<()> {
         let span = span!(Level::INFO, "enable_memory_mapping");
         let _enter = span.enter();
 
@@ -1567,7 +1585,10 @@ impl StarStore {
 
         // In a full implementation, this would set up actual memory mapping
         // For now, we just track the state
-        info!("Memory-mapped storage enabled with compression: {}", enable_compression);
+        info!(
+            "Memory-mapped storage enabled with compression: {}",
+            enable_compression
+        );
         Ok(())
     }
 
@@ -1585,10 +1606,10 @@ impl StarStore {
         // Cache miss - compute results
         debug!("Cache miss for pattern: {}", pattern);
         let results = self.compute_pattern_results(pattern);
-        
+
         // Store in cache
         self.cache.put(pattern.to_string(), results.clone());
-        
+
         results
     }
 
@@ -1639,7 +1660,7 @@ impl StarStore {
         // In a full implementation, this would compress the stored triples
         let triple_count = self.len();
         info!("Compressed storage for {} triples", triple_count);
-        
+
         // Return estimated space saved (placeholder)
         Ok(triple_count * 50)
     }

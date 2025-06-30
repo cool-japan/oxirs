@@ -8,9 +8,9 @@ use bloom::{BloomFilter, ASMS};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, info};
 
-use crate::{FederatedService, ServiceCapability, ServiceRegistry};
+use super::{types::*, ServiceOptimizer};
 use crate::planner::TriplePattern;
-use super::{ServiceOptimizer, types::*};
+use crate::{FederatedService, ServiceCapability, ServiceRegistry};
 
 impl ServiceOptimizer {
     /// Perform triple pattern coverage analysis for source selection
@@ -193,8 +193,8 @@ impl ServiceOptimizer {
                     score,
                     confidence: self.calculate_confidence_level(service, predicate),
                     coverage_ratio: score, // Use score as coverage ratio for now
-                    freshness_score: 0.8, // Default freshness score
-                    authority_score: 0.7, // Default authority score
+                    freshness_score: 0.8,  // Default freshness score
+                    authority_score: 0.7,  // Default authority score
                 });
             }
         }
@@ -338,10 +338,7 @@ impl ServiceOptimizer {
         predicate: &str,
     ) -> ConfidenceLevel {
         // Higher confidence if we have statistics
-        if self
-            .get_predicate_stats(predicate)
-            .is_some()
-        {
+        if self.get_predicate_stats(predicate).is_some() {
             return ConfidenceLevel::High;
         }
 
@@ -440,10 +437,11 @@ impl ServiceOptimizer {
         };
 
         // Boost for temporal capabilities on date ranges
-        let temporal_boost = if range.data_type.contains("temporal") || range.data_type.contains("date")
-            && service
-                .capabilities
-                .contains(&ServiceCapability::TemporalQueries)
+        let temporal_boost = if range.data_type.contains("temporal")
+            || range.data_type.contains("date")
+                && service
+                    .capabilities
+                    .contains(&ServiceCapability::TemporalQueries)
         {
             0.3
         } else {
@@ -504,29 +502,33 @@ impl ServiceOptimizer {
             .await?;
 
         // Apply range selectivity factor based on data type
-        let selectivity = if range.data_type.contains("temporal") || range.data_type.contains("date") {
-            // For temporal ranges, use a simple heuristic based on range width
-            0.3 // Default temporal selectivity
-        } else if range.is_numeric || range.data_type.contains("numeric") {
-            // Parse numeric values for better selectivity estimation
-            if let (Ok(min), Ok(max)) = (range.min_value.parse::<f64>(), range.max_value.parse::<f64>()) {
-                let range_width = max - min;
-                if range_width < 100.0 {
-                    0.1
-                } else if range_width < 1000.0 {
-                    0.3
+        let selectivity =
+            if range.data_type.contains("temporal") || range.data_type.contains("date") {
+                // For temporal ranges, use a simple heuristic based on range width
+                0.3 // Default temporal selectivity
+            } else if range.is_numeric || range.data_type.contains("numeric") {
+                // Parse numeric values for better selectivity estimation
+                if let (Ok(min), Ok(max)) = (
+                    range.min_value.parse::<f64>(),
+                    range.max_value.parse::<f64>(),
+                ) {
+                    let range_width = max - min;
+                    if range_width < 100.0 {
+                        0.1
+                    } else if range_width < 1000.0 {
+                        0.3
+                    } else {
+                        0.7
+                    }
                 } else {
-                    0.7
+                    0.5 // Default if parsing fails
                 }
+            } else if range.data_type.contains("geospatial") || range.data_type.contains("geo") {
+                // Geospatial ranges vary widely in selectivity
+                0.2
             } else {
-                0.5 // Default if parsing fails
-            }
-        } else if range.data_type.contains("geospatial") || range.data_type.contains("geo") {
-            // Geospatial ranges vary widely in selectivity
-            0.2
-        } else {
-            0.5 // Default selectivity for unknown types
-        };
+                0.5 // Default selectivity for unknown types
+            };
 
         Ok((base_count as f64 * selectivity) as u64)
     }
@@ -544,7 +546,11 @@ impl ServiceOptimizer {
             max_value: "1000000.0".to_string(),
             data_type: "numeric".to_string(),
             is_numeric: true,
-            sample_values: vec!["100.0".to_string(), "1000.0".to_string(), "10000.0".to_string()],
+            sample_values: vec![
+                "100.0".to_string(),
+                "1000.0".to_string(),
+                "10000.0".to_string(),
+            ],
         })
     }
 
@@ -575,7 +581,9 @@ impl ServiceOptimizer {
             }
         } else {
             // For non-numeric ranges, do string comparison as fallback
-            if query_range.min_value >= service_range.min_value && query_range.max_value <= service_range.max_value {
+            if query_range.min_value >= service_range.min_value
+                && query_range.max_value <= service_range.max_value
+            {
                 RangeOverlapType::Complete
             } else {
                 RangeOverlapType::Partial
@@ -681,7 +689,11 @@ impl ServiceOptimizer {
                 service_endpoint.clone(),
                 BloomFilterResult {
                     service_id: service_endpoint.clone(),
-                    predicate: pattern.predicate.as_ref().unwrap_or(&"unknown".to_string()).clone(),
+                    predicate: pattern
+                        .predicate
+                        .as_ref()
+                        .unwrap_or(&"unknown".to_string())
+                        .clone(),
                     possibly_contains: membership_probability > 0.5,
                     confidence: 1.0 - filter.false_positive_rate,
                     estimated_selectivity: membership_probability,

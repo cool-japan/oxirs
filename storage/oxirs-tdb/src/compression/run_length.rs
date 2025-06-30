@@ -1,10 +1,10 @@
 //! Run-Length Encoding implementation for TDB storage
 
-use anyhow::{anyhow, Result};
 use crate::compression::{
-    AdvancedCompressionType, CompressionAlgorithm, CompressionMetadata, CompressedData,
-    MAX_COMPRESSION_INPUT_SIZE, MAX_BLOCK_COUNT
+    AdvancedCompressionType, CompressedData, CompressionAlgorithm, CompressionMetadata,
+    MAX_BLOCK_COUNT, MAX_COMPRESSION_INPUT_SIZE,
 };
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -205,11 +205,14 @@ mod tests {
     fn test_compression_algorithm_trait() {
         let encoder = RunLengthEncoder;
         let data = vec![1, 1, 1, 2, 2, 3, 3, 3, 3];
-        
+
         let compressed = encoder.compress(&data).unwrap();
-        assert_eq!(compressed.metadata.algorithm, AdvancedCompressionType::RunLength);
+        assert_eq!(
+            compressed.metadata.algorithm,
+            AdvancedCompressionType::RunLength
+        );
         assert_eq!(compressed.metadata.original_size, data.len() as u64);
-        
+
         let decompressed = encoder.decompress(&compressed).unwrap();
         assert_eq!(data, decompressed);
     }

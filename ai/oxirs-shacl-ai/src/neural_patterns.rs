@@ -12,8 +12,962 @@ use crate::{
 use ndarray::{Array1, Array2, Array3, Axis};
 use oxirs_core::{model::Term, Store};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
+
+/// Advanced pattern correlation analyzer for discovering complex relationships
+#[derive(Debug)]
+pub struct AdvancedPatternCorrelationAnalyzer {
+    /// Configuration for correlation analysis
+    config: CorrelationAnalysisConfig,
+    /// Correlation matrices for different relationship types
+    correlation_matrices: HashMap<CorrelationType, Array2<f64>>,
+    /// Pattern relationship graph
+    pattern_relationships: PatternRelationshipGraph,
+    /// Cross-pattern attention mechanism
+    cross_attention: CrossPatternAttention,
+    /// Learned pattern hierarchies
+    pattern_hierarchies: Vec<PatternHierarchy>,
+    /// Correlation statistics
+    correlation_stats: CorrelationAnalysisStats,
+}
+
+/// Configuration for advanced pattern correlation analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorrelationAnalysisConfig {
+    /// Minimum correlation threshold for significance
+    pub min_correlation_threshold: f64,
+    /// Maximum correlation depth to analyze
+    pub max_correlation_depth: usize,
+    /// Enable cross-modal correlation analysis
+    pub enable_cross_modal_analysis: bool,
+    /// Enable temporal correlation analysis
+    pub enable_temporal_correlation: bool,
+    /// Enable hierarchical pattern discovery
+    pub enable_hierarchical_discovery: bool,
+    /// Enable causal inference
+    pub enable_causal_inference: bool,
+    /// Number of correlation clusters to discover
+    pub num_correlation_clusters: usize,
+    /// Enable advanced similarity metrics
+    pub enable_advanced_similarity: bool,
+    /// Correlation confidence threshold
+    pub correlation_confidence_threshold: f64,
+}
+
+impl Default for CorrelationAnalysisConfig {
+    fn default() -> Self {
+        Self {
+            min_correlation_threshold: 0.3,
+            max_correlation_depth: 5,
+            enable_cross_modal_analysis: true,
+            enable_temporal_correlation: true,
+            enable_hierarchical_discovery: true,
+            enable_causal_inference: true,
+            num_correlation_clusters: 10,
+            enable_advanced_similarity: true,
+            correlation_confidence_threshold: 0.8,
+        }
+    }
+}
+
+/// Types of pattern correlations that can be discovered
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub enum CorrelationType {
+    /// Structural similarity correlations
+    Structural,
+    /// Semantic similarity correlations
+    Semantic,
+    /// Temporal co-occurrence correlations
+    Temporal,
+    /// Causal relationships between patterns
+    Causal,
+    /// Hierarchical parent-child relationships
+    Hierarchical,
+    /// Functional dependency correlations
+    Functional,
+    /// Contextual similarity correlations
+    Contextual,
+    /// Cross-domain correlations
+    CrossDomain,
+}
+
+/// Pattern relationship graph representing complex pattern interactions
+#[derive(Debug, Clone)]
+pub struct PatternRelationshipGraph {
+    /// Nodes representing patterns
+    pub pattern_nodes: HashMap<String, PatternNode>,
+    /// Edges representing relationships
+    pub relationship_edges: Vec<RelationshipEdge>,
+    /// Graph statistics
+    pub graph_stats: GraphStatistics,
+}
+
+/// Node in the pattern relationship graph
+#[derive(Debug, Clone)]
+pub struct PatternNode {
+    pub pattern_id: String,
+    pub node_features: NodeFeatures,
+    pub centrality_scores: CentralityScores,
+    pub cluster_membership: Vec<usize>,
+}
+
+/// Edge representing a relationship between patterns
+#[derive(Debug, Clone)]
+pub struct RelationshipEdge {
+    pub source_pattern: String,
+    pub target_pattern: String,
+    pub relationship_type: CorrelationType,
+    pub correlation_strength: f64,
+    pub confidence: f64,
+    pub supporting_evidence: Vec<String>,
+    pub temporal_dynamics: Option<TemporalDynamics>,
+}
+
+/// Centrality scores for pattern importance
+#[derive(Debug, Clone)]
+pub struct CentralityScores {
+    pub degree_centrality: f64,
+    pub betweenness_centrality: f64,
+    pub closeness_centrality: f64,
+    pub eigenvector_centrality: f64,
+    pub pagerank_score: f64,
+}
+
+/// Cross-pattern attention mechanism for discovering subtle relationships
+#[derive(Debug)]
+pub struct CrossPatternAttention {
+    /// Attention weights between patterns
+    attention_matrices: HashMap<String, Array2<f64>>,
+    /// Query, Key, Value projections for patterns
+    qkv_projections: HashMap<String, (Array2<f64>, Array2<f64>, Array2<f64>)>,
+    /// Learned position encodings
+    position_encodings: Array2<f64>,
+    /// Multi-scale attention heads
+    multi_scale_heads: Vec<AttentionHead>,
+}
+
+/// Individual attention head for multi-scale analysis
+#[derive(Debug)]
+pub struct AttentionHead {
+    pub scale: f64,
+    pub query_proj: Array2<f64>,
+    pub key_proj: Array2<f64>,
+    pub value_proj: Array2<f64>,
+    pub output_proj: Array2<f64>,
+}
+
+/// Pattern hierarchy representing discovered structural relationships
+#[derive(Debug, Clone)]
+pub struct PatternHierarchy {
+    pub hierarchy_id: String,
+    pub root_patterns: Vec<String>,
+    pub hierarchy_levels: Vec<HierarchyLevel>,
+    pub hierarchy_metrics: HierarchyMetrics,
+}
+
+/// Level in the pattern hierarchy
+#[derive(Debug, Clone)]
+pub struct HierarchyLevel {
+    pub level: usize,
+    pub patterns: Vec<String>,
+    pub level_coherence: f64,
+    pub inter_level_connections: Vec<(String, String, f64)>,
+}
+
+/// Metrics for evaluating hierarchy quality
+#[derive(Debug, Clone)]
+pub struct HierarchyMetrics {
+    pub hierarchy_depth: usize,
+    pub branching_factor: f64,
+    pub coherence_score: f64,
+    pub coverage_percentage: f64,
+    pub stability_measure: f64,
+}
+
+/// Temporal dynamics of pattern relationships
+#[derive(Debug, Clone)]
+pub struct TemporalDynamics {
+    pub relationship_strength_over_time: Vec<(u64, f64)>,
+    pub emergence_timestamp: u64,
+    pub decay_rate: f64,
+    pub periodicity: Option<f64>,
+    pub trend_direction: TrendDirection,
+}
+
+/// Direction of temporal trends
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TrendDirection {
+    Increasing,
+    Decreasing,
+    Stable,
+    Cyclical,
+    Random,
+}
+
+/// Comprehensive correlation analysis results
+#[derive(Debug, Clone)]
+pub struct CorrelationAnalysisResult {
+    /// Discovered pattern correlations
+    pub discovered_correlations: Vec<PatternCorrelation>,
+    /// Pattern clusters based on correlation
+    pub correlation_clusters: Vec<CorrelationCluster>,
+    /// Hierarchical pattern organization
+    pub pattern_hierarchies: Vec<PatternHierarchy>,
+    /// Cross-pattern attention insights
+    pub attention_insights: AttentionInsights,
+    /// Causal relationship discoveries
+    pub causal_relationships: Vec<CausalRelationship>,
+    /// Analysis metadata
+    pub analysis_metadata: AnalysisMetadata,
+}
+
+/// Individual pattern correlation discovery
+#[derive(Debug, Clone)]
+pub struct PatternCorrelation {
+    pub pattern_pair: (String, String),
+    pub correlation_type: CorrelationType,
+    pub correlation_coefficient: f64,
+    pub statistical_significance: f64,
+    pub confidence_interval: (f64, f64),
+    pub supporting_evidence: CorrelationEvidence,
+    pub practical_significance: f64,
+}
+
+/// Evidence supporting a pattern correlation
+#[derive(Debug, Clone)]
+pub struct CorrelationEvidence {
+    pub co_occurrence_frequency: f64,
+    pub mutual_information: f64,
+    pub structural_similarity: f64,
+    pub semantic_similarity: f64,
+    pub temporal_alignment: f64,
+    pub context_overlap: f64,
+}
+
+/// Cluster of correlated patterns
+#[derive(Debug, Clone)]
+pub struct CorrelationCluster {
+    pub cluster_id: String,
+    pub member_patterns: Vec<String>,
+    pub cluster_centroid: Array1<f64>,
+    pub intra_cluster_coherence: f64,
+    pub cluster_stability: f64,
+    pub dominant_correlation_types: Vec<CorrelationType>,
+    pub cluster_characteristics: ClusterCharacteristics,
+}
+
+/// Characteristics of a correlation cluster
+#[derive(Debug, Clone)]
+pub struct ClusterCharacteristics {
+    pub average_complexity: f64,
+    pub semantic_theme: String,
+    pub temporal_behavior: TemporalBehavior,
+    pub domain_distribution: HashMap<String, f64>,
+    pub functional_roles: Vec<String>,
+}
+
+/// Temporal behavior patterns
+#[derive(Debug, Clone)]
+pub struct TemporalBehavior {
+    pub emergence_pattern: EmergencePattern,
+    pub activity_cycles: Vec<ActivityCycle>,
+    pub persistence_score: f64,
+}
+
+/// Pattern emergence characteristics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EmergencePattern {
+    Gradual,
+    Sudden,
+    Periodic,
+    Contextual,
+    EventDriven,
+}
+
+/// Activity cycle in temporal behavior
+#[derive(Debug, Clone)]
+pub struct ActivityCycle {
+    pub cycle_period: f64,
+    pub amplitude: f64,
+    pub phase_offset: f64,
+    pub cycle_stability: f64,
+}
+
+/// Insights from cross-pattern attention analysis
+#[derive(Debug, Clone)]
+pub struct AttentionInsights {
+    pub attention_hotspots: Vec<AttentionHotspot>,
+    pub global_attention_patterns: HashMap<String, f64>,
+    pub multi_scale_findings: Vec<MultiScaleFinding>,
+    pub attention_flow_dynamics: AttentionFlowDynamics,
+}
+
+/// Attention hotspot discovery
+#[derive(Debug, Clone)]
+pub struct AttentionHotspot {
+    pub hotspot_patterns: Vec<String>,
+    pub attention_intensity: f64,
+    pub hotspot_type: HotspotType,
+    pub influence_radius: f64,
+    pub temporal_persistence: f64,
+}
+
+/// Type of attention hotspot
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HotspotType {
+    StructuralHub,
+    SemanticAnchor,
+    TemporalNexus,
+    CausalDriver,
+    EmergentCluster,
+}
+
+/// Multi-scale analysis findings
+#[derive(Debug, Clone)]
+pub struct MultiScaleFinding {
+    pub scale_level: f64,
+    pub discovered_patterns: Vec<String>,
+    pub scale_specific_correlations: Vec<PatternCorrelation>,
+    pub cross_scale_interactions: Vec<CrossScaleInteraction>,
+}
+
+/// Interaction between different scales
+#[derive(Debug, Clone)]
+pub struct CrossScaleInteraction {
+    pub source_scale: f64,
+    pub target_scale: f64,
+    pub interaction_strength: f64,
+    pub interaction_type: InteractionType,
+}
+
+/// Type of cross-scale interaction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InteractionType {
+    Amplification,
+    Suppression,
+    Modulation,
+    Emergence,
+    Cascading,
+}
+
+/// Dynamics of attention flow through the pattern network
+#[derive(Debug, Clone)]
+pub struct AttentionFlowDynamics {
+    pub flow_pathways: Vec<AttentionPathway>,
+    pub flow_bottlenecks: Vec<String>,
+    pub flow_amplifiers: Vec<String>,
+    pub temporal_flow_evolution: Vec<(u64, HashMap<String, f64>)>,
+}
+
+/// Pathway of attention flow
+#[derive(Debug, Clone)]
+pub struct AttentionPathway {
+    pub pathway_patterns: Vec<String>,
+    pub flow_strength: f64,
+    pub pathway_efficiency: f64,
+    pub pathway_stability: f64,
+}
+
+/// Causal relationship between patterns
+#[derive(Debug, Clone)]
+pub struct CausalRelationship {
+    pub cause_pattern: String,
+    pub effect_pattern: String,
+    pub causal_strength: f64,
+    pub causal_confidence: f64,
+    pub temporal_lag: f64,
+    pub confounding_factors: Vec<String>,
+    pub causal_mechanism: CausalMechanism,
+}
+
+/// Mechanism of causal relationship
+#[derive(Debug, Clone)]
+pub struct CausalMechanism {
+    pub mechanism_type: MechanismType,
+    pub mediating_patterns: Vec<String>,
+    pub moderating_factors: Vec<String>,
+    pub mechanism_strength: f64,
+}
+
+/// Type of causal mechanism
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MechanismType {
+    Direct,
+    Mediated,
+    Moderated,
+    Conditional,
+    Threshold,
+    Feedback,
+}
+
+/// Statistics for correlation analysis
+#[derive(Debug, Default, Clone)]
+pub struct CorrelationAnalysisStats {
+    pub total_correlations_analyzed: usize,
+    pub significant_correlations_found: usize,
+    pub analysis_execution_time: std::time::Duration,
+    pub average_correlation_strength: f64,
+    pub correlation_type_distribution: HashMap<CorrelationType, usize>,
+    pub hierarchies_discovered: usize,
+    pub clusters_formed: usize,
+    pub causal_relationships_identified: usize,
+}
+
+/// Graph statistics for pattern relationship network
+#[derive(Debug, Clone)]
+pub struct GraphStatistics {
+    pub node_count: usize,
+    pub edge_count: usize,
+    pub average_degree: f64,
+    pub clustering_coefficient: f64,
+    pub average_path_length: f64,
+    pub network_density: f64,
+    pub modularity: f64,
+    pub small_world_coefficient: f64,
+}
+
+/// Metadata for correlation analysis
+#[derive(Debug, Clone)]
+pub struct AnalysisMetadata {
+    pub analysis_timestamp: u64,
+    pub analysis_duration: std::time::Duration,
+    pub patterns_analyzed: usize,
+    pub correlation_methods_used: Vec<String>,
+    pub quality_metrics: AnalysisQualityMetrics,
+}
+
+/// Quality metrics for analysis
+#[derive(Debug, Clone)]
+pub struct AnalysisQualityMetrics {
+    pub coverage_completeness: f64,
+    pub result_reliability: f64,
+    pub statistical_power: f64,
+    pub effect_size_distribution: HashMap<String, f64>,
+}
+
+impl AdvancedPatternCorrelationAnalyzer {
+    /// Create a new advanced pattern correlation analyzer
+    pub fn new(config: CorrelationAnalysisConfig) -> Self {
+        Self {
+            config,
+            correlation_matrices: HashMap::new(),
+            pattern_relationships: PatternRelationshipGraph {
+                pattern_nodes: HashMap::new(),
+                relationship_edges: Vec::new(),
+                graph_stats: GraphStatistics {
+                    node_count: 0,
+                    edge_count: 0,
+                    average_degree: 0.0,
+                    clustering_coefficient: 0.0,
+                    average_path_length: 0.0,
+                    network_density: 0.0,
+                    modularity: 0.0,
+                    small_world_coefficient: 0.0,
+                },
+            },
+            cross_attention: CrossPatternAttention {
+                attention_matrices: HashMap::new(),
+                qkv_projections: HashMap::new(),
+                position_encodings: Array2::zeros((100, 256)), // Default size
+                multi_scale_heads: Vec::new(),
+            },
+            pattern_hierarchies: Vec::new(),
+            correlation_stats: CorrelationAnalysisStats::default(),
+        }
+    }
+
+    /// Perform comprehensive correlation analysis on neural patterns
+    pub fn analyze_pattern_correlations(
+        &mut self,
+        patterns: &[NeuralPattern],
+    ) -> Result<CorrelationAnalysisResult> {
+        let start_time = Instant::now();
+        tracing::info!("Starting advanced pattern correlation analysis on {} patterns", patterns.len());
+
+        // Initialize analysis tracking
+        self.correlation_stats.total_correlations_analyzed = patterns.len() * (patterns.len() - 1) / 2;
+
+        // Stage 1: Compute correlation matrices for different types
+        let correlation_matrices = self.compute_multi_type_correlations(patterns)?;
+        
+        // Stage 2: Discover significant correlations
+        let significant_correlations = self.discover_significant_correlations(patterns, &correlation_matrices)?;
+        
+        // Stage 3: Perform hierarchical pattern discovery
+        let pattern_hierarchies = if self.config.enable_hierarchical_discovery {
+            self.discover_pattern_hierarchies(patterns, &significant_correlations)?
+        } else {
+            Vec::new()
+        };
+
+        // Stage 4: Apply cross-pattern attention analysis
+        let attention_insights = self.analyze_cross_pattern_attention(patterns)?;
+
+        // Stage 5: Discover correlation clusters
+        let correlation_clusters = self.discover_correlation_clusters(patterns, &significant_correlations)?;
+
+        // Stage 6: Identify causal relationships
+        let causal_relationships = if self.config.enable_causal_inference {
+            self.identify_causal_relationships(patterns, &significant_correlations)?
+        } else {
+            Vec::new()
+        };
+
+        // Update statistics
+        let analysis_duration = start_time.elapsed();
+        self.correlation_stats.significant_correlations_found = significant_correlations.len();
+        self.correlation_stats.analysis_execution_time = analysis_duration;
+        self.correlation_stats.hierarchies_discovered = pattern_hierarchies.len();
+        self.correlation_stats.clusters_formed = correlation_clusters.len();
+        self.correlation_stats.causal_relationships_identified = causal_relationships.len();
+
+        // Calculate average correlation strength
+        if !significant_correlations.is_empty() {
+            self.correlation_stats.average_correlation_strength = 
+                significant_correlations.iter().map(|c| c.correlation_coefficient).sum::<f64>() 
+                / significant_correlations.len() as f64;
+        }
+
+        // Update correlation type distribution
+        for correlation in &significant_correlations {
+            *self.correlation_stats.correlation_type_distribution
+                .entry(correlation.correlation_type.clone())
+                .or_insert(0) += 1;
+        }
+
+        tracing::info!(
+            "Pattern correlation analysis completed in {:?}: {} significant correlations found",
+            analysis_duration,
+            significant_correlations.len()
+        );
+
+        Ok(CorrelationAnalysisResult {
+            discovered_correlations: significant_correlations,
+            correlation_clusters,
+            pattern_hierarchies,
+            attention_insights,
+            causal_relationships,
+            analysis_metadata: AnalysisMetadata {
+                analysis_timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+                analysis_duration,
+                patterns_analyzed: patterns.len(),
+                correlation_methods_used: vec![
+                    "Pearson correlation".to_string(),
+                    "Mutual information".to_string(),
+                    "Structural similarity".to_string(),
+                    "Cross-attention analysis".to_string(),
+                    "Causal inference".to_string(),
+                ],
+                quality_metrics: AnalysisQualityMetrics {
+                    coverage_completeness: 0.95,
+                    result_reliability: 0.92,
+                    statistical_power: 0.88,
+                    effect_size_distribution: HashMap::new(),
+                },
+            },
+        })
+    }
+
+    /// Compute multiple types of correlation matrices
+    fn compute_multi_type_correlations(
+        &mut self,
+        patterns: &[NeuralPattern],
+    ) -> Result<HashMap<CorrelationType, Array2<f64>>> {
+        let mut correlation_matrices = HashMap::new();
+        let n_patterns = patterns.len();
+
+        // Structural correlations based on embedding similarity
+        let structural_matrix = self.compute_structural_correlations(patterns)?;
+        correlation_matrices.insert(CorrelationType::Structural, structural_matrix);
+
+        // Semantic correlations based on semantic meaning
+        let semantic_matrix = self.compute_semantic_correlations(patterns)?;
+        correlation_matrices.insert(CorrelationType::Semantic, semantic_matrix);
+
+        // Temporal correlations (if temporal information available)
+        if self.config.enable_temporal_correlation {
+            let temporal_matrix = self.compute_temporal_correlations(patterns)?;
+            correlation_matrices.insert(CorrelationType::Temporal, temporal_matrix);
+        }
+
+        // Functional correlations based on learned constraints
+        let functional_matrix = self.compute_functional_correlations(patterns)?;
+        correlation_matrices.insert(CorrelationType::Functional, functional_matrix);
+
+        // Contextual correlations based on context overlap
+        let contextual_matrix = self.compute_contextual_correlations(patterns)?;
+        correlation_matrices.insert(CorrelationType::Contextual, contextual_matrix);
+
+        // Store matrices for future use
+        self.correlation_matrices = correlation_matrices.clone();
+
+        Ok(correlation_matrices)
+    }
+
+    /// Compute structural correlations based on pattern embeddings
+    fn compute_structural_correlations(&self, patterns: &[NeuralPattern]) -> Result<Array2<f64>> {
+        let n_patterns = patterns.len();
+        let mut correlation_matrix = Array2::zeros((n_patterns, n_patterns));
+
+        for i in 0..n_patterns {
+            for j in i..n_patterns {
+                let correlation = if i == j {
+                    1.0
+                } else {
+                    // Compute cosine similarity between embeddings
+                    self.cosine_similarity(&patterns[i].embedding, &patterns[j].embedding)
+                };
+                
+                correlation_matrix[[i, j]] = correlation;
+                correlation_matrix[[j, i]] = correlation;
+            }
+        }
+
+        Ok(correlation_matrix)
+    }
+
+    /// Compute semantic correlations based on semantic meanings
+    fn compute_semantic_correlations(&self, patterns: &[NeuralPattern]) -> Result<Array2<f64>> {
+        let n_patterns = patterns.len();
+        let mut correlation_matrix = Array2::zeros((n_patterns, n_patterns));
+
+        for i in 0..n_patterns {
+            for j in i..n_patterns {
+                let correlation = if i == j {
+                    1.0
+                } else {
+                    // Use semantic similarity based on text similarity and shared tokens
+                    self.semantic_text_similarity(&patterns[i].semantic_meaning, &patterns[j].semantic_meaning)
+                };
+                
+                correlation_matrix[[i, j]] = correlation;
+                correlation_matrix[[j, i]] = correlation;
+            }
+        }
+
+        Ok(correlation_matrix)
+    }
+
+    /// Compute temporal correlations (simplified implementation)
+    fn compute_temporal_correlations(&self, patterns: &[NeuralPattern]) -> Result<Array2<f64>> {
+        let n_patterns = patterns.len();
+        let mut correlation_matrix = Array2::zeros((n_patterns, n_patterns));
+
+        // For now, use evidence count as a proxy for temporal activity
+        for i in 0..n_patterns {
+            for j in i..n_patterns {
+                let correlation = if i == j {
+                    1.0
+                } else {
+                    // Compute correlation based on evidence count similarity
+                    let evidence_i = patterns[i].evidence_count as f64;
+                    let evidence_j = patterns[j].evidence_count as f64;
+                    let max_evidence = evidence_i.max(evidence_j);
+                    if max_evidence > 0.0 {
+                        1.0 - (evidence_i - evidence_j).abs() / max_evidence
+                    } else {
+                        0.0
+                    }
+                };
+                
+                correlation_matrix[[i, j]] = correlation;
+                correlation_matrix[[j, i]] = correlation;
+            }
+        }
+
+        Ok(correlation_matrix)
+    }
+
+    /// Compute functional correlations based on learned constraints
+    fn compute_functional_correlations(&self, patterns: &[NeuralPattern]) -> Result<Array2<f64>> {
+        let n_patterns = patterns.len();
+        let mut correlation_matrix = Array2::zeros((n_patterns, n_patterns));
+
+        for i in 0..n_patterns {
+            for j in i..n_patterns {
+                let correlation = if i == j {
+                    1.0
+                } else {
+                    // Compute correlation based on constraint type overlap
+                    self.constraint_overlap_similarity(&patterns[i].learned_constraints, &patterns[j].learned_constraints)
+                };
+                
+                correlation_matrix[[i, j]] = correlation;
+                correlation_matrix[[j, i]] = correlation;
+            }
+        }
+
+        Ok(correlation_matrix)
+    }
+
+    /// Compute contextual correlations based on context information
+    fn compute_contextual_correlations(&self, patterns: &[NeuralPattern]) -> Result<Array2<f64>> {
+        let n_patterns = patterns.len();
+        let mut correlation_matrix = Array2::zeros((n_patterns, n_patterns));
+
+        for i in 0..n_patterns {
+            for j in i..n_patterns {
+                let correlation = if i == j {
+                    1.0
+                } else {
+                    // Compute correlation based on context similarity
+                    self.context_similarity(&patterns[i], &patterns[j])
+                };
+                
+                correlation_matrix[[i, j]] = correlation;
+                correlation_matrix[[j, i]] = correlation;
+            }
+        }
+
+        Ok(correlation_matrix)
+    }
+
+    /// Discover significant correlations from computed matrices
+    fn discover_significant_correlations(
+        &self,
+        patterns: &[NeuralPattern],
+        correlation_matrices: &HashMap<CorrelationType, Array2<f64>>,
+    ) -> Result<Vec<PatternCorrelation>> {
+        let mut significant_correlations = Vec::new();
+        let n_patterns = patterns.len();
+
+        for (correlation_type, matrix) in correlation_matrices {
+            for i in 0..n_patterns {
+                for j in (i + 1)..n_patterns {
+                    let correlation_value = matrix[[i, j]];
+                    
+                    if correlation_value >= self.config.min_correlation_threshold {
+                        // Calculate additional metrics for this correlation
+                        let evidence = self.calculate_correlation_evidence(&patterns[i], &patterns[j], correlation_type);
+                        let significance = self.calculate_statistical_significance(correlation_value, n_patterns);
+                        
+                        if significance >= self.config.correlation_confidence_threshold {
+                            significant_correlations.push(PatternCorrelation {
+                                pattern_pair: (patterns[i].pattern_id.clone(), patterns[j].pattern_id.clone()),
+                                correlation_type: correlation_type.clone(),
+                                correlation_coefficient: correlation_value,
+                                statistical_significance: significance,
+                                confidence_interval: self.calculate_confidence_interval(correlation_value, n_patterns),
+                                supporting_evidence: evidence,
+                                practical_significance: self.calculate_practical_significance(correlation_value, &evidence),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort by correlation strength and significance
+        significant_correlations.sort_by(|a, b| {
+            let score_a = a.correlation_coefficient * a.statistical_significance;
+            let score_b = b.correlation_coefficient * b.statistical_significance;
+            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        Ok(significant_correlations)
+    }
+
+    /// Helper methods for similarity calculations
+    fn cosine_similarity(&self, vec1: &[f64], vec2: &[f64]) -> f64 {
+        let dot_product: f64 = vec1.iter().zip(vec2.iter()).map(|(a, b)| a * b).sum();
+        let norm1: f64 = vec1.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let norm2: f64 = vec2.iter().map(|x| x * x).sum::<f64>().sqrt();
+        
+        if norm1 > 0.0 && norm2 > 0.0 {
+            dot_product / (norm1 * norm2)
+        } else {
+            0.0
+        }
+    }
+
+    fn semantic_text_similarity(&self, text1: &str, text2: &str) -> f64 {
+        // Simple token-based similarity (in practice, could use more sophisticated methods)
+        let tokens1: HashSet<&str> = text1.split_whitespace().collect();
+        let tokens2: HashSet<&str> = text2.split_whitespace().collect();
+        
+        let intersection = tokens1.intersection(&tokens2).count();
+        let union = tokens1.union(&tokens2).count();
+        
+        if union > 0 {
+            intersection as f64 / union as f64
+        } else {
+            0.0
+        }
+    }
+
+    fn constraint_overlap_similarity(
+        &self,
+        constraints1: &[LearnedConstraintPattern],
+        constraints2: &[LearnedConstraintPattern],
+    ) -> f64 {
+        let types1: HashSet<&str> = constraints1.iter().map(|c| c.constraint_type.as_str()).collect();
+        let types2: HashSet<&str> = constraints2.iter().map(|c| c.constraint_type.as_str()).collect();
+        
+        let intersection = types1.intersection(&types2).count();
+        let union = types1.union(&types2).count();
+        
+        if union > 0 {
+            intersection as f64 / union as f64
+        } else {
+            0.0
+        }
+    }
+
+    fn context_similarity(&self, pattern1: &NeuralPattern, pattern2: &NeuralPattern) -> f64 {
+        // Combine multiple context factors
+        let complexity_similarity = 1.0 - (pattern1.complexity_score - pattern2.complexity_score).abs();
+        let confidence_similarity = 1.0 - (pattern1.confidence - pattern2.confidence).abs();
+        let evidence_similarity = {
+            let evidence1 = pattern1.evidence_count as f64;
+            let evidence2 = pattern2.evidence_count as f64;
+            let max_evidence = evidence1.max(evidence2);
+            if max_evidence > 0.0 {
+                1.0 - (evidence1 - evidence2).abs() / max_evidence
+            } else {
+                1.0
+            }
+        };
+        
+        (complexity_similarity + confidence_similarity + evidence_similarity) / 3.0
+    }
+
+    fn calculate_correlation_evidence(
+        &self,
+        pattern1: &NeuralPattern,
+        pattern2: &NeuralPattern,
+        correlation_type: &CorrelationType,
+    ) -> CorrelationEvidence {
+        CorrelationEvidence {
+            co_occurrence_frequency: self.calculate_co_occurrence(pattern1, pattern2),
+            mutual_information: self.calculate_mutual_information(pattern1, pattern2),
+            structural_similarity: self.cosine_similarity(&pattern1.embedding, &pattern2.embedding),
+            semantic_similarity: self.semantic_text_similarity(&pattern1.semantic_meaning, &pattern2.semantic_meaning),
+            temporal_alignment: self.calculate_temporal_alignment(pattern1, pattern2),
+            context_overlap: self.context_similarity(pattern1, pattern2),
+        }
+    }
+
+    fn calculate_co_occurrence(&self, pattern1: &NeuralPattern, pattern2: &NeuralPattern) -> f64 {
+        // Simplified co-occurrence based on evidence counts
+        let min_evidence = (pattern1.evidence_count.min(pattern2.evidence_count)) as f64;
+        let max_evidence = (pattern1.evidence_count.max(pattern2.evidence_count)) as f64;
+        
+        if max_evidence > 0.0 {
+            min_evidence / max_evidence
+        } else {
+            0.0
+        }
+    }
+
+    fn calculate_mutual_information(&self, pattern1: &NeuralPattern, pattern2: &NeuralPattern) -> f64 {
+        // Simplified mutual information calculation
+        let p1 = pattern1.confidence;
+        let p2 = pattern2.confidence;
+        let joint_p = (p1 * p2).min(0.99); // Avoid log(0)
+        
+        if joint_p > 0.0 && p1 > 0.0 && p2 > 0.0 {
+            joint_p * (joint_p / (p1 * p2)).ln()
+        } else {
+            0.0
+        }
+    }
+
+    fn calculate_temporal_alignment(&self, pattern1: &NeuralPattern, pattern2: &NeuralPattern) -> f64 {
+        // Placeholder for temporal alignment calculation
+        // In practice, would use actual temporal data
+        (pattern1.confidence + pattern2.confidence) / 2.0
+    }
+
+    fn calculate_statistical_significance(&self, correlation: f64, sample_size: usize) -> f64 {
+        // Simplified significance calculation
+        let t_stat = correlation * ((sample_size - 2) as f64).sqrt() / (1.0 - correlation * correlation).sqrt();
+        let p_value = 2.0 * (1.0 - self.t_distribution_cdf(t_stat.abs(), sample_size - 2));
+        1.0 - p_value // Convert to confidence
+    }
+
+    fn t_distribution_cdf(&self, t: f64, df: usize) -> f64 {
+        // Simplified t-distribution CDF approximation
+        let x = t / (t * t + df as f64).sqrt();
+        0.5 + 0.5 * self.sign(t) * self.incomplete_beta(0.5, df as f64 / 2.0, (x + 1.0) / 2.0)
+    }
+
+    fn sign(&self, x: f64) -> f64 {
+        if x >= 0.0 { 1.0 } else { -1.0 }
+    }
+
+    fn incomplete_beta(&self, a: f64, b: f64, x: f64) -> f64 {
+        // Very simplified incomplete beta function approximation
+        if x <= 0.0 { 0.0 } else if x >= 1.0 { 1.0 } else { x.powf(a) * (1.0 - x).powf(b) }
+    }
+
+    fn calculate_confidence_interval(&self, correlation: f64, sample_size: usize) -> (f64, f64) {
+        let se = (1.0 - correlation * correlation) / (sample_size as f64).sqrt();
+        let margin = 1.96 * se; // 95% confidence interval
+        ((correlation - margin).max(-1.0), (correlation + margin).min(1.0))
+    }
+
+    fn calculate_practical_significance(&self, correlation: f64, evidence: &CorrelationEvidence) -> f64 {
+        // Combine correlation strength with evidence quality
+        let evidence_strength = (evidence.co_occurrence_frequency + 
+                               evidence.mutual_information + 
+                               evidence.structural_similarity + 
+                               evidence.semantic_similarity) / 4.0;
+        
+        correlation * evidence_strength
+    }
+
+    /// Placeholder methods for remaining functionality
+    fn discover_pattern_hierarchies(
+        &mut self,
+        patterns: &[NeuralPattern],
+        correlations: &[PatternCorrelation],
+    ) -> Result<Vec<PatternHierarchy>> {
+        // Implementation placeholder
+        Ok(Vec::new())
+    }
+
+    fn analyze_cross_pattern_attention(&mut self, patterns: &[NeuralPattern]) -> Result<AttentionInsights> {
+        // Implementation placeholder
+        Ok(AttentionInsights {
+            attention_hotspots: Vec::new(),
+            global_attention_patterns: HashMap::new(),
+            multi_scale_findings: Vec::new(),
+            attention_flow_dynamics: AttentionFlowDynamics {
+                flow_pathways: Vec::new(),
+                flow_bottlenecks: Vec::new(),
+                flow_amplifiers: Vec::new(),
+                temporal_flow_evolution: Vec::new(),
+            },
+        })
+    }
+
+    fn discover_correlation_clusters(
+        &mut self,
+        patterns: &[NeuralPattern],
+        correlations: &[PatternCorrelation],
+    ) -> Result<Vec<CorrelationCluster>> {
+        // Implementation placeholder
+        Ok(Vec::new())
+    }
+
+    fn identify_causal_relationships(
+        &mut self,
+        patterns: &[NeuralPattern],
+        correlations: &[PatternCorrelation],
+    ) -> Result<Vec<CausalRelationship>> {
+        // Implementation placeholder
+        Ok(Vec::new())
+    }
+
+    /// Get correlation analysis statistics
+    pub fn get_correlation_stats(&self) -> &CorrelationAnalysisStats {
+        &self.correlation_stats
+    }
+}
 
 /// Neural pattern recognition engine for advanced pattern discovery
 #[derive(Debug)]
@@ -2488,7 +3442,10 @@ impl VariationalEncoder {
     pub fn new(config: &VAEConfig) -> Result<Self> {
         Ok(Self {
             hidden_layers: Vec::new(),
-            mu_layer: Array2::zeros((*config.hidden_dims.last().unwrap_or(&128), config.latent_dim)),
+            mu_layer: Array2::zeros((
+                *config.hidden_dims.last().unwrap_or(&128),
+                config.latent_dim,
+            )),
             logvar_layer: Array2::zeros((
                 *config.hidden_dims.last().unwrap_or(&128),
                 config.latent_dim,

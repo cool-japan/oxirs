@@ -44,9 +44,7 @@ pub struct MemoryBackend {
 
 impl MemoryBackend {
     pub fn new() -> Self {
-        Self {
-            connected: false,
-        }
+        Self { connected: false }
     }
 }
 

@@ -35,13 +35,16 @@
 use std::net::SocketAddr;
 
 pub mod aggregation;
+pub mod analytics;
 pub mod auth;
 pub mod bind_values_enhanced;
 pub mod clustering;
 pub mod config;
+pub mod consciousness;
 pub mod error;
 pub mod federated_query_optimizer;
 pub mod federation;
+pub mod graph_analytics;
 pub mod handlers;
 pub mod metrics;
 pub mod optimization;

@@ -277,7 +277,10 @@ impl AsyncWrite for AtomicFileWriter {
         }
     }
 
-    fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
         if let Some(ref mut file) = self.file {
             let file_pin = std::pin::Pin::new(file);
             file_pin.poll_flush(cx)
@@ -286,7 +289,10 @@ impl AsyncWrite for AtomicFileWriter {
         }
     }
 
-    fn poll_shutdown(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
         if let Some(ref mut file) = self.file {
             let file_pin = std::pin::Pin::new(file);
             file_pin.poll_shutdown(cx)
@@ -388,8 +394,6 @@ impl CorruptionDetector {
         self.verify_file_integrity(path).await
     }
 }
-
-
 
 /// Schema evolution support for backward compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]

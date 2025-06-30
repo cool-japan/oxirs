@@ -765,7 +765,7 @@ impl Default for MultiModalConfig {
         Self {
             enable_caching: true,
             cache_ttl: Duration::from_secs(3600), // 1 hour
-            max_content_size: 100 * 1024 * 1024, // 100MB
+            max_content_size: 100 * 1024 * 1024,  // 100MB
             parallel_processing: true,
             quality_threshold: 0.7,
             semantic_analysis_enabled: true,

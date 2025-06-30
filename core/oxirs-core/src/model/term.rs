@@ -5,7 +5,7 @@ use crate::model::{
 };
 use crate::OxirsError;
 use lazy_static::lazy_static;
-use rand::random;
+// use rand::random; // Replaced with fastrand
 use regex::Regex;
 // use serde::{Deserialize, Serialize}; // Available for serialization features
 use std::collections::HashSet;
@@ -144,7 +144,7 @@ impl Default for BlankNode {
     /// Ensures the ID does not start with a number to be also valid with RDF/XML
     fn default() -> Self {
         loop {
-            let id: u128 = random();
+            let id: u128 = fastrand::u128(..);
             let str = format!("{:x}", id);
             if matches!(str.as_bytes().first(), Some(b'a'..=b'f')) {
                 return Self {

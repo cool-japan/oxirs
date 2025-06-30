@@ -17,7 +17,107 @@ use crate::{
     PropertyPath, Result, Severity, ShaclError, ShapeId,
 };
 
+/// Report output formats supported by the SHACL validator
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReportFormat {
+    /// Turtle/TTL format
+    Turtle,
+    /// JSON-LD format
+    JsonLd,
+    /// RDF/XML format
+    RdfXml,
+    /// N-Triples format
+    NTriples,
+    /// JSON format (non-RDF)
+    Json,
+    /// HTML format with styling
+    Html,
+    /// CSV format for tabular data
+    Csv,
+    /// Plain text summary
+    Text,
+    /// YAML format
+    Yaml,
+}
+
+impl fmt::Display for ReportFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReportFormat::Turtle => write!(f, "turtle"),
+            ReportFormat::JsonLd => write!(f, "jsonld"),
+            ReportFormat::RdfXml => write!(f, "rdfxml"),
+            ReportFormat::NTriples => write!(f, "ntriples"),
+            ReportFormat::Json => write!(f, "json"),
+            ReportFormat::Html => write!(f, "html"),
+            ReportFormat::Csv => write!(f, "csv"),
+            ReportFormat::Text => write!(f, "text"),
+            ReportFormat::Yaml => write!(f, "yaml"),
+        }
+    }
+}
+
 /// SHACL validation report according to W3C specification
+///
+/// The `ValidationReport` contains the results of SHACL validation, including
+/// conformance status, detailed violation information, and metadata about
+/// the validation process.
+///
+/// ## Example
+///
+/// ```rust
+/// use oxirs_shacl::{ValidationReport, ValidationViolation, ReportFormat};
+/// use oxirs_core::model::*;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create a new validation report
+/// let mut report = ValidationReport::new();
+///
+/// // Add violations if any are found during validation
+/// // report.add_violation(violation);
+///
+/// // Check if data conforms to all shapes
+/// if report.conforms() {
+///     println!("✅ Data is valid!");
+/// } else {
+///     println!("❌ Found {} violations", report.violation_count());
+///     
+///     // Print violations
+///     for violation in report.violations() {
+///         println!("Violation at {}: {}", 
+///             violation.focus_node,
+///             violation.result_message.as_deref().unwrap_or("No message")
+///         );
+///     }
+/// }
+///
+/// // Export report in different formats
+/// let json_report = report.to_json()?;
+/// let html_report = report.to_html()?;
+/// let turtle_report = report.to_turtle()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## Report Formats
+///
+/// The validation report can be exported in multiple formats:
+///
+/// - **JSON**: Machine-readable format for APIs
+/// - **HTML**: Human-readable format with styling
+/// - **Turtle/RDF**: W3C standard RDF format
+/// - **CSV**: Tabular format for spreadsheet analysis
+/// - **Text**: Simple plain text summary
+///
+/// ## Violation Analysis
+///
+/// Each violation contains detailed information:
+///
+/// - **Focus node**: The RDF node that failed validation
+/// - **Property path**: The path to the violating value (if applicable)
+/// - **Constraint component**: Which SHACL constraint was violated
+/// - **Severity**: Error, warning, or info level
+/// - **Message**: Human-readable explanation
+///
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationReport {
     /// Whether the data conforms to all shapes
@@ -127,6 +227,87 @@ impl ValidationReport {
         report
     }
 
+    /// Filter violations by multiple severities
+    pub fn filter_by_severities(&self, severities: &[Severity]) -> ValidationReport {
+        let filtered_violations: Vec<ValidationViolation> = self
+            .violations
+            .iter()
+            .filter(|v| severities.contains(&v.result_severity))
+            .cloned()
+            .collect();
+
+        let mut report = ValidationReport::with_metadata(self.metadata.clone());
+        report.add_violations(filtered_violations);
+        report
+    }
+
+    /// Filter violations by minimum severity level
+    pub fn filter_by_minimum_severity(&self, min_severity: &Severity) -> ValidationReport {
+        let filtered_violations: Vec<ValidationViolation> = self
+            .violations
+            .iter()
+            .filter(|v| self.severity_level(&v.result_severity) >= self.severity_level(min_severity))
+            .cloned()
+            .collect();
+
+        let mut report = ValidationReport::with_metadata(self.metadata.clone());
+        report.add_violations(filtered_violations);
+        report
+    }
+
+    /// Get severity level as numeric value for comparison
+    fn severity_level(&self, severity: &Severity) -> u8 {
+        match severity {
+            Severity::Info => 1,
+            Severity::Warning => 2,
+            Severity::Violation => 3,
+        }
+    }
+
+    /// Filter violations by shape pattern
+    pub fn filter_by_shape_pattern(&self, pattern: &str) -> ValidationReport {
+        let filtered_violations: Vec<ValidationViolation> = self
+            .violations
+            .iter()
+            .filter(|v| v.source_shape.as_str().contains(pattern))
+            .cloned()
+            .collect();
+
+        let mut report = ValidationReport::with_metadata(self.metadata.clone());
+        report.add_violations(filtered_violations);
+        report
+    }
+
+    /// Filter violations by constraint component pattern
+    pub fn filter_by_constraint_pattern(&self, pattern: &str) -> ValidationReport {
+        let filtered_violations: Vec<ValidationViolation> = self
+            .violations
+            .iter()
+            .filter(|v| v.source_constraint_component.as_str().contains(pattern))
+            .cloned()
+            .collect();
+
+        let mut report = ValidationReport::with_metadata(self.metadata.clone());
+        report.add_violations(filtered_violations);
+        report
+    }
+
+    /// Get violations with nested results flattened
+    pub fn get_flattened_violations(&self) -> Vec<&ValidationViolation> {
+        let mut flattened = Vec::new();
+        for violation in &self.violations {
+            flattened.extend(violation.flatten_violations());
+        }
+        flattened
+    }
+
+    /// Get total violation count including nested
+    pub fn total_violation_count_including_nested(&self) -> usize {
+        self.violations.iter()
+            .map(|v| v.total_violation_count())
+            .sum()
+    }
+
     /// Update the summary statistics
     fn update_summary(&mut self) {
         self.summary = ValidationSummary::from_violations(&self.violations);
@@ -145,7 +326,7 @@ impl ValidationReport {
             ))),
         }
     }
-    
+
     /// Generate a representation of the report in any supported format
     pub fn to_format(&self, format: &str) -> Result<String> {
         match format.to_lowercase().as_str() {
@@ -154,18 +335,343 @@ impl ValidationReport {
             "json-ld" | "jsonld" => self.to_json_ld(),
             "rdf-xml" | "rdfxml" | "xml" => self.to_rdf_xml(),
             "n-triples" | "nt" => self.to_n_triples(),
-            
+
             // Non-RDF formats
             "json" => self.to_json(),
             "html" => self.to_html(),
             "csv" => self.to_csv(),
             "tsv" => self.to_tsv(),
-            
+
+            // Enhanced formats
+            "markdown" | "md" => self.to_markdown(),
+            "yaml" => self.to_yaml(),
+            "summary" => self.to_summary(),
+            "detailed-html" => self.to_detailed_html(),
+
             _ => Err(ShaclError::ReportGeneration(format!(
-                "Unsupported format: {}. Supported formats: turtle, json-ld, rdf-xml, n-triples, json, html, csv, tsv",
+                "Unsupported format: {}. Supported formats: turtle, json-ld, rdf-xml, n-triples, json, html, csv, tsv, markdown, yaml, summary, detailed-html",
                 format
             ))),
         }
+    }
+
+    /// Generate a filtered report based on configuration
+    pub fn to_format_with_config(&self, format: &str, config: &ReportConfig) -> Result<String> {
+        let mut filtered_report = self.clone();
+
+        // Apply severity filter
+        if let Some(ref severity_filter) = config.severity_filter {
+            let filtered_violations: Vec<ValidationViolation> = filtered_report
+                .violations
+                .into_iter()
+                .filter(|v| severity_filter.contains(&v.result_severity))
+                .collect();
+            
+            filtered_report = ValidationReport::with_metadata(self.metadata.clone());
+            filtered_report.add_violations(filtered_violations);
+        }
+
+        // Apply violation limit
+        if let Some(max_violations) = config.max_violations {
+            filtered_report.violations.truncate(max_violations);
+        }
+
+        filtered_report.to_format(format)
+    }
+
+    /// Generate a Markdown representation
+    fn to_markdown(&self) -> Result<String> {
+        let mut md = String::new();
+
+        // Header
+        md.push_str("# SHACL Validation Report\n\n");
+        
+        // Status badge
+        let status_badge = if self.conforms {
+            "![Status](https://img.shields.io/badge/Status-PASS-brightgreen)"
+        } else {
+            "![Status](https://img.shields.io/badge/Status-FAIL-red)"
+        };
+        md.push_str(&format!("{}\n\n", status_badge));
+
+        // Metadata
+        md.push_str("## Report Metadata\n\n");
+        md.push_str(&format!("- **Generated**: {}\n", self.metadata.formatted_timestamp()));
+        md.push_str(&format!("- **SHACL Version**: {}\n", self.metadata.shacl_version));
+        md.push_str(&format!("- **Validator Version**: {}\n\n", self.metadata.validator_version));
+
+        // Summary
+        md.push_str("## Summary\n\n");
+        md.push_str(&format!("| Metric | Count |\n"));
+        md.push_str(&format!("|--------|-------|\n"));
+        md.push_str(&format!("| Conforms | {} |\n", if self.conforms { "✅ Yes" } else { "❌ No" }));
+        md.push_str(&format!("| Total Violations | {} |\n", self.summary.total_violations));
+        md.push_str(&format!("| Violations | {} |\n", self.summary.violation_count));
+        md.push_str(&format!("| Warnings | {} |\n", self.summary.warning_count));
+        md.push_str(&format!("| Info | {} |\n", self.summary.info_count));
+        md.push_str(&format!("| Shapes Evaluated | {} |\n\n", self.summary.shapes_evaluated.len()));
+
+        // Violations
+        if !self.violations.is_empty() {
+            md.push_str("## Violations\n\n");
+            
+            // Group by severity
+            let mut violations_by_severity = std::collections::HashMap::new();
+            for violation in &self.violations {
+                violations_by_severity
+                    .entry(&violation.result_severity)
+                    .or_insert_with(Vec::new)
+                    .push(violation);
+            }
+
+            for (severity, violations) in violations_by_severity {
+                let severity_icon = match severity {
+                    crate::Severity::Violation => "🚫",
+                    crate::Severity::Warning => "⚠️",
+                    crate::Severity::Info => "ℹ️",
+                };
+
+                md.push_str(&format!("### {} {} ({} items)\n\n", severity_icon, severity, violations.len()));
+
+                for (i, violation) in violations.iter().enumerate() {
+                    md.push_str(&format!("#### {}. Violation {}\n\n", i + 1, i + 1));
+                    md.push_str(&format!("- **Focus Node**: `{}`\n", violation.focus_node.as_str()));
+                    md.push_str(&format!("- **Source Shape**: `{}`\n", violation.source_shape.as_str()));
+                    md.push_str(&format!("- **Constraint Component**: `{}`\n", violation.source_constraint_component.as_str()));
+                    
+                    if let Some(path) = &violation.result_path {
+                        md.push_str(&format!("- **Property Path**: `{:?}`\n", path));
+                    }
+                    
+                    if let Some(value) = &violation.value {
+                        md.push_str(&format!("- **Value**: `{}`\n", value.as_str()));
+                    }
+                    
+                    if let Some(message) = &violation.result_message {
+                        md.push_str(&format!("- **Message**: {}\n", message));
+                    }
+
+                    if !violation.nested_results.is_empty() {
+                        md.push_str(&format!("- **Nested Results**: {} additional violations\n", violation.nested_results.len()));
+                    }
+
+                    md.push_str("\n");
+                }
+            }
+        } else {
+            md.push_str("## ✅ No Violations Found\n\n");
+            md.push_str("All data conforms to the specified SHACL shapes.\n\n");
+        }
+
+        // Footer
+        md.push_str("---\n");
+        md.push_str(&format!("*Generated by OxiRS SHACL Validator v{} | SHACL v{}*\n", 
+            self.metadata.validator_version, self.metadata.shacl_version));
+
+        Ok(md)
+    }
+
+    /// Generate a YAML representation
+    fn to_yaml(&self) -> Result<String> {
+        let mut yaml = String::new();
+
+        yaml.push_str("---\n");
+        yaml.push_str("shacl_validation_report:\n");
+        yaml.push_str(&format!("  conforms: {}\n", self.conforms));
+        yaml.push_str("  metadata:\n");
+        yaml.push_str(&format!("    timestamp: {}\n", self.metadata.timestamp));
+        yaml.push_str(&format!("    shacl_version: \"{}\"\n", self.metadata.shacl_version));
+        yaml.push_str(&format!("    validator_version: \"{}\"\n", self.metadata.validator_version));
+        yaml.push_str("  summary:\n");
+        yaml.push_str(&format!("    total_violations: {}\n", self.summary.total_violations));
+        yaml.push_str(&format!("    violation_count: {}\n", self.summary.violation_count));
+        yaml.push_str(&format!("    warning_count: {}\n", self.summary.warning_count));
+        yaml.push_str(&format!("    info_count: {}\n", self.summary.info_count));
+        yaml.push_str(&format!("    shapes_evaluated: {}\n", self.summary.shapes_evaluated.len()));
+
+        if !self.violations.is_empty() {
+            yaml.push_str("  violations:\n");
+            for (i, violation) in self.violations.iter().enumerate() {
+                yaml.push_str(&format!("    - id: {}\n", i + 1));
+                yaml.push_str(&format!("      focus_node: \"{}\"\n", violation.focus_node.as_str()));
+                yaml.push_str(&format!("      source_shape: \"{}\"\n", violation.source_shape.as_str()));
+                yaml.push_str(&format!("      constraint_component: \"{}\"\n", violation.source_constraint_component.as_str()));
+                yaml.push_str(&format!("      severity: \"{}\"\n", violation.result_severity));
+                
+                if let Some(path) = &violation.result_path {
+                    yaml.push_str(&format!("      result_path: \"{:?}\"\n", path));
+                }
+                
+                if let Some(value) = &violation.value {
+                    yaml.push_str(&format!("      value: \"{}\"\n", value.as_str()));
+                }
+                
+                if let Some(message) = &violation.result_message {
+                    yaml.push_str(&format!("      message: \"{}\"\n", message.replace('"', "\\\"")));
+                }
+
+                if !violation.nested_results.is_empty() {
+                    yaml.push_str(&format!("      nested_results_count: {}\n", violation.nested_results.len()));
+                }
+            }
+        } else {
+            yaml.push_str("  violations: []\n");
+        }
+
+        Ok(yaml)
+    }
+
+    /// Generate a summary representation
+    fn to_summary(&self) -> Result<String> {
+        let mut summary = String::new();
+
+        summary.push_str("SHACL VALIDATION SUMMARY\n");
+        summary.push_str("========================\n\n");
+
+        // Overall status
+        let status = if self.conforms { "PASS ✅" } else { "FAIL ❌" };
+        summary.push_str(&format!("Status: {}\n", status));
+        summary.push_str(&format!("Generated: {}\n\n", self.metadata.formatted_timestamp()));
+
+        // Quick stats
+        summary.push_str("VIOLATION BREAKDOWN:\n");
+        summary.push_str(&format!("  Total: {} violations\n", self.summary.total_violations));
+        summary.push_str(&format!("  🚫 Violations: {}\n", self.summary.violation_count));
+        summary.push_str(&format!("  ⚠️  Warnings: {}\n", self.summary.warning_count));
+        summary.push_str(&format!("  ℹ️  Info: {}\n\n", self.summary.info_count));
+
+        // Shape statistics
+        summary.push_str("SHAPE STATISTICS:\n");
+        summary.push_str(&format!("  Shapes evaluated: {}\n", self.summary.shapes_evaluated.len()));
+        summary.push_str(&format!("  Unique focus nodes: {}\n", self.summary.focus_nodes.len()));
+        summary.push_str(&format!("  Constraint types: {}\n\n", self.summary.constraints_evaluated.len()));
+
+        // Top problematic shapes/constraints
+        if !self.violations.is_empty() {
+            let mut shape_counts: std::collections::HashMap<&ShapeId, usize> = std::collections::HashMap::new();
+            let mut constraint_counts: std::collections::HashMap<&ConstraintComponentId, usize> = std::collections::HashMap::new();
+
+            for violation in &self.violations {
+                *shape_counts.entry(&violation.source_shape).or_insert(0) += 1;
+                *constraint_counts.entry(&violation.source_constraint_component).or_insert(0) += 1;
+            }
+
+            let mut sorted_shapes: Vec<_> = shape_counts.iter().collect();
+            sorted_shapes.sort_by(|a, b| b.1.cmp(a.1));
+
+            let mut sorted_constraints: Vec<_> = constraint_counts.iter().collect();
+            sorted_constraints.sort_by(|a, b| b.1.cmp(a.1));
+
+            summary.push_str("TOP PROBLEMATIC SHAPES:\n");
+            for (i, (shape, count)) in sorted_shapes.iter().take(5).enumerate() {
+                summary.push_str(&format!("  {}. {} ({} violations)\n", i + 1, shape.as_str(), count));
+            }
+
+            summary.push_str("\nTOP FAILING CONSTRAINTS:\n");
+            for (i, (constraint, count)) in sorted_constraints.iter().take(5).enumerate() {
+                summary.push_str(&format!("  {}. {} ({} violations)\n", i + 1, constraint.as_str(), count));
+            }
+        }
+
+        summary.push_str(&format!("\nReport generated by OxiRS SHACL Validator v{}\n", self.metadata.validator_version));
+
+        Ok(summary)
+    }
+
+    /// Generate a detailed HTML report with enhanced analytics
+    fn to_detailed_html(&self) -> Result<String> {
+        let mut html = self.to_html()?;
+
+        // Add additional analytics section before the footer
+        let analytics_section = format!(r#"
+        <section class="analytics-section">
+            <h2>📈 Detailed Analytics</h2>
+            
+            <div class="analytics-grid">
+                <div class="analytics-card">
+                    <h3>Violation Distribution</h3>
+                    <div class="chart-placeholder">
+                        <div class="bar-chart">
+                            <div class="bar violations" style="height: {}%">
+                                <span class="bar-label">Violations ({})</span>
+                            </div>
+                            <div class="bar warnings" style="height: {}%">
+                                <span class="bar-label">Warnings ({})</span>
+                            </div>
+                            <div class="bar info" style="height: {}%">
+                                <span class="bar-label">Info ({})</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="analytics-card">
+                    <h3>Shape Performance</h3>
+                    <div class="performance-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Shapes Evaluated:</span>
+                            <span class="metric-value">{}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Average Violations per Shape:</span>
+                            <span class="metric-value">{:.2}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Conformance Rate:</span>
+                            <span class="metric-value">{:.1}%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="analytics-card">
+                    <h3>Data Quality Score</h3>
+                    <div class="quality-score">
+                        <div class="score-circle">
+                            <span class="score-number">{:.0}%</span>
+                        </div>
+                        <div class="score-description">
+                            Based on violation severity and frequency
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        "#,
+            if self.summary.total_violations > 0 { (self.summary.violation_count as f64 / self.summary.total_violations as f64 * 100.0) as u32 } else { 0 },
+            self.summary.violation_count,
+            if self.summary.total_violations > 0 { (self.summary.warning_count as f64 / self.summary.total_violations as f64 * 100.0) as u32 } else { 0 },
+            self.summary.warning_count,
+            if self.summary.total_violations > 0 { (self.summary.info_count as f64 / self.summary.total_violations as f64 * 100.0) as u32 } else { 0 },
+            self.summary.info_count,
+            self.summary.shapes_evaluated.len(),
+            if self.summary.shapes_evaluated.len() > 0 { self.summary.total_violations as f64 / self.summary.shapes_evaluated.len() as f64 } else { 0.0 },
+            if self.summary.shapes_evaluated.len() > 0 { 
+                ((self.summary.shapes_evaluated.len() - self.violations.len()) as f64 / self.summary.shapes_evaluated.len() as f64) * 100.0 
+            } else { 100.0 },
+            self.calculate_quality_score()
+        );
+
+        // Insert before the footer
+        html = html.replace("<footer class=\"report-footer\">", &format!("{}\n<footer class=\"report-footer\">", analytics_section));
+
+        Ok(html)
+    }
+
+    /// Calculate a data quality score based on violations
+    fn calculate_quality_score(&self) -> f64 {
+        if self.summary.shapes_evaluated.is_empty() {
+            return 100.0;
+        }
+
+        let total_shapes = self.summary.shapes_evaluated.len() as f64;
+        let violation_penalty = (self.summary.violation_count as f64 * 3.0) + 
+                               (self.summary.warning_count as f64 * 1.5) + 
+                               (self.summary.info_count as f64 * 0.5);
+        
+        let max_penalty = total_shapes * 3.0; // Assume max 3 violations per shape
+        let quality_score = ((max_penalty - violation_penalty) / max_penalty * 100.0).max(0.0);
+        
+        quality_score
     }
 
     /// Generate a Turtle representation
@@ -293,32 +799,35 @@ impl ValidationReport {
     fn path_to_turtle(&self, path: &PropertyPath) -> Result<String> {
         match path {
             PropertyPath::Predicate(pred) => Ok(format!("<{}>", pred.as_str())),
-            PropertyPath::Inverse(inner_path) => {
-                Ok(format!("[ sh:inversePath {} ]", self.path_to_turtle(inner_path)?))
-            }
+            PropertyPath::Inverse(inner_path) => Ok(format!(
+                "[ sh:inversePath {} ]",
+                self.path_to_turtle(inner_path)?
+            )),
             PropertyPath::Sequence(paths) => {
-                let path_strs: Result<Vec<String>> = paths
-                    .iter()
-                    .map(|p| self.path_to_turtle(p))
-                    .collect();
+                let path_strs: Result<Vec<String>> =
+                    paths.iter().map(|p| self.path_to_turtle(p)).collect();
                 Ok(format!("( {} )", path_strs?.join(" ")))
             }
             PropertyPath::Alternative(paths) => {
-                let path_strs: Result<Vec<String>> = paths
-                    .iter()
-                    .map(|p| self.path_to_turtle(p))
-                    .collect();
-                Ok(format!("[ sh:alternativePath ( {} ) ]", path_strs?.join(" ")))
+                let path_strs: Result<Vec<String>> =
+                    paths.iter().map(|p| self.path_to_turtle(p)).collect();
+                Ok(format!(
+                    "[ sh:alternativePath ( {} ) ]",
+                    path_strs?.join(" ")
+                ))
             }
-            PropertyPath::ZeroOrMore(inner_path) => {
-                Ok(format!("[ sh:zeroOrMorePath {} ]", self.path_to_turtle(inner_path)?))
-            }
-            PropertyPath::OneOrMore(inner_path) => {
-                Ok(format!("[ sh:oneOrMorePath {} ]", self.path_to_turtle(inner_path)?))
-            }
-            PropertyPath::ZeroOrOne(inner_path) => {
-                Ok(format!("[ sh:zeroOrOnePath {} ]", self.path_to_turtle(inner_path)?))
-            }
+            PropertyPath::ZeroOrMore(inner_path) => Ok(format!(
+                "[ sh:zeroOrMorePath {} ]",
+                self.path_to_turtle(inner_path)?
+            )),
+            PropertyPath::OneOrMore(inner_path) => Ok(format!(
+                "[ sh:oneOrMorePath {} ]",
+                self.path_to_turtle(inner_path)?
+            )),
+            PropertyPath::ZeroOrOne(inner_path) => Ok(format!(
+                "[ sh:zeroOrOnePath {} ]",
+                self.path_to_turtle(inner_path)?
+            )),
         }
     }
 
@@ -380,9 +889,14 @@ impl ValidationReport {
         );
         summary_obj.insert(
             "shapesEvaluated".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(self.summary.shapes_evaluated.len())),
+            serde_json::Value::Number(serde_json::Number::from(
+                self.summary.shapes_evaluated.len(),
+            )),
         );
-        json_ld.insert("summary".to_string(), serde_json::Value::Object(summary_obj));
+        json_ld.insert(
+            "summary".to_string(),
+            serde_json::Value::Object(summary_obj),
+        );
 
         // Add results
         if !self.violations.is_empty() {
@@ -402,7 +916,7 @@ impl ValidationReport {
     /// Create comprehensive JSON-LD context with full SHACL vocabulary
     fn create_enhanced_json_ld_context(&self) -> serde_json::Map<String, serde_json::Value> {
         let mut context = serde_json::Map::new();
-        
+
         // Namespace prefixes
         context.insert(
             "sh".to_string(),
@@ -651,10 +1165,7 @@ impl ValidationReport {
                     "@type".to_string(),
                     serde_json::Value::String("sh:InversePath".to_string()),
                 );
-                inv_obj.insert(
-                    "inversePath".to_string(),
-                    self.path_to_json_ld(inner_path)?,
-                );
+                inv_obj.insert("inversePath".to_string(), self.path_to_json_ld(inner_path)?);
                 Ok(serde_json::Value::Object(inv_obj))
             }
             PropertyPath::Sequence(paths) => {
@@ -667,10 +1178,7 @@ impl ValidationReport {
                     .iter()
                     .map(|p| self.path_to_json_ld(p))
                     .collect::<Result<Vec<_>>>()?;
-                seq_obj.insert(
-                    "@list".to_string(),
-                    serde_json::Value::Array(path_list),
-                );
+                seq_obj.insert("@list".to_string(), serde_json::Value::Array(path_list));
                 Ok(serde_json::Value::Object(seq_obj))
             }
             PropertyPath::Alternative(paths) => {
@@ -1080,7 +1588,7 @@ impl ValidationReport {
     fn generate_path_hash(&self, path: &PropertyPath) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         format!("{:?}", path).hash(&mut hasher);
         format!("{:x}", hasher.finish())
@@ -1114,7 +1622,9 @@ impl ValidationReport {
         html.push_str("<html>\n<head>\n");
         html.push_str("<title>SHACL Validation Report</title>\n");
         html.push_str("<meta charset=\"UTF-8\">\n");
-        html.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n");
+        html.push_str(
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n",
+        );
         html.push_str("<style>\n");
         html.push_str(self.get_enhanced_html_styles()?.as_str());
         html.push_str("</style>\n");
@@ -1132,10 +1642,18 @@ impl ValidationReport {
         html.push_str("</header>\n");
 
         // Overall status banner
-        let status_class = if self.conforms { "status-pass" } else { "status-fail" };
+        let status_class = if self.conforms {
+            "status-pass"
+        } else {
+            "status-fail"
+        };
         let status_icon = if self.conforms { "✅" } else { "❌" };
-        let status_text = if self.conforms { "Conforms" } else { "Violations Found" };
-        
+        let status_text = if self.conforms {
+            "Conforms"
+        } else {
+            "Violations Found"
+        };
+
         html.push_str(&format!(
             "<div class=\"status-banner {}\">\n                <div class=\"status-icon\">{}</div>\n                <div class=\"status-text\">{}</div>\n            </div>\n",
             status_class, status_icon, status_text
@@ -1145,33 +1663,36 @@ impl ValidationReport {
         html.push_str("<section class=\"summary-section\">\n");
         html.push_str("<h2>📊 Validation Summary</h2>\n");
         html.push_str("<div class=\"summary-grid\">\n");
-        
+
         html.push_str(&format!(
             "<div class=\"summary-card violations\">\n                <div class=\"card-icon\">🚫</div>\n                <div class=\"card-content\">\n                    <div class=\"card-number\">{}</div>\n                    <div class=\"card-label\">Violations</div>\n                </div>\n            </div>\n",
             self.summary.violation_count
         ));
-        
+
         html.push_str(&format!(
             "<div class=\"summary-card warnings\">\n                <div class=\"card-icon\">⚠️</div>\n                <div class=\"card-content\">\n                    <div class=\"card-number\">{}</div>\n                    <div class=\"card-label\">Warnings</div>\n                </div>\n            </div>\n",
             self.summary.warning_count
         ));
-        
+
         html.push_str(&format!(
             "<div class=\"summary-card info\">\n                <div class=\"card-icon\">ℹ️</div>\n                <div class=\"card-content\">\n                    <div class=\"card-number\">{}</div>\n                    <div class=\"card-label\">Info</div>\n                </div>\n            </div>\n",
             self.summary.info_count
         ));
-        
+
         html.push_str(&format!(
             "<div class=\"summary-card shapes\">\n                <div class=\"card-icon\">🔧</div>\n                <div class=\"card-content\">\n                    <div class=\"card-number\">{}</div>\n                    <div class=\"card-label\">Shapes Evaluated</div>\n                </div>\n            </div>\n",
             self.summary.shapes_evaluated.len()
         ));
-        
+
         html.push_str("</div>\n</section>\n");
 
         // Violations section with enhanced presentation
         if !self.violations.is_empty() {
             html.push_str("<section class=\"violations-section\">\n");
-            html.push_str(&format!("<h2>🔍 Violations Details ({} total)</h2>\n", self.violations.len()));
+            html.push_str(&format!(
+                "<h2>🔍 Violations Details ({} total)</h2>\n",
+                self.violations.len()
+            ));
 
             // Group violations by severity
             let mut violations_by_severity = std::collections::HashMap::new();
@@ -1188,7 +1709,7 @@ impl ValidationReport {
                     crate::Severity::Warning => "⚠️",
                     crate::Severity::Info => "ℹ️",
                 };
-                
+
                 html.push_str(&format!(
                     "<div class=\"severity-group severity-{}\">\n                        <h3>{} {} ({} items)</h3>\n",
                     severity.to_string().to_lowercase(),
@@ -1202,20 +1723,20 @@ impl ValidationReport {
                         "<div class=\"violation-card violation-{}\">\n",
                         violation.result_severity.to_string().to_lowercase()
                     ));
-                    
+
                     html.push_str(&format!(
                         "<div class=\"violation-header\">\n                            <h4>🎯 Focus Node: <code>{}</code></h4>\n                            <div class=\"violation-badges\">\n                                <span class=\"badge severity-badge\">{}</span>\n                            </div>\n                        </div>\n",
                         self.escape_html(&violation.focus_node.as_str()),
                         violation.result_severity
                     ));
-                    
+
                     html.push_str("<div class=\"violation-details\">\n");
-                    
+
                     html.push_str(&format!(
                         "<div class=\"detail-row\">\n                            <span class=\"detail-label\">🔧 Source Shape:</span>\n                            <code class=\"detail-value\">{}</code>\n                        </div>\n",
                         self.escape_html(&violation.source_shape.as_str())
                     ));
-                    
+
                     html.push_str(&format!(
                         "<div class=\"detail-row\">\n                            <span class=\"detail-label\">⚙️ Constraint Component:</span>\n                            <code class=\"detail-value\">{}</code>\n                        </div>\n",
                         self.escape_html(&violation.source_constraint_component.as_str())
@@ -1251,7 +1772,7 @@ impl ValidationReport {
                             violation.nested_results.len()
                         ));
                         html.push_str("<ul class=\"nested-list\">\n");
-                        
+
                         for nested in &violation.nested_results {
                             html.push_str("<li class=\"nested-item\">\n");
                             if let Some(nested_msg) = &nested.result_message {
@@ -1272,7 +1793,7 @@ impl ValidationReport {
                             }
                             html.push_str("</li>\n");
                         }
-                        
+
                         html.push_str("</ul>\n");
                         html.push_str("</details>\n");
                         html.push_str("</div>\n");
@@ -1281,7 +1802,7 @@ impl ValidationReport {
                     html.push_str("</div>\n"); // Close violation-details
                     html.push_str("</div>\n"); // Close violation-card
                 }
-                
+
                 html.push_str("</div>\n"); // Close severity-group
             }
 
@@ -1299,8 +1820,7 @@ impl ValidationReport {
         html.push_str("<footer class=\"report-footer\">\n");
         html.push_str(&format!(
             "<p>Generated by OxiRS SHACL Validator v{} | SHACL v{}</p>\n",
-            self.metadata.validator_version,
-            self.metadata.shacl_version
+            self.metadata.validator_version, self.metadata.shacl_version
         ));
         html.push_str("</footer>\n");
 
@@ -1701,17 +2221,13 @@ impl ValidationReport {
                 Ok(format!("^{}", self.format_path_for_html(inner_path)?))
             }
             PropertyPath::Sequence(paths) => {
-                let path_strs: Result<Vec<String>> = paths
-                    .iter()
-                    .map(|p| self.format_path_for_html(p))
-                    .collect();
+                let path_strs: Result<Vec<String>> =
+                    paths.iter().map(|p| self.format_path_for_html(p)).collect();
                 Ok(format!("({})", path_strs?.join(" / ")))
             }
             PropertyPath::Alternative(paths) => {
-                let path_strs: Result<Vec<String>> = paths
-                    .iter()
-                    .map(|p| self.format_path_for_html(p))
-                    .collect();
+                let path_strs: Result<Vec<String>> =
+                    paths.iter().map(|p| self.format_path_for_html(p)).collect();
                 Ok(format!("({})", path_strs?.join(" | ")))
             }
             PropertyPath::ZeroOrMore(inner_path) => {
@@ -1738,27 +2254,27 @@ impl ValidationReport {
     /// Generate a CSV (Comma-Separated Values) representation for tabular analysis
     pub fn to_csv(&self) -> Result<String> {
         let mut csv = String::new();
-        
+
         // CSV Header
         csv.push_str("Focus Node,Source Shape,Constraint Component,Result Severity,Result Path,Value,Message,Details\n");
-        
+
         for violation in &self.violations {
             // Focus Node
             csv.push_str(&self.escape_csv_field(&violation.focus_node.as_str()));
             csv.push(',');
-            
+
             // Source Shape
             csv.push_str(&self.escape_csv_field(&violation.source_shape.as_str()));
             csv.push(',');
-            
+
             // Constraint Component
             csv.push_str(&self.escape_csv_field(&violation.source_constraint_component.as_str()));
             csv.push(',');
-            
+
             // Result Severity
             csv.push_str(&self.escape_csv_field(&violation.result_severity.to_string()));
             csv.push(',');
-            
+
             // Result Path
             let path_str = if let Some(path) = &violation.result_path {
                 self.format_path_for_csv(path)?
@@ -1767,7 +2283,7 @@ impl ValidationReport {
             };
             csv.push_str(&self.escape_csv_field(&path_str));
             csv.push(',');
-            
+
             // Value
             let value_str = if let Some(value) = &violation.value {
                 value.as_str().to_string()
@@ -1776,12 +2292,12 @@ impl ValidationReport {
             };
             csv.push_str(&self.escape_csv_field(&value_str));
             csv.push(',');
-            
+
             // Message
             let message_str = violation.result_message.as_deref().unwrap_or("");
             csv.push_str(&self.escape_csv_field(message_str));
             csv.push(',');
-            
+
             // Details
             let details_str = if !violation.details.is_empty() {
                 violation.details.join("; ")
@@ -1789,37 +2305,37 @@ impl ValidationReport {
                 String::new()
             };
             csv.push_str(&self.escape_csv_field(&details_str));
-            
+
             csv.push('\n');
         }
-        
+
         Ok(csv)
     }
-    
+
     /// Generate a TSV (Tab-Separated Values) representation for tabular analysis
     pub fn to_tsv(&self) -> Result<String> {
         let mut tsv = String::new();
-        
+
         // TSV Header
         tsv.push_str("Focus Node\tSource Shape\tConstraint Component\tResult Severity\tResult Path\tValue\tMessage\tDetails\n");
-        
+
         for violation in &self.violations {
             // Focus Node
             tsv.push_str(&self.escape_tsv_field(&violation.focus_node.as_str()));
             tsv.push('\t');
-            
+
             // Source Shape
             tsv.push_str(&self.escape_tsv_field(&violation.source_shape.as_str()));
             tsv.push('\t');
-            
+
             // Constraint Component
             tsv.push_str(&self.escape_tsv_field(&violation.source_constraint_component.as_str()));
             tsv.push('\t');
-            
+
             // Result Severity
             tsv.push_str(&self.escape_tsv_field(&violation.result_severity.to_string()));
             tsv.push('\t');
-            
+
             // Result Path
             let path_str = if let Some(path) = &violation.result_path {
                 self.format_path_for_csv(path)?
@@ -1828,7 +2344,7 @@ impl ValidationReport {
             };
             tsv.push_str(&self.escape_tsv_field(&path_str));
             tsv.push('\t');
-            
+
             // Value
             let value_str = if let Some(value) = &violation.value {
                 value.as_str().to_string()
@@ -1837,12 +2353,12 @@ impl ValidationReport {
             };
             tsv.push_str(&self.escape_tsv_field(&value_str));
             tsv.push('\t');
-            
+
             // Message
             let message_str = violation.result_message.as_deref().unwrap_or("");
             tsv.push_str(&self.escape_tsv_field(message_str));
             tsv.push('\t');
-            
+
             // Details
             let details_str = if !violation.details.is_empty() {
                 violation.details.join("; ")
@@ -1850,13 +2366,13 @@ impl ValidationReport {
                 String::new()
             };
             tsv.push_str(&self.escape_tsv_field(&details_str));
-            
+
             tsv.push('\n');
         }
-        
+
         Ok(tsv)
     }
-    
+
     /// Format property path for CSV/TSV display (simplified)
     fn format_path_for_csv(&self, path: &PropertyPath) -> Result<String> {
         match path {
@@ -1865,17 +2381,13 @@ impl ValidationReport {
                 Ok(format!("^{}", self.format_path_for_csv(inner_path)?))
             }
             PropertyPath::Sequence(paths) => {
-                let path_strs: Result<Vec<String>> = paths
-                    .iter()
-                    .map(|p| self.format_path_for_csv(p))
-                    .collect();
+                let path_strs: Result<Vec<String>> =
+                    paths.iter().map(|p| self.format_path_for_csv(p)).collect();
                 Ok(format!("({})", path_strs?.join(" / ")))
             }
             PropertyPath::Alternative(paths) => {
-                let path_strs: Result<Vec<String>> = paths
-                    .iter()
-                    .map(|p| self.format_path_for_csv(p))
-                    .collect();
+                let path_strs: Result<Vec<String>> =
+                    paths.iter().map(|p| self.format_path_for_csv(p)).collect();
                 Ok(format!("({})", path_strs?.join(" | ")))
             }
             PropertyPath::ZeroOrMore(inner_path) => {
@@ -1889,16 +2401,20 @@ impl ValidationReport {
             }
         }
     }
-    
+
     /// Escape CSV field (handle commas, quotes, newlines)
     fn escape_csv_field(&self, field: &str) -> String {
-        if field.contains(',') || field.contains('"') || field.contains('\n') || field.contains('\r') {
+        if field.contains(',')
+            || field.contains('"')
+            || field.contains('\n')
+            || field.contains('\r')
+        {
             format!("\"{}\"", field.replace('"', "\"\""))
         } else {
             field.to_string()
         }
     }
-    
+
     /// Escape TSV field (handle tabs, newlines)
     fn escape_tsv_field(&self, field: &str) -> String {
         field
@@ -1979,8 +2495,10 @@ impl ReportMetadata {
 
     pub fn formatted_timestamp(&self) -> String {
         use std::time::{Duration, SystemTime, UNIX_EPOCH};
-        
-        if let Some(datetime) = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(self.timestamp)) {
+
+        if let Some(datetime) =
+            SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(self.timestamp))
+        {
             // For now, use a simple ISO 8601-like format
             // In a full implementation, you'd want to use chrono or time crate
             format!("{:?}", datetime)
@@ -2245,18 +2763,18 @@ mod tests {
     #[test]
     fn test_csv_serialization() {
         let mut report = ValidationReport::new();
-        
+
         let violation = ValidationViolation::new(
             Term::NamedNode(NamedNode::new("http://example.org/john").unwrap()),
             ShapeId::new("http://example.org/PersonShape"),
             ConstraintComponentId::new("sh:ClassConstraintComponent"),
             Severity::Violation,
         );
-        
+
         report.add_violation(violation);
-        
+
         let csv = report.to_csv().unwrap();
-        
+
         // Check header
         assert!(csv.starts_with("Focus Node,Source Shape,Constraint Component,Result Severity"));
         // Check data row
@@ -2269,18 +2787,18 @@ mod tests {
     #[test]
     fn test_tsv_serialization() {
         let mut report = ValidationReport::new();
-        
+
         let violation = ValidationViolation::new(
             Term::NamedNode(NamedNode::new("http://example.org/jane").unwrap()),
             ShapeId::new("http://example.org/PersonShape"),
             ConstraintComponentId::new("sh:MinCountConstraintComponent"),
             Severity::Warning,
         );
-        
+
         report.add_violation(violation);
-        
+
         let tsv = report.to_tsv().unwrap();
-        
+
         // Check header (tab-separated)
         assert!(tsv.starts_with("Focus Node\tSource Shape\tConstraint Component\tResult Severity"));
         // Check data row
@@ -2293,16 +2811,16 @@ mod tests {
     #[test]
     fn test_csv_field_escaping() {
         let report = ValidationReport::new();
-        
+
         // Test CSV field escaping with commas and quotes
         let field_with_comma = "test,value";
         let escaped = report.escape_csv_field(field_with_comma);
         assert_eq!(escaped, "\"test,value\"");
-        
+
         let field_with_quote = "test\"value";
         let escaped = report.escape_csv_field(field_with_quote);
         assert_eq!(escaped, "\"test\"\"value\"");
-        
+
         let normal_field = "test_value";
         let escaped = report.escape_csv_field(normal_field);
         assert_eq!(escaped, "test_value");
@@ -2311,12 +2829,12 @@ mod tests {
     #[test]
     fn test_tsv_field_escaping() {
         let report = ValidationReport::new();
-        
+
         // Test TSV field escaping with tabs and newlines
         let field_with_tab = "test\tvalue";
         let escaped = report.escape_tsv_field(field_with_tab);
         assert_eq!(escaped, "test\\tvalue");
-        
+
         let field_with_newline = "test\nvalue";
         let escaped = report.escape_tsv_field(field_with_newline);
         assert_eq!(escaped, "test\\nvalue");
@@ -2325,22 +2843,40 @@ mod tests {
     #[test]
     fn test_to_format_dispatch() {
         let report = ValidationReport::new();
-        
+
         // Test CSV format dispatch
         let csv = report.to_format("csv").unwrap();
         assert!(csv.contains("Focus Node,Source Shape"));
-        
+
         // Test TSV format dispatch
         let tsv = report.to_format("tsv").unwrap();
         assert!(tsv.contains("Focus Node\tSource Shape"));
-        
+
         // Test JSON format dispatch
         let json = report.to_format("json").unwrap();
         assert!(json.contains("\"conforms\": true"));
-        
+
         // Test unsupported format
         let result = report.to_format("unsupported");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Unsupported format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unsupported format"));
+    }
+}
+
+/// Generate a validation report in the specified format
+pub fn generate_report(validation_report: &ValidationReport, format: &ReportFormat) -> Result<String> {
+    match format {
+        ReportFormat::Turtle => validation_report.to_turtle(),
+        ReportFormat::JsonLd => validation_report.to_json_ld(),
+        ReportFormat::RdfXml => validation_report.to_rdf_xml(),
+        ReportFormat::NTriples => validation_report.to_ntriples(),
+        ReportFormat::Json => validation_report.to_json(),
+        ReportFormat::Html => validation_report.to_html(),
+        ReportFormat::Csv => validation_report.to_csv(),
+        ReportFormat::Text => validation_report.to_summary(),
+        ReportFormat::Yaml => validation_report.to_yaml(),
     }
 }

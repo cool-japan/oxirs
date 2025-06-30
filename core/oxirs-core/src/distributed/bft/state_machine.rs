@@ -266,7 +266,9 @@ mod tests {
         assert!(state_machine.contains_triple(&triple).unwrap());
 
         // Test remove
-        let result = state_machine.execute(RdfOperation::Remove(triple.clone())).unwrap();
+        let result = state_machine
+            .execute(RdfOperation::Remove(triple.clone()))
+            .unwrap();
         assert!(matches!(result, OperationResult::Success));
         assert_eq!(state_machine.triple_count(), 0);
         assert!(!state_machine.contains_triple(&triple).unwrap());
@@ -330,7 +332,9 @@ mod tests {
         let digest1 = state_machine.calculate_digest();
 
         // Add triple
-        state_machine.execute(RdfOperation::Insert(triple.clone())).unwrap();
+        state_machine
+            .execute(RdfOperation::Insert(triple.clone()))
+            .unwrap();
         let digest2 = state_machine.calculate_digest();
 
         // Digests should be different
@@ -365,7 +369,9 @@ mod tests {
 
         // Test query (should return max 10 results)
         let result = state_machine
-            .execute(RdfOperation::Query("SELECT * WHERE { ?s ?p ?o }".to_string()))
+            .execute(RdfOperation::Query(
+                "SELECT * WHERE { ?s ?p ?o }".to_string(),
+            ))
             .unwrap();
 
         if let OperationResult::QueryResult(results) = result {
@@ -418,10 +424,18 @@ mod tests {
         };
 
         // Insert all triples
-        state_machine.execute(RdfOperation::Insert(triple1)).unwrap();
-        state_machine.execute(RdfOperation::Insert(triple2)).unwrap();
-        state_machine.execute(RdfOperation::Insert(triple3)).unwrap();
-        state_machine.execute(RdfOperation::Insert(triple4)).unwrap();
+        state_machine
+            .execute(RdfOperation::Insert(triple1))
+            .unwrap();
+        state_machine
+            .execute(RdfOperation::Insert(triple2))
+            .unwrap();
+        state_machine
+            .execute(RdfOperation::Insert(triple3))
+            .unwrap();
+        state_machine
+            .execute(RdfOperation::Insert(triple4))
+            .unwrap();
 
         assert_eq!(state_machine.triple_count(), 4);
     }

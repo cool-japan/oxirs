@@ -14,26 +14,35 @@ use oxirs_core::{
 };
 
 use crate::{
-    constraints::*, iri_resolver::*, optimization::*, paths::*, report::*, sparql::*, targets::*, Constraint, ConstraintComponentId,
-    PropertyPath, Result, Severity, ShaclError, Shape, ShapeId, Target, ValidationConfig,
-    ValidationReport,
+    constraints::*, iri_resolver::*, optimization::*, paths::*, report::*, sparql::*, targets::*,
+    Constraint, ConstraintComponentId, PropertyPath, Result, Severity, ShaclError, Shape, ShapeId,
+    Target, ValidationConfig, ValidationReport,
 };
 
 // Re-export submodules
-pub mod engine;
-pub mod constraint_validators;
-pub mod stats;
+pub mod async_engine;
+pub mod batch;
 pub mod cache;
+pub mod constraint_validators;
+pub mod engine;
+pub mod error_recovery;
+pub mod stats;
 pub mod utils;
 
 #[cfg(test)]
 pub mod tests;
 
 // Re-export main types
-pub use engine::ValidationEngine;
-pub use constraint_validators::*;
-pub use stats::*;
+pub use async_engine::{
+    AsyncValidationConfig, AsyncValidationEngine, AsyncValidationEngineBuilder,
+    AsyncValidationResult, AsyncValidationStats, ValidationEvent,
+};
+pub use batch::*;
 pub use cache::*;
+pub use constraint_validators::*;
+pub use engine::ValidationEngine;
+pub use error_recovery::*;
+pub use stats::*;
 pub use utils::*;
 
 /// Cache key for constraint results
@@ -50,6 +59,8 @@ pub struct ConstraintCacheKey {
 pub enum ConstraintEvaluationResult {
     /// Constraint is satisfied
     Satisfied,
+    /// Constraint is satisfied but with a note (e.g., due to error recovery)
+    SatisfiedWithNote { note: String },
     /// Constraint is violated with optional violating value and message
     Violated {
         violating_value: Option<Term>,
@@ -63,20 +74,22 @@ impl ConstraintEvaluationResult {
         ConstraintEvaluationResult::Satisfied
     }
 
+    /// Create a satisfied result with a note
+    pub fn satisfied_with_note(note: String) -> Self {
+        ConstraintEvaluationResult::SatisfiedWithNote { note }
+    }
+
     /// Create a violated result
-    pub fn violated(
-        violating_value: Option<Term>,
-        message: Option<String>,
-    ) -> Self {
+    pub fn violated(violating_value: Option<Term>, message: Option<String>) -> Self {
         ConstraintEvaluationResult::Violated {
             violating_value,
             message,
         }
     }
 
-    /// Check if the result is satisfied
+    /// Check if the result is satisfied (including satisfied with note)
     pub fn is_satisfied(&self) -> bool {
-        matches!(self, ConstraintEvaluationResult::Satisfied)
+        matches!(self, ConstraintEvaluationResult::Satisfied | ConstraintEvaluationResult::SatisfiedWithNote { .. })
     }
 
     /// Check if the result is violated
@@ -88,7 +101,10 @@ impl ConstraintEvaluationResult {
     pub fn violating_value(&self) -> Option<&Term> {
         match self {
             ConstraintEvaluationResult::Satisfied => None,
-            ConstraintEvaluationResult::Violated { violating_value, .. } => violating_value.as_ref(),
+            ConstraintEvaluationResult::SatisfiedWithNote { .. } => None,
+            ConstraintEvaluationResult::Violated {
+                violating_value, ..
+            } => violating_value.as_ref(),
         }
     }
 
@@ -96,7 +112,16 @@ impl ConstraintEvaluationResult {
     pub fn message(&self) -> Option<&str> {
         match self {
             ConstraintEvaluationResult::Satisfied => None,
+            ConstraintEvaluationResult::SatisfiedWithNote { .. } => None,
             ConstraintEvaluationResult::Violated { message, .. } => message.as_deref(),
+        }
+    }
+
+    /// Get the note for satisfied with note results
+    pub fn note(&self) -> Option<&str> {
+        match self {
+            ConstraintEvaluationResult::SatisfiedWithNote { note } => Some(note),
+            _ => None,
         }
     }
 }
@@ -120,6 +145,8 @@ pub struct ValidationViolation {
     pub result_message: Option<String>,
     /// Additional violation details
     pub details: HashMap<String, String>,
+    /// Nested validation results for complex constraints
+    pub nested_results: Vec<ValidationViolation>,
 }
 
 impl ValidationViolation {
@@ -139,6 +166,7 @@ impl ValidationViolation {
             result_severity,
             result_message: None,
             details: HashMap::new(),
+            nested_results: Vec::new(),
         }
     }
 
@@ -164,6 +192,39 @@ impl ValidationViolation {
     pub fn with_detail(mut self, key: String, value: String) -> Self {
         self.details.insert(key, value);
         self
+    }
+
+    /// Add a nested validation result
+    pub fn with_nested_result(mut self, nested: ValidationViolation) -> Self {
+        self.nested_results.push(nested);
+        self
+    }
+
+    /// Add multiple nested validation results
+    pub fn with_nested_results(mut self, nested: Vec<ValidationViolation>) -> Self {
+        self.nested_results.extend(nested);
+        self
+    }
+
+    /// Check if this violation has nested results
+    pub fn has_nested_results(&self) -> bool {
+        !self.nested_results.is_empty()
+    }
+
+    /// Get the total number of violations (including nested)
+    pub fn total_violation_count(&self) -> usize {
+        1 + self.nested_results.iter()
+            .map(|v| v.total_violation_count())
+            .sum::<usize>()
+    }
+
+    /// Get all violations flattened (including nested)
+    pub fn flatten_violations(&self) -> Vec<&ValidationViolation> {
+        let mut violations = vec![self];
+        for nested in &self.nested_results {
+            violations.extend(nested.flatten_violations());
+        }
+        violations
     }
 
     /// Get the violation as an RDF graph representation

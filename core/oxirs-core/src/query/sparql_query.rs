@@ -4,9 +4,9 @@
 //! Based on W3C SPARQL 1.1 Query specification:
 //! https://www.w3.org/TR/sparql11-query/
 
+use super::algebra::{AlgebraTriplePattern as TriplePattern, TermPattern};
 use super::sparql_algebra::{
     GraphPattern,
-    TriplePattern, // Import the sparql_algebra TriplePattern explicitly
 };
 use crate::model::{NamedNode, Variable};
 use serde::{Deserialize, Serialize};
@@ -761,10 +761,10 @@ mod tests {
     fn test_query_creation() {
         let var = Variable::new("s").unwrap();
         let pattern = GraphPattern::Bgp {
-            patterns: vec![TriplePattern::new(
-                var.clone(),
-                Variable::new("p").unwrap(),
-                Variable::new("o").unwrap(),
+            patterns: vec![crate::query::algebra::AlgebraTriplePattern::new(
+                TermPattern::Variable(var.clone()),
+                TermPattern::Variable(Variable::new("p").unwrap()),
+                TermPattern::Variable(Variable::new("o").unwrap()),
             )],
         };
 
@@ -792,10 +792,10 @@ mod tests {
     #[test]
     fn test_query_display() {
         let pattern = GraphPattern::Bgp {
-            patterns: vec![TriplePattern::new(
-                Variable::new("s").unwrap(),
-                Variable::new("p").unwrap(),
-                Variable::new("o").unwrap(),
+            patterns: vec![crate::query::algebra::AlgebraTriplePattern::new(
+                TermPattern::Variable(Variable::new("s").unwrap()),
+                TermPattern::Variable(Variable::new("p").unwrap()),
+                TermPattern::Variable(Variable::new("o").unwrap()),
             )],
         };
 

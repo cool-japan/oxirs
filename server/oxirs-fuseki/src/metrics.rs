@@ -247,7 +247,8 @@ impl MetricsService {
             .push(metrics.duration.as_secs_f64());
 
         // Update Prometheus metrics
-        counter!("http_requests_total", "method" => metrics.method.clone(), "status" => metrics.status.to_string()).increment(1);
+        let status_str = metrics.status.to_string();
+        counter!("http_requests_total", "method" => metrics.method.clone(), "status" => status_str).increment(1);
         histogram!("http_request_duration_seconds", "method" => metrics.method.clone())
             .record(metrics.duration.as_secs_f64());
 
@@ -374,7 +375,8 @@ impl MetricsService {
         // Update Prometheus metrics
         let method_str = method.to_string();
         let success_str = success.to_string();
-        counter!("authentication_attempts_total", "method" => method_str, "success" => success_str).increment(1);
+        counter!("authentication_attempts_total", "method" => method_str, "success" => success_str)
+            .increment(1);
 
         debug!(
             method = method,

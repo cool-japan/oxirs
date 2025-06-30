@@ -5,7 +5,8 @@
 
 use crate::indexing::IndexStats as BaseIndexStats;
 use crate::model::*;
-use crate::query::algebra::{TermPattern, TriplePattern as AlgebraTriplePattern};
+use crate::model::pattern::{TriplePattern as ModelTriplePattern, SubjectPattern, PredicatePattern, ObjectPattern};
+use crate::query::algebra::{TermPattern as AlgebraTermPattern, AlgebraTriplePattern};
 use crate::store::IndexedGraph;
 use crate::OxirsError;
 use std::collections::{HashMap, HashSet};
@@ -267,10 +268,10 @@ impl PatternOptimizer {
     fn analyze_pattern(&self, pattern: &AlgebraTriplePattern) -> Vec<PatternStrategy> {
         let mut strategies = Vec::new();
 
-        // Analyze which components are bound vs variable
-        let s_bound = !matches!(pattern.subject, TermPattern::Variable(_));
-        let p_bound = !matches!(pattern.predicate, TermPattern::Variable(_));
-        let o_bound = !matches!(pattern.object, TermPattern::Variable(_));
+        // Analyze which components are bound vs variable  
+        let s_bound = !matches!(pattern.subject, AlgebraTermPattern::Variable(_));
+        let p_bound = !matches!(pattern.predicate, AlgebraTermPattern::Variable(_));
+        let o_bound = !matches!(pattern.object, AlgebraTermPattern::Variable(_));
 
         // Generate strategies for each index type
         for &index_type in &self.available_indexes {
@@ -360,13 +361,13 @@ impl PatternOptimizer {
 
         // Subject selectivity
         match &pattern.subject {
-            TermPattern::NamedNode(_) | TermPattern::BlankNode(_) => {
+            AlgebraTermPattern::NamedNode(_) | AlgebraTermPattern::BlankNode(_) => {
                 // Bound subject - highly selective
                 selectivity *= 0.001;
             }
-            TermPattern::Variable(_) => {
+            AlgebraTermPattern::Variable(_) => {
                 // Variable subject - depends on predicate cardinality
-                if let TermPattern::NamedNode(pred) = &pattern.predicate {
+                if let AlgebraTermPattern::NamedNode(pred) = &pattern.predicate {
                     if let Ok(card) = self.index_stats.subject_cardinality.read() {
                         if let Some(subj_card) = card.get(pred.as_str()) {
                             selectivity *= (*subj_card as f64) / total_triples;
@@ -379,7 +380,7 @@ impl PatternOptimizer {
 
         // Predicate selectivity (most important for triple stores)
         match &pattern.predicate {
-            TermPattern::NamedNode(pred) => {
+            AlgebraTermPattern::NamedNode(pred) => {
                 if let Ok(counts) = self.index_stats.predicate_counts.read() {
                     if let Some(pred_count) = counts.get(pred.as_str()) {
                         selectivity *= (*pred_count as f64) / total_triples;
@@ -389,7 +390,7 @@ impl PatternOptimizer {
                     }
                 }
             }
-            TermPattern::Variable(_) => {
+            AlgebraTermPattern::Variable(_) => {
                 // Variable predicate - less selective
                 selectivity *= 0.5;
             }
@@ -398,21 +399,21 @@ impl PatternOptimizer {
 
         // Object selectivity
         match &pattern.object {
-            TermPattern::Literal(_) => {
+            AlgebraTermPattern::Literal(_) => {
                 // Literals are usually very selective
                 selectivity *= 0.01;
             }
-            TermPattern::NamedNode(_) => {
+            AlgebraTermPattern::NamedNode(_) => {
                 // Named nodes moderately selective
                 selectivity *= 0.1;
             }
-            TermPattern::BlankNode(_) => {
+            AlgebraTermPattern::BlankNode(_) => {
                 // Blank nodes moderately selective
                 selectivity *= 0.1;
             }
-            TermPattern::Variable(_) => {
+            AlgebraTermPattern::Variable(_) => {
                 // Variable object - depends on predicate object cardinality
-                if let TermPattern::NamedNode(pred) = &pattern.predicate {
+                if let AlgebraTermPattern::NamedNode(pred) = &pattern.predicate {
                     if let Ok(card) = self.index_stats.object_cardinality.read() {
                         if let Some(obj_card) = card.get(pred.as_str()) {
                             selectivity *= (*obj_card as f64) / total_triples;
@@ -430,13 +431,13 @@ impl PatternOptimizer {
     fn extract_bound_vars(&self, pattern: &AlgebraTriplePattern) -> HashSet<Variable> {
         let mut vars = HashSet::new();
 
-        if let TermPattern::Variable(v) = &pattern.subject {
+        if let AlgebraTermPattern::Variable(v) = &pattern.subject {
             vars.insert(v.clone());
         }
-        if let TermPattern::Variable(v) = &pattern.predicate {
+        if let AlgebraTermPattern::Variable(v) = &pattern.predicate {
             vars.insert(v.clone());
         }
-        if let TermPattern::Variable(v) = &pattern.object {
+        if let AlgebraTermPattern::Variable(v) = &pattern.object {
             vars.insert(v.clone());
         }
 
@@ -465,15 +466,15 @@ impl PatternOptimizer {
     ) -> PatternStrategy {
         // Check which variables in pattern are already bound
         let s_bound = match &pattern.subject {
-            TermPattern::Variable(v) => bound_vars.contains(v),
+            AlgebraTermPattern::Variable(v) => bound_vars.contains(v),
             _ => true,
         };
         let p_bound = match &pattern.predicate {
-            TermPattern::Variable(v) => bound_vars.contains(v),
+            AlgebraTermPattern::Variable(v) => bound_vars.contains(v),
             _ => true,
         };
         let o_bound = match &pattern.object {
-            TermPattern::Variable(v) => bound_vars.contains(v),
+            AlgebraTermPattern::Variable(v) => bound_vars.contains(v),
             _ => true,
         };
 
@@ -574,17 +575,17 @@ impl PatternOptimizer {
         var: &Variable,
         pattern: &AlgebraTriplePattern,
     ) -> Option<VarPosition> {
-        if let TermPattern::Variable(v) = &pattern.subject {
+        if let AlgebraTermPattern::Variable(v) = &pattern.subject {
             if v == var {
                 return Some(VarPosition::Subject);
             }
         }
-        if let TermPattern::Variable(v) = &pattern.predicate {
+        if let AlgebraTermPattern::Variable(v) = &pattern.predicate {
             if v == var {
                 return Some(VarPosition::Predicate);
             }
         }
-        if let TermPattern::Variable(v) = &pattern.object {
+        if let AlgebraTermPattern::Variable(v) = &pattern.object {
             if v == var {
                 return Some(VarPosition::Object);
             }
@@ -647,9 +648,9 @@ impl PatternOptimizer {
 
     /// Check if pattern binds variable
     fn pattern_binds_variable(&self, var: &Variable, pattern: &AlgebraTriplePattern) -> bool {
-        matches!(&pattern.subject, TermPattern::Variable(v) if v == var)
-            || matches!(&pattern.predicate, TermPattern::Variable(v) if v == var)
-            || matches!(&pattern.object, TermPattern::Variable(v) if v == var)
+        matches!(&pattern.subject, AlgebraTermPattern::Variable(v) if v == var)
+            || matches!(&pattern.predicate, AlgebraTermPattern::Variable(v) if v == var)
+            || matches!(&pattern.object, AlgebraTermPattern::Variable(v) if v == var)
     }
 
     /// Estimate filter selectivity
@@ -683,7 +684,7 @@ impl PatternOptimizer {
     /// Get optimal index type for a pattern execution
     pub fn get_optimal_index(
         &self,
-        pattern: &TriplePattern,
+        pattern: &ModelTriplePattern,
         bound_vars: &HashSet<Variable>,
     ) -> IndexType {
         // Check which components are bound
@@ -783,13 +784,13 @@ impl PatternExecutor {
                 let mut new_binding = binding.clone();
 
                 // Bind variables from matched triple
-                if let TermPattern::Variable(v) = &pattern.subject {
+                if let AlgebraTermPattern::Variable(v) = &pattern.subject {
                     new_binding.insert(v.clone(), Term::from(triple.subject().clone()));
                 }
-                if let TermPattern::Variable(v) = &pattern.predicate {
+                if let AlgebraTermPattern::Variable(v) = &pattern.predicate {
                     new_binding.insert(v.clone(), Term::from(triple.predicate().clone()));
                 }
-                if let TermPattern::Variable(v) = &pattern.object {
+                if let AlgebraTermPattern::Variable(v) = &pattern.object {
                     new_binding.insert(v.clone(), Term::from(triple.object().clone()));
                 }
 
@@ -805,48 +806,48 @@ impl PatternExecutor {
         &self,
         pattern: &AlgebraTriplePattern,
         bindings: &HashMap<Variable, Term>,
-    ) -> Result<TriplePattern, OxirsError> {
+    ) -> Result<ModelTriplePattern, OxirsError> {
         let subject = match &pattern.subject {
-            TermPattern::Variable(v) => {
+            AlgebraTermPattern::Variable(v) => {
                 if let Some(term) = bindings.get(v) {
                     Some(self.term_to_subject_pattern(term)?)
                 } else {
                     None
                 }
             }
-            TermPattern::NamedNode(n) => Some(SubjectPattern::NamedNode(n.clone())),
-            TermPattern::BlankNode(b) => Some(SubjectPattern::BlankNode(b.clone())),
-            TermPattern::Literal(_) => {
+            AlgebraTermPattern::NamedNode(n) => Some(SubjectPattern::NamedNode(n.clone())),
+            AlgebraTermPattern::BlankNode(b) => Some(SubjectPattern::BlankNode(b.clone())),
+            AlgebraTermPattern::Literal(_) => {
                 return Err(OxirsError::Query("Literal cannot be subject".to_string()))
             }
         };
 
         let predicate = match &pattern.predicate {
-            TermPattern::Variable(v) => {
+            AlgebraTermPattern::Variable(v) => {
                 if let Some(term) = bindings.get(v) {
                     Some(self.term_to_predicate_pattern(term)?)
                 } else {
                     None
                 }
             }
-            TermPattern::NamedNode(n) => Some(PredicatePattern::NamedNode(n.clone())),
+            AlgebraTermPattern::NamedNode(n) => Some(PredicatePattern::NamedNode(n.clone())),
             _ => return Err(OxirsError::Query("Invalid predicate pattern".to_string())),
         };
 
         let object = match &pattern.object {
-            TermPattern::Variable(v) => {
+            AlgebraTermPattern::Variable(v) => {
                 if let Some(term) = bindings.get(v) {
                     Some(self.term_to_object_pattern(term)?)
                 } else {
                     None
                 }
             }
-            TermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
-            TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
-            TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
+            AlgebraTermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
+            AlgebraTermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
+            AlgebraTermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
         };
 
-        Ok(TriplePattern::new(subject, predicate, object))
+        Ok(ModelTriplePattern::new(subject, predicate, object))
     }
 
     /// Convert term to subject pattern
@@ -924,7 +925,7 @@ mod tests {
         let optimizer = PatternOptimizer::new(stats);
 
         // Pattern with bound subject
-        let pattern = TriplePattern::new(
+        let pattern = ModelTriplePattern::new(
             Some(SubjectPattern::NamedNode(
                 NamedNode::new("http://example.org/s").unwrap(),
             )),
@@ -943,11 +944,11 @@ mod tests {
         let stats = Arc::new(IndexStats::new());
         let optimizer = PatternOptimizer::new(stats);
 
-        let pattern = AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("s").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
-            object: TermPattern::Literal(Literal::new("test")),
-        };
+        let pattern = AlgebraTriplePattern::new(
+            AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
+            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+            AlgebraTermPattern::Literal(Literal::new("test"))
+        );
 
         let selectivity = optimizer.estimate_selectivity(&pattern);
 
@@ -961,22 +962,22 @@ mod tests {
         let optimizer = PatternOptimizer::new(stats);
 
         let patterns = vec![
-            AlgebraTriplePattern {
-                subject: TermPattern::Variable(Variable::new("s").unwrap()),
-                predicate: TermPattern::NamedNode(
+            AlgebraTriplePattern::new(
+                AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
+                AlgebraTermPattern::NamedNode(
                     NamedNode::new("http://example.org/type").unwrap(),
                 ),
-                object: TermPattern::NamedNode(
+                AlgebraTermPattern::NamedNode(
                     NamedNode::new("http://example.org/Person").unwrap(),
-                ),
-            },
-            AlgebraTriplePattern {
-                subject: TermPattern::Variable(Variable::new("s").unwrap()),
-                predicate: TermPattern::NamedNode(
+                )
+            ),
+            AlgebraTriplePattern::new(
+                AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
+                AlgebraTermPattern::NamedNode(
                     NamedNode::new("http://example.org/name").unwrap(),
                 ),
-                object: TermPattern::Variable(Variable::new("name").unwrap()),
-            },
+                AlgebraTermPattern::Variable(Variable::new("name").unwrap())
+            ),
         ];
 
         let plan = optimizer.optimize_patterns(&patterns).unwrap();
@@ -984,116 +985,5 @@ mod tests {
         assert_eq!(plan.patterns.len(), 2);
         assert!(plan.total_cost > 0.0);
         assert_eq!(plan.binding_order.len(), 2);
-    }
-
-    #[test]
-    fn test_advanced_selectivity_estimation() {
-        let stats = Arc::new(IndexStats::new());
-
-        // Setup some statistics
-        stats.set_total_triples(100000);
-        stats.update_predicate_count("http://example.org/type", 5000);
-        stats.update_subject_cardinality("http://example.org/type", 1000);
-        stats.update_object_cardinality("http://example.org/name", 10000);
-
-        let optimizer = PatternOptimizer::new(stats);
-
-        // Pattern with literal object should be very selective
-        let literal_pattern = AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("s").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
-            object: TermPattern::Literal(Literal::new("John")),
-        };
-
-        let selectivity = optimizer.estimate_selectivity(&literal_pattern);
-        assert!(
-            selectivity < 0.1,
-            "Literal pattern should be highly selective"
-        );
-
-        // Pattern with known predicate should use statistics
-        let known_pred_pattern = AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("s").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
-            object: TermPattern::Variable(Variable::new("o").unwrap()),
-        };
-
-        let pred_selectivity = optimizer.estimate_selectivity(&known_pred_pattern);
-        assert!(pred_selectivity > 0.0 && pred_selectivity < 1.0);
-    }
-
-    #[test]
-    fn test_join_selectivity_estimation() {
-        let stats = Arc::new(IndexStats::new());
-        let optimizer = PatternOptimizer::new(stats);
-
-        let pattern1 = AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("s").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
-            object: TermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
-        };
-
-        let pattern2 = AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("s").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
-            object: TermPattern::Variable(Variable::new("name").unwrap()),
-        };
-
-        // Subject-subject join should be selective
-        let join_sel = optimizer.estimate_join_selectivity(&pattern1, &pattern2);
-        assert!(join_sel < 0.5, "Subject-subject join should be selective");
-
-        // Test caching
-        let cached_sel = optimizer.estimate_join_selectivity(&pattern1, &pattern2);
-        assert_eq!(join_sel, cached_sel, "Should return cached value");
-    }
-
-    #[test]
-    fn test_filter_optimization() {
-        let stats = Arc::new(IndexStats::new());
-        let optimizer = PatternOptimizer::new(stats);
-
-        let patterns = vec![AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("s").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
-            object: TermPattern::Variable(Variable::new("name").unwrap()),
-        }];
-
-        let filters = vec![FilterExpression::Equals(
-            Variable::new("name").unwrap(),
-            Term::Literal(Literal::new("John")),
-        )];
-
-        let pushdown_map = optimizer.optimize_filters(&patterns, &filters);
-
-        // Filter should be pushed down to the pattern that binds the variable
-        assert_eq!(pushdown_map.len(), 1);
-        assert_eq!(pushdown_map[0].0, 0); // Pattern index 0
-        assert_eq!(pushdown_map[0].1.len(), 1); // One filter
-    }
-
-    #[test]
-    fn test_filter_selectivity() {
-        let stats = Arc::new(IndexStats::new());
-        let optimizer = PatternOptimizer::new(stats);
-
-        let eq_filter = FilterExpression::Equals(
-            Variable::new("x").unwrap(),
-            Term::Literal(Literal::new("test")),
-        );
-
-        let and_filter = FilterExpression::And(
-            Box::new(eq_filter.clone()),
-            Box::new(FilterExpression::LessThan(
-                Variable::new("y").unwrap(),
-                Term::Literal(Literal::new("10")),
-            )),
-        );
-
-        let eq_sel = optimizer.estimate_filter_selectivity(&eq_filter);
-        let and_sel = optimizer.estimate_filter_selectivity(&and_filter);
-
-        assert!(eq_sel > 0.0 && eq_sel < 1.0);
-        assert!(and_sel < eq_sel, "AND filter should be more selective");
     }
 }

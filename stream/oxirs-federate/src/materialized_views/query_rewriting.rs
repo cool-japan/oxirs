@@ -193,7 +193,7 @@ impl QueryRewriter {
         registry: &ServiceRegistry,
     ) -> Result<RewritingResult> {
         let start_time = Instant::now();
-        
+
         debug!(
             "Attempting to rewrite query with {} patterns using {} views",
             query_info.patterns.len(),
@@ -201,8 +201,10 @@ impl QueryRewriter {
         );
 
         // Find candidate views that might be useful
-        let candidates = self.find_candidate_views(query_info, available_views).await?;
-        
+        let candidates = self
+            .find_candidate_views(query_info, available_views)
+            .await?;
+
         if candidates.is_empty() {
             return Ok(RewritingResult {
                 original_query: query_info.clone(),
@@ -217,10 +219,14 @@ impl QueryRewriter {
 
         // Try different rewriting strategies
         let strategies = vec![
-            self.try_single_view_complete_rewriting(query_info, &candidates, registry).await?,
-            self.try_single_view_partial_rewriting(query_info, &candidates, registry).await?,
-            self.try_multi_view_composition(query_info, &candidates, registry).await?,
-            self.try_hybrid_rewriting(query_info, &candidates, registry).await?,
+            self.try_single_view_complete_rewriting(query_info, &candidates, registry)
+                .await?,
+            self.try_single_view_partial_rewriting(query_info, &candidates, registry)
+                .await?,
+            self.try_multi_view_composition(query_info, &candidates, registry)
+                .await?,
+            self.try_hybrid_rewriting(query_info, &candidates, registry)
+                .await?,
         ];
 
         // Select the best strategy
@@ -282,14 +288,18 @@ impl QueryRewriter {
             }
 
             // Check if view patterns might overlap with query patterns
-            if self.view_matcher.has_potential_overlap(&view.definition, query_info).await? {
+            if self
+                .view_matcher
+                .has_potential_overlap(&view.definition, query_info)
+                .await?
+            {
                 candidates.push(view);
             }
         }
 
         // Limit the number of candidates
         candidates.truncate(self.config.max_views_per_query);
-        
+
         debug!("Found {} candidate views for rewriting", candidates.len());
         Ok(candidates)
     }
@@ -303,21 +313,28 @@ impl QueryRewriter {
     ) -> Result<RewritingResult> {
         for view in candidates {
             // Check if view completely contains the query
-            if self.containment_checker.is_query_contained(&view.definition, query_info).await? {
-                let cost_reduction = self.cost_estimator.estimate_cost_reduction(
-                    query_info,
-                    &[view],
-                    registry,
-                ).await?;
+            if self
+                .containment_checker
+                .is_query_contained(&view.definition, query_info)
+                .await?
+            {
+                let cost_reduction = self
+                    .cost_estimator
+                    .estimate_cost_reduction(query_info, &[view], registry)
+                    .await?;
 
                 let rewritten_query = RewrittenQuery {
-                    patterns: vec![], // No original patterns needed
+                    patterns: vec![],          // No original patterns needed
                     remaining_filters: vec![], // All handled by view
                     view_accesses: vec![ViewAccess {
                         view_id: view.id.clone(),
-                        selection_criteria: self.extract_selection_criteria(query_info, view).await?,
+                        selection_criteria: self
+                            .extract_selection_criteria(query_info, view)
+                            .await?,
                         projection: self.extract_projection(query_info).await?,
-                        estimated_result_size: self.estimate_view_result_size(view, query_info).await?,
+                        estimated_result_size: self
+                            .estimate_view_result_size(view, query_info)
+                            .await?,
                     }],
                     additional_joins: vec![],
                 };
@@ -375,29 +392,37 @@ impl QueryRewriter {
 
         for view in candidates {
             // Find patterns that can be covered by this view
-            let coverage = self.view_matcher.calculate_pattern_coverage(&view.definition, &query_info.patterns).await?;
-            
+            let coverage = self
+                .view_matcher
+                .calculate_pattern_coverage(&view.definition, &query_info.patterns)
+                .await?;
+
             if coverage.coverage_percentage > best_coverage && coverage.coverage_percentage > 0.3 {
                 // Need at least 30% coverage to be worthwhile
-                
-                let cost_reduction = self.cost_estimator.estimate_partial_cost_reduction(
-                    query_info,
-                    view,
-                    &coverage,
-                    registry,
-                ).await?;
 
-                if cost_reduction > 0.1 { // At least 10% improvement
+                let cost_reduction = self
+                    .cost_estimator
+                    .estimate_partial_cost_reduction(query_info, view, &coverage, registry)
+                    .await?;
+
+                if cost_reduction > 0.1 {
+                    // At least 10% improvement
                     let rewritten_query = RewrittenQuery {
                         patterns: coverage.uncovered_patterns.clone(),
                         remaining_filters: query_info.filters.clone(), // May need filtering
                         view_accesses: vec![ViewAccess {
                             view_id: view.id.clone(),
-                            selection_criteria: self.extract_selection_criteria(query_info, view).await?,
+                            selection_criteria: self
+                                .extract_selection_criteria(query_info, view)
+                                .await?,
                             projection: self.extract_projection(query_info).await?,
-                            estimated_result_size: self.estimate_view_result_size(view, query_info).await?,
+                            estimated_result_size: self
+                                .estimate_view_result_size(view, query_info)
+                                .await?,
                         }],
-                        additional_joins: self.plan_view_integration_joins(query_info, view, &coverage).await?,
+                        additional_joins: self
+                            .plan_view_integration_joins(query_info, view, &coverage)
+                            .await?,
                     };
 
                     best_result = Some(RewritingResult {
@@ -459,8 +484,11 @@ impl QueryRewriter {
         for i in 0..candidates.len() {
             for j in i + 1..candidates.len() {
                 let view_pair = &[candidates[i], candidates[j]];
-                
-                if let Some(composition) = self.try_view_pair_composition(query_info, view_pair, registry).await? {
+
+                if let Some(composition) = self
+                    .try_view_pair_composition(query_info, view_pair, registry)
+                    .await?
+                {
                     if composition.cost_reduction > best_cost_reduction {
                         best_cost_reduction = composition.cost_reduction;
                         best_composition = Some(composition);
@@ -494,15 +522,17 @@ impl QueryRewriter {
         let mut best_cost_reduction = 0.0;
 
         for view in candidates {
-            let coverage = self.view_matcher.calculate_pattern_coverage(&view.definition, &query_info.patterns).await?;
-            
-            if coverage.coverage_percentage > 0.2 { // At least 20% coverage
-                let cost_reduction = self.cost_estimator.estimate_hybrid_cost_reduction(
-                    query_info,
-                    view,
-                    &coverage,
-                    registry,
-                ).await?;
+            let coverage = self
+                .view_matcher
+                .calculate_pattern_coverage(&view.definition, &query_info.patterns)
+                .await?;
+
+            if coverage.coverage_percentage > 0.2 {
+                // At least 20% coverage
+                let cost_reduction = self
+                    .cost_estimator
+                    .estimate_hybrid_cost_reduction(query_info, view, &coverage, registry)
+                    .await?;
 
                 if cost_reduction > best_cost_reduction {
                     let rewritten_query = RewrittenQuery {
@@ -510,11 +540,17 @@ impl QueryRewriter {
                         remaining_filters: query_info.filters.clone(),
                         view_accesses: vec![ViewAccess {
                             view_id: view.id.clone(),
-                            selection_criteria: self.extract_selection_criteria(query_info, view).await?,
+                            selection_criteria: self
+                                .extract_selection_criteria(query_info, view)
+                                .await?,
                             projection: self.extract_projection(query_info).await?,
-                            estimated_result_size: self.estimate_view_result_size(view, query_info).await?,
+                            estimated_result_size: self
+                                .estimate_view_result_size(view, query_info)
+                                .await?,
                         }],
-                        additional_joins: self.plan_hybrid_joins(query_info, view, &coverage).await?,
+                        additional_joins: self
+                            .plan_hybrid_joins(query_info, view, &coverage)
+                            .await?,
                     };
 
                     best_hybrid = Some(RewritingResult {
@@ -559,18 +595,24 @@ impl QueryRewriter {
     ) -> Result<Option<RewritingResult>> {
         // Simplified composition logic
         // In practice, this would need sophisticated join planning
-        
-        let coverage1 = self.view_matcher.calculate_pattern_coverage(&views[0].definition, &query_info.patterns).await?;
-        let coverage2 = self.view_matcher.calculate_pattern_coverage(&views[1].definition, &query_info.patterns).await?;
-        
+
+        let coverage1 = self
+            .view_matcher
+            .calculate_pattern_coverage(&views[0].definition, &query_info.patterns)
+            .await?;
+        let coverage2 = self
+            .view_matcher
+            .calculate_pattern_coverage(&views[1].definition, &query_info.patterns)
+            .await?;
+
         let combined_coverage = coverage1.coverage_percentage + coverage2.coverage_percentage;
-        
-        if combined_coverage > 0.8 { // Good combined coverage
-            let cost_reduction = self.cost_estimator.estimate_composition_cost_reduction(
-                query_info,
-                views,
-                registry,
-            ).await?;
+
+        if combined_coverage > 0.8 {
+            // Good combined coverage
+            let cost_reduction = self
+                .cost_estimator
+                .estimate_composition_cost_reduction(query_info, views, registry)
+                .await?;
 
             if cost_reduction > 0.2 {
                 let rewritten_query = RewrittenQuery {
@@ -590,14 +632,12 @@ impl QueryRewriter {
                             estimated_result_size: 1000, // Placeholder
                         },
                     ],
-                    additional_joins: vec![
-                        JoinRequirement {
-                            left_side: JoinSide::View(views[0].id.clone()),
-                            right_side: JoinSide::View(views[1].id.clone()),
-                            join_variables: vec!["id".to_string()], // Simplified
-                            join_type: JoinType::Inner,
-                        },
-                    ],
+                    additional_joins: vec![JoinRequirement {
+                        left_side: JoinSide::View(views[0].id.clone()),
+                        right_side: JoinSide::View(views[1].id.clone()),
+                        join_variables: vec!["id".to_string()], // Simplified
+                        join_type: JoinType::Inner,
+                    }],
                 };
 
                 return Ok(Some(RewritingResult {
@@ -630,7 +670,11 @@ impl QueryRewriter {
         Ok(None)
     }
 
-    async fn extract_selection_criteria(&self, _query_info: &QueryInfo, _view: &MaterializedView) -> Result<Vec<String>> {
+    async fn extract_selection_criteria(
+        &self,
+        _query_info: &QueryInfo,
+        _view: &MaterializedView,
+    ) -> Result<Vec<String>> {
         // Placeholder implementation
         Ok(vec![])
     }
@@ -640,7 +684,11 @@ impl QueryRewriter {
         Ok(query_info.variables.iter().cloned().collect())
     }
 
-    async fn estimate_view_result_size(&self, _view: &MaterializedView, _query_info: &QueryInfo) -> Result<u64> {
+    async fn estimate_view_result_size(
+        &self,
+        _view: &MaterializedView,
+        _query_info: &QueryInfo,
+    ) -> Result<u64> {
         // Placeholder implementation
         Ok(1000)
     }
@@ -681,7 +729,11 @@ impl ContainmentChecker {
         Self
     }
 
-    async fn is_query_contained(&self, _view_def: &ViewDefinition, _query: &QueryInfo) -> Result<bool> {
+    async fn is_query_contained(
+        &self,
+        _view_def: &ViewDefinition,
+        _query: &QueryInfo,
+    ) -> Result<bool> {
         // Simplified containment check
         // In practice, this requires sophisticated logic
         Ok(false)
@@ -749,7 +801,11 @@ impl ViewMatcher {
         Self
     }
 
-    async fn has_potential_overlap(&self, _view_def: &ViewDefinition, _query: &QueryInfo) -> Result<bool> {
+    async fn has_potential_overlap(
+        &self,
+        _view_def: &ViewDefinition,
+        _query: &QueryInfo,
+    ) -> Result<bool> {
         // Simplified overlap detection
         Ok(true) // Assume potential overlap for simplicity
     }
@@ -762,7 +818,7 @@ impl ViewMatcher {
         // Simplified coverage calculation
         let coverage_percentage = 0.7; // 70% coverage
         let split_point = (patterns.len() as f64 * coverage_percentage) as usize;
-        
+
         Ok(PatternCoverage {
             covered_patterns: patterns[..split_point].to_vec(),
             uncovered_patterns: patterns[split_point..].to_vec(),
@@ -801,7 +857,10 @@ mod tests {
     #[test]
     fn test_rewriting_strategy_types() {
         assert_eq!(RewritingStrategy::None, RewritingStrategy::None);
-        assert_ne!(RewritingStrategy::SingleViewComplete, RewritingStrategy::MultiViewComposition);
+        assert_ne!(
+            RewritingStrategy::SingleViewComplete,
+            RewritingStrategy::MultiViewComposition
+        );
     }
 
     #[test]
@@ -813,7 +872,7 @@ mod tests {
             cost_savings: 0.5,
             coverage_percentage: 1.0,
         };
-        
+
         assert_eq!(usage.usage_type, ViewUsageType::CompleteReplacement);
         assert_eq!(usage.coverage_percentage, 1.0);
     }

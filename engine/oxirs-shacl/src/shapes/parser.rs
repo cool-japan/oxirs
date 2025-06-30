@@ -3,12 +3,12 @@
 use std::collections::{HashMap, HashSet};
 
 use oxirs_core::{
-    model::{NamedNode, Term, Object, Predicate, Subject, BlankNode},
-    Store,
     graph::Graph,
+    model::{BlankNode, NamedNode, Object, Predicate, Subject, Term},
+    Store,
 };
 
-use crate::{Result, Shape, ShaclError, ShapeId, ShapeType, paths::PropertyPath};
+use crate::{paths::PropertyPath, Result, ShaclError, Shape, ShapeId, ShapeType};
 
 use super::types::{ShapeParsingConfig, ShapeParsingStats};
 
@@ -58,6 +58,13 @@ impl ShapeParser {
         self
     }
 
+    /// Create parser with custom configuration
+    pub fn with_config(mut self, config: ShapeParsingConfig) -> Self {
+        self.max_depth = config.max_depth;
+        self.strict_mode = config.strict_mode;
+        self
+    }
+
     /// Parse shapes from an RDF store
     pub fn parse_shapes_from_store(
         &mut self,
@@ -74,7 +81,10 @@ impl ShapeParser {
         for shape_node in shape_nodes {
             match self.parse_shape_from_store(store, &shape_node, graph_name) {
                 Ok(shape) => {
-                    self.stats.update_shape_parsed(shape.constraints.len(), std::time::Duration::from_millis(1));
+                    self.stats.update_shape_parsed(
+                        shape.constraints.len(),
+                        std::time::Duration::from_millis(1),
+                    );
                     shapes.push(shape);
                 }
                 Err(e) => {
@@ -109,11 +119,11 @@ impl ShapeParser {
     ) -> Result<Vec<Shape>> {
         // Create a temporary store and load the RDF data
         let store = Store::new().map_err(|e| ShaclError::Core(e))?;
-        
+
         // Parse the RDF data into the store
         // Note: This is a simplified implementation - the actual implementation
         // would need proper RDF parsing based on format
-        
+
         // For now, return empty shapes as this would require implementing
         // a full RDF parser which is beyond scope of this refactoring
         tracing::warn!("RDF parsing from string not yet implemented in refactored parser");
@@ -207,7 +217,7 @@ impl ShapeParser {
         // This is a simplified implementation
         // The actual implementation would query the store for shape nodes
         // using SPARQL or graph iteration
-        
+
         tracing::warn!("Shape node discovery not yet implemented in refactored parser");
         Ok(Vec::new())
     }
@@ -270,9 +280,9 @@ impl ShapeParser {
         // This is a simplified implementation
         // The actual implementation would extract shape properties,
         // targets, constraints, etc. from the RDF graph
-        
+
         Err(ShaclError::ShapeParsing(
-            "Shape parsing not yet implemented in refactored parser".to_string()
+            "Shape parsing not yet implemented in refactored parser".to_string(),
         ))
     }
 
@@ -363,7 +373,11 @@ impl ShapeParser {
     }
 
     /// Parse a property path from an RDF object
-    fn parse_property_path_object(&self, graph: &Graph, path_object: &Object) -> Result<PropertyPath> {
+    fn parse_property_path_object(
+        &self,
+        graph: &Graph,
+        path_object: &Object,
+    ) -> Result<PropertyPath> {
         match path_object {
             Object::NamedNode(node) => {
                 // Simple property path
@@ -380,7 +394,11 @@ impl ShapeParser {
     }
 
     /// Parse complex property paths from blank nodes
-    fn parse_complex_property_path(&self, graph: &Graph, blank_node: &BlankNode) -> Result<PropertyPath> {
+    fn parse_complex_property_path(
+        &self,
+        graph: &Graph,
+        blank_node: &BlankNode,
+    ) -> Result<PropertyPath> {
         // Check for inverse path
         if let Some(inverse_path) = self.parse_inverse_path(graph, blank_node)? {
             return Ok(inverse_path);
@@ -417,9 +435,15 @@ impl ShapeParser {
     }
 
     /// Parse inverse property path
-    fn parse_inverse_path(&self, graph: &Graph, blank_node: &BlankNode) -> Result<Option<PropertyPath>> {
-        let inverse_prop = NamedNode::new("http://www.w3.org/ns/shacl#inversePath")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid inversePath property IRI: {}", e)))?;
+    fn parse_inverse_path(
+        &self,
+        graph: &Graph,
+        blank_node: &BlankNode,
+    ) -> Result<Option<PropertyPath>> {
+        let inverse_prop =
+            NamedNode::new("http://www.w3.org/ns/shacl#inversePath").map_err(|e| {
+                ShaclError::ShapeParsing(format!("Invalid inversePath property IRI: {}", e))
+            })?;
 
         let triples = graph.query_triples(
             Some(&Subject::BlankNode(blank_node.clone())),
@@ -439,9 +463,15 @@ impl ShapeParser {
     }
 
     /// Parse alternative property path
-    fn parse_alternative_path(&self, graph: &Graph, blank_node: &BlankNode) -> Result<Option<PropertyPath>> {
+    fn parse_alternative_path(
+        &self,
+        graph: &Graph,
+        blank_node: &BlankNode,
+    ) -> Result<Option<PropertyPath>> {
         let alternative_prop = NamedNode::new("http://www.w3.org/ns/shacl#alternativePath")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid alternativePath property IRI: {}", e)))?;
+            .map_err(|e| {
+                ShaclError::ShapeParsing(format!("Invalid alternativePath property IRI: {}", e))
+            })?;
 
         let triples = graph.query_triples(
             Some(&Subject::BlankNode(blank_node.clone())),
@@ -461,7 +491,11 @@ impl ShapeParser {
     }
 
     /// Parse sequence property path
-    fn parse_sequence_path(&self, graph: &Graph, blank_node: &BlankNode) -> Result<Option<PropertyPath>> {
+    fn parse_sequence_path(
+        &self,
+        graph: &Graph,
+        blank_node: &BlankNode,
+    ) -> Result<Option<PropertyPath>> {
         // Check if this blank node is the head of an RDF list
         let first_prop = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
             .map_err(|e| ShaclError::ShapeParsing(format!("Invalid first property IRI: {}", e)))?;
@@ -474,7 +508,8 @@ impl ShapeParser {
 
         if first_triples.len() > 0 {
             // This is an RDF list, parse it as a sequence
-            let paths = self.parse_rdf_list_as_paths(graph, &Object::BlankNode(blank_node.clone()))?;
+            let paths =
+                self.parse_rdf_list_as_paths(graph, &Object::BlankNode(blank_node.clone()))?;
             if paths.len() > 1 {
                 return Ok(Some(PropertyPath::Sequence(paths)));
             }
@@ -484,9 +519,15 @@ impl ShapeParser {
     }
 
     /// Parse zero-or-more property path
-    fn parse_zero_or_more_path(&self, graph: &Graph, blank_node: &BlankNode) -> Result<Option<PropertyPath>> {
+    fn parse_zero_or_more_path(
+        &self,
+        graph: &Graph,
+        blank_node: &BlankNode,
+    ) -> Result<Option<PropertyPath>> {
         let zero_or_more_prop = NamedNode::new("http://www.w3.org/ns/shacl#zeroOrMorePath")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid zeroOrMorePath property IRI: {}", e)))?;
+            .map_err(|e| {
+                ShaclError::ShapeParsing(format!("Invalid zeroOrMorePath property IRI: {}", e))
+            })?;
 
         let triples = graph.query_triples(
             Some(&Subject::BlankNode(blank_node.clone())),
@@ -503,9 +544,15 @@ impl ShapeParser {
     }
 
     /// Parse one-or-more property path
-    fn parse_one_or_more_path(&self, graph: &Graph, blank_node: &BlankNode) -> Result<Option<PropertyPath>> {
-        let one_or_more_prop = NamedNode::new("http://www.w3.org/ns/shacl#oneOrMorePath")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid oneOrMorePath property IRI: {}", e)))?;
+    fn parse_one_or_more_path(
+        &self,
+        graph: &Graph,
+        blank_node: &BlankNode,
+    ) -> Result<Option<PropertyPath>> {
+        let one_or_more_prop =
+            NamedNode::new("http://www.w3.org/ns/shacl#oneOrMorePath").map_err(|e| {
+                ShaclError::ShapeParsing(format!("Invalid oneOrMorePath property IRI: {}", e))
+            })?;
 
         let triples = graph.query_triples(
             Some(&Subject::BlankNode(blank_node.clone())),
@@ -522,9 +569,15 @@ impl ShapeParser {
     }
 
     /// Parse zero-or-one property path
-    fn parse_zero_or_one_path(&self, graph: &Graph, blank_node: &BlankNode) -> Result<Option<PropertyPath>> {
-        let zero_or_one_prop = NamedNode::new("http://www.w3.org/ns/shacl#zeroOrOnePath")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid zeroOrOnePath property IRI: {}", e)))?;
+    fn parse_zero_or_one_path(
+        &self,
+        graph: &Graph,
+        blank_node: &BlankNode,
+    ) -> Result<Option<PropertyPath>> {
+        let zero_or_one_prop =
+            NamedNode::new("http://www.w3.org/ns/shacl#zeroOrOnePath").map_err(|e| {
+                ShaclError::ShapeParsing(format!("Invalid zeroOrOnePath property IRI: {}", e))
+            })?;
 
         let triples = graph.query_triples(
             Some(&Subject::BlankNode(blank_node.clone())),
@@ -541,7 +594,11 @@ impl ShapeParser {
     }
 
     /// Parse an RDF list into a vector of property paths
-    fn parse_rdf_list_as_paths(&self, graph: &Graph, list_object: &Object) -> Result<Vec<PropertyPath>> {
+    fn parse_rdf_list_as_paths(
+        &self,
+        graph: &Graph,
+        list_object: &Object,
+    ) -> Result<Vec<PropertyPath>> {
         let mut paths = Vec::new();
         let mut current = list_object.clone();
 

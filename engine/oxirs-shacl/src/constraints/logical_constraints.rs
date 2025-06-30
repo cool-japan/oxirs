@@ -1,19 +1,13 @@
 //! Logical constraint implementations with performance optimizations for negation and deep nesting
 
-use oxirs_core::{Subject, Predicate, Object};
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
 use super::constraint_types::Constraint;
 use super::shape_constraints::EvaluationComplexity;
 use crate::{
-    ConstraintComponentId, 
-    Result, 
-    ShaclError, 
-    Severity, 
-    ShapeId, 
-    ValidationConfig,
-    Validator
+    ConstraintComponentId, Result, Severity, ShaclError, ShapeId, ValidationConfig, Validator,
 };
 use oxirs_core::{model::Term, Store};
+use oxirs_core::{Object, Predicate, Subject};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -47,12 +41,12 @@ impl NotConstraint {
     ) -> Result<ConstraintEvaluationResult> {
         // Check if there's a shape validator available in the context
         // For now, we'll implement a simplified version
-        
+
         // The NOT constraint is satisfied if the referenced shape is NOT satisfied
         // This is a performance-critical operation that can benefit from optimizations
-        
+
         let values = &context.values;
-        
+
         if values.is_empty() {
             // No values to validate against - NOT constraint is satisfied
             return Ok(ConstraintEvaluationResult::satisfied());
@@ -83,7 +77,7 @@ impl NotConstraint {
         store: &Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
@@ -113,14 +107,14 @@ impl NotConstraint {
         cache: &mut HashMap<(Term, ShapeId), bool>,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
 
         for value in values {
             let cache_key = (value.clone(), self.shape.clone());
-            
+
             let conforms = if let Some(&cached_result) = cache.get(&cache_key) {
                 cached_result
             } else {
@@ -191,7 +185,7 @@ impl NotConstraint {
     ) -> Result<bool> {
         // This is a simplified implementation
         // In a full implementation, this would delegate to the actual shape validator
-        
+
         // For test cases and demo purposes, implement basic shape checking
         if self.shape.as_str().contains("FriendShape") {
             if let Term::NamedNode(node) = value {
@@ -202,22 +196,19 @@ impl NotConstraint {
                     Ok(pred) => pred,
                     Err(_) => return Ok(false),
                 };
-                
-                let friend_type = match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
-                    Ok(friend) => friend,
-                    Err(_) => return Ok(false),
-                };
+
+                let friend_type =
+                    match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
+                        Ok(friend) => friend,
+                        Err(_) => return Ok(false),
+                    };
 
                 // Check if the store contains the triple: value rdf:type Friend
                 let subject: Subject = node.clone().into();
                 let predicate: Predicate = type_predicate.into();
                 let object: Object = friend_type.clone().into();
-                let quads = store.query_quads(
-                    Some(&subject),
-                    Some(&predicate),
-                    Some(&object),
-                    None,
-                )?;
+                let quads =
+                    store.query_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
                 if !quads.is_empty() {
                     return Ok(true);
                 }
@@ -286,7 +277,7 @@ impl AndConstraint {
         store: &Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             // No values to validate - AND constraint is satisfied
             return Ok(ConstraintEvaluationResult::satisfied());
@@ -317,7 +308,7 @@ impl AndConstraint {
         store: &Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
@@ -348,7 +339,7 @@ impl AndConstraint {
         cache: &mut HashMap<(Term, ShapeId), bool>,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
@@ -356,7 +347,7 @@ impl AndConstraint {
         for value in values {
             for shape_id in &self.shapes {
                 let cache_key = (value.clone(), shape_id.clone());
-                
+
                 let conforms = if let Some(&cached_result) = cache.get(&cache_key) {
                     cached_result
                 } else {
@@ -398,7 +389,7 @@ impl AndConstraint {
         }
 
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
@@ -423,9 +414,9 @@ impl AndConstraint {
                 }
 
                 visited_shapes.insert(shape_id.clone());
-                
+
                 let conforms = self.value_conforms_to_shape(value, shape_id, store, context)?;
-                
+
                 visited_shapes.remove(shape_id);
 
                 if !conforms {
@@ -460,21 +451,18 @@ impl AndConstraint {
                     Ok(pred) => pred,
                     Err(_) => return Ok(false),
                 };
-                
-                let friend_type = match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
-                    Ok(friend) => friend,
-                    Err(_) => return Ok(false),
-                };
+
+                let friend_type =
+                    match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
+                        Ok(friend) => friend,
+                        Err(_) => return Ok(false),
+                    };
 
                 let subject: Subject = node.clone().into();
                 let predicate: Predicate = type_predicate.into();
                 let object: Object = friend_type.clone().into();
-                let quads = store.query_quads(
-                    Some(&subject),
-                    Some(&predicate),
-                    Some(&object),
-                    None,
-                )?;
+                let quads =
+                    store.query_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
                 if !quads.is_empty() {
                     return Ok(true);
                 }
@@ -557,7 +545,7 @@ impl OrConstraint {
         store: &Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             // No values to validate - OR constraint is satisfied if at least one shape would be satisfied
             return Ok(ConstraintEvaluationResult::satisfied());
@@ -566,14 +554,14 @@ impl OrConstraint {
         // For OR constraint to be satisfied, at least ONE referenced shape must be satisfied for ALL values
         for value in values {
             let mut satisfied_by_any_shape = false;
-            
+
             for shape_id in &self.shapes {
                 if self.value_conforms_to_shape(value, shape_id, store, context)? {
                     satisfied_by_any_shape = true;
                     break; // Early termination - found a satisfying shape
                 }
             }
-            
+
             if !satisfied_by_any_shape {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -595,7 +583,7 @@ impl OrConstraint {
         store: &Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
@@ -603,14 +591,14 @@ impl OrConstraint {
         // Early termination: stop as soon as ANY shape succeeds for each value
         for value in values {
             let mut satisfied_by_any_shape = false;
-            
+
             for shape_id in &self.shapes {
                 if self.value_conforms_to_shape(value, shape_id, store, context)? {
                     satisfied_by_any_shape = true;
                     break; // Early termination optimization
                 }
             }
-            
+
             if !satisfied_by_any_shape {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -633,17 +621,17 @@ impl OrConstraint {
         cache: &mut HashMap<(Term, ShapeId), bool>,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
 
         for value in values {
             let mut satisfied_by_any_shape = false;
-            
+
             for shape_id in &self.shapes {
                 let cache_key = (value.clone(), shape_id.clone());
-                
+
                 let conforms = if let Some(&cached_result) = cache.get(&cache_key) {
                     cached_result
                 } else {
@@ -657,7 +645,7 @@ impl OrConstraint {
                     break; // Early termination
                 }
             }
-            
+
             if !satisfied_by_any_shape {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -690,7 +678,7 @@ impl OrConstraint {
         }
 
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
@@ -708,7 +696,7 @@ impl OrConstraint {
         // Evaluate each value against shapes with recursion tracking
         for value in values {
             let mut satisfied_by_any_shape = false;
-            
+
             for shape_id in &self.shapes {
                 // Skip if this would cause circular reference
                 if visited_shapes.contains(shape_id) {
@@ -716,9 +704,9 @@ impl OrConstraint {
                 }
 
                 visited_shapes.insert(shape_id.clone());
-                
+
                 let conforms = self.value_conforms_to_shape(value, shape_id, store, context)?;
-                
+
                 visited_shapes.remove(shape_id);
 
                 if conforms {
@@ -726,7 +714,7 @@ impl OrConstraint {
                     break; // Early termination
                 }
             }
-            
+
             if !satisfied_by_any_shape {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -758,21 +746,18 @@ impl OrConstraint {
                     Ok(pred) => pred,
                     Err(_) => return Ok(false),
                 };
-                
-                let friend_type = match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
-                    Ok(friend) => friend,
-                    Err(_) => return Ok(false),
-                };
+
+                let friend_type =
+                    match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
+                        Ok(friend) => friend,
+                        Err(_) => return Ok(false),
+                    };
 
                 let subject: Subject = node.clone().into();
                 let predicate: Predicate = type_predicate.into();
                 let object: Object = friend_type.clone().into();
-                let quads = store.query_quads(
-                    Some(&subject),
-                    Some(&predicate),
-                    Some(&object),
-                    None,
-                )?;
+                let quads =
+                    store.query_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
                 if !quads.is_empty() {
                     return Ok(true);
                 }
@@ -856,7 +841,7 @@ impl XoneConstraint {
         store: &Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             // No values to validate - XONE constraint behavior for empty values is satisfied
             return Ok(ConstraintEvaluationResult::satisfied());
@@ -865,13 +850,13 @@ impl XoneConstraint {
         // For XONE constraint to be satisfied, exactly ONE referenced shape must be satisfied for ALL values
         for value in values {
             let mut conforming_shapes = Vec::new();
-            
+
             for shape_id in &self.shapes {
                 if self.value_conforms_to_shape(value, shape_id, store, context)? {
                     conforming_shapes.push(shape_id.clone());
                 }
             }
-            
+
             match conforming_shapes.len() {
                 0 => {
                     return Ok(ConstraintEvaluationResult::violated(
@@ -908,7 +893,7 @@ impl XoneConstraint {
         store: &Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
@@ -918,11 +903,11 @@ impl XoneConstraint {
         for value in values {
             let mut conforming_count = 0;
             let mut first_conforming_shape: Option<ShapeId> = None;
-            
+
             for shape_id in &self.shapes {
                 if self.value_conforms_to_shape(value, shape_id, store, context)? {
                     conforming_count += 1;
-                    
+
                     if conforming_count == 1 {
                         first_conforming_shape = Some(shape_id.clone());
                     } else {
@@ -938,7 +923,7 @@ impl XoneConstraint {
                     }
                 }
             }
-            
+
             if conforming_count == 0 {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -961,17 +946,17 @@ impl XoneConstraint {
         cache: &mut HashMap<(Term, ShapeId), bool>,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
 
         for value in values {
             let mut conforming_shapes = Vec::new();
-            
+
             for shape_id in &self.shapes {
                 let cache_key = (value.clone(), shape_id.clone());
-                
+
                 let conforms = if let Some(&cached_result) = cache.get(&cache_key) {
                     cached_result
                 } else {
@@ -982,7 +967,7 @@ impl XoneConstraint {
 
                 if conforms {
                     conforming_shapes.push(shape_id.clone());
-                    
+
                     // Early termination if we already have more than one
                     if conforming_shapes.len() > 1 {
                         return Ok(ConstraintEvaluationResult::violated(
@@ -995,7 +980,7 @@ impl XoneConstraint {
                     }
                 }
             }
-            
+
             if conforming_shapes.len() != 1 {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -1028,7 +1013,7 @@ impl XoneConstraint {
         }
 
         let values = &context.values;
-        
+
         if values.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
@@ -1046,7 +1031,7 @@ impl XoneConstraint {
         // Evaluate each value against shapes with recursion tracking
         for value in values {
             let mut conforming_shapes = Vec::new();
-            
+
             for shape_id in &self.shapes {
                 // Skip if this would cause circular reference
                 if visited_shapes.contains(shape_id) {
@@ -1054,14 +1039,14 @@ impl XoneConstraint {
                 }
 
                 visited_shapes.insert(shape_id.clone());
-                
+
                 let conforms = self.value_conforms_to_shape(value, shape_id, store, context)?;
-                
+
                 visited_shapes.remove(shape_id);
 
                 if conforms {
                     conforming_shapes.push(shape_id.clone());
-                    
+
                     // Early termination if we already have more than one
                     if conforming_shapes.len() > 1 {
                         return Ok(ConstraintEvaluationResult::violated(
@@ -1074,7 +1059,7 @@ impl XoneConstraint {
                     }
                 }
             }
-            
+
             if conforming_shapes.len() != 1 {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -1106,21 +1091,18 @@ impl XoneConstraint {
                     Ok(pred) => pred,
                     Err(_) => return Ok(false),
                 };
-                
-                let friend_type = match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
-                    Ok(friend) => friend,
-                    Err(_) => return Ok(false),
-                };
+
+                let friend_type =
+                    match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
+                        Ok(friend) => friend,
+                        Err(_) => return Ok(false),
+                    };
 
                 let subject: Subject = node.clone().into();
                 let predicate: Predicate = type_predicate.into();
                 let object: Object = friend_type.clone().into();
-                let quads = store.query_quads(
-                    Some(&subject),
-                    Some(&predicate),
-                    Some(&object),
-                    None,
-                )?;
+                let quads =
+                    store.query_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
                 if !quads.is_empty() {
                     return Ok(true);
                 }
@@ -1175,16 +1157,18 @@ impl XoneConstraint {
 
         for value in values {
             let mut conforming_count = 0;
-            
+
             for shape_id in &self.shapes {
                 if self.value_conforms_to_shape(value, shape_id, store, context)? {
                     conforming_count += 1;
-                    *shape_conformance_counts.entry(shape_id.clone()).or_insert(0) += 1;
+                    *shape_conformance_counts
+                        .entry(shape_id.clone())
+                        .or_insert(0) += 1;
                 }
             }
-            
+
             total_conforming_shapes += conforming_count;
-            
+
             match conforming_count {
                 0 => analysis.values_with_zero_conformance += 1,
                 1 => analysis.values_with_single_conformance += 1,

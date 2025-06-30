@@ -3,11 +3,11 @@
 //! This module provides intelligent shape management capabilities including
 //! version control, optimization, collaboration, and reusability features.
 
-pub mod version_control;
-pub mod optimization;
 pub mod collaboration;
-pub mod reusability;
 pub mod library;
+pub mod optimization;
+pub mod reusability;
+pub mod version_control;
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -23,11 +23,11 @@ use crate::{
 };
 
 // Re-export important types
-pub use version_control::*;
-pub use optimization::*;
 pub use collaboration::*;
-pub use reusability::*;
 pub use library::*;
+pub use optimization::*;
+pub use reusability::*;
+pub use version_control::*;
 
 /// Configuration for shape management
 #[derive(Debug, Clone, Serialize, Deserialize)]

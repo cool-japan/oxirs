@@ -1,8 +1,6 @@
-use oxirs_chat::rag::{
-    QueryContext, QueryIntent, RAGConfig, RAGSystem, SimpleEmbeddingModel,
-};
-use oxirs_embed::EmbeddingModel;
+use oxirs_chat::rag::{QueryContext, QueryIntent, RAGConfig, RAGSystem, SimpleEmbeddingModel};
 use oxirs_core::{Literal, NamedNode, Store, Triple};
+use oxirs_embed::EmbeddingModel;
 use oxirs_vec::{
     index::AdvancedVectorIndex,
     index::{DistanceMetric, IndexConfig, IndexType},

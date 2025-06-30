@@ -11,7 +11,9 @@ pub mod types;
 // Re-export commonly used types and functions
 pub use cost_analysis::{MaintenanceCost, ViewBenefit, ViewCostAnalyzer, ViewCreationCost};
 pub use maintenance::{CleanupResult, MaintenanceConfig, MaintenanceScheduler, ViewStorageCleaner};
-pub use query_rewriting::{QueryRewriter, RewritingConfig, RewritingResult, RewritingStrategy, ViewUsage};
+pub use query_rewriting::{
+    QueryRewriter, RewritingConfig, RewritingResult, RewritingStrategy, ViewUsage,
+};
 pub use types::*;
 
 use anyhow::{anyhow, Result};

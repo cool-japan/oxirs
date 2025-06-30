@@ -31,7 +31,7 @@ impl Default for ResultMergingConfig {
     fn default() -> Self {
         let mut source_weights = HashMap::new();
         source_weights.insert("primary".to_string(), 1.0);
-        
+
         Self {
             combination_strategy: ScoreCombinationStrategy::WeightedSum,
             normalization_method: ScoreNormalizationMethod::MinMax,
@@ -249,8 +249,9 @@ impl AdvancedResultMerger {
 
         // Update statistics
         self.fusion_stats.total_merges += 1;
-        self.fusion_stats.average_sources_per_merge = 
-            (self.fusion_stats.average_sources_per_merge * (self.fusion_stats.total_merges - 1) as f32 + sources.len() as f32) 
+        self.fusion_stats.average_sources_per_merge = (self.fusion_stats.average_sources_per_merge
+            * (self.fusion_stats.total_merges - 1) as f32
+            + sources.len() as f32)
             / self.fusion_stats.total_merges as f32;
 
         // Step 1: Normalize scores from each source
@@ -263,9 +264,15 @@ impl AdvancedResultMerger {
         let mut merged_results = match self.config.fusion_algorithm {
             RankFusionAlgorithm::CombSUM => self.apply_combsum(&normalized_sources, &all_items)?,
             RankFusionAlgorithm::CombMNZ => self.apply_combmnz(&normalized_sources, &all_items)?,
-            RankFusionAlgorithm::ReciprocalRankFusion => self.apply_rrf(&normalized_sources, &all_items)?,
-            RankFusionAlgorithm::BordaFusion => self.apply_borda(&normalized_sources, &all_items)?,
-            RankFusionAlgorithm::CondorcetFusion => self.apply_condorcet(&normalized_sources, &all_items)?,
+            RankFusionAlgorithm::ReciprocalRankFusion => {
+                self.apply_rrf(&normalized_sources, &all_items)?
+            }
+            RankFusionAlgorithm::BordaFusion => {
+                self.apply_borda(&normalized_sources, &all_items)?
+            }
+            RankFusionAlgorithm::CondorcetFusion => {
+                self.apply_condorcet(&normalized_sources, &all_items)?
+            }
         };
 
         // Step 4: Apply score combination strategy
@@ -273,7 +280,8 @@ impl AdvancedResultMerger {
 
         // Step 5: Calculate confidence intervals if enabled
         if self.config.confidence_intervals {
-            merged_results = self.calculate_confidence_intervals(merged_results, &normalized_sources)?;
+            merged_results =
+                self.calculate_confidence_intervals(merged_results, &normalized_sources)?;
         }
 
         // Step 6: Generate explanations if enabled
@@ -316,9 +324,11 @@ impl AdvancedResultMerger {
         let normalization_params = self.calculate_normalization_params(&scores);
 
         // Cache normalization parameters
-        self.normalization_cache.insert(source.source_id.clone(), normalization_params.clone());
+        self.normalization_cache
+            .insert(source.source_id.clone(), normalization_params.clone());
 
-        let normalized_results: Vec<ScoredResult> = source.results
+        let normalized_results: Vec<ScoredResult> = source
+            .results
             .iter()
             .map(|result| {
                 let normalized_score = self.normalize_score(result.score, &normalization_params);
@@ -344,10 +354,12 @@ impl AdvancedResultMerger {
         let min_score = scores.iter().fold(f32::INFINITY, |a, &b| a.min(b));
         let max_score = scores.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
         let mean_score = scores.iter().sum::<f32>() / scores.len() as f32;
-        
-        let variance = scores.iter()
+
+        let variance = scores
+            .iter()
             .map(|&x| (x - mean_score).powi(2))
-            .sum::<f32>() / scores.len() as f32;
+            .sum::<f32>()
+            / scores.len() as f32;
         let std_dev = variance.sqrt();
 
         NormalizationParams {
@@ -380,9 +392,7 @@ impl AdvancedResultMerger {
                 // For softmax, we need all scores, so this is a simplified version
                 (score - params.min_score).exp()
             }
-            ScoreNormalizationMethod::Sigmoid => {
-                1.0 / (1.0 + (-score).exp())
-            }
+            ScoreNormalizationMethod::Sigmoid => 1.0 / (1.0 + (-score).exp()),
             ScoreNormalizationMethod::RankBased => {
                 // This would require rank information
                 score / params.max_score
@@ -402,7 +412,11 @@ impl AdvancedResultMerger {
     }
 
     /// Apply CombSUM fusion algorithm
-    fn apply_combsum(&self, sources: &[SourceResult], items: &HashSet<String>) -> Result<Vec<MergedResult>> {
+    fn apply_combsum(
+        &self,
+        sources: &[SourceResult],
+        items: &HashSet<String>,
+    ) -> Result<Vec<MergedResult>> {
         let mut merged_results = Vec::new();
 
         for item_id in items {
@@ -411,7 +425,12 @@ impl AdvancedResultMerger {
 
             for source in sources {
                 if let Some(result) = source.results.iter().find(|r| r.item_id == *item_id) {
-                    let weight = self.config.source_weights.get(&source.source_id).copied().unwrap_or(1.0);
+                    let weight = self
+                        .config
+                        .source_weights
+                        .get(&source.source_id)
+                        .copied()
+                        .unwrap_or(1.0);
                     let weighted_score = result.score * weight;
                     total_score += weighted_score;
 
@@ -439,7 +458,11 @@ impl AdvancedResultMerger {
     }
 
     /// Apply CombMNZ fusion algorithm
-    fn apply_combmnz(&self, sources: &[SourceResult], items: &HashSet<String>) -> Result<Vec<MergedResult>> {
+    fn apply_combmnz(
+        &self,
+        sources: &[SourceResult],
+        items: &HashSet<String>,
+    ) -> Result<Vec<MergedResult>> {
         let mut merged_results = Vec::new();
 
         for item_id in items {
@@ -449,9 +472,14 @@ impl AdvancedResultMerger {
 
             for source in sources {
                 if let Some(result) = source.results.iter().find(|r| r.item_id == *item_id) {
-                    let weight = self.config.source_weights.get(&source.source_id).copied().unwrap_or(1.0);
+                    let weight = self
+                        .config
+                        .source_weights
+                        .get(&source.source_id)
+                        .copied()
+                        .unwrap_or(1.0);
                     let weighted_score = result.score * weight;
-                    
+
                     if weighted_score > 0.0 {
                         total_score += weighted_score;
                         non_zero_count += 1;
@@ -487,7 +515,11 @@ impl AdvancedResultMerger {
     }
 
     /// Apply Reciprocal Rank Fusion
-    fn apply_rrf(&self, sources: &[SourceResult], items: &HashSet<String>) -> Result<Vec<MergedResult>> {
+    fn apply_rrf(
+        &self,
+        sources: &[SourceResult],
+        items: &HashSet<String>,
+    ) -> Result<Vec<MergedResult>> {
         let k = 60.0; // RRF constant
         let mut merged_results = Vec::new();
 
@@ -497,7 +529,12 @@ impl AdvancedResultMerger {
 
             for source in sources {
                 if let Some(result) = source.results.iter().find(|r| r.item_id == *item_id) {
-                    let weight = self.config.source_weights.get(&source.source_id).copied().unwrap_or(1.0);
+                    let weight = self
+                        .config
+                        .source_weights
+                        .get(&source.source_id)
+                        .copied()
+                        .unwrap_or(1.0);
                     let rrf_contribution = weight / (k + result.rank as f32);
                     rrf_score += rrf_contribution;
 
@@ -525,7 +562,11 @@ impl AdvancedResultMerger {
     }
 
     /// Apply Borda fusion
-    fn apply_borda(&self, sources: &[SourceResult], items: &HashSet<String>) -> Result<Vec<MergedResult>> {
+    fn apply_borda(
+        &self,
+        sources: &[SourceResult],
+        items: &HashSet<String>,
+    ) -> Result<Vec<MergedResult>> {
         let mut merged_results = Vec::new();
 
         for item_id in items {
@@ -534,7 +575,12 @@ impl AdvancedResultMerger {
 
             for source in sources {
                 if let Some(result) = source.results.iter().find(|r| r.item_id == *item_id) {
-                    let weight = self.config.source_weights.get(&source.source_id).copied().unwrap_or(1.0);
+                    let weight = self
+                        .config
+                        .source_weights
+                        .get(&source.source_id)
+                        .copied()
+                        .unwrap_or(1.0);
                     let max_rank = source.results.len() as f32;
                     let borda_contribution = weight * (max_rank - result.rank as f32);
                     borda_score += borda_contribution;
@@ -563,21 +609,32 @@ impl AdvancedResultMerger {
     }
 
     /// Apply Condorcet fusion (simplified)
-    fn apply_condorcet(&self, sources: &[SourceResult], items: &HashSet<String>) -> Result<Vec<MergedResult>> {
+    fn apply_condorcet(
+        &self,
+        sources: &[SourceResult],
+        items: &HashSet<String>,
+    ) -> Result<Vec<MergedResult>> {
         // For simplicity, we'll use a vote-based approach
         // In a full implementation, this would involve pairwise comparisons
         self.apply_borda(sources, items)
     }
 
     /// Apply score combination strategy
-    fn apply_score_combination(&self, mut results: Vec<MergedResult>, sources: &[SourceResult]) -> Result<Vec<MergedResult>> {
+    fn apply_score_combination(
+        &self,
+        mut results: Vec<MergedResult>,
+        sources: &[SourceResult],
+    ) -> Result<Vec<MergedResult>> {
         match self.config.combination_strategy {
             ScoreCombinationStrategy::Average => {
                 for result in &mut results {
                     if !result.source_contributions.is_empty() {
-                        result.final_score = result.source_contributions.iter()
+                        result.final_score = result
+                            .source_contributions
+                            .iter()
                             .map(|c| c.normalized_score)
-                            .sum::<f32>() / result.source_contributions.len() as f32;
+                            .sum::<f32>()
+                            / result.source_contributions.len() as f32;
                     }
                 }
             }
@@ -586,24 +643,31 @@ impl AdvancedResultMerger {
             }
             ScoreCombinationStrategy::Maximum => {
                 for result in &mut results {
-                    result.final_score = result.source_contributions.iter()
+                    result.final_score = result
+                        .source_contributions
+                        .iter()
                         .map(|c| c.normalized_score)
                         .fold(0.0, f32::max);
                 }
             }
             ScoreCombinationStrategy::Minimum => {
                 for result in &mut results {
-                    result.final_score = result.source_contributions.iter()
+                    result.final_score = result
+                        .source_contributions
+                        .iter()
                         .map(|c| c.normalized_score)
                         .fold(f32::INFINITY, f32::min);
                 }
             }
             ScoreCombinationStrategy::GeometricMean => {
                 for result in &mut results {
-                    let product: f32 = result.source_contributions.iter()
+                    let product: f32 = result
+                        .source_contributions
+                        .iter()
                         .map(|c| c.normalized_score.max(0.001)) // Avoid zero values
                         .product();
-                    result.final_score = product.powf(1.0 / result.source_contributions.len() as f32);
+                    result.final_score =
+                        product.powf(1.0 / result.source_contributions.len() as f32);
                 }
             }
             _ => {
@@ -615,22 +679,27 @@ impl AdvancedResultMerger {
     }
 
     /// Calculate confidence intervals
-    fn calculate_confidence_intervals(&self, mut results: Vec<MergedResult>, _sources: &[SourceResult]) -> Result<Vec<MergedResult>> {
+    fn calculate_confidence_intervals(
+        &self,
+        mut results: Vec<MergedResult>,
+        _sources: &[SourceResult],
+    ) -> Result<Vec<MergedResult>> {
         for result in &mut results {
             if result.source_contributions.len() > 1 {
-                let scores: Vec<f32> = result.source_contributions.iter()
+                let scores: Vec<f32> = result
+                    .source_contributions
+                    .iter()
                     .map(|c| c.normalized_score)
                     .collect();
-                
+
                 let mean = scores.iter().sum::<f32>() / scores.len() as f32;
-                let variance = scores.iter()
-                    .map(|&x| (x - mean).powi(2))
-                    .sum::<f32>() / scores.len() as f32;
+                let variance =
+                    scores.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / scores.len() as f32;
                 let std_dev = variance.sqrt();
-                
+
                 // 95% confidence interval (approximation)
                 let margin = 1.96 * std_dev / (scores.len() as f32).sqrt();
-                
+
                 result.confidence_interval = Some(ConfidenceInterval {
                     lower_bound: (mean - margin).max(0.0),
                     upper_bound: (mean + margin).min(1.0),
@@ -643,7 +712,11 @@ impl AdvancedResultMerger {
     }
 
     /// Generate explanations for results
-    fn generate_explanations(&self, mut results: Vec<MergedResult>, _sources: &[SourceResult]) -> Result<Vec<MergedResult>> {
+    fn generate_explanations(
+        &self,
+        mut results: Vec<MergedResult>,
+        _sources: &[SourceResult],
+    ) -> Result<Vec<MergedResult>> {
         for result in &mut results {
             let mut ranking_factors = Vec::new();
             let mut score_breakdown = HashMap::new();
@@ -653,11 +726,16 @@ impl AdvancedResultMerger {
                 ranking_factors.push(RankingFactor {
                     factor_name: format!("Source: {}", contribution.source_id),
                     importance: contribution.normalized_score,
-                    description: format!("Contribution from {} with weight {}", 
-                                       contribution.source_id, contribution.weight),
+                    description: format!(
+                        "Contribution from {} with weight {}",
+                        contribution.source_id, contribution.weight
+                    ),
                 });
-                
-                score_breakdown.insert(contribution.source_id.clone(), contribution.normalized_score);
+
+                score_breakdown.insert(
+                    contribution.source_id.clone(),
+                    contribution.normalized_score,
+                );
             }
 
             result.explanation = Some(ResultExplanation {
@@ -672,7 +750,11 @@ impl AdvancedResultMerger {
     }
 
     /// Enhance diversity of results
-    fn enhance_diversity(&self, mut results: Vec<MergedResult>, diversity_config: &DiversityConfig) -> Result<Vec<MergedResult>> {
+    fn enhance_diversity(
+        &self,
+        mut results: Vec<MergedResult>,
+        diversity_config: &DiversityConfig,
+    ) -> Result<Vec<MergedResult>> {
         if results.len() <= diversity_config.max_diverse_results {
             return Ok(results);
         }
@@ -695,9 +777,10 @@ impl AdvancedResultMerger {
             for (i, candidate) in remaining.iter().enumerate() {
                 // Calculate MMR score
                 let relevance = candidate.final_score;
-                let max_similarity = self.calculate_max_similarity_to_selected(candidate, &selected);
-                let mmr = diversity_config.diversity_weight * relevance - 
-                         (1.0 - diversity_config.diversity_weight) * max_similarity;
+                let max_similarity =
+                    self.calculate_max_similarity_to_selected(candidate, &selected);
+                let mmr = diversity_config.diversity_weight * relevance
+                    - (1.0 - diversity_config.diversity_weight) * max_similarity;
 
                 if mmr > best_mmr {
                     best_mmr = mmr;
@@ -718,7 +801,11 @@ impl AdvancedResultMerger {
     }
 
     /// Calculate maximum similarity to already selected results
-    fn calculate_max_similarity_to_selected(&self, candidate: &MergedResult, selected: &[MergedResult]) -> f32 {
+    fn calculate_max_similarity_to_selected(
+        &self,
+        candidate: &MergedResult,
+        selected: &[MergedResult],
+    ) -> f32 {
         if selected.is_empty() {
             return 0.0;
         }
@@ -726,7 +813,7 @@ impl AdvancedResultMerger {
         // Simplified similarity calculation
         // In a full implementation, this would use actual vector similarities
         let mut max_similarity: f32 = 0.0;
-        
+
         for selected_result in selected {
             // Simple similarity based on score difference
             let similarity: f32 = 1.0 - (candidate.final_score - selected_result.final_score).abs();
@@ -782,20 +869,20 @@ mod tests {
         let config = ResultMergingConfig::default();
         let mut merger = AdvancedResultMerger::new(config);
 
-        let source1 = create_test_source("source1", vec![
-            ("doc1".to_string(), 0.9, 1),
-            ("doc2".to_string(), 0.8, 2),
-        ]);
+        let source1 = create_test_source(
+            "source1",
+            vec![("doc1".to_string(), 0.9, 1), ("doc2".to_string(), 0.8, 2)],
+        );
 
-        let source2 = create_test_source("source2", vec![
-            ("doc1".to_string(), 0.7, 1),
-            ("doc3".to_string(), 0.6, 2),
-        ]);
+        let source2 = create_test_source(
+            "source2",
+            vec![("doc1".to_string(), 0.7, 1), ("doc3".to_string(), 0.6, 2)],
+        );
 
         let merged = merger.merge_results(vec![source1, source2]).unwrap();
-        
+
         assert_eq!(merged.len(), 3); // doc1, doc2, doc3
-        
+
         // doc1 should have the highest score (appears in both sources)
         let doc1_result = merged.iter().find(|r| r.item_id == "doc1").unwrap();
         assert!(doc1_result.final_score > 1.0); // Should be sum of normalized scores
@@ -805,23 +892,23 @@ mod tests {
     fn test_reciprocal_rank_fusion() {
         let mut config = ResultMergingConfig::default();
         config.fusion_algorithm = RankFusionAlgorithm::ReciprocalRankFusion;
-        
+
         let mut merger = AdvancedResultMerger::new(config);
 
-        let source1 = create_test_source("source1", vec![
-            ("doc1".to_string(), 0.9, 1),
-            ("doc2".to_string(), 0.8, 2),
-        ]);
+        let source1 = create_test_source(
+            "source1",
+            vec![("doc1".to_string(), 0.9, 1), ("doc2".to_string(), 0.8, 2)],
+        );
 
-        let source2 = create_test_source("source2", vec![
-            ("doc2".to_string(), 0.7, 1),
-            ("doc1".to_string(), 0.6, 2),
-        ]);
+        let source2 = create_test_source(
+            "source2",
+            vec![("doc2".to_string(), 0.7, 1), ("doc1".to_string(), 0.6, 2)],
+        );
 
         let merged = merger.merge_results(vec![source1, source2]).unwrap();
-        
+
         assert_eq!(merged.len(), 2);
-        
+
         // Both documents appear in both sources, so both should have RRF scores
         for result in &merged {
             assert!(result.final_score > 0.0);
@@ -833,24 +920,20 @@ mod tests {
     fn test_confidence_intervals() {
         let mut config = ResultMergingConfig::default();
         config.confidence_intervals = true;
-        
+
         let mut merger = AdvancedResultMerger::new(config);
 
-        let source1 = create_test_source("source1", vec![
-            ("doc1".to_string(), 0.9, 1),
-        ]);
+        let source1 = create_test_source("source1", vec![("doc1".to_string(), 0.9, 1)]);
 
-        let source2 = create_test_source("source2", vec![
-            ("doc1".to_string(), 0.7, 1),
-        ]);
+        let source2 = create_test_source("source2", vec![("doc1".to_string(), 0.7, 1)]);
 
         let merged = merger.merge_results(vec![source1, source2]).unwrap();
-        
+
         assert_eq!(merged.len(), 1);
-        
+
         let result = &merged[0];
         assert!(result.confidence_interval.is_some());
-        
+
         let ci = result.confidence_interval.as_ref().unwrap();
         assert!(ci.lower_bound <= ci.upper_bound);
         assert_eq!(ci.confidence_level, 0.95);
@@ -860,17 +943,20 @@ mod tests {
     fn test_score_normalization() {
         let mut config = ResultMergingConfig::default();
         config.normalization_method = ScoreNormalizationMethod::MinMax;
-        
+
         let mut merger = AdvancedResultMerger::new(config);
 
-        let source = create_test_source("source1", vec![
-            ("doc1".to_string(), 10.0, 1),
-            ("doc2".to_string(), 5.0, 2),
-            ("doc3".to_string(), 0.0, 3),
-        ]);
+        let source = create_test_source(
+            "source1",
+            vec![
+                ("doc1".to_string(), 10.0, 1),
+                ("doc2".to_string(), 5.0, 2),
+                ("doc3".to_string(), 0.0, 3),
+            ],
+        );
 
         let normalized = merger.normalize_source(&source).unwrap();
-        
+
         // After min-max normalization, scores should be in [0, 1]
         for result in &normalized.results {
             assert!(result.score >= 0.0 && result.score <= 1.0);

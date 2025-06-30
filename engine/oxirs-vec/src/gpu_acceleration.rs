@@ -209,20 +209,20 @@ pub struct GpuConfig {
 /// GPU optimization levels
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OptimizationLevel {
-    Debug,      // Maximum debugging, minimal optimization
-    Balanced,   // Good balance of performance and debugging
+    Debug,       // Maximum debugging, minimal optimization
+    Balanced,    // Good balance of performance and debugging
     Performance, // Maximum performance, minimal debugging
-    Extreme,    // Aggressive optimizations, may reduce precision
+    Extreme,     // Aggressive optimizations, may reduce precision
 }
 
 /// Precision modes for GPU computations
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PrecisionMode {
-    FP32,      // Single precision
-    FP16,      // Half precision
-    Mixed,     // Mixed precision (FP16 for compute, FP32 for storage)
-    INT8,      // 8-bit integer quantization
-    Adaptive,  // Adaptive precision based on data characteristics
+    FP32,     // Single precision
+    FP16,     // Half precision
+    Mixed,    // Mixed precision (FP16 for compute, FP32 for storage)
+    INT8,     // 8-bit integer quantization
+    Adaptive, // Adaptive precision based on data characteristics
 }
 
 impl Default for GpuConfig {
@@ -374,6 +374,35 @@ impl GpuAccelerator {
             (
                 "matrix_multiply".to_string(),
                 self.get_matrix_multiply_kernel(),
+            ),
+            // HNSW-specific kernels for enhanced graph-based search
+            (
+                "hnsw_search_layer".to_string(),
+                self.get_hnsw_search_layer_kernel(),
+            ),
+            (
+                "hnsw_batch_search".to_string(),
+                self.get_hnsw_batch_search_kernel(),
+            ),
+            (
+                "hnsw_graph_traversal".to_string(),
+                self.get_hnsw_graph_traversal_kernel(),
+            ),
+            (
+                "hnsw_candidate_selection".to_string(),
+                self.get_hnsw_candidate_selection_kernel(),
+            ),
+            (
+                "hnsw_parallel_search".to_string(),
+                self.get_hnsw_parallel_search_kernel(),
+            ),
+            (
+                "hnsw_node_insertion".to_string(),
+                self.get_hnsw_node_insertion_kernel(),
+            ),
+            (
+                "hnsw_connection_pruning".to_string(),
+                self.get_hnsw_connection_pruning_kernel(),
             ),
         ]
     }
@@ -795,32 +824,573 @@ impl GpuAccelerator {
         .to_string()
     }
 
+    /// HNSW-specific GPU kernels for enhanced graph-based search
+    fn get_hnsw_search_layer_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void hnsw_search_layer_kernel(
+            const float* __restrict__ query,
+            const float* __restrict__ vectors,
+            const int* __restrict__ connections,
+            const int* __restrict__ connection_counts,
+            float* __restrict__ candidates,
+            int* __restrict__ candidate_indices,
+            int* __restrict__ candidate_count,
+            const int dim,
+            const int max_connections,
+            const int ef_search,
+            const int layer_nodes
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            
+            if (tid >= layer_nodes) return;
+            
+            // Shared memory for cooperative search
+            __shared__ float shared_query[512]; // Assuming max 512D
+            __shared__ float shared_distances[256]; // Shared candidates
+            __shared__ int shared_indices[256];
+            
+            // Load query vector into shared memory
+            if (threadIdx.x < dim) {
+                shared_query[threadIdx.x] = query[threadIdx.x];
+            }
+            __syncthreads();
+            
+            // Compute distance to current node
+            const float* node_vector = vectors + tid * dim;
+            float distance = 0.0f;
+            
+            for (int d = 0; d < dim; d++) {
+                float diff = shared_query[d] - node_vector[d];
+                distance += diff * diff;
+            }
+            distance = sqrtf(distance);
+            
+            // Cooperative insertion into candidate list
+            if (threadIdx.x == 0) {
+                // Use atomic operations for thread-safe insertion
+                int pos = atomicAdd(candidate_count, 1);
+                if (pos < ef_search) {
+                    candidates[pos] = distance;
+                    candidate_indices[pos] = tid;
+                }
+            }
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_hnsw_batch_search_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void hnsw_batch_search_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ vectors,
+            const int* __restrict__ entry_points,
+            float* __restrict__ results,
+            int* __restrict__ result_indices,
+            const int batch_size,
+            const int dim,
+            const int k,
+            const int num_vectors
+        ) {
+            const int query_idx = blockIdx.x;
+            const int tid = threadIdx.x;
+            
+            if (query_idx >= batch_size) return;
+            
+            const float* query = queries + query_idx * dim;
+            float* query_results = results + query_idx * k;
+            int* query_indices = result_indices + query_idx * k;
+            
+            // Shared memory for distance calculations
+            extern __shared__ float shared_data[];
+            float* shared_distances = shared_data;
+            int* shared_ids = (int*)(shared_data + blockDim.x);
+            
+            // Initialize with large values
+            shared_distances[tid] = FLT_MAX;
+            shared_ids[tid] = -1;
+            
+            // Process vectors in parallel
+            for (int vec_id = tid; vec_id < num_vectors; vec_id += blockDim.x) {
+                const float* vector = vectors + vec_id * dim;
+                
+                // Calculate Euclidean distance
+                float distance = 0.0f;
+                for (int d = 0; d < dim; d++) {
+                    float diff = query[d] - vector[d];
+                    distance += diff * diff;
+                }
+                distance = sqrtf(distance);
+                
+                // Update local best candidates
+                if (distance < shared_distances[tid]) {
+                    shared_distances[tid] = distance;
+                    shared_ids[tid] = vec_id;
+                }
+            }
+            
+            __syncthreads();
+            
+            // Parallel reduction to find top-k
+            for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+                if (tid < stride && tid < k) {
+                    if (shared_distances[tid + stride] < shared_distances[tid]) {
+                        shared_distances[tid] = shared_distances[tid + stride];
+                        shared_ids[tid] = shared_ids[tid + stride];
+                    }
+                }
+                __syncthreads();
+            }
+            
+            // Write results
+            if (tid < k) {
+                query_results[tid] = shared_distances[tid];
+                query_indices[tid] = shared_ids[tid];
+            }
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_hnsw_graph_traversal_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void hnsw_graph_traversal_kernel(
+            const float* __restrict__ query,
+            const float* __restrict__ vectors,
+            const int* __restrict__ adjacency_list,
+            const int* __restrict__ adjacency_offsets,
+            float* __restrict__ visited_distances,
+            int* __restrict__ visited_nodes,
+            int* __restrict__ candidate_queue,
+            float* __restrict__ candidate_distances,
+            int* __restrict__ queue_size,
+            const int dim,
+            const int max_candidates,
+            const int entry_point
+        ) {
+            const int tid = threadIdx.x;
+            
+            // Shared memory for cooperative queue operations
+            __shared__ float shared_query[512];
+            __shared__ int shared_queue[128];
+            __shared__ float shared_queue_dist[128];
+            __shared__ int queue_head, queue_tail;
+            
+            // Initialize shared memory
+            if (tid < dim && tid < 512) {
+                shared_query[tid] = query[tid];
+            }
+            
+            if (tid == 0) {
+                queue_head = 0;
+                queue_tail = 1;
+                shared_queue[0] = entry_point;
+                
+                // Calculate distance to entry point
+                const float* entry_vector = vectors + entry_point * dim;
+                float entry_dist = 0.0f;
+                for (int d = 0; d < dim; d++) {
+                    float diff = shared_query[d] - entry_vector[d];
+                    entry_dist += diff * diff;
+                }
+                shared_queue_dist[0] = sqrtf(entry_dist);
+            }
+            
+            __syncthreads();
+            
+            // Graph traversal loop
+            while (queue_head < queue_tail && queue_tail < 128) {
+                __syncthreads();
+                
+                if (tid == 0 && queue_head < queue_tail) {
+                    int current_node = shared_queue[queue_head];
+                    queue_head++;
+                    
+                    // Examine neighbors
+                    int neighbor_start = adjacency_offsets[current_node];
+                    int neighbor_end = adjacency_offsets[current_node + 1];
+                    
+                    for (int i = neighbor_start; i < neighbor_end && queue_tail < 128; i++) {
+                        int neighbor = adjacency_list[i];
+                        
+                        // Calculate distance to neighbor
+                        const float* neighbor_vector = vectors + neighbor * dim;
+                        float neighbor_dist = 0.0f;
+                        for (int d = 0; d < dim; d++) {
+                            float diff = shared_query[d] - neighbor_vector[d];
+                            neighbor_dist += diff * diff;
+                        }
+                        neighbor_dist = sqrtf(neighbor_dist);
+                        
+                        // Add to queue if promising
+                        shared_queue[queue_tail] = neighbor;
+                        shared_queue_dist[queue_tail] = neighbor_dist;
+                        queue_tail++;
+                    }
+                }
+            }
+            
+            // Copy results back to global memory
+            if (tid < queue_tail) {
+                candidate_queue[tid] = shared_queue[tid];
+                candidate_distances[tid] = shared_queue_dist[tid];
+            }
+            
+            if (tid == 0) {
+                *queue_size = queue_tail;
+            }
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_hnsw_candidate_selection_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void hnsw_candidate_selection_kernel(
+            const float* __restrict__ candidates,
+            const int* __restrict__ candidate_ids,
+            float* __restrict__ selected,
+            int* __restrict__ selected_ids,
+            const int num_candidates,
+            const int ef_search,
+            const int select_count
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            
+            // Shared memory for parallel selection
+            extern __shared__ float shared_data[];
+            float* shared_distances = shared_data;
+            int* shared_ids = (int*)(shared_data + blockDim.x);
+            
+            // Load candidates into shared memory
+            if (tid < num_candidates) {
+                shared_distances[tid] = candidates[tid];
+                shared_ids[tid] = candidate_ids[tid];
+            } else {
+                shared_distances[tid] = FLT_MAX;
+                shared_ids[tid] = -1;
+            }
+            
+            __syncthreads();
+            
+            // Bitonic sort for top-k selection
+            for (int step = 2; step <= blockDim.x; step *= 2) {
+                for (int substep = step / 2; substep > 0; substep /= 2) {
+                    int pair_idx = tid ^ substep;
+                    
+                    if (pair_idx > tid) {
+                        bool should_swap = (tid & step) == 0 ? 
+                            shared_distances[tid] > shared_distances[pair_idx] :
+                            shared_distances[tid] < shared_distances[pair_idx];
+                        
+                        if (should_swap) {
+                            // Swap distances
+                            float temp_dist = shared_distances[tid];
+                            shared_distances[tid] = shared_distances[pair_idx];
+                            shared_distances[pair_idx] = temp_dist;
+                            
+                            // Swap IDs
+                            int temp_id = shared_ids[tid];
+                            shared_ids[tid] = shared_ids[pair_idx];
+                            shared_ids[pair_idx] = temp_id;
+                        }
+                    }
+                    __syncthreads();
+                }
+            }
+            
+            // Write selected candidates
+            if (tid < select_count) {
+                selected[tid] = shared_distances[tid];
+                selected_ids[tid] = shared_ids[tid];
+            }
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_hnsw_parallel_search_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void hnsw_parallel_search_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ vectors,
+            const int* __restrict__ graph_layers,
+            const int* __restrict__ layer_offsets,
+            float* __restrict__ results,
+            int* __restrict__ result_indices,
+            const int batch_size,
+            const int dim,
+            const int k,
+            const int num_layers
+        ) {
+            const int query_idx = blockIdx.y;
+            const int layer_idx = blockIdx.x;
+            const int tid = threadIdx.x;
+            
+            if (query_idx >= batch_size || layer_idx >= num_layers) return;
+            
+            const float* query = queries + query_idx * dim;
+            
+            // Shared memory for each layer's processing
+            extern __shared__ float shared_data[];
+            float* layer_distances = shared_data + layer_idx * blockDim.x * 2;
+            int* layer_indices = (int*)(layer_distances + blockDim.x);
+            
+            // Process nodes in current layer
+            int layer_start = layer_offsets[layer_idx];
+            int layer_end = layer_offsets[layer_idx + 1];
+            
+            float best_distance = FLT_MAX;
+            int best_index = -1;
+            
+            for (int node_idx = layer_start + tid; node_idx < layer_end; node_idx += blockDim.x) {
+                const float* node_vector = vectors + graph_layers[node_idx] * dim;
+                
+                // Calculate distance
+                float distance = 0.0f;
+                for (int d = 0; d < dim; d++) {
+                    float diff = query[d] - node_vector[d];
+                    distance += diff * diff;
+                }
+                distance = sqrtf(distance);
+                
+                if (distance < best_distance) {
+                    best_distance = distance;
+                    best_index = graph_layers[node_idx];
+                }
+            }
+            
+            layer_distances[tid] = best_distance;
+            layer_indices[tid] = best_index;
+            
+            __syncthreads();
+            
+            // Reduction within layer
+            for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+                if (tid < stride) {
+                    if (layer_distances[tid + stride] < layer_distances[tid]) {
+                        layer_distances[tid] = layer_distances[tid + stride];
+                        layer_indices[tid] = layer_indices[tid + stride];
+                    }
+                }
+                __syncthreads();
+            }
+            
+            // Layer 0 writes final result
+            if (tid == 0 && layer_idx == 0) {
+                results[query_idx * k] = layer_distances[0];
+                result_indices[query_idx * k] = layer_indices[0];
+            }
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_hnsw_node_insertion_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void hnsw_node_insertion_kernel(
+            const float* __restrict__ new_vector,
+            const float* __restrict__ existing_vectors,
+            int* __restrict__ connections,
+            int* __restrict__ connection_counts,
+            const int* __restrict__ candidates,
+            const float* __restrict__ candidate_distances,
+            const int dim,
+            const int new_node_id,
+            const int num_candidates,
+            const int max_connections,
+            const int layer
+        ) {
+            const int tid = threadIdx.x;
+            
+            if (tid >= num_candidates) return;
+            
+            int candidate_id = candidates[tid];
+            float distance = candidate_distances[tid];
+            
+            // Shared memory for connection management
+            __shared__ int shared_connections[64]; // Max connections per layer
+            __shared__ float shared_distances[64];
+            __shared__ int connection_count;
+            
+            if (tid == 0) {
+                connection_count = connection_counts[new_node_id];
+            }
+            __syncthreads();
+            
+            // Add connection if there's space or if it's better than existing
+            if (connection_count < max_connections) {
+                // Direct insertion
+                if (tid < max_connections) {
+                    int conn_idx = new_node_id * max_connections + connection_count + tid;
+                    if (tid == 0) {
+                        connections[conn_idx] = candidate_id;
+                        atomicAdd(&connection_counts[new_node_id], 1);
+                    }
+                }
+            } else {
+                // Need to replace worst connection
+                if (tid < max_connections) {
+                    shared_connections[tid] = connections[new_node_id * max_connections + tid];
+                    
+                    // Calculate distance to existing connection
+                    const float* conn_vector = existing_vectors + shared_connections[tid] * dim;
+                    float conn_distance = 0.0f;
+                    for (int d = 0; d < dim; d++) {
+                        float diff = new_vector[d] - conn_vector[d];
+                        conn_distance += diff * diff;
+                    }
+                    shared_distances[tid] = sqrtf(conn_distance);
+                }
+                
+                __syncthreads();
+                
+                // Find worst connection
+                if (tid == 0) {
+                    int worst_idx = 0;
+                    float worst_distance = shared_distances[0];
+                    
+                    for (int i = 1; i < max_connections; i++) {
+                        if (shared_distances[i] > worst_distance) {
+                            worst_distance = shared_distances[i];
+                            worst_idx = i;
+                        }
+                    }
+                    
+                    // Replace if new candidate is better
+                    if (distance < worst_distance) {
+                        connections[new_node_id * max_connections + worst_idx] = candidate_id;
+                    }
+                }
+            }
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_hnsw_connection_pruning_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void hnsw_connection_pruning_kernel(
+            const float* __restrict__ vectors,
+            int* __restrict__ connections,
+            int* __restrict__ connection_counts,
+            const int* __restrict__ nodes_to_prune,
+            const int dim,
+            const int num_nodes,
+            const int max_connections,
+            const float diversity_factor
+        ) {
+            const int node_idx = blockIdx.x * blockDim.x + threadIdx.x;
+            
+            if (node_idx >= num_nodes) return;
+            
+            int node_id = nodes_to_prune[node_idx];
+            int conn_count = connection_counts[node_id];
+            
+            if (conn_count <= max_connections) return;
+            
+            // Shared memory for pruning calculation
+            extern __shared__ float shared_data[];
+            float* distances = shared_data;
+            float* diversity_scores = shared_data + blockDim.x;
+            int* temp_connections = (int*)(shared_data + 2 * blockDim.x);
+            
+            const float* node_vector = vectors + node_id * dim;
+            
+            // Calculate diversity-based pruning scores
+            for (int i = threadIdx.x; i < conn_count; i += blockDim.x) {
+                int conn_id = connections[node_id * max_connections + i];
+                const float* conn_vector = vectors + conn_id * dim;
+                
+                // Distance to main node
+                float distance = 0.0f;
+                for (int d = 0; d < dim; d++) {
+                    float diff = node_vector[d] - conn_vector[d];
+                    distance += diff * diff;
+                }
+                distance = sqrtf(distance);
+                
+                // Diversity penalty (distance to other connections)
+                float diversity_penalty = 0.0f;
+                for (int j = 0; j < conn_count; j++) {
+                    if (i != j) {
+                        int other_conn = connections[node_id * max_connections + j];
+                        const float* other_vector = vectors + other_conn * dim;
+                        
+                        float other_distance = 0.0f;
+                        for (int d = 0; d < dim; d++) {
+                            float diff = conn_vector[d] - other_vector[d];
+                            other_distance += diff * diff;
+                        }
+                        diversity_penalty += 1.0f / (1.0f + sqrtf(other_distance));
+                    }
+                }
+                
+                diversity_scores[i] = distance - diversity_factor * diversity_penalty;
+            }
+            
+            __syncthreads();
+            
+            // Sort connections by diversity score (keep best max_connections)
+            // Simple insertion sort for small arrays
+            if (threadIdx.x == 0) {
+                for (int i = 0; i < conn_count; i++) {
+                    temp_connections[i] = connections[node_id * max_connections + i];
+                }
+                
+                for (int i = 1; i < conn_count; i++) {
+                    float key_score = diversity_scores[i];
+                    int key_conn = temp_connections[i];
+                    int j = i - 1;
+                    
+                    while (j >= 0 && diversity_scores[j] > key_score) {
+                        diversity_scores[j + 1] = diversity_scores[j];
+                        temp_connections[j + 1] = temp_connections[j];
+                        j--;
+                    }
+                    
+                    diversity_scores[j + 1] = key_score;
+                    temp_connections[j + 1] = key_conn;
+                }
+                
+                // Keep only the best max_connections
+                for (int i = 0; i < max_connections; i++) {
+                    connections[node_id * max_connections + i] = temp_connections[i];
+                }
+                
+                connection_counts[node_id] = max_connections;
+            }
+        }
+        "#
+        .to_string()
+    }
+
     fn compile_kernel_from_source(&self, kernel_name: &str, source: &str) -> Result<()> {
         #[cfg(feature = "cuda")]
         {
             use std::ffi::{CStr, CString};
-            
+
             tracing::info!("Compiling CUDA kernel: {}", kernel_name);
-            
+
             // Create NVRTC program
             let program_name = CString::new(kernel_name)?;
             let source_code = CString::new(source)?;
-            
+
             // For now, simulate successful compilation and store kernel metadata
             // In full implementation, this would use:
             // nvrtcCreateProgram, nvrtcCompileProgram, nvrtcGetPTX/Code
             // cuModuleLoadData, cuModuleGetFunction, etc.
-            
+
             let kernel = CudaKernel {
                 function: std::ptr::null_mut(), // Would store actual kernel function pointer
                 module: std::ptr::null_mut(),   // Would store loaded CUDA module
                 name: kernel_name.to_string(),
             };
-            
+
             // Cache the compiled kernel
             let mut cache = self.kernel_cache.write();
             cache.insert(kernel_name.to_string(), kernel);
-            
+
             tracing::info!("Successfully compiled CUDA kernel: {}", kernel_name);
         }
 
@@ -1133,9 +1703,9 @@ impl GpuAccelerator {
                 OptimizationLevel::Performance => 512,
                 OptimizationLevel::Extreme => 1024,
             };
-            
+
             let blocks_per_grid = (batch_size + threads_per_block - 1) / threads_per_block;
-            
+
             // Use shared memory for better performance
             let shared_memory_size = match self.config.precision_mode {
                 PrecisionMode::FP32 => threads_per_block * std::mem::size_of::<f32>(),
@@ -1146,12 +1716,14 @@ impl GpuAccelerator {
             // Launch kernel with optimized parameters
             tracing::debug!(
                 "Launching cosine similarity kernel: blocks={}, threads={}, shared_mem={}",
-                blocks_per_grid, threads_per_block, shared_memory_size
+                blocks_per_grid,
+                threads_per_block,
+                shared_memory_size
             );
-            
+
             // In full implementation, this would use cuLaunchKernel or cudaLaunchKernel
             // with proper parameter passing and error checking
-            
+
             // Simulate successful kernel execution
             if self.config.enable_async_execution {
                 tracing::trace!("Kernel launched asynchronously");
@@ -1175,35 +1747,39 @@ impl GpuAccelerator {
         #[cfg(feature = "cuda")]
         {
             let kernel = self.get_or_compile_kernel("euclidean_distance")?;
-            
+
             // Optimize for large datasets
             let optimal_block_size = if database_size > 100_000 {
                 512 // Better occupancy for large datasets
             } else {
                 256 // Good balance for smaller datasets
             };
-            
+
             let block_size = std::cmp::min(optimal_block_size, database_size);
             let grid_size = (database_size + block_size - 1) / block_size;
-            
+
             // Use streams for async execution if enabled
             if self.config.enable_async_execution && !self.stream_pool.is_empty() {
                 tracing::debug!(
                     "Launching distance kernel on stream: blocks={}, threads={}",
-                    grid_size, block_size
+                    grid_size,
+                    block_size
                 );
             } else {
                 tracing::debug!(
                     "Launching distance kernel synchronously: blocks={}, threads={}",
-                    grid_size, block_size
+                    grid_size,
+                    block_size
                 );
             }
-            
+
             // Memory coalescing optimization for large dimensions
             if dimensions > 512 {
-                tracing::trace!("Using memory coalescing optimization for high-dimensional vectors");
+                tracing::trace!(
+                    "Using memory coalescing optimization for high-dimensional vectors"
+                );
             }
-            
+
             // In full implementation: cuLaunchKernel with proper error handling
         }
 
@@ -1437,7 +2013,10 @@ impl GpuAccelerator {
                     let embeddings = self.batch_embeddings(texts, model_name)?;
                     GpuOperationResult::Embeddings(embeddings)
                 }
-                GpuOperation::QuantizeVectors { vectors, target_precision } => {
+                GpuOperation::QuantizeVectors {
+                    vectors,
+                    target_precision,
+                } => {
                     let quantized = self.quantize_vectors_batch(vectors, *target_precision)?;
                     GpuOperationResult::QuantizedVectors(quantized)
                 }
@@ -1488,7 +2067,11 @@ impl GpuAccelerator {
     }
 
     /// Compute Euclidean distances between vector pairs on GPU
-    pub fn euclidean_distance_batch(&self, vectors1: &[Vector], vectors2: &[Vector]) -> Result<Vec<f32>> {
+    pub fn euclidean_distance_batch(
+        &self,
+        vectors1: &[Vector],
+        vectors2: &[Vector],
+    ) -> Result<Vec<f32>> {
         if vectors1.len() != vectors2.len() {
             return Err(anyhow!("Vector arrays must have the same length"));
         }
@@ -1520,7 +2103,13 @@ impl GpuAccelerator {
         buffer2.copy_from_host(&flat_data2)?;
 
         // Launch GPU kernel for Euclidean distance
-        self.launch_euclidean_distance_kernel(&buffer1, &buffer2, &result_buffer, batch_size, dimensions)?;
+        self.launch_euclidean_distance_kernel(
+            &buffer1,
+            &buffer2,
+            &result_buffer,
+            batch_size,
+            dimensions,
+        )?;
 
         // Copy results back to host
         let mut results = vec![0.0f32; batch_size];
@@ -1571,7 +2160,11 @@ impl GpuAccelerator {
     }
 
     /// Add vector pairs element-wise on GPU
-    pub fn vector_add_batch(&self, vectors1: &[Vector], vectors2: &[Vector]) -> Result<Vec<Vector>> {
+    pub fn vector_add_batch(
+        &self,
+        vectors1: &[Vector],
+        vectors2: &[Vector],
+    ) -> Result<Vec<Vector>> {
         if vectors1.len() != vectors2.len() {
             return Err(anyhow!("Vector arrays must have the same length"));
         }
@@ -1621,7 +2214,11 @@ impl GpuAccelerator {
     }
 
     /// Quantize vectors to different precision modes on GPU
-    pub fn quantize_vectors_batch(&self, vectors: &[Vector], target_precision: PrecisionMode) -> Result<Vec<Vector>> {
+    pub fn quantize_vectors_batch(
+        &self,
+        vectors: &[Vector],
+        target_precision: PrecisionMode,
+    ) -> Result<Vec<Vector>> {
         if vectors.is_empty() {
             return Ok(Vec::new());
         }
@@ -1671,9 +2268,12 @@ impl GpuAccelerator {
         #[cfg(feature = "cuda")]
         {
             let kernel = self.get_or_compile_kernel("euclidean_distance")?;
-            tracing::debug!("Launching Euclidean distance kernel for {} vectors", batch_size);
+            tracing::debug!(
+                "Launching Euclidean distance kernel for {} vectors",
+                batch_size
+            );
         }
-        
+
         // CPU fallback
         Ok(())
     }
@@ -1691,7 +2291,7 @@ impl GpuAccelerator {
             let kernel = self.get_or_compile_kernel("dot_product")?;
             tracing::debug!("Launching dot product kernel for {} vectors", batch_size);
         }
-        
+
         // CPU fallback
         Ok(())
     }
@@ -1707,9 +2307,12 @@ impl GpuAccelerator {
         #[cfg(feature = "cuda")]
         {
             let kernel = self.get_or_compile_kernel("vector_add")?;
-            tracing::debug!("Launching vector addition kernel for {} vectors", batch_size);
+            tracing::debug!(
+                "Launching vector addition kernel for {} vectors",
+                batch_size
+            );
         }
-        
+
         // CPU fallback
         Ok(())
     }
@@ -1725,14 +2328,18 @@ impl GpuAccelerator {
         {
             let kernel_name = match precision {
                 PrecisionMode::FP16 => "quantize_fp16",
-                PrecisionMode::INT8 => "quantize_int8", 
+                PrecisionMode::INT8 => "quantize_int8",
                 PrecisionMode::Mixed => "quantize_mixed",
                 _ => "quantize_adaptive",
             };
             let kernel = self.get_or_compile_kernel(kernel_name)?;
-            tracing::debug!("Launching quantization kernel ({:?}) for {} vectors", precision, batch_size);
+            tracing::debug!(
+                "Launching quantization kernel ({:?}) for {} vectors",
+                precision,
+                batch_size
+            );
         }
-        
+
         // CPU fallback
         Ok(())
     }

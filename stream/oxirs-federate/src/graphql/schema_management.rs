@@ -444,7 +444,11 @@ impl GraphQLFederation {
                         let field_type = self.extract_base_type(&field_def.field_type);
                         if schema.types.contains_key(&field_type) {
                             self.visit_type_for_cycles(
-                                &field_type, schema, visited, visiting, path,
+                                &field_type,
+                                schema,
+                                visited,
+                                visiting,
+                                path,
                             )?;
                         }
                     }
@@ -463,7 +467,11 @@ impl GraphQLFederation {
                         let field_type = self.extract_base_type(&field_def.field_type);
                         if schema.types.contains_key(&field_type) {
                             self.visit_type_for_cycles(
-                                &field_type, schema, visited, visiting, path,
+                                &field_type,
+                                schema,
+                                visited,
+                                visiting,
+                                path,
                             )?;
                         }
                     }
@@ -540,7 +548,7 @@ impl GraphQLFederation {
         service_id: &str,
     ) -> Result<SchemaCapabilities> {
         let schemas = self.schemas.read().await;
-        
+
         let schema = schemas
             .get(service_id)
             .ok_or_else(|| anyhow!("Schema not found for service: {}", service_id))?;
@@ -565,7 +573,9 @@ impl GraphQLFederation {
                     capabilities.supports_defer_stream = true;
                 }
                 _ => {
-                    capabilities.custom_directives.push(directive_def.name.clone());
+                    capabilities
+                        .custom_directives
+                        .push(directive_def.name.clone());
                 }
             }
         }
@@ -666,14 +676,20 @@ impl GraphQLFederation {
         breaking_changes: &mut Vec<BreakingChange>,
     ) -> Result<()> {
         match (&old_type.kind, &new_type.kind) {
-            (TypeKind::Object { fields: old_fields }, TypeKind::Object { fields: new_fields }) |
-            (TypeKind::Interface { fields: old_fields }, TypeKind::Interface { fields: new_fields }) => {
+            (TypeKind::Object { fields: old_fields }, TypeKind::Object { fields: new_fields })
+            | (
+                TypeKind::Interface { fields: old_fields },
+                TypeKind::Interface { fields: new_fields },
+            ) => {
                 // Check for removed fields
                 for (field_name, _) in old_fields {
                     if !new_fields.contains_key(field_name) {
                         breaking_changes.push(BreakingChange {
                             change_type: BreakingChangeType::FieldRemoved,
-                            description: format!("Field '{}.{}' was removed", type_name, field_name),
+                            description: format!(
+                                "Field '{}.{}' was removed",
+                                type_name, field_name
+                            ),
                             severity: BreakingChangeSeverity::High,
                         });
                     }
@@ -687,7 +703,10 @@ impl GraphQLFederation {
                                 change_type: BreakingChangeType::TypeChanged,
                                 description: format!(
                                     "Field '{}.{}' changed type from '{}' to '{}'",
-                                    type_name, field_name, old_field.field_type, new_field.field_type
+                                    type_name,
+                                    field_name,
+                                    old_field.field_type,
+                                    new_field.field_type
                                 ),
                                 severity: BreakingChangeSeverity::Medium,
                             });
@@ -711,8 +730,11 @@ impl GraphQLFederation {
         // Check for deprecated fields being removed
         for (type_name, old_type) in &old_schema.types {
             if let Some(new_type) = new_schema.types.get(type_name) {
-                if let (TypeKind::Object { fields: old_fields }, TypeKind::Object { fields: new_fields }) = 
-                    (&old_type.kind, &new_type.kind) {
+                if let (
+                    TypeKind::Object { fields: old_fields },
+                    TypeKind::Object { fields: new_fields },
+                ) = (&old_type.kind, &new_type.kind)
+                {
                     for (field_name, old_field) in old_fields {
                         if !new_fields.contains_key(field_name) {
                             if old_field.directives.iter().any(|d| d.name == "deprecated") {

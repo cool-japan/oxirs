@@ -318,7 +318,10 @@ impl QueryParser {
                 ':' => {
                     chars.next();
                     // Check if this is a standalone colon or part of a prefixed name
-                    if chars.peek().map_or(true, |c| !c.is_ascii_alphanumeric() && *c != '_') {
+                    if chars
+                        .peek()
+                        .map_or(true, |c| !c.is_ascii_alphanumeric() && *c != '_')
+                    {
                         // Standalone colon (like in default namespace declarations)
                         tokens.push(Token::Colon);
                     } else {
@@ -649,7 +652,7 @@ impl QueryParser {
             match token {
                 Token::Prefix => {
                     self.advance(); // consume PREFIX
-                    
+
                     // Handle both default namespace (:) and named prefixes (prefix:)
                     let prefix = match self.peek() {
                         Some(Token::PrefixedName(prefix, local)) => {
@@ -680,7 +683,7 @@ impl QueryParser {
                             bail!("Expected prefix name or colon after PREFIX")
                         }
                     };
-                    
+
                     let iri = self.expect_iri()?;
                     query.prefixes.insert(prefix.clone(), iri.clone());
                     self.prefixes.insert(prefix, iri);
@@ -824,12 +827,12 @@ impl QueryParser {
         }
         Ok(())
     }
-    
+
     /// Check if the current pattern contains UNION by looking ahead
     fn has_union_pattern(&self) -> bool {
         let mut pos = self.position;
         let mut brace_depth = 0;
-        
+
         while pos < self.tokens.len() {
             match &self.tokens[pos] {
                 Token::LeftBrace => brace_depth += 1,
@@ -853,18 +856,18 @@ impl QueryParser {
         if self.has_union_pattern() {
             return self.parse_graph_pattern_or_union();
         }
-        
+
         let mut patterns = Vec::new();
 
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
             // Skip whitespace and newlines before parsing each pattern
             self.skip_whitespace_and_newlines();
-            
+
             // Check again if we've reached the end after skipping whitespace
             if self.is_at_end() || matches!(self.peek(), Some(Token::RightBrace)) {
                 break;
             }
-            
+
             let pattern = self.parse_graph_pattern_or_union()?;
             patterns.push(pattern);
 
@@ -910,7 +913,7 @@ impl QueryParser {
     fn parse_graph_pattern(&mut self) -> Result<Algebra> {
         // Skip whitespace and newlines before determining pattern type
         self.skip_whitespace_and_newlines();
-        
+
         match self.peek() {
             Some(Token::Optional) => self.parse_optional_pattern(),
             Some(Token::Union) => self.parse_union_pattern(),
@@ -938,18 +941,18 @@ impl QueryParser {
         while !self.is_at_end() {
             // Skip whitespace/newlines before checking for pattern end
             self.skip_whitespace_and_newlines();
-            
+
             // Check if we've reached the end of the pattern
             if self.is_pattern_end() {
                 break;
             }
-            
+
             // Skip any additional newlines that might appear
             if matches!(self.peek(), Some(Token::Newline)) {
                 self.advance();
                 continue;
             }
-            
+
             let triple = self.parse_triple_pattern()?;
             triples.push(triple);
 
@@ -2286,10 +2289,12 @@ mod tests {
         parser.tokenize(query_str).unwrap();
         println!("Union query tokens: {:?}", parser.tokens);
 
-        let query = parse_query(query_str).map_err(|e| {
-            eprintln!("Parse error: {}", e);
-            e
-        }).unwrap();
+        let query = parse_query(query_str)
+            .map_err(|e| {
+                eprintln!("Parse error: {}", e);
+                e
+            })
+            .unwrap();
         assert_eq!(query.query_type, QueryType::Select);
         assert_eq!(query.select_variables, vec![Variable::new("name").unwrap()]);
 

@@ -15,7 +15,7 @@ use crate::{
     error::{FusekiError, FusekiResult},
     store::Store,
 };
-use oxirs_core::{query::QueryResults, Quad, Triple};
+use oxirs_core::{Quad, Triple};
 
 /// Serializable query result for distributed operations
 #[derive(Debug, Clone, Serialize, Deserialize)]

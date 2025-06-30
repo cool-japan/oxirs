@@ -6,27 +6,120 @@
 
 pub mod function_library;
 
-// Re-export key types from the existing sparql.rs for compatibility
-use crate::sparql as legacy_sparql;
-
-pub use legacy_sparql::{
-    SparqlConstraint, SparqlConstraintExecutor, SparqlQueryType, 
-    SparqlConstraintComponent, SparqlConstraintLibrary
-};
-
-// Re-export enhanced function library types
-pub use function_library::{
-    SparqlFunctionLibrary, DynamicFunction, FunctionMetadata, ExecutionContext,
-    FunctionExecutionResult, FunctionSecurityPolicy, FunctionLibrary,
-    FunctionCategory, SandboxLevel, Operation, Permission, SecurityConfig,
-};
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use oxirs_core::model::Term;
-use crate::{Result, ShaclError};
+use oxirs_core::{
+    model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple, Variable},
+    OxirsError, Store,
+};
+
+use crate::{
+    constraints::{
+        ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator,
+    },
+    Result, Severity, ShaclError, ShapeId,
+};
+
+/// SPARQL-based constraint
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SparqlConstraint {
+    /// SPARQL SELECT or ASK query
+    pub query: String,
+    /// Optional prefixes for the query
+    pub prefixes: Option<String>,
+    /// Custom violation message
+    pub message: Option<String>,
+    /// Severity level for violations
+    pub severity: Option<Severity>,
+    /// Optional SPARQL CONSTRUCT query for generating violation details
+    pub construct_query: Option<String>,
+}
+
+/// SPARQL query type
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SparqlQueryType {
+    Select,
+    Ask,
+    Construct,
+}
+
+/// SPARQL constraint component
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SparqlConstraintComponent {
+    pub constraint: SparqlConstraint,
+    pub query_type: SparqlQueryType,
+}
+
+/// SPARQL constraint executor
+#[derive(Debug)]
+pub struct SparqlConstraintExecutor {
+    cache: HashMap<String, ConstraintEvaluationResult>,
+}
+
+impl SparqlConstraintExecutor {
+    pub fn new() -> Self {
+        Self {
+            cache: HashMap::new(),
+        }
+    }
+
+    pub fn execute_constraint(
+        &self,
+        constraint: &SparqlConstraint,
+        context: &ConstraintContext,
+        store: &Store,
+    ) -> Result<ConstraintEvaluationResult> {
+        // Basic implementation - in a real system this would execute SPARQL queries
+        Ok(ConstraintEvaluationResult::Valid)
+    }
+}
+
+/// SPARQL constraint library
+#[derive(Debug)]
+pub struct SparqlConstraintLibrary {
+    constraints: HashMap<String, SparqlConstraint>,
+}
+
+impl SparqlConstraintLibrary {
+    pub fn new() -> Self {
+        Self {
+            constraints: HashMap::new(),
+        }
+    }
+}
+
+impl SparqlConstraint {
+    /// Create a new SPARQL constraint with a SELECT query
+    pub fn select(query: String) -> Self {
+        Self {
+            query,
+            prefixes: None,
+            message: None,
+            severity: None,
+            construct_query: None,
+        }
+    }
+
+    /// Create a new SPARQL constraint with an ASK query
+    pub fn ask(query: String) -> Self {
+        Self {
+            query,
+            prefixes: None,
+            message: None,
+            severity: None,
+            construct_query: None,
+        }
+    }
+}
+
+// Re-export enhanced function library types
+pub use function_library::{
+    DynamicFunction, ExecutionContext, FunctionCategory, FunctionExecutionResult, FunctionLibrary,
+    FunctionMetadata, FunctionSecurityPolicy, Operation, Permission, SandboxLevel, SecurityConfig,
+    SparqlFunctionLibrary,
+};
 
 /// Enhanced SPARQL constraint executor with function library integration
 #[derive(Debug)]
@@ -55,7 +148,8 @@ impl EnhancedSparqlExecutor {
         function: Arc<dyn DynamicFunction>,
         security_policy: Option<FunctionSecurityPolicy>,
     ) -> Result<()> {
-        self.function_library.register_function(function, security_policy)
+        self.function_library
+            .register_function(function, security_policy)
     }
 
     /// Load a function library
@@ -71,7 +165,8 @@ impl EnhancedSparqlExecutor {
         store: &oxirs_core::Store,
     ) -> Result<crate::constraints::ConstraintEvaluationResult> {
         // Use legacy executor for now, but could be enhanced to use function library
-        self.legacy_executor.execute_constraint(constraint, context, store)
+        self.legacy_executor
+            .execute_constraint(constraint, context, store)
     }
 
     /// Get available functions
@@ -133,14 +228,14 @@ pub mod examples {
     impl DynamicFunction for UpperCaseFunction {
         fn execute(&self, args: &[Term], _context: &ExecutionContext) -> Result<Term> {
             self.validate_args(args)?;
-            
+
             match &args[0] {
                 Term::Literal(literal) => {
                     let upper_value = literal.as_str().to_uppercase();
                     Ok(Term::Literal(Literal::new(upper_value)))
                 }
                 _ => Err(ShaclError::ValidationEngine(
-                    "UPPERCASE function requires a literal argument".to_string()
+                    "UPPERCASE function requires a literal argument".to_string(),
                 )),
             }
         }
@@ -195,17 +290,22 @@ pub mod examples {
     impl DynamicFunction for PowerFunction {
         fn execute(&self, args: &[Term], _context: &ExecutionContext) -> Result<Term> {
             self.validate_args(args)?;
-            
+
             let base = extract_number(&args[0])?;
             let exponent = extract_number(&args[1])?;
-            
+
             let result = base.powf(exponent);
-            
+
             // Return as double literal
-            let double_type = NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
-                .map_err(|e| ShaclError::ValidationEngine(format!("Invalid datatype IRI: {}", e)))?;
-            
-            Ok(Term::Literal(Literal::new_typed(result.to_string(), double_type)))
+            let double_type =
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").map_err(|e| {
+                    ShaclError::ValidationEngine(format!("Invalid datatype IRI: {}", e))
+                })?;
+
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                double_type,
+            )))
         }
 
         fn metadata(&self) -> &FunctionMetadata {
@@ -230,11 +330,12 @@ pub mod examples {
     /// Extract numeric value from a term
     fn extract_number(term: &Term) -> Result<f64> {
         match term {
-            Term::Literal(literal) => {
-                literal.as_str().parse::<f64>()
-                    .map_err(|_| ShaclError::ValidationEngine(format!("Cannot parse number: {}", literal.as_str())))
-            }
-            _ => Err(ShaclError::ValidationEngine("Expected numeric literal".to_string())),
+            Term::Literal(literal) => literal.as_str().parse::<f64>().map_err(|_| {
+                ShaclError::ValidationEngine(format!("Cannot parse number: {}", literal.as_str()))
+            }),
+            _ => Err(ShaclError::ValidationEngine(
+                "Expected numeric literal".to_string(),
+            )),
         }
     }
 
@@ -246,7 +347,10 @@ pub mod examples {
         ];
 
         let mut security_policies = HashMap::new();
-        security_policies.insert("UPPERCASE".to_string(), UpperCaseFunction::new().security_policy());
+        security_policies.insert(
+            "UPPERCASE".to_string(),
+            UpperCaseFunction::new().security_policy(),
+        );
         security_policies.insert("POW".to_string(), PowerFunction::new().security_policy());
 
         FunctionLibrary {
@@ -268,8 +372,8 @@ pub mod examples {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::examples::*;
+    use super::*;
 
     #[test]
     fn test_enhanced_executor_creation() {
@@ -281,7 +385,7 @@ mod tests {
     fn test_function_registration() {
         let mut executor = EnhancedSparqlExecutor::new();
         let function = Arc::new(UpperCaseFunction::new());
-        
+
         executor.register_function(function, None).unwrap();
         assert_eq!(executor.list_available_functions().len(), 1);
     }
@@ -290,7 +394,7 @@ mod tests {
     fn test_library_loading() {
         let mut executor = EnhancedSparqlExecutor::new();
         let library = create_example_library();
-        
+
         executor.load_function_library(library).unwrap();
         assert_eq!(executor.list_available_functions().len(), 2);
     }
@@ -298,7 +402,7 @@ mod tests {
     #[test]
     fn test_uppercase_function() {
         use oxirs_core::model::Literal;
-        
+
         let function = UpperCaseFunction::new();
         let args = vec![Term::Literal(Literal::new("hello"))];
         let context = ExecutionContext {
@@ -309,9 +413,9 @@ mod tests {
             max_execution_time: std::time::Duration::from_secs(1),
             max_memory: 1024,
         };
-        
+
         let result = function.execute(&args, &context).unwrap();
-        
+
         match result {
             Term::Literal(literal) => {
                 assert_eq!(literal.as_str(), "HELLO");
@@ -323,7 +427,7 @@ mod tests {
     #[test]
     fn test_power_function() {
         use oxirs_core::model::Literal;
-        
+
         let function = PowerFunction::new();
         let args = vec![
             Term::Literal(Literal::new("2")),
@@ -337,9 +441,9 @@ mod tests {
             max_execution_time: std::time::Duration::from_secs(1),
             max_memory: 1024,
         };
-        
+
         let result = function.execute(&args, &context).unwrap();
-        
+
         match result {
             Term::Literal(literal) => {
                 let value: f64 = literal.as_str().parse().unwrap();

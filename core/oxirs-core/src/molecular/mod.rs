@@ -6,6 +6,7 @@
 //! ## Module Organization
 //!
 //! - `dna_structures` - DNA-inspired data structures and nucleotide representations
+//! - `genetic_optimizer` - Genetic algorithm optimization for graph evolution
 //! - `replication` - DNA replication machinery (polymerase, helicase, ligase, etc.)
 //! - `cellular_division` - Mitotic apparatus and cell division processes
 //! - `regulatory` - Regulatory proteins and checkpoint systems
@@ -19,17 +20,26 @@ use crate::error::OxirsResult;
 use crate::model::{Term, Triple};
 
 // Sub-modules
-mod dna_structures;
-mod replication;
 mod cellular_division;
+mod dna_structures;
+mod genetic_optimizer;
 mod regulatory;
+mod replication;
 mod types;
 
 // Re-export main types from sub-modules
+pub use cellular_division::{
+    CellCycleState, CellularDivision, Centrosome, MitoticApparatus, SpindleApparatus,
+};
 pub use dna_structures::{DnaDataStructure, NucleotideData, SpecialMarker};
-pub use replication::{ReplicationMachinery, DnaPolymerase, Helicase, Ligase, Primase, ProofreadingSystem};
-pub use cellular_division::{CellularDivision, MitoticApparatus, SpindleApparatus, Centrosome, CellCycleState};
-pub use regulatory::{RegulatoryProtein, CheckpointSystem, CheckpointResult};
+pub use genetic_optimizer::{
+    GeneticGraphOptimizer, GraphStructure, IndexingGenes, StorageGenes, AccessGenes,
+    GenerationStats, MutationType, default_fitness_function,
+};
+pub use regulatory::{CheckpointResult, CheckpointSystem, RegulatoryProtein};
+pub use replication::{
+    DnaPolymerase, Helicase, Ligase, Primase, ProofreadingSystem, ReplicationMachinery,
+};
 pub use types::*;
 
 #[cfg(test)]
@@ -51,7 +61,7 @@ mod tests {
         // Test integration between modules
         let mut division = CellularDivision::new();
         let dna = DnaDataStructure::new();
-        
+
         division.add_dna_content(dna);
         assert!(matches!(division.current_state(), CellCycleState::G1));
     }

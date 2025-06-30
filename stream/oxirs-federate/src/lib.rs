@@ -24,26 +24,19 @@
 
 use anyhow::{anyhow, Result};
 use oxirs_core::{Graph, Quad, Term, Triple};
-// Temporarily commented out due to compilation issues in oxirs-gql
-// use oxirs_gql::types::Schema as GraphQLSchema;
+use oxirs_gql::types::Schema as GraphQLSchema;
 use serde::{Deserialize, Serialize};
-
-// Placeholder for GraphQLSchema until oxirs-gql compilation is fixed
-#[derive(Debug, Clone)]
-pub struct GraphQLSchema {
-    pub types: HashMap<String, String>,
-    pub queries: Vec<String>,
-    pub mutations: Vec<String>,
-}
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
+pub mod auth;
 pub mod auto_discovery;
 pub mod cache;
 pub mod capability_assessment;
+pub mod cdc;
 pub mod connection_pool_manager;
 pub mod discovery;
 pub mod distributed_tracing;
@@ -54,23 +47,30 @@ pub mod join_optimizer;
 pub mod k8s_discovery;
 pub mod materialized_views;
 pub mod metadata;
+pub mod ml_optimizer;
 pub mod monitoring;
 pub mod nats_federation;
 pub mod network_optimizer;
+pub mod performance_analyzer;
 pub mod planner;
+pub mod privacy;
 pub mod query_decomposition;
 pub mod request_batcher;
 pub mod result_streaming;
+pub mod semantic_enhancer;
 pub mod service;
 pub mod service_client;
 pub mod service_executor;
 pub mod service_optimizer;
 pub mod source_selection;
+pub mod streaming;
 pub mod streaming_optimizer;
 
+pub use auth::*;
 pub use auto_discovery::*;
 pub use cache::*;
 pub use capability_assessment::*;
+pub use cdc::*;
 pub use connection_pool_manager::*;
 pub use discovery::*;
 pub use distributed_tracing::*;
@@ -81,22 +81,27 @@ pub use join_optimizer::*;
 pub use k8s_discovery::*;
 pub use materialized_views::*;
 pub use metadata::*;
+pub use ml_optimizer::*;
 pub use monitoring::*;
 pub use nats_federation::*;
 pub use network_optimizer::*;
+pub use performance_analyzer::*;
 pub use planner::*;
-pub use query_decomposition::*;
+pub use privacy::*;
 pub use query_decomposition::advanced_pattern_analysis::{
-    AdvancedPatternAnalyzer, PatternAnalysisResult, ServiceRecommendation,
-    OptimizationOpportunity, ComplexityAssessment,
+    AdvancedPatternAnalyzer, ComplexityAssessment, OptimizationOpportunity, PatternAnalysisResult,
+    ServiceRecommendation,
 };
+pub use query_decomposition::*;
 pub use request_batcher::*;
 pub use result_streaming::*;
+pub use semantic_enhancer::*;
 pub use service::*;
 pub use service_client::*;
 pub use service_executor::*;
 pub use service_optimizer::*;
 pub use source_selection::*;
+pub use streaming::*;
 pub use streaming_optimizer::*;
 
 /// Main federation engine that coordinates all federated query processing

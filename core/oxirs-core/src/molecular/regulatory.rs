@@ -1,7 +1,7 @@
 //! Regulatory systems for controlling molecular processes
 
-use crate::error::OxirsResult;
 use super::types::*;
+use crate::error::OxirsResult;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -482,13 +482,14 @@ impl RegulatoryProtein {
     /// Calculate current activity based on modifications and time
     pub fn calculate_current_activity(&self) -> f64 {
         let base_activity = self.activity_level;
-        
+
         // Apply modification effects
-        let modification_factor: f64 = self.modifications
+        let modification_factor: f64 = self
+            .modifications
             .iter()
             .map(|m| match m.modification_type {
                 ModificationType::Phosphorylation => 1.2, // Increase activity
-                ModificationType::Methylation => 0.8,      // Decrease activity
+                ModificationType::Methylation => 0.8,     // Decrease activity
                 ModificationType::Acetylation => 1.1,     // Slight increase
                 _ => 1.0,
             })
@@ -606,10 +607,13 @@ impl SpindleCheckpoint {
     pub fn check_alignment(&self) -> OxirsResult<bool> {
         // Check Mad protein activity (should be low when aligned)
         let mad_activity: f64 = self.mad_proteins.iter().map(|p| p.activity_level).sum();
-        
+
         // Check APC/C activity (should be active when aligned)
-        let apc_active = matches!(self.apc_c_regulation.activity_state, ApcCActivityState::Active);
-        
+        let apc_active = matches!(
+            self.apc_c_regulation.activity_state,
+            ApcCActivityState::Active
+        );
+
         Ok(mad_activity < 0.5 && apc_active)
     }
 }
@@ -625,12 +629,20 @@ impl DnaDamageCheckpoint {
                 DnaRepairMechanism {
                     repair_type: DnaRepairType::HomologousRecombination,
                     efficiency: 0.95,
-                    active_proteins: vec!["BRCA1".to_string(), "BRCA2".to_string(), "RAD51".to_string()],
+                    active_proteins: vec![
+                        "BRCA1".to_string(),
+                        "BRCA2".to_string(),
+                        "RAD51".to_string(),
+                    ],
                 },
                 DnaRepairMechanism {
                     repair_type: DnaRepairType::NonHomologousEndJoining,
                     efficiency: 0.85,
-                    active_proteins: vec!["DNA-PKcs".to_string(), "Ku70".to_string(), "Ku80".to_string()],
+                    active_proteins: vec![
+                        "DNA-PKcs".to_string(),
+                        "Ku70".to_string(),
+                        "Ku80".to_string(),
+                    ],
                 },
             ],
             damage_sensors: vec![
@@ -758,7 +770,7 @@ impl QualityControlCheckpoint {
         let protein_ok = self.protein_qc.proteasome_activity > 0.5;
         let rna_ok = self.rna_qc.nmd_activity > 0.5;
         let organelle_ok = self.organelle_qc.mitochondrial_qc.membrane_potential > 150.0;
-        
+
         Ok(protein_ok && rna_ok && organelle_ok)
     }
 }
@@ -800,7 +812,8 @@ mod tests {
 
     #[test]
     fn test_regulatory_protein_creation() {
-        let protein = RegulatoryProtein::new("TestProtein".to_string(), RegulatoryFunction::Loading);
+        let protein =
+            RegulatoryProtein::new("TestProtein".to_string(), RegulatoryFunction::Loading);
         assert_eq!(protein.name, "TestProtein");
         assert!(protein.is_active());
     }
@@ -814,19 +827,21 @@ mod tests {
 
     #[test]
     fn test_protein_modification() {
-        let mut protein = RegulatoryProtein::new("TestProtein".to_string(), RegulatoryFunction::Loading);
+        let mut protein =
+            RegulatoryProtein::new("TestProtein".to_string(), RegulatoryFunction::Loading);
         protein.add_modification(ModificationType::Phosphorylation, 100);
         assert_eq!(protein.modifications.len(), 1);
-        
+
         protein.remove_modification(100);
         assert_eq!(protein.modifications.len(), 0);
     }
 
     #[test]
     fn test_protein_activity_calculation() {
-        let mut protein = RegulatoryProtein::new("TestProtein".to_string(), RegulatoryFunction::Loading);
+        let mut protein =
+            RegulatoryProtein::new("TestProtein".to_string(), RegulatoryFunction::Loading);
         protein.activate().unwrap();
-        
+
         let activity = protein.calculate_current_activity();
         assert!(activity > 0.0);
     }

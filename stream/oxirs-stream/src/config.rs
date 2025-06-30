@@ -19,8 +19,8 @@ use tokio::sync::{broadcast, RwLock};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    CompressionType, MonitoringConfig, StreamPerformanceConfig, RetryConfig, SaslConfig, SecurityConfig,
-    StreamBackendType, StreamConfig,
+    CompressionType, MonitoringConfig, RetryConfig, SaslConfig, SecurityConfig, StreamBackendType,
+    StreamConfig, StreamPerformanceConfig,
 };
 
 /// Configuration source types

@@ -298,6 +298,17 @@ impl RealTimeFinetuningModel {
         target: Array1<f32>,
         task_id: Option<String>,
     ) -> Result<()> {
+        // Initialize network if needed
+        if self.embeddings.nrows() == 0 {
+            let input_dim = input.len();
+            let output_dim = target.len();
+            self.embeddings = Array2::from_shape_fn((output_dim, input_dim), |(_, _)| {
+                (rand::random::<f32>() - 0.5) * 0.1
+            });
+            self.fisher_information = Array2::zeros((output_dim, input_dim));
+            self.optimal_parameters = Array2::zeros((output_dim, input_dim));
+        }
+
         // Add to replay buffer
         let entry = ExperienceEntry {
             input: input.clone(),
@@ -920,6 +931,10 @@ mod tests {
     #[tokio::test]
     async fn test_add_example_and_adaptation() {
         let config = RealTimeFinetuningConfig {
+            base_config: ModelConfig {
+                dimensions: 3, // Match array size
+                ..Default::default()
+            },
             update_frequency: 1, // Adapt on every example
             ..Default::default()
         };
@@ -973,7 +988,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_real_time_training() {
-        let config = RealTimeFinetuningConfig::default();
+        let config = RealTimeFinetuningConfig {
+            base_config: ModelConfig {
+                dimensions: 3, // Match array size
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let mut model = RealTimeFinetuningModel::new(config);
 
         // Add some examples to replay buffer

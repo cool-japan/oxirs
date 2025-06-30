@@ -1,11 +1,17 @@
 //! Common types and definitions for molecular memory management
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// Helper function for serde default deserialization of Instant
+fn default_instant() -> Instant {
+    Instant::now()
+}
+
 /// Access level for operators
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AccessLevel {
     Read,
     Write,
@@ -14,7 +20,7 @@ pub enum AccessLevel {
 }
 
 /// Chromosome segment for data partitioning
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChromosomeSegment {
     /// Segment identifier
     pub id: String,
@@ -29,7 +35,7 @@ pub struct ChromosomeSegment {
 }
 
 /// Gene representation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Gene {
     /// Gene identifier
     pub id: String,
@@ -44,7 +50,7 @@ pub struct Gene {
 }
 
 /// Promoter region
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromoterRegion {
     /// TATA box position
     pub tata_box: Option<usize>,
@@ -55,7 +61,7 @@ pub struct PromoterRegion {
 }
 
 /// Exon (coding region)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Exon {
     /// Start position
     pub start: usize,
@@ -66,7 +72,7 @@ pub struct Exon {
 }
 
 /// Intron (non-coding region)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Intron {
     /// Start position
     pub start: usize,
@@ -77,7 +83,7 @@ pub struct Intron {
 }
 
 /// Reading frame
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ReadingFrame {
     Frame0,
     Frame1,
@@ -85,7 +91,7 @@ pub enum ReadingFrame {
 }
 
 /// Splice site
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpliceSite {
     /// Position
     pub position: usize,
@@ -94,14 +100,14 @@ pub struct SpliceSite {
 }
 
 /// Splice site type
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SpliceSiteType {
     Donor,
     Acceptor,
 }
 
 /// Enhancer element
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Enhancer {
     /// Position
     pub position: usize,
@@ -112,7 +118,7 @@ pub struct Enhancer {
 }
 
 /// Silencer element
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Silencer {
     /// Position
     pub position: usize,
@@ -123,7 +129,7 @@ pub struct Silencer {
 }
 
 /// Methylation pattern
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MethylationPattern {
     /// CpG sites
     pub cpg_sites: Vec<CpGSite>,
@@ -134,14 +140,27 @@ pub struct MethylationPattern {
 }
 
 /// CpG site
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CpGSite {
     /// Position
+    #[serde(default)]
     pub position: usize,
     /// Methylation status
+    #[serde(default)]
     pub methylated: bool,
     /// Methylation timestamp
+    #[serde(skip, default = "default_instant")]
     pub timestamp: Instant,
+}
+
+impl Default for CpGSite {
+    fn default() -> Self {
+        Self {
+            position: 0,
+            methylated: false,
+            timestamp: Instant::now(),
+        }
+    }
 }
 
 impl PartialEq for CpGSite {
@@ -152,16 +171,31 @@ impl PartialEq for CpGSite {
 }
 
 /// Histone modification
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoneModification {
     /// Modification type
+    #[serde(default)]
     pub modification_type: ModificationType,
     /// Position
+    #[serde(default)]
     pub position: usize,
     /// Intensity
+    #[serde(default)]
     pub intensity: f64,
     /// Timestamp
+    #[serde(skip, default = "default_instant")]
     pub timestamp: Instant,
+}
+
+impl Default for HistoneModification {
+    fn default() -> Self {
+        Self {
+            modification_type: ModificationType::Acetylation,
+            position: 0,
+            intensity: 0.0,
+            timestamp: Instant::now(),
+        }
+    }
 }
 
 impl PartialEq for HistoneModification {
@@ -174,7 +208,7 @@ impl PartialEq for HistoneModification {
 }
 
 /// Modification type
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ModificationType {
     Acetylation,
     Methylation,
@@ -182,6 +216,12 @@ pub enum ModificationType {
     Ubiquitination,
     Sumoylation,
     ADP_Ribosylation,
+}
+
+impl Default for ModificationType {
+    fn default() -> Self {
+        Self::Acetylation
+    }
 }
 
 /// Modification status

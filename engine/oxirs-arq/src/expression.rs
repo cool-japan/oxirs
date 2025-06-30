@@ -308,6 +308,10 @@ impl ExpressionEvaluator {
             Term::Literal(lit) => lit.lexical_form.clone(),
             Term::BlankNode(id) => format!("_:{}", id),
             Term::Variable(var) => format!("?{}", var),
+            Term::QuotedTriple(triple) => {
+                format!("<<{} {} {}>>", triple.subject, triple.predicate, triple.object)
+            }
+            Term::PropertyPath(path) => format!("{}", path),
         };
 
         Ok(Term::literal(&str_val))
@@ -620,16 +624,28 @@ impl ExpressionEvaluator {
                 match lit.datatype.as_str() {
                     xsd::DATE | xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
                         // Parse ISO 8601 date/datetime
-                        if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(&lit.lexical_form) {
-                            Term::typed_literal(&datetime.year().to_string(), "http://www.w3.org/2001/XMLSchema#integer")
+                        if let Ok(datetime) =
+                            chrono::DateTime::parse_from_rfc3339(&lit.lexical_form)
+                        {
+                            Term::typed_literal(
+                                &datetime.year().to_string(),
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )
                         } else if let Ok(date) =
                             chrono::NaiveDate::parse_from_str(&lit.lexical_form, "%Y-%m-%d")
                         {
-                            Term::typed_literal(&date.year().to_string(), "http://www.w3.org/2001/XMLSchema#integer")
-                        } else if let Ok(datetime) =
-                            chrono::NaiveDateTime::parse_from_str(&lit.lexical_form, "%Y-%m-%dT%H:%M:%S")
-                        {
-                            Term::typed_literal(&datetime.year().to_string(), "http://www.w3.org/2001/XMLSchema#integer")
+                            Term::typed_literal(
+                                &date.year().to_string(),
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )
+                        } else if let Ok(datetime) = chrono::NaiveDateTime::parse_from_str(
+                            &lit.lexical_form,
+                            "%Y-%m-%dT%H:%M:%S",
+                        ) {
+                            Term::typed_literal(
+                                &datetime.year().to_string(),
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )
                         } else {
                             bail!("Invalid date/dateTime format: {}", lit.lexical_form)
                         }
@@ -651,16 +667,28 @@ impl ExpressionEvaluator {
                 match lit.datatype.as_str() {
                     xsd::DATE | xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
                         // Parse ISO 8601 date/datetime
-                        if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(&lit.lexical_form) {
-                            Term::typed_literal(&datetime.month().to_string(), "http://www.w3.org/2001/XMLSchema#integer")
+                        if let Ok(datetime) =
+                            chrono::DateTime::parse_from_rfc3339(&lit.lexical_form)
+                        {
+                            Term::typed_literal(
+                                &datetime.month().to_string(),
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )
                         } else if let Ok(date) =
                             chrono::NaiveDate::parse_from_str(&lit.lexical_form, "%Y-%m-%d")
                         {
-                            Term::typed_literal(&date.month().to_string(), "http://www.w3.org/2001/XMLSchema#integer")
-                        } else if let Ok(datetime) =
-                            chrono::NaiveDateTime::parse_from_str(&lit.lexical_form, "%Y-%m-%dT%H:%M:%S")
-                        {
-                            Term::typed_literal(&datetime.month().to_string(), "http://www.w3.org/2001/XMLSchema#integer")
+                            Term::typed_literal(
+                                &date.month().to_string(),
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )
+                        } else if let Ok(datetime) = chrono::NaiveDateTime::parse_from_str(
+                            &lit.lexical_form,
+                            "%Y-%m-%dT%H:%M:%S",
+                        ) {
+                            Term::typed_literal(
+                                &datetime.month().to_string(),
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )
                         } else {
                             bail!("Invalid date/dateTime format: {}", lit.lexical_form)
                         }
@@ -682,16 +710,28 @@ impl ExpressionEvaluator {
                 match lit.datatype.as_str() {
                     xsd::DATE | xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
                         // Parse ISO 8601 date/datetime
-                        if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(&lit.lexical_form) {
-                            Term::typed_literal(&datetime.day().to_string(), "http://www.w3.org/2001/XMLSchema#integer")
+                        if let Ok(datetime) =
+                            chrono::DateTime::parse_from_rfc3339(&lit.lexical_form)
+                        {
+                            Term::typed_literal(
+                                &datetime.day().to_string(),
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )
                         } else if let Ok(date) =
                             chrono::NaiveDate::parse_from_str(&lit.lexical_form, "%Y-%m-%d")
                         {
-                            Term::typed_literal(&date.day().to_string(), "http://www.w3.org/2001/XMLSchema#integer")
-                        } else if let Ok(datetime) =
-                            chrono::NaiveDateTime::parse_from_str(&lit.lexical_form, "%Y-%m-%dT%H:%M:%S")
-                        {
-                            Term::typed_literal(&datetime.day().to_string(), "http://www.w3.org/2001/XMLSchema#integer")
+                            Term::typed_literal(
+                                &date.day().to_string(),
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )
+                        } else if let Ok(datetime) = chrono::NaiveDateTime::parse_from_str(
+                            &lit.lexical_form,
+                            "%Y-%m-%dT%H:%M:%S",
+                        ) {
+                            Term::typed_literal(
+                                &datetime.day().to_string(),
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )
                         } else {
                             bail!("Invalid date/dateTime format: {}", lit.lexical_form)
                         }

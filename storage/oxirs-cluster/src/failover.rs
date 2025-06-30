@@ -569,10 +569,7 @@ impl FailoverManager {
 
         // Step 5: Verify replacement node is healthy and integrated
         tokio::time::sleep(Duration::from_secs(10)).await;
-        let health_check = self
-            .health_monitor
-            .get_node_health(replacement_node)
-            .await;
+        let health_check = self.health_monitor.get_node_health(replacement_node).await;
 
         match health_check {
             Some(status) if matches!(status.health, NodeHealth::Healthy) => {

@@ -37,6 +37,16 @@ pub struct InternerStats {
     pub memory_saved_bytes: usize,
 }
 
+/// Memory usage statistics for performance monitoring
+#[derive(Debug, Clone)]
+pub struct MemoryUsage {
+    pub interned_strings: usize,
+    pub id_mappings: usize,
+    pub estimated_memory_bytes: usize,
+    pub memory_saved_bytes: usize,
+    pub compression_ratio: f64,
+}
+
 impl InternerStats {
     pub fn hit_ratio(&self) -> f64 {
         if self.total_requests == 0 {
@@ -199,6 +209,95 @@ impl StringInterner {
     /// Check if the interner is empty
     pub fn is_empty(&self) -> bool {
         self.strings.read().unwrap().is_empty()
+    }
+
+    /// Batch intern multiple strings for improved performance
+    /// Returns a Vec of Arc<str> in the same order as input
+    pub fn intern_batch(&self, strings: &[&str]) -> Vec<Arc<str>> {
+        let mut result = Vec::with_capacity(strings.len());
+        let mut to_create = Vec::new();
+        
+        // First pass: collect existing strings with read lock
+        {
+            let string_map = self.strings.read().unwrap();
+            for &s in strings {
+                if let Some(weak_ref) = string_map.get(s) {
+                    if let Some(arc_str) = weak_ref.upgrade() {
+                        result.push(arc_str);
+                        continue;
+                    }
+                }
+                to_create.push((result.len(), s));
+                result.push(Arc::from("")); // Placeholder
+            }
+        }
+
+        // Second pass: create missing strings with write lock
+        if !to_create.is_empty() {
+            let mut string_map = self.strings.write().unwrap();
+            let mut stats = self.stats.write().unwrap();
+            
+            for (index, s) in to_create {
+                // Double-check in case another thread added it
+                if let Some(weak_ref) = string_map.get(s) {
+                    if let Some(arc_str) = weak_ref.upgrade() {
+                        result[index] = arc_str;
+                        stats.cache_hits += 1;
+                        continue;
+                    }
+                }
+                
+                // Create new interned string
+                let arc_str: Arc<str> = Arc::from(s);
+                let weak_ref = Arc::downgrade(&arc_str);
+                string_map.insert(s.to_string(), weak_ref);
+                result[index] = arc_str;
+                
+                stats.cache_misses += 1;
+                stats.total_strings_stored += 1;
+                stats.memory_saved_bytes += s.len();
+            }
+            
+            stats.total_requests += strings.len();
+        }
+
+        result
+    }
+
+    /// Prefetch strings into the interner cache for improved performance
+    /// This is useful when you know you'll need certain strings soon
+    pub fn prefetch(&self, strings: &[&str]) {
+        let _ = self.intern_batch(strings);
+    }
+
+    /// Get memory usage statistics for performance monitoring
+    pub fn memory_usage(&self) -> MemoryUsage {
+        let string_map_size = self.strings.read().unwrap().len();
+        let id_map_size = self.string_to_id.read().unwrap().len();
+        let stats = self.stats.read().unwrap();
+        
+        MemoryUsage {
+            interned_strings: string_map_size,
+            id_mappings: id_map_size,
+            estimated_memory_bytes: string_map_size * 64 + id_map_size * 8, // Rough estimate
+            memory_saved_bytes: stats.memory_saved_bytes,
+            compression_ratio: if stats.memory_saved_bytes > 0 {
+                stats.memory_saved_bytes as f64 / (stats.memory_saved_bytes + string_map_size * 32) as f64
+            } else {
+                0.0
+            }
+        }
+    }
+
+    /// Optimize the interner by cleaning up and compacting data structures
+    pub fn optimize(&self) {
+        // Clean up expired weak references
+        self.cleanup();
+        
+        // TODO: In a real implementation, we might want to:
+        // - Rehash the HashMap with optimal capacity
+        // - Defragment string storage
+        // - Update statistics
     }
 }
 

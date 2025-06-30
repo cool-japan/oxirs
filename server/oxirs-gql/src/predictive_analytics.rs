@@ -48,7 +48,7 @@ impl Default for PredictiveAnalyticsConfig {
             capacity_threshold: 0.8, // 80% capacity
             alert_config: AlertConfig::default(),
             metrics_retention: Duration::from_secs(86400 * 7), // 7 days
-            sampling_rate: 1.0, // 100% sampling
+            sampling_rate: 1.0,                                // 100% sampling
         }
     }
 }
@@ -419,11 +419,9 @@ impl PredictiveAnalyticsEngine {
             loop {
                 interval.tick().await;
 
-                match Self::collect_predictive_metrics(
-                    &performance_tracker,
-                    &ai_predictor,
-                    &config,
-                ).await {
+                match Self::collect_predictive_metrics(&performance_tracker, &ai_predictor, &config)
+                    .await
+                {
                     Ok(metrics) => {
                         // Store metrics
                         {
@@ -431,15 +429,17 @@ impl PredictiveAnalyticsEngine {
                             history.push_back(metrics.clone());
 
                             // Limit history size
-                            let max_entries = (config.metrics_retention.as_secs() / 
-                                             config.monitoring_interval.as_secs()) as usize;
+                            let max_entries = (config.metrics_retention.as_secs()
+                                / config.monitoring_interval.as_secs())
+                                as usize;
                             while history.len() > max_entries {
                                 history.pop_front();
                             }
                         }
 
                         // Check for immediate alerts
-                        if let Err(e) = Self::check_immediate_alerts(&metrics, &alert_sender).await {
+                        if let Err(e) = Self::check_immediate_alerts(&metrics, &alert_sender).await
+                        {
                             error!("Failed to check immediate alerts: {}", e);
                         }
                     }
@@ -473,7 +473,7 @@ impl PredictiveAnalyticsEngine {
                                 alert_type: AlertType::AnomalyDetected,
                                 severity: anomaly.severity.clone(),
                                 message: format!("Anomaly detected in {}: current={:.2}, expected={:.2}, deviation={:.2}", 
-                                               anomaly.metric_name, anomaly.current_value, 
+                                               anomaly.metric_name, anomaly.current_value,
                                                anomaly.expected_value, anomaly.deviation_score),
                                 timestamp: SystemTime::now(),
                                 metadata: HashMap::new(),
@@ -509,13 +509,16 @@ impl PredictiveAnalyticsEngine {
 
                 match Self::analyze_trends(&trend_analyzer, &metrics_history).await {
                     Ok(trend_analysis) => {
-                        if matches!(trend_analysis.performance_trend, TrendDirection::Degrading) 
-                            && trend_analysis.trend_strength > 0.7 {
+                        if matches!(trend_analysis.performance_trend, TrendDirection::Degrading)
+                            && trend_analysis.trend_strength > 0.7
+                        {
                             let alert = Alert {
                                 alert_type: AlertType::TrendDegrading,
                                 severity: AlertSeverity::Warning,
-                                message: format!("Performance trend degrading with strength {:.2}", 
-                                               trend_analysis.trend_strength),
+                                message: format!(
+                                    "Performance trend degrading with strength {:.2}",
+                                    trend_analysis.trend_strength
+                                ),
                                 timestamp: SystemTime::now(),
                                 metadata: HashMap::new(),
                             };
@@ -554,8 +557,10 @@ impl PredictiveAnalyticsEngine {
                             let alert = Alert {
                                 alert_type: AlertType::CapacityExceeded,
                                 severity: AlertSeverity::Critical,
-                                message: format!("Capacity threshold exceeded: {:.2}%", 
-                                               capacity_forecast.current_utilization * 100.0),
+                                message: format!(
+                                    "Capacity threshold exceeded: {:.2}%",
+                                    capacity_forecast.current_utilization * 100.0
+                                ),
                                 timestamp: SystemTime::now(),
                                 metadata: HashMap::new(),
                             };
@@ -718,7 +723,7 @@ impl PredictiveAnalyticsEngine {
     pub async fn get_metrics_history(&self, duration: Duration) -> Result<Vec<PredictiveMetrics>> {
         let history = self.metrics_history.read().await;
         let cutoff = SystemTime::now() - duration;
-        
+
         Ok(history
             .iter()
             .filter(|m| m.timestamp >= cutoff)

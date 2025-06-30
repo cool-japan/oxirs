@@ -209,7 +209,9 @@ pub async fn initiate_saml_sso(
     let auth_service = state
         .auth_service
         .as_ref()
-        .ok_or(FusekiError::service_unavailable("Authentication service not available"))?;
+        .ok_or(FusekiError::service_unavailable(
+            "Authentication service not available",
+        ))?;
 
     if !auth_service.is_saml_enabled() {
         return Err(FusekiError::service_unavailable(
@@ -255,7 +257,9 @@ pub async fn handle_saml_acs(
     let auth_service = state
         .auth_service
         .as_ref()
-        .ok_or(FusekiError::service_unavailable("Authentication service not available"))?;
+        .ok_or(FusekiError::service_unavailable(
+            "Authentication service not available",
+        ))?;
 
     debug!("Processing SAML ACS response");
 
@@ -323,7 +327,9 @@ pub async fn handle_saml_slo(
     let auth_service = state
         .auth_service
         .as_ref()
-        .ok_or(FusekiError::service_unavailable("Authentication service not available"))?;
+        .ok_or(FusekiError::service_unavailable(
+            "Authentication service not available",
+        ))?;
 
     if let Some(saml_request) = params.saml_request {
         // Handle SLO request from IdP
@@ -370,7 +376,9 @@ pub async fn get_saml_metadata(State(state): State<AppState>) -> Result<Response
     let auth_service = state
         .auth_service
         .as_ref()
-        .ok_or(FusekiError::service_unavailable("Authentication service not available"))?;
+        .ok_or(FusekiError::service_unavailable(
+            "Authentication service not available",
+        ))?;
 
     if !auth_service.is_saml_enabled() {
         return Err(FusekiError::service_unavailable(
@@ -403,14 +411,14 @@ pub async fn initiate_saml_logout(
     let auth_service = state
         .auth_service
         .as_ref()
-        .ok_or(FusekiError::service_unavailable("Authentication service not available"))?;
+        .ok_or(FusekiError::service_unavailable(
+            "Authentication service not available",
+        ))?;
 
     // Extract current session
     let session_id = extract_session_id_from_headers(&headers)?;
-    let session = auth_service
-        .validate_session(&session_id)
-        .await?;
-    
+    let session = auth_service.validate_session(&session_id).await?;
+
     let user = match session {
         crate::auth::AuthResult::Authenticated(user) => user,
         _ => return Err(FusekiError::authentication("Invalid session")),

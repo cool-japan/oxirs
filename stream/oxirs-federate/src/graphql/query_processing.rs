@@ -32,15 +32,21 @@ impl GraphQLFederation {
 
         // Analyze field ownership and dependencies
         let field_ownership = self.analyze_field_ownership(&parsed_query, &unified_schema)?;
-        
+
         // Check for entity resolution requirements
-        let entity_requirements = self.analyze_entity_requirements(&parsed_query, &unified_schema)?;
-        
+        let entity_requirements =
+            self.analyze_entity_requirements(&parsed_query, &unified_schema)?;
+
         // Generate execution plan with entity resolution
-        let execution_plan = self.create_execution_plan(&parsed_query, &field_ownership, &entity_requirements)?;
-        
+        let execution_plan =
+            self.create_execution_plan(&parsed_query, &field_ownership, &entity_requirements)?;
+
         // Decompose into optimized service-specific queries
-        let service_queries = self.create_optimized_service_queries(&execution_plan, &parsed_query, &field_ownership)?;
+        let service_queries = self.create_optimized_service_queries(
+            &execution_plan,
+            &parsed_query,
+            &field_ownership,
+        )?;
 
         debug!(
             "Decomposed query into {} service queries with {} entity resolution steps",
@@ -57,17 +63,17 @@ impl GraphQLFederation {
         schema: &UnifiedSchema,
     ) -> Result<Vec<EntityReference>> {
         let mut entity_requirements = Vec::new();
-        
+
         // Analyze selections for entity references
         self.collect_entity_requirements_from_selections(
             &query.selection_set,
             schema,
             &mut entity_requirements,
         )?;
-        
+
         Ok(entity_requirements)
     }
-    
+
     /// Collect entity requirements from selections
     fn collect_entity_requirements_from_selections(
         &self,
@@ -89,7 +95,7 @@ impl GraphQLFederation {
                     });
                 }
             }
-            
+
             // Recursively check nested selections
             self.collect_entity_requirements_from_selections(
                 &selection.selection_set,
@@ -97,24 +103,28 @@ impl GraphQLFederation {
                 entity_requirements,
             )?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Check if a type is an entity type
     fn is_entity_type(&self, type_name: &str, schema: &UnifiedSchema) -> bool {
         // Check if type exists and could be an entity
-        schema.types.contains_key(type_name) && 
-        !matches!(type_name, "String" | "Int" | "Float" | "Boolean" | "ID")
+        schema.types.contains_key(type_name)
+            && !matches!(type_name, "String" | "Int" | "Float" | "Boolean" | "ID")
     }
-    
+
     /// Extract required fields from selection set
     fn extract_required_fields(&self, selections: &[Selection]) -> Vec<String> {
         selections.iter().map(|s| s.name.clone()).collect()
     }
-    
+
     /// Determine which service owns an entity type
-    fn determine_service_for_entity(&self, entity_type: &str, schema: &UnifiedSchema) -> Result<String> {
+    fn determine_service_for_entity(
+        &self,
+        entity_type: &str,
+        schema: &UnifiedSchema,
+    ) -> Result<String> {
         if let Some(services) = schema.schema_mapping.get(entity_type) {
             if let Some(service) = services.first() {
                 Ok(service.clone())
@@ -122,10 +132,13 @@ impl GraphQLFederation {
                 Err(anyhow!("No service found for entity type: {}", entity_type))
             }
         } else {
-            Err(anyhow!("Entity type not found in schema mapping: {}", entity_type))
+            Err(anyhow!(
+                "Entity type not found in schema mapping: {}",
+                entity_type
+            ))
         }
     }
-    
+
     /// Create execution plan with entity resolution
     fn create_execution_plan(
         &self,
@@ -135,7 +148,7 @@ impl GraphQLFederation {
     ) -> Result<ExecutionPlan> {
         let mut steps = Vec::new();
         let mut step_counter = 0;
-        
+
         // Create steps for entity resolution if needed
         for entity_req in entity_requirements {
             steps.push(ExecutionStep {
@@ -153,7 +166,7 @@ impl GraphQLFederation {
             });
             step_counter += 1;
         }
-        
+
         // Create steps for field resolution
         for (service_id, fields) in &field_ownership.service_to_fields {
             if !fields.is_empty() {
@@ -170,7 +183,7 @@ impl GraphQLFederation {
                 step_counter += 1;
             }
         }
-        
+
         // Add result stitching step
         steps.push(ExecutionStep {
             step_id: "result_stitching".to_string(),
@@ -182,7 +195,7 @@ impl GraphQLFederation {
             timeout: std::time::Duration::from_secs(10),
             retry_config: None,
         });
-        
+
         Ok(ExecutionPlan {
             query_id: uuid::Uuid::new_v4().to_string(),
             steps,
@@ -194,7 +207,7 @@ impl GraphQLFederation {
             parallelizable_steps: Vec::new(),
         })
     }
-    
+
     /// Create optimized service queries with entity resolution
     fn create_optimized_service_queries(
         &self,
@@ -203,29 +216,28 @@ impl GraphQLFederation {
         field_ownership: &FieldOwnership,
     ) -> Result<Vec<ServiceQuery>> {
         let mut service_queries = Vec::new();
-        
+
         // Generate queries from execution plan steps
         for step in &execution_plan.steps {
             if let Some(service_id) = &step.service_id {
                 match step.step_type {
                     StepType::GraphQLQuery => {
-                        let fields = field_ownership.service_to_fields.get(service_id)
+                        let fields = field_ownership
+                            .service_to_fields
+                            .get(service_id)
                             .cloned()
                             .unwrap_or_default();
-                        
+
                         if !fields.is_empty() {
                             let operation_type = match query.operation_type {
                                 GraphQLOperationType::Query => "query",
                                 GraphQLOperationType::Mutation => "mutation",
                                 GraphQLOperationType::Subscription => "subscription",
                             };
-                            
-                            let service_query = format!(
-                                "{} {{ {} }}",
-                                operation_type,
-                                fields.join(" ")
-                            );
-                            
+
+                            let service_query =
+                                format!("{} {{ {} }}", operation_type, fields.join(" "));
+
                             service_queries.push(ServiceQuery {
                                 service_id: service_id.clone(),
                                 query: service_query,
@@ -239,7 +251,7 @@ impl GraphQLFederation {
                             "query($_representations: [_Any!]!) {{ {} }}",
                             step.query_fragment
                         );
-                        
+
                         service_queries.push(ServiceQuery {
                             service_id: service_id.clone(),
                             query: entity_query,
@@ -252,10 +264,10 @@ impl GraphQLFederation {
                 }
             }
         }
-        
+
         Ok(service_queries)
     }
-    
+
     /// Extract base type name, removing List/NonNull wrappers
     fn extract_base_type(&self, type_str: &str) -> String {
         type_str
@@ -342,7 +354,7 @@ impl GraphQLFederation {
     /// Parse a single field selection
     fn parse_field_selection(&self, field_str: &str) -> Result<Option<Selection>> {
         let field_str = field_str.trim();
-        
+
         // Skip empty lines and comments
         if field_str.is_empty() || field_str.starts_with('#') {
             return Ok(None);
@@ -391,7 +403,7 @@ impl GraphQLFederation {
         if let Some(start) = field_str.find('(') {
             if let Some(end) = field_str.find(')') {
                 let args_content = &field_str[start + 1..end];
-                
+
                 // Split arguments by comma (simplified parsing)
                 for arg in args_content.split(',') {
                     let arg = arg.trim();
@@ -531,11 +543,8 @@ impl GraphQLFederation {
                 .unwrap_or_default();
 
             // Create service-specific selections
-            let service_selections = self.filter_selections_for_service(
-                &query.selection_set,
-                service_id,
-                ownership,
-            );
+            let service_selections =
+                self.filter_selections_for_service(&query.selection_set, service_id, ownership);
 
             let field_strings = self.format_selections(&service_selections, 1);
 
@@ -547,10 +556,8 @@ impl GraphQLFederation {
             );
 
             // Filter variables based on field usage
-            let filtered_variables = self.filter_variables_for_service(
-                &query.variables,
-                &service_selections,
-            );
+            let filtered_variables =
+                self.filter_variables_for_service(&query.variables, &service_selections);
 
             service_queries.push(ServiceQuery {
                 service_id: service_id.clone(),
@@ -580,14 +587,14 @@ impl GraphQLFederation {
             if let Some(field_service) = ownership.field_to_service.get(&selection.name) {
                 if field_service == service_id {
                     let mut filtered_selection = selection.clone();
-                    
+
                     // Recursively filter nested selections
                     filtered_selection.selection_set = self.filter_selections_for_service(
                         &selection.selection_set,
                         service_id,
                         ownership,
                     );
-                    
+
                     filtered.push(filtered_selection);
                 }
             }
@@ -626,10 +633,11 @@ impl GraphQLFederation {
             if !selection.selection_set.is_empty() {
                 field_str.push_str(" {");
                 formatted.push(format!("{}{}", indent, field_str));
-                
-                let nested_formatted = self.format_selections(&selection.selection_set, indent_level + 1);
+
+                let nested_formatted =
+                    self.format_selections(&selection.selection_set, indent_level + 1);
                 formatted.extend(nested_formatted);
-                
+
                 formatted.push(format!("{}}}", indent));
             } else {
                 formatted.push(format!("{}{}", indent, field_str));
@@ -731,10 +739,10 @@ impl GraphQLFederation {
         // Calculate complexity metrics
         complexity.max_depth = self.calculate_max_depth(&query.selection_set, 1);
         complexity.field_count = self.count_fields(&query.selection_set);
-        
+
         // Base complexity calculation
         complexity.total_complexity = complexity.field_count * 2;
-        
+
         // Add depth penalty
         if complexity.max_depth > 5 {
             complexity.total_complexity += (complexity.max_depth - 5) * 10;
@@ -753,7 +761,8 @@ impl GraphQLFederation {
 
         for selection in selections {
             if !selection.selection_set.is_empty() {
-                let nested_depth = self.calculate_max_depth(&selection.selection_set, current_depth + 1);
+                let nested_depth =
+                    self.calculate_max_depth(&selection.selection_set, current_depth + 1);
                 max_depth = max_depth.max(nested_depth);
             }
         }
@@ -775,7 +784,7 @@ impl GraphQLFederation {
     /// Validate query against schema
     pub async fn validate_query(&self, query: &str) -> Result<Vec<SchemaValidationError>> {
         let mut errors = Vec::new();
-        
+
         // Parse the query
         let parsed_query = match self.parse_graphql_query(query) {
             Ok(parsed) => parsed,
@@ -803,7 +812,12 @@ impl GraphQLFederation {
         };
 
         // Validate selections against schema
-        self.validate_selections(&parsed_query.selection_set, &parsed_query.operation_type, &schema, &mut errors);
+        self.validate_selections(
+            &parsed_query.selection_set,
+            &parsed_query.operation_type,
+            &schema,
+            &mut errors,
+        );
 
         Ok(errors)
     }
@@ -821,7 +835,9 @@ impl GraphQLFederation {
             let field_exists = match operation_type {
                 GraphQLOperationType::Query => schema.queries.contains_key(&selection.name),
                 GraphQLOperationType::Mutation => schema.mutations.contains_key(&selection.name),
-                GraphQLOperationType::Subscription => schema.subscriptions.contains_key(&selection.name),
+                GraphQLOperationType::Subscription => {
+                    schema.subscriptions.contains_key(&selection.name)
+                }
             };
 
             if !field_exists {

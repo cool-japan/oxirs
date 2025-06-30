@@ -455,7 +455,12 @@ impl BftNode {
     async fn execute_operation(&self, view: ViewNumber, sequence: SequenceNumber) -> Result<()> {
         if let Some(state) = self.states.get(&(view, sequence)) {
             if let Some(request) = &state.request {
-                if let BftMessage::Request { operation, client_id, .. } = request {
+                if let BftMessage::Request {
+                    operation,
+                    client_id,
+                    ..
+                } = request
+                {
                     // Execute operation on state machine
                     let result = {
                         let mut sm = self.state_machine.write();

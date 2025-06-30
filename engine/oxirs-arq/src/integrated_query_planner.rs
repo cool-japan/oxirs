@@ -804,7 +804,10 @@ impl IntegratedQueryPlanner {
         }
 
         // Calculate overall selectivity
-        let overall_selectivity = pattern_selectivity.iter().map(|p| p.selectivity).product::<f64>()
+        let overall_selectivity = pattern_selectivity
+            .iter()
+            .map(|p| p.selectivity)
+            .product::<f64>()
             * join_selectivity.values().product::<f64>();
 
         Ok(OptimizedBGP {

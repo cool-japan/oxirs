@@ -7,8 +7,7 @@ use criterion::{black_box, criterion_group, criterion_main, BatchSize, Benchmark
 use oxirs_tdb::{
     compression::{AdaptiveCompressor, ColumnStoreCompressor, RunLengthEncoder},
     nodes::NodeTableConfig,
-    SimpleTdbConfig,
-    TdbStore, Term,
+    SimpleTdbConfig, TdbStore, Term,
 };
 use rand::prelude::*;
 use std::sync::Arc;

@@ -260,7 +260,7 @@ pub enum StreamEvent {
         message: String,
         metadata: EventMetadata,
     },
-    
+
     // Error Events
     ErrorOccurred {
         error_type: String,
@@ -731,7 +731,7 @@ impl StreamEvent {
             | StreamEvent::QueryCompleted { .. } => EventCategory::Query,
 
             StreamEvent::Heartbeat { .. } => EventCategory::Data,
-            
+
             StreamEvent::ErrorOccurred { .. } => EventCategory::Data,
         }
     }

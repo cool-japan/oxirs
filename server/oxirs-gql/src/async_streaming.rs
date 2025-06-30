@@ -252,9 +252,15 @@ impl AsyncStreamingManager {
             config: config.clone(),
             active_streams: Arc::new(AsyncRwLock::new(HashMap::new())),
             stream_multiplexer: Arc::new(AsyncMutex::new(StreamMultiplexer::new(&config))),
-            backpressure_controller: Arc::new(AsyncMutex::new(BackpressureController::new(&config))),
-            compression_manager: Arc::new(AsyncMutex::new(CompressionManager::new(&config.compression_config))),
-            priority_scheduler: Arc::new(AsyncMutex::new(PriorityScheduler::new(&config.priority_config))),
+            backpressure_controller: Arc::new(AsyncMutex::new(BackpressureController::new(
+                &config,
+            ))),
+            compression_manager: Arc::new(AsyncMutex::new(CompressionManager::new(
+                &config.compression_config,
+            ))),
+            priority_scheduler: Arc::new(AsyncMutex::new(PriorityScheduler::new(
+                &config.priority_config,
+            ))),
             metrics_collector: Arc::new(AsyncMutex::new(MetricsCollector::new())),
             data_sender,
         };
@@ -303,7 +309,10 @@ impl AsyncStreamingManager {
         };
 
         // Register stream
-        self.active_streams.write().await.insert(stream_id.clone(), handle.clone());
+        self.active_streams
+            .write()
+            .await
+            .insert(stream_id.clone(), handle.clone());
 
         // Register with multiplexer
         let mut multiplexer = self.stream_multiplexer.lock().await;
@@ -328,11 +337,7 @@ impl AsyncStreamingManager {
     }
 
     /// Send data to specific stream
-    pub async fn send_to_stream(
-        &self,
-        stream_id: &str,
-        data: StreamData,
-    ) -> Result<()> {
+    pub async fn send_to_stream(&self, stream_id: &str, data: StreamData) -> Result<()> {
         let streams = self.active_streams.read().await;
         if let Some(handle) = streams.get(stream_id) {
             // Check backpressure
@@ -461,7 +466,10 @@ impl AsyncStreamingManager {
 
                 for (stream_id, handle) in streams.iter() {
                     if let Err(e) = controller.monitor_stream(stream_id, handle, &config).await {
-                        error!("Backpressure monitoring error for stream {}: {}", stream_id, e);
+                        error!(
+                            "Backpressure monitoring error for stream {}: {}",
+                            stream_id, e
+                        );
                     }
                 }
             }
@@ -683,9 +691,17 @@ impl StreamMultiplexer {
         }
     }
 
-    pub async fn register_stream(&mut self, stream_id: &str, priority: &StreamPriority) -> Result<()> {
-        self.registered_streams.insert(stream_id.to_string(), priority.clone());
-        debug!("Registered stream {} with priority {:?}", stream_id, priority);
+    pub async fn register_stream(
+        &mut self,
+        stream_id: &str,
+        priority: &StreamPriority,
+    ) -> Result<()> {
+        self.registered_streams
+            .insert(stream_id.to_string(), priority.clone());
+        debug!(
+            "Registered stream {} with priority {:?}",
+            stream_id, priority
+        );
         Ok(())
     }
 
@@ -784,8 +800,13 @@ impl PriorityScheduler {
         }
     }
 
-    pub async fn register_stream(&mut self, stream_id: &str, priority: StreamPriority) -> Result<()> {
-        self.stream_priorities.insert(stream_id.to_string(), priority);
+    pub async fn register_stream(
+        &mut self,
+        stream_id: &str,
+        priority: StreamPriority,
+    ) -> Result<()> {
+        self.stream_priorities
+            .insert(stream_id.to_string(), priority);
         Ok(())
     }
 

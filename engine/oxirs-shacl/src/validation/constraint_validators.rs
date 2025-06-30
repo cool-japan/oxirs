@@ -2,22 +2,17 @@
 //!
 //! This module contains the actual validation logic for different types of SHACL constraints.
 
-use std::collections::HashSet;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
     Store,
 };
 
-use crate::{
-    constraints::*,
-    PropertyPath,
-    Result,
-    ShaclError,
-};
+use crate::{constraints::*, PropertyPath, Result, ShaclError};
 
-use super::{ConstraintEvaluationResult, utils::format_term_for_message};
+use super::{utils::format_term_for_message, ConstraintEvaluationResult};
 
 /// Trait for validating specific constraint types
 pub trait ConstraintValidator {
@@ -41,7 +36,7 @@ impl ConstraintValidator for NodeKindConstraintValidator {
     ) -> Result<ConstraintEvaluationResult> {
         // Extract the constraint from context
         // This is a simplified implementation - in practice you'd get the constraint from context
-        
+
         for value in &context.values {
             // Check if value matches expected node kind
             // This is a placeholder implementation
@@ -82,10 +77,10 @@ impl ConstraintValidator for CardinalityConstraintValidator {
         _graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
         let value_count = context.values.len();
-        
+
         // This is a simplified implementation
         // In practice, you'd check min_count and max_count from the actual constraint
-        
+
         // Placeholder validation - check if we have at least one value
         if value_count == 0 {
             return Ok(ConstraintEvaluationResult::violated(
@@ -185,7 +180,7 @@ impl ConstraintValidator for StringLengthConstraintValidator {
             if let Term::Literal(literal) = value {
                 let str_value = literal.value();
                 let length = str_value.chars().count();
-                
+
                 // Placeholder: check if length is reasonable (between 1 and 1000)
                 if length == 0 {
                     return Ok(ConstraintEvaluationResult::violated(
@@ -193,7 +188,7 @@ impl ConstraintValidator for StringLengthConstraintValidator {
                         Some("String is empty".to_string()),
                     ));
                 }
-                
+
                 if length > 1000 {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
@@ -228,9 +223,12 @@ impl ConstraintValidator for PatternConstraintValidator {
         for value in &context.values {
             if let Term::Literal(literal) = value {
                 let str_value = literal.value();
-                
+
                 // Placeholder pattern validation - check if string contains only alphanumeric characters
-                if !str_value.chars().all(|c| c.is_alphanumeric() || c.is_whitespace()) {
+                if !str_value
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c.is_whitespace())
+                {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
                         Some(format!(
@@ -295,10 +293,14 @@ impl ConstraintValidatorFactory {
     pub fn create_validator(constraint: &Constraint) -> Box<dyn ConstraintValidator> {
         match constraint {
             Constraint::NodeKind(_) => Box::new(NodeKindConstraintValidator),
-            Constraint::MinCount(_) | Constraint::MaxCount(_) => Box::new(CardinalityConstraintValidator),
+            Constraint::MinCount(_) | Constraint::MaxCount(_) => {
+                Box::new(CardinalityConstraintValidator)
+            }
             Constraint::Datatype(_) => Box::new(DatatypeConstraintValidator),
             Constraint::Class(_) => Box::new(ClassConstraintValidator),
-            Constraint::MinLength(_) | Constraint::MaxLength(_) => Box::new(StringLengthConstraintValidator),
+            Constraint::MinLength(_) | Constraint::MaxLength(_) => {
+                Box::new(StringLengthConstraintValidator)
+            }
             Constraint::Pattern(_) => Box::new(PatternConstraintValidator),
             Constraint::In(_) => Box::new(InConstraintValidator),
             // Add more constraint types as needed
@@ -325,8 +327,8 @@ impl ConstraintValidator for DefaultConstraintValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{constraints::ConstraintContext, ShapeId};
     use oxirs_core::model::{Literal, NamedNode, Term};
-    use crate::{ShapeId, constraints::ConstraintContext};
 
     #[test]
     fn test_node_kind_validator() {
@@ -347,7 +349,7 @@ mod tests {
     #[test]
     fn test_cardinality_validator() {
         let validator = CardinalityConstraintValidator;
-        
+
         // Test with values - should pass
         let context_with_values = ConstraintContext::new(
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
@@ -356,7 +358,9 @@ mod tests {
         .with_values(vec![Term::Literal(Literal::new("value"))]);
 
         let store = Store::new().unwrap();
-        let result = validator.validate(&store, &context_with_values, None).unwrap();
+        let result = validator
+            .validate(&store, &context_with_values, None)
+            .unwrap();
         assert!(result.is_satisfied());
 
         // Test without values - should fail
@@ -365,7 +369,9 @@ mod tests {
             ShapeId::new("test_shape"),
         );
 
-        let result = validator.validate(&store, &context_no_values, None).unwrap();
+        let result = validator
+            .validate(&store, &context_no_values, None)
+            .unwrap();
         assert!(result.is_violated());
     }
 }

@@ -4,8 +4,8 @@
 //! replay capabilities, snapshots, and temporal queries. This forms the foundation
 //! for CQRS patterns and enables advanced temporal analytics.
 
-use crate::{EventMetadata, StreamEvent};
 use crate::multi_region_replication::VectorClock;
+use crate::{EventMetadata, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
@@ -114,7 +114,7 @@ impl Default for RetentionPolicy {
     fn default() -> Self {
         Self {
             max_age: Some(ChronoDuration::days(365)), // 1 year
-            max_events: Some(10_000_000),              // 10M events
+            max_events: Some(10_000_000),             // 10M events
             enable_archiving: true,
             archive_backend: None,
         }
@@ -314,11 +314,20 @@ pub struct EventSourcingStats {
 pub trait EventStoreTrait: Send + Sync {
     async fn store_event(&self, stream_id: String, event: StreamEvent) -> Result<StoredEvent>;
     async fn query_events(&self, query: EventQuery) -> Result<Vec<StoredEvent>>;
-    async fn get_stream_events(&self, stream_id: &str, from_version: Option<u64>) -> Result<Vec<StoredEvent>>;
+    async fn get_stream_events(
+        &self,
+        stream_id: &str,
+        from_version: Option<u64>,
+    ) -> Result<Vec<StoredEvent>>;
     async fn replay_from_timestamp(&self, timestamp: DateTime<Utc>) -> Result<Vec<StoredEvent>>;
     async fn get_latest_snapshot(&self, stream_id: &str) -> Result<Option<EventSnapshot>>;
     async fn rebuild_stream_state(&self, stream_id: &str) -> Result<Vec<u8>>;
-    async fn append_events(&self, aggregate_id: &str, events: &[StreamEvent], expected_version: Option<u64>) -> Result<u64>;
+    async fn append_events(
+        &self,
+        aggregate_id: &str,
+        events: &[StreamEvent],
+        expected_version: Option<u64>,
+    ) -> Result<u64>;
 }
 
 /// Event stream trait for streaming events
@@ -326,14 +335,22 @@ pub trait EventStoreTrait: Send + Sync {
 pub trait EventStream: Send + Sync {
     async fn next_event(&mut self) -> Option<StoredEvent>;
     async fn has_events(&self) -> bool;
-    async fn read_events_from_position(&self, position: u64, max_events: usize) -> Result<Vec<StoredEvent>>;
+    async fn read_events_from_position(
+        &self,
+        position: u64,
+        max_events: usize,
+    ) -> Result<Vec<StoredEvent>>;
 }
 
 /// Snapshot store trait for managing snapshots
 #[async_trait::async_trait]
 pub trait SnapshotStore: Send + Sync {
     async fn store_snapshot(&self, snapshot: EventSnapshot) -> Result<()>;
-    async fn get_snapshot(&self, stream_id: &str, version: Option<u64>) -> Result<Option<EventSnapshot>>;
+    async fn get_snapshot(
+        &self,
+        stream_id: &str,
+        version: Option<u64>,
+    ) -> Result<Option<EventSnapshot>>;
     async fn list_snapshots(&self, stream_id: &str) -> Result<Vec<EventSnapshot>>;
 }
 
@@ -409,8 +426,9 @@ pub struct PersistenceStats {
 impl EventStore {
     /// Create a new event store
     pub fn new(config: EventStoreConfig) -> Self {
-        let persistence_manager = Arc::new(PersistenceManager::new(config.persistence_backend.clone()));
-        
+        let persistence_manager =
+            Arc::new(PersistenceManager::new(config.persistence_backend.clone()));
+
         Self {
             config,
             memory_events: Arc::new(RwLock::new(BTreeMap::new())),
@@ -469,7 +487,7 @@ impl EventStore {
                     .take(memory_events.len() - self.config.max_memory_events)
                     .cloned()
                     .collect();
-                
+
                 for seq in to_remove {
                     memory_events.remove(&seq);
                 }
@@ -487,18 +505,20 @@ impl EventStore {
         }
 
         // Check if snapshot is needed
-        if self.config.snapshot_config.enable_snapshots 
-            && stream_version % self.config.snapshot_config.snapshot_interval as u64 == 0 {
+        if self.config.snapshot_config.enable_snapshots
+            && stream_version % self.config.snapshot_config.snapshot_interval as u64 == 0
+        {
             self.create_snapshot(&stream_id, stream_version).await?;
         }
 
         // Update statistics
-        self.stats.total_events_stored.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .total_events_stored
+            .fetch_add(1, Ordering::Relaxed);
         let store_latency = start_time.elapsed();
-        self.stats.average_store_latency_ms.store(
-            store_latency.as_millis() as u64,
-            Ordering::Relaxed,
-        );
+        self.stats
+            .average_store_latency_ms
+            .store(store_latency.as_millis() as u64, Ordering::Relaxed);
 
         info!(
             "Stored event {} for stream {} (seq: {}, version: {})",
@@ -521,7 +541,7 @@ impl EventStore {
             if let Some(stored_event) = memory_events.get(&sequence) {
                 if self.matches_query(stored_event, &query) {
                     results.push(stored_event.clone());
-                    
+
                     if let Some(limit) = query.limit {
                         if results.len() >= limit {
                             break;
@@ -535,12 +555,13 @@ impl EventStore {
         self.sort_results(&mut results, &query.order);
 
         // Update statistics
-        self.stats.total_events_retrieved.fetch_add(results.len() as u64, Ordering::Relaxed);
+        self.stats
+            .total_events_retrieved
+            .fetch_add(results.len() as u64, Ordering::Relaxed);
         let retrieve_latency = start_time.elapsed();
-        self.stats.average_retrieve_latency_ms.store(
-            retrieve_latency.as_millis() as u64,
-            Ordering::Relaxed,
-        );
+        self.stats
+            .average_retrieve_latency_ms
+            .store(retrieve_latency.as_millis() as u64, Ordering::Relaxed);
 
         debug!(
             "Query returned {} events in {:?}",
@@ -552,7 +573,11 @@ impl EventStore {
     }
 
     /// Get events for a specific stream
-    pub async fn get_stream_events(&self, stream_id: &str, from_version: Option<u64>) -> Result<Vec<StoredEvent>> {
+    pub async fn get_stream_events(
+        &self,
+        stream_id: &str,
+        from_version: Option<u64>,
+    ) -> Result<Vec<StoredEvent>> {
         let query = EventQuery {
             stream_id: Some(stream_id.to_string()),
             event_types: None,
@@ -565,7 +590,7 @@ impl EventStore {
         };
 
         let mut events = self.query_events(query).await?;
-        
+
         if let Some(from_version) = from_version {
             events.retain(|e| e.stream_version >= from_version);
         }
@@ -574,7 +599,10 @@ impl EventStore {
     }
 
     /// Replay events from a specific point in time
-    pub async fn replay_from_timestamp(&self, timestamp: DateTime<Utc>) -> Result<Vec<StoredEvent>> {
+    pub async fn replay_from_timestamp(
+        &self,
+        timestamp: DateTime<Utc>,
+    ) -> Result<Vec<StoredEvent>> {
         let query = EventQuery {
             stream_id: None,
             event_types: None,
@@ -595,7 +623,7 @@ impl EventStore {
     /// Create a snapshot for a stream
     async fn create_snapshot(&self, stream_id: &str, stream_version: u64) -> Result<EventSnapshot> {
         let events = self.get_stream_events(stream_id, None).await?;
-        
+
         // Aggregate state from events (simplified)
         let state_data = self.aggregate_events(&events)?;
         let compressed_data = self.compress_data(&state_data)?;
@@ -618,7 +646,9 @@ impl EventStore {
         // Store snapshot
         {
             let mut snapshots = self.snapshots.write().await;
-            let stream_snapshots = snapshots.entry(stream_id.to_string()).or_insert_with(Vec::new);
+            let stream_snapshots = snapshots
+                .entry(stream_id.to_string())
+                .or_insert_with(Vec::new);
             stream_snapshots.push(snapshot.clone());
 
             // Keep only recent snapshots
@@ -635,8 +665,10 @@ impl EventStore {
         }
 
         self.stats.snapshots_created.fetch_add(1, Ordering::Relaxed);
-        info!("Created snapshot {} for stream {} at version {}", 
-              snapshot.snapshot_id, stream_id, stream_version);
+        info!(
+            "Created snapshot {} for stream {} at version {}",
+            snapshot.snapshot_id, stream_id, stream_version
+        );
 
         Ok(snapshot)
     }
@@ -656,16 +688,18 @@ impl EventStore {
         // Get latest snapshot
         if let Some(snapshot) = self.get_latest_snapshot(stream_id).await? {
             // Get events after snapshot
-            let events = self.get_stream_events(stream_id, Some(snapshot.stream_version + 1)).await?;
-            
+            let events = self
+                .get_stream_events(stream_id, Some(snapshot.stream_version + 1))
+                .await?;
+
             // Start with snapshot state
             let mut state = self.decompress_data(&snapshot.state_data)?;
-            
+
             // Apply subsequent events
             for event in events {
                 state = self.apply_event_to_state(state, &event.event_data)?;
             }
-            
+
             Ok(state)
         } else {
             // No snapshot, rebuild from all events
@@ -748,7 +782,9 @@ impl EventStore {
 
     /// Estimate size of an event
     fn estimate_size(&self, event: &StreamEvent) -> usize {
-        serde_json::to_string(event).map(|s| s.len()).unwrap_or(1024)
+        serde_json::to_string(event)
+            .map(|s| s.len())
+            .unwrap_or(1024)
     }
 
     /// Aggregate events into state data
@@ -804,29 +840,23 @@ impl EventStore {
             total_events_retrieved: AtomicU64::new(
                 self.stats.total_events_retrieved.load(Ordering::Relaxed),
             ),
-            snapshots_created: AtomicU64::new(
-                self.stats.snapshots_created.load(Ordering::Relaxed),
-            ),
-            events_archived: AtomicU64::new(
-                self.stats.events_archived.load(Ordering::Relaxed),
-            ),
+            snapshots_created: AtomicU64::new(self.stats.snapshots_created.load(Ordering::Relaxed)),
+            events_archived: AtomicU64::new(self.stats.events_archived.load(Ordering::Relaxed)),
             persistence_operations: AtomicU64::new(
                 self.stats.persistence_operations.load(Ordering::Relaxed),
             ),
-            failed_operations: AtomicU64::new(
-                self.stats.failed_operations.load(Ordering::Relaxed),
-            ),
+            failed_operations: AtomicU64::new(self.stats.failed_operations.load(Ordering::Relaxed)),
             memory_usage_bytes: AtomicU64::new(
                 self.stats.memory_usage_bytes.load(Ordering::Relaxed),
             ),
-            disk_usage_bytes: AtomicU64::new(
-                self.stats.disk_usage_bytes.load(Ordering::Relaxed),
-            ),
+            disk_usage_bytes: AtomicU64::new(self.stats.disk_usage_bytes.load(Ordering::Relaxed)),
             average_store_latency_ms: AtomicU64::new(
                 self.stats.average_store_latency_ms.load(Ordering::Relaxed),
             ),
             average_retrieve_latency_ms: AtomicU64::new(
-                self.stats.average_retrieve_latency_ms.load(Ordering::Relaxed),
+                self.stats
+                    .average_retrieve_latency_ms
+                    .load(Ordering::Relaxed),
             ),
         }
     }
@@ -843,7 +873,11 @@ impl EventStoreTrait for EventStore {
         self.query_events(query).await
     }
 
-    async fn get_stream_events(&self, stream_id: &str, from_version: Option<u64>) -> Result<Vec<StoredEvent>> {
+    async fn get_stream_events(
+        &self,
+        stream_id: &str,
+        from_version: Option<u64>,
+    ) -> Result<Vec<StoredEvent>> {
         self.get_stream_events(stream_id, from_version).await
     }
 
@@ -859,10 +893,17 @@ impl EventStoreTrait for EventStore {
         self.rebuild_stream_state(stream_id).await
     }
 
-    async fn append_events(&self, aggregate_id: &str, events: &[StreamEvent], expected_version: Option<u64>) -> Result<u64> {
+    async fn append_events(
+        &self,
+        aggregate_id: &str,
+        events: &[StreamEvent],
+        expected_version: Option<u64>,
+    ) -> Result<u64> {
         let mut last_version = 0u64;
         for event in events {
-            let stored_event = self.store_event(aggregate_id.to_string(), event.clone()).await?;
+            let stored_event = self
+                .store_event(aggregate_id.to_string(), event.clone())
+                .await?;
             last_version = stored_event.stream_version;
         }
         Ok(last_version)
@@ -889,27 +930,39 @@ impl EventIndexes {
         {
             let mut by_type = self.by_event_type.write().await;
             let event_type = format!("{:?}", std::mem::discriminant(&event.event_data));
-            by_type.entry(event_type).or_insert_with(Vec::new).push(sequence);
+            by_type
+                .entry(event_type)
+                .or_insert_with(Vec::new)
+                .push(sequence);
         }
 
         // Index by timestamp
         {
             let mut by_timestamp = self.by_timestamp.write().await;
             let timestamp = event.event_data.metadata().timestamp;
-            by_timestamp.entry(timestamp).or_insert_with(Vec::new).push(sequence);
+            by_timestamp
+                .entry(timestamp)
+                .or_insert_with(Vec::new)
+                .push(sequence);
         }
 
         // Index by source
         {
             let mut by_source = self.by_source.write().await;
             let source = &event.event_data.metadata().source;
-            by_source.entry(source.clone()).or_insert_with(Vec::new).push(sequence);
+            by_source
+                .entry(source.clone())
+                .or_insert_with(Vec::new)
+                .push(sequence);
         }
 
         // Index by stream
         {
             let mut by_stream = self.by_stream.write().await;
-            by_stream.entry(event.stream_id.clone()).or_insert_with(Vec::new).push(sequence);
+            by_stream
+                .entry(event.stream_id.clone())
+                .or_insert_with(Vec::new)
+                .push(sequence);
         }
 
         Ok(())
@@ -939,13 +992,13 @@ impl EventIndexes {
         if let Some(ref event_types) = query.event_types {
             let by_type = self.by_event_type.read().await;
             let mut type_sequences: HashSet<u64> = HashSet::new();
-            
+
             for event_type in event_types {
                 if let Some(sequences) = by_type.get(event_type) {
                     type_sequences.extend(sequences);
                 }
             }
-            
+
             candidate_sequences.retain(|seq| type_sequences.contains(seq));
         }
 
@@ -987,7 +1040,9 @@ impl PersistenceManager {
         for operation in operations {
             match self.execute_operation(operation).await {
                 Ok(_) => {
-                    self.stats.operations_completed.fetch_add(1, Ordering::Relaxed);
+                    self.stats
+                        .operations_completed
+                        .fetch_add(1, Ordering::Relaxed);
                 }
                 Err(e) => {
                     self.stats.operations_failed.fetch_add(1, Ordering::Relaxed);
@@ -1007,7 +1062,8 @@ impl PersistenceManager {
                 Ok(())
             }
             PersistenceBackend::FileSystem { base_path } => {
-                self.execute_filesystem_operation(operation, base_path).await
+                self.execute_filesystem_operation(operation, base_path)
+                    .await
             }
             _ => {
                 // Other backends not implemented in this example
@@ -1070,7 +1126,8 @@ impl EventMetadataAccessor for StreamEvent {
             _ => {
                 // For unmatched event types, return a static reference
                 use std::sync::LazyLock;
-                static DEFAULT_METADATA: LazyLock<EventMetadata> = LazyLock::new(|| EventMetadata::default());
+                static DEFAULT_METADATA: LazyLock<EventMetadata> =
+                    LazyLock::new(|| EventMetadata::default());
                 &DEFAULT_METADATA
             }
         }
@@ -1106,7 +1163,7 @@ mod tests {
     async fn test_event_store_creation() {
         let config = EventStoreConfig::default();
         let store = EventStore::new(config);
-        
+
         let stats = store.get_stats();
         assert_eq!(stats.total_events_stored.load(Ordering::Relaxed), 0);
     }
@@ -1115,14 +1172,17 @@ mod tests {
     async fn test_store_and_retrieve_event() {
         let config = EventStoreConfig::default();
         let store = EventStore::new(config);
-        
+
         let event = create_test_event();
-        let stored_event = store.store_event("test_stream".to_string(), event).await.unwrap();
-        
+        let stored_event = store
+            .store_event("test_stream".to_string(), event)
+            .await
+            .unwrap();
+
         assert_eq!(stored_event.stream_id, "test_stream");
         assert_eq!(stored_event.stream_version, 1);
         assert_eq!(stored_event.sequence_number, 1);
-        
+
         let stream_events = store.get_stream_events("test_stream", None).await.unwrap();
         assert_eq!(stream_events.len(), 1);
         assert_eq!(stream_events[0].event_id, stored_event.event_id);
@@ -1132,13 +1192,16 @@ mod tests {
     async fn test_event_query() {
         let config = EventStoreConfig::default();
         let store = EventStore::new(config);
-        
+
         // Store multiple events
         for i in 0..5 {
             let event = create_test_event();
-            store.store_event(format!("stream_{}", i % 2), event).await.unwrap();
+            store
+                .store_event(format!("stream_{}", i % 2), event)
+                .await
+                .unwrap();
         }
-        
+
         // Query specific stream
         let query = EventQuery {
             stream_id: Some("stream_0".to_string()),
@@ -1150,13 +1213,13 @@ mod tests {
             limit: None,
             order: QueryOrder::SequenceAsc,
         };
-        
+
         let results = store.query_events(query).await.unwrap();
         assert_eq!(results.len(), 3); // Events 0, 2, 4
-        
+
         // Verify sequence order
         for i in 1..results.len() {
-            assert!(results[i].sequence_number > results[i-1].sequence_number);
+            assert!(results[i].sequence_number > results[i - 1].sequence_number);
         }
     }
 
@@ -1164,18 +1227,21 @@ mod tests {
     async fn test_snapshot_creation() {
         let mut config = EventStoreConfig::default();
         config.snapshot_config.snapshot_interval = 3; // Snapshot every 3 events
-        
+
         let store = EventStore::new(config);
-        
+
         // Store events to trigger snapshot
         for _ in 0..3 {
             let event = create_test_event();
-            store.store_event("test_stream".to_string(), event).await.unwrap();
+            store
+                .store_event("test_stream".to_string(), event)
+                .await
+                .unwrap();
         }
-        
+
         let snapshot = store.get_latest_snapshot("test_stream").await.unwrap();
         assert!(snapshot.is_some());
-        
+
         let snapshot = snapshot.unwrap();
         assert_eq!(snapshot.stream_id, "test_stream");
         assert_eq!(snapshot.stream_version, 3);
@@ -1185,22 +1251,25 @@ mod tests {
     async fn test_replay_from_timestamp() {
         let config = EventStoreConfig::default();
         let store = EventStore::new(config);
-        
+
         let start_time = Utc::now();
-        
+
         // Store some events
         for i in 0..3 {
             let event = create_test_event();
-            store.store_event(format!("stream_{}", i), event).await.unwrap();
+            store
+                .store_event(format!("stream_{}", i), event)
+                .await
+                .unwrap();
         }
-        
+
         // Replay from start time
         let replayed_events = store.replay_from_timestamp(start_time).await.unwrap();
         assert!(replayed_events.len() >= 3);
-        
+
         // Verify chronological order
         for i in 1..replayed_events.len() {
-            assert!(replayed_events[i].stored_at >= replayed_events[i-1].stored_at);
+            assert!(replayed_events[i].stored_at >= replayed_events[i - 1].stored_at);
         }
     }
 
@@ -1208,7 +1277,7 @@ mod tests {
     async fn test_persistence_manager() {
         let backend = PersistenceBackend::Memory;
         let manager = PersistenceManager::new(backend);
-        
+
         let event = create_test_event();
         let stored_event = StoredEvent {
             event_id: Uuid::new_v4(),
@@ -1225,24 +1294,30 @@ mod tests {
                 persistence_status: PersistenceStatus::InMemory,
             },
         };
-        
-        manager.queue_operation(PersistenceOperation::StoreEvent(stored_event)).await.unwrap();
+
+        manager
+            .queue_operation(PersistenceOperation::StoreEvent(stored_event))
+            .await
+            .unwrap();
         manager.process_pending_operations().await.unwrap();
-        
+
         assert_eq!(manager.stats.operations_queued.load(Ordering::Relaxed), 1);
-        assert_eq!(manager.stats.operations_completed.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            manager.stats.operations_completed.load(Ordering::Relaxed),
+            1
+        );
     }
 
     #[test]
     fn test_vector_clock_operations() {
         let mut clock1 = VectorClock::new();
         let mut clock2 = VectorClock::new();
-        
+
         // Test concurrent clocks
         clock1.increment("region1");
         clock2.increment("region2");
         assert!(clock1.is_concurrent(&clock2));
-        
+
         // Test happens-before
         clock1.update(&clock2);
         clock1.increment("region1");

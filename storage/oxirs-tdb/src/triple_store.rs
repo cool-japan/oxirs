@@ -133,6 +133,140 @@ impl IndexType {
     }
 }
 
+/// Index type for different quad orderings (SPOG - Subject-Predicate-Object-Graph)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum QuadIndexType {
+    SPOG, // Subject-Predicate-Object-Graph
+    POSG, // Predicate-Object-Subject-Graph
+    OSPG, // Object-Subject-Predicate-Graph
+    GSPO, // Graph-Subject-Predicate-Object
+    GPOS, // Graph-Predicate-Object-Subject
+    GOSP, // Graph-Object-Subject-Predicate
+}
+
+impl QuadIndexType {
+    /// Get all standard quad index types
+    pub fn all_standard() -> &'static [QuadIndexType] {
+        &[QuadIndexType::SPOG, QuadIndexType::POSG, QuadIndexType::OSPG]
+    }
+
+    /// Get all possible quad index types
+    pub fn all() -> &'static [QuadIndexType] {
+        &[
+            QuadIndexType::SPOG,
+            QuadIndexType::POSG,
+            QuadIndexType::OSPG,
+            QuadIndexType::GSPO,
+            QuadIndexType::GPOS,
+            QuadIndexType::GOSP,
+        ]
+    }
+
+    /// Convert quad to key for this index type
+    pub fn quad_to_key(&self, quad: &Quad) -> QuadKey {
+        let graph = quad.graph.unwrap_or(0); // Use 0 for default graph
+        match self {
+            QuadIndexType::SPOG => QuadKey::new(quad.subject, quad.predicate, quad.object, graph),
+            QuadIndexType::POSG => QuadKey::new(quad.predicate, quad.object, quad.subject, graph),
+            QuadIndexType::OSPG => QuadKey::new(quad.object, quad.subject, quad.predicate, graph),
+            QuadIndexType::GSPO => QuadKey::new(graph, quad.subject, quad.predicate, quad.object),
+            QuadIndexType::GPOS => QuadKey::new(graph, quad.predicate, quad.object, quad.subject),
+            QuadIndexType::GOSP => QuadKey::new(graph, quad.object, quad.subject, quad.predicate),
+        }
+    }
+
+    /// Get the best index for a quad pattern
+    pub fn best_for_pattern(
+        subject: Option<NodeId>,
+        predicate: Option<NodeId>,
+        object: Option<NodeId>,
+        graph: Option<Option<NodeId>>,
+    ) -> QuadIndexType {
+        match (
+            subject.is_some(),
+            predicate.is_some(),
+            object.is_some(),
+            graph.is_some(),
+        ) {
+            (true, true, true, true) => QuadIndexType::SPOG, // All bound
+            (true, true, true, false) => QuadIndexType::SPOG, // S, P, O bound
+            (true, true, false, true) => QuadIndexType::GSPO, // S, P, G bound
+            (true, false, true, true) => QuadIndexType::GSPO, // S, O, G bound
+            (false, true, true, true) => QuadIndexType::GPOS, // P, O, G bound
+            (true, true, false, false) => QuadIndexType::SPOG, // S, P bound
+            (true, false, true, false) => QuadIndexType::SPOG, // S, O bound
+            (false, true, true, false) => QuadIndexType::POSG, // P, O bound
+            (true, false, false, true) => QuadIndexType::GSPO, // S, G bound
+            (false, true, false, true) => QuadIndexType::GPOS, // P, G bound
+            (false, false, true, true) => QuadIndexType::GOSP, // O, G bound
+            (true, false, false, false) => QuadIndexType::SPOG, // Only S bound
+            (false, true, false, false) => QuadIndexType::POSG, // Only P bound
+            (false, false, true, false) => QuadIndexType::OSPG, // Only O bound
+            (false, false, false, true) => QuadIndexType::GSPO, // Only G bound
+            (false, false, false, false) => QuadIndexType::SPOG, // No variables bound
+        }
+    }
+}
+
+/// Key for B+ tree storage of quads
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct QuadKey {
+    pub first: NodeId,
+    pub second: NodeId,
+    pub third: NodeId,
+    pub fourth: NodeId,
+}
+
+impl QuadKey {
+    /// Create a new quad key
+    pub fn new(first: NodeId, second: NodeId, third: NodeId, fourth: NodeId) -> Self {
+        Self {
+            first,
+            second,
+            third,
+            fourth,
+        }
+    }
+
+    /// Convert to a compact byte representation
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(32); // 4 * 8 bytes
+        bytes.extend_from_slice(&self.first.to_be_bytes());
+        bytes.extend_from_slice(&self.second.to_be_bytes());
+        bytes.extend_from_slice(&self.third.to_be_bytes());
+        bytes.extend_from_slice(&self.fourth.to_be_bytes());
+        bytes
+    }
+
+    /// Create from byte representation
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() != 32 {
+            return Err(anyhow!("Invalid quad key byte length: {}", bytes.len()));
+        }
+
+        let first = u64::from_be_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ]);
+        let second = u64::from_be_bytes([
+            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
+        ]);
+        let third = u64::from_be_bytes([
+            bytes[16], bytes[17], bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23],
+        ]);
+        let fourth = u64::from_be_bytes([
+            bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30], bytes[31],
+        ]);
+
+        Ok(Self::new(first, second, third, fourth))
+    }
+}
+
+impl Display for QuadKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {}, {}, {})", self.first, self.second, self.third, self.fourth)
+    }
+}
+
 /// Key for B+ tree storage of triples
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TripleKey {
@@ -254,8 +388,12 @@ pub struct TripleStore {
     transaction_manager: Arc<RwLock<TransactionManager>>,
     /// MVCC storage for triples
     mvcc_storage: Arc<MvccStorage<TripleKey, bool>>,
+    /// MVCC storage for quads
+    quad_storage: Arc<MvccStorage<QuadKey, bool>>,
     /// B+ tree indices for different orderings
     indices: Arc<RwLock<HashMap<IndexType, BTree<TripleKey, bool>>>>,
+    /// B+ tree indices for quad orderings
+    quad_indices: Arc<RwLock<HashMap<QuadIndexType, BTree<QuadKey, bool>>>>,
     /// Buffer pool for page management
     buffer_pool: Arc<BufferPool>,
     /// Default graph node ID
@@ -284,6 +422,7 @@ impl TripleStore {
         let node_table = Arc::new(NodeTable::with_config(config.node_config.clone()));
         let transaction_manager = Arc::new(RwLock::new(TransactionManager::new()));
         let mvcc_storage = Arc::new(MvccStorage::new());
+        let quad_storage = Arc::new(MvccStorage::new());
 
         // Initialize buffer pool
         let buffer_file = config.storage_path.join("pages.db");
@@ -292,7 +431,7 @@ impl TripleStore {
             config.buffer_config.clone(),
         )?);
 
-        // Initialize indices
+        // Initialize triple indices
         let mut indices = HashMap::new();
         let index_types = if config.enable_all_indices {
             IndexType::all()
@@ -304,6 +443,18 @@ impl TripleStore {
             indices.insert(index_type, BTree::with_config(config.btree_config.clone()));
         }
 
+        // Initialize quad indices
+        let mut quad_indices = HashMap::new();
+        let quad_index_types = if config.enable_all_indices {
+            QuadIndexType::all()
+        } else {
+            QuadIndexType::all_standard()
+        };
+
+        for &index_type in quad_index_types {
+            quad_indices.insert(index_type, BTree::with_config(config.btree_config.clone()));
+        }
+
         // Store default graph term
         let default_graph_term = Term::iri("urn:x-arq:DefaultGraph");
         let default_graph = node_table.store_term(&default_graph_term)?;
@@ -313,7 +464,9 @@ impl TripleStore {
             node_table,
             transaction_manager,
             mvcc_storage,
+            quad_storage,
             indices: Arc::new(RwLock::new(indices)),
+            quad_indices: Arc::new(RwLock::new(quad_indices)),
             buffer_pool,
             default_graph,
             stats: Arc::new(Mutex::new(TripleStoreStats::default())),
@@ -394,6 +547,20 @@ impl TripleStore {
 
     /// Insert a quad within a transaction
     pub fn insert_quad_tx(&self, tx_id: TransactionId, quad: &Quad) -> Result<()> {
+        // Insert into all quad indices
+        let quad_indices = self
+            .quad_indices
+            .read()
+            .map_err(|_| anyhow!("Failed to acquire quad indices lock"))?;
+
+        for (&index_type, _btree) in quad_indices.iter() {
+            let key = index_type.quad_to_key(quad);
+
+            // Store in MVCC quad storage
+            self.quad_storage.put_tx(tx_id, key.clone(), true)?;
+        }
+
+        // Also insert as triple for compatibility
         let triple = quad.to_triple();
         self.insert_triple_tx(tx_id, &triple)?;
 
@@ -642,6 +809,215 @@ impl TripleStore {
         result
     }
 
+    /// Delete a quad within a transaction
+    pub fn delete_quad_tx(&self, tx_id: TransactionId, quad: &Quad) -> Result<bool> {
+        let mut deleted = false;
+
+        // Delete from all quad indices
+        let quad_indices = self
+            .quad_indices
+            .read()
+            .map_err(|_| anyhow!("Failed to acquire quad indices lock"))?;
+
+        for (&index_type, _btree) in quad_indices.iter() {
+            let key = index_type.quad_to_key(quad);
+
+            // Check if quad exists before deletion
+            if let Some(exists) = self.quad_storage.get_tx(tx_id, &key)? {
+                if exists {
+                    self.quad_storage.delete_tx(tx_id, key)?;
+                    deleted = true;
+                }
+            }
+        }
+
+        // Also delete the corresponding triple
+        let triple = quad.to_triple();
+        self.delete_triple_tx(tx_id, &triple)?;
+
+        // Update stats
+        if deleted {
+            if let Ok(mut stats) = self.stats.lock() {
+                stats.delete_count += 1;
+                stats.total_quads = stats.total_quads.saturating_sub(1);
+                stats.total_triples = stats.total_triples.saturating_sub(1);
+            }
+        }
+
+        Ok(deleted)
+    }
+
+    /// Query quads within a transaction
+    pub fn query_quads_tx(
+        &self,
+        tx_id: TransactionId,
+        subject: Option<NodeId>,
+        predicate: Option<NodeId>,
+        object: Option<NodeId>,
+        graph: Option<Option<NodeId>>,
+    ) -> Result<Vec<Quad>> {
+        let start_time = std::time::Instant::now();
+
+        // Choose the best index for this query pattern
+        let best_index = QuadIndexType::best_for_pattern(subject, predicate, object, graph);
+
+        let mut results = Vec::new();
+
+        // Create search patterns for each index type to find matching quads
+        match (subject, predicate, object, graph) {
+            // All bound - exact lookup
+            (Some(s), Some(p), Some(o), Some(g)) => {
+                let quad = Quad::new(s, p, o, g);
+                let key = best_index.quad_to_key(&quad);
+
+                if let Some(exists) = self.quad_storage.get_tx(tx_id, &key)? {
+                    if exists {
+                        results.push(quad);
+                    }
+                }
+            }
+
+            // Three bound - need to scan for matches
+            (Some(s), Some(p), Some(o), None) => {
+                // S, P, O bound, find all graphs
+                results.extend(self.scan_for_quad_pattern_tx(
+                    tx_id,
+                    best_index,
+                    Some(s),
+                    Some(p),
+                    Some(o),
+                    None,
+                )?);
+            }
+
+            // Two bound - broader scan
+            (Some(s), Some(p), None, Some(g)) => {
+                results.extend(self.scan_for_quad_pattern_tx(
+                    tx_id,
+                    best_index,
+                    Some(s),
+                    Some(p),
+                    None,
+                    Some(g),
+                )?);
+            }
+
+            (Some(s), None, Some(o), Some(g)) => {
+                results.extend(self.scan_for_quad_pattern_tx(
+                    tx_id,
+                    best_index,
+                    Some(s),
+                    None,
+                    Some(o),
+                    Some(g),
+                )?);
+            }
+
+            (None, Some(p), Some(o), Some(g)) => {
+                results.extend(self.scan_for_quad_pattern_tx(
+                    tx_id,
+                    best_index,
+                    None,
+                    Some(p),
+                    Some(o),
+                    Some(g),
+                )?);
+            }
+
+            // One or more unbound - use general scan
+            _ => {
+                results.extend(self.scan_for_quad_pattern_tx(
+                    tx_id,
+                    best_index,
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                )?);
+            }
+        }
+
+        // Update query stats
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.query_count += 1;
+            let query_time = start_time.elapsed().as_millis() as f64;
+            stats.avg_query_time_ms = (stats.avg_query_time_ms * (stats.query_count - 1) as f64
+                + query_time)
+                / stats.query_count as f64;
+
+            let index_name = format!("{:?}", best_index);
+            *stats.index_hits.entry(index_name).or_insert(0) += 1;
+        }
+
+        Ok(results)
+    }
+
+    /// Delete a quad (creates and commits transaction automatically)
+    pub fn delete_quad(&self, quad: &Quad) -> Result<bool> {
+        let tx_id = self.begin_transaction()?;
+
+        match self.delete_quad_tx(tx_id, quad) {
+            Ok(deleted) => {
+                self.commit_transaction(tx_id)?;
+                Ok(deleted)
+            }
+            Err(e) => {
+                self.abort_transaction(tx_id)?;
+                Err(e)
+            }
+        }
+    }
+
+    /// Query quads (creates and commits read transaction automatically)
+    pub fn query_quads(
+        &self,
+        subject: Option<NodeId>,
+        predicate: Option<NodeId>,
+        object: Option<NodeId>,
+        graph: Option<Option<NodeId>>,
+    ) -> Result<Vec<Quad>> {
+        let tx_id = self.begin_read_transaction()?;
+
+        let result = self.query_quads_tx(tx_id, subject, predicate, object, graph);
+
+        // Read transactions can always be committed
+        self.commit_transaction(tx_id)?;
+
+        result
+    }
+
+    /// Insert multiple quads in a single transaction (more efficient for bulk operations)
+    pub fn insert_quads_bulk(&self, quads: &[Quad]) -> Result<()> {
+        if quads.is_empty() {
+            return Ok(());
+        }
+
+        let tx_id = self.begin_transaction()?;
+
+        for quad in quads {
+            if let Err(e) = self.insert_quad_tx(tx_id, quad) {
+                let _ = self.abort_transaction(tx_id);
+                return Err(e);
+            }
+        }
+
+        match self.commit_transaction(tx_id) {
+            Ok(_) => {
+                // Update stats for bulk operation
+                if let Ok(mut stats) = self.stats.try_lock() {
+                    stats.insert_count += quads.len() as u64;
+                    stats.total_quads += quads.len() as u64;
+                    stats.total_triples += quads.len() as u64; // Quads are also triples
+                }
+                Ok(())
+            }
+            Err(e) => {
+                let _ = self.abort_transaction(tx_id);
+                Err(e)
+            }
+        }
+    }
+
     /// Store a term and return its node ID
     pub fn store_term(&self, term: &Term) -> Result<NodeId> {
         self.node_table.store_term(term)
@@ -678,6 +1054,9 @@ impl TripleStore {
 
         // Compact MVCC storage
         self.mvcc_storage.cleanup_old_versions(100)?;
+
+        // Compact quad MVCC storage
+        self.quad_storage.cleanup_old_versions(100)?;
 
         // Flush buffer pool
         self.buffer_pool.flush_all()?;
@@ -821,6 +1200,83 @@ impl TripleStore {
         }
         if let Some(obj) = o {
             if triple.object != obj {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Scan for quads matching a pattern using the specified index
+    fn scan_for_quad_pattern_tx(
+        &self,
+        tx_id: TransactionId,
+        index_type: QuadIndexType,
+        s: Option<NodeId>,
+        p: Option<NodeId>,
+        o: Option<NodeId>,
+        g: Option<Option<NodeId>>,
+    ) -> Result<Vec<Quad>> {
+        // Use efficient MVCC storage iteration instead of brute force
+        // Get all keys from the quad MVCC storage and filter matching patterns
+        let stored_keys = self.quad_storage.get_all_keys_tx(tx_id)?;
+        let mut results = Vec::new();
+
+        for quad_key in stored_keys {
+            // Convert the key back to a quad based on the index type
+            let quad = self.key_to_quad(index_type, &quad_key);
+
+            // Check if this quad matches our search pattern
+            if self.matches_quad_pattern(&quad, s, p, o, g) {
+                // Verify the quad still exists in this transaction
+                if let Some(exists) = self.quad_storage.get_tx(tx_id, &quad_key)? {
+                    if exists {
+                        results.push(quad);
+                    }
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Convert a quad key back to a quad based on the index type
+    fn key_to_quad(&self, index_type: QuadIndexType, key: &QuadKey) -> Quad {
+        match index_type {
+            QuadIndexType::SPOG => Quad::new(key.first, key.second, key.third, Some(key.fourth)),
+            QuadIndexType::POSG => Quad::new(key.third, key.first, key.second, Some(key.fourth)),
+            QuadIndexType::OSPG => Quad::new(key.second, key.third, key.first, Some(key.fourth)),
+            QuadIndexType::GSPO => Quad::new(key.second, key.third, key.fourth, Some(key.first)),
+            QuadIndexType::GPOS => Quad::new(key.fourth, key.second, key.third, Some(key.first)),
+            QuadIndexType::GOSP => Quad::new(key.third, key.fourth, key.second, Some(key.first)),
+        }
+    }
+
+    /// Check if a quad matches the given pattern
+    fn matches_quad_pattern(
+        &self,
+        quad: &Quad,
+        s: Option<NodeId>,
+        p: Option<NodeId>,
+        o: Option<NodeId>,
+        g: Option<Option<NodeId>>,
+    ) -> bool {
+        if let Some(subj) = s {
+            if quad.subject != subj {
+                return false;
+            }
+        }
+        if let Some(pred) = p {
+            if quad.predicate != pred {
+                return false;
+            }
+        }
+        if let Some(obj) = o {
+            if quad.object != obj {
+                return false;
+            }
+        }
+        if let Some(graph) = g {
+            if quad.graph != graph {
                 return false;
             }
         }

@@ -321,9 +321,10 @@ impl DeadlockDetector {
         let mut visited = HashSet::new();
         let mut path = Vec::new();
 
-        for tx_id in self.wait_for_graph.keys() {
-            if !visited.contains(tx_id) {
-                self.dfs_detect_cycle(tx_id, &mut visited, &mut path);
+        let tx_ids: Vec<_> = self.wait_for_graph.keys().cloned().collect();
+        for tx_id in tx_ids {
+            if !visited.contains(&tx_id) {
+                self.dfs_detect_cycle(&tx_id, &mut visited, &mut path);
             }
         }
 
@@ -340,10 +341,7 @@ impl DeadlockDetector {
     ) {
         if path.contains(&tx_id.to_string()) {
             // Found a cycle
-            let cycle_start = path
-                .iter()
-                .position(|id| id == tx_id)
-                .unwrap_or(path.len());
+            let cycle_start = path.iter().position(|id| id == tx_id).unwrap_or(path.len());
             let cycle = path[cycle_start..].to_vec();
             if cycle.len() > 1 {
                 self.deadlock_cycles.push(cycle);
@@ -359,8 +357,9 @@ impl DeadlockDetector {
         path.push(tx_id.to_string());
 
         if let Some(waiting_for) = self.wait_for_graph.get(tx_id) {
-            for next_tx in waiting_for {
-                self.dfs_detect_cycle(next_tx, visited, path);
+            let next_txs: Vec<_> = waiting_for.clone();
+            for next_tx in next_txs {
+                self.dfs_detect_cycle(&next_tx, visited, path);
             }
         }
 
@@ -562,7 +561,7 @@ impl TransactionManager {
             let mut stats = self.stats.write().unwrap();
             stats.committed_transactions += 1;
             stats.active_transactions -= 1;
-            
+
             // Update average duration
             let duration = tx_info.age();
             stats.average_duration = if stats.committed_transactions == 1 {
@@ -635,12 +634,7 @@ impl TransactionManager {
     }
 
     /// Acquire a lock on a resource
-    pub fn acquire_lock(
-        &self,
-        tx_id: &str,
-        resource: Resource,
-        mode: LockMode,
-    ) -> Result<()> {
+    pub fn acquire_lock(&self, tx_id: &str, resource: Resource, mode: LockMode) -> Result<()> {
         let start_time = Instant::now();
 
         // Check if transaction exists and is active
@@ -710,7 +704,9 @@ impl TransactionManager {
         mode: LockMode,
     ) -> Result<bool> {
         let mut lock_manager = self.lock_manager.lock().unwrap();
-        let existing_locks = lock_manager.entry(resource.clone()).or_insert_with(Vec::new);
+        let existing_locks = lock_manager
+            .entry(resource.clone())
+            .or_insert_with(Vec::new);
 
         // Check lock compatibility
         if self.is_lock_compatible(existing_locks, mode, tx_id) {
@@ -874,7 +870,10 @@ impl TransactionManager {
                     warn!("Failed to abort deadlock victim {}: {}", victim, e);
                 } else {
                     aborted.push(victim);
-                    info!("Aborted transaction {} to resolve deadlock", aborted.last().unwrap());
+                    info!(
+                        "Aborted transaction {} to resolve deadlock",
+                        aborted.last().unwrap()
+                    );
                 }
             }
         }
@@ -958,7 +957,10 @@ impl TransactionManager {
 
         for tx_id in active_txs {
             if let Err(e) = self.abort_transaction(&tx_id) {
-                warn!("Failed to abort transaction {} during shutdown: {}", tx_id, e);
+                warn!(
+                    "Failed to abort transaction {} during shutdown: {}",
+                    tx_id, e
+                );
             }
         }
 
@@ -1023,12 +1025,7 @@ mod tests {
             .unwrap();
 
         let child_id = tm
-            .begin_transaction(
-                TransactionType::Nested,
-                None,
-                None,
-                Some(parent_id.clone()),
-            )
+            .begin_transaction(TransactionType::Nested, None, None, Some(parent_id.clone()))
             .unwrap();
 
         let parent_info = tm.get_transaction_info(&parent_id).unwrap();

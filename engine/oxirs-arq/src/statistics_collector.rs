@@ -306,21 +306,32 @@ impl StatisticsCollector {
                 self.update_term_statistics(&triple.subject, TermPosition::Subject)?;
                 self.update_term_statistics(&triple.predicate, TermPosition::Predicate)?;
                 self.update_term_statistics(&triple.object, TermPosition::Object)?;
-                
+
                 // Track quoted triple complexity using pattern cardinality
-                let quoted_key = format!("<<{} {} {}>>", triple.subject, triple.predicate, triple.object);
-                *self.stats.pattern_cardinality.entry(quoted_key).or_insert(0) += 1;
+                let quoted_key = format!(
+                    "<<{} {} {}>>",
+                    triple.subject, triple.predicate, triple.object
+                );
+                *self
+                    .stats
+                    .pattern_cardinality
+                    .entry(quoted_key)
+                    .or_insert(0) += 1;
             }
             Term::PropertyPath(path) => {
                 // Property paths are complex patterns that affect selectivity
                 // Track as a special type of predicate usage
                 let path_key = format!("path:{}", path);
                 *self.stats.pattern_cardinality.entry(path_key).or_insert(0) += 1;
-                
+
                 // Property paths typically increase cardinality estimates
                 if position == TermPosition::Predicate {
                     // Add to predicate frequency to track path usage
-                    *self.stats.predicate_frequency.entry(format!("path:{}", path)).or_insert(0) += 1;
+                    *self
+                        .stats
+                        .predicate_frequency
+                        .entry(format!("path:{}", path))
+                        .or_insert(0) += 1;
                 }
             }
             Term::BlankNode(id) => {
@@ -343,7 +354,11 @@ impl StatisticsCollector {
                     TermPosition::Predicate => {
                         // Blank nodes as predicates are unusual but possible in some contexts
                         let blank_predicate_key = format!("blank_predicate:{}", id);
-                        *self.stats.pattern_cardinality.entry(blank_predicate_key).or_insert(0) += 1;
+                        *self
+                            .stats
+                            .pattern_cardinality
+                            .entry(blank_predicate_key)
+                            .or_insert(0) += 1;
                     }
                 }
             }
@@ -498,7 +513,7 @@ impl StatisticsCollector {
             for j in i + 1..predicates.len().min(20) {
                 let pred1 = &predicates[i];
                 let pred2 = &predicates[j];
-                
+
                 // Calculate real correlation based on frequency and co-occurrence
                 let correlation = self.calculate_predicate_correlation(pred1, pred2)?;
                 let joint_distribution = self.build_joint_distribution(pred1, pred2)?;
@@ -520,8 +535,18 @@ impl StatisticsCollector {
 
     /// Calculate correlation coefficient between two predicates
     fn calculate_predicate_correlation(&self, pred1: &str, pred2: &str) -> Result<f64> {
-        let freq1 = self.stats.predicate_frequency.get(pred1).copied().unwrap_or(0) as f64;
-        let freq2 = self.stats.predicate_frequency.get(pred2).copied().unwrap_or(0) as f64;
+        let freq1 = self
+            .stats
+            .predicate_frequency
+            .get(pred1)
+            .copied()
+            .unwrap_or(0) as f64;
+        let freq2 = self
+            .stats
+            .predicate_frequency
+            .get(pred2)
+            .copied()
+            .unwrap_or(0) as f64;
         let total = self.stats.predicate_frequency.values().sum::<usize>() as f64;
 
         if total == 0.0 {
@@ -538,8 +563,8 @@ impl StatisticsCollector {
 
         // Pearson-like correlation measure
         let correlation = if expected_cooccurrence > 0.0 {
-            (observed_cooccurrence - expected_cooccurrence) / 
-            (expected_cooccurrence * (1.0 - expected_cooccurrence)).sqrt()
+            (observed_cooccurrence - expected_cooccurrence)
+                / (expected_cooccurrence * (1.0 - expected_cooccurrence)).sqrt()
         } else {
             0.0
         };
@@ -551,9 +576,19 @@ impl StatisticsCollector {
     /// Estimate co-occurrence probability of two predicates
     fn estimate_cooccurrence(&self, pred1: &str, pred2: &str) -> f64 {
         // Heuristic: predicates with similar frequencies are more likely to co-occur
-        let freq1 = self.stats.predicate_frequency.get(pred1).copied().unwrap_or(0) as f64;
-        let freq2 = self.stats.predicate_frequency.get(pred2).copied().unwrap_or(0) as f64;
-        
+        let freq1 = self
+            .stats
+            .predicate_frequency
+            .get(pred1)
+            .copied()
+            .unwrap_or(0) as f64;
+        let freq2 = self
+            .stats
+            .predicate_frequency
+            .get(pred2)
+            .copied()
+            .unwrap_or(0) as f64;
+
         if freq1 == 0.0 || freq2 == 0.0 {
             return 0.0;
         }
@@ -561,18 +596,22 @@ impl StatisticsCollector {
         // Proximity-based co-occurrence estimation
         let freq_ratio = (freq1 / freq2).min(freq2 / freq1);
         let base_cooccurrence = 0.1; // Base co-occurrence probability
-        
+
         base_cooccurrence * freq_ratio
     }
 
     /// Build joint distribution histogram for two predicates
-    fn build_joint_distribution(&self, pred1: &str, pred2: &str) -> Result<HashMap<(String, String), usize>> {
+    fn build_joint_distribution(
+        &self,
+        pred1: &str,
+        pred2: &str,
+    ) -> Result<HashMap<(String, String), usize>> {
         let mut joint_dist = HashMap::new();
-        
+
         // Get histograms for both predicates
         let hist1 = self.histograms.get(pred1);
         let hist2 = self.histograms.get(pred2);
-        
+
         match (hist1, hist2) {
             (Some(h1), Some(h2)) => {
                 // Create joint distribution from individual histograms
@@ -591,28 +630,38 @@ impl StatisticsCollector {
                 joint_dist.insert(("unknown".to_string(), "unknown".to_string()), 1);
             }
         }
-        
+
         Ok(joint_dist)
     }
 
     /// Estimate functional dependency strength between predicates
     fn estimate_functional_dependency(&self, pred1: &str, pred2: &str) -> Result<f64> {
-        let freq1 = self.stats.predicate_frequency.get(pred1).copied().unwrap_or(0) as f64;
-        let freq2 = self.stats.predicate_frequency.get(pred2).copied().unwrap_or(0) as f64;
-        
+        let freq1 = self
+            .stats
+            .predicate_frequency
+            .get(pred1)
+            .copied()
+            .unwrap_or(0) as f64;
+        let freq2 = self
+            .stats
+            .predicate_frequency
+            .get(pred2)
+            .copied()
+            .unwrap_or(0) as f64;
+
         if freq1 == 0.0 || freq2 == 0.0 {
             return Ok(0.0);
         }
 
-        // Functional dependency heuristic: 
+        // Functional dependency heuristic:
         // Higher dependency if one predicate is much more frequent than the other
         let freq_ratio = freq1.min(freq2) / freq1.max(freq2);
         let dependency = 1.0 - freq_ratio;
-        
+
         // Scale by overall frequency to account for data volume
         let total_freq = self.stats.predicate_frequency.values().sum::<usize>() as f64;
         let prevalence_factor = (freq1 + freq2) / total_freq;
-        
+
         Ok(dependency * prevalence_factor)
     }
 
@@ -726,10 +775,13 @@ impl StatisticsCollector {
     /// Update temporal statistics with current snapshot
     pub fn update_temporal_statistics(&mut self) -> Result<()> {
         let now = Instant::now();
-        
+
         // Check if enough time has passed for an update
-        if now.duration_since(self.temporal_stats.last_update).as_secs() 
-            < self.temporal_stats.update_frequency {
+        if now
+            .duration_since(self.temporal_stats.last_update)
+            .as_secs()
+            < self.temporal_stats.update_frequency
+        {
             return Ok(());
         }
 
@@ -764,7 +816,7 @@ impl StatisticsCollector {
     /// Apply time-based decay to correlations
     fn apply_correlation_decay(&mut self) -> Result<()> {
         let decay_factor = 1.0 - self.adaptive_config.decay_rate;
-        
+
         for correlation_stats in self.correlations.values_mut() {
             correlation_stats.correlation *= decay_factor;
             correlation_stats.functional_dependency *= decay_factor;
@@ -776,55 +828,62 @@ impl StatisticsCollector {
     /// Adapt histogram bucket sizes based on data distribution
     fn adapt_histogram_buckets(&mut self) -> Result<()> {
         let mut histograms_to_rebuild = Vec::new();
-        
+
         // First collect predicates that need histogram rebuilding
         let predicates_and_histograms: Vec<_> = self.histograms.iter().collect();
-        
+
         for (predicate, histogram) in predicates_and_histograms {
             // Check if histogram needs more buckets for better resolution
             let avg_bucket_size = histogram.total_count / histogram.frequencies.len().max(1);
-            
+
             // Conditions for bucket adaptation:
             // 1. Average bucket size is too large (poor resolution)
             // 2. We haven't reached the maximum bucket limit
             // 3. There's significant skew in bucket distribution
             let has_skew = Self::has_significant_skew_static(histogram);
-            if (avg_bucket_size > 1000 && histogram.frequencies.len() < self.max_histogram_buckets) 
-                || has_skew {
-                
-                tracing::debug!("Adapting histogram for {} (avg bucket size: {}, buckets: {})", 
-                    predicate, avg_bucket_size, histogram.frequencies.len());
-                
+            if (avg_bucket_size > 1000 && histogram.frequencies.len() < self.max_histogram_buckets)
+                || has_skew
+            {
+                tracing::debug!(
+                    "Adapting histogram for {} (avg bucket size: {}, buckets: {})",
+                    predicate,
+                    avg_bucket_size,
+                    histogram.frequencies.len()
+                );
+
                 histograms_to_rebuild.push(predicate.clone());
             }
         }
-        
+
         // Rebuild histograms that need adaptation
         for predicate in histograms_to_rebuild {
             self.rebuild_histogram(&predicate)?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Check if histogram has significant skew requiring redistribution (static version)
     fn has_significant_skew_static(histogram: &Histogram) -> bool {
         if histogram.frequencies.len() < 3 {
             return false;
         }
-        
+
         // Calculate coefficient of variation for bucket sizes
         let mean = histogram.total_count as f64 / histogram.frequencies.len() as f64;
-        let variance: f64 = histogram.frequencies.iter()
+        let variance: f64 = histogram
+            .frequencies
+            .iter()
             .map(|&count| {
                 let diff = count as f64 - mean;
                 diff * diff
             })
-            .sum::<f64>() / histogram.frequencies.len() as f64;
-        
+            .sum::<f64>()
+            / histogram.frequencies.len() as f64;
+
         let std_dev = variance.sqrt();
         let coefficient_of_variation = if mean > 0.0 { std_dev / mean } else { 0.0 };
-        
+
         // Significant skew if CV > 1.5 (high variability in bucket sizes)
         coefficient_of_variation > 1.5
     }
@@ -834,149 +893,171 @@ impl StatisticsCollector {
         if histogram.frequencies.len() < 3 {
             return false;
         }
-        
+
         // Calculate coefficient of variation for bucket sizes
         let mean = histogram.total_count as f64 / histogram.frequencies.len() as f64;
-        let variance: f64 = histogram.frequencies.iter()
+        let variance: f64 = histogram
+            .frequencies
+            .iter()
             .map(|&count| {
                 let diff = count as f64 - mean;
                 diff * diff
             })
-            .sum::<f64>() / histogram.frequencies.len() as f64;
-        
+            .sum::<f64>()
+            / histogram.frequencies.len() as f64;
+
         let std_dev = variance.sqrt();
         let coefficient_of_variation = if mean > 0.0 { std_dev / mean } else { 0.0 };
-        
+
         // Significant skew if CV > 1.5 (high variability in bucket sizes)
         coefficient_of_variation > 1.5
     }
-    
+
     /// Rebuild histogram with better bucket distribution
     fn rebuild_histogram(&mut self, predicate: &str) -> Result<()> {
         let histogram = self.histograms.get(predicate);
         if histogram.is_none() {
             return Ok(());
         }
-        
+
         let old_histogram = histogram.unwrap().clone();
-        
+
         // Determine optimal number of buckets using Sturges' rule with modifications
         let optimal_buckets = self.calculate_optimal_buckets(old_histogram.total_count);
         let new_bucket_count = optimal_buckets.min(self.max_histogram_buckets);
-        
+
         // Create new histogram with adaptive bucket boundaries
         let mut new_histogram = self.create_adaptive_histogram(new_bucket_count, &old_histogram)?;
-        
+
         // Redistribute the most frequent values to optimize for common queries
         self.redistribute_frequent_values(&mut new_histogram, &old_histogram)?;
-        
+
         // Replace the old histogram
         self.histograms.insert(predicate.to_string(), new_histogram);
-        
-        tracing::debug!("Rebuilt histogram for {} with {} buckets", predicate, new_bucket_count);
+
+        tracing::debug!(
+            "Rebuilt histogram for {} with {} buckets",
+            predicate,
+            new_bucket_count
+        );
         Ok(())
     }
-    
+
     /// Calculate optimal number of buckets based on data size
     fn calculate_optimal_buckets(&self, total_count: usize) -> usize {
         if total_count == 0 {
             return 10; // Minimum buckets
         }
-        
+
         // Modified Sturges' rule: log2(n) + 1, with adjustments for large datasets
         let sturges_buckets = (total_count as f64).log2().ceil() as usize + 1;
-        
+
         // For large datasets, use square root rule as upper bound
         let sqrt_rule = (total_count as f64).sqrt().ceil() as usize;
-        
+
         // Use the more conservative estimate, but ensure reasonable bounds
         let optimal = sturges_buckets.min(sqrt_rule).max(10).min(100);
-        
+
         optimal
     }
-    
+
     /// Create new histogram with adaptive bucket boundaries
-    fn create_adaptive_histogram(&self, bucket_count: usize, old_histogram: &Histogram) -> Result<Histogram> {
+    fn create_adaptive_histogram(
+        &self,
+        bucket_count: usize,
+        old_histogram: &Histogram,
+    ) -> Result<Histogram> {
         let mut new_histogram = Histogram::new(bucket_count);
         new_histogram.total_count = old_histogram.total_count;
         new_histogram.distinct_count = old_histogram.distinct_count;
-        
+
         // Create boundaries using quantile-based approach
         // This ensures more balanced bucket sizes
         let quantile_step = 1.0 / bucket_count as f64;
-        
+
         // Generate new boundaries based on cumulative distribution
         for i in 0..bucket_count {
             let quantile = (i + 1) as f64 * quantile_step;
             let boundary = self.estimate_quantile_boundary(old_histogram, quantile);
             new_histogram.boundaries.push(boundary);
         }
-        
+
         // Initialize frequency counts to zero
         new_histogram.frequencies.resize(bucket_count, 0);
-        
+
         // Redistribute counts from old histogram to new buckets
         self.redistribute_histogram_counts(&mut new_histogram, old_histogram)?;
-        
+
         Ok(new_histogram)
     }
-    
+
     /// Estimate boundary value for a given quantile
     fn estimate_quantile_boundary(&self, histogram: &Histogram, quantile: f64) -> String {
         let target_count = (histogram.total_count as f64 * quantile) as usize;
         let mut cumulative_count = 0;
-        
+
         for (i, &frequency) in histogram.frequencies.iter().enumerate() {
             cumulative_count += frequency;
             if cumulative_count >= target_count {
-                return histogram.boundaries.get(i)
+                return histogram
+                    .boundaries
+                    .get(i)
                     .cloned()
                     .unwrap_or_else(|| format!("bucket_{}", i));
             }
         }
-        
+
         // Fallback: generate a boundary name
         format!("quantile_{:.2}", quantile)
     }
-    
+
     /// Redistribute counts from old histogram to new histogram
-    fn redistribute_histogram_counts(&self, new_histogram: &mut Histogram, old_histogram: &Histogram) -> Result<()> {
+    fn redistribute_histogram_counts(
+        &self,
+        new_histogram: &mut Histogram,
+        old_histogram: &Histogram,
+    ) -> Result<()> {
         // Simple redistribution: proportionally distribute old bucket counts to new buckets
         let old_bucket_count = old_histogram.frequencies.len();
         let new_bucket_count = new_histogram.frequencies.len();
-        
+
         if old_bucket_count == 0 || new_bucket_count == 0 {
             return Ok(());
         }
-        
+
         for (old_idx, &old_count) in old_histogram.frequencies.iter().enumerate() {
             // Map old bucket to new bucket(s)
             let bucket_ratio = old_idx as f64 / old_bucket_count as f64;
             let new_idx = (bucket_ratio * new_bucket_count as f64) as usize;
             let target_idx = new_idx.min(new_bucket_count - 1);
-            
+
             new_histogram.frequencies[target_idx] += old_count;
         }
-        
+
         Ok(())
     }
-    
+
     /// Redistribute frequent values for better query optimization
-    fn redistribute_frequent_values(&self, new_histogram: &mut Histogram, old_histogram: &Histogram) -> Result<()> {
+    fn redistribute_frequent_values(
+        &self,
+        new_histogram: &mut Histogram,
+        old_histogram: &Histogram,
+    ) -> Result<()> {
         // Copy over the most frequent values tracking
         new_histogram.most_frequent = old_histogram.most_frequent.clone();
-        
+
         // Ensure most frequent values are properly distributed in new buckets
         for (value, count) in &old_histogram.most_frequent {
             let bucket_idx = new_histogram.find_bucket(value);
-            
+
             // Adjust bucket count to account for this frequent value
             if bucket_idx < new_histogram.frequencies.len() {
                 // Ensure the bucket has at least the count of this frequent value
-                new_histogram.frequencies[bucket_idx] = new_histogram.frequencies[bucket_idx].max(*count);
+                new_histogram.frequencies[bucket_idx] =
+                    new_histogram.frequencies[bucket_idx].max(*count);
             }
         }
-        
+
         Ok(())
     }
 
@@ -987,8 +1068,18 @@ impl StatisticsCollector {
         }
 
         let recent_snapshots = &self.temporal_stats.snapshots;
-        let first_freq = recent_snapshots.first()?.predicate_frequencies.get(predicate).copied().unwrap_or(0) as f64;
-        let last_freq = recent_snapshots.last()?.predicate_frequencies.get(predicate).copied().unwrap_or(0) as f64;
+        let first_freq = recent_snapshots
+            .first()?
+            .predicate_frequencies
+            .get(predicate)
+            .copied()
+            .unwrap_or(0) as f64;
+        let last_freq = recent_snapshots
+            .last()?
+            .predicate_frequencies
+            .get(predicate)
+            .copied()
+            .unwrap_or(0) as f64;
 
         if first_freq == 0.0 {
             return Some(0.0);
@@ -1007,10 +1098,16 @@ impl StatisticsCollector {
         }
 
         // Check for frequency anomalies
-        let frequencies: Vec<f64> = self.stats.predicate_frequency.values().map(|&x| x as f64).collect();
+        let frequencies: Vec<f64> = self
+            .stats
+            .predicate_frequency
+            .values()
+            .map(|&x| x as f64)
+            .collect();
         if frequencies.len() >= self.adaptive_config.min_samples {
             let mean = frequencies.iter().sum::<f64>() / frequencies.len() as f64;
-            let variance = frequencies.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / frequencies.len() as f64;
+            let variance = frequencies.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
+                / frequencies.len() as f64;
             let std_dev = variance.sqrt();
 
             for (predicate, &freq) in &self.stats.predicate_frequency {
@@ -1021,7 +1118,11 @@ impl StatisticsCollector {
                         predicate: predicate.clone(),
                         value: freq as f64,
                         z_score,
-                        severity: if z_score.abs() > 3.0 { AnomalySeverity::High } else { AnomalySeverity::Medium },
+                        severity: if z_score.abs() > 3.0 {
+                            AnomalySeverity::High
+                        } else {
+                            AnomalySeverity::Medium
+                        },
                     });
                 }
             }
@@ -1036,7 +1137,7 @@ impl StatisticsCollector {
             snapshots_count: self.temporal_stats.snapshots.len(),
             time_span: if let (Some(first), Some(last)) = (
                 self.temporal_stats.snapshots.first(),
-                self.temporal_stats.snapshots.last()
+                self.temporal_stats.snapshots.last(),
             ) {
                 last.timestamp.duration_since(first.timestamp)
             } else {
@@ -1049,7 +1150,7 @@ impl StatisticsCollector {
     /// Calculate growth rates for predicates
     fn calculate_growth_rates(&self) -> HashMap<String, f64> {
         let mut growth_rates = HashMap::new();
-        
+
         for predicate in self.stats.predicate_frequency.keys() {
             if let Some(trend) = self.get_predicate_trend(predicate) {
                 growth_rates.insert(predicate.clone(), trend);

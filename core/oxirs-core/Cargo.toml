@@ -72,7 +72,7 @@ glob = "0.3"
 
 # Columnar storage dependencies
 arrow.workspace = true
-datafusion = "48.0"
+datafusion.workspace = true
 parquet.workspace = true
 
 # Compression dependencies

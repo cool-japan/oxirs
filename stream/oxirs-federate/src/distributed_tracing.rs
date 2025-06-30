@@ -54,7 +54,7 @@ impl Default for TracingConfig {
             service_name: "oxirs-federate".to_string(),
             otlp_endpoint: None,
             jaeger_endpoint: None,
-            sampling_rate: 0.1, // Sample 10% of traces
+            sampling_rate: 0.1,                           // Sample 10% of traces
             max_trace_duration: Duration::from_secs(300), // 5 minutes
             enable_detailed_attributes: true,
             max_attribute_size: 1024,
@@ -319,10 +319,16 @@ impl DistributedTracingManager {
         };
 
         // Store active trace
-        self.active_traces.write().await.insert(trace_id.clone(), trace_context.clone());
+        self.active_traces
+            .write()
+            .await
+            .insert(trace_id.clone(), trace_context.clone());
 
         // Initialize span storage for this trace
-        self.span_storage.write().await.insert(trace_id.clone(), Vec::new());
+        self.span_storage
+            .write()
+            .await
+            .insert(trace_id.clone(), Vec::new());
 
         // Update metrics
         let mut metrics = self.metrics.write().await;
@@ -357,29 +363,42 @@ impl DistributedTracingManager {
                 service_name: service_name.to_string(),
                 service_version: Some("1.0.0".to_string()),
                 service_instance_id: Some(Uuid::new_v4().to_string()),
-                host_name: Some(std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".to_string())),
+                host_name: Some(
+                    std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".to_string()),
+                ),
                 process_id: Some(std::process::id()),
             },
         };
 
         // Add default attributes
         if self.config.enable_detailed_attributes {
-            span.attributes.insert("query.type".to_string(), 
-                trace_context.query_context.query_type.clone());
-            span.attributes.insert("trace.sampled".to_string(), 
-                (trace_context.trace_flags & 1 == 1).to_string());
-            
+            span.attributes.insert(
+                "query.type".to_string(),
+                trace_context.query_context.query_type.clone(),
+            );
+            span.attributes.insert(
+                "trace.sampled".to_string(),
+                (trace_context.trace_flags & 1 == 1).to_string(),
+            );
+
             if let Some(user_id) = &trace_context.query_context.user_id {
-                span.attributes.insert("user.id".to_string(), user_id.clone());
+                span.attributes
+                    .insert("user.id".to_string(), user_id.clone());
             }
-            
+
             if let Some(session_id) = &trace_context.query_context.session_id {
-                span.attributes.insert("session.id".to_string(), session_id.clone());
+                span.attributes
+                    .insert("session.id".to_string(), session_id.clone());
             }
         }
 
         // Store span
-        if let Some(spans) = self.span_storage.write().await.get_mut(&trace_context.trace_id) {
+        if let Some(spans) = self
+            .span_storage
+            .write()
+            .await
+            .get_mut(&trace_context.trace_id)
+        {
             spans.push(span.clone());
         }
 
@@ -387,25 +406,30 @@ impl DistributedTracingManager {
         let mut metrics = self.metrics.write().await;
         metrics.total_spans += 1;
 
-        debug!("Created span: {} in trace: {}", span_id, trace_context.trace_id);
+        debug!(
+            "Created span: {} in trace: {}",
+            span_id, trace_context.trace_id
+        );
         Ok(span)
     }
 
     /// Finish a span
     pub async fn finish_span(&self, span_id: &str, status: SpanStatus) -> Result<()> {
         let mut span_storage = self.span_storage.write().await;
-        
+
         for spans in span_storage.values_mut() {
             if let Some(span) = spans.iter_mut().find(|s| s.span_id == span_id) {
                 span.end_time = Some(SystemTime::now());
                 span.duration = span.end_time.map(|end| {
-                    end.duration_since(span.start_time).unwrap_or(Duration::from_secs(0))
+                    end.duration_since(span.start_time)
+                        .unwrap_or(Duration::from_secs(0))
                 });
                 span.status = status;
 
                 // Update service latency statistics
                 if let Some(duration) = span.duration {
-                    self.update_service_latency_stats(&span.service_name, duration).await;
+                    self.update_service_latency_stats(&span.service_name, duration)
+                        .await;
                 }
 
                 debug!("Finished span: {} with status: {:?}", span_id, span.status);
@@ -418,9 +442,13 @@ impl DistributedTracingManager {
     }
 
     /// Add attributes to a span
-    pub async fn add_span_attributes(&self, span_id: &str, attributes: HashMap<String, String>) -> Result<()> {
+    pub async fn add_span_attributes(
+        &self,
+        span_id: &str,
+        attributes: HashMap<String, String>,
+    ) -> Result<()> {
         let mut span_storage = self.span_storage.write().await;
-        
+
         for spans in span_storage.values_mut() {
             if let Some(span) = spans.iter_mut().find(|s| s.span_id == span_id) {
                 for (key, value) in attributes {
@@ -440,9 +468,14 @@ impl DistributedTracingManager {
     }
 
     /// Add an event to a span
-    pub async fn add_span_event(&self, span_id: &str, event_name: &str, attributes: HashMap<String, String>) -> Result<()> {
+    pub async fn add_span_event(
+        &self,
+        span_id: &str,
+        event_name: &str,
+        attributes: HashMap<String, String>,
+    ) -> Result<()> {
         let mut span_storage = self.span_storage.write().await;
-        
+
         for spans in span_storage.values_mut() {
             if let Some(span) = spans.iter_mut().find(|s| s.span_id == span_id) {
                 let event = SpanEvent {
@@ -463,29 +496,39 @@ impl DistributedTracingManager {
     pub async fn complete_trace(&self, trace_id: &str) -> Result<TraceAnalysis> {
         // Remove from active traces
         let trace_context = self.active_traces.write().await.remove(trace_id);
-        
+
         if let Some(context) = trace_context {
             let analysis = self.analyze_trace(trace_id).await?;
-            
+
             // Update trace duration metrics
             let mut metrics = self.metrics.write().await;
             let total_traces = metrics.total_traces;
             if total_traces > 0 {
                 let current_avg = metrics.avg_trace_duration.as_millis() as f64;
-                let new_avg = (current_avg * (total_traces - 1) as f64 + analysis.total_duration.as_millis() as f64) / total_traces as f64;
+                let new_avg = (current_avg * (total_traces - 1) as f64
+                    + analysis.total_duration.as_millis() as f64)
+                    / total_traces as f64;
                 metrics.avg_trace_duration = Duration::from_millis(new_avg as u64);
             }
 
             // Update completion status
-            let status = if analysis.error_path.is_some() { "error" } else { "success" };
-            *metrics.traces_by_status.entry(status.to_string()).or_insert(0) += 1;
+            let status = if analysis.error_path.is_some() {
+                "error"
+            } else {
+                "success"
+            };
+            *metrics
+                .traces_by_status
+                .entry(status.to_string())
+                .or_insert(0) += 1;
 
-            info!("Completed trace: {} with {} spans in {:?}", 
-                trace_id, 
-                analysis.service_breakdown.len(), 
+            info!(
+                "Completed trace: {} with {} spans in {:?}",
+                trace_id,
+                analysis.service_breakdown.len(),
                 analysis.total_duration
             );
-            
+
             Ok(analysis)
         } else {
             Err(anyhow!("Trace not found: {}", trace_id))
@@ -495,7 +538,8 @@ impl DistributedTracingManager {
     /// Analyze a completed trace for performance insights
     pub async fn analyze_trace(&self, trace_id: &str) -> Result<TraceAnalysis> {
         let span_storage = self.span_storage.read().await;
-        let spans = span_storage.get(trace_id)
+        let spans = span_storage
+            .get(trace_id)
             .ok_or_else(|| anyhow!("Trace not found: {}", trace_id))?;
 
         if spans.is_empty() {
@@ -504,11 +548,14 @@ impl DistributedTracingManager {
 
         // Calculate total duration
         let start_time = spans.iter().map(|s| s.start_time).min().unwrap();
-        let end_time = spans.iter()
+        let end_time = spans
+            .iter()
             .filter_map(|s| s.end_time)
             .max()
             .unwrap_or(SystemTime::now());
-        let total_duration = end_time.duration_since(start_time).unwrap_or(Duration::from_secs(0));
+        let total_duration = end_time
+            .duration_since(start_time)
+            .unwrap_or(Duration::from_secs(0));
 
         // Analyze critical path
         let critical_path = self.calculate_critical_path(spans);
@@ -517,7 +564,9 @@ impl DistributedTracingManager {
         let mut service_breakdown = HashMap::new();
         for span in spans {
             if let Some(duration) = span.duration {
-                *service_breakdown.entry(span.service_name.clone()).or_insert(Duration::from_secs(0)) += duration;
+                *service_breakdown
+                    .entry(span.service_name.clone())
+                    .or_insert(Duration::from_secs(0)) += duration;
             }
         }
 
@@ -578,7 +627,8 @@ impl DistributedTracingManager {
 
     async fn update_service_latency_stats(&self, service_name: &str, duration: Duration) {
         let mut metrics = self.metrics.write().await;
-        let stats = metrics.service_latencies
+        let stats = metrics
+            .service_latencies
             .entry(service_name.to_string())
             .or_insert_with(|| ServiceLatencyStats {
                 service_name: service_name.to_string(),
@@ -599,29 +649,40 @@ impl DistributedTracingManager {
         if !stats.recent_samples.is_empty() {
             let mut sorted_samples = stats.recent_samples.clone();
             sorted_samples.sort();
-            
+
             let p50_idx = (sorted_samples.len() as f64 * 0.5) as usize;
             let p95_idx = (sorted_samples.len() as f64 * 0.95) as usize;
             let p99_idx = (sorted_samples.len() as f64 * 0.99) as usize;
-            
-            stats.p50_latency = sorted_samples.get(p50_idx).copied().unwrap_or(Duration::from_secs(0));
-            stats.p95_latency = sorted_samples.get(p95_idx).copied().unwrap_or(Duration::from_secs(0));
-            stats.p99_latency = sorted_samples.get(p99_idx).copied().unwrap_or(Duration::from_secs(0));
+
+            stats.p50_latency = sorted_samples
+                .get(p50_idx)
+                .copied()
+                .unwrap_or(Duration::from_secs(0));
+            stats.p95_latency = sorted_samples
+                .get(p95_idx)
+                .copied()
+                .unwrap_or(Duration::from_secs(0));
+            stats.p99_latency = sorted_samples
+                .get(p99_idx)
+                .copied()
+                .unwrap_or(Duration::from_secs(0));
         }
     }
 
     fn calculate_critical_path(&self, spans: &[Span]) -> Vec<String> {
         // Simple critical path calculation - longest sequential chain
         let mut path = Vec::new();
-        let mut current_span: Option<&Span> = spans.iter()
+        let mut current_span: Option<&Span> = spans
+            .iter()
             .filter(|s| s.parent_span_id.is_none())
             .max_by_key(|s| s.duration.unwrap_or(Duration::from_secs(0)));
 
         while let Some(span) = current_span {
             path.push(format!("{}:{}", span.service_name, span.operation_name));
-            
+
             // Find child span with longest duration
-            current_span = spans.iter()
+            current_span = spans
+                .iter()
                 .filter(|s| s.parent_span_id.as_ref() == Some(&span.span_id))
                 .max_by_key(|s| s.duration.unwrap_or(Duration::from_secs(0)));
         }
@@ -629,21 +690,29 @@ impl DistributedTracingManager {
         path
     }
 
-    fn find_parallelization_opportunities(&self, spans: &[Span]) -> Vec<ParallelizationOpportunity> {
+    fn find_parallelization_opportunities(
+        &self,
+        spans: &[Span],
+    ) -> Vec<ParallelizationOpportunity> {
         let mut opportunities = Vec::new();
 
         // Look for sequential spans that could be parallelized
         for span in spans {
             if let Some(span_id) = &span.parent_span_id {
-                let siblings: Vec<&Span> = spans.iter()
-                    .filter(|s| s.parent_span_id.as_ref() == Some(span_id) && s.span_id != span.span_id)
+                let siblings: Vec<&Span> = spans
+                    .iter()
+                    .filter(|s| {
+                        s.parent_span_id.as_ref() == Some(span_id) && s.span_id != span.span_id
+                    })
                     .collect();
 
                 if siblings.len() > 1 {
-                    let total_sequential_time: Duration = siblings.iter()
+                    let total_sequential_time: Duration = siblings
+                        .iter()
                         .map(|s| s.duration.unwrap_or(Duration::from_secs(0)))
                         .sum();
-                    let max_individual_time = siblings.iter()
+                    let max_individual_time = siblings
+                        .iter()
                         .map(|s| s.duration.unwrap_or(Duration::from_secs(0)))
                         .max()
                         .unwrap_or(Duration::from_secs(0));
@@ -652,7 +721,7 @@ impl DistributedTracingManager {
                         let potential_savings = total_sequential_time - max_individual_time;
                         opportunities.push(ParallelizationOpportunity {
                             description: format!(
-                                "Parallelize {} operations under {}", 
+                                "Parallelize {} operations under {}",
                                 siblings.len(),
                                 span.operation_name
                             ),
@@ -668,17 +737,25 @@ impl DistributedTracingManager {
         opportunities
     }
 
-    fn identify_trace_bottlenecks(&self, spans: &[Span], total_duration: Duration) -> Vec<TracingBottleneck> {
+    fn identify_trace_bottlenecks(
+        &self,
+        spans: &[Span],
+        total_duration: Duration,
+    ) -> Vec<TracingBottleneck> {
         let mut bottlenecks = Vec::new();
 
         for span in spans {
             if let Some(duration) = span.duration {
-                let percentage = (duration.as_millis() as f64 / total_duration.as_millis() as f64) * 100.0;
-                
-                if percentage > 20.0 { // Spans taking more than 20% of total time
-                    let bottleneck_type = self.classify_bottleneck_type(&span.operation_name, &span.attributes);
-                    let recommendations = self.generate_bottleneck_recommendations(&bottleneck_type, span);
-                    
+                let percentage =
+                    (duration.as_millis() as f64 / total_duration.as_millis() as f64) * 100.0;
+
+                if percentage > 20.0 {
+                    // Spans taking more than 20% of total time
+                    let bottleneck_type =
+                        self.classify_bottleneck_type(&span.operation_name, &span.attributes);
+                    let recommendations =
+                        self.generate_bottleneck_recommendations(&bottleneck_type, span);
+
                     bottlenecks.push(TracingBottleneck {
                         component: format!("{}:{}", span.service_name, span.operation_name),
                         duration,
@@ -690,13 +767,21 @@ impl DistributedTracingManager {
             }
         }
 
-        bottlenecks.sort_by(|a, b| b.percentage_of_trace.partial_cmp(&a.percentage_of_trace).unwrap());
+        bottlenecks.sort_by(|a, b| {
+            b.percentage_of_trace
+                .partial_cmp(&a.percentage_of_trace)
+                .unwrap()
+        });
         bottlenecks
     }
 
-    fn classify_bottleneck_type(&self, operation_name: &str, attributes: &HashMap<String, String>) -> TracingBottleneckType {
+    fn classify_bottleneck_type(
+        &self,
+        operation_name: &str,
+        attributes: &HashMap<String, String>,
+    ) -> TracingBottleneckType {
         let operation_lower = operation_name.to_lowercase();
-        
+
         if operation_lower.contains("query") || operation_lower.contains("sparql") {
             TracingBottleneckType::DatabaseQuery
         } else if operation_lower.contains("auth") || operation_lower.contains("login") {
@@ -705,14 +790,21 @@ impl DistributedTracingManager {
             TracingBottleneckType::Caching
         } else if operation_lower.contains("network") || operation_lower.contains("http") {
             TracingBottleneckType::NetworkLatency
-        } else if attributes.values().any(|v| v.contains("large") || v.contains("transfer")) {
+        } else if attributes
+            .values()
+            .any(|v| v.contains("large") || v.contains("transfer"))
+        {
             TracingBottleneckType::LargeDataTransfer
         } else {
             TracingBottleneckType::SlowService
         }
     }
 
-    fn generate_bottleneck_recommendations(&self, bottleneck_type: &TracingBottleneckType, span: &Span) -> Vec<String> {
+    fn generate_bottleneck_recommendations(
+        &self,
+        bottleneck_type: &TracingBottleneckType,
+        span: &Span,
+    ) -> Vec<String> {
         match bottleneck_type {
             TracingBottleneckType::DatabaseQuery => vec![
                 "Consider query optimization or indexing".to_string(),
@@ -753,7 +845,8 @@ impl DistributedTracingManager {
     }
 
     fn trace_error_propagation(&self, spans: &[Span]) -> Option<Vec<String>> {
-        let error_spans: Vec<&Span> = spans.iter()
+        let error_spans: Vec<&Span> = spans
+            .iter()
             .filter(|s| matches!(s.status, SpanStatus::Error(_)))
             .collect();
 
@@ -764,7 +857,10 @@ impl DistributedTracingManager {
         // Build error propagation path
         let mut error_path = Vec::new();
         for error_span in error_spans {
-            error_path.push(format!("{}:{}", error_span.service_name, error_span.operation_name));
+            error_path.push(format!(
+                "{}:{}",
+                error_span.service_name, error_span.operation_name
+            ));
         }
 
         Some(error_path)
@@ -809,8 +905,11 @@ mod tests {
         };
 
         let trace = tracer.start_trace(query_context).await.unwrap();
-        let span = tracer.create_span(&trace, "test_operation", "test_service", None).await.unwrap();
-        
+        let span = tracer
+            .create_span(&trace, "test_operation", "test_service", None)
+            .await
+            .unwrap();
+
         assert!(!span.span_id.is_empty());
         assert_eq!(span.operation_name, "test_operation");
         assert_eq!(span.service_name, "test_service");
@@ -831,11 +930,28 @@ mod tests {
         };
 
         let trace = tracer.start_trace(query_context).await.unwrap();
-        let span1 = tracer.create_span(&trace, "query_parsing", "parser_service", None).await.unwrap();
-        let span2 = tracer.create_span(&trace, "query_execution", "executor_service", Some(span1.span_id.clone())).await.unwrap();
+        let span1 = tracer
+            .create_span(&trace, "query_parsing", "parser_service", None)
+            .await
+            .unwrap();
+        let span2 = tracer
+            .create_span(
+                &trace,
+                "query_execution",
+                "executor_service",
+                Some(span1.span_id.clone()),
+            )
+            .await
+            .unwrap();
 
-        tracer.finish_span(&span1.span_id, SpanStatus::Ok).await.unwrap();
-        tracer.finish_span(&span2.span_id, SpanStatus::Ok).await.unwrap();
+        tracer
+            .finish_span(&span1.span_id, SpanStatus::Ok)
+            .await
+            .unwrap();
+        tracer
+            .finish_span(&span2.span_id, SpanStatus::Ok)
+            .await
+            .unwrap();
 
         let analysis = tracer.complete_trace(&trace.trace_id).await.unwrap();
         assert_eq!(analysis.trace_id, trace.trace_id);
@@ -858,7 +974,10 @@ mod tests {
         };
 
         let trace = tracer.start_trace(query_context).await.unwrap();
-        let _span = tracer.create_span(&trace, "test_operation", "test_service", None).await.unwrap();
+        let _span = tracer
+            .create_span(&trace, "test_operation", "test_service", None)
+            .await
+            .unwrap();
 
         let metrics = tracer.get_metrics().await;
         assert_eq!(metrics.total_traces, 1);

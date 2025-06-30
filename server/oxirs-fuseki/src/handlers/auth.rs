@@ -262,7 +262,7 @@ pub async fn logout_handler(
 }
 
 /// Get current user information
-#[instrument(skip(state, auth_user))]
+#[instrument(skip(state))]
 pub async fn user_info_handler(
     State(state): State<AppState>,
 ) -> Result<Json<UserInfoResponse>, FusekiError> {

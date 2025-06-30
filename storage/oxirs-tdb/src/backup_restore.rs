@@ -881,28 +881,29 @@ impl BackupRestoreManager {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         use std::sync::atomic::{AtomicU64, Ordering};
-        
+
         // Static counter to ensure uniqueness even within the same nanosecond
         static COUNTER: AtomicU64 = AtomicU64::new(0);
-        
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap();
-        
+
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+
         // Use nanoseconds for higher precision
         let timestamp_nanos = now.as_nanos();
-        
+
         // Get unique counter value
         let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
-        
+
         // Add a random component by hashing the thread ID, timestamp, and counter
         let mut hasher = DefaultHasher::new();
         std::thread::current().id().hash(&mut hasher);
         timestamp_nanos.hash(&mut hasher);
         counter.hash(&mut hasher);
         let random_component = hasher.finish() & 0xFFFF; // Use lower 16 bits for compactness
-        
-        format!("{}_{:x}_{:x}_{:04x}", prefix, timestamp_nanos, counter, random_component)
+
+        format!(
+            "{}_{:x}_{:x}_{:04x}",
+            prefix, timestamp_nanos, counter, random_component
+        )
     }
 
     /// Get chain info for a backup
@@ -1100,7 +1101,7 @@ mod tests {
         };
 
         let manager = BackupRestoreManager::new(config).unwrap();
-        
+
         // Generate multiple IDs rapidly to test uniqueness
         let mut ids = std::collections::HashSet::new();
         for _ in 0..100 {
@@ -1108,7 +1109,7 @@ mod tests {
             assert!(ids.insert(id.clone()), "Duplicate ID generated: {}", id);
             assert!(id.starts_with("TEST_"));
         }
-        
+
         // Ensure all IDs are unique
         assert_eq!(ids.len(), 100);
     }

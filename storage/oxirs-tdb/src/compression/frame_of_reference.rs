@@ -1,9 +1,9 @@
 //! Frame of Reference (FOR) encoding implementation
 
-use anyhow::{anyhow, Result};
 use crate::compression::{
-    AdvancedCompressionType, CompressionAlgorithm, CompressionMetadata, CompressedData
+    AdvancedCompressionType, CompressedData, CompressionAlgorithm, CompressionMetadata,
 };
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -18,7 +18,7 @@ impl FrameOfReferenceEncoder {
         }
 
         let mut encoded = Vec::new();
-        
+
         // Find minimum value as reference
         let reference = *values.iter().min().unwrap();
         encoded.extend_from_slice(&reference.to_le_bytes());
@@ -40,7 +40,7 @@ impl FrameOfReferenceEncoder {
 
         for &value in values {
             let delta = value - reference;
-            
+
             // Add delta to bit buffer
             bit_buffer |= delta << bits_used;
             bits_used += bit_width;
@@ -73,8 +73,8 @@ impl FrameOfReferenceEncoder {
 
         // Read reference value
         let reference = u64::from_le_bytes([
-            encoded[0], encoded[1], encoded[2], encoded[3],
-            encoded[4], encoded[5], encoded[6], encoded[7],
+            encoded[0], encoded[1], encoded[2], encoded[3], encoded[4], encoded[5], encoded[6],
+            encoded[7],
         ]);
 
         // Read bit width
@@ -85,7 +85,7 @@ impl FrameOfReferenceEncoder {
 
         let mut values = Vec::new();
         let data = &encoded[9..];
-        
+
         let mut bit_buffer = 0u64;
         let mut bits_available = 0;
         let mut byte_index = 0;
@@ -105,7 +105,7 @@ impl FrameOfReferenceEncoder {
                 // Extract value
                 let delta = bit_buffer & mask;
                 values.push(reference + delta);
-                
+
                 // Remove used bits
                 bit_buffer >>= bit_width;
                 bits_available -= bit_width;
@@ -143,15 +143,18 @@ impl CompressionAlgorithm for FrameOfReferenceEncoder {
     fn compress(&self, data: &[u8]) -> Result<CompressedData> {
         // Convert bytes to u64 sequence (simplified approach)
         if data.len() % 8 != 0 {
-            return Err(anyhow!("Data length must be multiple of 8 for FOR encoding"));
+            return Err(anyhow!(
+                "Data length must be multiple of 8 for FOR encoding"
+            ));
         }
 
         let values: Vec<u64> = data
             .chunks_exact(8)
-            .map(|chunk| u64::from_le_bytes([
-                chunk[0], chunk[1], chunk[2], chunk[3],
-                chunk[4], chunk[5], chunk[6], chunk[7],
-            ]))
+            .map(|chunk| {
+                u64::from_le_bytes([
+                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+                ])
+            })
             .collect();
 
         let start = Instant::now();
@@ -162,8 +165,12 @@ impl CompressionAlgorithm for FrameOfReferenceEncoder {
         if !values.is_empty() {
             let reference = *values.iter().min().unwrap();
             let max_delta = values.iter().map(|&v| v - reference).max().unwrap();
-            let bit_width = if max_delta == 0 { 1 } else { 64 - max_delta.leading_zeros() };
-            
+            let bit_width = if max_delta == 0 {
+                1
+            } else {
+                64 - max_delta.leading_zeros()
+            };
+
             metadata_map.insert("reference".to_string(), reference.to_string());
             metadata_map.insert("bit_width".to_string(), bit_width.to_string());
             metadata_map.insert("value_count".to_string(), values.len().to_string());
@@ -192,7 +199,7 @@ impl CompressionAlgorithm for FrameOfReferenceEncoder {
         }
 
         let values = Self::decode_u64_sequence(&compressed.data)?;
-        
+
         // Convert u64 sequence back to bytes
         let mut data = Vec::new();
         for value in values {
@@ -255,10 +262,13 @@ mod tests {
         let encoder = FrameOfReferenceEncoder;
         // Create test data as bytes (multiple of 8)
         let data = vec![0u8; 24]; // 3 u64 values
-        
+
         let compressed = encoder.compress(&data).unwrap();
-        assert_eq!(compressed.metadata.algorithm, AdvancedCompressionType::FrameOfReference);
-        
+        assert_eq!(
+            compressed.metadata.algorithm,
+            AdvancedCompressionType::FrameOfReference
+        );
+
         let decompressed = encoder.decompress(&compressed).unwrap();
         assert_eq!(data, decompressed);
     }

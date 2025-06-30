@@ -11,12 +11,12 @@ use std::collections::{HashMap, HashSet};
 use tracing::{debug, info, warn};
 
 use crate::{
-    planner::planning::{TriplePattern, FilterExpression},
-    service_optimizer::types::{
-        ServiceOptimizerConfig, PatternFeatures, MLSourcePrediction, 
-        QueryContext, HistoricalQueryData, SimilarQuery, QueryFeatures
-    },
+    planner::planning::{FilterExpression, TriplePattern},
     service::ServiceCapability,
+    service_optimizer::types::{
+        HistoricalQueryData, MLSourcePrediction, PatternFeatures, QueryContext, QueryFeatures,
+        ServiceOptimizerConfig, SimilarQuery,
+    },
     FederatedService,
 };
 
@@ -57,7 +57,11 @@ impl AdvancedPatternAnalyzer {
         filters: &[FilterExpression],
         services: &[FederatedService],
     ) -> Result<PatternAnalysisResult> {
-        info!("Analyzing {} patterns across {} services", patterns.len(), services.len());
+        info!(
+            "Analyzing {} patterns across {} services",
+            patterns.len(),
+            services.len()
+        );
 
         let mut analysis = PatternAnalysisResult {
             pattern_scores: HashMap::new(),
@@ -72,8 +76,10 @@ impl AdvancedPatternAnalyzer {
         // Analyze each pattern individually
         for (idx, pattern) in patterns.iter().enumerate() {
             let pattern_features = self.extract_pattern_features(pattern, filters);
-            let service_scores = self.score_services_for_pattern(pattern, services, &pattern_features).await?;
-            
+            let service_scores = self
+                .score_services_for_pattern(pattern, services, &pattern_features)
+                .await?;
+
             analysis.pattern_scores.insert(
                 format!("pattern_{}", idx),
                 PatternScore {
@@ -81,8 +87,9 @@ impl AdvancedPatternAnalyzer {
                     complexity: pattern_features.pattern_complexity,
                     selectivity: pattern_features.subject_specificity,
                     service_scores,
-                    estimated_result_size: self.estimate_pattern_result_size(pattern, &pattern_features),
-                }
+                    estimated_result_size: self
+                        .estimate_pattern_result_size(pattern, &pattern_features),
+                },
             );
         }
 
@@ -90,7 +97,8 @@ impl AdvancedPatternAnalyzer {
         analysis.service_recommendations = self.generate_service_recommendations(&analysis)?;
 
         // Identify optimization opportunities
-        analysis.optimization_opportunities = self.identify_optimization_opportunities(patterns, filters, &analysis)?;
+        analysis.optimization_opportunities =
+            self.identify_optimization_opportunities(patterns, filters, &analysis)?;
 
         // Generate execution recommendations
         analysis.recommendations = self.generate_execution_recommendations(&analysis);
@@ -99,14 +107,20 @@ impl AdvancedPatternAnalyzer {
     }
 
     /// Extract detailed features from a triple pattern
-    fn extract_pattern_features(&self, pattern: &TriplePattern, filters: &[FilterExpression]) -> PatternFeatures {
+    fn extract_pattern_features(
+        &self,
+        pattern: &TriplePattern,
+        filters: &[FilterExpression],
+    ) -> PatternFeatures {
         let mut features = PatternFeatures {
             predicate_frequency: self.get_predicate_frequency(&pattern.predicate),
             subject_specificity: self.calculate_specificity(&pattern.subject),
             object_specificity: self.calculate_specificity(&pattern.object),
             service_data_size_factor: 1.0,
             pattern_complexity: self.assess_individual_pattern_complexity(pattern),
-            has_variables: pattern.subject.is_none() || pattern.predicate.is_none() || pattern.object.is_none(),
+            has_variables: pattern.subject.is_none()
+                || pattern.predicate.is_none()
+                || pattern.object.is_none(),
             is_star_pattern: self.is_star_pattern(pattern),
         };
 
@@ -144,7 +158,10 @@ impl AdvancedPatternAnalyzer {
 
             // ML prediction score (if model is available)
             if let Some(ref ml_model) = self.ml_model {
-                if let Ok(ml_score) = ml_model.predict_service_score(service, pattern, features).await {
+                if let Ok(ml_score) = ml_model
+                    .predict_service_score(service, pattern, features)
+                    .await
+                {
                     score += ml_score.predicted_score * 0.3; // 30% weight for ML predictions
                 }
             }
@@ -158,28 +175,52 @@ impl AdvancedPatternAnalyzer {
     }
 
     /// Calculate capability-based score for a service
-    fn calculate_capability_score(&self, service: &FederatedService, pattern: &TriplePattern) -> f64 {
+    fn calculate_capability_score(
+        &self,
+        service: &FederatedService,
+        pattern: &TriplePattern,
+    ) -> f64 {
         let mut score = 0.0;
 
         // Basic SPARQL support
-        if service.capabilities.contains(&ServiceCapability::SparqlQuery) {
+        if service
+            .capabilities
+            .contains(&ServiceCapability::SparqlQuery)
+        {
             score += 0.3;
         }
 
         // Advanced SPARQL features
-        if service.capabilities.contains(&ServiceCapability::Sparql11Query) {
+        if service
+            .capabilities
+            .contains(&ServiceCapability::Sparql11Query)
+        {
             score += 0.2;
         }
 
         // Pattern-specific capabilities
-        if pattern.predicate.as_ref().map_or(false, |p| p.contains("geo:")) {
-            if service.capabilities.contains(&ServiceCapability::Geospatial) {
+        if pattern
+            .predicate
+            .as_ref()
+            .map_or(false, |p| p.contains("geo:"))
+        {
+            if service
+                .capabilities
+                .contains(&ServiceCapability::Geospatial)
+            {
                 score += 0.3;
             }
         }
 
-        if pattern.object.as_ref().map_or(false, |o| o.contains("\"") && o.len() > 20) {
-            if service.capabilities.contains(&ServiceCapability::FullTextSearch) {
+        if pattern
+            .object
+            .as_ref()
+            .map_or(false, |o| o.contains("\"") && o.len() > 20)
+        {
+            if service
+                .capabilities
+                .contains(&ServiceCapability::FullTextSearch)
+            {
                 score += 0.2;
             }
         }
@@ -188,7 +229,11 @@ impl AdvancedPatternAnalyzer {
     }
 
     /// Calculate data pattern matching score
-    fn calculate_data_pattern_score(&self, service: &FederatedService, pattern: &TriplePattern) -> f64 {
+    fn calculate_data_pattern_score(
+        &self,
+        service: &FederatedService,
+        pattern: &TriplePattern,
+    ) -> f64 {
         let mut score = 0.0;
 
         // Check if service data patterns match the query pattern
@@ -217,7 +262,11 @@ impl AdvancedPatternAnalyzer {
     }
 
     /// Calculate performance-based score
-    fn calculate_performance_score(&self, service: &FederatedService, features: &PatternFeatures) -> f64 {
+    fn calculate_performance_score(
+        &self,
+        service: &FederatedService,
+        features: &PatternFeatures,
+    ) -> f64 {
         let mut score = 0.0;
 
         // Base performance score
@@ -237,7 +286,7 @@ impl AdvancedPatternAnalyzer {
         // Adjust for pattern complexity
         match features.pattern_complexity {
             crate::service_optimizer::types::PatternComplexity::Simple => score += 0.1,
-            crate::service_optimizer::types::PatternComplexity::Medium => {},
+            crate::service_optimizer::types::PatternComplexity::Medium => {}
             crate::service_optimizer::types::PatternComplexity::Complex => score -= 0.1,
         }
 
@@ -245,12 +294,17 @@ impl AdvancedPatternAnalyzer {
     }
 
     /// Assess overall pattern complexity
-    fn assess_pattern_complexity(&self, patterns: &[TriplePattern], filters: &[FilterExpression]) -> ComplexityAssessment {
+    fn assess_pattern_complexity(
+        &self,
+        patterns: &[TriplePattern],
+        filters: &[FilterExpression],
+    ) -> ComplexityAssessment {
         let pattern_count = patterns.len();
         let filter_count = filters.len();
         let join_count = self.count_joins(patterns);
 
-        let base_complexity = pattern_count as f64 + filter_count as f64 * 0.5 + join_count as f64 * 2.0;
+        let base_complexity =
+            pattern_count as f64 + filter_count as f64 * 0.5 + join_count as f64 * 2.0;
 
         let complexity_level = if base_complexity < 5.0 {
             ComplexityLevel::Low
@@ -272,7 +326,11 @@ impl AdvancedPatternAnalyzer {
     }
 
     /// Estimate overall selectivity of the query
-    fn estimate_overall_selectivity(&self, patterns: &[TriplePattern], filters: &[FilterExpression]) -> f64 {
+    fn estimate_overall_selectivity(
+        &self,
+        patterns: &[TriplePattern],
+        filters: &[FilterExpression],
+    ) -> f64 {
         let mut selectivity = 1.0;
 
         for pattern in patterns {
@@ -303,7 +361,7 @@ impl AdvancedPatternAnalyzer {
         for (var, pattern_indices) in &variables {
             if pattern_indices.len() > 1 {
                 for i in 0..pattern_indices.len() {
-                    for j in i+1..pattern_indices.len() {
+                    for j in i + 1..pattern_indices.len() {
                         pattern_connections.push(JoinEdge {
                             pattern1: pattern_indices[i],
                             pattern2: pattern_indices[j],
@@ -317,7 +375,10 @@ impl AdvancedPatternAnalyzer {
 
         JoinGraphAnalysis {
             total_variables: variables.len(),
-            join_variables: variables.iter().filter(|(_, indices)| indices.len() > 1).count(),
+            join_variables: variables
+                .iter()
+                .filter(|(_, indices)| indices.len() > 1)
+                .count(),
             join_edges: pattern_connections,
             star_join_centers: self.identify_star_join_centers(&variables),
             chain_joins: self.identify_chain_joins(&variables),
@@ -326,7 +387,10 @@ impl AdvancedPatternAnalyzer {
     }
 
     /// Generate service recommendations based on analysis
-    fn generate_service_recommendations(&self, analysis: &PatternAnalysisResult) -> Result<Vec<ServiceRecommendation>> {
+    fn generate_service_recommendations(
+        &self,
+        analysis: &PatternAnalysisResult,
+    ) -> Result<Vec<ServiceRecommendation>> {
         let mut recommendations = Vec::new();
 
         // For each pattern, recommend the best services
@@ -376,7 +440,10 @@ impl AdvancedPatternAnalyzer {
             if self.can_pushdown_filter(filter, patterns) {
                 opportunities.push(OptimizationOpportunity {
                     opportunity_type: OptimizationType::FilterPushdown,
-                    description: format!("Filter '{}' can be pushed down to services", filter.expression),
+                    description: format!(
+                        "Filter '{}' can be pushed down to services",
+                        filter.expression
+                    ),
                     potential_benefit: 0.4,
                     implementation_cost: 0.05,
                     confidence: 0.9,
@@ -413,7 +480,10 @@ impl AdvancedPatternAnalyzer {
     }
 
     /// Generate execution recommendations
-    fn generate_execution_recommendations(&self, analysis: &PatternAnalysisResult) -> Vec<ExecutionRecommendation> {
+    fn generate_execution_recommendations(
+        &self,
+        analysis: &PatternAnalysisResult,
+    ) -> Vec<ExecutionRecommendation> {
         let mut recommendations = Vec::new();
 
         // Execution strategy recommendation
@@ -433,7 +503,11 @@ impl AdvancedPatternAnalyzer {
         });
 
         // Timeout recommendation
-        let timeout = analysis.complexity_assessment.estimated_execution_time.as_secs() * 2;
+        let timeout = analysis
+            .complexity_assessment
+            .estimated_execution_time
+            .as_secs()
+            * 2;
         recommendations.push(ExecutionRecommendation {
             recommendation_type: RecommendationType::Timeout,
             description: format!("Set timeout to {} seconds", timeout),
@@ -442,7 +516,11 @@ impl AdvancedPatternAnalyzer {
         });
 
         // Caching recommendation
-        if analysis.optimization_opportunities.iter().any(|op| matches!(op.opportunity_type, OptimizationType::Caching)) {
+        if analysis
+            .optimization_opportunities
+            .iter()
+            .any(|op| matches!(op.opportunity_type, OptimizationType::Caching))
+        {
             recommendations.push(ExecutionRecommendation {
                 recommendation_type: RecommendationType::Caching,
                 description: "Enable result caching for this query".to_string(),
@@ -456,7 +534,8 @@ impl AdvancedPatternAnalyzer {
 
     // Helper methods
     fn get_predicate_frequency(&self, predicate: &Option<String>) -> f64 {
-        predicate.as_ref()
+        predicate
+            .as_ref()
             .and_then(|p| self.pattern_statistics.get(p))
             .map(|stats| stats.frequency as f64)
             .unwrap_or(1.0)
@@ -467,11 +546,14 @@ impl AdvancedPatternAnalyzer {
             Some(v) if v.starts_with("http://") || v.starts_with("https://") => 0.9, // URI - high specificity
             Some(v) if v.starts_with("\"") && v.ends_with("\"") => 0.7, // Literal - medium specificity
             Some(_) => 0.5, // Other constants - medium specificity
-            None => 0.1, // Variable - low specificity
+            None => 0.1,    // Variable - low specificity
         }
     }
 
-    fn assess_individual_pattern_complexity(&self, pattern: &TriplePattern) -> crate::service_optimizer::types::PatternComplexity {
+    fn assess_individual_pattern_complexity(
+        &self,
+        pattern: &TriplePattern,
+    ) -> crate::service_optimizer::types::PatternComplexity {
         let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
             .iter()
             .filter(|x| x.is_none())
@@ -489,9 +571,16 @@ impl AdvancedPatternAnalyzer {
         pattern.subject.is_some() && pattern.predicate.is_none() && pattern.object.is_none()
     }
 
-    fn filter_applies_to_pattern(&self, filter: &FilterExpression, pattern: &TriplePattern) -> bool {
+    fn filter_applies_to_pattern(
+        &self,
+        filter: &FilterExpression,
+        pattern: &TriplePattern,
+    ) -> bool {
         let pattern_vars = self.extract_variables_from_pattern(pattern);
-        filter.variables.iter().any(|var| pattern_vars.contains(var))
+        filter
+            .variables
+            .iter()
+            .any(|var| pattern_vars.contains(var))
     }
 
     fn pattern_matches(&self, pattern: &TriplePattern, data_pattern: &str) -> bool {
@@ -499,11 +588,11 @@ impl AdvancedPatternAnalyzer {
         if data_pattern.contains("*") {
             return true;
         }
-        
+
         if let Some(predicate) = &pattern.predicate {
             return predicate.contains(data_pattern) || data_pattern.contains(predicate);
         }
-        
+
         false
     }
 
@@ -525,7 +614,11 @@ impl AdvancedPatternAnalyzer {
         join_count
     }
 
-    fn identify_complexity_factors(&self, patterns: &[TriplePattern], filters: &[FilterExpression]) -> Vec<String> {
+    fn identify_complexity_factors(
+        &self,
+        patterns: &[TriplePattern],
+        filters: &[FilterExpression],
+    ) -> Vec<String> {
         let mut factors = Vec::new();
 
         if patterns.len() > 10 {
@@ -587,7 +680,7 @@ impl AdvancedPatternAnalyzer {
 
     fn extract_variables_from_pattern(&self, pattern: &TriplePattern) -> Vec<String> {
         let mut vars = Vec::new();
-        
+
         if pattern.subject.is_none() {
             vars.push("?s".to_string()); // Simplified variable extraction
         }
@@ -606,21 +699,24 @@ impl AdvancedPatternAnalyzer {
     }
 
     fn identify_star_join_centers(&self, variables: &HashMap<String, Vec<usize>>) -> Vec<String> {
-        variables.iter()
+        variables
+            .iter()
             .filter(|(_, patterns)| patterns.len() > 2)
             .map(|(var, _)| var.clone())
             .collect()
     }
 
     fn identify_chain_joins(&self, variables: &HashMap<String, Vec<usize>>) -> Vec<String> {
-        variables.iter()
+        variables
+            .iter()
             .filter(|(_, patterns)| patterns.len() == 2)
             .map(|(var, _)| var.clone())
             .collect()
     }
 
     fn calculate_join_complexity(&self, variables: &HashMap<String, Vec<usize>>) -> f64 {
-        variables.iter()
+        variables
+            .iter()
             .map(|(_, patterns)| (patterns.len() * patterns.len()) as f64)
             .sum()
     }
@@ -633,13 +729,14 @@ impl AdvancedPatternAnalyzer {
         let values: Vec<f64> = scores.values().cloned().collect();
         let max_score = values.iter().cloned().fold(0.0, f64::max);
         let avg_score = values.iter().sum::<f64>() / values.len() as f64;
-        
+
         // Confidence is higher when there's a clear winner
         (max_score - avg_score) * 2.0 + 0.5
     }
 
     fn generate_recommendation_reasoning(&self, pattern_score: &PatternScore) -> String {
-        let best_service = pattern_score.service_scores
+        let best_service = pattern_score
+            .service_scores
             .iter()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             .map(|(id, score)| (id.clone(), *score));
@@ -653,7 +750,11 @@ impl AdvancedPatternAnalyzer {
         }
     }
 
-    fn estimate_pattern_result_size(&self, _pattern: &TriplePattern, features: &PatternFeatures) -> u64 {
+    fn estimate_pattern_result_size(
+        &self,
+        _pattern: &TriplePattern,
+        features: &PatternFeatures,
+    ) -> u64 {
         let base_size = 1000u64;
         let selectivity_factor = features.subject_specificity * features.object_specificity;
         (base_size as f64 / selectivity_factor.max(0.01)) as u64
@@ -661,11 +762,15 @@ impl AdvancedPatternAnalyzer {
 
     fn can_pushdown_filter(&self, filter: &FilterExpression, patterns: &[TriplePattern]) -> bool {
         // Check if filter references variables from only one pattern
-        let pattern_vars: HashSet<_> = patterns.iter()
+        let pattern_vars: HashSet<_> = patterns
+            .iter()
             .flat_map(|p| self.extract_variables_from_pattern(p))
             .collect();
 
-        filter.variables.iter().all(|var| pattern_vars.contains(var))
+        filter
+            .variables
+            .iter()
+            .all(|var| pattern_vars.contains(var))
     }
 }
 
@@ -844,7 +949,8 @@ impl MLOptimizationModel {
             crate::service_optimizer::types::PatternComplexity::Complex => 0.4,
         };
 
-        let performance_factor = (1000.0 - service.performance.avg_response_time_ms.min(1000.0)) / 1000.0;
+        let performance_factor =
+            (1000.0 - service.performance.avg_response_time_ms.min(1000.0)) / 1000.0;
         let predicted_score = base_score * 0.7 + performance_factor * 0.3;
 
         Ok(MLSourcePrediction {
@@ -862,7 +968,7 @@ impl MLOptimizationModel {
 
     pub fn update_training_data(&mut self, data: HistoricalQueryData) {
         self.training_data.push(data);
-        
+
         // Keep only recent data (last 1000 queries)
         if self.training_data.len() > 1000 {
             self.training_data.drain(0..self.training_data.len() - 1000);

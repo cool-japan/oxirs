@@ -328,7 +328,8 @@ impl PerformanceOptimizer {
 
         // Check memory efficiency
         let total_memory = join_metrics.left_result_size + join_metrics.right_result_size;
-        if total_memory > (self.optimization_config.high_memory_threshold_mb * 1024 * 1024) as usize {
+        if total_memory > (self.optimization_config.high_memory_threshold_mb * 1024 * 1024) as usize
+        {
             advice.memory_efficient = false;
             advice
                 .suggestions

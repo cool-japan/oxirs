@@ -253,13 +253,18 @@ impl GraphQLFederation {
     }
 
     /// Create a resolution step for an entity
-    async fn create_resolution_step(&self, entity_ref: &EntityReference) -> Result<EntityResolutionStep> {
+    async fn create_resolution_step(
+        &self,
+        entity_ref: &EntityReference,
+    ) -> Result<EntityResolutionStep> {
         Ok(EntityResolutionStep {
             service_name: entity_ref.service_id.clone(),
             entity_type: entity_ref.entity_type.clone(),
             key_fields: entity_ref.key_fields.clone(),
             query: self.build_entity_query(&[entity_ref.clone()]).await?,
-            depends_on: self.analyze_entity_dependencies(&[entity_ref.clone()]).await?,
+            depends_on: self
+                .analyze_entity_dependencies(&[entity_ref.clone()])
+                .await?,
         })
     }
 
@@ -346,7 +351,8 @@ impl GraphQLFederation {
         // Create futures for parallel execution
         let mut futures = Vec::new();
         for (service_id, service_entities) in service_groups {
-            let fut = self.resolve_service_entity_batch(&service_id, &service_entities, context, cache);
+            let fut =
+                self.resolve_service_entity_batch(&service_id, &service_entities, context, cache);
             futures.push(fut);
         }
 
@@ -391,7 +397,7 @@ impl GraphQLFederation {
 
             // Parse response into EntityData
             let entity_data = self.parse_entity_from_response(&response, &entity.entity_type)?;
-            
+
             if let Some(data) = entity_data {
                 results.push(((*entity).clone(), data));
             }
@@ -594,7 +600,7 @@ impl GraphQLFederation {
 
         // Get the appropriate fields for this entity type
         let fields = self.get_entity_selection_fields(typename)?;
-        
+
         Ok(format!(
             r#"
             query GetEntities($representations: [_Any!]!) {{
@@ -990,8 +996,7 @@ impl GraphQLFederation {
             if services.len() > 1 {
                 warn!(
                     "Field '{}' is owned by multiple services: {:?} - potential conflict",
-                    field_name,
-                    services
+                    field_name, services
                 );
                 // Convert to warning instead of error for better flexibility
             }
@@ -999,7 +1004,7 @@ impl GraphQLFederation {
 
         // Validate type references
         self.validate_type_references_in_composed(composed)?;
-        
+
         // Validate federation rules
         self.validate_federation_rules(composed)?;
 
@@ -1017,9 +1022,11 @@ impl GraphQLFederation {
         for (type_name, graphql_type) in &composed.types {
             for (field_name, field) in &graphql_type.fields {
                 let base_type = self.extract_base_type_from_field_type(&field.field_type);
-                
+
                 // Check if referenced type exists
-                if !self.is_builtin_graphql_type(&base_type) && !composed.types.contains_key(&base_type) {
+                if !self.is_builtin_graphql_type(&base_type)
+                    && !composed.types.contains_key(&base_type)
+                {
                     return Err(anyhow!(
                         "Field '{}.{}' references unknown type '{}'",
                         type_name,
@@ -1043,9 +1050,17 @@ impl GraphQLFederation {
 
     /// Check if type is a built-in GraphQL type
     fn is_builtin_graphql_type(&self, type_name: &str) -> bool {
-        matches!(type_name, 
-            "String" | "Int" | "Float" | "Boolean" | "ID" | 
-            "_Any" | "_Entity" | "_Service" | "_FieldSet"
+        matches!(
+            type_name,
+            "String"
+                | "Int"
+                | "Float"
+                | "Boolean"
+                | "ID"
+                | "_Any"
+                | "_Entity"
+                | "_Service"
+                | "_FieldSet"
         )
     }
 
@@ -1067,14 +1082,16 @@ impl GraphQLFederation {
         // Rule 2: Check for proper service distribution
         let mut service_entity_count: HashMap<String, usize> = HashMap::new();
         for entity_info in composed.entity_types.values() {
-            *service_entity_count.entry(entity_info.owning_service.clone()).or_insert(0) += 1;
+            *service_entity_count
+                .entry(entity_info.owning_service.clone())
+                .or_insert(0) += 1;
         }
 
         // Warn about unbalanced entity distribution
         if service_entity_count.len() > 1 {
             let max_entities = service_entity_count.values().max().unwrap_or(&0);
             let min_entities = service_entity_count.values().min().unwrap_or(&0);
-            
+
             if max_entities > &0 && min_entities > &0 && max_entities / min_entities > 3 {
                 debug!(
                     "Unbalanced entity distribution across services - consider redistributing for better performance"

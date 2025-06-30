@@ -17,8 +17,8 @@ pub use validator::{ShapeValidationReport, ShapeValidator, SingleShapeValidation
 // Re-export helper functions that were in the original shapes.rs
 // These need to be migrated from the original file
 
-use oxirs_core::model::{Literal, NamedNode, Object, Term};
 use crate::Result;
+use oxirs_core::model::{Literal, NamedNode, Object, Term};
 
 /// Format a term for use in SPARQL queries
 pub fn format_term_for_sparql(term: &Term) -> String {
@@ -35,13 +35,17 @@ pub fn format_literal_for_sparql(literal: &Literal) -> String {
     let value = literal.value();
     let datatype = literal.datatype();
     let xsd_string = NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap();
-    
+
     if datatype == xsd_string.as_ref() {
         format!("\"{}\"", escape_sparql_string(value))
     } else if let Some(language) = literal.language() {
         format!("\"{}\"@{}", escape_sparql_string(value), language)
     } else {
-        format!("\"{}\"^^<{}>", escape_sparql_string(value), datatype.as_str())
+        format!(
+            "\"{}\"^^<{}>",
+            escape_sparql_string(value),
+            datatype.as_str()
+        )
     }
 }
 
@@ -61,7 +65,9 @@ pub fn object_to_term(obj: &Object) -> Result<Term> {
         Object::BlankNode(node) => Ok(Term::BlankNode(node.clone())),
         Object::Literal(literal) => Ok(Term::Literal(literal.clone())),
         Object::Variable(var) => Ok(Term::Variable(var.clone())),
-        Object::QuotedTriple(_) => Err(crate::ShaclError::ShapeParsing("QuotedTriple not supported in constraint values".to_string())),
+        Object::QuotedTriple(_) => Err(crate::ShaclError::ShapeParsing(
+            "QuotedTriple not supported in constraint values".to_string(),
+        )),
     }
 }
 

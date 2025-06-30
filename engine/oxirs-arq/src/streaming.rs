@@ -14,7 +14,9 @@ use serde::{Deserialize, Serialize};
 use tempfile::{NamedTempFile, TempDir};
 use tracing::{debug, info, span, warn, Level};
 
-use crate::algebra::{Algebra, BinaryOperator, Binding, Expression, Solution, Term, TriplePattern, Variable};
+use crate::algebra::{
+    Algebra, BinaryOperator, Binding, Expression, Solution, Term, TriplePattern, Variable,
+};
 use crate::executor::{ExecutionContext, ExecutionStats};
 use oxirs_core::model::NamedNode;
 
@@ -1810,7 +1812,7 @@ impl StreamingPatternScan {
     /// Generate solutions for the pattern (simplified simulation)
     fn generate_pattern_solutions(&mut self) -> Result<Vec<Solution>> {
         let mut solutions = Vec::new();
-        
+
         // Generate fewer solutions for more bound patterns
         let solution_count = match (
             matches!(self.pattern.subject, Term::Variable(_)),
@@ -1829,12 +1831,14 @@ impl StreamingPatternScan {
 
         for i in 0..solution_count.min(self.config.batch_size) {
             let mut binding = Binding::new();
-            
+
             for var in self.pattern.variables() {
-                let value = Term::Iri(NamedNode::new(&format!("http://example.org/resource_{}", i)).unwrap());
+                let value = Term::Iri(
+                    NamedNode::new(&format!("http://example.org/resource_{}", i)).unwrap(),
+                );
                 binding.insert(var, value);
             }
-            
+
             if !binding.is_empty() {
                 solutions.push(vec![binding]);
             }
@@ -1853,10 +1857,14 @@ impl StreamingPatternScan {
     /// Spill current batch to disk
     fn spill_current_batch(&mut self) -> Result<()> {
         if !self.current_batch.is_empty() {
-            let spill_id = self.spill_manager.lock().unwrap().spill_data(&self.current_batch, SpillDataType::Solutions)?;
+            let spill_id = self
+                .spill_manager
+                .lock()
+                .unwrap()
+                .spill_data(&self.current_batch, SpillDataType::Solutions)?;
             self.spilled_batches.push(spill_id);
             self.current_batch.clear();
-            
+
             debug!("Spilled batch {} for pattern scan", self.batch_index);
         }
         Ok(())
@@ -1868,14 +1876,16 @@ impl DataStream for StreamingPatternScan {
         // First, try to return any spilled batches
         if !self.spilled_batches.is_empty() {
             let spill_id = self.spilled_batches.remove(0);
-            let spilled_solutions: Vec<Solution> = self.spill_manager.lock().unwrap().read_spill(&spill_id)?;
+            let spilled_solutions: Vec<Solution> =
+                self.spill_manager.lock().unwrap().read_spill(&spill_id)?;
             return Ok(Some(spilled_solutions));
         }
 
         // Generate new solutions if we haven't reached the end
-        if self.batch_index < 10 { // Limit to 10 batches for demo
+        if self.batch_index < 10 {
+            // Limit to 10 batches for demo
             let solutions = self.generate_pattern_solutions()?;
-            
+
             if solutions.is_empty() {
                 return Ok(None);
             }
@@ -1915,7 +1925,7 @@ impl DataStream for StreamingPatternScan {
     fn get_stats(&self) -> StreamStats {
         StreamStats {
             rows_processed: self.total_results,
-            bytes_processed: 0, // Estimated
+            bytes_processed: 0,                      // Estimated
             processing_time: Duration::from_secs(0), // Not tracked here
             spill_operations: self.spilled_batches.len(),
             cache_hits: 0,
@@ -1942,7 +1952,7 @@ impl BufferedPatternScan {
             current_index: 0,
             exhausted: false,
         };
-        
+
         scan.generate_all_solutions()?;
         Ok(scan)
     }
@@ -1966,12 +1976,13 @@ impl BufferedPatternScan {
 
         for i in 0..solution_count {
             let mut binding = Binding::new();
-            
+
             for var in self.pattern.variables() {
-                let value = Term::Iri(NamedNode::new(&format!("http://example.org/item_{}", i)).unwrap());
+                let value =
+                    Term::Iri(NamedNode::new(&format!("http://example.org/item_{}", i)).unwrap());
                 binding.insert(var, value);
             }
-            
+
             if !binding.is_empty() {
                 self.solutions.push(vec![binding]);
             }
@@ -1989,7 +2000,7 @@ impl DataStream for BufferedPatternScan {
 
         let end_index = (self.current_index + self.batch_size).min(self.solutions.len());
         let batch = self.solutions[self.current_index..end_index].to_vec();
-        
+
         self.current_index = end_index;
         if self.current_index >= self.solutions.len() {
             self.exhausted = true;
@@ -2015,7 +2026,7 @@ impl DataStream for BufferedPatternScan {
     fn get_stats(&self) -> StreamStats {
         StreamStats {
             rows_processed: self.solutions.len(),
-            bytes_processed: 0, // Estimated
+            bytes_processed: 0,                      // Estimated
             processing_time: Duration::from_secs(0), // Not tracked here
             spill_operations: 0,
             cache_hits: 0,

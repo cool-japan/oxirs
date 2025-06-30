@@ -237,12 +237,29 @@ impl PropertyPathPattern {
 
     /// Convert a simple property path to a regular triple pattern
     pub fn to_triple_pattern(&self) -> Option<TriplePattern> {
+        use crate::model::pattern::{SubjectPattern, PredicatePattern, ObjectPattern};
+        
         match &self.path {
-            PropertyPath::Predicate(p) => Some(TriplePattern {
-                subject: self.subject.clone(),
-                predicate: TermPattern::NamedNode(p.clone()),
-                object: self.object.clone(),
-            }),
+            PropertyPath::Predicate(p) => {
+                let subject = match &self.subject {
+                    TermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
+                    TermPattern::NamedNode(n) => Some(SubjectPattern::NamedNode(n.clone())),
+                    TermPattern::BlankNode(b) => Some(SubjectPattern::BlankNode(b.clone())),
+                    _ => None,
+                };
+                
+                let predicate = Some(PredicatePattern::NamedNode(p.clone()));
+                
+                let object = match &self.object {
+                    TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
+                    TermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
+                    TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
+                    TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
+                    _ => None,
+                };
+                
+                Some(TriplePattern { subject, predicate, object })
+            },
             _ => None,
         }
     }

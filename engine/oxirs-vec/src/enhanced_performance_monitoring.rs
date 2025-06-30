@@ -66,10 +66,10 @@ impl Default for AlertThresholds {
     fn default() -> Self {
         Self {
             max_query_latency: 1000.0, // 1 second
-            max_error_rate: 0.05, // 5%
-            min_recall_at_10: 0.90, // 90%
-            max_memory_usage: 8192, // 8GB
-            max_cpu_usage: 0.80, // 80%
+            max_error_rate: 0.05,      // 5%
+            min_recall_at_10: 0.90,    // 90%
+            max_memory_usage: 8192,    // 8GB
+            max_cpu_usage: 0.80,       // 80%
         }
     }
 }
@@ -238,21 +238,13 @@ impl EnhancedPerformanceMonitor {
     /// Export metrics
     pub fn export_metrics(&self) -> Result<String> {
         let report = self.generate_analytics_report();
-        
+
         match self.config.export_config.format {
-            ExportFormat::JSON => {
-                serde_json::to_string_pretty(&report)
-                    .map_err(|e| anyhow!("JSON serialization error: {}", e))
-            }
-            ExportFormat::CSV => {
-                self.generate_csv_export(&report)
-            }
-            ExportFormat::Prometheus => {
-                self.generate_prometheus_export(&report)
-            }
-            _ => {
-                Err(anyhow!("Export format not yet implemented"))
-            }
+            ExportFormat::JSON => serde_json::to_string_pretty(&report)
+                .map_err(|e| anyhow!("JSON serialization error: {}", e)),
+            ExportFormat::CSV => self.generate_csv_export(&report),
+            ExportFormat::Prometheus => self.generate_prometheus_export(&report),
+            _ => Err(anyhow!("Export format not yet implemented")),
         }
     }
 
@@ -260,31 +252,52 @@ impl EnhancedPerformanceMonitor {
     fn generate_csv_export(&self, report: &AnalyticsReport) -> Result<String> {
         let mut csv = String::new();
         csv.push_str("metric,value,timestamp\n");
-        
-        csv.push_str(&format!("total_queries,{},{}\n", 
-                             report.query_statistics.total_queries,
-                             report.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs()));
-        
-        csv.push_str(&format!("avg_latency,{:.2},{}\n", 
-                             report.query_statistics.average_latency.as_millis(),
-                             report.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs()));
-        
+
+        csv.push_str(&format!(
+            "total_queries,{},{}\n",
+            report.query_statistics.total_queries,
+            report
+                .timestamp
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        ));
+
+        csv.push_str(&format!(
+            "avg_latency,{:.2},{}\n",
+            report.query_statistics.average_latency.as_millis(),
+            report
+                .timestamp
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        ));
+
         Ok(csv)
     }
 
     /// Generate Prometheus export
     fn generate_prometheus_export(&self, report: &AnalyticsReport) -> Result<String> {
         let mut prometheus = String::new();
-        
-        prometheus.push_str(&format!("# HELP vector_search_queries_total Total number of queries\n"));
+
+        prometheus.push_str(&format!(
+            "# HELP vector_search_queries_total Total number of queries\n"
+        ));
         prometheus.push_str(&format!("# TYPE vector_search_queries_total counter\n"));
-        prometheus.push_str(&format!("vector_search_queries_total {}\n", report.query_statistics.total_queries));
-        
-        prometheus.push_str(&format!("# HELP vector_search_latency_seconds Query latency in seconds\n"));
+        prometheus.push_str(&format!(
+            "vector_search_queries_total {}\n",
+            report.query_statistics.total_queries
+        ));
+
+        prometheus.push_str(&format!(
+            "# HELP vector_search_latency_seconds Query latency in seconds\n"
+        ));
         prometheus.push_str(&format!("# TYPE vector_search_latency_seconds histogram\n"));
-        prometheus.push_str(&format!("vector_search_latency_seconds {:.6}\n", 
-                                   report.query_statistics.average_latency.as_secs_f64()));
-        
+        prometheus.push_str(&format!(
+            "vector_search_latency_seconds {:.6}\n",
+            report.query_statistics.average_latency.as_secs_f64()
+        ));
+
         Ok(prometheus)
     }
 
@@ -347,7 +360,7 @@ impl QueryMetricsCollector {
 
     pub fn record_query(&mut self, query: QueryInfo) {
         let latency = query.end_time.duration_since(query.start_time);
-        
+
         // Update statistics
         self.statistics.total_queries += 1;
         if query.success {
@@ -363,9 +376,14 @@ impl QueryMetricsCollector {
             self.statistics.max_latency = latency;
         } else {
             // Update running average
-            let total_time = self.statistics.average_latency.mul_f64(self.statistics.total_queries as f64 - 1.0) + latency;
-            self.statistics.average_latency = total_time.div_f64(self.statistics.total_queries as f64);
-            
+            let total_time = self
+                .statistics
+                .average_latency
+                .mul_f64(self.statistics.total_queries as f64 - 1.0)
+                + latency;
+            self.statistics.average_latency =
+                total_time.div_f64(self.statistics.total_queries as f64);
+
             if latency < self.statistics.min_latency {
                 self.statistics.min_latency = latency;
             }
@@ -390,11 +408,13 @@ impl QueryMetricsCollector {
 
         // Cache hit rate
         if query.cache_hit {
-            self.statistics.cache_hit_rate = 
-                (self.statistics.cache_hit_rate * (self.statistics.total_queries - 1) as f32 + 1.0) / self.statistics.total_queries as f32;
+            self.statistics.cache_hit_rate =
+                (self.statistics.cache_hit_rate * (self.statistics.total_queries - 1) as f32 + 1.0)
+                    / self.statistics.total_queries as f32;
         } else {
-            self.statistics.cache_hit_rate = 
-                (self.statistics.cache_hit_rate * (self.statistics.total_queries - 1) as f32) / self.statistics.total_queries as f32;
+            self.statistics.cache_hit_rate = (self.statistics.cache_hit_rate
+                * (self.statistics.total_queries - 1) as f32)
+                / self.statistics.total_queries as f32;
         }
 
         // Store query for retention
@@ -429,11 +449,11 @@ pub struct QueryStatistics {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LatencyDistribution {
-    pub p10: u64,  // < 10ms
-    pub p50: u64,  // < 50ms
-    pub p90: u64,  // < 100ms
-    pub p95: u64,  // < 500ms
-    pub p99: u64,  // >= 500ms
+    pub p10: u64, // < 10ms
+    pub p50: u64, // < 50ms
+    pub p90: u64, // < 100ms
+    pub p95: u64, // < 500ms
+    pub p99: u64, // >= 500ms
 }
 
 /// System metrics
@@ -472,11 +492,11 @@ impl SystemMetricsCollector {
         // Update statistics
         self.statistics.current_cpu_usage = metrics.cpu_usage;
         self.statistics.current_memory_usage = metrics.memory_usage;
-        
+
         if metrics.cpu_usage > self.statistics.peak_cpu_usage {
             self.statistics.peak_cpu_usage = metrics.cpu_usage;
         }
-        
+
         if metrics.memory_usage > self.statistics.peak_memory_usage {
             self.statistics.peak_memory_usage = metrics.memory_usage;
         }
@@ -519,7 +539,7 @@ pub struct QualityMetrics {
     pub recall_at_5: f32,
     pub recall_at_10: f32,
     pub f1_score: f32,
-    pub mrr: f32, // Mean Reciprocal Rank
+    pub mrr: f32,  // Mean Reciprocal Rank
     pub ndcg: f32, // Normalized Discounted Cumulative Gain
     pub query_coverage: f32,
     pub result_diversity: f32,
@@ -546,11 +566,13 @@ impl QualityMetricsCollector {
         // Update running statistics
         let count = self.metrics_history.len() as f32;
         if count > 0.0 {
-            self.statistics.average_precision_at_10 = 
-                (self.statistics.average_precision_at_10 * count + metrics.precision_at_10) / (count + 1.0);
-            self.statistics.average_recall_at_10 = 
-                (self.statistics.average_recall_at_10 * count + metrics.recall_at_10) / (count + 1.0);
-            self.statistics.average_f1_score = 
+            self.statistics.average_precision_at_10 =
+                (self.statistics.average_precision_at_10 * count + metrics.precision_at_10)
+                    / (count + 1.0);
+            self.statistics.average_recall_at_10 = (self.statistics.average_recall_at_10 * count
+                + metrics.recall_at_10)
+                / (count + 1.0);
+            self.statistics.average_f1_score =
                 (self.statistics.average_f1_score * count + metrics.f1_score) / (count + 1.0);
         } else {
             self.statistics.average_precision_at_10 = metrics.precision_at_10;
@@ -596,13 +618,15 @@ impl AlertManager {
 
     pub fn check_query_alerts(&self, query: &QueryInfo) {
         let latency_ms = query.end_time.duration_since(query.start_time).as_millis() as f64;
-        
+
         if latency_ms > self.thresholds.max_query_latency {
             self.add_alert(Alert {
                 alert_type: AlertType::HighLatency,
                 severity: AlertSeverity::Warning,
-                message: format!("Query latency {}ms exceeds threshold {}ms", 
-                               latency_ms, self.thresholds.max_query_latency),
+                message: format!(
+                    "Query latency {}ms exceeds threshold {}ms",
+                    latency_ms, self.thresholds.max_query_latency
+                ),
                 timestamp: SystemTime::now(),
                 source: "query_monitor".to_string(),
             });
@@ -614,8 +638,11 @@ impl AlertManager {
             self.add_alert(Alert {
                 alert_type: AlertType::HighCpuUsage,
                 severity: AlertSeverity::Warning,
-                message: format!("CPU usage {:.1}% exceeds threshold {:.1}%", 
-                               metrics.cpu_usage * 100.0, self.thresholds.max_cpu_usage * 100.0),
+                message: format!(
+                    "CPU usage {:.1}% exceeds threshold {:.1}%",
+                    metrics.cpu_usage * 100.0,
+                    self.thresholds.max_cpu_usage * 100.0
+                ),
                 timestamp: SystemTime::now(),
                 source: "system_monitor".to_string(),
             });
@@ -626,8 +653,10 @@ impl AlertManager {
             self.add_alert(Alert {
                 alert_type: AlertType::HighMemoryUsage,
                 severity: AlertSeverity::Critical,
-                message: format!("Memory usage {}MB exceeds threshold {}MB", 
-                               memory_mb, self.thresholds.max_memory_usage),
+                message: format!(
+                    "Memory usage {}MB exceeds threshold {}MB",
+                    memory_mb, self.thresholds.max_memory_usage
+                ),
                 timestamp: SystemTime::now(),
                 source: "system_monitor".to_string(),
             });
@@ -639,8 +668,10 @@ impl AlertManager {
             self.add_alert(Alert {
                 alert_type: AlertType::LowRecall,
                 severity: AlertSeverity::Warning,
-                message: format!("Recall@10 {:.3} below threshold {:.3}", 
-                               metrics.recall_at_10, self.thresholds.min_recall_at_10),
+                message: format!(
+                    "Recall@10 {:.3} below threshold {:.3}",
+                    metrics.recall_at_10, self.thresholds.min_recall_at_10
+                ),
                 timestamp: SystemTime::now(),
                 source: "quality_monitor".to_string(),
             });
@@ -650,7 +681,7 @@ impl AlertManager {
     fn add_alert(&self, alert: Alert) {
         let mut alerts = self.active_alerts.write();
         alerts.push(alert);
-        
+
         // Keep only recent alerts (last hour)
         let cutoff = SystemTime::now() - Duration::from_secs(3600);
         alerts.retain(|a| a.timestamp > cutoff);
@@ -831,7 +862,7 @@ mod tests {
     #[test]
     fn test_query_metrics_collection() {
         let mut collector = QueryMetricsCollector::new();
-        
+
         let query = QueryInfo {
             query_id: "test_query".to_string(),
             query_type: QueryType::KNNSearch,
@@ -849,7 +880,7 @@ mod tests {
         };
 
         collector.record_query(query);
-        
+
         let stats = collector.get_statistics();
         assert_eq!(stats.total_queries, 1);
         assert_eq!(stats.successful_queries, 1);
@@ -867,7 +898,7 @@ mod tests {
         };
 
         let alert_manager = AlertManager::new(thresholds);
-        
+
         let query = QueryInfo {
             query_id: "slow_query".to_string(),
             query_type: QueryType::KNNSearch,
@@ -885,7 +916,7 @@ mod tests {
         };
 
         alert_manager.check_query_alerts(&query);
-        
+
         let alerts = alert_manager.get_active_alerts();
         assert_eq!(alerts.len(), 1);
         assert!(matches!(alerts[0].alert_type, AlertType::HighLatency));
@@ -895,7 +926,7 @@ mod tests {
     fn test_performance_monitor() {
         let config = MonitoringConfig::default();
         let monitor = EnhancedPerformanceMonitor::new(config);
-        
+
         let query = QueryInfo {
             query_id: "test".to_string(),
             query_type: QueryType::KNNSearch,
@@ -913,7 +944,7 @@ mod tests {
         };
 
         monitor.record_query(query);
-        
+
         let dashboard = monitor.get_dashboard_data();
         assert!(dashboard.last_updated <= SystemTime::now());
     }

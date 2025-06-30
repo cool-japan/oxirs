@@ -85,10 +85,7 @@ impl ValidationAnalytics {
     }
 
     /// Record validation session for comprehensive analysis
-    pub fn record_validation_session(
-        &self,
-        session: ValidationSession,
-    ) -> Result<()> {
+    pub fn record_validation_session(&self, session: ValidationSession) -> Result<()> {
         // Store session data
         {
             let mut collector = self.data_collector.write().unwrap();
@@ -136,7 +133,7 @@ impl ValidationAnalytics {
     pub fn train_ml_models(&self) -> Result<MLTrainingReport> {
         let mut ml_engine = self.ml_engine.write().unwrap();
         let data_collector = self.data_collector.read().unwrap();
-        
+
         let training_data = data_collector.get_training_data()?;
         ml_engine.train_models(training_data)
     }
@@ -145,15 +142,15 @@ impl ValidationAnalytics {
     pub fn get_optimization_recommendations(&self) -> Vec<OptimizationRecommendation> {
         let profiler = self.performance_profiler.read().unwrap();
         let ml_engine = self.ml_engine.read().unwrap();
-        
+
         let mut recommendations = Vec::new();
-        
+
         // Performance-based recommendations
         recommendations.extend(profiler.generate_recommendations());
-        
+
         // ML-based recommendations
         recommendations.extend(ml_engine.generate_recommendations());
-        
+
         recommendations
     }
 
@@ -167,9 +164,15 @@ impl ValidationAnalytics {
     fn extract_context_metadata(&self, context: &ConstraintContext) -> ContextMetadata {
         ContextMetadata {
             values_count: context.values.len(),
-            path_complexity: context.path.as_ref().map(|p| self.calculate_path_complexity(p)).unwrap_or(0),
+            path_complexity: context
+                .path
+                .as_ref()
+                .map(|p| self.calculate_path_complexity(p))
+                .unwrap_or(0),
             has_allowed_properties: !context.allowed_properties.is_empty(),
-            shapes_registry_size: context.shapes_registry.as_ref()
+            shapes_registry_size: context
+                .shapes_registry
+                .as_ref()
                 .map(|registry| registry.len())
                 .unwrap_or(0),
         }
@@ -207,23 +210,29 @@ impl ConstraintPerformanceProfiler {
 
     fn record_execution(&mut self, record: &ConstraintExecutionRecord) -> Result<()> {
         let constraint_id = record.constraint_id.clone();
-        
+
         // Store execution record
-        let records = self.execution_records.entry(constraint_id.clone()).or_insert_with(VecDeque::new);
+        let records = self
+            .execution_records
+            .entry(constraint_id.clone())
+            .or_insert_with(VecDeque::new);
         records.push_back(record.clone());
-        
+
         // Maintain size limit
         if records.len() > self.max_records_per_constraint {
             records.pop_front();
         }
-        
+
         // Update performance statistics
-        let stats = self.performance_stats.entry(constraint_id).or_insert_with(ConstraintPerformanceStats::default);
+        let stats = self
+            .performance_stats
+            .entry(constraint_id)
+            .or_insert_with(ConstraintPerformanceStats::default);
         stats.update_with_execution(record);
-        
+
         // Update global metrics
         self.global_metrics.update_with_execution(record);
-        
+
         Ok(())
     }
 
@@ -241,7 +250,7 @@ impl ConstraintPerformanceProfiler {
 
     fn generate_recommendations(&self) -> Vec<OptimizationRecommendation> {
         let mut recommendations = Vec::new();
-        
+
         // Identify slow constraints
         for (constraint_id, stats) in &self.performance_stats {
             if stats.average_execution_time > Duration::from_millis(100) {
@@ -259,10 +268,11 @@ impl ConstraintPerformanceProfiler {
                 });
             }
         }
-        
+
         // Identify memory-heavy constraints
         for (constraint_id, stats) in &self.performance_stats {
-            if stats.average_memory_usage > 1024 * 1024 { // 1MB
+            if stats.average_memory_usage > 1024 * 1024 {
+                // 1MB
                 recommendations.push(OptimizationRecommendation {
                     category: RecommendationCategory::Memory,
                     priority: RecommendationPriority::Medium,
@@ -277,27 +287,32 @@ impl ConstraintPerformanceProfiler {
                 });
             }
         }
-        
+
         recommendations
     }
 
     fn get_slowest_constraints(&self, limit: usize) -> Vec<(ConstraintComponentId, Duration)> {
-        let mut constraints: Vec<_> = self.performance_stats
+        let mut constraints: Vec<_> = self
+            .performance_stats
             .iter()
             .map(|(id, stats)| (id.clone(), stats.average_execution_time))
             .collect();
-        
+
         constraints.sort_by(|a, b| b.1.cmp(&a.1));
         constraints.truncate(limit);
         constraints
     }
 
-    fn get_memory_consuming_constraints(&self, limit: usize) -> Vec<(ConstraintComponentId, usize)> {
-        let mut constraints: Vec<_> = self.performance_stats
+    fn get_memory_consuming_constraints(
+        &self,
+        limit: usize,
+    ) -> Vec<(ConstraintComponentId, usize)> {
+        let mut constraints: Vec<_> = self
+            .performance_stats
             .iter()
             .map(|(id, stats)| (id.clone(), stats.average_memory_usage))
             .collect();
-        
+
         constraints.sort_by(|a, b| b.1.cmp(&a.1));
         constraints.truncate(limit);
         constraints
@@ -364,12 +379,18 @@ impl MLIntegrationEngine {
             model_metrics: HashMap::new(),
             training_config: MLTrainingConfig::default(),
         };
-        
+
         // Register default feature extractors
-        engine.feature_extractors.push(Box::new(ConstraintTypeExtractor::new()));
-        engine.feature_extractors.push(Box::new(DataSizeExtractor::new()));
-        engine.feature_extractors.push(Box::new(ComplexityExtractor::new()));
-        
+        engine
+            .feature_extractors
+            .push(Box::new(ConstraintTypeExtractor::new()));
+        engine
+            .feature_extractors
+            .push(Box::new(DataSizeExtractor::new()));
+        engine
+            .feature_extractors
+            .push(Box::new(ComplexityExtractor::new()));
+
         engine
     }
 
@@ -388,18 +409,18 @@ impl MLIntegrationEngine {
     ) -> Result<ValidationPerformancePrediction> {
         // Extract features from shapes and data size
         let features = self.extract_features(shapes, estimated_data_size)?;
-        
+
         // Get predictions from models
         let mut predictions = HashMap::new();
-        
+
         for (model_name, model) in &self.models {
             let prediction = model.predict(&features)?;
             predictions.insert(model_name.clone(), prediction);
         }
-        
+
         // Combine predictions
         let combined_prediction = self.combine_predictions(&predictions)?;
-        
+
         Ok(ValidationPerformancePrediction {
             estimated_execution_time: combined_prediction.execution_time,
             estimated_memory_usage: combined_prediction.memory_usage,
@@ -412,19 +433,24 @@ impl MLIntegrationEngine {
 
     fn train_models(&mut self, training_data: TrainingData) -> Result<MLTrainingReport> {
         let mut training_results = HashMap::new();
-        
+
         // Train performance prediction model
         let performance_model = Box::new(PerformancePredictionModel::new());
         let training_result = performance_model.train(&training_data)?;
-        training_results.insert("performance_prediction".to_string(), training_result.clone());
-        self.models.insert("performance_prediction".to_string(), performance_model);
-        
+        training_results.insert(
+            "performance_prediction".to_string(),
+            training_result.clone(),
+        );
+        self.models
+            .insert("performance_prediction".to_string(), performance_model);
+
         // Train violation prediction model
         let violation_model = Box::new(ViolationPredictionModel::new());
         let training_result = violation_model.train(&training_data)?;
         training_results.insert("violation_prediction".to_string(), training_result.clone());
-        self.models.insert("violation_prediction".to_string(), violation_model);
-        
+        self.models
+            .insert("violation_prediction".to_string(), violation_model);
+
         Ok(MLTrainingReport {
             training_results,
             model_count: self.models.len(),
@@ -449,38 +475,45 @@ impl MLIntegrationEngine {
 
     fn extract_features(&self, shapes: &[Shape], data_size: usize) -> Result<MLFeatures> {
         let mut features = MLFeatures::new();
-        
+
         for extractor in &self.feature_extractors {
             let extracted = extractor.extract_features(shapes, data_size)?;
             features.merge(extracted);
         }
-        
+
         Ok(features)
     }
 
-    fn combine_predictions(&self, predictions: &HashMap<String, MLPrediction>) -> Result<MLPrediction> {
+    fn combine_predictions(
+        &self,
+        predictions: &HashMap<String, MLPrediction>,
+    ) -> Result<MLPrediction> {
         if predictions.is_empty() {
             return Ok(MLPrediction::default());
         }
-        
+
         // Simple average combination - could be enhanced with weighted averaging
         let count = predictions.len() as f64;
-        let avg_execution_time = predictions.values()
+        let avg_execution_time = predictions
+            .values()
             .map(|p| p.execution_time.as_millis() as f64)
-            .sum::<f64>() / count;
-        
-        let avg_memory = predictions.values()
+            .sum::<f64>()
+            / count;
+
+        let avg_memory = predictions
+            .values()
             .map(|p| p.memory_usage as f64)
-            .sum::<f64>() / count;
-        
-        let avg_violations = predictions.values()
+            .sum::<f64>()
+            / count;
+
+        let avg_violations = predictions
+            .values()
             .map(|p| p.violation_count as f64)
-            .sum::<f64>() / count;
-        
-        let avg_confidence = predictions.values()
-            .map(|p| p.confidence)
-            .sum::<f64>() / count;
-        
+            .sum::<f64>()
+            / count;
+
+        let avg_confidence = predictions.values().map(|p| p.confidence).sum::<f64>() / count;
+
         Ok(MLPrediction {
             execution_time: Duration::from_millis(avg_execution_time as u64),
             memory_usage: avg_memory as usize,
@@ -524,12 +557,17 @@ impl AnomalyDetector {
 
     fn check_execution_anomaly(&mut self, record: &ConstraintExecutionRecord) -> Result<()> {
         let constraint_key = record.constraint_id.as_str().to_string();
-        
+
         // Get or create baseline for this constraint
-        let baseline = self.baselines.entry(constraint_key.clone()).or_insert_with(StatisticalBaseline::default);
-        
+        let baseline = self
+            .baselines
+            .entry(constraint_key.clone())
+            .or_insert_with(StatisticalBaseline::default);
+
         // Check for time anomaly
-        if record.execution_time > baseline.expected_execution_time * self.thresholds.execution_time_multiplier {
+        if record.execution_time
+            > baseline.expected_execution_time * self.thresholds.execution_time_multiplier
+        {
             self.record_anomaly(DetectedAnomaly {
                 anomaly_type: AnomalyType::SlowExecution,
                 constraint_id: record.constraint_id.clone(),
@@ -547,9 +585,11 @@ impl AnomalyDetector {
                 }),
             });
         }
-        
+
         // Check for memory anomaly
-        if record.memory_used > baseline.expected_memory_usage * self.thresholds.memory_usage_multiplier {
+        if record.memory_used
+            > baseline.expected_memory_usage * self.thresholds.memory_usage_multiplier
+        {
             self.record_anomaly(DetectedAnomaly {
                 anomaly_type: AnomalyType::HighMemoryUsage,
                 constraint_id: record.constraint_id.clone(),
@@ -566,10 +606,10 @@ impl AnomalyDetector {
                 }),
             });
         }
-        
+
         // Update baseline with new data
         baseline.update_with_record(record);
-        
+
         Ok(())
     }
 
@@ -592,13 +632,13 @@ impl AnomalyDetector {
                 }),
             });
         }
-        
+
         Ok(())
     }
 
     fn record_anomaly(&mut self, anomaly: DetectedAnomaly) {
         self.anomalies.push_back(anomaly);
-        
+
         // Maintain size limit
         if self.anomalies.len() > self.config.max_stored_anomalies {
             self.anomalies.pop_front();
@@ -640,6 +680,28 @@ impl AnomalyDetector {
     }
 }
 
+/// Aggregated metrics for caching validation statistics
+#[derive(Debug, Clone)]
+pub struct AggregatedMetrics {
+    pub total_validations: usize,
+    pub total_violations: usize,
+    pub success_rate: f64,
+    pub average_execution_time: Duration,
+    pub last_updated: SystemTime,
+}
+
+impl Default for AggregatedMetrics {
+    fn default() -> Self {
+        Self {
+            total_validations: 0,
+            total_violations: 0,
+            success_rate: 0.0,
+            average_execution_time: Duration::from_secs(0),
+            last_updated: SystemTime::now(),
+        }
+    }
+}
+
 /// Analytics data collector for structured data gathering
 #[derive(Debug)]
 pub struct AnalyticsDataCollector {
@@ -665,26 +727,26 @@ impl AnalyticsDataCollector {
 
     fn collect_execution_data(&mut self, record: &ConstraintExecutionRecord) -> Result<()> {
         self.execution_data.push_back(record.clone());
-        
+
         // Maintain size limit
         if self.execution_data.len() > self.config.max_execution_records {
             self.execution_data.pop_front();
         }
-        
+
         // Invalidate cache
         self.aggregation_cache.clear();
-        
+
         Ok(())
     }
 
     fn collect_session_data(&mut self, session: &ValidationSession) -> Result<()> {
         self.session_data.push_back(session.clone());
-        
+
         // Maintain size limit
         if self.session_data.len() > self.config.max_session_records {
             self.session_data.pop_front();
         }
-        
+
         Ok(())
     }
 
@@ -710,15 +772,17 @@ impl AnalyticsDataCollector {
                     export_timestamp: SystemTime::now(),
                     version: "1.0".to_string(),
                 };
-                
+
                 serde_json::to_string_pretty(&export_data)
                     .map_err(|e| ShaclError::ValidationEngine(format!("JSON export error: {}", e)))
             }
             AnalyticsExportFormat::Csv => {
                 // Simplified CSV export
                 let mut csv = String::new();
-                csv.push_str("constraint_id,execution_time_ms,memory_used_bytes,result_type,timestamp\n");
-                
+                csv.push_str(
+                    "constraint_id,execution_time_ms,memory_used_bytes,result_type,timestamp\n",
+                );
+
                 for record in &self.execution_data {
                     csv.push_str(&format!(
                         "{},{},{},{},{}\n",
@@ -730,10 +794,14 @@ impl AnalyticsDataCollector {
                             ExecutionResultType::Violated => "violated",
                             ExecutionResultType::Error => "error",
                         },
-                        record.timestamp.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+                        record
+                            .timestamp
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs()
                     ));
                 }
-                
+
                 Ok(csv)
             }
         }
@@ -839,15 +907,17 @@ impl GlobalPerformanceMetrics {
         self.total_executions += 1;
         self.total_execution_time += record.execution_time;
         self.total_memory_used += record.memory_used;
-        
+
         self.average_execution_time = self.total_execution_time / self.total_executions as u32;
         self.average_memory_per_execution = self.total_memory_used / self.total_executions;
-        
+
         // Update rates (simplified)
         match record.result_type {
             ExecutionResultType::Satisfied => self.success_rate = (self.success_rate + 1.0) / 2.0,
-            ExecutionResultType::Violated => self.violation_rate = (self.violation_rate + 1.0) / 2.0,
-            ExecutionResultType::Error => {},
+            ExecutionResultType::Violated => {
+                self.violation_rate = (self.violation_rate + 1.0) / 2.0
+            }
+            ExecutionResultType::Error => {}
         }
     }
 }
@@ -873,10 +943,10 @@ impl ConstraintPerformanceStats {
         self.total_executions += 1;
         self.total_execution_time += record.execution_time;
         self.total_memory_usage += record.memory_used;
-        
+
         self.average_execution_time = self.total_execution_time / self.total_executions as u32;
         self.average_memory_usage = self.total_memory_usage / self.total_executions;
-        
+
         if self.total_executions == 1 {
             self.min_execution_time = record.execution_time;
             self.max_execution_time = record.execution_time;
@@ -888,13 +958,13 @@ impl ConstraintPerformanceStats {
                 self.max_execution_time = record.execution_time;
             }
         }
-        
+
         match record.result_type {
             ExecutionResultType::Satisfied => self.success_count += 1,
             ExecutionResultType::Violated => self.violation_count += 1,
             ExecutionResultType::Error => self.error_count += 1,
         }
-        
+
         self.last_updated = record.timestamp;
     }
 }
@@ -1104,15 +1174,15 @@ pub struct StatisticalBaseline {
 impl StatisticalBaseline {
     fn update_with_record(&mut self, record: &ConstraintExecutionRecord) {
         self.sample_count += 1;
-        
+
         // Simple moving average (could be enhanced with exponential moving average)
         let alpha = 1.0 / self.sample_count as f64;
-        
+
         let new_time_ms = record.execution_time.as_millis() as f64;
         let old_time_ms = self.expected_execution_time.as_millis() as f64;
         let updated_time_ms = old_time_ms + alpha * (new_time_ms - old_time_ms);
         self.expected_execution_time = Duration::from_millis(updated_time_ms as u64);
-        
+
         let new_memory = record.memory_used as f64;
         let old_memory = self.expected_memory_usage as f64;
         let updated_memory = old_memory + alpha * (new_memory - old_memory);
@@ -1132,10 +1202,10 @@ pub struct AnomalyThresholds {
 impl Default for AnomalyThresholds {
     fn default() -> Self {
         Self {
-            execution_time_multiplier: 3, // 3x expected time
-            memory_usage_multiplier: 2, // 2x expected memory
+            execution_time_multiplier: 3,  // 3x expected time
+            memory_usage_multiplier: 2,    // 2x expected memory
             violation_rate_threshold: 0.8, // 80% violation rate
-            error_rate_threshold: 0.1, // 10% error rate
+            error_rate_threshold: 0.1,     // 10% error rate
         }
     }
 }
@@ -1207,7 +1277,7 @@ impl MLFeatures {
             features: HashMap::new(),
         }
     }
-    
+
     fn merge(&mut self, other: MLFeatures) {
         self.features.extend(other.features);
     }
@@ -1286,13 +1356,16 @@ impl ConstraintTypeExtractor {
 impl FeatureExtractor for ConstraintTypeExtractor {
     fn extract_features(&self, shapes: &[Shape], _data_size: usize) -> Result<MLFeatures> {
         let mut features = MLFeatures::new();
-        
-        let constraint_count = shapes.iter()
+
+        let constraint_count = shapes
+            .iter()
             .map(|shape| shape.constraints.len())
             .sum::<usize>() as f64;
-        
-        features.features.insert("constraint_count".to_string(), constraint_count);
-        
+
+        features
+            .features
+            .insert("constraint_count".to_string(), constraint_count);
+
         Ok(features)
     }
 }
@@ -1310,7 +1383,9 @@ impl DataSizeExtractor {
 impl FeatureExtractor for DataSizeExtractor {
     fn extract_features(&self, _shapes: &[Shape], data_size: usize) -> Result<MLFeatures> {
         let mut features = MLFeatures::new();
-        features.features.insert("data_size".to_string(), data_size as f64);
+        features
+            .features
+            .insert("data_size".to_string(), data_size as f64);
         Ok(features)
     }
 }
@@ -1328,10 +1403,12 @@ impl ComplexityExtractor {
 impl FeatureExtractor for ComplexityExtractor {
     fn extract_features(&self, shapes: &[Shape], _data_size: usize) -> Result<MLFeatures> {
         let mut features = MLFeatures::new();
-        
+
         let complexity_score = shapes.len() as f64 * 1.5; // Simplified complexity calculation
-        features.features.insert("complexity_score".to_string(), complexity_score);
-        
+        features
+            .features
+            .insert("complexity_score".to_string(), complexity_score);
+
         Ok(features)
     }
 }
@@ -1348,7 +1425,7 @@ impl PerformancePredictionModel {
         weights.insert("constraint_count".to_string(), 0.1);
         weights.insert("data_size".to_string(), 0.05);
         weights.insert("complexity_score".to_string(), 0.2);
-        
+
         Self { weights }
     }
 }
@@ -1357,14 +1434,14 @@ impl MLModel for PerformancePredictionModel {
     fn predict(&self, features: &MLFeatures) -> Result<MLPrediction> {
         let mut execution_time_ms = 0.0;
         let mut memory_usage = 0.0;
-        
+
         for (feature_name, feature_value) in &features.features {
             if let Some(&weight) = self.weights.get(feature_name) {
                 execution_time_ms += feature_value * weight;
                 memory_usage += feature_value * weight * 1024.0; // KB
             }
         }
-        
+
         Ok(MLPrediction {
             execution_time: Duration::from_millis(execution_time_ms as u64),
             memory_usage: memory_usage as usize,
@@ -1372,7 +1449,7 @@ impl MLModel for PerformancePredictionModel {
             confidence: 0.75,
         })
     }
-    
+
     fn train(&self, _data: &TrainingData) -> Result<ModelTrainingResult> {
         // Simplified training simulation
         Ok(ModelTrainingResult {
@@ -1384,7 +1461,7 @@ impl MLModel for PerformancePredictionModel {
             validation_error: 0.18,
         })
     }
-    
+
     fn update_with_session(&mut self, _session: &ValidationSession) -> Result<()> {
         // Simplified online learning simulation
         Ok(())
@@ -1411,7 +1488,7 @@ impl MLModel for ViolationPredictionModel {
         } else {
             0
         };
-        
+
         Ok(MLPrediction {
             execution_time: Duration::from_millis(100),
             memory_usage: 1024,
@@ -1419,7 +1496,7 @@ impl MLModel for ViolationPredictionModel {
             confidence: 0.70,
         })
     }
-    
+
     fn train(&self, _data: &TrainingData) -> Result<ModelTrainingResult> {
         Ok(ModelTrainingResult {
             accuracy: 0.78,
@@ -1430,7 +1507,7 @@ impl MLModel for ViolationPredictionModel {
             validation_error: 0.25,
         })
     }
-    
+
     fn update_with_session(&mut self, _session: &ValidationSession) -> Result<()> {
         Ok(())
     }

@@ -7,6 +7,7 @@
 //! - Cross-node query coordination
 //! - Split-brain protection
 
+pub mod byzantine_raft;
 pub mod coordinator;
 pub mod node;
 pub mod partition;

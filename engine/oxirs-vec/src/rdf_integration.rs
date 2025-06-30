@@ -3,19 +3,19 @@
 //! This module provides seamless integration between oxirs-vec's vector operations
 //! and oxirs-core's RDF term system, enabling semantic vector search on RDF data.
 
-use crate::{Vector, VectorId, VectorStore, similarity::SimilarityMetric};
+use crate::{similarity::SimilarityMetric, Vector, VectorId, VectorStore, VectorStoreTrait};
 use anyhow::{anyhow, Result};
 use oxirs_core::{
     model::{
-        Term, NamedNode, BlankNode, Literal, Variable, Subject, Predicate, Object,
-        GraphName, Triple, Quad, Graph
+        BlankNode, Graph, GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject, Term,
+        Triple, Variable,
     },
     OxirsError,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
 use std::hash::{Hash, Hasher};
+use std::sync::{Arc, RwLock};
 
 /// Configuration for RDF-vector integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,7 +128,7 @@ pub struct RdfVectorIntegration {
     /// Namespace registry
     namespace_registry: Arc<RwLock<HashMap<String, String>>>,
     /// Vector store reference
-    vector_store: Arc<dyn VectorStore>,
+    vector_store: Arc<dyn VectorStoreTrait>,
 }
 
 /// Hash wrapper for RDF terms to enable HashMap keys
@@ -139,7 +139,7 @@ impl TermHash {
     fn from_term(term: &Term) -> Self {
         use std::collections::hash_map::DefaultHasher;
         let mut hasher = DefaultHasher::new();
-        
+
         match term {
             Term::NamedNode(node) => {
                 "NamedNode".hash(&mut hasher);
@@ -167,14 +167,14 @@ impl TermHash {
                 "quoted_triple".hash(&mut hasher);
             }
         }
-        
+
         TermHash(hasher.finish())
     }
 }
 
 impl RdfVectorIntegration {
     /// Create a new RDF-vector integration instance
-    pub fn new(config: RdfVectorConfig, vector_store: Arc<dyn VectorStore>) -> Self {
+    pub fn new(config: RdfVectorConfig, vector_store: Arc<dyn VectorStoreTrait>) -> Self {
         Self {
             config,
             term_mappings: Arc::new(RwLock::new(HashMap::new())),
@@ -186,10 +186,15 @@ impl RdfVectorIntegration {
     }
 
     /// Register an RDF term with vector representation
-    pub fn register_term(&self, term: Term, vector: Vector, graph_context: Option<GraphName>) -> Result<VectorId> {
+    pub fn register_term(
+        &self,
+        term: Term,
+        vector: Vector,
+        graph_context: Option<GraphName>,
+    ) -> Result<VectorId> {
         let vector_id = self.vector_store.add_vector(vector)?;
         let metadata = self.extract_term_metadata(&term)?;
-        
+
         let mapping = RdfTermMapping {
             term: term.clone(),
             vector_id,
@@ -198,13 +203,13 @@ impl RdfVectorIntegration {
         };
 
         let term_hash = TermHash::from_term(&term);
-        
+
         // Update mappings
         {
             let mut term_mappings = self.term_mappings.write().unwrap();
             term_mappings.insert(term_hash, mapping.clone());
         }
-        
+
         {
             let mut vector_mappings = self.vector_mappings.write().unwrap();
             vector_mappings.insert(vector_id, mapping);
@@ -213,7 +218,10 @@ impl RdfVectorIntegration {
         // Update graph cache if applicable
         if let Some(graph) = graph_context {
             let mut graph_cache = self.graph_cache.write().unwrap();
-            graph_cache.entry(graph).or_insert_with(HashSet::new).insert(vector_id);
+            graph_cache
+                .entry(graph)
+                .or_insert_with(HashSet::new)
+                .insert(vector_id);
         }
 
         Ok(vector_id)
@@ -228,18 +236,22 @@ impl RdfVectorIntegration {
         graph_context: Option<&GraphName>,
     ) -> Result<Vec<RdfVectorSearchResult>> {
         let start_time = std::time::Instant::now();
-        
+
         // Get vector for query term
-        let query_vector_id = self.get_vector_id(query_term)?
+        let query_vector_id = self
+            .get_vector_id(query_term)?
             .ok_or_else(|| anyhow!("Query term not found in vector store"))?;
-        
-        let query_vector = self.vector_store.get_vector(query_vector_id)?
+
+        let query_vector = self
+            .vector_store
+            .get_vector(query_vector_id)?
             .ok_or_else(|| anyhow!("Query vector not found"))?;
 
         // Filter by graph context if specified
         let candidate_vectors = if let Some(graph) = graph_context {
             let graph_cache = self.graph_cache.read().unwrap();
-            graph_cache.get(graph)
+            graph_cache
+                .get(graph)
                 .map(|set| set.iter().copied().collect::<Vec<_>>())
                 .unwrap_or_default()
         } else {
@@ -256,7 +268,7 @@ impl RdfVectorIntegration {
 
             if let Ok(Some(vector)) = self.vector_store.get_vector(vector_id) {
                 let similarity = self.config.default_metric.compute(&query_vector, &vector)?;
-                
+
                 // Apply threshold filtering
                 if let Some(thresh) = threshold {
                     if similarity < thresh {
@@ -268,7 +280,7 @@ impl RdfVectorIntegration {
                 let vector_mappings = self.vector_mappings.read().unwrap();
                 if let Some(mapping) = vector_mappings.get(&vector_id) {
                     let processing_time = start_time.elapsed().as_micros() as u64;
-                    
+
                     results.push(RdfVectorSearchResult {
                         term: mapping.term.clone(),
                         score: similarity,
@@ -286,8 +298,12 @@ impl RdfVectorIntegration {
         }
 
         // Sort by similarity score (descending)
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         // Apply limit
         results.truncate(limit);
 
@@ -305,18 +321,19 @@ impl RdfVectorIntegration {
         // Create a temporary literal term for text search
         let literal = Literal::new_simple_literal(query_text);
         let query_term = Term::Literal(literal);
-        
+
         // For text search, we would typically generate an embedding
         // This is a simplified version - in practice, you'd use an embedding model
         let query_vector = self.generate_text_embedding(query_text)?;
-        
+
         // Register temporary term (optional - for caching)
         let temp_vector_id = self.vector_store.add_vector(query_vector.clone())?;
-        
+
         // Perform similarity search against all terms
         let candidate_vectors = if let Some(graph) = graph_context {
             let graph_cache = self.graph_cache.read().unwrap();
-            graph_cache.get(graph)
+            graph_cache
+                .get(graph)
                 .map(|set| set.iter().copied().collect::<Vec<_>>())
                 .unwrap_or_default()
         } else {
@@ -329,7 +346,7 @@ impl RdfVectorIntegration {
         for vector_id in candidate_vectors {
             if let Ok(Some(vector)) = self.vector_store.get_vector(vector_id) {
                 let similarity = self.config.default_metric.compute(&query_vector, &vector)?;
-                
+
                 if let Some(thresh) = threshold {
                     if similarity < thresh {
                         continue;
@@ -339,7 +356,7 @@ impl RdfVectorIntegration {
                 let vector_mappings = self.vector_mappings.read().unwrap();
                 if let Some(mapping) = vector_mappings.get(&vector_id) {
                     let processing_time = start_time.elapsed().as_micros() as u64;
-                    
+
                     results.push(RdfVectorSearchResult {
                         term: mapping.term.clone(),
                         score: similarity,
@@ -360,7 +377,11 @@ impl RdfVectorIntegration {
         let _ = self.vector_store.remove_vector(temp_vector_id);
 
         // Sort and limit results
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(limit);
 
         Ok(results)
@@ -370,13 +391,17 @@ impl RdfVectorIntegration {
     pub fn get_vector_id(&self, term: &Term) -> Result<Option<VectorId>> {
         let term_hash = TermHash::from_term(term);
         let term_mappings = self.term_mappings.read().unwrap();
-        Ok(term_mappings.get(&term_hash).map(|mapping| mapping.vector_id))
+        Ok(term_mappings
+            .get(&term_hash)
+            .map(|mapping| mapping.vector_id))
     }
 
     /// Get RDF term for a vector ID
     pub fn get_term(&self, vector_id: VectorId) -> Result<Option<Term>> {
         let vector_mappings = self.vector_mappings.read().unwrap();
-        Ok(vector_mappings.get(&vector_id).map(|mapping| mapping.term.clone()))
+        Ok(vector_mappings
+            .get(&vector_id)
+            .map(|mapping| mapping.term.clone()))
     }
 
     /// Register a namespace prefix
@@ -392,7 +417,7 @@ impl RdfVectorIntegration {
             Term::NamedNode(node) => {
                 let uri = node.as_str();
                 let (namespace, local_name) = self.split_uri(uri);
-                
+
                 Ok(RdfTermMetadata {
                     term_type: RdfTermType::NamedNode,
                     namespace,
@@ -412,16 +437,14 @@ impl RdfVectorIntegration {
                     complexity_score: 0.5, // Blank nodes have medium complexity
                 })
             }
-            Term::Literal(literal) => {
-                Ok(RdfTermMetadata {
-                    term_type: RdfTermType::Literal,
-                    namespace: None,
-                    local_name: None,
-                    datatype: Some(literal.datatype()),
-                    language: literal.language().map(|s| s.to_string()),
-                    complexity_score: self.calculate_literal_complexity(literal),
-                })
-            }
+            Term::Literal(literal) => Ok(RdfTermMetadata {
+                term_type: RdfTermType::Literal,
+                namespace: None,
+                local_name: None,
+                datatype: Some(literal.datatype()),
+                language: literal.language().map(|s| s.to_string()),
+                complexity_score: self.calculate_literal_complexity(literal),
+            }),
             Term::Variable(_) => {
                 Ok(RdfTermMetadata {
                     term_type: RdfTermType::Variable,
@@ -462,20 +485,25 @@ impl RdfVectorIntegration {
         let length_factor = (uri.len() as f32 / 100.0).min(1.0);
         let segment_count = uri.matches(&['/', '#'][..]).count() as f32 / 10.0;
         let query_params = if uri.contains('?') { 0.2 } else { 0.0 };
-        
+
         (length_factor + segment_count + query_params).min(1.0)
     }
 
     /// Calculate literal complexity score
     fn calculate_literal_complexity(&self, literal: &Literal) -> f32 {
         let value_length = literal.value().len() as f32 / 200.0;
-        let datatype_complexity = if literal.datatype().as_str() == "http://www.w3.org/2001/XMLSchema#string" {
-            0.3
+        let datatype_complexity =
+            if literal.datatype().as_str() == "http://www.w3.org/2001/XMLSchema#string" {
+                0.3
+            } else {
+                0.7
+            };
+        let language_bonus = if literal.language().is_some() {
+            0.2
         } else {
-            0.7
+            0.0
         };
-        let language_bonus = if literal.language().is_some() { 0.2 } else { 0.0 };
-        
+
         (value_length + datatype_complexity + language_bonus).min(1.0)
     }
 
@@ -490,7 +518,7 @@ impl RdfVectorIntegration {
             RdfTermType::Variable => 0.01,
             RdfTermType::QuotedTriple => 0.15,
         };
-        
+
         (base_confidence + complexity_bonus + type_bonus).min(1.0)
     }
 
@@ -504,7 +532,11 @@ impl RdfVectorIntegration {
             RdfTermType::QuotedTriple => "Quoted Triple",
         };
 
-        let mut explanation = format!("{} with {:.2}% similarity", term_type_str, similarity * 100.0);
+        let mut explanation = format!(
+            "{} with {:.2}% similarity",
+            term_type_str,
+            similarity * 100.0
+        );
 
         if let Some(namespace) = &metadata.namespace {
             explanation.push_str(&format!(", namespace: {}", namespace));
@@ -523,9 +555,9 @@ impl RdfVectorIntegration {
         // In production, you would use a proper embedding model
         let words: Vec<&str> = text.split_whitespace().collect();
         let dimension = 384; // Standard sentence transformer dimension
-        
+
         let mut vector_data = vec![0.0; dimension];
-        
+
         // Simple word-based embedding generation
         for (i, word) in words.iter().enumerate() {
             let word_hash = {
@@ -534,14 +566,14 @@ impl RdfVectorIntegration {
                 word.hash(&mut hasher);
                 hasher.finish()
             };
-            
+
             // Distribute word influence across vector dimensions
             for j in 0..dimension {
                 let index = (word_hash as usize + j) % dimension;
                 vector_data[index] += 1.0 / (words.len() as f32);
             }
         }
-        
+
         // Normalize vector
         let norm: f32 = vector_data.iter().map(|x| x * x).sum::<f32>().sqrt();
         if norm > 0.0 {
@@ -549,7 +581,7 @@ impl RdfVectorIntegration {
                 *value /= norm;
             }
         }
-        
+
         Ok(Vector::new(vector_data))
     }
 
@@ -558,12 +590,12 @@ impl RdfVectorIntegration {
         let term_mappings = self.term_mappings.read().unwrap();
         let graph_cache = self.graph_cache.read().unwrap();
         let namespace_registry = self.namespace_registry.read().unwrap();
-        
+
         let mut type_counts = HashMap::new();
         for mapping in term_mappings.values() {
             *type_counts.entry(mapping.metadata.term_type).or_insert(0) += 1;
         }
-        
+
         RdfIntegrationStats {
             total_terms: term_mappings.len(),
             total_graphs: graph_cache.len(),
@@ -600,10 +632,15 @@ mod tests {
         let term = Term::NamedNode(named_node);
         let vector = Vector::new(vec![1.0, 0.0, 0.0]);
 
-        let vector_id = integration.register_term(term.clone(), vector, None).unwrap();
-        
+        let vector_id = integration
+            .register_term(term.clone(), vector, None)
+            .unwrap();
+
         assert!(integration.get_vector_id(&term).unwrap().is_some());
-        assert_eq!(integration.get_vector_id(&term).unwrap().unwrap(), vector_id);
+        assert_eq!(
+            integration.get_vector_id(&term).unwrap().unwrap(),
+            vector_id
+        );
     }
 
     #[test]
@@ -625,7 +662,7 @@ mod tests {
 
         let literal = Literal::new_language_tagged_literal("Hello", "en").unwrap();
         let term = Term::Literal(literal);
-        
+
         let metadata = integration.extract_term_metadata(&term).unwrap();
         assert_eq!(metadata.term_type, RdfTermType::Literal);
         assert_eq!(metadata.language, Some("en".to_string()));

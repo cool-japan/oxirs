@@ -1,11 +1,11 @@
 //! Type definitions for service optimization
 
 use anyhow::Result;
+use bloom::BloomFilter as ExternalBloomFilter;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
-use bloom::BloomFilter as ExternalBloomFilter;
 
 use crate::planner::planning::{FilterExpression, TriplePattern};
 use crate::ServiceCapability;
@@ -130,7 +130,11 @@ impl StatisticsCache {
         None // Placeholder implementation
     }
 
-    pub fn update_service_performance(&mut self, service_id: &str, _metrics: &ServicePerformanceMetrics) {
+    pub fn update_service_performance(
+        &mut self,
+        service_id: &str,
+        _metrics: &ServicePerformanceMetrics,
+    ) {
         // Placeholder implementation
         debug!("Updated performance for service: {}", service_id);
     }

@@ -14,9 +14,9 @@
 //! - SERVICE federation (basic support)
 
 use crate::model::{BlankNode, Literal, NamedNode, Variable};
+use crate::query::algebra::{AlgebraTriplePattern as TriplePattern, TermPattern};
 use crate::query::sparql_algebra::{
-    AggregateExpression, Expression, GraphPattern, OrderExpression, PropertyPath, TermPattern,
-    TriplePattern,
+    AggregateExpression, Expression, GraphPattern, OrderExpression, PropertyPath,
 };
 use crate::query::sparql_query::{Query, QueryDataset};
 use crate::OxirsError;

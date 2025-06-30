@@ -9,15 +9,15 @@
 //! - `adaptive_execution`: Adaptive execution algorithms with runtime optimization
 //! - `step_execution`: Individual step execution functions (service queries, joins, filters, etc.)
 
-pub mod types;
-pub mod core;
 pub mod adaptive_execution;
+pub mod core;
 pub mod step_execution;
+pub mod types;
 
 // Re-export main types and structs for public API
-pub use types::*;
 pub use core::*;
 pub use step_execution::{execute_parallel_group, execute_step};
+pub use types::*;
 
 #[cfg(test)]
 mod tests {

@@ -16,10 +16,10 @@ thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 
 # Optional async support
-tokio = { version = "1.0", features = ["io-util", "fs"], optional = true }
+tokio = { version = "1.45", features = ["io-util", "fs"], optional = true }
 
 # Optional parallel processing
-rayon = { version = "1.8", optional = true }
+rayon = { version = "1.10", optional = true }
 
 [features]
 default = []

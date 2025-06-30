@@ -101,6 +101,7 @@ pub enum FusekiError {
     Http(#[from] axum::http::Error),
 
     #[error("JWT error: {0}")]
+    #[cfg(feature = "auth")]
     Jwt(#[from] jsonwebtoken::errors::Error),
 
     #[error("Validation error: {0}")]
@@ -185,7 +186,9 @@ impl FusekiError {
             | FusekiError::Yaml(..)
             | FusekiError::Toml(..)
             | FusekiError::Http(..)
-            | FusekiError::Jwt(..) => StatusCode::INTERNAL_SERVER_ERROR,
+            #[cfg(feature = "auth")]
+            | FusekiError::Jwt(..)
+            => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 

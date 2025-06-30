@@ -222,11 +222,24 @@ pub enum Permission {
 /// Authentication factors
 #[derive(Debug, Clone)]
 pub enum AuthenticationFactor {
-    Password { verified_at: SystemTime },
-    TwoFactorCode { verified_at: SystemTime },
-    BiometricScan { scan_type: BiometricType, verified_at: SystemTime },
-    HardwareToken { token_id: String, verified_at: SystemTime },
-    CertificateAuth { cert_fingerprint: String, verified_at: SystemTime },
+    Password {
+        verified_at: SystemTime,
+    },
+    TwoFactorCode {
+        verified_at: SystemTime,
+    },
+    BiometricScan {
+        scan_type: BiometricType,
+        verified_at: SystemTime,
+    },
+    HardwareToken {
+        token_id: String,
+        verified_at: SystemTime,
+    },
+    CertificateAuth {
+        cert_fingerprint: String,
+        verified_at: SystemTime,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -356,9 +369,13 @@ impl ZeroTrustSecurityManager {
             active_sessions: Arc::new(AsyncRwLock::new(HashMap::new())),
             rate_limiters: Arc::new(AsyncRwLock::new(HashMap::new())),
             behavioral_profiles: Arc::new(AsyncRwLock::new(HashMap::new())),
-            threat_detector: Arc::new(AsyncMutex::new(ThreatDetector::new(&config.threat_detection_config))),
+            threat_detector: Arc::new(AsyncMutex::new(ThreatDetector::new(
+                &config.threat_detection_config,
+            ))),
             audit_logger: Arc::new(AsyncMutex::new(AuditLogger::new(&config.audit_config))),
-            encryption_manager: Arc::new(AsyncMutex::new(EncryptionManager::new(&config.encryption_config))),
+            encryption_manager: Arc::new(AsyncMutex::new(EncryptionManager::new(
+                &config.encryption_config,
+            ))),
             security_event_sender,
             blocked_ips: Arc::new(AsyncRwLock::new(HashSet::new())),
             blocked_users: Arc::new(AsyncRwLock::new(HashSet::new())),
@@ -368,10 +385,7 @@ impl ZeroTrustSecurityManager {
     }
 
     /// Authenticate and authorize a request
-    pub async fn authenticate_request(
-        &self,
-        request: &SecurityRequest,
-    ) -> Result<SecurityContext> {
+    pub async fn authenticate_request(&self, request: &SecurityRequest) -> Result<SecurityContext> {
         info!("Authenticating request from {}", request.ip_address);
 
         // Check if IP is blocked
@@ -390,7 +404,9 @@ impl ZeroTrustSecurityManager {
         self.check_rate_limits(request).await?;
 
         // Validate authentication token
-        let auth_info = self.validate_authentication_token(&request.auth_token).await?;
+        let auth_info = self
+            .validate_authentication_token(&request.auth_token)
+            .await?;
 
         // Create security context
         let mut context = SecurityContext {
@@ -422,7 +438,10 @@ impl ZeroTrustSecurityManager {
         }
 
         // Store active session
-        self.active_sessions.write().await.insert(context.session_id.clone(), context.clone());
+        self.active_sessions
+            .write()
+            .await
+            .insert(context.session_id.clone(), context.clone());
 
         // Log authentication event
         self.log_security_event(SecurityEvent {
@@ -437,7 +456,8 @@ impl ZeroTrustSecurityManager {
             metadata: HashMap::new(),
             threat_score: Some(context.trust_score),
             mitigated: false,
-        }).await?;
+        })
+        .await?;
 
         Ok(context)
     }
@@ -474,13 +494,20 @@ impl ZeroTrustSecurityManager {
                 session_id: context.session_id.clone(),
                 ip_address: context.ip_address,
                 timestamp: SystemTime::now(),
-                description: format!("Authorization denied - missing permissions: {:?}", missing_permissions),
+                description: format!(
+                    "Authorization denied - missing permissions: {:?}",
+                    missing_permissions
+                ),
                 metadata: HashMap::new(),
                 threat_score: None,
                 mitigated: false,
-            }).await?;
+            })
+            .await?;
 
-            return Err(anyhow!("Insufficient permissions: {:?}", missing_permissions));
+            return Err(anyhow!(
+                "Insufficient permissions: {:?}",
+                missing_permissions
+            ));
         }
 
         // Analyze query for suspicious patterns
@@ -507,9 +534,15 @@ impl ZeroTrustSecurityManager {
     }
 
     /// Decrypt sensitive data
-    pub async fn decrypt_data(&self, encrypted_data: &str, context: &SecurityContext) -> Result<String> {
+    pub async fn decrypt_data(
+        &self,
+        encrypted_data: &str,
+        context: &SecurityContext,
+    ) -> Result<String> {
         let encryption_manager = self.encryption_manager.lock().await;
-        encryption_manager.decrypt(encrypted_data, &context.session_id).await
+        encryption_manager
+            .decrypt(encrypted_data, &context.session_id)
+            .await
     }
 
     /// Check if IP is blocked
@@ -527,7 +560,7 @@ impl ZeroTrustSecurityManager {
     /// Check rate limits
     async fn check_rate_limits(&self, request: &SecurityRequest) -> Result<()> {
         let key = format!("{}:{:?}", request.ip_address, request.user_id);
-        
+
         let mut rate_limiters = self.rate_limiters.write().await;
         let rate_limiter = rate_limiters
             .entry(key)
@@ -541,10 +574,7 @@ impl ZeroTrustSecurityManager {
     }
 
     /// Validate authentication token
-    async fn validate_authentication_token(
-        &self,
-        token: &str,
-    ) -> Result<AuthenticationInfo> {
+    async fn validate_authentication_token(&self, token: &str) -> Result<AuthenticationInfo> {
         // In a real implementation, this would validate JWT tokens or similar
         Ok(AuthenticationInfo {
             user_id: Some("test_user".to_string()),
@@ -562,7 +592,7 @@ impl ZeroTrustSecurityManager {
         context: &SecurityContext,
         request: &SecurityRequest,
     ) -> Result<f64> {
-        let mut score = 1.0;
+        let mut score: f64 = 1.0;
 
         // Decrease score for risk factors
         for risk_factor in &context.risk_factors {
@@ -596,7 +626,10 @@ impl ZeroTrustSecurityManager {
             let profiles = self.behavioral_profiles.read().await;
             if let Some(profile) = profiles.get(user_id) {
                 // Check for deviations from normal behavior
-                if self.is_unusual_access_time(&profile, SystemTime::now()).await? {
+                if self
+                    .is_unusual_access_time(&profile, SystemTime::now())
+                    .await?
+                {
                     context.risk_factors.push(RiskFactor {
                         factor_type: RiskFactorType::AnomalousAccess,
                         severity: RiskSeverity::Medium,
@@ -606,7 +639,10 @@ impl ZeroTrustSecurityManager {
                     });
                 }
 
-                if self.is_unusual_location(&profile, context.ip_address).await? {
+                if self
+                    .is_unusual_location(&profile, context.ip_address)
+                    .await?
+                {
                     context.risk_factors.push(RiskFactor {
                         factor_type: RiskFactorType::UnusualLocation,
                         severity: RiskSeverity::High,
@@ -635,7 +671,7 @@ impl ZeroTrustSecurityManager {
                 context.risk_factors.push(RiskFactor {
                     factor_type: threat.threat_type,
                     severity: threat.severity,
-                    description: threat.description,
+                    description: threat.description.clone(),
                     detected_at: SystemTime::now(),
                     auto_mitigated: false,
                 });
@@ -655,7 +691,12 @@ impl ZeroTrustSecurityManager {
         let sessions = self.active_sessions.read().await;
         if let Some(session) = sessions.get(&context.session_id) {
             // Check session timeout
-            if session.last_activity.elapsed().unwrap_or(Duration::from_secs(0)) > self.config.session_timeout {
+            if session
+                .last_activity
+                .elapsed()
+                .unwrap_or(Duration::from_secs(0))
+                > self.config.session_timeout
+            {
                 return Err(anyhow!("Session expired"));
             }
         } else {
@@ -672,13 +713,11 @@ impl ZeroTrustSecurityManager {
         // Simple permission extraction (in practice would be more sophisticated)
         for definition in &query.definitions {
             match definition {
-                crate::ast::Definition::OperationDefinition(op) => {
-                    match op.operation_type {
-                        OperationType::Query => permissions.push(Permission::ReadData),
-                        OperationType::Mutation => permissions.push(Permission::WriteData),
-                        OperationType::Subscription => permissions.push(Permission::ReadData),
-                    }
-                }
+                crate::ast::Definition::Operation(op) => match op.operation_type {
+                    OperationType::Query => permissions.push(Permission::ReadData),
+                    OperationType::Mutation => permissions.push(Permission::WriteData),
+                    OperationType::Subscription => permissions.push(Permission::ReadData),
+                },
                 _ => {}
             }
         }
@@ -713,11 +752,7 @@ impl ZeroTrustSecurityManager {
     }
 
     /// Check if location is unusual
-    async fn is_unusual_location(
-        &self,
-        _profile: &BehavioralProfile,
-        _ip: IpAddr,
-    ) -> Result<bool> {
+    async fn is_unusual_location(&self, _profile: &BehavioralProfile, _ip: IpAddr) -> Result<bool> {
         // Implement location-based anomaly detection
         Ok(false)
     }
@@ -743,7 +778,8 @@ impl ZeroTrustSecurityManager {
                     metadata: HashMap::new(),
                     threat_score: Some(threat.score),
                     mitigated: false,
-                }).await?;
+                })
+                .await?;
             }
             ThreatResponseAction::BlockIP => {
                 self.blocked_ips.write().await.insert(context.ip_address);
@@ -833,10 +869,12 @@ impl RateLimiter {
 
     pub async fn allow_request(&mut self) -> Result<bool> {
         let now = SystemTime::now();
-        
+
         // Clean old requests
         while let Some(&front) = self.requests.front() {
-            if now.duration_since(front).unwrap_or(Duration::from_secs(0)) > self.config.sliding_window_duration {
+            if now.duration_since(front).unwrap_or(Duration::from_secs(0))
+                > self.config.sliding_window_duration
+            {
                 self.requests.pop_front();
             } else {
                 break;
@@ -904,7 +942,7 @@ impl AuditLogger {
     pub async fn log_event(&mut self, event: &SecurityEvent) -> Result<()> {
         if self.config.enable_audit_logging {
             self.events.push_back(event.clone());
-            
+
             // In practice, would write to persistent storage
             info!("Security event logged: {:?}", event);
         }

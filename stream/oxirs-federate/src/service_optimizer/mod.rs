@@ -11,10 +11,10 @@
 //! - `enhanced_optimizer`: ML-driven enhanced optimizer with advanced pattern analysis
 
 pub mod core;
-pub mod source_selection;
 pub mod cost_analysis;
-pub mod types;
 pub mod enhanced_optimizer;
+pub mod source_selection;
+pub mod types;
 
 // Re-export main types and structs for public API
 pub use core::ServiceOptimizer;

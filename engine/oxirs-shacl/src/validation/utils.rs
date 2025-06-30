@@ -1,7 +1,7 @@
 //! Utility functions for validation operations
 
-use oxirs_core::model::{Term, NamedNode, Literal};
 use crate::{Result, ShaclError};
+use oxirs_core::model::{Literal, NamedNode, Term};
 
 /// Format a term for use in SPARQL queries
 pub fn format_term_for_sparql(term: &Term) -> Result<String> {
@@ -45,10 +45,9 @@ pub fn term_to_sort_key(term: &Term) -> String {
             let base = format!("literal:{}", literal.value());
             if let Some(lang) = literal.language() {
                 format!("{}@{}", base, lang)
-            } else if let Some(datatype) = literal.datatype() {
-                format!("{}^^{}", base, datatype.as_str())
             } else {
-                base
+                let datatype = literal.datatype();
+                format!("{}^^{}", base, datatype.as_str())
             }
         }
         Term::Variable(var) => format!("var:{}", var.name()),
@@ -60,30 +59,26 @@ pub fn term_to_sort_key(term: &Term) -> String {
 pub fn is_numeric_term(term: &Term) -> bool {
     if let Term::Literal(literal) = term {
         let datatype = literal.datatype();
-        if let Some(dt) = datatype {
-            let dt_str = dt.as_str();
-            matches!(dt_str,
-                "http://www.w3.org/2001/XMLSchema#integer" |
-                "http://www.w3.org/2001/XMLSchema#decimal" |
-                "http://www.w3.org/2001/XMLSchema#float" |
-                "http://www.w3.org/2001/XMLSchema#double" |
-                "http://www.w3.org/2001/XMLSchema#byte" |
-                "http://www.w3.org/2001/XMLSchema#short" |
-                "http://www.w3.org/2001/XMLSchema#int" |
-                "http://www.w3.org/2001/XMLSchema#long" |
-                "http://www.w3.org/2001/XMLSchema#unsignedByte" |
-                "http://www.w3.org/2001/XMLSchema#unsignedShort" |
-                "http://www.w3.org/2001/XMLSchema#unsignedInt" |
-                "http://www.w3.org/2001/XMLSchema#unsignedLong" |
-                "http://www.w3.org/2001/XMLSchema#positiveInteger" |
-                "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" |
-                "http://www.w3.org/2001/XMLSchema#negativeInteger" |
-                "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
-            )
-        } else {
-            // Try to parse as number
-            literal.value().parse::<f64>().is_ok()
-        }
+        let dt_str = datatype.as_str();
+        matches!(
+            dt_str,
+            "http://www.w3.org/2001/XMLSchema#integer"
+                | "http://www.w3.org/2001/XMLSchema#decimal"
+                | "http://www.w3.org/2001/XMLSchema#float"
+                | "http://www.w3.org/2001/XMLSchema#double"
+                | "http://www.w3.org/2001/XMLSchema#byte"
+                | "http://www.w3.org/2001/XMLSchema#short"
+                | "http://www.w3.org/2001/XMLSchema#int"
+                | "http://www.w3.org/2001/XMLSchema#long"
+                | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+        ) || literal.value().parse::<f64>().is_ok() // Also try to parse as number for untyped literals
     } else {
         false
     }
@@ -92,11 +87,9 @@ pub fn is_numeric_term(term: &Term) -> bool {
 /// Check if a term represents a boolean value
 pub fn is_boolean_term(term: &Term) -> bool {
     if let Term::Literal(literal) = term {
-        if let Some(datatype) = literal.datatype() {
-            datatype.as_str() == "http://www.w3.org/2001/XMLSchema#boolean"
-        } else {
-            matches!(literal.value(), "true" | "false")
-        }
+        let datatype = literal.datatype();
+        datatype.as_str() == "http://www.w3.org/2001/XMLSchema#boolean"
+            || matches!(literal.value(), "true" | "false")
     } else {
         false
     }
@@ -105,21 +98,19 @@ pub fn is_boolean_term(term: &Term) -> bool {
 /// Check if a term represents a date/time value
 pub fn is_datetime_term(term: &Term) -> bool {
     if let Term::Literal(literal) = term {
-        if let Some(datatype) = literal.datatype() {
-            let dt_str = datatype.as_str();
-            matches!(dt_str,
-                "http://www.w3.org/2001/XMLSchema#dateTime" |
-                "http://www.w3.org/2001/XMLSchema#date" |
-                "http://www.w3.org/2001/XMLSchema#time" |
-                "http://www.w3.org/2001/XMLSchema#gYear" |
-                "http://www.w3.org/2001/XMLSchema#gYearMonth" |
-                "http://www.w3.org/2001/XMLSchema#gMonth" |
-                "http://www.w3.org/2001/XMLSchema#gMonthDay" |
-                "http://www.w3.org/2001/XMLSchema#gDay"
-            )
-        } else {
-            false
-        }
+        let datatype = literal.datatype();
+        let dt_str = datatype.as_str();
+        matches!(
+            dt_str,
+            "http://www.w3.org/2001/XMLSchema#dateTime"
+                | "http://www.w3.org/2001/XMLSchema#date"
+                | "http://www.w3.org/2001/XMLSchema#time"
+                | "http://www.w3.org/2001/XMLSchema#gYear"
+                | "http://www.w3.org/2001/XMLSchema#gYearMonth"
+                | "http://www.w3.org/2001/XMLSchema#gMonth"
+                | "http://www.w3.org/2001/XMLSchema#gMonthDay"
+                | "http://www.w3.org/2001/XMLSchema#gDay"
+        )
     } else {
         false
     }
@@ -128,14 +119,18 @@ pub fn is_datetime_term(term: &Term) -> bool {
 /// Parse a numeric value from a term
 pub fn parse_numeric_value(term: &Term) -> Result<f64> {
     if let Term::Literal(literal) = term {
-        literal.value().parse::<f64>()
-            .map_err(|e| ShaclError::ValidationEngine(
-                format!("Failed to parse numeric value '{}': {}", literal.value(), e)
+        literal.value().parse::<f64>().map_err(|e| {
+            ShaclError::ValidationEngine(format!(
+                "Failed to parse numeric value '{}': {}",
+                literal.value(),
+                e
             ))
+        })
     } else {
-        Err(ShaclError::ValidationEngine(
-            format!("Term is not a literal: {}", format_term_for_message(term))
-        ))
+        Err(ShaclError::ValidationEngine(format!(
+            "Term is not a literal: {}",
+            format_term_for_message(term)
+        )))
     }
 }
 
@@ -145,14 +140,16 @@ pub fn parse_boolean_value(term: &Term) -> Result<bool> {
         match literal.value() {
             "true" | "1" => Ok(true),
             "false" | "0" => Ok(false),
-            _ => Err(ShaclError::ValidationEngine(
-                format!("Invalid boolean value: '{}'", literal.value())
-            ))
+            _ => Err(ShaclError::ValidationEngine(format!(
+                "Invalid boolean value: '{}'",
+                literal.value()
+            ))),
         }
     } else {
-        Err(ShaclError::ValidationEngine(
-            format!("Term is not a literal: {}", format_term_for_message(term))
-        ))
+        Err(ShaclError::ValidationEngine(format!(
+            "Term is not a literal: {}",
+            format_term_for_message(term)
+        )))
     }
 }
 
@@ -196,11 +193,15 @@ pub fn term_to_canonical_string(term: &Term) -> String {
         Term::NamedNode(node) => format!("<{}>", node.as_str()),
         Term::BlankNode(node) => format!("_:{}", node.as_str()),
         Term::Literal(literal) => {
-            let mut result = format!("\"{}\"", literal.value().replace('\\', "\\\\").replace('"', "\\\""));
+            let mut result = format!(
+                "\"{}\"",
+                literal.value().replace('\\', "\\\\").replace('"', "\\\"")
+            );
             if let Some(lang) = literal.language() {
                 result.push('@');
                 result.push_str(lang);
-            } else if let Some(datatype) = literal.datatype() {
+            } else {
+                let datatype = literal.datatype();
                 result.push_str("^^<");
                 result.push_str(datatype.as_str());
                 result.push('>');
@@ -215,12 +216,15 @@ pub fn term_to_canonical_string(term: &Term) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxirs_core::model::{NamedNode, Literal};
+    use oxirs_core::model::{Literal, NamedNode};
 
     #[test]
     fn test_format_term_for_message() {
         let iri_term = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
-        assert_eq!(format_term_for_message(&iri_term), "http://example.org/test");
+        assert_eq!(
+            format_term_for_message(&iri_term),
+            "http://example.org/test"
+        );
 
         let literal_term = Term::Literal(Literal::new("hello"));
         assert_eq!(format_term_for_message(&literal_term), "\"hello\"");
@@ -269,7 +273,7 @@ mod tests {
             "42.0",
             NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
         ));
-        
+
         assert!(terms_equivalent(&term1, &term2));
     }
 }

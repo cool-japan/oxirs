@@ -991,9 +991,12 @@ impl CollaborativeWorkspaceManager {
     }
 
     /// Create a new collaborative workspace
-    pub async fn create_workspace(&mut self, request: CreateWorkspaceRequest) -> Result<WorkspaceId> {
+    pub async fn create_workspace(
+        &mut self,
+        request: CreateWorkspaceRequest,
+    ) -> Result<WorkspaceId> {
         let workspace_id = WorkspaceId(Uuid::new_v4().to_string());
-        
+
         let workspace = CollaborativeWorkspace {
             id: workspace_id.clone(),
             name: request.name,
@@ -1009,20 +1012,20 @@ impl CollaborativeWorkspaceManager {
         };
 
         self.workspaces.insert(workspace_id.0.clone(), workspace);
-        
+
         info!("Created collaborative workspace: {}", workspace_id.0);
         Ok(workspace_id)
     }
 
     /// Join a collaborative session
     pub async fn join_session(
-        &mut self, 
-        workspace_id: &WorkspaceId, 
+        &mut self,
+        workspace_id: &WorkspaceId,
         user_id: &str,
-        user_info: UserInfo
+        user_info: UserInfo,
     ) -> Result<SessionToken> {
         let session_token = SessionToken(Uuid::new_v4().to_string());
-        
+
         let session = CollaborativeSession {
             token: session_token.clone(),
             workspace_id: workspace_id.clone(),
@@ -1034,14 +1037,19 @@ impl CollaborativeWorkspaceManager {
             permissions: self.get_user_permissions(workspace_id, user_id)?,
         };
 
-        self.active_sessions.insert(session_token.0.clone(), session);
-        
+        self.active_sessions
+            .insert(session_token.0.clone(), session);
+
         // Update presence
-        self.presence_tracker.user_joined(workspace_id, user_id).await?;
-        
+        self.presence_tracker
+            .user_joined(workspace_id, user_id)
+            .await?;
+
         // Notify other users
-        self.message_bus.broadcast_user_joined(workspace_id, user_id).await?;
-        
+        self.message_bus
+            .broadcast_user_joined(workspace_id, user_id)
+            .await?;
+
         Ok(session_token)
     }
 
@@ -1049,14 +1057,18 @@ impl CollaborativeWorkspaceManager {
     pub async fn leave_session(&mut self, session_token: &SessionToken) -> Result<()> {
         if let Some(session) = self.active_sessions.remove(&session_token.0) {
             // Update presence
-            self.presence_tracker.user_left(&session.workspace_id, &session.user_id).await?;
-            
+            self.presence_tracker
+                .user_left(&session.workspace_id, &session.user_id)
+                .await?;
+
             // Notify other users
-            self.message_bus.broadcast_user_left(&session.workspace_id, &session.user_id).await?;
-            
+            self.message_bus
+                .broadcast_user_left(&session.workspace_id, &session.user_id)
+                .await?;
+
             info!("User {} left session", session.user_id);
         }
-        
+
         Ok(())
     }
 
@@ -1067,16 +1079,20 @@ impl CollaborativeWorkspaceManager {
         document_id: &str,
         document_type: DocumentType,
     ) -> Result<CollaborativeEditingSession> {
-        let session = self.active_sessions.get(session_token.0.as_str())
+        let session = self
+            .active_sessions
+            .get(session_token.0.as_str())
             .ok_or_else(|| anyhow!("Invalid session token"))?;
 
-        let editing_session = self.shared_document_manager
+        let editing_session = self
+            .shared_document_manager
             .start_editing_session(
                 &session.workspace_id,
                 document_id,
                 &session.user_id,
                 document_type,
-            ).await?;
+            )
+            .await?;
 
         Ok(editing_session)
     }
@@ -1087,10 +1103,13 @@ impl CollaborativeWorkspaceManager {
         session_token: &SessionToken,
         message: CollaborativeMessage,
     ) -> Result<MessageId> {
-        let session = self.active_sessions.get(session_token.0.as_str())
+        let session = self
+            .active_sessions
+            .get(session_token.0.as_str())
             .ok_or_else(|| anyhow!("Invalid session token"))?;
 
-        let message_id = self.message_bus
+        let message_id = self
+            .message_bus
             .send_message(&session.workspace_id, &session.user_id, message)
             .await?;
 
@@ -1103,10 +1122,13 @@ impl CollaborativeWorkspaceManager {
         session_token: &SessionToken,
         decision_request: DecisionRequest,
     ) -> Result<DecisionId> {
-        let session = self.active_sessions.get(session_token.0.as_str())
+        let session = self
+            .active_sessions
+            .get(session_token.0.as_str())
             .ok_or_else(|| anyhow!("Invalid session token"))?;
 
-        let decision_id = self.decision_tracker
+        let decision_id = self
+            .decision_tracker
             .start_decision(&session.workspace_id, &session.user_id, decision_request)
             .await?;
 
@@ -1114,8 +1136,13 @@ impl CollaborativeWorkspaceManager {
     }
 
     /// Get current workspace presence
-    pub async fn get_workspace_presence(&self, workspace_id: &WorkspaceId) -> Result<Vec<UserPresence>> {
-        self.presence_tracker.get_workspace_presence(workspace_id).await
+    pub async fn get_workspace_presence(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<UserPresence>> {
+        self.presence_tracker
+            .get_workspace_presence(workspace_id)
+            .await
     }
 
     /// Get workspace activity feed
@@ -1129,7 +1156,11 @@ impl CollaborativeWorkspaceManager {
         Ok(Vec::new()) // Placeholder
     }
 
-    fn get_user_permissions(&self, workspace_id: &WorkspaceId, user_id: &str) -> Result<UserPermissions> {
+    fn get_user_permissions(
+        &self,
+        workspace_id: &WorkspaceId,
+        user_id: &str,
+    ) -> Result<UserPermissions> {
         // Implementation would check user permissions
         Ok(UserPermissions::default())
     }
@@ -1328,8 +1359,12 @@ impl PresenceTracker {
         Ok(())
     }
 
-    pub async fn get_workspace_presence(&self, workspace_id: &WorkspaceId) -> Result<Vec<UserPresence>> {
-        Ok(self.workspace_presence
+    pub async fn get_workspace_presence(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<UserPresence>> {
+        Ok(self
+            .workspace_presence
             .get(&workspace_id.0)
             .cloned()
             .unwrap_or_default())
@@ -1376,7 +1411,7 @@ impl CollaborativeMessageBus {
         message: CollaborativeMessage,
     ) -> Result<MessageId> {
         let message_id = MessageId(Uuid::new_v4().to_string());
-        
+
         let timestamped_message = CollaborativeMessage {
             id: Some(message_id.clone()),
             sender_id: sender_id.to_string(),
@@ -1395,21 +1430,42 @@ impl CollaborativeMessageBus {
         Ok(message_id)
     }
 
-    pub async fn broadcast_user_joined(&self, workspace_id: &WorkspaceId, user_id: &str) -> Result<()> {
+    pub async fn broadcast_user_joined(
+        &self,
+        workspace_id: &WorkspaceId,
+        user_id: &str,
+    ) -> Result<()> {
         // Implementation would broadcast presence updates
-        debug!("Broadcasting user joined: {} in workspace {}", user_id, workspace_id.0);
+        debug!(
+            "Broadcasting user joined: {} in workspace {}",
+            user_id, workspace_id.0
+        );
         Ok(())
     }
 
-    pub async fn broadcast_user_left(&self, workspace_id: &WorkspaceId, user_id: &str) -> Result<()> {
+    pub async fn broadcast_user_left(
+        &self,
+        workspace_id: &WorkspaceId,
+        user_id: &str,
+    ) -> Result<()> {
         // Implementation would broadcast presence updates
-        debug!("Broadcasting user left: {} in workspace {}", user_id, workspace_id.0);
+        debug!(
+            "Broadcasting user left: {} in workspace {}",
+            user_id, workspace_id.0
+        );
         Ok(())
     }
 
-    async fn broadcast_message(&self, workspace_id: &WorkspaceId, message_id: &MessageId) -> Result<()> {
+    async fn broadcast_message(
+        &self,
+        workspace_id: &WorkspaceId,
+        message_id: &MessageId,
+    ) -> Result<()> {
         // Implementation would use WebSocket or other real-time protocol
-        debug!("Broadcasting message {} to workspace {}", message_id.0, workspace_id.0);
+        debug!(
+            "Broadcasting message {} to workspace {}",
+            message_id.0, workspace_id.0
+        );
         Ok(())
     }
 }
@@ -1621,7 +1677,7 @@ impl CollaborativeDecisionTracker {
         request: DecisionRequest,
     ) -> Result<DecisionId> {
         let decision_id = DecisionId(Uuid::new_v4().to_string());
-        
+
         let decision_process = DecisionProcess {
             id: decision_id.clone(),
             workspace_id: workspace_id.clone(),
@@ -1639,7 +1695,8 @@ impl CollaborativeDecisionTracker {
             updated_at: SystemTime::now(),
         };
 
-        self.active_decisions.insert(decision_id.0.clone(), decision_process);
+        self.active_decisions
+            .insert(decision_id.0.clone(), decision_process);
 
         Ok(decision_id)
     }

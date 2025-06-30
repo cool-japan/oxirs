@@ -385,11 +385,11 @@ impl StreamingSolution {
             Term::Variable(var) => var.as_str().len(),
             Term::QuotedTriple(triple) => {
                 // Estimate size of quoted triple as sum of its parts
-                self.estimate_term_size(&triple.subject) 
+                self.estimate_term_size(&triple.subject)
                     + self.estimate_term_size(&triple.predicate)
                     + self.estimate_term_size(&triple.object)
                     + 6 // << >> brackets
-            },
+            }
             Term::PropertyPath(path) => {
                 // Estimate property path size based on complexity
                 match path.complexity() {
@@ -397,7 +397,7 @@ impl StreamingSolution {
                     c if c < 100 => 50,
                     _ => 100,
                 }
-            },
+            }
         }
     }
 
@@ -676,11 +676,14 @@ impl SerializableTerm {
             Term::QuotedTriple(triple) => {
                 // For quoted triples, serialize as a string representation
                 Self::Literal {
-                    value: format!("<<{} {} {}>>", triple.subject, triple.predicate, triple.object),
+                    value: format!(
+                        "<<{} {} {}>>",
+                        triple.subject, triple.predicate, triple.object
+                    ),
                     language: None,
                     datatype: Some("http://example.org/quoted-triple".to_string()),
                 }
-            },
+            }
             Term::PropertyPath(path) => {
                 // For property paths, serialize as a string representation
                 Self::Literal {
@@ -688,7 +691,7 @@ impl SerializableTerm {
                     language: None,
                     datatype: Some("http://example.org/property-path".to_string()),
                 }
-            },
+            }
         }
     }
 

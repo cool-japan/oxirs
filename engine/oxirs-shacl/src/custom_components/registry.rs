@@ -4,7 +4,9 @@
 //! including registration, validation, execution, and lifecycle management.
 
 use crate::{
-    constraints::{ConstraintContext, ConstraintEvaluationResult, constraint_types::ConstraintEvaluator},
+    constraints::{
+        constraint_types::ConstraintEvaluator, ConstraintContext, ConstraintEvaluationResult,
+    },
     ConstraintComponentId, Result, ShaclError,
 };
 use oxirs_core::{model::Term, Store};
@@ -13,11 +15,19 @@ use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use super::{
-    constraints::{CompositeConstraint, ComponentExecutionResult, CustomConstraint, CompositionType},
-    metadata::{ComponentLibrary, ComponentMetadata, ParameterConstraint, ParameterDefinition, ValidationRule},
+    constraints::{
+        ComponentExecutionResult, CompositeConstraint, CompositionType, CustomConstraint,
+    },
+    metadata::{
+        ComponentLibrary, ComponentMetadata, ParameterConstraint, ParameterDefinition,
+        ValidationRule,
+    },
     performance::{ComponentExecutionContext, ComponentPerformanceStats, ExecutionMetrics},
     security::{SecurityPolicy, SecurityViolation},
-    standard::{EmailValidationComponent, RangeConstraintComponent, RegexConstraintComponent, SparqlConstraintComponent, UrlValidationComponent},
+    standard::{
+        EmailValidationComponent, RangeConstraintComponent, RegexConstraintComponent,
+        SparqlConstraintComponent, UrlValidationComponent,
+    },
     CustomConstraintComponent,
 };
 

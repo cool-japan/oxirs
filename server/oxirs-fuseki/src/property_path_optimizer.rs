@@ -1066,7 +1066,10 @@ impl AdvancedPropertyPathOptimizer {
     }
 
     /// Estimate total cost for execution plan
-    async fn estimate_total_cost(&self, execution_plan: &EnhancedPathExecutionPlan) -> FusekiResult<f64> {
+    async fn estimate_total_cost(
+        &self,
+        execution_plan: &EnhancedPathExecutionPlan,
+    ) -> FusekiResult<f64> {
         let mut total_cost = 0.0;
 
         // Base cost from the execution plan
@@ -1097,8 +1100,8 @@ impl AdvancedPropertyPathOptimizer {
             PathExecutionStrategy::ParallelAlternatives => {
                 total_cost *= self.cost_model.alternative_multiplier;
             }
-            PathExecutionStrategy::BreadthFirst { .. } | 
-            PathExecutionStrategy::DepthFirst { .. } => {
+            PathExecutionStrategy::BreadthFirst { .. }
+            | PathExecutionStrategy::DepthFirst { .. } => {
                 total_cost *= 1.5; // Search algorithms have overhead
             }
             PathExecutionStrategy::DynamicProgramming => {

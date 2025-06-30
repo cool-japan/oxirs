@@ -6,11 +6,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use oxirs_shacl::ShapeId;
 use crate::{
-    shape::{Shape as AiShape, PropertyConstraint},
+    shape::{PropertyConstraint, Shape as AiShape},
     Result, ShaclAiError,
 };
+use oxirs_shacl::ShapeId;
 
 /// Reusability manager for shape patterns and templates
 #[derive(Debug)]
@@ -328,7 +328,10 @@ impl ReusabilityManager {
         Ok(Vec::new())
     }
 
-    pub fn suggest_templates(&self, requirements: &TemplateRequirements) -> Result<Vec<TemplateId>> {
+    pub fn suggest_templates(
+        &self,
+        requirements: &TemplateRequirements,
+    ) -> Result<Vec<TemplateId>> {
         // This would implement template suggestion logic
         // For now, return empty result
         Ok(Vec::new())

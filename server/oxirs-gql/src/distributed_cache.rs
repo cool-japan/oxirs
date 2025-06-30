@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use redis::{Client, cmd};
+use redis::{cmd, Client};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -534,11 +534,8 @@ impl DistributedCache for RedisDistributedCache {
         for client in clients.iter() {
             match client.get_multiplexed_async_connection().await {
                 Ok(mut connection) => {
-                    let result: Result<String, _> = cmd("PING")
-                        .query_async(&mut connection)
-                        .await;
-                    if result.is_err()
-                    {
+                    let result: Result<String, _> = cmd("PING").query_async(&mut connection).await;
+                    if result.is_err() {
                         return Ok(false);
                     }
                 }
@@ -560,9 +557,7 @@ impl DistributedCache for RedisDistributedCache {
         let clients = self.redis_pool.read().await;
         for client in clients.iter() {
             let mut connection = client.get_multiplexed_async_connection().await?;
-            cmd("FLUSHDB")
-                .query_async(&mut connection)
-                .await?;
+            cmd("FLUSHDB").query_async(&mut connection).await?;
         }
 
         // Reset stats

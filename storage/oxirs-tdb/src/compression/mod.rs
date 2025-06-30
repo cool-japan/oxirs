@@ -3,13 +3,13 @@
 //! Provides advanced compression algorithms including column-store optimizations,
 //! bitmap compression, delta encoding, and adaptive compression selection.
 
-pub mod run_length;
-pub mod delta;
-pub mod frame_of_reference;
-pub mod dictionary;
-pub mod column_store;
-pub mod bitmap;
 pub mod adaptive;
+pub mod bitmap;
+pub mod column_store;
+pub mod delta;
+pub mod dictionary;
+pub mod frame_of_reference;
+pub mod run_length;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -17,13 +17,13 @@ use std::collections::HashMap;
 use std::fmt;
 
 // Re-export main compression implementations
-pub use run_length::RunLengthEncoder;
-pub use delta::DeltaEncoder;
-pub use frame_of_reference::FrameOfReferenceEncoder;
-pub use dictionary::AdaptiveDictionary;
-pub use column_store::ColumnStoreCompressor;
-pub use bitmap::{BitmapWAHEncoder, BitmapRoaringEncoder};
 pub use adaptive::AdaptiveCompressor;
+pub use bitmap::{BitmapRoaringEncoder, BitmapWAHEncoder};
+pub use column_store::ColumnStoreCompressor;
+pub use delta::DeltaEncoder;
+pub use dictionary::AdaptiveDictionary;
+pub use frame_of_reference::FrameOfReferenceEncoder;
+pub use run_length::RunLengthEncoder;
 
 /// Advanced compression types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,10 +126,10 @@ pub const MAX_DICTIONARY_SIZE: usize = 100000;
 pub trait CompressionAlgorithm {
     /// Compress data and return compressed bytes with metadata
     fn compress(&self, data: &[u8]) -> Result<CompressedData>;
-    
+
     /// Decompress data
     fn decompress(&self, compressed: &CompressedData) -> Result<Vec<u8>>;
-    
+
     /// Get algorithm type
     fn algorithm_type(&self) -> AdvancedCompressionType;
 }
@@ -154,13 +154,7 @@ mod tests {
 
     #[test]
     fn test_compression_type_display() {
-        assert_eq!(
-            AdvancedCompressionType::RunLength.to_string(),
-            "RunLength"
-        );
-        assert_eq!(
-            AdvancedCompressionType::BitmapWAH.to_string(),
-            "BitmapWAH"
-        );
+        assert_eq!(AdvancedCompressionType::RunLength.to_string(), "RunLength");
+        assert_eq!(AdvancedCompressionType::BitmapWAH.to_string(), "BitmapWAH");
     }
 }

@@ -344,7 +344,7 @@ pub async fn websocket_handler(
     State(state): State<AppState>,
     Query(params): Query<WebSocketParams>,
     // auth_user: Option<AuthUser>, // Would be extracted in full implementation
-) -> Result<Response, FusekiError> {
+) -> impl IntoResponse {
     info!("WebSocket connection request received");
 
     // Validate authentication if required
@@ -356,9 +356,9 @@ pub async fn websocket_handler(
     let subscription_manager = get_or_create_subscription_manager(&state).await;
 
     // Upgrade to WebSocket
-    Ok(ws.on_upgrade(move |socket| {
+    ws.on_upgrade(move |socket| {
         handle_websocket_connection(socket, state, subscription_manager, params)
-    }))
+    })
 }
 
 /// Handle WebSocket connection

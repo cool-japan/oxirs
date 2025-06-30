@@ -46,14 +46,15 @@ pub use connection_pool::{
     PoolStatus,
 };
 pub use cqrs::{
-    CQRSConfig, CQRSSystem, Command, CommandBus, CommandHandler, CommandResult, Query, QueryBus,
-    QueryHandler, QueryResult as CQRSQueryResult, ReadModelManager, ReadModelProjection, RetryConfig as CQRSRetryConfig, QueryCacheConfig,
-    CommandBusMetrics, QueryBusMetrics, ReadModelMetrics, CQRSHealthStatus,
+    CQRSConfig, CQRSHealthStatus, CQRSSystem, Command, CommandBus, CommandBusMetrics,
+    CommandHandler, CommandResult, Query, QueryBus, QueryBusMetrics, QueryCacheConfig,
+    QueryHandler, QueryResult as CQRSQueryResult, ReadModelManager, ReadModelMetrics,
+    ReadModelProjection, RetryConfig as CQRSRetryConfig,
 };
 pub use delta::{BatchDeltaProcessor, DeltaComputer, DeltaProcessor};
 pub use event::{
-    EventCategory, EventMetadata, EventPriority, IsolationLevel, QueryResult as EventQueryResult, SchemaChangeType,
-    SchemaType, SparqlOperationType, StreamEvent,
+    EventCategory, EventMetadata, EventPriority, IsolationLevel, QueryResult as EventQueryResult,
+    SchemaChangeType, SchemaType, SparqlOperationType, StreamEvent,
 };
 pub use event_sourcing::{
     EventQuery, EventSnapshot, EventStore, EventStoreConfig, PersistenceBackend, QueryOrder,
@@ -62,13 +63,14 @@ pub use event_sourcing::{
 pub use failover::{ConnectionEndpoint, FailoverConfig, FailoverManager};
 pub use multi_region_replication::{
     ConflictResolution, ConflictType, GeographicLocation, MultiRegionReplicationManager,
-    RegionConfig, RegionHealth, ReplicationConfig, ReplicationStats, ReplicationStrategy,
-    ReplicatedEvent, VectorClock,
+    RegionConfig, RegionHealth, ReplicatedEvent, ReplicationConfig, ReplicationStats,
+    ReplicationStrategy, VectorClock,
 };
 pub use patch::{PatchParser, PatchSerializer};
 pub use performance_optimizer::{
     AdaptiveBatcher, BatchingStats, MemoryPool, MemoryPoolStats, ParallelEventProcessor,
-    PerformanceConfig as OptimizerPerformanceConfig, ProcessingResult, ProcessingStats, ProcessingStatus, ZeroCopyEvent,
+    PerformanceConfig as OptimizerPerformanceConfig, ProcessingResult, ProcessingStats,
+    ProcessingStatus, ZeroCopyEvent,
 };
 pub use schema_registry::{
     CompatibilityMode, ExternalRegistryConfig, RegistryAuth, SchemaDefinition, SchemaFormat,
@@ -83,27 +85,41 @@ pub use store_integration::{
     UpdateFilter, UpdateNotification,
 };
 // Stream, StreamConsumer, and StreamProducer are defined below in this module
+pub use consciousness_streaming::{
+    ConsciousnessLevel, ConsciousnessStats, ConsciousnessStreamProcessor, DreamSequence,
+    EmotionalContext, IntuitiveEngine, MeditationState,
+};
+pub use quantum_streaming::{
+    QuantumEvent, QuantumOperation, QuantumProcessingStats, QuantumState, QuantumStreamProcessor,
+};
+pub use security::{
+    AuditConfig, AuditLogEntry, AuditLogger, AuthConfig, AuthMethod, AuthenticationProvider,
+    AuthorizationProvider, AuthzConfig, Credentials, EncryptionConfig, Permission, RateLimitConfig,
+    RateLimiter, SecurityConfig as StreamSecurityConfig, SecurityContext, SecurityManager,
+    SecurityMetrics, SessionConfig, ThreatAlert, ThreatDetectionConfig, ThreatDetector,
+};
+pub use biological_computing::{
+    AminoAcid, BiologicalProcessingStats, BiologicalStreamProcessor, Cell, CellState, CellularAutomaton,
+    ComputationalFunction, DNASequence, EvolutionaryOptimizer, FunctionalDomain, Individual, Nucleotide,
+    ProteinStructure, SequenceMetadata,
+};
+pub use time_travel::{
+    AggregationType, TemporalAggregations, TemporalFilter, TemporalOrdering, TemporalProjection,
+    TemporalQuery, TemporalQueryResult, TemporalResultMetadata, TemporalStatistics, TimePoint,
+    TimeRange as TimeTravelTimeRange, TimeTravelConfig, TimeTravelEngine, TimeTravelMetrics,
+    TimelinePoint,
+};
 pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
     WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata,
 };
-pub use time_travel::{
-    TimeTravelConfig, TimeTravelEngine, TemporalQuery, TimePoint, TimeRange as TimeTravelTimeRange, TemporalFilter,
-    TemporalProjection, TemporalOrdering, TemporalQueryResult, TemporalResultMetadata,
-    TemporalAggregations, TimelinePoint, TemporalStatistics, AggregationType, TimeTravelMetrics,
+pub use wasm_edge_computing::{
+    EdgeExecutionResult, EdgeLocation, OptimizationLevel, ProcessingSpecialization, 
+    WasmEdgeConfig, WasmEdgeProcessor, WasmPlugin, WasmResourceLimits,
 };
-pub use security::{
-    SecurityConfig as StreamSecurityConfig, SecurityManager, SecurityContext, AuthConfig, AuthzConfig, EncryptionConfig,
-    AuditConfig, ThreatDetectionConfig, RateLimitConfig, SessionConfig, AuthMethod, Permission,
-    Credentials, AuditLogEntry, ThreatAlert, SecurityMetrics, AuthenticationProvider,
-    AuthorizationProvider, AuditLogger, ThreatDetector, RateLimiter,
-};
-pub use quantum_streaming::{
-    QuantumState, QuantumEvent, QuantumOperation, QuantumStreamProcessor, QuantumProcessingStats,
-};
-pub use consciousness_streaming::{
-    ConsciousnessLevel, EmotionalContext, DreamSequence, IntuitiveEngine, ConsciousnessStreamProcessor,
-    MeditationState, ConsciousnessStats,
+pub use quantum_communication::{
+    BellState, EntanglementDistribution, QuantumCommConfig, QuantumCommSystem, 
+    QuantumOperation, QuantumSecurityProtocol, QuantumState, Qubit,
 };
 
 #[cfg(test)]
@@ -111,10 +127,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod backend;
 pub mod backend_optimizer;
+pub mod biological_computing;
 pub mod bridge;
 pub mod circuit_breaker;
 pub mod config;
 pub mod connection_pool;
+pub mod consciousness_streaming;
 pub mod consumer;
 pub mod cqrs;
 pub mod delta;
@@ -131,6 +149,7 @@ pub mod patch;
 pub mod performance_optimizer;
 pub mod processing;
 pub mod producer;
+pub mod quantum_streaming;
 pub mod reconnect;
 pub mod reliability;
 pub mod schema_registry;
@@ -142,8 +161,8 @@ pub mod store_integration;
 pub mod time_travel;
 pub mod types;
 pub mod webhook;
-pub mod quantum_streaming;
-pub mod consciousness_streaming;
+pub mod wasm_edge_computing;
+pub mod quantum_communication;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]

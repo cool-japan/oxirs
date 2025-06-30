@@ -12,11 +12,11 @@ use tokio::runtime::Runtime;
 /// Benchmark service registration performance
 fn bench_service_registration(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     c.bench_function("service_registration", |b| {
         b.to_async(&rt).iter(|| async {
             let mut registry = ServiceRegistry::new();
-            
+
             // Register 100 services
             for i in 0..100 {
                 let service = FederatedService::new_sparql(
@@ -33,11 +33,16 @@ fn bench_service_registration(c: &mut Criterion) {
 /// Benchmark query planning for different query complexities
 fn bench_query_planning(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     let queries = vec![
         ("simple", "SELECT ?s ?p ?o WHERE { ?s ?p ?o }"),
-        ("join", "SELECT ?s ?name ?friend WHERE { ?s foaf:name ?name . ?s foaf:knows ?friend }"),
-        ("complex", r#"
+        (
+            "join",
+            "SELECT ?s ?name ?friend WHERE { ?s foaf:name ?name . ?s foaf:knows ?friend }",
+        ),
+        (
+            "complex",
+            r#"
             SELECT ?person ?name ?age ?company ?title WHERE {
                 ?person foaf:name ?name .
                 ?person foaf:age ?age .
@@ -45,18 +50,22 @@ fn bench_query_planning(c: &mut Criterion) {
                 ?person work:hasTitle ?title .
                 FILTER(?age > 25)
             }
-        "#),
-        ("union", r#"
+        "#,
+        ),
+        (
+            "union",
+            r#"
             SELECT ?entity ?type WHERE {
                 { ?entity a foaf:Person } UNION
                 { ?entity a org:Organization } UNION 
                 { ?entity a foaf:Document }
             }
-        "#),
+        "#,
+        ),
     ];
-    
+
     let mut group = c.benchmark_group("query_planning");
-    
+
     for (name, query) in queries {
         group.bench_with_input(BenchmarkId::new("analyze", name), query, |b, query| {
             b.to_async(&rt).iter(|| async {
@@ -65,18 +74,18 @@ fn bench_query_planning(c: &mut Criterion) {
             });
         });
     }
-    
+
     group.finish();
 }
 
 /// Benchmark source selection algorithms
 fn bench_source_selection(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     c.bench_function("source_selection_large_registry", |b| {
         b.to_async(&rt).iter(|| async {
             let mut registry = ServiceRegistry::new();
-            
+
             // Create 1000 services with different capabilities
             for i in 0..1000 {
                 let mut service = FederatedService::new_sparql(
@@ -84,10 +93,12 @@ fn bench_source_selection(c: &mut Criterion) {
                     format!("Test Service {}", i),
                     format!("http://example.com/sparql/{}", i),
                 );
-                
+
                 // Add random capabilities
                 if i % 2 == 0 {
-                    service.capabilities.insert(ServiceCapability::FullTextSearch);
+                    service
+                        .capabilities
+                        .insert(ServiceCapability::FullTextSearch);
                 }
                 if i % 3 == 0 {
                     service.capabilities.insert(ServiceCapability::Geospatial);
@@ -95,16 +106,19 @@ fn bench_source_selection(c: &mut Criterion) {
                 if i % 5 == 0 {
                     service.capabilities.insert(ServiceCapability::RdfStar);
                 }
-                
+
                 registry.register(service).await.unwrap();
             }
-            
+
             // Benchmark source selection
             let planner = QueryPlanner::new();
             let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
             let query_info = planner.analyze_sparql(query).await.unwrap();
-            
-            planner.select_sources(&query_info, &registry).await.unwrap()
+
+            planner
+                .select_sources(&query_info, &registry)
+                .await
+                .unwrap()
         });
     });
 }
@@ -112,11 +126,11 @@ fn bench_source_selection(c: &mut Criterion) {
 /// Benchmark caching performance
 fn bench_caching_performance(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     let cache_sizes = vec![100, 1000, 10000];
-    
+
     let mut group = c.benchmark_group("caching");
-    
+
     for size in cache_sizes {
         group.throughput(Throughput::Elements(size as u64));
         group.bench_with_input(
@@ -125,14 +139,14 @@ fn bench_caching_performance(c: &mut Criterion) {
             |b, &size| {
                 b.to_async(&rt).iter(|| async {
                     let cache = FederationCache::new_with_capacity(size);
-                    
+
                     // Fill cache
                     for i in 0..size {
                         let key = format!("query-{}", i);
                         let result = QueryResult::default_sparql_empty();
                         cache.insert(key, result, Duration::from_secs(300)).await;
                     }
-                    
+
                     // Test retrieval performance
                     let mut hits = 0;
                     for i in 0..size {
@@ -141,24 +155,24 @@ fn bench_caching_performance(c: &mut Criterion) {
                             hits += 1;
                         }
                     }
-                    
+
                     hits
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark result integration performance
 fn bench_result_integration(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     let result_counts = vec![10, 100, 1000];
-    
+
     let mut group = c.benchmark_group("result_integration");
-    
+
     for count in result_counts {
         group.throughput(Throughput::Elements(count as u64));
         group.bench_with_input(
@@ -168,62 +182,58 @@ fn bench_result_integration(c: &mut Criterion) {
                 b.to_async(&rt).iter(|| async {
                     let integrator = ResultIntegrator::new();
                     let mut results = Vec::new();
-                    
+
                     // Create sample results
                     for i in 0..count {
                         let result = create_sample_sparql_result(i, 10); // 10 bindings per result
                         results.push(QueryResult::Sparql(result));
                     }
-                    
+
                     integrator.integrate_results(results).await.unwrap()
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark network optimization
 fn bench_network_optimization(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     let data_sizes = vec![1024, 10240, 102400]; // 1KB, 10KB, 100KB
-    
+
     let mut group = c.benchmark_group("network_optimization");
-    
+
     for size in data_sizes {
         group.throughput(Throughput::Bytes(size as u64));
-        group.bench_with_input(
-            BenchmarkId::new("compression", size),
-            &size,
-            |b, &size| {
-                b.to_async(&rt).iter(|| async {
-                    let optimizer = NetworkOptimizer::new();
-                    let test_data = vec![65u8; size]; // Create test data
-                    
-                    let compressed = optimizer
-                        .compress_data(&test_data, EncodingFormat::Json)
-                        .await
-                        .unwrap();
-                    
-                    optimizer.decompress_data(&compressed).await.unwrap()
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("compression", size), &size, |b, &size| {
+            b.to_async(&rt).iter(|| async {
+                let optimizer = NetworkOptimizer::new();
+                let test_data = vec![65u8; size]; // Create test data
+
+                let compressed = optimizer
+                    .compress_data(&test_data, EncodingFormat::Json)
+                    .await
+                    .unwrap();
+
+                optimizer.decompress_data(&compressed).await.unwrap()
+            });
+        });
     }
-    
+
     group.finish();
 }
 
 /// Benchmark request batching
 fn bench_request_batching(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     let batch_sizes = vec![1, 10, 50, 100];
-    
+
     let mut group = c.benchmark_group("request_batching");
-    
+
     for size in batch_sizes {
         group.throughput(Throughput::Elements(size as u64));
         group.bench_with_input(
@@ -233,7 +243,7 @@ fn bench_request_batching(c: &mut Criterion) {
                 b.to_async(&rt).iter(|| async {
                     let batcher = RequestBatcher::new();
                     let registry = ServiceRegistry::new();
-                    
+
                     // Create batch requests
                     let mut batch = RequestBatch {
                         id: "bench-batch".to_string(),
@@ -243,7 +253,7 @@ fn bench_request_batching(c: &mut Criterion) {
                         batch_strategy: BatchingStrategy::SmallBatch { size },
                         estimated_processing_time: Duration::from_millis(50),
                     };
-                    
+
                     for i in 0..size {
                         let request = BatchableRequest {
                             id: format!("req-{}", i),
@@ -257,24 +267,24 @@ fn bench_request_batching(c: &mut Criterion) {
                         };
                         batch.requests.push(request);
                     }
-                    
+
                     batcher.execute_batch(batch, &registry).await.unwrap()
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark distributed tracing overhead
 fn bench_distributed_tracing(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     c.bench_function("tracing_overhead", |b| {
         b.to_async(&rt).iter(|| async {
             let tracer = DistributedTracingManager::new();
-            
+
             let query_context = QueryContext {
                 query: "SELECT ?s ?p ?o WHERE { ?s ?p ?o }".to_string(),
                 query_type: "SPARQL".to_string(),
@@ -282,30 +292,25 @@ fn bench_distributed_tracing(c: &mut Criterion) {
                 session_id: Some("bench-session".to_string()),
                 priority: QueryPriority::Normal,
             };
-            
+
             // Start trace
             let trace = tracer.start_trace(query_context).await.unwrap();
-            
+
             // Create 10 spans
             let mut span_ids = Vec::new();
             for i in 0..10 {
                 let span = tracer
-                    .create_span(
-                        &trace,
-                        &format!("operation-{}", i),
-                        "bench-service",
-                        None,
-                    )
+                    .create_span(&trace, &format!("operation-{}", i), "bench-service", None)
                     .await
                     .unwrap();
                 span_ids.push(span.span_id);
             }
-            
+
             // Finish all spans
             for span_id in span_ids {
                 tracer.finish_span(&span_id, SpanStatus::Ok).await.unwrap();
             }
-            
+
             // Complete trace
             tracer.complete_trace(&trace.trace_id).await.unwrap()
         });
@@ -316,7 +321,7 @@ fn bench_distributed_tracing(c: &mut Criterion) {
 
 fn create_sample_sparql_result(offset: usize, binding_count: usize) -> SparqlResults {
     let mut bindings = Vec::new();
-    
+
     for i in 0..binding_count {
         let mut binding = HashMap::new();
         binding.insert(
@@ -348,7 +353,7 @@ fn create_sample_sparql_result(offset: usize, binding_count: usize) -> SparqlRes
         );
         bindings.push(binding);
     }
-    
+
     SparqlResults {
         head: SparqlHead {
             vars: vec!["s".to_string(), "p".to_string(), "o".to_string()],

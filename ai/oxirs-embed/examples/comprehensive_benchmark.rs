@@ -235,9 +235,10 @@ async fn benchmark_transe(triples: &[Triple], config: ModelConfig) -> Result<Mod
         .collect();
 
     // Evaluation
-    let mut eval_suite = AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
+    let mut eval_suite =
+        AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
     eval_suite.generate_negative_samples(&model)?;
-    let eval_results = eval_suite.evaluate(&model)?;
+    let eval_results = eval_suite.evaluate(&model).await?;
 
     // Check if meets TODO.md requirements
     let meets_requirements = check_requirements(&eval_results, training_time, inference_latency);
@@ -246,9 +247,19 @@ async fn benchmark_transe(triples: &[Triple], config: ModelConfig) -> Result<Mod
         training_time_seconds: training_time,
         inference_latency_ms: inference_latency,
         memory_usage_mb: estimate_memory_usage(&model),
-        mrr: eval_results.mean_reciprocal_rank,
-        hits_at_1: eval_results.hits_at_k.get(&1).copied().unwrap_or(0.0),
-        hits_at_10: eval_results.hits_at_k.get(&10).copied().unwrap_or(0.0),
+        mrr: eval_results.basic_metrics.mrr as f64,
+        hits_at_1: eval_results
+            .basic_metrics
+            .hits_at_k
+            .get(&1)
+            .copied()
+            .unwrap_or(0.0) as f64,
+        hits_at_10: eval_results
+            .basic_metrics
+            .hits_at_k
+            .get(&10)
+            .copied()
+            .unwrap_or(0.0) as f64,
         passes_requirements: meets_requirements,
     })
 }
@@ -318,9 +329,10 @@ async fn benchmark_model_impl<M: oxirs_embed::EmbeddingModel>(
         .collect();
 
     // Evaluation
-    let mut eval_suite = AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
+    let mut eval_suite =
+        AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
     eval_suite.generate_negative_samples(model)?;
-    let eval_results = eval_suite.evaluate(model)?;
+    let eval_results = eval_suite.evaluate(model).await?;
 
     // Check if meets TODO.md requirements
     let meets_requirements = check_requirements(&eval_results, training_time, inference_latency);
@@ -329,9 +341,19 @@ async fn benchmark_model_impl<M: oxirs_embed::EmbeddingModel>(
         training_time_seconds: training_time,
         inference_latency_ms: inference_latency,
         memory_usage_mb: estimate_memory_usage(model),
-        mrr: eval_results.mean_reciprocal_rank,
-        hits_at_1: eval_results.hits_at_k.get(&1).copied().unwrap_or(0.0),
-        hits_at_10: eval_results.hits_at_k.get(&10).copied().unwrap_or(0.0),
+        mrr: eval_results.basic_metrics.mrr as f64,
+        hits_at_1: eval_results
+            .basic_metrics
+            .hits_at_k
+            .get(&1)
+            .copied()
+            .unwrap_or(0.0) as f64,
+        hits_at_10: eval_results
+            .basic_metrics
+            .hits_at_k
+            .get(&10)
+            .copied()
+            .unwrap_or(0.0) as f64,
         passes_requirements: meets_requirements,
     })
 }

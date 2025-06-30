@@ -346,7 +346,7 @@ impl RealTimeSchemaSynchronizer {
 
                 // Simple periodic sync implementation - would need full synchronizer logic
                 debug!("Performing periodic sync");
-                
+
                 // For now, just log the sync attempt
                 // In a full implementation, this would call the actual sync logic
             }

@@ -896,7 +896,7 @@ impl ParallelQueryExecutor {
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
         stats.property_path_evaluations += 1;
-        
+
         // Parallel property path evaluation based on path type
         match path {
             PropertyPath::Iri(predicate) => {
@@ -910,28 +910,40 @@ impl ParallelQueryExecutor {
             }
             PropertyPath::Inverse(inner_path) => {
                 // Inverse path - swap subject and object
-                self.execute_parallel_property_path(object, inner_path, subject, dataset, context, stats)
+                self.execute_parallel_property_path(
+                    object, inner_path, subject, dataset, context, stats,
+                )
             }
             PropertyPath::Sequence(left_path, right_path) => {
                 // Sequence path (p1/p2) - find intermediate nodes
-                self.execute_parallel_sequence_path(subject, left_path, right_path, object, dataset, context, stats)
+                self.execute_parallel_sequence_path(
+                    subject, left_path, right_path, object, dataset, context, stats,
+                )
             }
             PropertyPath::Alternative(left_path, right_path) => {
                 // Alternative path (p1|p2) - union of both paths
-                self.execute_parallel_alternative_path(subject, left_path, right_path, object, dataset, context, stats)
+                self.execute_parallel_alternative_path(
+                    subject, left_path, right_path, object, dataset, context, stats,
+                )
             }
             PropertyPath::ZeroOrMore(inner_path) => {
                 // Kleene star - transitive closure
-                self.execute_parallel_transitive_closure(subject, inner_path, object, dataset, context, stats, true)
+                self.execute_parallel_transitive_closure(
+                    subject, inner_path, object, dataset, context, stats, true,
+                )
             }
             PropertyPath::OneOrMore(inner_path) => {
                 // Plus operator - transitive closure without zero
-                self.execute_parallel_transitive_closure(subject, inner_path, object, dataset, context, stats, false)
+                self.execute_parallel_transitive_closure(
+                    subject, inner_path, object, dataset, context, stats, false,
+                )
             }
             PropertyPath::ZeroOrOne(inner_path) => {
                 // Optional path - direct or empty
-                let direct_result = self.execute_parallel_property_path(subject, inner_path, object, dataset, context, stats)?;
-                
+                let direct_result = self.execute_parallel_property_path(
+                    subject, inner_path, object, dataset, context, stats,
+                )?;
+
                 // Add empty binding if subject equals object (zero path)
                 if subject == object {
                     let mut result = direct_result;
@@ -968,9 +980,14 @@ impl ParallelQueryExecutor {
         // Find all possible intermediate nodes by exploring left path from subject
         let intermediate_var = Variable::new("?__intermediate")?;
         let intermediate_term = AlgebraTerm::Variable(intermediate_var.clone());
-        
+
         let left_results = self.execute_parallel_property_path(
-            subject, left_path, &intermediate_term, dataset, context, stats
+            subject,
+            left_path,
+            &intermediate_term,
+            dataset,
+            context,
+            stats,
         )?;
 
         // For each intermediate result, explore right path to object
@@ -981,8 +998,14 @@ impl ParallelQueryExecutor {
                     // Create a thread-local stats copy for parallel execution
                     let mut local_stats = ExecutionStats::default();
                     self.execute_parallel_property_path(
-                        intermediate_value, right_path, object, dataset, context, &mut local_stats
-                    ).ok()
+                        intermediate_value,
+                        right_path,
+                        object,
+                        dataset,
+                        context,
+                        &mut local_stats,
+                    )
+                    .ok()
                 } else {
                     None
                 }
@@ -1013,10 +1036,28 @@ impl ParallelQueryExecutor {
         let mut left_stats = ExecutionStats::new();
         let mut right_stats = ExecutionStats::new();
         let (left_results, right_results) = rayon::join(
-            || self.execute_parallel_property_path(subject, left_path, object, dataset, context, &mut left_stats),
-            || self.execute_parallel_property_path(subject, right_path, object, dataset, context, &mut right_stats),
+            || {
+                self.execute_parallel_property_path(
+                    subject,
+                    left_path,
+                    object,
+                    dataset,
+                    context,
+                    &mut left_stats,
+                )
+            },
+            || {
+                self.execute_parallel_property_path(
+                    subject,
+                    right_path,
+                    object,
+                    dataset,
+                    context,
+                    &mut right_stats,
+                )
+            },
         );
-        
+
         // Merge stats back
         stats.merge_from(&left_stats);
         stats.merge_from(&right_stats);
@@ -1043,7 +1084,7 @@ impl ParallelQueryExecutor {
         let mut visited = HashSet::new();
         let mut current_level = vec![subject.clone()];
         let max_depth = 50; // Prevent infinite loops
-        
+
         // Add zero-length path if needed
         if include_zero && subject == object {
             result.push(HashMap::new());
@@ -1060,14 +1101,20 @@ impl ParallelQueryExecutor {
                     // Find all nodes reachable in one step
                     let next_var = Variable::new(&format!("?__next_{}", depth)).unwrap();
                     let next_term = AlgebraTerm::Variable(next_var.clone());
-                    
+
                     let mut local_stats = ExecutionStats::new();
                     if let Ok(step_results) = self.execute_parallel_property_path(
-                        current_node, path, &next_term, dataset, context, &mut local_stats
+                        current_node,
+                        path,
+                        &next_term,
+                        dataset,
+                        context,
+                        &mut local_stats,
                     ) {
-                        step_results.into_iter().filter_map(|binding| {
-                            binding.get(&next_var).cloned()
-                        }).collect::<Vec<_>>()
+                        step_results
+                            .into_iter()
+                            .filter_map(|binding| binding.get(&next_var).cloned())
+                            .collect::<Vec<_>>()
                     } else {
                         Vec::new()
                     }
@@ -1454,7 +1501,7 @@ impl<T: Send + Sync> WorkStealingQueue<T> {
     pub fn new(thread_count: usize) -> Self {
         let mut queues = Vec::with_capacity(thread_count);
         let mut work_counters = Vec::with_capacity(thread_count);
-        
+
         for _ in 0..thread_count {
             queues.push(Arc::new(Mutex::new(VecDeque::new())));
             work_counters.push(AtomicUsize::new(0));
@@ -1482,7 +1529,7 @@ impl<T: Send + Sync> WorkStealingQueue<T> {
     pub fn push_balanced(&self, work: T) {
         let mut min_load = usize::MAX;
         let mut best_queue = 0;
-        
+
         // Find the queue with minimum load
         for (i, counter) in self.work_counters.iter().enumerate() {
             let load = counter.load(Ordering::Relaxed);
@@ -1491,7 +1538,7 @@ impl<T: Send + Sync> WorkStealingQueue<T> {
                 best_queue = i;
             }
         }
-        
+
         self.push(best_queue, work);
     }
 
@@ -1549,7 +1596,7 @@ impl<T: Send + Sync> WorkStealingQueue<T> {
     /// Drain all work from all queues
     pub fn drain_all(&self) -> Vec<T> {
         let mut all_work = Vec::new();
-        
+
         for (i, queue) in self.queues.iter().enumerate() {
             {
                 let mut q = queue.lock();
@@ -1559,7 +1606,7 @@ impl<T: Send + Sync> WorkStealingQueue<T> {
             }
             self.work_counters[i].store(0, Ordering::Relaxed);
         }
-        
+
         self.global_work_count.store(0, Ordering::Relaxed);
         all_work
     }

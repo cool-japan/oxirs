@@ -227,11 +227,19 @@ impl QueryExecutor {
                 let pattern_results = self.execute_serial(pattern, dataset)?;
                 Ok(self.apply_slice(pattern_results, *offset, *limit))
             }
-            Algebra::Group { pattern, variables, aggregates } => {
+            Algebra::Group {
+                pattern,
+                variables,
+                aggregates,
+            } => {
                 let pattern_results = self.execute_serial(pattern, dataset)?;
                 self.apply_group_by(pattern_results, variables, aggregates)
             }
-            Algebra::LeftJoin { left, right, filter } => {
+            Algebra::LeftJoin {
+                left,
+                right,
+                filter,
+            } => {
                 let left_results = self.execute_serial(left, dataset)?;
                 let right_results = self.execute_serial(right, dataset)?;
                 self.apply_left_join(left_results, right_results, filter)
@@ -573,7 +581,7 @@ impl QueryExecutor {
                 // Check for variable compatibility before merging
                 let mut is_compatible = true;
                 let mut merged = left_binding.clone();
-                
+
                 for (var, term) in right_binding {
                     if let Some(existing_term) = merged.get(var) {
                         // Variable exists in both bindings - they must have the same value
@@ -586,7 +594,7 @@ impl QueryExecutor {
                         merged.insert(var.clone(), term.clone());
                     }
                 }
-                
+
                 if is_compatible {
                     result.push(merged);
                 }
@@ -604,10 +612,13 @@ impl QueryExecutor {
         aggregates: &[(crate::algebra::Variable, crate::algebra::Aggregate)],
     ) -> Result<Solution> {
         use std::collections::HashMap;
-        
+
         // Group bindings by grouping variables
-        let mut groups: HashMap<Vec<(crate::algebra::Variable, crate::algebra::Term)>, Vec<&crate::algebra::Binding>> = HashMap::new();
-        
+        let mut groups: HashMap<
+            Vec<(crate::algebra::Variable, crate::algebra::Term)>,
+            Vec<&crate::algebra::Binding>,
+        > = HashMap::new();
+
         for binding in &solution {
             let mut group_key = Vec::new();
             for group_condition in variables {
@@ -617,9 +628,12 @@ impl QueryExecutor {
                     }
                 }
             }
-            groups.entry(group_key).or_insert_with(Vec::new).push(binding);
+            groups
+                .entry(group_key)
+                .or_insert_with(Vec::new)
+                .push(binding);
         }
-        
+
         // If no grouping variables, create single group with all bindings
         if variables.is_empty() && !solution.is_empty() {
             let mut all_bindings = Vec::new();
@@ -628,27 +642,27 @@ impl QueryExecutor {
             }
             groups.insert(Vec::new(), all_bindings);
         }
-        
+
         let mut result = Solution::new();
-        
+
         // Process each group
         for (group_key, group_bindings) in groups {
             let mut group_result = crate::algebra::Binding::new();
-            
+
             // Add grouping variables to result
             for (var, term) in group_key {
                 group_result.insert(var, term);
             }
-            
+
             // Calculate aggregates
             for (agg_var, aggregate) in aggregates {
                 let agg_value = self.calculate_aggregate(aggregate, &group_bindings)?;
                 group_result.insert(agg_var.clone(), agg_value);
             }
-            
+
             result.push(group_result);
         }
-        
+
         Ok(result)
     }
 
@@ -658,25 +672,190 @@ impl QueryExecutor {
         aggregate: &crate::algebra::Aggregate,
         bindings: &[&crate::algebra::Binding],
     ) -> Result<crate::algebra::Term> {
+        use std::collections::HashSet;
+
         match aggregate {
-            crate::algebra::Aggregate::Count { distinct: false, expr: None } => {
-                // COUNT(*)
-                let count = bindings.len();
+            crate::algebra::Aggregate::Count { distinct, expr } => {
+                if let Some(expr) = expr {
+                    // COUNT(expression)
+                    let mut values = Vec::new();
+                    for binding in bindings {
+                        if let Ok(value) = self.evaluate_expression(expr, binding) {
+                            if *distinct {
+                                // For DISTINCT, we'll collect unique values
+                                values.push(value);
+                            } else {
+                                values.push(value);
+                            }
+                        }
+                    }
+
+                    let count = if *distinct {
+                        // Remove duplicates
+                        let unique_values: HashSet<_> = values.into_iter().collect();
+                        unique_values.len()
+                    } else {
+                        values.len()
+                    };
+
+                    Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                        value: count.to_string(),
+                        language: None,
+                        datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                            "http://www.w3.org/2001/XMLSchema#integer",
+                        )),
+                    }))
+                } else {
+                    // COUNT(*) - count all bindings
+                    let count = bindings.len();
+                    Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                        value: count.to_string(),
+                        language: None,
+                        datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                            "http://www.w3.org/2001/XMLSchema#integer",
+                        )),
+                    }))
+                }
+            }
+            crate::algebra::Aggregate::Sum { distinct, expr } => {
+                let mut values = Vec::new();
+                for binding in bindings {
+                    if let Ok(value) = self.evaluate_expression(expr, binding) {
+                        if let Ok(num) = self.extract_numeric_value(&value) {
+                            values.push(num);
+                        }
+                    }
+                }
+
+                if *distinct {
+                    let unique_values: HashSet<_> = values.iter().cloned().collect();
+                    values = unique_values.into_iter().collect();
+                }
+
+                let sum: f64 = values.iter().sum();
                 Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
-                    value: count.to_string(),
+                    value: sum.to_string(),
                     language: None,
                     datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
-                        "http://www.w3.org/2001/XMLSchema#integer"
+                        "http://www.w3.org/2001/XMLSchema#decimal",
                     )),
                 }))
             }
-            _ => {
-                // For now, return a default value for other aggregates
+            crate::algebra::Aggregate::Min { distinct: _, expr } => {
+                let mut min_value: Option<f64> = None;
+                for binding in bindings {
+                    if let Ok(value) = self.evaluate_expression(expr, binding) {
+                        if let Ok(num) = self.extract_numeric_value(&value) {
+                            min_value = Some(min_value.map_or(num, |min| min.min(num)));
+                        }
+                    }
+                }
+
+                if let Some(min) = min_value {
+                    Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                        value: min.to_string(),
+                        language: None,
+                        datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                            "http://www.w3.org/2001/XMLSchema#decimal",
+                        )),
+                    }))
+                } else {
+                    Err(anyhow::anyhow!("No numeric values found for MIN aggregate"))
+                }
+            }
+            crate::algebra::Aggregate::Max { distinct: _, expr } => {
+                let mut max_value: Option<f64> = None;
+                for binding in bindings {
+                    if let Ok(value) = self.evaluate_expression(expr, binding) {
+                        if let Ok(num) = self.extract_numeric_value(&value) {
+                            max_value = Some(max_value.map_or(num, |max| max.max(num)));
+                        }
+                    }
+                }
+
+                if let Some(max) = max_value {
+                    Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                        value: max.to_string(),
+                        language: None,
+                        datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                            "http://www.w3.org/2001/XMLSchema#decimal",
+                        )),
+                    }))
+                } else {
+                    Err(anyhow::anyhow!("No numeric values found for MAX aggregate"))
+                }
+            }
+            crate::algebra::Aggregate::Avg { distinct, expr } => {
+                let mut values = Vec::new();
+                for binding in bindings {
+                    if let Ok(value) = self.evaluate_expression(expr, binding) {
+                        if let Ok(num) = self.extract_numeric_value(&value) {
+                            values.push(num);
+                        }
+                    }
+                }
+
+                if *distinct {
+                    let unique_values: HashSet<_> = values.iter().cloned().collect();
+                    values = unique_values.into_iter().collect();
+                }
+
+                if values.is_empty() {
+                    Err(anyhow::anyhow!("No numeric values found for AVG aggregate"))
+                } else {
+                    let sum: f64 = values.iter().sum();
+                    let avg = sum / values.len() as f64;
+                    Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                        value: avg.to_string(),
+                        language: None,
+                        datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                            "http://www.w3.org/2001/XMLSchema#decimal",
+                        )),
+                    }))
+                }
+            }
+            crate::algebra::Aggregate::Sample { distinct: _, expr } => {
+                // SAMPLE returns any value from the group
+                for binding in bindings {
+                    if let Ok(value) = self.evaluate_expression(expr, binding) {
+                        return Ok(value);
+                    }
+                }
+                Err(anyhow::anyhow!("No values found for SAMPLE aggregate"))
+            }
+            crate::algebra::Aggregate::GroupConcat {
+                distinct,
+                expr,
+                separator,
+            } => {
+                let mut values = Vec::new();
+                for binding in bindings {
+                    if let Ok(value) = self.evaluate_expression(expr, binding) {
+                        // Convert value to string representation
+                        let string_value = match value {
+                            crate::algebra::Term::Literal(lit) => lit.value,
+                            crate::algebra::Term::Iri(iri) => iri.to_string(),
+                            crate::algebra::Term::BlankNode(bn) => format!("_:{}", bn),
+                            _ => value.to_string(),
+                        };
+                        values.push(string_value);
+                    }
+                }
+
+                if *distinct {
+                    let unique_values: HashSet<_> = values.into_iter().collect();
+                    values = unique_values.into_iter().collect();
+                    values.sort(); // Ensure deterministic order for DISTINCT
+                }
+
+                let sep = separator.as_deref().unwrap_or(" ");
+                let concatenated = values.join(sep);
+
                 Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
-                    value: "0".to_string(),
+                    value: concatenated,
                     language: None,
                     datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
-                        "http://www.w3.org/2001/XMLSchema#integer"
+                        "http://www.w3.org/2001/XMLSchema#string",
                     )),
                 }))
             }
@@ -691,15 +870,15 @@ impl QueryExecutor {
         _conditions: &Option<crate::algebra::Expression>,
     ) -> Result<Solution> {
         let mut result = Solution::new();
-        
+
         for left_binding in &left {
             let mut has_join = false;
-            
+
             // Try to join with each right binding
             for right_binding in &right {
                 let mut is_compatible = true;
                 let mut merged = left_binding.clone();
-                
+
                 for (var, term) in right_binding {
                     if let Some(existing_term) = merged.get(var) {
                         if existing_term != term {
@@ -710,19 +889,19 @@ impl QueryExecutor {
                         merged.insert(var.clone(), term.clone());
                     }
                 }
-                
+
                 if is_compatible {
                     result.push(merged);
                     has_join = true;
                 }
             }
-            
+
             // If no join found, include left binding alone (LEFT JOIN behavior)
             if !has_join {
                 result.push(left_binding.clone());
             }
         }
-        
+
         Ok(result)
     }
 
@@ -762,13 +941,13 @@ impl QueryExecutor {
         } else {
             return Ok(Solution::new());
         };
-        
+
         let probe_vars: HashSet<_> = if let Some(first_binding) = probe_side.first() {
             first_binding.keys().collect()
         } else {
             return Ok(Solution::new());
         };
-        
+
         let shared_vars: Vec<_> = build_vars.intersection(&probe_vars).cloned().collect();
 
         // Build hash table using only shared variables as keys
@@ -790,7 +969,11 @@ impl QueryExecutor {
         for probe_binding in &probe_side {
             let probe_key: Vec<_> = shared_vars
                 .iter()
-                .filter_map(|var| probe_binding.get(var).map(|term| ((*var).clone(), term.clone())))
+                .filter_map(|var| {
+                    probe_binding
+                        .get(var)
+                        .map(|term| ((*var).clone(), term.clone()))
+                })
                 .collect();
 
             if let Some(matching_bindings) = hash_table.get(&probe_key) {
@@ -798,7 +981,7 @@ impl QueryExecutor {
                     // Check for variable compatibility and merge
                     let mut is_compatible = true;
                     let mut merged = probe_binding.clone();
-                    
+
                     for (var, term) in build_binding {
                         if let Some(existing_term) = merged.get(var) {
                             // Variable exists in both - they must have same value
@@ -811,7 +994,7 @@ impl QueryExecutor {
                             merged.insert(var.clone(), term.clone());
                         }
                     }
-                    
+
                     if is_compatible {
                         result.push(merged);
                     }
@@ -826,10 +1009,453 @@ impl QueryExecutor {
     fn apply_filter(
         &self,
         solution: Solution,
-        _condition: &crate::algebra::Expression,
+        condition: &crate::algebra::Expression,
     ) -> Result<Solution> {
-        // Simplified filter application - would need full expression evaluation
-        Ok(solution)
+        let mut filtered = Solution::new();
+
+        for binding in solution {
+            match self.evaluate_expression(condition, &binding) {
+                Ok(crate::algebra::Term::Literal(lit)) => {
+                    // Check if the literal represents a true boolean value
+                    if self.is_truthy(&lit) {
+                        filtered.push(binding);
+                    }
+                }
+                Ok(_) => {
+                    // Non-literal terms that are not errors are considered true
+                    // (e.g., variables that are bound, IRIs that exist)
+                    filtered.push(binding);
+                }
+                Err(_) => {
+                    // Expression evaluation error means the binding doesn't satisfy the filter
+                    // Continue to next binding without adding this one
+                }
+            }
+        }
+
+        Ok(filtered)
+    }
+
+    /// Evaluate a SPARQL expression against a binding
+    fn evaluate_expression(
+        &self,
+        expr: &crate::algebra::Expression,
+        binding: &crate::algebra::Binding,
+    ) -> Result<crate::algebra::Term> {
+        use crate::algebra::{BinaryOperator, Expression, UnaryOperator};
+
+        match expr {
+            Expression::Variable(var) => {
+                // Look up variable in binding
+                binding
+                    .get(var)
+                    .cloned()
+                    .ok_or_else(|| anyhow::anyhow!("Unbound variable: {}", var))
+            }
+            Expression::Literal(lit) => Ok(crate::algebra::Term::Literal(lit.clone())),
+            Expression::Iri(iri) => Ok(crate::algebra::Term::Iri(iri.clone())),
+            Expression::Binary { op, left, right } => {
+                let left_val = self.evaluate_expression(left, binding)?;
+                let right_val = self.evaluate_expression(right, binding)?;
+                self.evaluate_binary_operation(op, &left_val, &right_val)
+            }
+            Expression::Unary { op, expr } => {
+                let val = self.evaluate_expression(expr, binding)?;
+                self.evaluate_unary_operation(op, &val)
+            }
+            Expression::Bound(var) => {
+                // BOUND() function checks if a variable is bound
+                let is_bound = binding.contains_key(var);
+                Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                    value: is_bound.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            Expression::Conditional {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                let condition_result = self.evaluate_expression(condition, binding)?;
+                if let crate::algebra::Term::Literal(lit) = condition_result {
+                    if self.is_truthy(&lit) {
+                        self.evaluate_expression(then_expr, binding)
+                    } else {
+                        self.evaluate_expression(else_expr, binding)
+                    }
+                } else {
+                    // Non-literal condition is considered true if evaluation succeeded
+                    self.evaluate_expression(then_expr, binding)
+                }
+            }
+            Expression::Function { name, args } => {
+                // Basic function implementations
+                match name.as_str() {
+                    "str" => {
+                        if args.len() == 1 {
+                            let arg = self.evaluate_expression(&args[0], binding)?;
+                            self.str_function(&arg)
+                        } else {
+                            Err(anyhow::anyhow!("str() function requires exactly 1 argument"))
+                        }
+                    }
+                    "lang" => {
+                        if args.len() == 1 {
+                            let arg = self.evaluate_expression(&args[0], binding)?;
+                            self.lang_function(&arg)
+                        } else {
+                            Err(anyhow::anyhow!("lang() function requires exactly 1 argument"))
+                        }
+                    }
+                    "datatype" => {
+                        if args.len() == 1 {
+                            let arg = self.evaluate_expression(&args[0], binding)?;
+                            self.datatype_function(&arg)
+                        } else {
+                            Err(anyhow::anyhow!("datatype() function requires exactly 1 argument"))
+                        }
+                    }
+                    _ => Err(anyhow::anyhow!("Unknown function: {}", name)),
+                }
+            }
+            Expression::Exists(_) | Expression::NotExists(_) => {
+                // EXISTS and NOT EXISTS would require evaluating subqueries
+                // For now, return a basic implementation
+                Err(anyhow::anyhow!(
+                    "EXISTS/NOT EXISTS not yet implemented in filter evaluation"
+                ))
+            }
+        }
+    }
+
+    /// Evaluate binary operations
+    fn evaluate_binary_operation(
+        &self,
+        op: &crate::algebra::BinaryOperator,
+        left: &crate::algebra::Term,
+        right: &crate::algebra::Term,
+    ) -> Result<crate::algebra::Term> {
+        use crate::algebra::{BinaryOperator, Term};
+
+        match op {
+            BinaryOperator::Equal => {
+                let result = self.terms_equal(left, right);
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: result.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            BinaryOperator::NotEqual => {
+                let result = !self.terms_equal(left, right);
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: result.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            BinaryOperator::Less => self.numeric_comparison(left, right, |a, b| a < b),
+            BinaryOperator::LessEqual => self.numeric_comparison(left, right, |a, b| a <= b),
+            BinaryOperator::Greater => self.numeric_comparison(left, right, |a, b| a > b),
+            BinaryOperator::GreaterEqual => self.numeric_comparison(left, right, |a, b| a >= b),
+            BinaryOperator::And => {
+                let left_truth = self.is_term_truthy(left)?;
+                let right_truth = self.is_term_truthy(right)?;
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: (left_truth && right_truth).to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            BinaryOperator::Or => {
+                let left_truth = self.is_term_truthy(left)?;
+                let right_truth = self.is_term_truthy(right)?;
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: (left_truth || right_truth).to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            BinaryOperator::SameTerm => {
+                // SameTerm is stricter than equal - requires exact same term
+                let result = left == right;
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: result.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            _ => Err(anyhow::anyhow!("Binary operator {:?} not yet implemented", op)),
+        }
+    }
+
+    /// Evaluate unary operations
+    fn evaluate_unary_operation(
+        &self,
+        op: &crate::algebra::UnaryOperator,
+        operand: &crate::algebra::Term,
+    ) -> Result<crate::algebra::Term> {
+        use crate::algebra::{Term, UnaryOperator};
+
+        match op {
+            UnaryOperator::Not => {
+                let truth = self.is_term_truthy(operand)?;
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: (!truth).to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            UnaryOperator::IsIri => {
+                let result = matches!(operand, Term::Iri(_));
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: result.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            UnaryOperator::IsBlank => {
+                let result = matches!(operand, Term::BlankNode(_));
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: result.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            UnaryOperator::IsLiteral => {
+                let result = matches!(operand, Term::Literal(_));
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: result.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            UnaryOperator::IsNumeric => {
+                let result = self.is_numeric_literal(operand);
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: result.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            _ => Err(anyhow::anyhow!("Unary operator {:?} not yet implemented", op)),
+        }
+    }
+
+    /// Check if two terms are equal according to SPARQL semantics
+    fn terms_equal(&self, left: &crate::algebra::Term, right: &crate::algebra::Term) -> bool {
+        use crate::algebra::Term;
+        
+        match (left, right) {
+            (Term::Literal(l1), Term::Literal(l2)) => {
+                // SPARQL equality for literals
+                if l1.language.is_some() || l2.language.is_some() {
+                    // Language-tagged strings must match exactly
+                    l1 == l2
+                } else if let (Some(dt1), Some(dt2)) = (&l1.datatype, &l2.datatype) {
+                    // Typed literals - try numeric comparison for numeric types
+                    if self.is_numeric_datatype(dt1) && self.is_numeric_datatype(dt2) {
+                        self.compare_numeric_literals(l1, l2) == Some(std::cmp::Ordering::Equal)
+                    } else {
+                        l1 == l2
+                    }
+                } else {
+                    l1 == l2
+                }
+            }
+            _ => left == right, // For non-literals, use structural equality
+        }
+    }
+
+    /// Check if a term is truthy according to SPARQL semantics
+    fn is_term_truthy(&self, term: &crate::algebra::Term) -> Result<bool> {
+        match term {
+            crate::algebra::Term::Literal(lit) => Ok(self.is_truthy(lit)),
+            _ => Err(anyhow::anyhow!("Cannot evaluate truthiness of non-literal term")),
+        }
+    }
+
+    /// Check if a literal is truthy
+    fn is_truthy(&self, literal: &crate::algebra::Literal) -> bool {
+        if let Some(ref datatype) = literal.datatype {
+            match datatype.as_str() {
+                "http://www.w3.org/2001/XMLSchema#boolean" => {
+                    literal.value == "true" || literal.value == "1"
+                }
+                "http://www.w3.org/2001/XMLSchema#integer"
+                | "http://www.w3.org/2001/XMLSchema#decimal"
+                | "http://www.w3.org/2001/XMLSchema#double"
+                | "http://www.w3.org/2001/XMLSchema#float" => {
+                    literal.value.parse::<f64>().map(|n| n != 0.0).unwrap_or(false)
+                }
+                "http://www.w3.org/2001/XMLSchema#string" => !literal.value.is_empty(),
+                _ => !literal.value.is_empty(), // Default: non-empty strings are truthy
+            }
+        } else if literal.language.is_some() {
+            !literal.value.is_empty() // Language-tagged strings
+        } else {
+            !literal.value.is_empty() // Simple literals
+        }
+    }
+
+    /// Perform numeric comparison between terms
+    fn numeric_comparison(
+        &self,
+        left: &crate::algebra::Term,
+        right: &crate::algebra::Term,
+        op: impl Fn(f64, f64) -> bool,
+    ) -> Result<crate::algebra::Term> {
+        let left_num = self.extract_numeric_value(left)?;
+        let right_num = self.extract_numeric_value(right)?;
+        
+        let result = op(left_num, right_num);
+        Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+            value: result.to_string(),
+            language: None,
+            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                "http://www.w3.org/2001/XMLSchema#boolean",
+            )),
+        }))
+    }
+
+    /// Extract numeric value from a term
+    fn extract_numeric_value(&self, term: &crate::algebra::Term) -> Result<f64> {
+        match term {
+            crate::algebra::Term::Literal(lit) => {
+                lit.value.parse::<f64>()
+                    .map_err(|_| anyhow::anyhow!("Cannot convert literal to number: {}", lit.value))
+            }
+            _ => Err(anyhow::anyhow!("Cannot extract numeric value from non-literal term")),
+        }
+    }
+
+    /// Check if a term represents a numeric literal
+    fn is_numeric_literal(&self, term: &crate::algebra::Term) -> bool {
+        match term {
+            crate::algebra::Term::Literal(lit) => {
+                if let Some(ref datatype) = lit.datatype {
+                    self.is_numeric_datatype(datatype)
+                } else {
+                    // Try to parse as number
+                    lit.value.parse::<f64>().is_ok()
+                }
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if a datatype IRI represents a numeric type
+    fn is_numeric_datatype(&self, datatype: &oxirs_core::model::NamedNode) -> bool {
+        matches!(
+            datatype.as_str(),
+            "http://www.w3.org/2001/XMLSchema#integer"
+                | "http://www.w3.org/2001/XMLSchema#decimal"
+                | "http://www.w3.org/2001/XMLSchema#double"
+                | "http://www.w3.org/2001/XMLSchema#float"
+                | "http://www.w3.org/2001/XMLSchema#int"
+                | "http://www.w3.org/2001/XMLSchema#long"
+                | "http://www.w3.org/2001/XMLSchema#short"
+                | "http://www.w3.org/2001/XMLSchema#byte"
+                | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+        )
+    }
+
+    /// Compare numeric literals
+    fn compare_numeric_literals(
+        &self,
+        left: &crate::algebra::Literal,
+        right: &crate::algebra::Literal,
+    ) -> Option<std::cmp::Ordering> {
+        let left_val = left.value.parse::<f64>().ok()?;
+        let right_val = right.value.parse::<f64>().ok()?;
+        left_val.partial_cmp(&right_val)
+    }
+
+    /// Built-in STR function
+    fn str_function(&self, arg: &crate::algebra::Term) -> Result<crate::algebra::Term> {
+        match arg {
+            crate::algebra::Term::Literal(lit) => {
+                Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                    value: lit.value.clone(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#string",
+                    )),
+                }))
+            }
+            crate::algebra::Term::Iri(iri) => {
+                Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                    value: iri.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#string",
+                    )),
+                }))
+            }
+            _ => Err(anyhow::anyhow!("STR function not applicable to this term type")),
+        }
+    }
+
+    /// Built-in LANG function
+    fn lang_function(&self, arg: &crate::algebra::Term) -> Result<crate::algebra::Term> {
+        match arg {
+            crate::algebra::Term::Literal(lit) => {
+                let lang = lit.language.as_ref().unwrap_or(&String::new()).clone();
+                Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                    value: lang,
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#string",
+                    )),
+                }))
+            }
+            _ => Err(anyhow::anyhow!("LANG function only applicable to literals")),
+        }
+    }
+
+    /// Built-in DATATYPE function
+    fn datatype_function(&self, arg: &crate::algebra::Term) -> Result<crate::algebra::Term> {
+        match arg {
+            crate::algebra::Term::Literal(lit) => {
+                let datatype = lit.datatype.as_ref().unwrap_or(
+                    &oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#string"
+                    )
+                ).clone();
+                Ok(crate::algebra::Term::Iri(datatype))
+            }
+            _ => Err(anyhow::anyhow!("DATATYPE function only applicable to literals")),
+        }
     }
 
     /// Apply projection to solution
@@ -947,13 +1573,13 @@ impl QueryExecutor {
         dataset: &dyn Dataset,
     ) -> Result<Solution> {
         let mut solution = Solution::new();
-        
+
         // Find matching triples from dataset
         let triples = dataset.find_triples(pattern)?;
-        
+
         for (s, p, o) in triples {
             let mut binding = crate::algebra::Binding::new();
-            
+
             // Bind variables based on pattern
             if let crate::algebra::Term::Variable(var) = &pattern.subject {
                 binding.insert(var.clone(), s);
@@ -964,7 +1590,7 @@ impl QueryExecutor {
             if let crate::algebra::Term::Variable(var) = &pattern.object {
                 binding.insert(var.clone(), o);
             }
-            
+
             // Only add binding if it has variables (otherwise it's just a test for existence)
             if !binding.is_empty() {
                 solution.push(binding);
@@ -973,7 +1599,7 @@ impl QueryExecutor {
                 solution.push(crate::algebra::Binding::new());
             }
         }
-        
+
         Ok(solution)
     }
 

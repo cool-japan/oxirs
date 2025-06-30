@@ -292,8 +292,9 @@ impl SchemaRegistry {
         }
 
         // Create new schema definition
-        let mut schema = SchemaDefinition::new(subject.clone(), next_version, format, schema_content);
-        
+        let mut schema =
+            SchemaDefinition::new(subject.clone(), next_version, format, schema_content);
+
         if let Some(compat) = compatibility {
             schema.compatibility = compat;
         } else {
@@ -325,16 +326,16 @@ impl SchemaRegistry {
         version: Option<u32>,
     ) -> Result<Option<SchemaDefinition>> {
         let schemas = self.schemas.read().await;
-        
+
         if let Some(subject_schemas) = schemas.get(subject) {
             let version = if let Some(v) = version {
                 v
             } else {
                 // Get latest version
                 let latest_versions = self.latest_versions.read().await;
-                *latest_versions.get(subject).ok_or_else(|| {
-                    anyhow!("No schemas found for subject: {}", subject)
-                })?
+                *latest_versions
+                    .get(subject)
+                    .ok_or_else(|| anyhow!("No schemas found for subject: {}", subject))?
             };
 
             Ok(subject_schemas.get(&version).cloned())
@@ -365,7 +366,7 @@ impl SchemaRegistry {
                         let mut cache = self.schema_cache.write().await;
                         cache.insert(*schema_id, schema.clone());
                     }
-                    
+
                     let mut stats = self.validation_stats.write().await;
                     stats.cache_misses += 1;
                     return Ok(Some(schema.clone()));
@@ -379,7 +380,7 @@ impl SchemaRegistry {
     /// List all schemas for a subject
     pub async fn list_schemas(&self, subject: &str) -> Result<Vec<SchemaDefinition>> {
         let schemas = self.schemas.read().await;
-        
+
         if let Some(subject_schemas) = schemas.get(subject) {
             let mut schemas: Vec<SchemaDefinition> = subject_schemas.values().cloned().collect();
             schemas.sort_by(|a, b| a.version.cmp(&b.version));
@@ -437,20 +438,24 @@ impl SchemaRegistry {
         let elapsed = start_time.elapsed();
         let mut stats = self.validation_stats.write().await;
         stats.validation_time_ms = (stats.validation_time_ms + elapsed.as_millis() as f64) / 2.0;
-        
+
         if validation_result.is_valid {
             stats.successful_validations += 1;
         } else {
             stats.failed_validations += 1;
         }
-        
+
         stats.warnings_count += validation_result.warnings.len() as u64;
 
         debug!(
             "Validated event against schema {} ({}ms): {}",
             schema.id,
             elapsed.as_millis(),
-            if validation_result.is_valid { "VALID" } else { "INVALID" }
+            if validation_result.is_valid {
+                "VALID"
+            } else {
+                "INVALID"
+            }
         );
 
         Ok(validation_result)
@@ -460,26 +465,31 @@ impl SchemaRegistry {
     fn extract_subject_from_event(&self, event: &StreamEvent) -> Option<String> {
         // Try to get subject from event metadata
         match event {
-            StreamEvent::TripleAdded { metadata, .. } => {
-                metadata.properties.get("subject").cloned()
-                    .or_else(|| Some(format!("rdf.triple.added")))
-            }
-            StreamEvent::TripleRemoved { metadata, .. } => {
-                metadata.properties.get("subject").cloned()
-                    .or_else(|| Some(format!("rdf.triple.removed")))
-            }
-            StreamEvent::SparqlUpdate { metadata, .. } => {
-                metadata.properties.get("subject").cloned()
-                    .or_else(|| Some(format!("sparql.update")))
-            }
-            StreamEvent::TransactionBegin { metadata, .. } => {
-                metadata.properties.get("subject").cloned()
-                    .or_else(|| Some(format!("transaction.begin")))
-            }
-            StreamEvent::TransactionCommit { metadata, .. } => {
-                metadata.properties.get("subject").cloned()
-                    .or_else(|| Some(format!("transaction.commit")))
-            }
+            StreamEvent::TripleAdded { metadata, .. } => metadata
+                .properties
+                .get("subject")
+                .cloned()
+                .or_else(|| Some(format!("rdf.triple.added"))),
+            StreamEvent::TripleRemoved { metadata, .. } => metadata
+                .properties
+                .get("subject")
+                .cloned()
+                .or_else(|| Some(format!("rdf.triple.removed"))),
+            StreamEvent::SparqlUpdate { metadata, .. } => metadata
+                .properties
+                .get("subject")
+                .cloned()
+                .or_else(|| Some(format!("sparql.update"))),
+            StreamEvent::TransactionBegin { metadata, .. } => metadata
+                .properties
+                .get("subject")
+                .cloned()
+                .or_else(|| Some(format!("transaction.begin"))),
+            StreamEvent::TransactionCommit { metadata, .. } => metadata
+                .properties
+                .get("subject")
+                .cloned()
+                .or_else(|| Some(format!("transaction.commit"))),
             _ => Some(format!("stream.event.{:?}", std::mem::discriminant(event))),
         }
     }
@@ -514,7 +524,10 @@ impl SchemaRegistry {
                     .await
             }
             _ => {
-                warn!("Compatibility checking not implemented for format: {:?}", new_format);
+                warn!(
+                    "Compatibility checking not implemented for format: {:?}",
+                    new_format
+                );
                 Ok(())
             }
         }
@@ -540,14 +553,19 @@ impl SchemaRegistry {
     ) -> Result<ValidationResult> {
         // Custom RDF validation logic
         match event {
-            StreamEvent::TripleAdded { subject, predicate, object, .. } => {
+            StreamEvent::TripleAdded {
+                subject,
+                predicate,
+                object,
+                ..
+            } => {
                 let mut errors = Vec::new();
-                
+
                 // Basic URI validation
                 if !subject.starts_with("http://") && !subject.starts_with("https://") {
                     errors.push(format!("Invalid subject URI: {}", subject));
                 }
-                
+
                 if !predicate.starts_with("http://") && !predicate.starts_with("https://") {
                     errors.push(format!("Invalid predicate URI: {}", predicate));
                 }
@@ -610,7 +628,7 @@ impl SchemaRegistry {
             if let Some(version) = version {
                 // Delete specific version
                 let removed = subject_schemas.remove(&version).is_some();
-                
+
                 // Update latest version if this was the latest
                 if let Some(latest) = latest_versions.get(subject) {
                     if *latest == version {
@@ -623,7 +641,7 @@ impl SchemaRegistry {
                         }
                     }
                 }
-                
+
                 Ok(removed)
             } else {
                 // Delete all versions for subject
@@ -745,7 +763,9 @@ mod tests {
             },
         };
 
-        let validation_result = registry.validate_event(&event, Some("rdf.triple.added")).await?;
+        let validation_result = registry
+            .validate_event(&event, Some("rdf.triple.added"))
+            .await?;
 
         assert!(validation_result.is_valid);
         assert!(validation_result.errors.is_empty());

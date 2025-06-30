@@ -1157,6 +1157,908 @@ impl Default for AdvancedOptimizationEngine {
     }
 }
 
+/// Ant Colony Optimization for Constraint Ordering
+#[derive(Debug)]
+pub struct AntColonyOptimizer {
+    num_ants: usize,
+    max_iterations: usize,
+    pheromone_evaporation_rate: f64,
+    pheromone_deposit_strength: f64,
+    alpha: f64, // Pheromone importance
+    beta: f64,  // Heuristic importance
+    pheromone_matrix: Vec<Vec<f64>>,
+    distance_matrix: Vec<Vec<f64>>,
+    best_solution: Option<Vec<usize>>,
+    best_cost: f64,
+}
+
+impl AntColonyOptimizer {
+    pub fn new(num_constraints: usize) -> Self {
+        let pheromone_matrix = vec![vec![1.0; num_constraints]; num_constraints];
+        let distance_matrix = vec![vec![1.0; num_constraints]; num_constraints];
+        
+        Self {
+            num_ants: 20,
+            max_iterations: 100,
+            pheromone_evaporation_rate: 0.1,
+            pheromone_deposit_strength: 1.0,
+            alpha: 1.0,
+            beta: 2.0,
+            pheromone_matrix,
+            distance_matrix,
+            best_solution: None,
+            best_cost: f64::INFINITY,
+        }
+    }
+
+    /// Optimize constraint ordering using ant colony optimization
+    pub async fn optimize_constraint_order(
+        &mut self,
+        constraints: &[PropertyConstraint],
+    ) -> Result<Vec<usize>> {
+        if constraints.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Initialize distance matrix based on constraint dependencies
+        self.initialize_distance_matrix(constraints)?;
+
+        for iteration in 0..self.max_iterations {
+            let mut solutions = Vec::new();
+            
+            // Generate solutions with each ant
+            for _ in 0..self.num_ants {
+                let solution = self.construct_ant_solution(constraints.len())?;
+                let cost = self.calculate_solution_cost(&solution, constraints)?;
+                solutions.push((solution, cost));
+            }
+
+            // Update best solution
+            for (solution, cost) in &solutions {
+                if *cost < self.best_cost {
+                    self.best_cost = *cost;
+                    self.best_solution = Some(solution.clone());
+                }
+            }
+
+            // Update pheromone trails
+            self.update_pheromones(&solutions)?;
+
+            if iteration % 20 == 0 {
+                tracing::debug!(
+                    "ACO Iteration {}: Best cost = {:.4}",
+                    iteration,
+                    self.best_cost
+                );
+            }
+        }
+
+        self.best_solution.clone().ok_or_else(|| {
+            ShaclAiError::ShapeManagement("ACO failed to find solution".to_string())
+        })
+    }
+
+    fn initialize_distance_matrix(&mut self, constraints: &[PropertyConstraint]) -> Result<()> {
+        let n = constraints.len();
+        for i in 0..n {
+            for j in 0..n {
+                if i != j {
+                    // Calculate distance based on constraint compatibility
+                    let distance = self.calculate_constraint_distance(&constraints[i], &constraints[j]);
+                    self.distance_matrix[i][j] = distance;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn calculate_constraint_distance(&self, c1: &PropertyConstraint, c2: &PropertyConstraint) -> f64 {
+        // Distance based on property similarity and constraint type compatibility
+        let property_similarity = if c1.property() == c2.property() { 0.1 } else { 1.0 };
+        let type_compatibility = match (c1.constraint_type().as_str(), c2.constraint_type().as_str()) {
+            ("sh:datatype", "sh:pattern") => 0.3, // Compatible
+            ("sh:class", "sh:nodeKind") => 0.4,   // Somewhat compatible
+            (a, b) if a == b => 0.2,              // Same type
+            _ => 1.0,                             // Default distance
+        };
+        
+        property_similarity + type_compatibility
+    }
+
+    fn construct_ant_solution(&self, num_constraints: usize) -> Result<Vec<usize>> {
+        let mut solution = Vec::new();
+        let mut unvisited: HashSet<usize> = (0..num_constraints).collect();
+        
+        // Start from random constraint
+        let mut current = fastrand::usize(0..num_constraints);
+        solution.push(current);
+        unvisited.remove(&current);
+
+        while !unvisited.is_empty() {
+            let next = self.select_next_constraint(current, &unvisited)?;
+            solution.push(next);
+            unvisited.remove(&next);
+            current = next;
+        }
+
+        Ok(solution)
+    }
+
+    fn select_next_constraint(&self, current: usize, unvisited: &HashSet<usize>) -> Result<usize> {
+        let mut probabilities = Vec::new();
+        let mut total_probability = 0.0;
+
+        for &next in unvisited {
+            let pheromone = self.pheromone_matrix[current][next];
+            let heuristic = 1.0 / self.distance_matrix[current][next];
+            let probability = pheromone.powf(self.alpha) * heuristic.powf(self.beta);
+            
+            probabilities.push((next, probability));
+            total_probability += probability;
+        }
+
+        // Roulette wheel selection
+        let random_value = fastrand::f64() * total_probability;
+        let mut cumulative = 0.0;
+
+        for (constraint, probability) in probabilities {
+            cumulative += probability;
+            if cumulative >= random_value {
+                return Ok(constraint);
+            }
+        }
+
+        // Fallback to random selection
+        let unvisited_vec: Vec<_> = unvisited.iter().cloned().collect();
+        Ok(unvisited_vec[fastrand::usize(0..unvisited_vec.len())])
+    }
+
+    fn calculate_solution_cost(&self, solution: &[usize], constraints: &[PropertyConstraint]) -> Result<f64> {
+        let mut total_cost = 0.0;
+        let mut failure_probability = 0.0;
+
+        for &constraint_idx in solution {
+            let constraint_cost = match constraints[constraint_idx].constraint_type().as_str() {
+                "sh:pattern" => 3.5,
+                "sh:sparql" => 4.0,
+                "sh:class" => 2.5,
+                "sh:hasValue" => 1.0,
+                "sh:count" => 1.5,
+                "sh:datatype" => 0.8,
+                "sh:nodeKind" => 0.5,
+                _ => 1.5,
+            };
+
+            // Cost considering early termination probability
+            total_cost += constraint_cost * (1.0 - failure_probability);
+            failure_probability += 0.08; // Incremental failure probability
+        }
+
+        Ok(total_cost)
+    }
+
+    fn update_pheromones(&mut self, solutions: &[(Vec<usize>, f64)]) -> Result<()> {
+        // Evaporate pheromones
+        for i in 0..self.pheromone_matrix.len() {
+            for j in 0..self.pheromone_matrix[i].len() {
+                self.pheromone_matrix[i][j] *= 1.0 - self.pheromone_evaporation_rate;
+            }
+        }
+
+        // Deposit pheromones for good solutions
+        for (solution, cost) in solutions {
+            let pheromone_deposit = self.pheromone_deposit_strength / cost;
+            
+            for window in solution.windows(2) {
+                let from = window[0];
+                let to = window[1];
+                self.pheromone_matrix[from][to] += pheromone_deposit;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Differential Evolution for Global Optimization
+#[derive(Debug)]
+pub struct DifferentialEvolutionOptimizer {
+    population_size: usize,
+    max_generations: usize,
+    crossover_rate: f64,
+    differential_weight: f64,
+    population: Vec<DEIndividual>,
+    best_individual: Option<DEIndividual>,
+}
+
+impl DifferentialEvolutionOptimizer {
+    pub fn new() -> Self {
+        Self {
+            population_size: 50,
+            max_generations: 100,
+            crossover_rate: 0.9,
+            differential_weight: 0.8,
+            population: Vec::new(),
+            best_individual: None,
+        }
+    }
+
+    /// Optimize using differential evolution
+    pub async fn optimize(
+        &mut self,
+        objective_function: &dyn OptimizationObjectiveFunction,
+        search_space: &OptimizationSearchSpace,
+    ) -> Result<DEIndividual> {
+        self.initialize_population(search_space)?;
+
+        for generation in 0..self.max_generations {
+            let mut new_population = Vec::new();
+
+            for i in 0..self.population_size {
+                // Mutation and crossover
+                let mutant = self.mutate(i, search_space)?;
+                let trial = self.crossover(&self.population[i], &mutant)?;
+                
+                // Selection
+                let trial_fitness = objective_function.evaluate(&trial.to_optimization_point()).await?;
+                let current_fitness = self.population[i].fitness;
+                
+                if trial_fitness > current_fitness {
+                    let mut new_trial = trial;
+                    new_trial.fitness = trial_fitness;
+                    new_population.push(new_trial);
+                } else {
+                    new_population.push(self.population[i].clone());
+                }
+            }
+
+            self.population = new_population;
+
+            // Update best individual
+            if let Some(best_in_generation) = self.population
+                .iter()
+                .max_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap())
+            {
+                if self.best_individual.is_none() 
+                    || best_in_generation.fitness > self.best_individual.as_ref().unwrap().fitness
+                {
+                    self.best_individual = Some(best_in_generation.clone());
+                }
+            }
+
+            if generation % 20 == 0 {
+                tracing::debug!(
+                    "DE Generation {}: Best fitness = {:.4}",
+                    generation,
+                    self.best_individual.as_ref().map(|i| i.fitness).unwrap_or(0.0)
+                );
+            }
+        }
+
+        self.best_individual.clone().ok_or_else(|| {
+            ShaclAiError::ShapeManagement("Differential evolution failed".to_string())
+        })
+    }
+
+    fn initialize_population(&mut self, search_space: &OptimizationSearchSpace) -> Result<()> {
+        self.population.clear();
+
+        for _ in 0..self.population_size {
+            let individual = DEIndividual::random(search_space)?;
+            self.population.push(individual);
+        }
+
+        Ok(())
+    }
+
+    fn mutate(&self, target_index: usize, search_space: &OptimizationSearchSpace) -> Result<DEIndividual> {
+        // Select three random individuals different from target
+        let mut indices: Vec<usize> = (0..self.population_size)
+            .filter(|&i| i != target_index)
+            .collect();
+        
+        indices.shuffle(&mut fastrand::Rng::new());
+        let (a, b, c) = (indices[0], indices[1], indices[2]);
+
+        let individual_a = &self.population[a];
+        let individual_b = &self.population[b];
+        let individual_c = &self.population[c];
+
+        // Mutant = a + F * (b - c)
+        let mutant = DEIndividual {
+            parameters: vec![
+                (individual_a.parameters[0] + self.differential_weight * 
+                 (individual_b.parameters[0] - individual_c.parameters[0]))
+                .clamp(search_space.execution_time_range.0, search_space.execution_time_range.1),
+                
+                (individual_a.parameters[1] + self.differential_weight * 
+                 (individual_b.parameters[1] - individual_c.parameters[1]))
+                .clamp(search_space.memory_usage_range.0, search_space.memory_usage_range.1),
+                
+                (individual_a.parameters[2] + self.differential_weight * 
+                 (individual_b.parameters[2] - individual_c.parameters[2]))
+                .clamp(search_space.cache_efficiency_range.0, search_space.cache_efficiency_range.1),
+            ],
+            fitness: 0.0,
+        };
+
+        Ok(mutant)
+    }
+
+    fn crossover(&self, target: &DEIndividual, mutant: &DEIndividual) -> Result<DEIndividual> {
+        let mut trial = target.clone();
+        let crossover_point = fastrand::usize(0..target.parameters.len());
+
+        for i in 0..target.parameters.len() {
+            if fastrand::f64() < self.crossover_rate || i == crossover_point {
+                trial.parameters[i] = mutant.parameters[i];
+            }
+        }
+
+        Ok(trial)
+    }
+}
+
+/// Tabu Search for Local Optimization with Memory
+#[derive(Debug)]
+pub struct TabuSearchOptimizer {
+    tabu_list_size: usize,
+    max_iterations: usize,
+    neighborhood_size: usize,
+    tabu_list: VecDeque<TabuMove>,
+    best_solution: Option<OptimizationSolution>,
+    current_solution: Option<OptimizationSolution>,
+}
+
+impl TabuSearchOptimizer {
+    pub fn new() -> Self {
+        Self {
+            tabu_list_size: 20,
+            max_iterations: 200,
+            neighborhood_size: 50,
+            tabu_list: VecDeque::new(),
+            best_solution: None,
+            current_solution: None,
+        }
+    }
+
+    /// Optimize using tabu search
+    pub async fn optimize(
+        &mut self,
+        initial_solution: OptimizationSolution,
+        objective_function: &dyn OptimizationObjectiveFunction,
+    ) -> Result<OptimizationSolution> {
+        self.current_solution = Some(initial_solution.clone());
+        self.best_solution = Some(initial_solution);
+
+        for iteration in 0..self.max_iterations {
+            let neighborhood = self.generate_neighborhood(
+                self.current_solution.as_ref().unwrap()
+            )?;
+
+            let mut best_neighbor = None;
+            let mut best_neighbor_fitness = f64::NEG_INFINITY;
+
+            for neighbor in neighborhood {
+                let neighbor_point = self.solution_to_point(&neighbor)?;
+                let fitness = objective_function.evaluate(&neighbor_point).await?;
+                
+                let tabu_move = TabuMove::from_solutions(
+                    self.current_solution.as_ref().unwrap(),
+                    &neighbor
+                );
+
+                // Accept if not tabu or if it's better than best known solution
+                if !self.is_tabu(&tabu_move) || fitness > self.get_best_fitness() {
+                    if fitness > best_neighbor_fitness {
+                        best_neighbor_fitness = fitness;
+                        best_neighbor = Some(neighbor);
+                    }
+                }
+            }
+
+            if let Some(neighbor) = best_neighbor {
+                let tabu_move = TabuMove::from_solutions(
+                    self.current_solution.as_ref().unwrap(),
+                    &neighbor
+                );
+                
+                self.add_to_tabu_list(tabu_move);
+                self.current_solution = Some(neighbor.clone());
+
+                // Update best solution if improved
+                if best_neighbor_fitness > self.get_best_fitness() {
+                    self.best_solution = Some(neighbor);
+                }
+            }
+
+            if iteration % 20 == 0 {
+                tracing::debug!(
+                    "Tabu Search Iteration {}: Best fitness = {:.4}",
+                    iteration,
+                    self.get_best_fitness()
+                );
+            }
+        }
+
+        self.best_solution.clone().ok_or_else(|| {
+            ShaclAiError::ShapeManagement("Tabu search failed".to_string())
+        })
+    }
+
+    fn generate_neighborhood(&self, solution: &OptimizationSolution) -> Result<Vec<OptimizationSolution>> {
+        let mut neighborhood = Vec::new();
+
+        for _ in 0..self.neighborhood_size {
+            let mut neighbor = solution.clone();
+            
+            // Randomly modify one aspect of the solution
+            match fastrand::u8(0..3) {
+                0 => {
+                    // Modify constraint order
+                    if neighbor.constraint_configuration.constraint_order.len() > 1 {
+                        let idx1 = fastrand::usize(0..neighbor.constraint_configuration.constraint_order.len());
+                        let idx2 = fastrand::usize(0..neighbor.constraint_configuration.constraint_order.len());
+                        neighbor.constraint_configuration.constraint_order.swap(idx1, idx2);
+                    }
+                }
+                1 => {
+                    // Modify parallelization config
+                    neighbor.constraint_configuration.parallelization_config.max_parallel_constraints = 
+                        (neighbor.constraint_configuration.parallelization_config.max_parallel_constraints
+                         + fastrand::i8(-2..=2) as usize).max(1).min(16);
+                }
+                _ => {
+                    // Modify cache configuration
+                    neighbor.constraint_configuration.cache_configuration.estimated_hit_rate = 
+                        (neighbor.constraint_configuration.cache_configuration.estimated_hit_rate 
+                         + fastrand::f64() * 0.2 - 0.1).clamp(0.0, 1.0);
+                }
+            }
+
+            neighborhood.push(neighbor);
+        }
+
+        Ok(neighborhood)
+    }
+
+    fn solution_to_point(&self, solution: &OptimizationSolution) -> Result<OptimizationPoint> {
+        Ok(OptimizationPoint {
+            execution_time_weight: solution.performance_metrics.validation_time_ms / 1000.0,
+            memory_usage_weight: solution.performance_metrics.memory_usage_mb / 100.0,
+            cache_efficiency_weight: solution.performance_metrics.cache_hit_rate,
+        })
+    }
+
+    fn is_tabu(&self, tabu_move: &TabuMove) -> bool {
+        self.tabu_list.contains(tabu_move)
+    }
+
+    fn add_to_tabu_list(&mut self, tabu_move: TabuMove) {
+        if self.tabu_list.len() >= self.tabu_list_size {
+            self.tabu_list.pop_front();
+        }
+        self.tabu_list.push_back(tabu_move);
+    }
+
+    fn get_best_fitness(&self) -> f64 {
+        self.best_solution.as_ref()
+            .map(|s| s.performance_metrics.validation_time_ms)
+            .unwrap_or(0.0)
+    }
+}
+
+/// Reinforcement Learning-based Optimizer
+#[derive(Debug)]
+pub struct ReinforcementLearningOptimizer {
+    q_table: HashMap<StateActionPair, f64>,
+    learning_rate: f64,
+    discount_factor: f64,
+    epsilon: f64, // Exploration rate
+    episode_count: usize,
+    state_space_size: usize,
+    action_space_size: usize,
+}
+
+impl ReinforcementLearningOptimizer {
+    pub fn new() -> Self {
+        Self {
+            q_table: HashMap::new(),
+            learning_rate: 0.1,
+            discount_factor: 0.9,
+            epsilon: 0.1,
+            episode_count: 0,
+            state_space_size: 1000, // Discretized state space
+            action_space_size: 10,  // Number of possible optimization actions
+        }
+    }
+
+    /// Optimize using Q-learning
+    pub async fn optimize(
+        &mut self,
+        initial_state: OptimizationState,
+        max_episodes: usize,
+    ) -> Result<OptimizationPolicy> {
+        for episode in 0..max_episodes {
+            let mut current_state = initial_state.clone();
+            let mut total_reward = 0.0;
+            let mut step_count = 0;
+            let max_steps_per_episode = 100;
+
+            while !self.is_terminal_state(&current_state) && step_count < max_steps_per_episode {
+                let action = self.select_action(&current_state)?;
+                let (next_state, reward) = self.take_action(&current_state, &action).await?;
+                
+                self.update_q_value(&current_state, &action, reward, &next_state)?;
+                
+                current_state = next_state;
+                total_reward += reward;
+                step_count += 1;
+            }
+
+            // Decay exploration rate
+            self.epsilon *= 0.995;
+            self.episode_count += 1;
+
+            if episode % 100 == 0 {
+                tracing::debug!(
+                    "RL Episode {}: Total reward = {:.4}, Epsilon = {:.4}",
+                    episode,
+                    total_reward,
+                    self.epsilon
+                );
+            }
+        }
+
+        Ok(self.extract_policy()?)
+    }
+
+    fn select_action(&self, state: &OptimizationState) -> Result<OptimizationAction> {
+        if fastrand::f64() < self.epsilon {
+            // Exploration: random action
+            Ok(OptimizationAction::random())
+        } else {
+            // Exploitation: best known action
+            let mut best_action = OptimizationAction::random();
+            let mut best_q_value = f64::NEG_INFINITY;
+
+            for action_id in 0..self.action_space_size {
+                let action = OptimizationAction::from_id(action_id);
+                let state_action_pair = StateActionPair {
+                    state: state.clone(),
+                    action: action.clone(),
+                };
+
+                let q_value = self.q_table.get(&state_action_pair).unwrap_or(&0.0);
+                if *q_value > best_q_value {
+                    best_q_value = *q_value;
+                    best_action = action;
+                }
+            }
+
+            Ok(best_action)
+        }
+    }
+
+    async fn take_action(
+        &self,
+        state: &OptimizationState,
+        action: &OptimizationAction,
+    ) -> Result<(OptimizationState, f64)> {
+        let mut next_state = state.clone();
+        let mut reward = 0.0;
+
+        match action {
+            OptimizationAction::IncreaseParallelism => {
+                next_state.parallel_threads = (next_state.parallel_threads + 1).min(16);
+                reward = if next_state.parallel_threads <= 8 { 0.1 } else { -0.1 };
+            }
+            OptimizationAction::DecreaseParallelism => {
+                next_state.parallel_threads = (next_state.parallel_threads.saturating_sub(1)).max(1);
+                reward = if next_state.parallel_threads >= 2 { 0.1 } else { -0.1 };
+            }
+            OptimizationAction::IncreaseCacheSize => {
+                next_state.cache_size_mb = (next_state.cache_size_mb * 1.2).min(1000.0);
+                reward = if next_state.cache_size_mb <= 500.0 { 0.15 } else { -0.05 };
+            }
+            OptimizationAction::DecreaseCacheSize => {
+                next_state.cache_size_mb = (next_state.cache_size_mb * 0.8).max(10.0);
+                reward = if next_state.cache_size_mb >= 50.0 { 0.05 } else { -0.1 };
+            }
+            OptimizationAction::ReorderConstraints => {
+                next_state.constraint_order_entropy += 0.1;
+                reward = 0.2; // Constraint reordering is generally beneficial
+            }
+            OptimizationAction::NoAction => {
+                reward = -0.01; // Small penalty for inaction
+            }
+        }
+
+        // Add performance-based reward
+        let performance_reward = self.calculate_performance_reward(&next_state);
+        reward += performance_reward;
+
+        Ok((next_state, reward))
+    }
+
+    fn calculate_performance_reward(&self, state: &OptimizationState) -> f64 {
+        // Reward based on estimated performance improvement
+        let parallelism_score = (state.parallel_threads as f64 / 8.0).min(1.0) * 0.3;
+        let cache_score = (state.cache_size_mb / 100.0).min(1.0) * 0.3;
+        let entropy_score = (1.0 - state.constraint_order_entropy.min(1.0)) * 0.4;
+        
+        parallelism_score + cache_score + entropy_score
+    }
+
+    fn update_q_value(
+        &mut self,
+        state: &OptimizationState,
+        action: &OptimizationAction,
+        reward: f64,
+        next_state: &OptimizationState,
+    ) -> Result<()> {
+        let state_action_pair = StateActionPair {
+            state: state.clone(),
+            action: action.clone(),
+        };
+
+        let current_q = self.q_table.get(&state_action_pair).unwrap_or(&0.0);
+        let max_next_q = self.get_max_q_value(next_state);
+
+        let new_q = current_q + self.learning_rate * 
+            (reward + self.discount_factor * max_next_q - current_q);
+
+        self.q_table.insert(state_action_pair, new_q);
+        Ok(())
+    }
+
+    fn get_max_q_value(&self, state: &OptimizationState) -> f64 {
+        let mut max_q = f64::NEG_INFINITY;
+
+        for action_id in 0..self.action_space_size {
+            let action = OptimizationAction::from_id(action_id);
+            let state_action_pair = StateActionPair {
+                state: state.clone(),
+                action,
+            };
+
+            let q_value = self.q_table.get(&state_action_pair).unwrap_or(&0.0);
+            max_q = max_q.max(*q_value);
+        }
+
+        if max_q == f64::NEG_INFINITY { 0.0 } else { max_q }
+    }
+
+    fn is_terminal_state(&self, state: &OptimizationState) -> bool {
+        // Define terminal conditions
+        state.parallel_threads >= 16 || 
+        state.cache_size_mb >= 1000.0 || 
+        state.constraint_order_entropy <= 0.1
+    }
+
+    fn extract_policy(&self) -> Result<OptimizationPolicy> {
+        let mut policy_actions = HashMap::new();
+
+        // Extract best action for each state
+        for (state_action_pair, &q_value) in &self.q_table {
+            let state = &state_action_pair.state;
+            let action = &state_action_pair.action;
+
+            let current_best = policy_actions.get(state);
+            if current_best.is_none() || q_value > current_best.unwrap().1 {
+                policy_actions.insert(state.clone(), (action.clone(), q_value));
+            }
+        }
+
+        Ok(OptimizationPolicy {
+            state_action_mapping: policy_actions.into_iter()
+                .map(|(state, (action, _))| (state, action))
+                .collect(),
+            confidence: self.calculate_policy_confidence(),
+        })
+    }
+
+    fn calculate_policy_confidence(&self) -> f64 {
+        if self.q_table.is_empty() {
+            return 0.0;
+        }
+
+        let avg_q_value: f64 = self.q_table.values().sum::<f64>() / self.q_table.len() as f64;
+        (avg_q_value + 1.0) / 2.0 // Normalize to [0, 1]
+    }
+}
+
+/// Adaptive Optimizer that learns from historical performance
+#[derive(Debug)]
+pub struct AdaptiveOptimizer {
+    historical_optimizations: Vec<HistoricalOptimization>,
+    performance_model: AdaptivePerformanceModel,
+    adaptation_threshold: f64,
+    min_history_size: usize,
+}
+
+impl AdaptiveOptimizer {
+    pub fn new() -> Self {
+        Self {
+            historical_optimizations: Vec::new(),
+            performance_model: AdaptivePerformanceModel::new(),
+            adaptation_threshold: 0.8,
+            min_history_size: 10,
+        }
+    }
+
+    /// Optimize using adaptive learning from historical data
+    pub async fn optimize(
+        &mut self,
+        current_problem: &OptimizationProblem,
+    ) -> Result<AdaptiveOptimizationResult> {
+        // Update performance model with historical data
+        if self.historical_optimizations.len() >= self.min_history_size {
+            self.update_performance_model()?;
+        }
+
+        // Predict best optimization strategy
+        let predicted_strategy = self.predict_best_strategy(current_problem)?;
+        
+        // Apply the strategy
+        let optimization_result = self.apply_strategy(current_problem, &predicted_strategy).await?;
+        
+        // Record this optimization for future learning
+        self.record_optimization(current_problem.clone(), predicted_strategy, optimization_result.clone())?;
+
+        Ok(optimization_result)
+    }
+
+    fn update_performance_model(&mut self) -> Result<()> {
+        let training_examples: Vec<_> = self.historical_optimizations
+            .iter()
+            .map(|ho| PerformanceTrainingExample {
+                problem_features: ho.problem.extract_features(),
+                strategy_features: ho.strategy.extract_features(),
+                performance_outcome: ho.result.performance_improvement,
+            })
+            .collect();
+
+        self.performance_model.train(&training_examples)?;
+        tracing::debug!("Updated adaptive performance model with {} examples", training_examples.len());
+        
+        Ok(())
+    }
+
+    fn predict_best_strategy(&self, problem: &OptimizationProblem) -> Result<OptimizationStrategy> {
+        if self.historical_optimizations.len() < self.min_history_size {
+            // Not enough data, use default strategy
+            return Ok(OptimizationStrategy::default());
+        }
+
+        let problem_features = problem.extract_features();
+        let mut best_strategy = OptimizationStrategy::default();
+        let mut best_predicted_performance = 0.0;
+
+        // Evaluate different strategy candidates
+        for strategy_candidate in self.generate_strategy_candidates() {
+            let strategy_features = strategy_candidate.extract_features();
+            let predicted_performance = self.performance_model
+                .predict(&problem_features, &strategy_features)?;
+
+            if predicted_performance > best_predicted_performance {
+                best_predicted_performance = predicted_performance;
+                best_strategy = strategy_candidate;
+            }
+        }
+
+        tracing::debug!(
+            "Predicted best strategy with {:.2}% improvement", 
+            best_predicted_performance * 100.0
+        );
+
+        Ok(best_strategy)
+    }
+
+    fn generate_strategy_candidates(&self) -> Vec<OptimizationStrategy> {
+        vec![
+            OptimizationStrategy {
+                use_parallel_execution: true,
+                cache_strategy: CacheStrategyType::ResultCaching,
+                constraint_ordering: ConstraintOrderingType::CostBased,
+                memory_optimization: true,
+            },
+            OptimizationStrategy {
+                use_parallel_execution: false,
+                cache_strategy: CacheStrategyType::QueryCaching,
+                constraint_ordering: ConstraintOrderingType::FailFast,
+                memory_optimization: true,
+            },
+            OptimizationStrategy {
+                use_parallel_execution: true,
+                cache_strategy: CacheStrategyType::DataCaching,
+                constraint_ordering: ConstraintOrderingType::DependencyBased,
+                memory_optimization: false,
+            },
+        ]
+    }
+
+    async fn apply_strategy(
+        &self,
+        problem: &OptimizationProblem,
+        strategy: &OptimizationStrategy,
+    ) -> Result<AdaptiveOptimizationResult> {
+        let start_time = Instant::now();
+        
+        // Simulate applying the optimization strategy
+        let baseline_performance = problem.baseline_metrics.clone();
+        let mut optimized_performance = baseline_performance.clone();
+
+        // Apply parallel execution optimization
+        if strategy.use_parallel_execution {
+            optimized_performance.validation_time_ms *= 0.6; // 40% improvement
+            optimized_performance.parallelization_factor = 
+                problem.constraints.len().min(8) as f64;
+        }
+
+        // Apply caching optimization
+        match strategy.cache_strategy {
+            CacheStrategyType::ResultCaching => {
+                optimized_performance.cache_hit_rate = 0.8;
+                optimized_performance.validation_time_ms *= 0.8; // 20% improvement
+            }
+            CacheStrategyType::QueryCaching => {
+                optimized_performance.cache_hit_rate = 0.7;
+                optimized_performance.validation_time_ms *= 0.85; // 15% improvement
+            }
+            CacheStrategyType::DataCaching => {
+                optimized_performance.cache_hit_rate = 0.75;
+                optimized_performance.memory_usage_mb *= 1.1; // Slight memory increase
+                optimized_performance.validation_time_ms *= 0.9; // 10% improvement
+            }
+            _ => {}
+        }
+
+        // Apply memory optimization
+        if strategy.memory_optimization {
+            optimized_performance.memory_usage_mb *= 0.8; // 20% reduction
+        }
+
+        let optimization_time = start_time.elapsed();
+        let performance_improvement = 
+            (baseline_performance.validation_time_ms - optimized_performance.validation_time_ms) 
+            / baseline_performance.validation_time_ms;
+
+        Ok(AdaptiveOptimizationResult {
+            strategy_applied: strategy.clone(),
+            baseline_performance,
+            optimized_performance,
+            performance_improvement,
+            optimization_duration: optimization_time,
+            confidence: self.performance_model.confidence(),
+        })
+    }
+
+    fn record_optimization(
+        &mut self,
+        problem: OptimizationProblem,
+        strategy: OptimizationStrategy,
+        result: AdaptiveOptimizationResult,
+    ) -> Result<()> {
+        let historical_optimization = HistoricalOptimization {
+            problem,
+            strategy,
+            result,
+            timestamp: chrono::Utc::now(),
+        };
+
+        self.historical_optimizations.push(historical_optimization);
+
+        // Keep only recent optimizations to prevent unbounded growth
+        const MAX_HISTORY_SIZE: usize = 1000;
+        if self.historical_optimizations.len() > MAX_HISTORY_SIZE {
+            self.historical_optimizations.drain(0..100); // Remove oldest 100
+        }
+
+        Ok(())
+    }
+}
+
 /// Advanced Genetic Algorithm Optimizer for SHACL Constraints
 #[derive(Debug)]
 pub struct GeneticOptimizer {
@@ -1594,7 +2496,7 @@ impl ParticleSwarmOptimizer {
             for particle in &self.particles {
                 fitness_values.push(self.evaluate_particle(particle).await?);
             }
-            
+
             for (particle, fitness) in self.particles.iter_mut().zip(fitness_values) {
                 particle.fitness = fitness;
 
@@ -1788,7 +2690,7 @@ impl ParticleSwarmOptimizer {
         search_space: &OptimizationSearchSpace,
     ) -> Result<()> {
         let particle = &mut self.particles[index];
-        
+
         // Update position
         particle.position.execution_time_weight = (particle.position.execution_time_weight
             + particle.velocity.execution_time_weight)
@@ -1937,8 +2839,14 @@ impl BayesianOptimizer {
     fn normal_cdf(&self, x: f64) -> f64 {
         // Simple erf approximation
         let t = 1.0 / (1.0 + 0.3275911 * x.abs());
-        let poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
-        let erf_approx = if x >= 0.0 { 1.0 - poly * (-x * x).exp() } else { poly * (-x * x).exp() - 1.0 };
+        let poly = t
+            * (0.254829592
+                + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+        let erf_approx = if x >= 0.0 {
+            1.0 - poly * (-x * x).exp()
+        } else {
+            poly * (-x * x).exp() - 1.0
+        };
         0.5 * (1.0 + erf_approx)
     }
 
@@ -2618,4 +3526,338 @@ mod tests {
         assert!(large_potential >= 0.0);
         assert!(large_potential <= 1.0);
     }
+
+    #[tokio::test]
+    async fn test_ant_colony_optimizer() {
+        let constraints = vec![
+            PropertyConstraint::new("test1".to_string()).with_datatype("xsd:string".to_string()),
+            PropertyConstraint::new("test2".to_string()).with_pattern(".*".to_string()),
+            PropertyConstraint::new("test3".to_string()).with_class("rdfs:Resource".to_string()),
+        ];
+
+        let mut aco = AntColonyOptimizer::new(constraints.len());
+        let result = aco.optimize_constraint_order(&constraints).await;
+        assert!(result.is_ok());
+        
+        let optimized_order = result.unwrap();
+        assert_eq!(optimized_order.len(), constraints.len());
+    }
+
+    #[tokio::test]
+    async fn test_differential_evolution() {
+        let search_space = OptimizationSearchSpace {
+            execution_time_range: (0.0, 100.0),
+            memory_usage_range: (0.0, 1000.0),
+            cache_efficiency_range: (0.0, 1.0),
+        };
+
+        let mut de = DifferentialEvolutionOptimizer::new();
+        
+        // Create a simple objective function
+        struct SimpleObjective;
+        
+        #[async_trait::async_trait]
+        impl OptimizationObjectiveFunction for SimpleObjective {
+            async fn evaluate(&self, point: &OptimizationPoint) -> Result<f64> {
+                Ok(100.0 - point.execution_time_weight - point.memory_usage_weight + point.cache_efficiency_weight)
+            }
+        }
+        
+        let objective = SimpleObjective;
+        let result = de.optimize(&objective, &search_space).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_reinforcement_learning_optimizer() {
+        let initial_state = OptimizationState {
+            parallel_threads: 4,
+            cache_size_mb: 100.0,
+            constraint_order_entropy: 0.5,
+        };
+
+        let mut rl = ReinforcementLearningOptimizer::new();
+        let result = rl.optimize(initial_state, 50).await;
+        assert!(result.is_ok());
+        
+        let policy = result.unwrap();
+        assert!(policy.confidence >= 0.0);
+        assert!(policy.confidence <= 1.0);
+    }
+
+    #[tokio::test]
+    async fn test_adaptive_optimizer() {
+        let problem = OptimizationProblem {
+            constraints: vec![
+                PropertyConstraint::new("test1".to_string()).with_datatype("xsd:string".to_string()),
+                PropertyConstraint::new("test2".to_string()).with_pattern(".*".to_string()),
+            ],
+            baseline_metrics: PerformanceMetrics {
+                validation_time_ms: 100.0,
+                memory_usage_mb: 50.0,
+                cache_hit_rate: 0.5,
+                parallelization_factor: 1.0,
+                constraint_execution_times: HashMap::new(),
+            },
+        };
+
+        let mut adaptive = AdaptiveOptimizer::new();
+        let result = adaptive.optimize(&problem).await;
+        assert!(result.is_ok());
+        
+        let optimization_result = result.unwrap();
+        assert!(optimization_result.performance_improvement >= 0.0);
+    }
+}
+
+// Additional supporting types for the new optimizers
+
+#[derive(Debug, Clone)]
+pub struct DEIndividual {
+    pub parameters: Vec<f64>,
+    pub fitness: f64,
+}
+
+impl DEIndividual {
+    pub fn random(search_space: &OptimizationSearchSpace) -> Result<Self> {
+        Ok(Self {
+            parameters: vec![
+                fastrand::f64() * (search_space.execution_time_range.1 - search_space.execution_time_range.0) + search_space.execution_time_range.0,
+                fastrand::f64() * (search_space.memory_usage_range.1 - search_space.memory_usage_range.0) + search_space.memory_usage_range.0,
+                fastrand::f64() * (search_space.cache_efficiency_range.1 - search_space.cache_efficiency_range.0) + search_space.cache_efficiency_range.0,
+            ],
+            fitness: 0.0,
+        })
+    }
+
+    pub fn to_optimization_point(&self) -> OptimizationPoint {
+        OptimizationPoint {
+            execution_time_weight: self.parameters[0],
+            memory_usage_weight: self.parameters[1],
+            cache_efficiency_weight: self.parameters[2],
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TabuMove {
+    pub description: String,
+    pub move_type: TabuMoveType,
+}
+
+impl TabuMove {
+    pub fn from_solutions(from: &OptimizationSolution, to: &OptimizationSolution) -> Self {
+        Self {
+            description: format!("Move from solution {} to {}", from.constraint_configuration.fitness_score, to.constraint_configuration.fitness_score),
+            move_type: TabuMoveType::ConstraintReordering,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TabuMoveType {
+    ConstraintReordering,
+    ParallelizationChange,
+    CacheConfigChange,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StateActionPair {
+    pub state: OptimizationState,
+    pub action: OptimizationAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct OptimizationState {
+    pub parallel_threads: usize,
+    pub cache_size_mb: u64, // Changed to u64 for better hash compatibility
+    pub constraint_order_entropy: u64, // Changed to u64 and scaled for better hash compatibility
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum OptimizationAction {
+    IncreaseParallelism,
+    DecreaseParallelism,
+    IncreaseCacheSize,
+    DecreaseCacheSize,
+    ReorderConstraints,
+    NoAction,
+}
+
+impl OptimizationAction {
+    pub fn random() -> Self {
+        match fastrand::u8(0..6) {
+            0 => OptimizationAction::IncreaseParallelism,
+            1 => OptimizationAction::DecreaseParallelism,
+            2 => OptimizationAction::IncreaseCacheSize,
+            3 => OptimizationAction::DecreaseCacheSize,
+            4 => OptimizationAction::ReorderConstraints,
+            _ => OptimizationAction::NoAction,
+        }
+    }
+
+    pub fn from_id(id: usize) -> Self {
+        match id % 6 {
+            0 => OptimizationAction::IncreaseParallelism,
+            1 => OptimizationAction::DecreaseParallelism,
+            2 => OptimizationAction::IncreaseCacheSize,
+            3 => OptimizationAction::DecreaseCacheSize,
+            4 => OptimizationAction::ReorderConstraints,
+            _ => OptimizationAction::NoAction,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OptimizationPolicy {
+    pub state_action_mapping: HashMap<OptimizationState, OptimizationAction>,
+    pub confidence: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct OptimizationProblem {
+    pub constraints: Vec<PropertyConstraint>,
+    pub baseline_metrics: PerformanceMetrics,
+}
+
+impl OptimizationProblem {
+    pub fn extract_features(&self) -> ProblemFeatures {
+        ProblemFeatures {
+            num_constraints: self.constraints.len(),
+            avg_complexity: self.constraints.iter()
+                .map(|c| match c.constraint_type().as_str() {
+                    "sh:pattern" => 3.5,
+                    "sh:sparql" => 4.0,
+                    "sh:class" => 2.5,
+                    _ => 1.5,
+                })
+                .sum::<f64>() / self.constraints.len().max(1) as f64,
+            baseline_execution_time: self.baseline_metrics.validation_time_ms,
+            baseline_memory_usage: self.baseline_metrics.memory_usage_mb,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ProblemFeatures {
+    pub num_constraints: usize,
+    pub avg_complexity: f64,
+    pub baseline_execution_time: f64,
+    pub baseline_memory_usage: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct OptimizationStrategy {
+    pub use_parallel_execution: bool,
+    pub cache_strategy: CacheStrategyType,
+    pub constraint_ordering: ConstraintOrderingType,
+    pub memory_optimization: bool,
+}
+
+impl Default for OptimizationStrategy {
+    fn default() -> Self {
+        Self {
+            use_parallel_execution: true,
+            cache_strategy: CacheStrategyType::ResultCaching,
+            constraint_ordering: ConstraintOrderingType::CostBased,
+            memory_optimization: true,
+        }
+    }
+}
+
+impl OptimizationStrategy {
+    pub fn extract_features(&self) -> StrategyFeatures {
+        StrategyFeatures {
+            parallel_execution: if self.use_parallel_execution { 1.0 } else { 0.0 },
+            cache_type: match self.cache_strategy {
+                CacheStrategyType::ResultCaching => 1.0,
+                CacheStrategyType::QueryCaching => 2.0,
+                CacheStrategyType::DataCaching => 3.0,
+                _ => 0.0,
+            },
+            ordering_type: match self.constraint_ordering {
+                ConstraintOrderingType::CostBased => 1.0,
+                ConstraintOrderingType::FailFast => 2.0,
+                ConstraintOrderingType::DependencyBased => 3.0,
+            },
+            memory_optimization: if self.memory_optimization { 1.0 } else { 0.0 },
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StrategyFeatures {
+    pub parallel_execution: f64,
+    pub cache_type: f64,
+    pub ordering_type: f64,
+    pub memory_optimization: f64,
+}
+
+#[derive(Debug, Clone)]
+pub enum ConstraintOrderingType {
+    CostBased,
+    FailFast,
+    DependencyBased,
+}
+
+#[derive(Debug, Clone)]
+pub struct AdaptiveOptimizationResult {
+    pub strategy_applied: OptimizationStrategy,
+    pub baseline_performance: PerformanceMetrics,
+    pub optimized_performance: PerformanceMetrics,
+    pub performance_improvement: f64,
+    pub optimization_duration: Duration,
+    pub confidence: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct HistoricalOptimization {
+    pub problem: OptimizationProblem,
+    pub strategy: OptimizationStrategy,
+    pub result: AdaptiveOptimizationResult,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug)]
+pub struct AdaptivePerformanceModel {
+    model_parameters: Vec<f64>,
+    confidence_score: f64,
+}
+
+impl AdaptivePerformanceModel {
+    pub fn new() -> Self {
+        Self {
+            model_parameters: vec![0.5, 0.3, 0.2], // Simple linear model weights
+            confidence_score: 0.5,
+        }
+    }
+
+    pub fn train(&mut self, examples: &[PerformanceTrainingExample]) -> Result<()> {
+        // Simplified training - in practice would use proper ML training
+        if !examples.is_empty() {
+            self.confidence_score = 0.8;
+            // Update parameters based on examples
+            self.model_parameters = vec![0.6, 0.25, 0.15];
+        }
+        Ok(())
+    }
+
+    pub fn predict(&self, problem_features: &ProblemFeatures, strategy_features: &StrategyFeatures) -> Result<f64> {
+        // Simple linear prediction
+        let prediction = strategy_features.parallel_execution * self.model_parameters[0] +
+                        strategy_features.cache_type * self.model_parameters[1] +
+                        strategy_features.memory_optimization * self.model_parameters[2];
+        Ok(prediction.clamp(0.0, 1.0))
+    }
+
+    pub fn confidence(&self) -> f64 {
+        self.confidence_score
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PerformanceTrainingExample {
+    pub problem_features: ProblemFeatures,
+    pub strategy_features: StrategyFeatures,
+    pub performance_outcome: f64,
 }

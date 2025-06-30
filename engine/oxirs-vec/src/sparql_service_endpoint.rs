@@ -132,7 +132,10 @@ impl ServiceEndpointManager {
                 Ok(result) => partial_results.push(result),
                 Err(e) => {
                     // Log error but continue with other endpoints
-                    eprintln!("Error executing on endpoint {}: {}", endpoint.endpoint_uri, e);
+                    eprintln!(
+                        "Error executing on endpoint {}: {}",
+                        endpoint.endpoint_uri, e
+                    );
                 }
             }
         }
@@ -147,7 +150,10 @@ impl ServiceEndpointManager {
     }
 
     /// Select appropriate endpoints for a query
-    fn select_endpoints(&self, query: &FederatedVectorQuery) -> Result<Vec<FederatedServiceEndpoint>> {
+    fn select_endpoints(
+        &self,
+        query: &FederatedVectorQuery,
+    ) -> Result<Vec<FederatedServiceEndpoint>> {
         let endpoints = self.endpoints.read();
         let mut suitable_endpoints = Vec::new();
 
@@ -166,20 +172,24 @@ impl ServiceEndpointManager {
     }
 
     /// Check if endpoint supports the given query
-    fn endpoint_supports_query(&self, endpoint: &FederatedServiceEndpoint, query: &FederatedVectorQuery) -> bool {
+    fn endpoint_supports_query(
+        &self,
+        endpoint: &FederatedServiceEndpoint,
+        query: &FederatedVectorQuery,
+    ) -> bool {
         match &query.operation {
-            FederatedOperation::KNNSearch { .. } => {
-                endpoint.capabilities.contains(&ServiceCapability::KNNSearch)
-            }
-            FederatedOperation::ThresholdSearch { .. } => {
-                endpoint.capabilities.contains(&ServiceCapability::ThresholdSearch)
-            }
-            FederatedOperation::SimilarityCalculation { .. } => {
-                endpoint.capabilities.contains(&ServiceCapability::SimilarityCalculation)
-            }
-            FederatedOperation::CustomFunction { function_name, .. } => {
-                endpoint.capabilities.contains(&ServiceCapability::CustomFunction(function_name.clone()))
-            }
+            FederatedOperation::KNNSearch { .. } => endpoint
+                .capabilities
+                .contains(&ServiceCapability::KNNSearch),
+            FederatedOperation::ThresholdSearch { .. } => endpoint
+                .capabilities
+                .contains(&ServiceCapability::ThresholdSearch),
+            FederatedOperation::SimilarityCalculation { .. } => endpoint
+                .capabilities
+                .contains(&ServiceCapability::SimilarityCalculation),
+            FederatedOperation::CustomFunction { function_name, .. } => endpoint
+                .capabilities
+                .contains(&ServiceCapability::CustomFunction(function_name.clone())),
         }
     }
 
@@ -191,15 +201,16 @@ impl ServiceEndpointManager {
     ) -> Result<PartialSearchResult> {
         // Implementation would depend on the actual service protocol
         // For now, we'll simulate the execution
-        
+
         let start_time = Instant::now();
-        
+
         // Simulate network request with retry logic
         let result = self.execute_with_retry(endpoint, query).await?;
-        
+
         let duration = start_time.elapsed();
-        self.performance_monitor.record_operation(&format!("endpoint_{}", endpoint.endpoint_uri), duration);
-        
+        self.performance_monitor
+            .record_operation(&format!("endpoint_{}", endpoint.endpoint_uri), duration);
+
         Ok(result)
     }
 
@@ -217,13 +228,16 @@ impl ServiceEndpointManager {
                 Ok(result) => return Ok(result),
                 Err(e) if attempt < endpoint.retry_config.max_retries => {
                     attempt += 1;
-                    
+
                     // Wait before retry
                     tokio::time::sleep(delay).await;
-                    
+
                     // Increase delay for next attempt
                     delay = std::cmp::min(
-                        Duration::from_millis((delay.as_millis() as f32 * endpoint.retry_config.backoff_multiplier) as u64),
+                        Duration::from_millis(
+                            (delay.as_millis() as f32 * endpoint.retry_config.backoff_multiplier)
+                                as u64,
+                        ),
                         endpoint.retry_config.max_delay,
                     );
                 }
@@ -240,7 +254,7 @@ impl ServiceEndpointManager {
     ) -> Result<PartialSearchResult> {
         // Simulate the actual service call
         // In a real implementation, this would make HTTP requests to the endpoint
-        
+
         match &query.operation {
             FederatedOperation::KNNSearch { vector, k, .. } => {
                 // Simulate KNN search result
@@ -329,7 +343,10 @@ impl LoadBalancer {
         }
     }
 
-    pub fn balance_endpoints(&self, endpoints: Vec<FederatedServiceEndpoint>) -> Vec<FederatedServiceEndpoint> {
+    pub fn balance_endpoints(
+        &self,
+        endpoints: Vec<FederatedServiceEndpoint>,
+    ) -> Vec<FederatedServiceEndpoint> {
         match self.strategy {
             LoadBalancingStrategy::HealthBased => {
                 let mut healthy_endpoints: Vec<_> = endpoints
@@ -337,7 +354,7 @@ impl LoadBalancer {
                     .filter(|e| matches!(e.health_status, ServiceHealthStatus::Healthy))
                     .cloned()
                     .collect();
-                
+
                 if healthy_endpoints.is_empty() {
                     // Fall back to degraded endpoints if no healthy ones
                     healthy_endpoints = endpoints
@@ -346,7 +363,7 @@ impl LoadBalancer {
                         .cloned()
                         .collect();
                 }
-                
+
                 healthy_endpoints
             }
             _ => endpoints, // Other strategies would be implemented here
@@ -375,7 +392,7 @@ impl HealthChecker {
     pub async fn check_health(&self, endpoint_uri: &str) -> Result<ServiceHealthStatus> {
         // Simulate health check
         // In a real implementation, this would make a health check request
-        
+
         if endpoint_uri.contains("unhealthy") {
             Ok(ServiceHealthStatus::Unhealthy)
         } else if endpoint_uri.contains("degraded") {
@@ -469,7 +486,7 @@ impl CustomFunctionRegistry {
         args: &[VectorServiceArg],
     ) -> Result<VectorServiceResult> {
         let functions = self.functions.read();
-        
+
         if let Some(function) = functions.get(name) {
             function.execute(args)
         } else {
@@ -567,7 +584,9 @@ pub struct CosineSimilarityFunction;
 impl CustomVectorFunction for CosineSimilarityFunction {
     fn execute(&self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
         if args.len() != 2 {
-            return Err(anyhow!("CosineSimilarity requires exactly 2 vector arguments"));
+            return Err(anyhow!(
+                "CosineSimilarity requires exactly 2 vector arguments"
+            ));
         }
 
         let vector1 = match &args[0] {
@@ -598,7 +617,9 @@ pub struct VectorMagnitudeFunction;
 impl CustomVectorFunction for VectorMagnitudeFunction {
     fn execute(&self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
         if args.len() != 1 {
-            return Err(anyhow!("VectorMagnitude requires exactly 1 vector argument"));
+            return Err(anyhow!(
+                "VectorMagnitude requires exactly 1 vector argument"
+            ));
         }
 
         let vector = match &args[0] {
@@ -626,11 +647,14 @@ mod tests {
     #[test]
     fn test_endpoint_registration() {
         let manager = ServiceEndpointManager::new();
-        
+
         let endpoint = FederatedServiceEndpoint {
             endpoint_uri: "http://example.org/vector-service".to_string(),
             service_type: ServiceType::VectorSearch,
-            capabilities: vec![ServiceCapability::KNNSearch, ServiceCapability::ThresholdSearch],
+            capabilities: vec![
+                ServiceCapability::KNNSearch,
+                ServiceCapability::ThresholdSearch,
+            ],
             authentication: None,
             retry_config: RetryConfiguration::default(),
             timeout: Duration::from_secs(30),
@@ -643,7 +667,7 @@ mod tests {
     #[test]
     fn test_custom_function_registry() {
         let registry = CustomFunctionRegistry::new();
-        
+
         let metadata = FunctionMetadata {
             name: "cosine_similarity".to_string(),
             description: "Calculate cosine similarity".to_string(),
@@ -668,12 +692,10 @@ mod tests {
         };
 
         let function = Box::new(CosineSimilarityFunction);
-        
-        assert!(registry.register_function(
-            "cosine_similarity".to_string(),
-            function,
-            metadata,
-        ).is_ok());
+
+        assert!(registry
+            .register_function("cosine_similarity".to_string(), function, metadata,)
+            .is_ok());
 
         let functions = registry.list_functions();
         assert!(functions.contains(&"cosine_similarity".to_string()));
@@ -682,17 +704,14 @@ mod tests {
     #[test]
     fn test_cosine_similarity_function() {
         let function = CosineSimilarityFunction;
-        
+
         let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
         let v2 = Vector::new(vec![1.0, 0.0, 0.0]);
-        
-        let args = vec![
-            VectorServiceArg::Vector(v1),
-            VectorServiceArg::Vector(v2),
-        ];
+
+        let args = vec![VectorServiceArg::Vector(v1), VectorServiceArg::Vector(v2)];
 
         let result = function.execute(&args).unwrap();
-        
+
         match result {
             VectorServiceResult::Number(similarity) => {
                 assert!((similarity - 1.0).abs() < 0.001); // Should be 1.0 for identical vectors
@@ -704,7 +723,7 @@ mod tests {
     #[test]
     fn test_load_balancer() {
         let balancer = LoadBalancer::new();
-        
+
         let endpoints = vec![
             FederatedServiceEndpoint {
                 endpoint_uri: "http://healthy.example.org".to_string(),
@@ -727,7 +746,7 @@ mod tests {
         ];
 
         let balanced = balancer.balance_endpoints(endpoints);
-        
+
         // Should only return healthy endpoints
         assert_eq!(balanced.len(), 1);
         assert_eq!(balanced[0].endpoint_uri, "http://healthy.example.org");

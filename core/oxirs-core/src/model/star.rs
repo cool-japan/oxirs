@@ -6,6 +6,7 @@
 use crate::model::{
     NamedNode, Object, ObjectTerm, Predicate, RdfTerm, Subject, SubjectTerm, Triple,
 };
+use crate::query::algebra::{AlgebraTriplePattern, TermPattern};
 use crate::OxirsError;
 use std::fmt;
 use std::sync::Arc;
@@ -170,13 +171,13 @@ impl Annotation {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum StarPattern {
     /// A regular triple pattern
-    Triple(crate::query::algebra::TriplePattern),
+    Triple(AlgebraTriplePattern),
     /// A quoted triple pattern
     QuotedTriple {
         /// Subject pattern (can be nested quoted triple)
         subject: Box<StarPattern>,
         /// Predicate pattern
-        predicate: crate::query::algebra::TermPattern,
+        predicate: TermPattern,
         /// Object pattern (can be nested quoted triple)
         object: Box<StarPattern>,
     },
@@ -185,9 +186,9 @@ pub enum StarPattern {
         /// The annotated statement pattern
         statement: Box<StarPattern>,
         /// Annotation property pattern
-        property: crate::query::algebra::TermPattern,
+        property: TermPattern,
         /// Annotation value pattern
-        value: crate::query::algebra::TermPattern,
+        value: TermPattern,
     },
 }
 

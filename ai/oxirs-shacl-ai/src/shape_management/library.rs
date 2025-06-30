@@ -6,11 +6,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
+use crate::{shape::Shape as AiShape, Result, ShaclAiError};
 use oxirs_shacl::ShapeId;
-use crate::{
-    shape::{Shape as AiShape},
-    Result, ShaclAiError,
-};
 
 use super::{ShapePattern, TemplateId};
 
@@ -97,11 +94,11 @@ pub enum DifficultyLevel {
 /// Complexity range for indexing
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ComplexityRange {
-    VeryLow,     // 0.0 - 2.0
-    Low,         // 2.0 - 4.0
-    Medium,      // 4.0 - 6.0
-    High,        // 6.0 - 8.0
-    VeryHigh,    // 8.0 - 10.0
+    VeryLow,  // 0.0 - 2.0
+    Low,      // 2.0 - 4.0
+    Medium,   // 4.0 - 6.0
+    High,     // 6.0 - 8.0
+    VeryHigh, // 8.0 - 10.0
 }
 
 /// Pattern collection
@@ -256,7 +253,8 @@ impl ShapeLibrary {
     }
 
     pub fn get_highly_rated_shapes(&self, min_rating: f64, limit: usize) -> Vec<&ShapeEntry> {
-        let mut shapes: Vec<&ShapeEntry> = self.shape_catalog
+        let mut shapes: Vec<&ShapeEntry> = self
+            .shape_catalog
             .values()
             .filter(|entry| entry.rating >= min_rating)
             .collect();
@@ -266,14 +264,16 @@ impl ShapeLibrary {
 
     fn update_search_indices(&mut self, entry: &ShapeEntry) -> Result<()> {
         // Update text index with name and description
-        let words: Vec<String> = entry.name
+        let words: Vec<String> = entry
+            .name
             .split_whitespace()
             .chain(entry.description.split_whitespace())
             .map(|s| s.to_lowercase())
             .collect();
 
         for word in words {
-            self.search_index.text_index
+            self.search_index
+                .text_index
                 .entry(word)
                 .or_insert_with(Vec::new)
                 .push(entry.shape_id.clone());
@@ -281,14 +281,16 @@ impl ShapeLibrary {
 
         // Update tag index
         for tag in &entry.tags {
-            self.search_index.tag_index
+            self.search_index
+                .tag_index
                 .entry(tag.clone())
                 .or_insert_with(Vec::new)
                 .push(entry.shape_id.clone());
         }
 
         // Update category index
-        self.search_index.category_index
+        self.search_index
+            .category_index
             .entry(entry.category.clone())
             .or_insert_with(Vec::new)
             .push(entry.shape_id.clone());
@@ -302,7 +304,8 @@ impl ShapeLibrary {
             _ => ComplexityRange::VeryHigh,
         };
 
-        self.search_index.complexity_index
+        self.search_index
+            .complexity_index
             .entry(complexity_range)
             .or_insert_with(Vec::new)
             .push(entry.shape_id.clone());
@@ -325,25 +328,28 @@ impl PatternRepository {
         self.patterns.insert(pattern_id.clone(), pattern);
 
         // Initialize metadata
-        self.pattern_metadata.insert(pattern_id, PatternMetadata {
-            pattern_id: pattern_id.clone(),
-            quality_score: 0.0,
-            validation_status: ValidationStatus::NotValidated,
-            performance_metrics: PerformanceMetrics {
-                average_validation_time_ms: 0.0,
-                memory_usage_kb: 0.0,
-                cpu_utilization: 0.0,
-                throughput_operations_per_second: 0.0,
-                error_rate: 0.0,
+        self.pattern_metadata.insert(
+            pattern_id,
+            PatternMetadata {
+                pattern_id: pattern_id.clone(),
+                quality_score: 0.0,
+                validation_status: ValidationStatus::NotValidated,
+                performance_metrics: PerformanceMetrics {
+                    average_validation_time_ms: 0.0,
+                    memory_usage_kb: 0.0,
+                    cpu_utilization: 0.0,
+                    throughput_operations_per_second: 0.0,
+                    error_rate: 0.0,
+                },
+                compatibility_info: CompatibilityInfo {
+                    supported_versions: Vec::new(),
+                    deprecated_features: Vec::new(),
+                    migration_notes: Vec::new(),
+                    breaking_changes: Vec::new(),
+                },
+                review_comments: Vec::new(),
             },
-            compatibility_info: CompatibilityInfo {
-                supported_versions: Vec::new(),
-                deprecated_features: Vec::new(),
-                migration_notes: Vec::new(),
-                breaking_changes: Vec::new(),
-            },
-            review_comments: Vec::new(),
-        });
+        );
 
         Ok(())
     }

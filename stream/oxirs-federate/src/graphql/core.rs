@@ -168,7 +168,10 @@ impl GraphQLFederation {
             ),
         };
 
-        let result_size = data.as_ref().map(|d| self.estimate_result_size(d)).unwrap_or(0);
+        let result_size = data
+            .as_ref()
+            .map(|d| self.estimate_result_size(d))
+            .unwrap_or(0);
 
         // Calculate memory usage before moving data
         let memory_used = data
@@ -335,17 +338,19 @@ impl GraphQLFederation {
         "#;
 
         // Execute the introspection query
-        let response = self.execute_introspection_query(service_endpoint, federation_query).await?;
-        
+        let response = self
+            .execute_introspection_query(service_endpoint, federation_query)
+            .await?;
+
         // Parse the response to extract federation capabilities
         let capabilities = self.parse_federation_capabilities(&response)?;
-        
+
         // Extract SDL from response or generate from schema
         let sdl = self.extract_or_generate_sdl(&response).await?;
-        
+
         // Extract entity types from the schema
         let entity_types = self.extract_entity_types(&response)?;
-        
+
         Ok(FederationServiceInfo {
             sdl,
             capabilities,
@@ -362,7 +367,7 @@ impl GraphQLFederation {
         if let Some(start) = query.find('(') {
             if let Some(end) = query.find(')') {
                 let vars_section = &query[start + 1..end];
-                
+
                 for var_def in vars_section.split(',') {
                     let var_def = var_def.trim();
                     if var_def.starts_with('$') {
@@ -370,7 +375,7 @@ impl GraphQLFederation {
                         if parts.len() >= 2 {
                             let var_name = parts[0].trim().trim_start_matches('$').to_string();
                             let var_type = parts[1].trim().to_string();
-                            
+
                             variables.insert(
                                 var_name.clone(),
                                 VariableDefinition {
@@ -391,14 +396,14 @@ impl GraphQLFederation {
     /// Merge directives from two sets (helper method)
     pub fn merge_directives(&self, existing: &[Directive], new: &[Directive]) -> Vec<Directive> {
         let mut merged = existing.to_vec();
-        
+
         for new_directive in new {
             // Check if directive already exists
             if !merged.iter().any(|d| d.name == new_directive.name) {
                 merged.push(new_directive.clone());
             }
         }
-        
+
         merged
     }
 
@@ -414,42 +419,48 @@ impl GraphQLFederation {
         variables: Option<serde_json::Value>,
     ) -> Result<FederatedSubscriptionStream> {
         debug!("Creating federated subscription");
-        
+
         // Parse the subscription query
         let parsed_query = self.parse_graphql_query(subscription_query)?;
-        
-        if !matches!(parsed_query.operation_type, GraphQLOperationType::Subscription) {
+
+        if !matches!(
+            parsed_query.operation_type,
+            GraphQLOperationType::Subscription
+        ) {
             return Err(anyhow!("Query is not a subscription"));
         }
-        
+
         // Decompose subscription across services
         let service_subscriptions = self.decompose_subscription(&parsed_query).await?;
-        
+
         // Create federated subscription stream
         let stream = FederatedSubscriptionStream::new(
             subscription_query.to_string(),
             variables,
             service_subscriptions,
         );
-        
+
         Ok(stream)
     }
-    
+
     /// Decompose subscription query across federated services
-    async fn decompose_subscription(&self, query: &ParsedQuery) -> Result<Vec<ServiceSubscription>> {
+    async fn decompose_subscription(
+        &self,
+        query: &ParsedQuery,
+    ) -> Result<Vec<ServiceSubscription>> {
         let mut service_subscriptions = Vec::new();
-        
+
         // Get unified schema
         let unified_schema = self.create_unified_schema().await?;
-        
+
         // Analyze field ownership for subscription fields
         let field_ownership = self.analyze_field_ownership(query, &unified_schema)?;
-        
+
         // Create service-specific subscriptions
         for (service_id, fields) in &field_ownership.service_to_fields {
             if !fields.is_empty() {
                 let subscription_query = self.build_service_subscription_query(fields, query)?;
-                
+
                 service_subscriptions.push(ServiceSubscription {
                     service_id: service_id.clone(),
                     query: subscription_query,
@@ -458,41 +469,39 @@ impl GraphQLFederation {
                 });
             }
         }
-        
+
         Ok(service_subscriptions)
     }
-    
+
     /// Build subscription query for a specific service
     fn build_service_subscription_query(
         &self,
         fields: &[String],
         original_query: &ParsedQuery,
     ) -> Result<String> {
-        let operation_name = original_query.operation_name
+        let operation_name = original_query
+            .operation_name
             .as_ref()
             .map(|name| format!(" {}", name))
             .unwrap_or_default();
-        
+
         // Build subscription with service-specific fields
-        let subscription_query = format!(
-            "subscription{} {{ {} }}",
-            operation_name,
-            fields.join(" ")
-        );
-        
+        let subscription_query =
+            format!("subscription{} {{ {} }}", operation_name, fields.join(" "));
+
         Ok(subscription_query)
     }
-    
+
     /// Merge subscription events from multiple services
     pub async fn merge_subscription_events(
         &self,
         events: Vec<SubscriptionEvent>,
     ) -> Result<GraphQLResponse> {
         debug!("Merging {} subscription events", events.len());
-        
+
         let mut merged_data = serde_json::Map::new();
         let mut all_errors = Vec::new();
-        
+
         // Merge events based on their source service and field ownership
         for event in events {
             if let Some(data) = event.data.as_object() {
@@ -508,22 +517,26 @@ impl GraphQLFederation {
                     }
                 }
             }
-            
+
             all_errors.extend(event.errors);
         }
-        
+
         Ok(GraphQLResponse {
             data: serde_json::Value::Object(merged_data),
             errors: all_errors,
             extensions: None,
         })
     }
-    
+
     /// Get timestamp of a field in merged data (placeholder implementation)
-    fn get_field_timestamp(&self, _data: &serde_json::Map<String, serde_json::Value>, _field: &str) -> chrono::DateTime<chrono::Utc> {
+    fn get_field_timestamp(
+        &self,
+        _data: &serde_json::Map<String, serde_json::Value>,
+        _field: &str,
+    ) -> chrono::DateTime<chrono::Utc> {
         chrono::Utc::now() // Simplified - in real implementation would track field timestamps
     }
-    
+
     /// Handle subscription connection management
     pub async fn manage_subscription_connections(
         &self,
@@ -533,7 +546,9 @@ impl GraphQLFederation {
         match operation {
             SubscriptionOperation::Start { query, variables } => {
                 debug!("Starting subscription connection: {}", connection_id);
-                let _subscription = self.create_federated_subscription(&query, variables).await?;
+                let _subscription = self
+                    .create_federated_subscription(&query, variables)
+                    .await?;
                 // Store subscription in connection manager
                 // Implementation would involve WebSocket connection management
             }
@@ -546,17 +561,14 @@ impl GraphQLFederation {
                 // Send connection ack
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Handle real-time event propagation across federation
-    pub async fn propagate_federation_event(
-        &self,
-        event: FederationEvent,
-    ) -> Result<()> {
+    pub async fn propagate_federation_event(&self, event: FederationEvent) -> Result<()> {
         debug!("Propagating federation event: {:?}", event.event_type);
-        
+
         match event.event_type {
             FederationEventType::EntityUpdate => {
                 // Invalidate caches and notify dependent services
@@ -571,60 +583,66 @@ impl GraphQLFederation {
                 self.handle_service_availability_change(&event).await?
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Handle entity update propagation
     async fn handle_entity_update_propagation(&self, event: &FederationEvent) -> Result<()> {
         debug!("Handling entity update propagation");
-        
+
         // Extract entity information from event
         if let Some(entity_type) = event.data.get("entityType").and_then(|v| v.as_str()) {
             // Find all services that might be affected by this entity update
             let schemas = self.schemas.read().await;
             let mut affected_services = Vec::new();
-            
+
             for (service_id, schema) in schemas.iter() {
                 if schema.types.contains_key(entity_type) {
                     affected_services.push(service_id.clone());
                 }
             }
-            
+
             // Notify affected services about the entity update
             for service_id in affected_services {
                 debug!("Notifying service {} about entity update", service_id);
                 // Implementation would send notification to service
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Handle schema change propagation
     async fn handle_schema_change_propagation(&self, event: &FederationEvent) -> Result<()> {
         debug!("Handling schema change propagation");
-        
+
         if let Some(service_id) = event.data.get("serviceId").and_then(|v| v.as_str()) {
             // Re-validate unified schema after change
             if let Err(e) = self.create_unified_schema().await {
-                warn!("Schema validation failed after change in service {}: {}", service_id, e);
+                warn!(
+                    "Schema validation failed after change in service {}: {}",
+                    service_id, e
+                );
             } else {
                 info!("Schema successfully updated for service {}", service_id);
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Handle service availability changes
     async fn handle_service_availability_change(&self, event: &FederationEvent) -> Result<()> {
         debug!("Handling service availability change");
-        
+
         if let Some(service_id) = event.data.get("serviceId").and_then(|v| v.as_str()) {
             if let Some(available) = event.data.get("available").and_then(|v| v.as_bool()) {
                 if !available {
-                    warn!("Service {} is no longer available - implementing fallback strategies", service_id);
+                    warn!(
+                        "Service {} is no longer available - implementing fallback strategies",
+                        service_id
+                    );
                     // Implement circuit breaker and fallback logic
                 } else {
                     info!("Service {} is now available", service_id);
@@ -632,12 +650,16 @@ impl GraphQLFederation {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// Execute introspection query against a GraphQL service
-    async fn execute_introspection_query(&self, endpoint: &str, query: &str) -> Result<serde_json::Value> {
+    async fn execute_introspection_query(
+        &self,
+        endpoint: &str,
+        query: &str,
+    ) -> Result<serde_json::Value> {
         let client = reqwest::Client::new();
         let request_body = serde_json::json!({
             "query": query
@@ -662,7 +684,10 @@ impl GraphQLFederation {
     }
 
     /// Parse federation capabilities from introspection response
-    fn parse_federation_capabilities(&self, response: &serde_json::Value) -> Result<FederationCapabilities> {
+    fn parse_federation_capabilities(
+        &self,
+        response: &serde_json::Value,
+    ) -> Result<FederationCapabilities> {
         let schema = response["data"]["__schema"]
             .as_object()
             .ok_or_else(|| anyhow!("Invalid introspection response: missing schema"))?;
@@ -725,7 +750,7 @@ impl GraphQLFederation {
             .ok_or_else(|| anyhow!("Invalid introspection response: missing schema"))?;
 
         let mut sdl = String::new();
-        
+
         // Generate type definitions
         if let Some(types) = schema["types"].as_array() {
             for type_def in types {
@@ -761,20 +786,21 @@ impl GraphQLFederation {
 
     /// Generate SDL for object type
     fn generate_object_type_sdl(&self, type_def: &serde_json::Value) -> Result<String> {
-        let type_name = type_def["name"].as_str()
+        let type_name = type_def["name"]
+            .as_str()
             .ok_or_else(|| anyhow!("Missing type name"))?;
-        
+
         let mut sdl = format!("type {} ", type_name);
-        
+
         // Add directives (simplified - would need more sophisticated parsing)
         if let Some(description) = type_def["description"].as_str() {
             if description.contains("@key") {
                 sdl.push_str("@key(fields: \"id\") ");
             }
         }
-        
+
         sdl.push_str("{\n");
-        
+
         // Add fields
         if let Some(fields) = type_def["fields"].as_array() {
             for field in fields {
@@ -784,18 +810,19 @@ impl GraphQLFederation {
                 }
             }
         }
-        
+
         sdl.push_str("}\n\n");
         Ok(sdl)
     }
 
     /// Generate SDL for interface type
     fn generate_interface_type_sdl(&self, type_def: &serde_json::Value) -> Result<String> {
-        let type_name = type_def["name"].as_str()
+        let type_name = type_def["name"]
+            .as_str()
             .ok_or_else(|| anyhow!("Missing type name"))?;
-        
+
         let mut sdl = format!("interface {} {{\n", type_name);
-        
+
         // Add fields
         if let Some(fields) = type_def["fields"].as_array() {
             for field in fields {
@@ -805,18 +832,19 @@ impl GraphQLFederation {
                 }
             }
         }
-        
+
         sdl.push_str("}\n\n");
         Ok(sdl)
     }
 
     /// Generate SDL for enum type
     fn generate_enum_type_sdl(&self, type_def: &serde_json::Value) -> Result<String> {
-        let type_name = type_def["name"].as_str()
+        let type_name = type_def["name"]
+            .as_str()
             .ok_or_else(|| anyhow!("Missing type name"))?;
-        
+
         let mut sdl = format!("enum {} {{\n", type_name);
-        
+
         // Add enum values
         if let Some(enum_values) = type_def["enumValues"].as_array() {
             for enum_value in enum_values {
@@ -825,7 +853,7 @@ impl GraphQLFederation {
                 }
             }
         }
-        
+
         sdl.push_str("}\n\n");
         Ok(sdl)
     }
@@ -911,7 +939,7 @@ impl GraphQLFederation {
     /// Parse a value from string format to JSON value (helper method)
     pub fn parse_value_from_string(&self, value: &str) -> Result<serde_json::Value> {
         let value = value.trim();
-        
+
         if value == "true" {
             Ok(serde_json::Value::Bool(true))
         } else if value == "false" {

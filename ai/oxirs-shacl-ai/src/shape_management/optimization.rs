@@ -234,7 +234,8 @@ impl ShapeOptimizer {
                     if validation_time > 300.0 {
                         bottlenecks.push(PerformanceBottleneck {
                             bottleneck_type: "regex_constraint".to_string(),
-                            description: "Regular expression constraints are performance-intensive".to_string(),
+                            description: "Regular expression constraints are performance-intensive"
+                                .to_string(),
                             severity: BottleneckSeverity::Medium,
                             estimated_impact: 0.3,
                             resolution_suggestions: vec![
@@ -290,7 +291,8 @@ impl ShapeOptimizer {
             optimization_suggestions.push(OptimizationSuggestion {
                 suggestion_id: "reduce_validation_time".to_string(),
                 suggestion_type: "performance".to_string(),
-                description: "Consider reordering constraints for early failure detection".to_string(),
+                description: "Consider reordering constraints for early failure detection"
+                    .to_string(),
                 expected_improvement: 0.3,
                 implementation_effort: ImplementationEffort::Low,
                 risk_level: RiskLevel::Low,
@@ -358,7 +360,8 @@ impl ComplexityAnalyzer {
         let structural_complexity = self.calculate_structural_complexity(shape);
         let logical_complexity = self.calculate_logical_complexity(shape);
 
-        overall_complexity = (overall_complexity + structural_complexity + logical_complexity) / 3.0;
+        overall_complexity =
+            (overall_complexity + structural_complexity + logical_complexity) / 3.0;
 
         Ok(ComplexityAnalysis {
             overall_complexity,

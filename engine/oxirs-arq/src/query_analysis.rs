@@ -1243,10 +1243,7 @@ mod tests {
         let analysis = analyzer.analyze(&algebra).unwrap();
 
         // Check that index optimization hints were generated
-        assert!(!analysis
-            .index_hints
-            .pattern_recommendations
-            .is_empty());
+        assert!(!analysis.index_hints.pattern_recommendations.is_empty());
 
         // Check that pattern cardinalities were estimated
         assert!(!analysis.pattern_cardinalities.is_empty());

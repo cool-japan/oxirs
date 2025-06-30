@@ -5,29 +5,30 @@
 //! This crate provides a conversational interface for knowledge graphs,
 //! combining retrieval-augmented generation (RAG) with SPARQL querying.
 
-use crate::rag::{AssembledContext, QueryContext, QueryIntent, RAGConfig, RAGSystem};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
+    collections::HashMap,
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
+// Core modules
 pub mod analytics;
 pub mod cache;
 pub mod chat;
+pub mod chat_session;
 pub mod context;
+pub mod enterprise_integration;
 pub mod explanation;
 pub mod external_services;
 pub mod graph_exploration;
 pub mod health_monitoring;
 pub mod llm;
 pub mod message_analytics;
+pub mod messages;
 pub mod nl2sparql;
 pub mod performance;
 pub mod persistence;
@@ -35,3049 +36,552 @@ pub mod rag;
 pub mod rich_content;
 pub mod server;
 pub mod session;
+pub mod session_manager;
 pub mod sparql_optimizer;
 pub mod types;
 pub mod workflow;
 
 // Re-export commonly used types
+pub use chat_session::{ChatSession, SessionStatistics};
+pub use messages::{Message, MessageContent, MessageRole, RichContentElement, MessageAttachment};
+pub use session_manager::{ChatConfig, SessionData, SessionState, ContextWindow, TopicTracker, SessionMetrics};
 pub use session::*;
 pub use types::*;
 
-/// Chat message with rich content support
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Message {
-    pub id: String,
-    pub role: MessageRole,
-    pub content: MessageContent,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub metadata: Option<MessageMetadata>,
-    pub thread_id: Option<String>,
-    pub parent_message_id: Option<String>,
-    pub token_count: Option<usize>,
-    pub reactions: Vec<MessageReaction>,
-    pub attachments: Vec<MessageAttachment>,
-    pub rich_elements: Vec<RichContentElement>,
-}
-
-/// Message content supporting both plain text and rich content
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MessageContent {
-    /// Plain text content
-    Text(String),
-    /// Rich content with multiple elements
-    Rich {
-        text: String,
-        elements: Vec<RichContentElement>,
-    },
-}
-
-impl MessageContent {
-    pub fn to_text(&self) -> &str {
-        match self {
-            MessageContent::Text(text) => text,
-            MessageContent::Rich { text, .. } => text,
-        }
-    }
-
-    pub fn from_text(text: String) -> Self {
-        MessageContent::Text(text)
-    }
-
-    pub fn add_element(&mut self, element: RichContentElement) {
-        match self {
-            MessageContent::Text(text) => {
-                let text = std::mem::take(text);
-                *self = MessageContent::Rich {
-                    text,
-                    elements: vec![element],
-                };
-            }
-            MessageContent::Rich { elements, .. } => {
-                elements.push(element);
-            }
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.to_text().len()
-    }
-
-    pub fn contains(&self, pat: char) -> bool {
-        self.to_text().contains(pat)
-    }
-
-    pub fn to_lowercase(&self) -> String {
-        self.to_text().to_lowercase()
-    }
-
-    pub fn chars(&self) -> std::str::Chars {
-        self.to_text().chars()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.to_text().is_empty()
-    }
-}
-
-impl std::fmt::Display for MessageContent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_text())
-    }
-}
-
-/// Rich content elements that can be embedded in messages
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RichContentElement {
-    /// Code snippet with syntax highlighting
-    CodeBlock {
-        language: String,
-        code: String,
-        title: Option<String>,
-        line_numbers: bool,
-        highlight_lines: Vec<usize>,
-    },
-    /// SPARQL query block with execution metadata
-    SparqlQuery {
-        query: String,
-        execution_time_ms: Option<u64>,
-        result_count: Option<usize>,
-        status: QueryExecutionStatus,
-        explanation: Option<String>,
-    },
-    /// Data table with formatting options
-    Table {
-        headers: Vec<String>,
-        rows: Vec<Vec<String>>,
-        title: Option<String>,
-        pagination: Option<TablePagination>,
-        sorting: Option<TableSorting>,
-        formatting: TableFormatting,
-    },
-    /// Graph visualization configuration
-    GraphVisualization {
-        graph_type: GraphType,
-        data: GraphData,
-        layout: GraphLayout,
-        styling: GraphStyling,
-        interactive: bool,
-    },
-    /// Chart or plot
-    Chart {
-        chart_type: ChartType,
-        data: ChartData,
-        title: Option<String>,
-        axes: ChartAxes,
-        styling: ChartStyling,
-    },
-    /// File upload reference
-    FileReference {
-        file_id: String,
-        filename: String,
-        file_type: String,
-        size_bytes: u64,
-        preview: Option<FilePreview>,
-    },
-    /// Interactive widget
-    Widget {
-        widget_type: WidgetType,
-        data: serde_json::Value,
-        config: WidgetConfig,
-    },
-    /// Timeline visualization
-    Timeline {
-        events: Vec<TimelineEvent>,
-        range: TimelineRange,
-        styling: TimelineStyling,
-    },
-}
-
-/// Message attachment for file uploads
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MessageAttachment {
-    pub id: String,
-    pub filename: String,
-    pub file_type: String,
-    pub size_bytes: u64,
-    pub url: Option<String>,
-    pub thumbnail_url: Option<String>,
-    pub metadata: AttachmentMetadata,
-    pub upload_timestamp: chrono::DateTime<chrono::Utc>,
-    pub processing_status: AttachmentProcessingStatus,
-}
-
-/// Query execution status for SPARQL queries
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum QueryExecutionStatus {
-    Success,
-    Error(String),
-    Timeout,
-    Cancelled,
-    ValidationError(String),
-}
-
-/// Table pagination information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TablePagination {
-    pub current_page: usize,
-    pub total_pages: usize,
-    pub page_size: usize,
-    pub total_rows: usize,
-}
-
-/// Table sorting configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TableSorting {
-    pub column: String,
-    pub direction: SortDirection,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SortDirection {
-    Ascending,
-    Descending,
-}
-
-/// Table formatting options
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TableFormatting {
-    pub striped_rows: bool,
-    pub borders: bool,
-    pub compact: bool,
-    pub hover_highlight: bool,
-    pub column_widths: Option<Vec<String>>,
-}
-
-impl Default for TableFormatting {
-    fn default() -> Self {
-        Self {
-            striped_rows: true,
-            borders: true,
-            compact: false,
-            hover_highlight: true,
-            column_widths: None,
-        }
-    }
-}
-
-/// Graph visualization types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum GraphType {
-    NetworkGraph,
-    Tree,
-    DAG,
-    ForceDirected,
-    Hierarchical,
-    Circular,
-}
-
-/// Graph data structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GraphData {
-    pub nodes: Vec<GraphNode>,
-    pub edges: Vec<GraphEdge>,
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GraphNode {
-    pub id: String,
-    pub label: String,
-    pub node_type: Option<String>,
-    pub properties: HashMap<String, String>,
-    pub styling: Option<NodeStyling>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GraphEdge {
-    pub id: String,
-    pub source: String,
-    pub target: String,
-    pub label: Option<String>,
-    pub edge_type: Option<String>,
-    pub properties: HashMap<String, String>,
-    pub styling: Option<EdgeStyling>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeStyling {
-    pub color: Option<String>,
-    pub size: Option<f32>,
-    pub shape: Option<String>,
-    pub border_color: Option<String>,
-    pub border_width: Option<f32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EdgeStyling {
-    pub color: Option<String>,
-    pub width: Option<f32>,
-    pub style: Option<String>, // solid, dashed, dotted
-    pub arrow_type: Option<String>,
-}
-
-/// Graph layout configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GraphLayout {
-    pub algorithm: String,
-    pub parameters: HashMap<String, f32>,
-    pub constraints: Option<Vec<LayoutConstraint>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LayoutConstraint {
-    pub constraint_type: String,
-    pub nodes: Vec<String>,
-    pub parameters: HashMap<String, f32>,
-}
-
-/// Graph styling options
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GraphStyling {
-    pub theme: String,
-    pub background_color: Option<String>,
-    pub node_defaults: Option<NodeStyling>,
-    pub edge_defaults: Option<EdgeStyling>,
-    pub highlight_color: Option<String>,
-}
-
-/// Chart types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ChartType {
-    Line,
-    Bar,
-    Pie,
-    Scatter,
-    Histogram,
-    Heatmap,
-    Box,
-    Violin,
-}
-
-/// Chart data structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChartData {
-    pub datasets: Vec<ChartDataset>,
-    pub labels: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChartDataset {
-    pub label: String,
-    pub data: Vec<f64>,
-    pub styling: ChartDatasetStyling,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChartDatasetStyling {
-    pub color: Option<String>,
-    pub background_color: Option<String>,
-    pub border_color: Option<String>,
-    pub border_width: Option<f32>,
-    pub point_style: Option<String>,
-}
-
-/// Chart axes configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChartAxes {
-    pub x_axis: AxisConfig,
-    pub y_axis: AxisConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AxisConfig {
-    pub title: Option<String>,
-    pub unit: Option<String>,
-    pub min: Option<f64>,
-    pub max: Option<f64>,
-    pub logarithmic: bool,
-}
-
-/// Chart styling options
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChartStyling {
-    pub theme: String,
-    pub responsive: bool,
-    pub legend: LegendConfig,
-    pub tooltip: TooltipConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LegendConfig {
-    pub show: bool,
-    pub position: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TooltipConfig {
-    pub show: bool,
-    pub format: Option<String>,
-}
-
-/// File preview information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum FilePreview {
-    Text {
-        content: String,
-        truncated: bool,
-    },
-    Image {
-        thumbnail_url: String,
-        width: u32,
-        height: u32,
-    },
-    Document {
-        page_count: Option<u32>,
-        title: Option<String>,
-    },
-    Data {
-        row_count: Option<u32>,
-        column_count: Option<u32>,
-        schema: Option<Vec<String>>,
-    },
-}
-
-/// Interactive widget types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum WidgetType {
-    QueryBuilder,
-    DataExplorer,
-    GraphNavigator,
-    FilterPanel,
-    PropertyInspector,
-    EntityBrowser,
-}
-
-/// Widget configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WidgetConfig {
-    pub interactive: bool,
-    pub auto_update: bool,
-    pub refresh_interval: Option<u64>,
-    pub height: Option<u32>,
-    pub width: Option<u32>,
-}
-
-/// Timeline event
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimelineEvent {
-    pub id: String,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub title: String,
-    pub description: Option<String>,
-    pub event_type: String,
-    pub metadata: Option<serde_json::Value>,
-}
-
-/// Timeline range
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimelineRange {
-    pub start: chrono::DateTime<chrono::Utc>,
-    pub end: chrono::DateTime<chrono::Utc>,
-    pub granularity: TimelineGranularity,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TimelineGranularity {
-    Second,
-    Minute,
-    Hour,
-    Day,
-    Week,
-    Month,
-    Year,
-}
-
-/// Timeline styling
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimelineStyling {
-    pub theme: String,
-    pub show_grid: bool,
-    pub highlight_current: bool,
-    pub zoom_enabled: bool,
-}
-
-/// Attachment metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AttachmentMetadata {
-    pub description: Option<String>,
-    pub tags: Vec<String>,
-    pub uploaded_by: Option<String>,
-    pub processed: bool,
-    pub virus_scanned: bool,
-    pub content_hash: Option<String>,
-}
-
-/// Attachment processing status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AttachmentProcessingStatus {
-    Pending,
-    Processing,
-    Complete,
-    Failed(String),
-    VirusDetected,
-}
-
-/// Message reaction
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MessageReaction {
-    pub emoji: String,
-    pub user_id: String,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-}
-
-/// Message role
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum MessageRole {
-    User,
-    Assistant,
-    System,
-}
-
-/// Message metadata with analytics support
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct MessageMetadata {
-    pub sparql_query: Option<String>,
-    pub retrieved_triples: Option<Vec<String>>,
-    pub confidence_score: Option<f32>,
-    pub processing_time_ms: Option<u64>,
-    pub model_used: Option<String>,
-    pub intent_classification: Option<String>,
-    pub entities_extracted: Option<Vec<String>>,
-    pub context_used: Option<bool>,
-    /// Analytics data
-    pub analytics: Option<MessageAnalytics>,
-}
-
-/// Message analytics data
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct MessageAnalytics {
-    /// Intent classification with confidence
-    pub intent: MessageIntent,
-    /// Sentiment analysis result
-    pub sentiment: SentimentAnalysis,
-    /// Complexity scoring
-    pub complexity: ComplexityMetrics,
-    /// Confidence tracking
-    pub confidence: ConfidenceMetrics,
-    /// Success metrics
-    pub success_metrics: SuccessMetrics,
-    /// User satisfaction indicators
-    pub satisfaction: SatisfactionMetrics,
-}
-
-/// Message intent classification
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct MessageIntent {
-    pub primary_intent: IntentType,
-    pub secondary_intents: Vec<IntentType>,
-    pub confidence: f32,
-    pub entities: Vec<ExtractedEntity>,
-    pub keywords: Vec<String>,
-}
-
-/// Intent types for message classification
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum IntentType {
-    /// User is asking a factual question
-    Question,
-    /// User is making a request for action
-    Request,
-    /// User is providing information
-    Information,
-    /// User is expressing gratitude
-    Gratitude,
-    /// User is expressing dissatisfaction
-    Complaint,
-    /// User is asking for clarification
-    Clarification,
-    /// User is browsing or exploring
-    Exploration,
-    /// User is comparing options
-    Comparison,
-    /// User is asking for a list
-    ListQuery,
-    /// User is asking for an aggregation
-    Aggregation,
-    /// User is asking about relationships
-    Relationship,
-    /// User is asking for a definition
-    Definition,
-    /// Complex multi-part query
-    Complex,
-    /// Social/conversational message
-    Social,
-}
-
-/// Extracted entity from message
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ExtractedEntity {
-    pub text: String,
-    pub entity_type: EntityType,
-    pub confidence: f32,
-    pub start_offset: usize,
-    pub end_offset: usize,
-    pub uri: Option<String>,
-}
-
-/// Types of entities that can be extracted
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum EntityType {
-    Person,
-    Organization,
-    Location,
-    Date,
-    Time,
-    Number,
-    Concept,
-    Property,
-    Class,
-    Resource,
-    Literal,
-}
-
-/// Sentiment analysis result
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SentimentAnalysis {
-    pub polarity: SentimentPolarity,
-    pub confidence: f32,
-    pub emotions: Vec<EmotionScore>,
-    pub subjectivity: f32,
-}
-
-/// Sentiment polarity
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum SentimentPolarity {
-    Positive,
-    Negative,
-    Neutral,
-}
-
-/// Emotion score
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct EmotionScore {
-    pub emotion: EmotionType,
-    pub score: f32,
-}
-
-/// Types of emotions
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum EmotionType {
-    Joy,
-    Anger,
-    Fear,
-    Sadness,
-    Surprise,
-    Disgust,
-    Anticipation,
-    Trust,
-    Frustration,
-    Satisfaction,
-    Confusion,
-    Excitement,
-}
-
-/// Complexity metrics for messages
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ComplexityMetrics {
-    pub linguistic_complexity: f32,
-    pub conceptual_complexity: f32,
-    pub structural_complexity: f32,
-    pub domain_complexity: f32,
-    pub overall_score: f32,
-    pub factors: Vec<ComplexityFactor>,
-}
-
-/// Factors contributing to complexity
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ComplexityFactor {
-    pub factor_type: String,
-    pub score: f32,
-    pub description: String,
-}
-
-/// Confidence metrics
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ConfidenceMetrics {
-    pub overall_confidence: f32,
-    pub understanding_confidence: f32,
-    pub response_confidence: f32,
-    pub data_confidence: f32,
-    pub reasoning_confidence: f32,
-    pub uncertainty_factors: Vec<UncertaintyFactor>,
-}
-
-/// Factors that reduce confidence
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct UncertaintyFactor {
-    pub factor_type: String,
-    pub impact: f32,
-    pub description: String,
-}
-
-/// Success metrics for message processing
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SuccessMetrics {
-    pub query_successful: bool,
-    pub response_generated: bool,
-    pub context_retrieved: bool,
-    pub entities_found: bool,
-    pub sparql_executed: bool,
-    pub results_returned: bool,
-    pub user_satisfied: Option<bool>,
-    pub completion_time_ms: u64,
-    pub retry_count: u32,
-    pub error_count: u32,
-}
-
-/// User satisfaction metrics
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SatisfactionMetrics {
-    pub explicit_feedback: Option<UserFeedback>,
-    pub implicit_signals: ImplicitSatisfactionSignals,
-    pub satisfaction_score: Option<f32>,
-    pub follow_up_questions: u32,
-    pub clarification_requests: u32,
-}
-
-/// Explicit user feedback
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct UserFeedback {
-    pub rating: u32, // 1-5 scale
-    pub comment: Option<String>,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub helpful: Option<bool>,
-    pub accurate: Option<bool>,
-    pub complete: Option<bool>,
-}
-
-/// Implicit satisfaction signals
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ImplicitSatisfactionSignals {
-    pub response_time_to_user: Option<u64>,
-    pub conversation_continued: bool,
-    pub message_length_ratio: f32, // user response length / our response length
-    pub topic_shift_occurred: bool,
-    pub repeat_query_pattern: bool,
-    pub engagement_score: f32,
-}
-
-/// Persistent session data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionData {
-    pub id: String,
+// Re-export key RAG types
+pub use rag::{RAGSystem, RAGConfig, QueryContext, AssembledContext};
+
+/// Main chat interface for OxiRS with advanced AI capabilities
+pub struct OxiRSChat {
+    /// Configuration for the chat system
     pub config: ChatConfig,
-    pub messages: Vec<Message>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub last_activity: chrono::DateTime<chrono::Utc>,
-    pub user_preferences: HashMap<String, String>,
-    pub session_state: SessionState,
-    pub context_summary: Option<String>,
-    pub pinned_messages: Vec<String>,
-    pub current_topics: Vec<Topic>,
-    pub topic_history: Vec<TopicTransition>,
-    pub performance_metrics: SessionMetrics,
-}
-
-/// Session state
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SessionState {
-    Active,
-    Idle,
-    Expired,
-    Suspended,
-}
-
-/// Session performance metrics
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionMetrics {
-    pub total_queries: usize,
-    pub successful_queries: usize,
-    pub failed_queries: usize,
-    pub average_response_time_ms: f64,
-    pub total_tokens_processed: usize,
-    pub cache_hits: usize,
-    pub cache_misses: usize,
-    pub last_query_time: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-impl Default for SessionMetrics {
-    fn default() -> Self {
-        Self {
-            total_queries: 0,
-            successful_queries: 0,
-            failed_queries: 0,
-            average_response_time_ms: 0.0,
-            total_tokens_processed: 0,
-            cache_hits: 0,
-            cache_misses: 0,
-            last_query_time: None,
-        }
-    }
-}
-
-/// Context window for managing conversation memory
-#[derive(Debug, Clone)]
-pub struct ContextWindow {
-    pub window_size: usize,
-    pub pinned_messages: Vec<String>,
-    pub context_summary: Option<String>,
-}
-
-impl ContextWindow {
-    pub fn new(window_size: usize) -> Self {
-        Self {
-            window_size,
-            pinned_messages: Vec::new(),
-            context_summary: None,
-        }
-    }
-
-    pub fn should_summarize(&self, total_messages: usize) -> bool {
-        total_messages > self.window_size * 2
-    }
-
-    pub fn update_summary(&mut self, summary: String) {
-        self.context_summary = Some(summary);
-    }
-
-    pub fn pin_message(&mut self, message_id: String) {
-        if !self.pinned_messages.contains(&message_id) {
-            self.pinned_messages.push(message_id);
-        }
-    }
-
-    pub fn unpin_message(&mut self, message_id: &str) {
-        self.pinned_messages.retain(|id| id != message_id);
-    }
-
-    pub fn get_context_messages<'a>(&self, messages: &'a [Message]) -> Vec<&'a Message> {
-        // Return the last window_size messages plus any pinned messages
-        let mut context_messages = Vec::new();
-
-        // Add pinned messages first
-        for message in messages {
-            if self.pinned_messages.contains(&message.id) {
-                context_messages.push(message);
-            }
-        }
-
-        // Add recent messages up to window size
-        let recent_start = messages.len().saturating_sub(self.window_size);
-        for message in &messages[recent_start..] {
-            if !context_messages.iter().any(|m| m.id == message.id) {
-                context_messages.push(message);
-            }
-        }
-
-        context_messages
-    }
-}
-
-/// Topic tracking for conversation analysis
-#[derive(Debug, Clone)]
-pub struct TopicTracker {
-    pub current_topics: Vec<Topic>,
-    pub topic_history: Vec<TopicTransition>,
-    pub topic_threshold: f32,
-}
-
-impl TopicTracker {
-    pub fn new() -> Self {
-        Self {
-            current_topics: Vec::new(),
-            topic_history: Vec::new(),
-            topic_threshold: 0.7,
-        }
-    }
-
-    /// Analyze a message for topic changes with enhanced drift detection
-    pub fn analyze_message(&mut self, message: &Message) -> Option<TopicTransition> {
-        let detected_topics = self.extract_topics(message.content.to_text());
-
-        if detected_topics.is_empty() {
-            return None;
-        }
-
-        // Enhanced topic drift detection
-        let drift_result = self.detect_topic_drift(&detected_topics, message);
-
-        match drift_result {
-            Some(drift) => {
-                let transition = TopicTransition {
-                    id: Uuid::new_v4().to_string(),
-                    from_topics: self.current_topics.clone(),
-                    to_topics: detected_topics.clone(),
-                    timestamp: chrono::Utc::now(),
-                    trigger_message_id: message.id.clone(),
-                    confidence: drift.confidence,
-                    transition_type: drift.transition_type,
-                };
-
-                self.topic_history.push(transition.clone());
-                self.current_topics = detected_topics;
-
-                return Some(transition);
-            }
-            None => {
-                // Update existing topics with new mentions
-                self.update_topic_mentions(&detected_topics);
-            }
-        }
-
-        None
-    }
-
-    /// Enhanced topic drift detection with multiple strategies
-    fn detect_topic_drift(&self, new_topics: &[Topic], message: &Message) -> Option<TopicDrift> {
-        if self.current_topics.is_empty() {
-            return Some(TopicDrift {
-                confidence: 0.9,
-                transition_type: TransitionType::NewTopic,
-                drift_magnitude: 1.0,
-            });
-        }
-
-        // Calculate semantic similarity between topic sets
-        let semantic_similarity =
-            self.calculate_topic_set_similarity(&self.current_topics, new_topics);
-
-        // Detect different types of drift
-        if semantic_similarity < 0.3 {
-            // Major topic shift
-            Some(TopicDrift {
-                confidence: 1.0 - semantic_similarity,
-                transition_type: TransitionType::TopicShift,
-                drift_magnitude: 1.0 - semantic_similarity,
-            })
-        } else if semantic_similarity < 0.7 {
-            // Gradual topic drift
-            let drift_strength = self.calculate_drift_strength(new_topics, message);
-            if drift_strength > 0.6 {
-                Some(TopicDrift {
-                    confidence: drift_strength,
-                    transition_type: TransitionType::TopicShift,
-                    drift_magnitude: drift_strength,
-                })
-            } else {
-                None
-            }
-        } else {
-            // Check for topic return patterns
-            self.detect_topic_return(new_topics)
-                .map(|confidence| TopicDrift {
-                    confidence,
-                    transition_type: TransitionType::TopicReturn,
-                    drift_magnitude: confidence,
-                })
-        }
-    }
-
-    /// Calculate semantic similarity between two topic sets
-    fn calculate_topic_set_similarity(&self, topics1: &[Topic], topics2: &[Topic]) -> f32 {
-        if topics1.is_empty() || topics2.is_empty() {
-            return 0.0;
-        }
-
-        let mut total_similarity = 0.0;
-        let mut pair_count = 0;
-
-        for topic1 in topics1 {
-            for topic2 in topics2 {
-                total_similarity += topic1.similarity(topic2);
-                pair_count += 1;
-            }
-        }
-
-        if pair_count > 0 {
-            total_similarity / pair_count as f32
-        } else {
-            0.0
-        }
-    }
-
-    /// Calculate drift strength based on multiple factors
-    fn calculate_drift_strength(&self, new_topics: &[Topic], message: &Message) -> f32 {
-        let mut drift_strength = 0.0;
-
-        // Factor 1: Presence of transition words/phrases
-        let transition_indicators = [
-            "but",
-            "however",
-            "on the other hand",
-            "meanwhile",
-            "speaking of",
-            "by the way",
-            "let me ask about",
-            "what about",
-            "moving on",
-            "actually",
-            "wait",
-            "hold on",
-            "before we continue",
-        ];
-
-        let content_lower = message.content.to_lowercase();
-        for indicator in &transition_indicators {
-            if content_lower.contains(indicator) {
-                drift_strength += 0.2;
-                break;
-            }
-        }
-
-        // Factor 2: Question patterns that suggest topic change
-        if content_lower.contains("?")
-            && (content_lower.starts_with("what about")
-                || content_lower.starts_with("how about")
-                || content_lower.starts_with("can we talk about")
-                || content_lower.starts_with("let's discuss"))
-        {
-            drift_strength += 0.3;
-        }
-
-        // Factor 3: Length of current topic session
-        let current_topic_duration = self
-            .current_topics
-            .iter()
-            .map(|t| chrono::Utc::now() - t.first_mentioned)
-            .min()
-            .unwrap_or_default();
-
-        if current_topic_duration > chrono::Duration::minutes(10) {
-            drift_strength += 0.2;
-        }
-
-        // Factor 4: Keyword novelty
-        let existing_keywords: HashSet<String> = self
-            .current_topics
-            .iter()
-            .flat_map(|t| t.keywords.iter())
-            .cloned()
-            .collect();
-
-        let new_keywords: HashSet<String> = new_topics
-            .iter()
-            .flat_map(|t| t.keywords.iter())
-            .cloned()
-            .collect();
-
-        let keyword_overlap = existing_keywords.intersection(&new_keywords).count();
-        let total_keywords = existing_keywords.union(&new_keywords).count();
-
-        if total_keywords > 0 {
-            let novelty = 1.0 - (keyword_overlap as f32 / total_keywords as f32);
-            drift_strength += novelty * 0.3;
-        }
-
-        drift_strength.min(1.0)
-    }
-
-    /// Detect if user is returning to a previous topic
-    fn detect_topic_return(&self, new_topics: &[Topic]) -> Option<f32> {
-        // Look through recent topic history
-        let recent_window = chrono::Duration::minutes(30);
-        let cutoff_time = chrono::Utc::now() - recent_window;
-
-        for historical_topic in self.topic_history.iter().rev().take(10) {
-            if historical_topic.timestamp < cutoff_time {
-                break;
-            }
-
-            for old_topic in &historical_topic.from_topics {
-                for new_topic in new_topics {
-                    let similarity = old_topic.similarity(new_topic);
-                    if similarity > 0.8 {
-                        return Some(similarity);
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Update mention counts and timestamps for existing topics
-    fn update_topic_mentions(&mut self, detected_topics: &[Topic]) {
-        for detected in detected_topics {
-            for current in &mut self.current_topics {
-                if current.similarity(detected) > self.topic_threshold {
-                    current.mention_count += 1;
-                    current.last_mentioned = chrono::Utc::now();
-                    // Merge keywords if new ones are found
-                    for keyword in &detected.keywords {
-                        if !current.keywords.contains(keyword) {
-                            current.keywords.push(keyword.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Extract topics from message content (simplified implementation)
-    fn extract_topics(&self, content: &str) -> Vec<Topic> {
-        let keywords = content
-            .to_lowercase()
-            .split_whitespace()
-            .filter(|word| word.len() > 3)
-            .filter(|word| {
-                ![
-                    "what", "this", "that", "have", "been", "will", "with", "from", "they", "them",
-                    "were", "said", "each", "which", "their", "time", "about",
-                ]
-                .contains(word)
-            })
-            .take(3)
-            .map(|s| s.to_string())
-            .collect::<Vec<_>>();
-
-        if keywords.is_empty() {
-            return Vec::new();
-        }
-
-        vec![Topic {
-            id: Uuid::new_v4().to_string(),
-            name: keywords.join(" "),
-            keywords,
-            confidence: 0.6,
-            category: TopicCategory::General,
-            entities: Vec::new(),
-            first_mentioned: chrono::Utc::now(),
-            last_mentioned: chrono::Utc::now(),
-            mention_count: 1,
-        }]
-    }
-}
-
-/// Topic representation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Topic {
-    pub id: String,
-    pub name: String,
-    pub keywords: Vec<String>,
-    pub confidence: f32,
-    pub category: TopicCategory,
-    pub entities: Vec<String>,
-    pub first_mentioned: chrono::DateTime<chrono::Utc>,
-    pub last_mentioned: chrono::DateTime<chrono::Utc>,
-    pub mention_count: usize,
-}
-
-impl Topic {
-    /// Calculate similarity with another topic
-    pub fn similarity(&self, other: &Topic) -> f32 {
-        let self_keywords: std::collections::HashSet<_> = self.keywords.iter().collect();
-        let other_keywords: std::collections::HashSet<_> = other.keywords.iter().collect();
-
-        let intersection = self_keywords.intersection(&other_keywords).count();
-        let union = self_keywords.union(&other_keywords).count();
-
-        if union == 0 {
-            0.0
-        } else {
-            intersection as f32 / union as f32
-        }
-    }
-}
-
-/// Topic category
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TopicCategory {
-    General,
-    Technical,
-    Business,
-    Personal,
-    Research,
-    Education,
-}
-
-/// Topic transition
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopicTransition {
-    pub id: String,
-    pub from_topics: Vec<Topic>,
-    pub to_topics: Vec<Topic>,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub trigger_message_id: String,
-    pub confidence: f32,
-    pub transition_type: TransitionType,
-}
-
-/// Type of topic transition
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TransitionType {
-    NewTopic,
-    TopicShift,
-    TopicReturn,
-    TopicMerge,
-    TopicSplit,
-}
-
-/// Topic drift analysis result
-#[derive(Debug, Clone)]
-struct TopicDrift {
-    confidence: f32,
-    transition_type: TransitionType,
-    drift_magnitude: f32,
-}
-
-/// Chat session
-pub struct ChatSession {
-    pub id: String,
-    pub config: ChatConfig,
-    pub messages: Vec<Message>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub last_activity: chrono::DateTime<chrono::Utc>,
-    pub user_preferences: HashMap<String, String>,
-    pub session_state: SessionState,
-    pub context_window: ContextWindow,
-    pub topic_tracker: TopicTracker,
-    pub performance_metrics: SessionMetrics,
-    store: Arc<oxirs_core::Store>,
-}
-
-impl ChatSession {
-    pub fn new(id: String, store: Arc<oxirs_core::Store>) -> Self {
-        let now = chrono::Utc::now();
-        let config = ChatConfig::default();
-        Self {
-            id,
-            config: config.clone(),
-            messages: Vec::new(),
-            created_at: now,
-            last_activity: now,
-            user_preferences: HashMap::new(),
-            session_state: SessionState::Active,
-            context_window: ContextWindow::new(config.sliding_window_size),
-            topic_tracker: TopicTracker::new(),
-            performance_metrics: SessionMetrics::default(),
-            store,
-        }
-    }
-
-    pub fn from_data(data: SessionData, store: Arc<oxirs_core::Store>) -> Self {
-        let mut context_window = ContextWindow::new(data.config.sliding_window_size);
-        context_window.pinned_messages = data.pinned_messages;
-        context_window.context_summary = data.context_summary;
-
-        let mut topic_tracker = TopicTracker::new();
-        topic_tracker.current_topics = data.current_topics;
-        topic_tracker.topic_history = data.topic_history;
-
-        Self {
-            id: data.id,
-            config: data.config,
-            messages: data.messages,
-            created_at: data.created_at,
-            last_activity: data.last_activity,
-            user_preferences: data.user_preferences,
-            session_state: data.session_state,
-            context_window,
-            topic_tracker,
-            performance_metrics: data.performance_metrics,
-            store,
-        }
-    }
-
-    pub fn to_data(&self) -> SessionData {
-        SessionData {
-            id: self.id.clone(),
-            config: self.config.clone(),
-            messages: self.messages.clone(),
-            created_at: self.created_at,
-            last_activity: self.last_activity,
-            user_preferences: self.user_preferences.clone(),
-            session_state: self.session_state.clone(),
-            context_summary: self.context_window.context_summary.clone(),
-            pinned_messages: self.context_window.pinned_messages.clone(),
-            current_topics: self.topic_tracker.current_topics.clone(),
-            topic_history: self.topic_tracker.topic_history.clone(),
-            performance_metrics: self.performance_metrics.clone(),
-        }
-    }
-
-    pub fn update_activity(&mut self) {
-        self.last_activity = chrono::Utc::now();
-    }
-
-    pub fn is_expired(&self) -> bool {
-        let elapsed = chrono::Utc::now() - self.last_activity;
-        elapsed > chrono::Duration::from_std(self.config.session_timeout).unwrap_or_default()
-    }
-
-    pub fn add_reaction(&mut self, message_id: &str, emoji: String, user_id: String) -> Result<()> {
-        if let Some(message) = self.messages.iter_mut().find(|m| m.id == message_id) {
-            message.reactions.push(MessageReaction {
-                emoji,
-                user_id,
-                timestamp: chrono::Utc::now(),
-            });
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Message not found"))
-        }
-    }
-
-    /// Process a user message and generate a response
-    pub async fn process_message(&mut self, user_input: String) -> Result<Message> {
-        self.process_message_with_options(user_input, None, None)
-            .await
-    }
-
-    pub async fn process_message_with_options(
-        &mut self,
-        user_input: String,
-        thread_id: Option<String>,
-        parent_message_id: Option<String>,
-    ) -> Result<Message> {
-        use crate::{
-            llm::{ChatMessage, ChatRole, LLMConfig, LLMManager, LLMRequest, Priority, UseCase},
-            nl2sparql::{NL2SPARQLConfig, NL2SPARQLSystem},
-            // rag::{AssembledContext, QueryContext, QueryIntent, RAGConfig, RAGSystem}, // Temporarily disabled
-        };
-
-        // Add user message to history
-        let user_message_id = Uuid::new_v4().to_string();
-        let user_message = Message {
-            id: user_message_id.clone(),
-            role: MessageRole::User,
-            content: MessageContent::from_text(user_input.clone()),
-            timestamp: chrono::Utc::now(),
-            metadata: None,
-            thread_id: thread_id.clone(),
-            parent_message_id,
-            token_count: Some(user_input.split_whitespace().count()),
-            reactions: Vec::new(),
-            attachments: Vec::new(),
-            rich_elements: Vec::new(),
-        };
-        self.messages.push(user_message);
-
-        // Enhanced RAG pipeline implementation
-        let mut retrieved_triples: Option<Vec<String>> = None;
-        let mut sparql_query: Option<String> = None;
-        let mut confidence_score = 0.5f32;
-
-        // Create initial query context (entities will be extracted by RAG system)
-        let query_context = QueryContext {
-            query: user_input.clone(),
-            intent: self.classify_intent(&user_input),
-            entities: Vec::new(), // Will be filled by RAG system's extract_query_components
-            relationships: Vec::new(), // Will be filled by RAG system's extract_query_components
-            constraints: Vec::new(), // Will be filled by RAG system's extract_query_components
-            conversation_history: self
-                .messages
-                .iter()
-                .take(5) // Last 5 messages for context
-                .map(|m| m.content.to_text().to_string())
-                .collect(),
-        };
-
-        // Initialize enhanced RAG system with proper embedding configuration
-        let rag_config = RAGConfig::default();
-        let embedding_config = crate::rag::EmbeddingConfig {
-            provider_type: crate::rag::EmbeddingProviderType::Local, // Use local by default for better reliability
-            model_name: "sentence-transformers/all-MiniLM-L6-v2".to_string(),
-            api_key: std::env::var("OPENAI_API_KEY").ok(), // Fallback to OpenAI if available
-            base_url: None,
-            cache_size: 5000,
-            batch_size: 50,
-            timeout_seconds: 30,
-        };
-
-        let rag_system = match RAGSystem::with_enhanced_embeddings(
-            rag_config.clone(),
-            self.store.clone(),
-            embedding_config,
-        )
-        .await
-        {
-            Ok(system) => system,
-            Err(e) => {
-                warn!(
-                    "Failed to create enhanced RAG system, falling back to basic: {}",
-                    e
-                );
-                // Fallback to basic RAG system
-                RAGSystem::new(
-                    rag_config,
-                    self.store.clone(),
-                    None, // Vector index not available yet
-                    None, // Embedding model not available yet
-                )
-            }
-        };
-
-        // Step 1: Retrieve relevant knowledge
-        let retrieved_knowledge = match rag_system.retrieve_knowledge(&query_context).await {
-            Ok(knowledge) => {
-                confidence_score = knowledge.metadata.quality_score;
-                retrieved_triples = Some(
-                    knowledge
-                        .triples
-                        .iter()
-                        .map(|t| format!("{} {} {}", t.subject(), t.predicate(), t.object()))
-                        .collect(),
-                );
-                Some(knowledge)
-            }
-            Err(e) => {
-                tracing::warn!("RAG retrieval failed: {}", e);
-                None
-            }
-        };
-
-        // Step 2: Generate SPARQL query if appropriate
-        if self.should_generate_sparql(&query_context.intent) {
-            let nl2sparql_config = NL2SPARQLConfig::default();
-            if let Ok(mut nl2sparql_system) =
-                NL2SPARQLSystem::with_store(nl2sparql_config, None, self.store.clone())
-            {
-                if let Ok(sparql_result) = nl2sparql_system.generate_sparql(&query_context).await {
-                    sparql_query = Some(sparql_result.query.clone());
-                    confidence_score = confidence_score.max(sparql_result.confidence);
-
-                    // Execute the SPARQL query if it was generated successfully
-                    if sparql_result.validation_result.is_valid {
-                        if let Ok(execution_result) = nl2sparql_system
-                            .execute_sparql_query(&sparql_result.query)
-                            .await
-                        {
-                            if execution_result.result_count > 0 {
-                                info!(
-                                    "SPARQL query returned {} results",
-                                    execution_result.result_count
-                                );
-                                // TODO: Format and include SPARQL results in response
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Step 3: Assemble context for LLM
-        let context_text = if let Some(knowledge) = retrieved_knowledge {
-            match rag_system
-                .assemble_context(&knowledge, &query_context)
-                .await
-            {
-                Ok(context) => {
-                    confidence_score = confidence_score.max(context.quality_score);
-                    Some(context.context_text)
-                }
-                Err(_) => None,
-            }
-        } else {
-            None
-        };
-
-        // Step 4: Generate response using LLM or fallback
-        let response_content = if let Some(ref context) = context_text {
-            self.generate_llm_response(&user_input, &context, sparql_query.as_ref())
-                .await
-                .unwrap_or_else(|_| self.generate_fallback_response(&user_input, &context))
-        } else {
-            self.generate_simple_response(&user_input)
-        };
-
-        let response = Message {
-            id: Uuid::new_v4().to_string(),
-            role: MessageRole::Assistant,
-            content: MessageContent::from_text(response_content.clone()),
-            timestamp: chrono::Utc::now(),
-            metadata: Some(MessageMetadata {
-                sparql_query,
-                retrieved_triples,
-                confidence_score: Some(confidence_score),
-                processing_time_ms: None,
-                model_used: None,
-                intent_classification: Some(format!("{:?}", self.classify_intent(&user_input))),
-                entities_extracted: None,
-                context_used: Some(context_text.is_some()),
-                analytics: None, // Will be populated by analytics processor
-            }),
-            thread_id,
-            parent_message_id: Some(user_message_id),
-            token_count: Some(response_content.split_whitespace().count()),
-            reactions: Vec::new(),
-            attachments: Vec::new(),
-            rich_elements: Vec::new(),
-        };
-
-        self.messages.push(response.clone());
-
-        // Update performance metrics
-        self.performance_metrics.total_queries += 1;
-        self.performance_metrics.successful_queries += 1;
-        self.performance_metrics.total_tokens_processed += response.token_count.unwrap_or(0);
-        self.performance_metrics.last_query_time = Some(chrono::Utc::now());
-
-        // Analyze topic transitions
-        if let Some(transition) = self.topic_tracker.analyze_message(&response) {
-            tracing::info!("Topic transition detected: {:?}", transition);
-        }
-
-        // Check if we should summarize the conversation
-        if self.config.enable_context_summarization
-            && self.context_window.should_summarize(self.messages.len())
-        {
-            self.summarize_context().await;
-        }
-
-        Ok(response)
-    }
-
-    /// Classify the intent of a user query
-    fn classify_intent(&self, query: &str) -> QueryIntent {
-        let query_lower = query.to_lowercase();
-
-        if query_lower.contains("what is") || query_lower.contains("who is") {
-            QueryIntent::FactualLookup
-        } else if query_lower.contains("how are") || query_lower.contains("relationship") {
-            QueryIntent::Relationship
-        } else if query_lower.contains("list") || query_lower.contains("show me") {
-            QueryIntent::ListQuery
-        } else if query_lower.contains("compare") || query_lower.contains("difference") {
-            QueryIntent::Comparison
-        } else if query_lower.contains("count") || query_lower.contains("how many") {
-            QueryIntent::Aggregation
-        } else if query_lower.contains("define") || query_lower.contains("meaning") {
-            QueryIntent::Definition
-        } else if query_lower.len() > 100 || query_lower.matches("and").count() > 2 {
-            QueryIntent::Complex
-        } else {
-            QueryIntent::Exploration
-        }
-    }
-
-    /// Determine if SPARQL generation is appropriate for this intent
-    fn should_generate_sparql(&self, intent: &QueryIntent) -> bool {
-        matches!(
-            intent,
-            QueryIntent::FactualLookup
-                | QueryIntent::ListQuery
-                | QueryIntent::Aggregation
-                | QueryIntent::Relationship
-        )
-    }
-
-    /// Generate response using LLM with context
-    async fn generate_llm_response(
-        &self,
-        query: &str,
-        context: &str,
-        sparql_query: Option<&String>,
-    ) -> Result<String> {
-        // This would require LLM integration - for now return enhanced fallback
-        let mut response = format!(
-            "Based on the knowledge graph, here's what I found for your query: {}\n\n",
-            query
-        );
-
-        if let Some(sparql) = sparql_query {
-            response.push_str(&format!(
-                "Generated SPARQL query:\n```sparql\n{}\n```\n\n",
-                sparql
-            ));
-        }
-
-        response.push_str("Relevant information:\n");
-        response.push_str(context);
-
-        Ok(response)
-    }
-
-    /// Generate fallback response with context
-    fn generate_fallback_response(&self, query: &str, context: &str) -> String {
-        format!(
-            "I found some information related to your query '{}' in the knowledge graph:\n\n{}",
-            query, context
-        )
-    }
-
-    /// Generate simple response without context
-    fn generate_simple_response(&self, query: &str) -> String {
-        format!("I understand you're asking about: '{}'. Let me search the knowledge graph for relevant information.", query)
-    }
-
-    /// Get chat history
-    pub fn get_history(&self) -> &[Message] {
-        &self.messages
-    }
-
-    /// Clear chat history
-    pub fn clear_history(&mut self) {
-        self.messages.clear();
-    }
-
-    /// Get messages in a thread
-    pub fn get_thread_messages(&self, thread_id: &str) -> Vec<&Message> {
-        self.messages
-            .iter()
-            .filter(|m| m.thread_id.as_ref() == Some(&thread_id.to_string()))
-            .collect()
-    }
-
-    /// Create a new thread from a message
-    pub fn create_thread_from_message(&self, message_id: &str) -> Result<String> {
-        if self.messages.iter().any(|m| m.id == message_id) {
-            Ok(Uuid::new_v4().to_string())
-        } else {
-            Err(anyhow::anyhow!("Message not found"))
-        }
-    }
-
-    /// Get reply chain for a message
-    pub fn get_reply_chain(&self, message_id: &str) -> Vec<&Message> {
-        let mut chain = Vec::new();
-        let mut current_id = Some(message_id.to_string());
-
-        while let Some(id) = current_id {
-            if let Some(message) = self.messages.iter().find(|m| m.id == id) {
-                chain.push(message);
-                current_id = message.parent_message_id.clone();
-            } else {
-                break;
-            }
-        }
-
-        chain.reverse();
-        chain
-    }
-
-    /// Get all replies to a message
-    pub fn get_replies(&self, message_id: &str) -> Vec<&Message> {
-        self.messages
-            .iter()
-            .filter(|m| m.parent_message_id.as_ref() == Some(&message_id.to_string()))
-            .collect()
-    }
-
-    /// Summarize the conversation context using LLM
-    async fn summarize_context(&mut self) {
-        // Get messages that need to be summarized
-        let messages_to_summarize: Vec<&Message> = self
-            .messages
-            .iter()
-            .take(
-                self.messages
-                    .len()
-                    .saturating_sub(self.config.sliding_window_size),
-            )
-            .filter(|m| !self.context_window.pinned_messages.contains(&m.id))
-            .collect();
-
-        if messages_to_summarize.is_empty() {
-            return;
-        }
-
-        // Try LLM-powered summarization first, fallback to simple if needed
-        let summary = match self.create_llm_summary(&messages_to_summarize).await {
-            Ok(llm_summary) => llm_summary,
-            Err(e) => {
-                warn!("LLM summarization failed ({}), using fallback", e);
-                self.create_fallback_summary(&messages_to_summarize)
-            }
-        };
-
-        info!(
-            "Created conversation summary: {} messages -> {} chars",
-            messages_to_summarize.len(),
-            summary.len()
-        );
-
-        self.context_window.update_summary(summary);
-
-        // Remove old messages from memory (keep them in persistence)
-        let keep_from = self
-            .messages
-            .len()
-            .saturating_sub(self.config.sliding_window_size);
-        if keep_from > 0 {
-            // Keep pinned messages and recent messages
-            let mut new_messages = Vec::new();
-
-            // Add pinned messages
-            for message in &self.messages {
-                if self.context_window.pinned_messages.contains(&message.id) {
-                    new_messages.push(message.clone());
-                }
-            }
-
-            // Add recent messages
-            new_messages.extend_from_slice(&self.messages[keep_from..]);
-
-            self.messages = new_messages;
-        }
-    }
-
-    /// Create an LLM-powered conversation summary
-    async fn create_llm_summary(&self, messages: &[&Message]) -> Result<String> {
-        use crate::llm::{
-            ChatMessage, ChatRole, LLMConfig, LLMManager, LLMRequest, Priority, UseCase,
-        };
-
-        // Format messages for summarization
-        let conversation_text = messages
-            .iter()
-            .map(|m| {
-                let role = match m.role {
-                    MessageRole::User => "User",
-                    MessageRole::Assistant => "Assistant",
-                    MessageRole::System => "System",
-                };
-                format!("{}: {}", role, m.content)
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        // Create summarization prompt
-        let prompt = format!(
-            r#"Please create a concise summary of the following conversation. 
-Focus on:
-- Main topics discussed
-- Key information shared
-- Important questions asked and answered
-- Context that would be valuable for continuing the conversation
-
-Conversation to summarize:
-{}
-
-Summary:"#,
-            conversation_text
-        );
-
-        // Initialize LLM manager
-        let llm_config = LLMConfig::default();
-        let llm_manager = LLMManager::new(llm_config)?;
-
-        // Create summarization request (use fast, cost-effective model)
-        let chat_messages = vec![
-            ChatMessage {
-                role: ChatRole::System,
-                content: "You are a helpful assistant that creates concise, informative conversation summaries. Keep summaries under 200 words while preserving essential context.".to_string(),
-                metadata: None,
-            },
-            ChatMessage {
-                role: ChatRole::User,
-                content: prompt,
-                metadata: None,
-            },
-        ];
-
-        let request = LLMRequest {
-            messages: chat_messages,
-            system_prompt: Some("Create concise, informative conversation summaries.".to_string()),
-            use_case: UseCase::SimpleQuery, // Use efficient model for summarization
-            priority: Priority::Low,        // Not urgent
-            max_tokens: Some(300),          // Limit response length
-            temperature: 0.3f32,            // Lower creativity for consistent summaries
-            timeout: Some(Duration::from_secs(30)),
-        };
-
-        // Send request and get summary
-        let response = llm_manager.generate_response(request).await?;
-
-        // Add metadata to summary
-        let enhanced_summary = format!(
-            "Conversation Summary ({} messages from {} to {}):\n\n{}",
-            messages.len(),
-            messages
-                .first()
-                .map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string())
-                .unwrap_or_default(),
-            messages
-                .last()
-                .map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string())
-                .unwrap_or_default(),
-            response.content.trim()
-        );
-
-        Ok(enhanced_summary)
-    }
-
-    /// Create a fallback summary when LLM is unavailable
-    fn create_fallback_summary(&self, messages: &[&Message]) -> String {
-        // Analyze message patterns for better fallback summary
-        let mut _topics: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
-        let mut user_questions = Vec::new();
-        let mut key_terms = std::collections::HashMap::new();
-
-        for message in messages {
-            let content_lower = message.content.to_lowercase();
-
-            // Extract questions
-            if message.role == MessageRole::User
-                && (content_lower.contains("?")
-                    || content_lower.starts_with("what")
-                    || content_lower.starts_with("how")
-                    || content_lower.starts_with("when")
-                    || content_lower.starts_with("where")
-                    || content_lower.starts_with("why")
-                    || content_lower.starts_with("who"))
-            {
-                user_questions.push(message.content.clone());
-            }
-
-            // Extract key terms (simple keyword extraction)
-            let words: Vec<&str> = content_lower
-                .split_whitespace()
-                .filter(|w| w.len() > 4 && !self.is_stop_word(w))
-                .collect();
-
-            for word in words {
-                *key_terms.entry(word.to_string()).or_insert(0) += 1;
-            }
-        }
-
-        // Get most frequent terms
-        let mut frequent_terms: Vec<_> = key_terms.into_iter().collect();
-        frequent_terms.sort_by(|a, b| b.1.cmp(&a.1));
-        frequent_terms.truncate(5);
-
-        // Build structured summary
-        let mut summary_parts = Vec::new();
-
-        summary_parts.push(format!(
-            "Conversation Summary ({} messages from {} to {})",
-            messages.len(),
-            messages
-                .first()
-                .map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string())
-                .unwrap_or_default(),
-            messages
-                .last()
-                .map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string())
-                .unwrap_or_default()
-        ));
-
-        if !user_questions.is_empty() {
-            summary_parts.push("Key Questions Asked:".to_string());
-            for (i, question) in user_questions.iter().take(3).enumerate() {
-                summary_parts.push(format!(
-                    "{}. {}",
-                    i + 1,
-                    question.chars().take(100).collect::<String>()
-                ));
-            }
-        }
-
-        if !frequent_terms.is_empty() {
-            let terms: Vec<String> = frequent_terms
-                .iter()
-                .map(|(term, _)| term.clone())
-                .collect();
-            summary_parts.push(format!("Main Topics: {}", terms.join(", ")));
-        }
-
-        // Add basic conversation flow
-        let user_messages = messages
-            .iter()
-            .filter(|m| m.role == MessageRole::User)
-            .count();
-        let assistant_messages = messages
-            .iter()
-            .filter(|m| m.role == MessageRole::Assistant)
-            .count();
-        summary_parts.push(format!(
-            "Conversation Flow: {} user messages, {} assistant responses",
-            user_messages, assistant_messages
-        ));
-
-        summary_parts.join("\n")
-    }
-
-    /// Simple stop word filter for keyword extraction
-    fn is_stop_word(&self, word: &str) -> bool {
-        matches!(
-            word,
-            "the"
-                | "and"
-                | "or"
-                | "but"
-                | "in"
-                | "on"
-                | "at"
-                | "to"
-                | "for"
-                | "of"
-                | "with"
-                | "by"
-                | "from"
-                | "up"
-                | "about"
-                | "into"
-                | "through"
-                | "during"
-                | "before"
-                | "after"
-                | "above"
-                | "below"
-                | "between"
-                | "among"
-                | "this"
-                | "that"
-                | "these"
-                | "those"
-                | "i"
-                | "you"
-                | "he"
-                | "she"
-                | "it"
-                | "we"
-                | "they"
-                | "me"
-                | "him"
-                | "her"
-                | "us"
-                | "them"
-                | "my"
-                | "your"
-                | "his"
-                | "its"
-                | "our"
-                | "their"
-                | "am"
-                | "is"
-                | "are"
-                | "was"
-                | "were"
-                | "be"
-                | "been"
-                | "being"
-                | "have"
-                | "has"
-                | "had"
-                | "do"
-                | "does"
-                | "did"
-                | "will"
-                | "would"
-                | "could"
-                | "should"
-                | "may"
-                | "might"
-                | "must"
-                | "can"
-        )
-    }
-
-    /// Count messages by role
-    pub fn count_messages_by_role(&self) -> HashMap<String, usize> {
-        let mut counts = HashMap::new();
-
-        for message in &self.messages {
-            let role_str = match &message.role {
-                MessageRole::User => "user",
-                MessageRole::Assistant => "assistant",
-                MessageRole::System => "system",
-            };
-            *counts.entry(role_str.to_string()).or_insert(0) += 1;
-        }
-
-        counts
-    }
-
-    /// Pin a message to keep it in context
-    pub fn pin_message(&mut self, message_id: &str) -> Result<()> {
-        if self.messages.iter().any(|m| m.id == message_id) {
-            self.context_window.pin_message(message_id.to_string());
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Message not found"))
-        }
-    }
-
-    /// Unpin a message
-    pub fn unpin_message(&mut self, message_id: &str) {
-        self.context_window.unpin_message(message_id);
-    }
-
-    /// Get current context messages
-    pub fn get_context_messages(&self) -> Vec<&Message> {
-        self.context_window.get_context_messages(&self.messages)
-    }
-
-    /// Get current topics
-    pub fn get_current_topics(&self) -> &[Topic] {
-        &self.topic_tracker.current_topics
-    }
-
-    /// Get topic history
-    pub fn get_topic_history(&self) -> &[TopicTransition] {
-        &self.topic_tracker.topic_history
-    }
-
-    /// Get performance metrics
-    pub fn get_performance_metrics(&self) -> &SessionMetrics {
-        &self.performance_metrics
-    }
-
-    /// Update user preference
-    pub fn set_preference(&mut self, key: String, value: String) {
-        self.user_preferences.insert(key, value);
-    }
-
-    /// Get user preference
-    pub fn get_preference(&self, key: &str) -> Option<&String> {
-        self.user_preferences.get(key)
-    }
-
-    /// Suspend the session
-    pub fn suspend(&mut self) {
-        self.session_state = SessionState::Suspended;
-        self.update_activity();
-    }
-
-    /// Resume the session
-    pub fn resume(&mut self) {
-        if matches!(self.session_state, SessionState::Suspended) {
-            self.session_state = SessionState::Active;
-            self.update_activity();
-        }
-    }
-
-    /// Mark session as idle
-    pub fn mark_idle(&mut self) {
-        if matches!(self.session_state, SessionState::Active) {
-            self.session_state = SessionState::Idle;
-        }
-    }
-
-    /// Export session to JSON
-    pub fn export_to_json(&self) -> Result<String> {
-        let data = self.to_data();
-        Ok(serde_json::to_string_pretty(&data)?)
-    }
-
-    /// Get conversation threads
-    pub fn get_threads(&self) -> Vec<ThreadInfo> {
-        let mut threads: HashMap<String, ThreadInfo> = HashMap::new();
-
-        for message in &self.messages {
-            if let Some(thread_id) = &message.thread_id {
-                let thread = threads
-                    .entry(thread_id.clone())
-                    .or_insert_with(|| ThreadInfo {
-                        id: thread_id.clone(),
-                        message_count: 0,
-                        first_message_time: message.timestamp,
-                        last_message_time: message.timestamp,
-                        participants: Vec::new(),
-                    });
-
-                thread.message_count += 1;
-                thread.last_message_time = thread.last_message_time.max(message.timestamp);
-                thread.first_message_time = thread.first_message_time.min(message.timestamp);
-
-                let role_str = match &message.role {
-                    MessageRole::User => "user",
-                    MessageRole::Assistant => "assistant",
-                    MessageRole::System => "system",
-                };
-
-                if !thread.participants.contains(&role_str.to_string()) {
-                    thread.participants.push(role_str.to_string());
-                }
-            }
-        }
-
-        threads.into_values().collect()
-    }
-}
-
-/// Chat manager for multiple sessions with persistence
-pub struct ChatManager {
+    /// RDF store for knowledge graph access
+    pub store: Arc<oxirs_core::Store>,
+    /// Session storage
     sessions: Arc<RwLock<HashMap<String, Arc<Mutex<ChatSession>>>>>,
-    store: Arc<oxirs_core::Store>,
-    persistence: Option<Arc<sled::Db>>,
-    persistence_path: Option<PathBuf>,
+    /// Session timeout duration
+    session_timeout: Duration,
+    /// Advanced RAG engine with quantum, consciousness, and reasoning capabilities
+    rag_engine: Arc<Mutex<rag::RagEngine>>,
+    /// LLM integration for natural language processing
+    llm_manager: Arc<Mutex<llm::LLMManager>>,
+    /// NL2SPARQL translation engine
+    nl2sparql_engine: Arc<Mutex<nl2sparql::NL2SPARQLEngine>>,
 }
 
-impl ChatManager {
-    pub async fn new(store: Arc<oxirs_core::Store>) -> Result<Self> {
+impl OxiRSChat {
+    /// Create a new OxiRS Chat instance with advanced AI capabilities
+    pub async fn new(config: ChatConfig, store: Arc<oxirs_core::Store>) -> Result<Self> {
+        // Initialize RAG engine with advanced features
+        let rag_config = rag::RagConfig {
+            retrieval: rag::RetrievalConfig {
+                enable_quantum_enhancement: true,
+                enable_consciousness_integration: true,
+                ..Default::default()
+            },
+            quantum: rag::QuantumConfig {
+                enabled: true,
+                ..Default::default()
+            },
+            consciousness: rag::consciousness::ConsciousnessConfig {
+                enabled: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        
+        let mut rag_engine = rag::RagEngine::new(rag_config, store.clone() as Arc<dyn oxirs_core::Store>);
+        rag_engine.initialize().await
+            .context("Failed to initialize RAG engine")?;
+        
+        // Initialize LLM manager
+        let llm_config = llm::LLMConfig::default();
+        let llm_manager = llm::LLMManager::new(llm_config)?;
+        
+        // Initialize NL2SPARQL engine
+        let nl2sparql_config = nl2sparql::NL2SPARQLConfig::default();
+        let nl2sparql_engine = nl2sparql::NL2SPARQLEngine::new(nl2sparql_config, store.clone())?;
+        
         Ok(Self {
-            sessions: Arc::new(RwLock::new(HashMap::new())),
+            config,
             store,
-            persistence: None,
-            persistence_path: None,
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            session_timeout: Duration::from_secs(3600), // 1 hour default
+            rag_engine: Arc::new(Mutex::new(rag_engine)),
+            llm_manager: Arc::new(Mutex::new(llm_manager)),
+            nl2sparql_engine: Arc::new(Mutex::new(nl2sparql_engine)),
         })
     }
 
-    pub async fn with_persistence(
-        store: Arc<oxirs_core::Store>,
-        persistence_path: impl AsRef<Path>,
-    ) -> Result<Self> {
-        let db = sled::open(&persistence_path)?;
-        let mut manager = Self {
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            store,
-            persistence: Some(Arc::new(db)),
-            persistence_path: Some(persistence_path.as_ref().to_path_buf()),
-        };
-
-        // Load existing sessions
-        manager.load_sessions().await?;
-
-        // Start expiration checker
-        manager.start_expiration_checker();
-
-        Ok(manager)
-    }
-
-    async fn load_sessions(&mut self) -> Result<()> {
-        if let Some(db) = &self.persistence {
-            let mut sessions = self.sessions.write().await;
-            let mut loaded_count = 0;
-            let mut skipped_count = 0;
-            let mut error_count = 0;
-
-            info!("Starting session recovery from persistence store");
-
-            for item in db.iter() {
-                match item {
-                    Ok((key, value)) => {
-                        let session_id = String::from_utf8_lossy(&key).to_string();
-
-                        match bincode::deserialize::<SessionData>(&value) {
-                            Ok(session_data) => {
-                                // Validate session data integrity
-                                if self.validate_session_data(&session_data) {
-                                    let session =
-                                        ChatSession::from_data(session_data, self.store.clone());
-                                    if !session.is_expired() {
-                                        sessions.insert(
-                                            session_id.clone(),
-                                            Arc::new(Mutex::new(session)),
-                                        );
-                                        loaded_count += 1;
-                                        debug!("Recovered session: {}", session_id);
-                                    } else {
-                                        skipped_count += 1;
-                                        debug!("Skipped expired session: {}", session_id);
-                                    }
-                                } else {
-                                    error_count += 1;
-                                    warn!("Invalid session data for session: {}", session_id);
-                                }
-                            }
-                            Err(e) => {
-                                error_count += 1;
-                                error!("Failed to deserialize session {}: {}", session_id, e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error_count += 1;
-                        error!("Failed to read session from persistence: {}", e);
-                    }
-                }
-            }
-
-            info!(
-                "Session recovery complete: {} loaded, {} skipped (expired), {} errors",
-                loaded_count, skipped_count, error_count
-            );
-        }
-        Ok(())
-    }
-
-    fn validate_session_data(&self, session_data: &SessionData) -> bool {
-        // Basic validation checks
-        if session_data.id.is_empty() {
-            return false;
-        }
-
-        // Check if timestamps are reasonable
-        let now = chrono::Utc::now();
-        if session_data.created_at > now || session_data.last_activity > now {
-            return false;
-        }
-
-        // Check if session is too old (older than 30 days)
-        let max_age = chrono::Duration::days(30);
-        if now - session_data.created_at > max_age {
-            return false;
-        }
-
-        true
-    }
-
-    async fn save_session(&self, session_id: &str) -> Result<()> {
-        if let Some(db) = &self.persistence {
-            let sessions = self.sessions.read().await;
-            if let Some(session_arc) = sessions.get(session_id) {
-                let session = session_arc.lock().await;
-                let data = session.to_data();
-
-                // Validate data before serialization
-                if !self.validate_session_data(&data) {
-                    return Err(anyhow::anyhow!(
-                        "Invalid session data for session: {}",
-                        session_id
-                    ));
-                }
-
-                match bincode::serialize(&data) {
-                    Ok(serialized) => {
-                        // Use a transaction-like approach with a temporary key
-                        let temp_key = format!("{}_temp", session_id);
-
-                        // Write to temporary key first
-                        db.insert(temp_key.as_bytes(), serialized.clone())?;
-                        db.flush()?;
-
-                        // Then move to actual key (atomic on most filesystems)
-                        db.insert(session_id.as_bytes(), serialized)?;
-                        db.remove(temp_key.as_bytes())?;
-                        db.flush()?;
-
-                        debug!("Successfully saved session: {}", session_id);
-                    }
-                    Err(e) => {
-                        error!("Failed to serialize session {}: {}", session_id, e);
-                        return Err(anyhow::anyhow!("Serialization failed: {}", e));
-                    }
-                }
-            } else {
-                warn!("Attempted to save non-existent session: {}", session_id);
-            }
-        }
-        Ok(())
-    }
-
+    /// Create a new chat session
     pub async fn create_session(&self, session_id: String) -> Result<Arc<Mutex<ChatSession>>> {
-        let session = ChatSession::new(session_id.clone(), self.store.clone());
-        let session_arc = Arc::new(Mutex::new(session));
-
-        {
-            let mut sessions = self.sessions.write().await;
-            sessions.insert(session_id.clone(), session_arc.clone());
-        }
-
-        self.save_session(&session_id).await?;
-        Ok(session_arc)
+        let session = Arc::new(Mutex::new(ChatSession::new(session_id.clone(), self.store.clone())));
+        
+        let mut sessions = self.sessions.write().await;
+        sessions.insert(session_id, session.clone());
+        
+        Ok(session)
     }
 
+    /// Get an existing session
     pub async fn get_session(&self, session_id: &str) -> Option<Arc<Mutex<ChatSession>>> {
         let sessions = self.sessions.read().await;
         sessions.get(session_id).cloned()
     }
 
-    pub async fn get_or_create_session(
-        &self,
-        session_id: String,
-    ) -> Result<Arc<Mutex<ChatSession>>> {
-        // Try to get existing session first
-        if let Some(session) = self.get_session(&session_id).await {
-            // Update activity and save
-            {
-                let mut session_guard = session.lock().await;
-
-                // Check if session is still valid
-                if session_guard.is_expired() {
-                    warn!("Session {} has expired, creating new session", session_id);
-                    drop(session_guard);
-
-                    // Remove expired session and create new one
-                    self.remove_session(&session_id).await?;
-                    return self.create_session(session_id).await;
-                }
-
-                session_guard.update_activity();
-            }
-
-            // Save updated session asynchronously (don't block on save errors)
-            if let Err(e) = self.save_session(&session_id).await {
-                warn!("Failed to save session activity update: {}", e);
-            }
-
-            Ok(session)
-        } else {
-            self.create_session(session_id).await
-        }
+    /// Remove a session
+    pub async fn remove_session(&self, session_id: &str) -> bool {
+        let mut sessions = self.sessions.write().await;
+        sessions.remove(session_id).is_some()
     }
 
-    pub async fn remove_session(&self, session_id: &str) -> Result<()> {
-        {
-            let mut sessions = self.sessions.write().await;
+    /// List all active sessions
+    pub async fn list_sessions(&self) -> Vec<String> {
+        let sessions = self.sessions.read().await;
+        sessions.keys().cloned().collect()
+    }
+
+    /// Clean up expired sessions
+    pub async fn cleanup_expired_sessions(&self) -> usize {
+        let mut sessions = self.sessions.write().await;
+        let mut expired_sessions = Vec::new();
+
+        for (session_id, session) in sessions.iter() {
+            if let Ok(session_guard) = session.try_lock() {
+                if session_guard.should_expire(self.session_timeout) {
+                    expired_sessions.push(session_id.clone());
+                }
+            }
+        }
+
+        for session_id in &expired_sessions {
             sessions.remove(session_id);
         }
 
-        if let Some(db) = &self.persistence {
-            db.remove(session_id.as_bytes())?;
-            db.flush()?;
-        }
-
-        Ok(())
+        expired_sessions.len()
     }
 
-    pub async fn save_all_sessions(&self) -> Result<()> {
-        let sessions = self.sessions.read().await;
-        for session_id in sessions.keys() {
-            self.save_session(session_id).await?;
-        }
-        Ok(())
-    }
-
-    pub async fn cleanup_expired_sessions(&self) -> Result<usize> {
-        let mut expired_count = 0;
-        let mut error_count = 0;
-
-        // Get list of expired sessions
-        let expired_ids = {
-            let sessions = self.sessions.read().await;
-            let mut expired_ids = Vec::new();
-
-            for (id, session_arc) in sessions.iter() {
-                match session_arc.try_lock() {
-                    Ok(session) => {
-                        if session.is_expired() {
-                            expired_ids.push(id.clone());
-                        }
-                    }
-                    Err(_) => {
-                        // Session is locked, skip for now
-                        debug!("Skipping cleanup for locked session: {}", id);
-                    }
-                }
-            }
-            expired_ids
-        };
-
-        info!("Found {} expired sessions to clean up", expired_ids.len());
-
-        // Remove expired sessions
-        for id in expired_ids {
-            match self.remove_session(&id).await {
-                Ok(_) => {
-                    expired_count += 1;
-                    debug!("Cleaned up expired session: {}", id);
-                }
-                Err(e) => {
-                    error_count += 1;
-                    error!("Failed to clean up session {}: {}", id, e);
-                }
-            }
-        }
-
-        if error_count > 0 {
-            warn!(
-                "Cleanup completed with {} errors out of {} expired sessions",
-                error_count,
-                expired_count + error_count
-            );
-        } else if expired_count > 0 {
-            info!("Successfully cleaned up {} expired sessions", expired_count);
-        }
-
-        Ok(expired_count)
-    }
-
-    fn start_expiration_checker(&self) {
-        let manager = self.sessions.clone();
-        let persistence = self.persistence.clone();
-
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(300)); // Check every 5 minutes
-            let mut cleanup_interval = tokio::time::interval(Duration::from_secs(3600)); // Cleanup every hour
-
-            loop {
-                tokio::select! {
-                    _ = interval.tick() => {
-                        Self::check_session_health(&manager).await;
-                    }
-                    _ = cleanup_interval.tick() => {
-                        Self::cleanup_expired_sessions_background(&manager, &persistence).await;
-                    }
-                }
-            }
-        });
-    }
-
-    async fn check_session_health(manager: &Arc<RwLock<HashMap<String, Arc<Mutex<ChatSession>>>>>) {
-        let sessions = manager.read().await;
-        let mut healthy_count = 0;
-        let mut idle_count = 0;
-        let mut expired_count = 0;
-        let mut error_count = 0;
-
-        for (id, session_arc) in sessions.iter() {
-            match session_arc.try_lock() {
-                Ok(session) => {
-                    match session.session_state {
-                        SessionState::Active => healthy_count += 1,
-                        SessionState::Idle => idle_count += 1,
-                        SessionState::Expired => expired_count += 1,
-                        SessionState::Suspended => {}
-                    }
-
-                    // Check for sessions with high error rates
-                    let error_rate = if session.performance_metrics.total_queries > 0 {
-                        session.performance_metrics.failed_queries as f64
-                            / session.performance_metrics.total_queries as f64
-                    } else {
-                        0.0
-                    };
-
-                    if error_rate > 0.5 && session.performance_metrics.total_queries > 10 {
-                        warn!(
-                            "Session {} has high error rate: {:.2}%",
-                            id,
-                            error_rate * 100.0
-                        );
-                        error_count += 1;
-                    }
-                }
-                Err(_) => {
-                    // Session is locked, that's normal
-                }
-            }
-        }
-
-        let total_sessions = sessions.len();
-        drop(sessions);
-
-        debug!(
-            "Session health check: {} total, {} healthy, {} idle, {} expired, {} high-error",
-            total_sessions, healthy_count, idle_count, expired_count, error_count
-        );
-
-        // Log warnings for concerning patterns
-        if expired_count > total_sessions / 4 {
-            warn!(
-                "High number of expired sessions: {}/{}",
-                expired_count, total_sessions
-            );
-        }
-
-        if error_count > 0 {
-            warn!("Found {} sessions with high error rates", error_count);
-        }
-    }
-
-    async fn cleanup_expired_sessions_background(
-        manager: &Arc<RwLock<HashMap<String, Arc<Mutex<ChatSession>>>>>,
-        persistence: &Option<Arc<sled::Db>>,
-    ) {
-        let mut expired_ids = Vec::new();
-
-        // Collect expired session IDs
-        {
-            let sessions = manager.read().await;
-            for (id, session_arc) in sessions.iter() {
-                if let Ok(session) = session_arc.try_lock() {
-                    if session.is_expired() {
-                        expired_ids.push(id.clone());
-                    }
-                }
-            }
-        }
-
-        if expired_ids.is_empty() {
-            return;
-        }
-
-        info!(
-            "Background cleanup removing {} expired sessions",
-            expired_ids.len()
-        );
-
-        // Remove expired sessions
-        let mut removed_count = 0;
-        for id in expired_ids {
-            // Remove from memory
-            {
-                let mut sessions = manager.write().await;
-                if sessions.remove(&id).is_some() {
-                    removed_count += 1;
-                }
-            }
-
-            // Remove from persistence
-            if let Some(db) = persistence {
-                if let Err(e) = db.remove(id.as_bytes()) {
-                    error!("Failed to remove session {} from persistence: {}", id, e);
-                }
-            }
-        }
-
-        if removed_count > 0 {
-            info!(
-                "Background cleanup removed {} expired sessions",
-                removed_count
-            );
-
-            // Flush persistence changes
-            if let Some(db) = persistence {
-                if let Err(e) = db.flush() {
-                    error!("Failed to flush persistence after cleanup: {}", e);
-                }
-            }
-        }
-    }
-
-    pub async fn get_active_session_count(&self) -> usize {
+    /// Get session count
+    pub async fn session_count(&self) -> usize {
         let sessions = self.sessions.read().await;
         sessions.len()
     }
 
-    pub async fn get_session_stats(&self) -> SessionStats {
-        let sessions = self.sessions.read().await;
-        let mut stats = SessionStats::default();
-        stats.total_sessions = sessions.len();
+    /// Process a chat message with advanced AI capabilities (Quantum RAG, Consciousness, Reasoning)
+    pub async fn process_message(
+        &self,
+        session_id: &str,
+        user_message: String,
+    ) -> Result<Message> {
+        let processing_start = std::time::Instant::now();
+        info!("Processing message for session {}: {}", session_id, 
+             user_message.chars().take(100).collect::<String>());
 
-        for session_arc in sessions.values() {
-            let session = session_arc.lock().await;
-            match session.session_state {
-                SessionState::Active => stats.active_sessions += 1,
-                SessionState::Idle => stats.idle_sessions += 1,
-                SessionState::Expired => stats.expired_sessions += 1,
-                SessionState::Suspended => stats.suspended_sessions += 1,
-            }
-            stats.total_messages += session.messages.len();
-        }
+        let session = self.get_session(session_id).await
+            .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
-        stats
-    }
+        let mut session = session.lock().await;
+        
+        // Create user message
+        let user_msg = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            role: MessageRole::User,
+            content: MessageContent::from_text(user_message.clone()),
+            timestamp: chrono::Utc::now(),
+            metadata: None,
+            thread_id: None,
+            parent_message_id: None,
+            token_count: Some(user_message.len() / 4), // Rough estimate
+            reactions: Vec::new(),
+            attachments: Vec::new(),
+            rich_elements: Vec::new(),
+        };
 
-    /// Recover a session from error state
-    pub async fn recover_session(&self, session_id: &str) -> Result<()> {
-        if let Some(session_arc) = self.get_session(session_id).await {
-            let mut session = session_arc.lock().await;
+        // Add user message to session
+        session.add_message(user_msg)?;
 
-            // Reset session state if it's in an error condition
-            match session.session_state {
-                SessionState::Expired => {
-                    session.session_state = SessionState::Active;
-                    session.update_activity();
-                }
-                SessionState::Suspended => {
-                    session.session_state = SessionState::Active;
-                    session.update_activity();
-                }
-                _ => {}
-            }
-
-            // Clear any error flags in performance metrics
-            if session.performance_metrics.failed_queries
-                > session.performance_metrics.successful_queries
-            {
-                tracing::warn!(
-                    "Session {} has high failure rate, resetting metrics",
-                    session_id
-                );
-                session.performance_metrics.failed_queries = 0;
-            }
-
-            drop(session);
-            self.save_session(session_id).await?;
-        }
-
-        Ok(())
-    }
-
-    /// Validate and repair persistence database
-    pub async fn validate_persistence(&self) -> Result<ValidationReport> {
-        let mut report = ValidationReport::default();
-
-        if let Some(db) = &self.persistence {
-            // Check database health
-            report.total_entries = db.len();
-
-            let mut corrupted_entries = Vec::new();
-            let mut recoverable_entries = Vec::new();
-
-            for item in db.iter() {
-                match item {
-                    Ok((key, value)) => {
-                        let session_id = String::from_utf8_lossy(&key).to_string();
-
-                        match bincode::deserialize::<SessionData>(&value) {
-                            Ok(session_data) => {
-                                // Validate session data
-                                if session_data.messages.is_empty()
-                                    && session_data.performance_metrics.total_queries > 0
-                                {
-                                    report.inconsistent_entries += 1;
-                                    recoverable_entries.push(session_id.clone());
-                                }
-                                report.valid_entries += 1;
-                            }
-                            Err(e) => {
-                                report.corrupted_entries += 1;
-                                corrupted_entries.push(session_id.clone());
-                                tracing::error!("Corrupted session data for {}: {}", session_id, e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        report.read_errors += 1;
-                        tracing::error!("Database read error: {}", e);
-                    }
-                }
-            }
-
-            // Remove corrupted entries
-            for id in corrupted_entries {
-                db.remove(id.as_bytes())?;
-                report.removed_entries += 1;
-            }
-
-            // Attempt to recover inconsistent entries
-            for id in recoverable_entries {
-                if let Ok(Some(value)) = db.get(id.as_bytes()) {
-                    if let Ok(mut session_data) = bincode::deserialize::<SessionData>(&value) {
-                        // Reset inconsistent state
-                        session_data.performance_metrics = SessionMetrics::default();
-
-                        if let Ok(serialized) = bincode::serialize(&session_data) {
-                            db.insert(id.as_bytes(), serialized)?;
-                            report.recovered_entries += 1;
-                        }
-                    }
-                }
-            }
-
-            db.flush()?;
-        }
-
-        Ok(report)
-    }
-
-    /// Create a backup of all sessions with integrity checks
-    pub async fn backup_sessions(&self, backup_path: impl AsRef<Path>) -> Result<BackupReport> {
-        let mut report = BackupReport::default();
-        let backup_dir = backup_path.as_ref();
-        std::fs::create_dir_all(backup_dir)?;
-
-        // Create a manifest file for backup integrity
-        let manifest_path = backup_dir.join("backup_manifest.json");
-        let mut manifest = serde_json::Map::new();
-        manifest.insert(
-            "created_at".to_string(),
-            serde_json::Value::String(chrono::Utc::now().to_rfc3339()),
-        );
-        manifest.insert(
-            "version".to_string(),
-            serde_json::Value::String("1.0".to_string()),
-        );
-
-        let sessions = self.sessions.read().await;
-        report.total_sessions = sessions.len();
-
-        let mut session_hashes = serde_json::Map::new();
-
-        for (session_id, session_arc) in sessions.iter() {
-            match session_arc.try_lock() {
-                Ok(session) => {
-                    let session_data = session.to_data();
-
-                    // Validate session data before backup
-                    if !self.validate_session_data(&session_data) {
-                        report.failed_backups += 1;
-                        error!("Invalid session data for {}, skipping backup", session_id);
-                        continue;
-                    }
-
-                    let backup_file = backup_dir.join(format!("{}.json", session_id));
-                    match serde_json::to_string_pretty(&session_data) {
-                        Ok(json) => {
-                            // Calculate hash for integrity checking
-                            use std::collections::hash_map::DefaultHasher;
-                            use std::hash::{Hash, Hasher};
-
-                            let mut hasher = DefaultHasher::new();
-                            json.hash(&mut hasher);
-                            let hash = hasher.finish();
-
-                            match std::fs::write(&backup_file, &json) {
-                                Ok(_) => {
-                                    report.successful_backups += 1;
-                                    session_hashes.insert(
-                                        session_id.clone(),
-                                        serde_json::Value::Number(serde_json::Number::from(hash)),
-                                    );
-                                    debug!("Backed up session: {}", session_id);
-                                }
-                                Err(e) => {
-                                    report.failed_backups += 1;
-                                    error!(
-                                        "Failed to write backup for session {}: {}",
-                                        session_id, e
-                                    );
-                                }
-                            }
-                        }
+        // **ADVANCED AI PROCESSING PIPELINE**
+        
+        // 1. Advanced RAG retrieval with quantum optimization and consciousness
+        debug!("Starting advanced RAG retrieval with quantum and consciousness capabilities");
+        let assembled_context = {
+            let mut rag_engine = self.rag_engine.lock().await;
+            rag_engine.retrieve(&user_message).await
+                .context("Failed to perform advanced RAG retrieval")?
+        };
+        
+        // 2. Determine if this is a SPARQL-related query
+        let (sparql_query, sparql_results) = if self.is_sparql_query(&user_message) {
+            debug!("Detected SPARQL query, performing NL2SPARQL translation");
+            let mut nl2sparql = self.nl2sparql_engine.lock().await;
+            match nl2sparql.translate_to_sparql(&user_message, &assembled_context).await {
+                Ok(sparql) => {
+                    debug!("Generated SPARQL: {}", sparql);
+                    // Execute SPARQL query
+                    match self.execute_sparql(&sparql).await {
+                        Ok(results) => (Some(sparql), Some(results)),
                         Err(e) => {
-                            report.failed_backups += 1;
-                            error!("Failed to serialize session {}: {}", session_id, e);
+                            warn!("SPARQL execution failed: {}", e);
+                            (Some(sparql), None)
                         }
                     }
                 }
-                Err(_) => {
-                    // Session is locked, skip for now but don't count as failure
-                    warn!("Session {} is locked, skipping backup", session_id);
-                    report.total_sessions -= 1; // Adjust count
-                }
-            }
-        }
-
-        // Write manifest with session hashes
-        manifest.insert(
-            "sessions".to_string(),
-            serde_json::Value::Object(session_hashes),
-        );
-        manifest.insert(
-            "total_sessions".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(report.successful_backups)),
-        );
-
-        if let Err(e) = std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?) {
-            warn!("Failed to write backup manifest: {}", e);
-        }
-
-        report.backup_path = backup_dir.to_path_buf();
-        report.timestamp = chrono::Utc::now();
-
-        info!(
-            "Backup completed: {}/{} sessions backed up successfully",
-            report.successful_backups, report.total_sessions
-        );
-
-        Ok(report)
-    }
-
-    /// Restore sessions from backup with integrity verification
-    pub async fn restore_sessions(
-        &mut self,
-        backup_path: impl AsRef<Path>,
-    ) -> Result<RestoreReport> {
-        let mut report = RestoreReport::default();
-        let backup_dir = backup_path.as_ref();
-
-        if !backup_dir.exists() {
-            return Err(anyhow::anyhow!("Backup directory does not exist"));
-        }
-
-        // Try to load and verify backup manifest
-        let manifest_path = backup_dir.join("backup_manifest.json");
-        let manifest = if manifest_path.exists() {
-            match std::fs::read_to_string(&manifest_path) {
-                Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
-                    Ok(manifest) => {
-                        info!("Found backup manifest, verifying backup integrity");
-                        Some(manifest)
-                    }
-                    Err(e) => {
-                        warn!("Invalid backup manifest: {}", e);
-                        None
-                    }
-                },
                 Err(e) => {
-                    warn!("Failed to read backup manifest: {}", e);
-                    None
+                    warn!("NL2SPARQL translation failed: {}", e);
+                    (None, None)
                 }
             }
         } else {
-            warn!("No backup manifest found, proceeding without integrity checks");
-            None
+            (None, None)
         };
 
-        // Get session hashes from manifest for verification
-        let session_hashes = manifest
-            .as_ref()
-            .and_then(|m| m.get("sessions"))
-            .and_then(|s| s.as_object())
-            .cloned();
+        // 3. Generate response using LLM with enhanced context
+        debug!("Generating response using LLM with assembled context");
+        let response_text = {
+            let mut llm_manager = self.llm_manager.lock().await;
+            self.generate_enhanced_response(
+                &mut *llm_manager,
+                &user_message,
+                &assembled_context,
+                sparql_query.as_ref(),
+                sparql_results.as_ref()
+            ).await
+                .context("Failed to generate enhanced response")?
+        };
 
-        for entry in std::fs::read_dir(backup_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            // Skip non-JSON files and the manifest
-            if path.extension().and_then(|s| s.to_str()) != Some("json")
-                || path.file_name().and_then(|n| n.to_str()) == Some("backup_manifest.json")
-            {
-                continue;
-            }
-
-            report.total_files += 1;
-
-            match std::fs::read_to_string(&path) {
-                Ok(json) => {
-                    // Verify hash if manifest is available
-                    if let Some(ref hashes) = session_hashes {
-                        let session_id = path
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("unknown");
-
-                        if let Some(expected_hash) = hashes.get(session_id).and_then(|h| h.as_u64())
-                        {
-                            use std::collections::hash_map::DefaultHasher;
-                            use std::hash::{Hash, Hasher};
-
-                            let mut hasher = DefaultHasher::new();
-                            json.hash(&mut hasher);
-                            let actual_hash = hasher.finish();
-
-                            if actual_hash != expected_hash {
-                                error!(
-                                    "Hash mismatch for session {}, skipping restore",
-                                    session_id
-                                );
-                                report.failed_restorations += 1;
-                                continue;
-                            }
-                        }
-                    }
-
-                    match serde_json::from_str::<SessionData>(&json) {
-                        Ok(session_data) => {
-                            // Validate session data before restoring
-                            if !self.validate_session_data(&session_data) {
-                                error!("Invalid session data in backup file {:?}", path);
-                                report.failed_restorations += 1;
-                                continue;
-                            }
-
-                            let session = ChatSession::from_data(session_data, self.store.clone());
-                            let session_id = session.id.clone();
-
-                            // Check if session already exists
-                            if self.get_session(&session_id).await.is_some() {
-                                warn!("Session {} already exists, skipping restore", session_id);
-                                report.failed_restorations += 1;
-                                continue;
-                            }
-
-                            // Add to sessions
-                            {
-                                let mut sessions = self.sessions.write().await;
-                                sessions.insert(session_id.clone(), Arc::new(Mutex::new(session)));
-                            }
-
-                            // Save to persistence
-                            match self.save_session(&session_id).await {
-                                Ok(_) => {
-                                    report.restored_sessions += 1;
-                                    debug!("Restored session: {}", session_id);
-                                }
-                                Err(e) => {
-                                    error!("Failed to save restored session {}: {}", session_id, e);
-                                    report.failed_restorations += 1;
-
-                                    // Remove from memory since save failed
-                                    let mut sessions = self.sessions.write().await;
-                                    sessions.remove(&session_id);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            report.failed_restorations += 1;
-                            error!("Failed to deserialize session from {:?}: {}", path, e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    report.failed_restorations += 1;
-                    error!("Failed to read backup file {:?}: {}", path, e);
-                }
+        // 4. Create rich content elements based on context
+        let mut rich_elements = Vec::new();
+        
+        // Add quantum results visualization if available
+        if let Some(ref quantum_results) = assembled_context.quantum_results {
+            if !quantum_results.is_empty() {
+                rich_elements.push(RichContentElement::QuantumVisualization {
+                    results: quantum_results.clone(),
+                    entanglement_map: HashMap::new(),
+                });
             }
         }
+        
+        // Add consciousness insights if available
+        if let Some(ref consciousness_insights) = assembled_context.consciousness_insights {
+            if !consciousness_insights.is_empty() {
+                rich_elements.push(RichContentElement::ConsciousnessInsights {
+                    insights: consciousness_insights.clone(),
+                    awareness_level: 0.8, // From consciousness processing
+                });
+            }
+        }
+        
+        // Add reasoning chains if available
+        if let Some(ref reasoning_results) = assembled_context.reasoning_results {
+            rich_elements.push(RichContentElement::ReasoningChain {
+                reasoning_steps: reasoning_results.reasoning_chain.clone(),
+                confidence_score: reasoning_results.reasoning_quality.overall_quality,
+            });
+        }
+        
+        // Add SPARQL results if available
+        if let Some(ref results) = sparql_results {
+            rich_elements.push(RichContentElement::SPARQLResults {
+                query: sparql_query.unwrap_or_default(),
+                results: results.clone(),
+                execution_time: processing_start.elapsed(),
+            });
+        }
 
-        info!(
-            "Session restore completed: {}/{} sessions restored successfully",
-            report.restored_sessions, report.total_files
-        );
+        // 5. Create comprehensive response message
+        let response = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            role: MessageRole::Assistant,
+            content: MessageContent::from_text(response_text),
+            timestamp: chrono::Utc::now(),
+            metadata: Some(self.create_response_metadata(&assembled_context, processing_start.elapsed())),
+            thread_id: None,
+            parent_message_id: Some(user_msg.id.clone()),
+            token_count: Some(response_text.len() / 4), // Rough estimate
+            reactions: Vec::new(),
+            attachments: Vec::new(),
+            rich_elements,
+        };
 
-        Ok(report)
+        // Add response to session
+        session.add_message(response.clone())?;
+
+        info!("Advanced AI processing completed in {:?} with context score: {:.3}", 
+              processing_start.elapsed(), assembled_context.context_score);
+
+        Ok(response)
     }
 
-    /// Concurrent session creation with proper locking
-    pub async fn create_session_concurrent(
+    /// Helper: Detect if user message contains SPARQL-related intent
+    fn is_sparql_query(&self, message: &str) -> bool {
+        let sparql_keywords = [
+            "select", "construct", "ask", "describe", "insert", "delete", "where",
+            "prefix", "base", "distinct", "reduced", "from", "named", "graph",
+            "optional", "union", "minus", "bind", "values", "filter", "order by",
+            "group by", "having", "limit", "offset"
+        ];
+        
+        let lowercase_message = message.to_lowercase();
+        sparql_keywords.iter().any(|&keyword| lowercase_message.contains(keyword)) ||
+        lowercase_message.contains("sparql") ||
+        lowercase_message.contains("query") ||
+        lowercase_message.contains("find all") ||
+        lowercase_message.contains("show me") ||
+        lowercase_message.contains("list")
+    }
+
+    /// Helper: Execute SPARQL query against the store
+    async fn execute_sparql(&self, sparql: &str) -> Result<Vec<HashMap<String, String>>> {
+        debug!("Executing SPARQL query: {}", sparql);
+        
+        // Prepare query against the store
+        let query = self.store.prepare_query(sparql)
+            .context("Failed to prepare SPARQL query")?;
+        
+        // Execute query and collect results
+        let results = query.exec()
+            .context("Failed to execute SPARQL query")?;
+        
+        let mut result_maps = Vec::new();
+        
+        // Convert results to string maps for easier handling
+        // Note: This is a simplified conversion - real implementation would handle all RDF term types
+        for solution in results {
+            let mut result_map = HashMap::new();
+            for (var, term) in solution.iter() {
+                result_map.insert(var.to_string(), term.to_string());
+            }
+            result_maps.push(result_map);
+        }
+        
+        debug!("SPARQL query returned {} results", result_maps.len());
+        Ok(result_maps)
+    }
+
+    /// Helper: Generate enhanced response using LLM with all available context
+    async fn generate_enhanced_response(
         &self,
-        session_id: String,
-    ) -> Result<Arc<Mutex<ChatSession>>> {
-        // Use a more sophisticated approach to prevent race conditions
-        // First, try to insert a placeholder
-        {
-            let mut sessions = self.sessions.write().await;
-            if sessions.contains_key(&session_id) {
-                drop(sessions);
-                return self
-                    .get_session(&session_id)
-                    .await
-                    .ok_or_else(|| anyhow::anyhow!("Session disappeared during creation"));
+        llm_manager: &mut llm::LLMManager,
+        user_message: &str,
+        assembled_context: &rag::AssembledContext,
+        sparql_query: Option<&String>,
+        sparql_results: Option<&Vec<HashMap<String, String>>>,
+    ) -> Result<String> {
+        // Build comprehensive prompt with all context
+        let mut prompt = String::new();
+        
+        // System prompt
+        prompt.push_str("You are an advanced AI assistant with access to a knowledge graph. ");
+        prompt.push_str("You have quantum-enhanced retrieval, consciousness-aware processing, ");
+        prompt.push_str("and advanced reasoning capabilities. ");
+        prompt.push_str("Provide helpful, accurate, and insightful responses based on the available context.\n\n");
+        
+        // User query
+        prompt.push_str(&format!("User Query: {}\n\n", user_message));
+        
+        // Add semantic search results
+        if !assembled_context.semantic_results.is_empty() {
+            prompt.push_str("Relevant Knowledge Graph Facts:\n");
+            for (i, result) in assembled_context.semantic_results.iter().take(5).enumerate() {
+                prompt.push_str(&format!("{}. {} (relevance: {:.2})\n", 
+                                       i + 1, result.triple, result.score));
             }
-
-            // Insert a temporary placeholder to reserve the slot
-            let temp_session = ChatSession::new(session_id.clone(), self.store.clone());
-            let session_arc = Arc::new(Mutex::new(temp_session));
-            sessions.insert(session_id.clone(), session_arc.clone());
+            prompt.push('\n');
         }
-
-        // Now we have exclusive access to this session ID
-        // Save the session to persistence
-        match self.save_session(&session_id).await {
-            Ok(_) => {
-                info!("Created new session: {}", session_id);
-                Ok(self.get_session(&session_id).await.unwrap())
+        
+        // Add entity information
+        if !assembled_context.extracted_entities.is_empty() {
+            prompt.push_str("Extracted Entities:\n");
+            for entity in assembled_context.extracted_entities.iter().take(10) {
+                prompt.push_str(&format!("- {} (type: {:?}, confidence: {:.2})\n", 
+                                       entity.text, entity.entity_type, entity.confidence));
             }
-            Err(e) => {
-                // Remove the failed session from memory
-                self.sessions.write().await.remove(&session_id);
-                Err(e)
+            prompt.push('\n');
+        }
+        
+        // Add reasoning results if available
+        if let Some(ref reasoning_results) = assembled_context.reasoning_results {
+            prompt.push_str("Advanced Reasoning Analysis:\n");
+            for step in reasoning_results.reasoning_chain.iter().take(3) {
+                prompt.push_str(&format!("- {}: {} (confidence: {:.2})\n", 
+                                       step.reasoning_type, step.conclusion, step.confidence));
             }
+            prompt.push('\n');
         }
-    }
-
-    /// Batch session operations for efficiency
-    pub async fn save_multiple_sessions(&self, session_ids: &[String]) -> Result<Vec<String>> {
-        let mut successful_saves = Vec::new();
-        let mut errors = Vec::new();
-
-        for session_id in session_ids {
-            match self.save_session(session_id).await {
-                Ok(_) => successful_saves.push(session_id.clone()),
-                Err(e) => errors.push(format!("{}: {}", session_id, e)),
-            }
-        }
-
-        if !errors.is_empty() {
-            warn!("Some session saves failed: {:?}", errors);
-        }
-
-        debug!(
-            "Batch save completed: {}/{} sessions saved",
-            successful_saves.len(),
-            session_ids.len()
-        );
-        Ok(successful_saves)
-    }
-
-    /// Get detailed session metrics
-    pub async fn get_detailed_metrics(&self) -> DetailedSessionMetrics {
-        let sessions = self.sessions.read().await;
-        let mut metrics = DetailedSessionMetrics::default();
-
-        for (_session_id, session_arc) in sessions.iter() {
-            if let Ok(session) = session_arc.try_lock() {
-                metrics.total_sessions += 1;
-
-                match session.session_state {
-                    SessionState::Active => metrics.active_sessions += 1,
-                    SessionState::Idle => metrics.idle_sessions += 1,
-                    SessionState::Expired => metrics.expired_sessions += 1,
-                    SessionState::Suspended => metrics.suspended_sessions += 1,
+        
+        // Add consciousness insights if available
+        if let Some(ref consciousness_insights) = assembled_context.consciousness_insights {
+            if !consciousness_insights.is_empty() {
+                prompt.push_str("Consciousness-Aware Insights:\n");
+                for insight in consciousness_insights.iter().take(3) {
+                    prompt.push_str(&format!("- {} (confidence: {:.2})\n", 
+                                           insight.description, insight.confidence));
                 }
-
-                metrics.total_messages += session.messages.len();
-                metrics.total_tokens += session.performance_metrics.total_tokens_processed;
-
-                if session.performance_metrics.total_queries > 0 {
-                    let error_rate = session.performance_metrics.failed_queries as f64
-                        / session.performance_metrics.total_queries as f64;
-                    if error_rate > 0.1 {
-                        metrics.high_error_sessions += 1;
+                prompt.push('\n');
+            }
+        }
+        
+        // Add SPARQL information if available
+        if let Some(sparql) = sparql_query {
+            prompt.push_str(&format!("Generated SPARQL Query:\n{}\n\n", sparql));
+            
+            if let Some(results) = sparql_results {
+                prompt.push_str("SPARQL Query Results:\n");
+                for (i, result) in results.iter().take(10).enumerate() {
+                    prompt.push_str(&format!("{}. ", i + 1));
+                    for (key, value) in result {
+                        prompt.push_str(&format!("{}: {} ", key, value));
                     }
-
-                    metrics.average_response_time +=
-                        session.performance_metrics.average_response_time_ms;
-                    metrics.response_time_samples += 1;
+                    prompt.push('\n');
                 }
-
-                let session_age = chrono::Utc::now() - session.created_at;
-                metrics.total_session_age += session_age;
-
-                if session.messages.len() > metrics.max_messages_per_session {
-                    metrics.max_messages_per_session = session.messages.len();
-                }
-
-                if session.context_window.pinned_messages.len() > 0 {
-                    metrics.sessions_with_pinned_messages += 1;
-                }
-            } else {
-                metrics.locked_sessions += 1;
+                prompt.push('\n');
             }
         }
-
-        if metrics.response_time_samples > 0 {
-            metrics.average_response_time /= metrics.response_time_samples as f64;
+        
+        // Add quantum enhancement info if available
+        if let Some(ref quantum_results) = assembled_context.quantum_results {
+            if !quantum_results.is_empty() {
+                prompt.push_str("Quantum-Enhanced Retrieval Information:\n");
+                prompt.push_str(&format!("Found {} quantum-optimized results with enhanced relevance scoring.\n\n", 
+                                       quantum_results.len()));
+            }
         }
+        
+        prompt.push_str("Please provide a comprehensive, helpful response based on this information. ");
+        prompt.push_str("If SPARQL results are available, incorporate them naturally into your answer. ");
+        prompt.push_str("Highlight any interesting patterns or insights you discover.");
+        
+        // Generate response using LLM
+        debug!("Generating LLM response with context length: {} chars", prompt.len());
+        llm_manager.generate_response(&prompt).await
+            .context("Failed to generate LLM response")
+    }
 
-        if metrics.total_sessions > 0 {
-            metrics.average_session_age = metrics.total_session_age / metrics.total_sessions as i32;
+    /// Helper: Create metadata for response message
+    fn create_response_metadata(
+        &self, 
+        assembled_context: &rag::AssembledContext,
+        processing_time: Duration
+    ) -> HashMap<String, String> {
+        let mut metadata = HashMap::new();
+        
+        metadata.insert("context_score".to_string(), assembled_context.context_score.to_string());
+        metadata.insert("processing_time_ms".to_string(), processing_time.as_millis().to_string());
+        metadata.insert("semantic_results_count".to_string(), assembled_context.semantic_results.len().to_string());
+        metadata.insert("graph_results_count".to_string(), assembled_context.graph_results.len().to_string());
+        metadata.insert("extracted_entities_count".to_string(), assembled_context.extracted_entities.len().to_string());
+        metadata.insert("assembly_time_ms".to_string(), assembled_context.assembly_time.as_millis().to_string());
+        
+        // Add quantum metadata if available
+        if let Some(ref quantum_results) = assembled_context.quantum_results {
+            metadata.insert("quantum_results_count".to_string(), quantum_results.len().to_string());
+            metadata.insert("quantum_enhanced".to_string(), "true".to_string());
         }
+        
+        // Add consciousness metadata if available
+        if let Some(ref consciousness_insights) = assembled_context.consciousness_insights {
+            metadata.insert("consciousness_insights_count".to_string(), consciousness_insights.len().to_string());
+            metadata.insert("consciousness_enhanced".to_string(), "true".to_string());
+        }
+        
+        // Add reasoning metadata if available
+        if let Some(ref reasoning_results) = assembled_context.reasoning_results {
+            metadata.insert("reasoning_quality".to_string(), reasoning_results.reasoning_quality.overall_quality.to_string());
+            metadata.insert("reasoning_enhanced".to_string(), "true".to_string());
+        }
+        
+        // Add knowledge extraction metadata if available
+        if let Some(ref extracted_knowledge) = assembled_context.extracted_knowledge {
+            metadata.insert("extracted_knowledge_score".to_string(), extracted_knowledge.confidence_score.to_string());
+            metadata.insert("knowledge_extraction_enhanced".to_string(), "true".to_string());
+        }
+        
+        metadata.insert("oxirs_chat_version".to_string(), VERSION.to_string());
+        metadata.insert("advanced_ai_enabled".to_string(), "true".to_string());
+        
+        metadata
+    }
 
-        metrics
+    /// Get session statistics
+    pub async fn get_session_statistics(&self, session_id: &str) -> Result<SessionStatistics> {
+        let session = self.get_session(session_id).await
+            .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
+
+        let session = session.lock().await;
+        Ok(session.get_statistics())
+    }
+
+    /// Export session data
+    pub async fn export_session(&self, session_id: &str) -> Result<SessionData> {
+        let session = self.get_session(session_id).await
+            .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
+
+        let session = session.lock().await;
+        Ok(session.export_data())
+    }
+
+    /// Import session data
+    pub async fn import_session(&self, session_data: SessionData) -> Result<()> {
+        let session = Arc::new(Mutex::new(ChatSession::from_data(session_data.clone(), self.store.clone())));
+        
+        let mut sessions = self.sessions.write().await;
+        sessions.insert(session_data.id, session);
+        
+        Ok(())
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct SessionStats {
-    pub total_sessions: usize,
-    pub active_sessions: usize,
-    pub idle_sessions: usize,
-    pub expired_sessions: usize,
-    pub suspended_sessions: usize,
-    pub total_messages: usize,
+/// Create a default OxiRS Chat instance (synchronous helper)
+impl OxiRSChat {
+    /// Create a default instance synchronously for testing
+    pub fn create_default() -> Result<Self> {
+        let rt = tokio::runtime::Runtime::new()?;
+        rt.block_on(async {
+            let store = Arc::new(oxirs_core::Store::new()?);
+            Self::new(ChatConfig::default(), store).await
+        })
+    }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct ValidationReport {
-    pub total_entries: usize,
-    pub valid_entries: usize,
-    pub corrupted_entries: usize,
-    pub inconsistent_entries: usize,
-    pub read_errors: usize,
-    pub removed_entries: usize,
-    pub recovered_entries: usize,
+/// Version information
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const NAME: &str = env!("CARGO_PKG_NAME");
+
+/// Feature flags for optional functionality
+pub mod features {
+    pub const RAG_ENABLED: bool = true;
+    pub const NL2SPARQL_ENABLED: bool = true;
+    pub const ANALYTICS_ENABLED: bool = true;
+    pub const CACHING_ENABLED: bool = true;
+    pub const RICH_CONTENT_ENABLED: bool = true;
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct BackupReport {
-    pub total_sessions: usize,
-    pub successful_backups: usize,
-    pub failed_backups: usize,
-    pub backup_path: PathBuf,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct RestoreReport {
-    pub total_files: usize,
-    pub restored_sessions: usize,
-    pub failed_restorations: usize,
-}
+    #[tokio::test]
+    async fn test_chat_creation() {
+        let store = Arc::new(oxirs_core::Store::new().expect("Failed to create store"));
+        let chat = OxiRSChat::new(ChatConfig::default(), store).await.expect("Failed to create chat");
+        
+        assert_eq!(chat.session_count().await, 0);
+    }
 
-/// Detailed session metrics for monitoring
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct DetailedSessionMetrics {
-    pub total_sessions: usize,
-    pub active_sessions: usize,
-    pub idle_sessions: usize,
-    pub expired_sessions: usize,
-    pub suspended_sessions: usize,
-    pub locked_sessions: usize,
-    pub high_error_sessions: usize,
-    pub sessions_with_pinned_messages: usize,
-    pub total_messages: usize,
-    pub max_messages_per_session: usize,
-    pub total_tokens: usize,
-    pub average_response_time: f64,
-    pub response_time_samples: usize,
-    pub total_session_age: chrono::Duration,
-    pub average_session_age: chrono::Duration,
-}
-
-/// Thread information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ThreadInfo {
-    pub id: String,
-    pub message_count: usize,
-    pub first_message_time: chrono::DateTime<chrono::Utc>,
-    pub last_message_time: chrono::DateTime<chrono::Utc>,
-    pub participants: Vec<String>,
+    #[tokio::test]
+    async fn test_session_management() {
+        let store = Arc::new(oxirs_core::Store::new().expect("Failed to create store"));
+        let chat = OxiRSChat::new(ChatConfig::default(), store).await.expect("Failed to create chat");
+        
+        let session_id = "test-session".to_string();
+        let session = chat.create_session(session_id.clone()).await.unwrap();
+        
+        assert_eq!(chat.session_count().await, 1);
+        assert!(chat.get_session(&session_id).await.is_some());
+        
+        let removed = chat.remove_session(&session_id).await;
+        assert!(removed);
+        assert_eq!(chat.session_count().await, 0);
+    }
 }

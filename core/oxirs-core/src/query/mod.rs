@@ -18,18 +18,22 @@ pub mod sparql_query;
 pub mod streaming_results;
 pub mod wasm;
 
-// Re-export the enhanced SPARQL algebra and query types
-pub use sparql_algebra::*;
+// Re-export the enhanced SPARQL algebra and query types from sparql_algebra
+pub use sparql_algebra::{
+    TermPattern as SparqlTermPattern, TriplePattern as SparqlTriplePattern, 
+    GraphPattern as SparqlGraphPattern, Expression as SparqlExpression, 
+    PropertyPathExpression, NamedNodePattern
+};
 pub use sparql_query::*;
 
 // Re-export execution plan types
 pub use plan::ExecutionPlan;
 
-// Legacy algebra for backward compatibility
+// Re-export algebra types (without Query to avoid conflict)
+// Use explicit aliases to avoid conflicts
 pub use algebra::{
-    Expression as LegacyExpression, GraphPattern as LegacyGraphPattern,
-    PropertyPath as LegacyPropertyPath, TermPattern as LegacyTermPattern,
-    TriplePattern as LegacyTriplePattern,
+    AlgebraTriplePattern, Expression as AlgebraExpression, GraphPattern as AlgebraGraphPattern, 
+    PropertyPath, TermPattern as AlgebraTermPattern, Query as AlgebraQuery
 };
 pub use binding_optimizer::{BindingIterator, BindingOptimizer, BindingSet, Constraint, TermType};
 pub use distributed::{DistributedConfig, DistributedQueryEngine, FederatedEndpoint};
@@ -55,6 +59,9 @@ use crate::model::{Object, Predicate, Subject, Term, Variable};
 use crate::OxirsError;
 use crate::Store;
 use std::collections::HashMap;
+
+// Import TermPattern for internal usage 
+use algebra::TermPattern;
 
 /// Simplified QueryResult for SHACL compatibility
 #[derive(Debug, Clone)]
@@ -126,21 +133,21 @@ impl QueryEngine {
     }
 
     /// Execute a parsed Query object against a store
-    pub fn execute_query(&self, query: &Query, store: &Store) -> Result<QueryResult, OxirsError> {
+    pub fn execute_query(&self, query: &sparql_query::Query, store: &Store) -> Result<QueryResult, OxirsError> {
         match query {
-            Query::Select {
+            sparql_query::Query::Select {
                 pattern, dataset, ..
             } => self.execute_select_query(pattern, dataset.as_ref(), store),
-            Query::Ask {
+            sparql_query::Query::Ask {
                 pattern, dataset, ..
             } => self.execute_ask_query(pattern, dataset.as_ref(), store),
-            Query::Construct {
+            sparql_query::Query::Construct {
                 template,
                 pattern,
                 dataset,
                 ..
             } => self.execute_construct_query(template, pattern, dataset.as_ref(), store),
-            Query::Describe {
+            sparql_query::Query::Describe {
                 pattern, dataset, ..
             } => self.execute_describe_query(pattern, dataset.as_ref(), store),
         }
@@ -149,7 +156,7 @@ impl QueryEngine {
     /// Execute a SELECT query
     fn execute_select_query(
         &self,
-        pattern: &GraphPattern,
+        pattern: &SparqlGraphPattern,
         _dataset: Option<&QueryDataset>,
         store: &Store,
     ) -> Result<QueryResult, OxirsError> {
@@ -189,7 +196,7 @@ impl QueryEngine {
     /// Execute an ASK query
     fn execute_ask_query(
         &self,
-        pattern: &GraphPattern,
+        pattern: &SparqlGraphPattern,
         _dataset: Option<&QueryDataset>,
         store: &Store,
     ) -> Result<QueryResult, OxirsError> {
@@ -208,8 +215,8 @@ impl QueryEngine {
     /// Execute a CONSTRUCT query
     fn execute_construct_query(
         &self,
-        template: &[TriplePattern],
-        pattern: &GraphPattern,
+        template: &[AlgebraTriplePattern],
+        pattern: &SparqlGraphPattern,
         _dataset: Option<&QueryDataset>,
         store: &Store,
     ) -> Result<QueryResult, OxirsError> {
@@ -237,7 +244,7 @@ impl QueryEngine {
     /// Execute a DESCRIBE query
     fn execute_describe_query(
         &self,
-        pattern: &GraphPattern,
+        pattern: &SparqlGraphPattern,
         _dataset: Option<&QueryDataset>,
         store: &Store,
     ) -> Result<QueryResult, OxirsError> {
@@ -271,23 +278,23 @@ impl QueryEngine {
     }
 
     /// Convert a graph pattern to an execution plan
-    fn pattern_to_plan(&self, pattern: &GraphPattern) -> Result<ExecutionPlan, OxirsError> {
+    fn pattern_to_plan(&self, pattern: &SparqlGraphPattern) -> Result<ExecutionPlan, OxirsError> {
         match pattern {
-            GraphPattern::Bgp { patterns } => {
+            SparqlGraphPattern::Bgp { patterns } => {
                 if patterns.len() == 1 {
                     // Single triple pattern
                     Ok(ExecutionPlan::TripleScan {
-                        pattern: self.convert_triple_pattern(&patterns[0])?,
+                        pattern: self.convert_sparql_triple_pattern(&patterns[0])?,
                     })
                 } else {
                     // Multiple patterns - join them
                     let mut plan = ExecutionPlan::TripleScan {
-                        pattern: self.convert_triple_pattern(&patterns[0])?,
+                        pattern: self.convert_sparql_triple_pattern(&patterns[0])?,
                     };
 
                     for triple_pattern in &patterns[1..] {
                         let right_plan = ExecutionPlan::TripleScan {
-                            pattern: self.convert_triple_pattern(triple_pattern)?,
+                            pattern: self.convert_sparql_triple_pattern(triple_pattern)?,
                         };
 
                         // Find join variables
@@ -303,7 +310,7 @@ impl QueryEngine {
                     Ok(plan)
                 }
             }
-            GraphPattern::Join { left, right } => {
+            SparqlGraphPattern::Join { left, right } => {
                 let left_plan = self.pattern_to_plan(left)?;
                 let right_plan = self.pattern_to_plan(right)?;
                 let join_vars = self.find_join_variables(&left_plan, &right_plan);
@@ -314,7 +321,7 @@ impl QueryEngine {
                     join_vars,
                 })
             }
-            GraphPattern::Filter { expr, inner } => {
+            SparqlGraphPattern::Filter { expr, inner } => {
                 let input_plan = self.pattern_to_plan(inner)?;
                 // Convert sparql_algebra::Expression to algebra::Expression
                 let condition = self.convert_expression(expr.clone())?;
@@ -323,7 +330,7 @@ impl QueryEngine {
                     condition,
                 })
             }
-            GraphPattern::Union { left, right } => {
+            SparqlGraphPattern::Union { left, right } => {
                 let left_plan = self.pattern_to_plan(left)?;
                 let right_plan = self.pattern_to_plan(right)?;
 
@@ -332,20 +339,20 @@ impl QueryEngine {
                     right: Box::new(right_plan),
                 })
             }
-            GraphPattern::Project { inner, variables } => {
+            SparqlGraphPattern::Project { inner, variables } => {
                 let input_plan = self.pattern_to_plan(inner)?;
                 Ok(ExecutionPlan::Project {
                     input: Box::new(input_plan),
                     vars: variables.clone(),
                 })
             }
-            GraphPattern::Distinct { inner } => {
+            SparqlGraphPattern::Distinct { inner } => {
                 let input_plan = self.pattern_to_plan(inner)?;
                 Ok(ExecutionPlan::Distinct {
                     input: Box::new(input_plan),
                 })
             }
-            GraphPattern::Slice {
+            SparqlGraphPattern::Slice {
                 inner,
                 start,
                 length,
@@ -367,10 +374,45 @@ impl QueryEngine {
         }
     }
 
+    /// Convert a SPARQL triple pattern to a model triple pattern
+    fn convert_sparql_triple_pattern(
+        &self,
+        pattern: &SparqlTriplePattern,
+    ) -> Result<crate::model::pattern::TriplePattern, OxirsError> {
+        use crate::model::pattern::*;
+
+        let subject = match &pattern.subject {
+            SparqlTermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
+            SparqlTermPattern::NamedNode(n) => Some(SubjectPattern::NamedNode(n.clone())),
+            SparqlTermPattern::BlankNode(b) => Some(SubjectPattern::BlankNode(b.clone())),
+            _ => None,
+        };
+
+        let predicate = match &pattern.predicate {
+            SparqlTermPattern::Variable(v) => Some(PredicatePattern::Variable(v.clone())),
+            SparqlTermPattern::NamedNode(n) => Some(PredicatePattern::NamedNode(n.clone())),
+            _ => None,
+        };
+
+        let object = match &pattern.object {
+            SparqlTermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
+            SparqlTermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
+            SparqlTermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
+            SparqlTermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
+            _ => None,
+        };
+
+        Ok(crate::model::pattern::TriplePattern {
+            subject,
+            predicate,
+            object,
+        })
+    }
+
     /// Convert a SPARQL algebra triple pattern to a model triple pattern
     fn convert_triple_pattern(
         &self,
-        pattern: &TriplePattern,
+        pattern: &AlgebraTriplePattern,
     ) -> Result<crate::model::pattern::TriplePattern, OxirsError> {
         use crate::model::pattern::*;
 
@@ -412,8 +454,8 @@ impl QueryEngine {
     fn convert_expression(
         &self,
         expr: sparql_algebra::Expression,
-    ) -> Result<algebra::Expression, OxirsError> {
-        use algebra::Expression as AlgebraExpr;
+    ) -> Result<AlgebraExpression, OxirsError> {
+        use AlgebraExpression as AlgebraExpr;
         use sparql_algebra::Expression as SparqlExpr;
 
         match expr {
@@ -490,7 +532,7 @@ impl QueryEngine {
     }
 
     /// Extract all variables from a graph pattern
-    fn extract_variables(&self, pattern: &GraphPattern) -> Vec<Variable> {
+    fn extract_variables(&self, pattern: &SparqlGraphPattern) -> Vec<Variable> {
         let mut variables = Vec::new();
         self.collect_variables_from_pattern(pattern, &mut variables);
         variables.sort_by_key(|v: &Variable| v.name().to_owned());
@@ -501,37 +543,37 @@ impl QueryEngine {
     /// Recursively collect variables from a graph pattern
     fn collect_variables_from_pattern(
         &self,
-        pattern: &GraphPattern,
+        pattern: &SparqlGraphPattern,
         variables: &mut Vec<Variable>,
     ) {
         match pattern {
-            GraphPattern::Bgp { patterns } => {
+            SparqlGraphPattern::Bgp { patterns } => {
                 for triple_pattern in patterns {
                     self.collect_variables_from_triple_pattern(triple_pattern, variables);
                 }
             }
-            GraphPattern::Join { left, right } => {
+            SparqlGraphPattern::Join { left, right } => {
                 self.collect_variables_from_pattern(left, variables);
                 self.collect_variables_from_pattern(right, variables);
             }
-            GraphPattern::Filter { inner, .. } => {
+            SparqlGraphPattern::Filter { inner, .. } => {
                 self.collect_variables_from_pattern(inner, variables);
             }
-            GraphPattern::Union { left, right } => {
+            SparqlGraphPattern::Union { left, right } => {
                 self.collect_variables_from_pattern(left, variables);
                 self.collect_variables_from_pattern(right, variables);
             }
-            GraphPattern::Project {
+            SparqlGraphPattern::Project {
                 inner,
                 variables: proj_vars,
             } => {
                 self.collect_variables_from_pattern(inner, variables);
                 variables.extend(proj_vars.iter().cloned());
             }
-            GraphPattern::Distinct { inner } => {
+            SparqlGraphPattern::Distinct { inner } => {
                 self.collect_variables_from_pattern(inner, variables);
             }
-            GraphPattern::Slice { inner, .. } => {
+            SparqlGraphPattern::Slice { inner, .. } => {
                 self.collect_variables_from_pattern(inner, variables);
             }
             _ => {
@@ -543,16 +585,16 @@ impl QueryEngine {
     /// Collect variables from a triple pattern
     fn collect_variables_from_triple_pattern(
         &self,
-        pattern: &TriplePattern,
+        pattern: &SparqlTriplePattern,
         variables: &mut Vec<Variable>,
     ) {
-        if let TermPattern::Variable(v) = &pattern.subject {
+        if let SparqlTermPattern::Variable(v) = &pattern.subject {
             variables.push(v.clone());
         }
-        if let TermPattern::Variable(v) = &pattern.predicate {
+        if let SparqlTermPattern::Variable(v) = &pattern.predicate {
             variables.push(v.clone());
         }
-        if let TermPattern::Variable(v) = &pattern.object {
+        if let SparqlTermPattern::Variable(v) = &pattern.object {
             variables.push(v.clone());
         }
     }
@@ -560,7 +602,7 @@ impl QueryEngine {
     /// Instantiate a triple pattern with a solution
     fn instantiate_triple_pattern(
         &self,
-        pattern: &TriplePattern,
+        pattern: &AlgebraTriplePattern,
         solution: &Solution,
     ) -> Result<Option<crate::model::Triple>, OxirsError> {
         use crate::model::*;

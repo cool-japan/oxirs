@@ -563,7 +563,7 @@ impl PerformanceAnalyticsEngine {
 
         Ok(ComplexAnomalyAnalysis {
             anomalies: Vec::new(), // Convert from anomaly_detection_results
-            patterns: Vec::new(), // Convert from pattern_analysis
+            patterns: Vec::new(),  // Convert from pattern_analysis
             severity_score: impact_prediction,
             impact_assessment: format!("Analysis of {} data points", recent_metrics.len()),
             recommended_actions: root_cause_analysis,
@@ -671,7 +671,10 @@ impl PerformanceAnalyticsEngine {
             implementation_roadmap: self
                 .create_capacity_implementation_roadmap(&scaling_strategies)?,
             monitoring_framework: self.design_capacity_monitoring_framework()?,
-            scaling_recommendations: vec!["Enable auto-scaling".to_string(), "Optimize resource allocation".to_string()],
+            scaling_recommendations: vec![
+                "Enable auto-scaling".to_string(),
+                "Optimize resource allocation".to_string(),
+            ],
             timeline_months: 6,
             confidence_score: 0.85,
         })
@@ -1047,7 +1050,8 @@ impl PerformanceAnalyticsEngine {
                 StrategyType::Moderate => RiskTolerance::Medium,
                 StrategyType::Conservative => RiskTolerance::Low,
             },
-            implementation_phases: self.generate_implementation_phases(&strategy_type)?
+            implementation_phases: self
+                .generate_implementation_phases(&strategy_type)?
                 .into_iter()
                 .map(|phase| phase.phase_name)
                 .collect(),
@@ -1117,7 +1121,8 @@ impl PerformanceAnalyticsEngine {
         });
 
         // Multi-variate anomaly detection
-        let multivariate_metrics: Vec<PerformanceMetric> = metrics.iter().map(|&m| m.clone()).collect();
+        let multivariate_metrics: Vec<PerformanceMetric> =
+            metrics.iter().map(|&m| m.clone()).collect();
         results.extend(self.detect_multivariate_anomalies(&multivariate_metrics)?);
 
         Ok(results)
@@ -1132,17 +1137,23 @@ impl PerformanceAnalyticsEngine {
         let recurrence_patterns = self.identify_recurrence_patterns(anomaly_results)?;
 
         Ok(AnomalyPatternAnalysis {
-            detected_patterns: temporal_patterns.into_iter().map(|s| AnomalyPattern {
-                pattern_type: "temporal".to_string(),
-                frequency: 0.8,
-                correlation: 0.5,
-            }).collect(),
+            detected_patterns: temporal_patterns
+                .into_iter()
+                .map(|s| AnomalyPattern {
+                    pattern_type: "temporal".to_string(),
+                    frequency: 0.8,
+                    correlation: 0.5,
+                })
+                .collect(),
             pattern_correlations: HashMap::new(),
             recurrence_predictions: recurrence_patterns,
         })
     }
 
-    fn detect_multivariate_anomalies(&self, metrics: &[PerformanceMetric]) -> Result<Vec<AnomalyDetectionResult>> {
+    fn detect_multivariate_anomalies(
+        &self,
+        metrics: &[PerformanceMetric],
+    ) -> Result<Vec<AnomalyDetectionResult>> {
         // Return default anomaly detection results
         Ok(vec![AnomalyDetectionResult {
             is_anomaly: false,
@@ -1153,31 +1164,61 @@ impl PerformanceAnalyticsEngine {
         }])
     }
 
-    fn identify_temporal_anomaly_patterns(&self, anomaly_results: &[AnomalyDetectionResult]) -> Result<Vec<String>> {
-        Ok(vec!["temporal_pattern_1".to_string(), "temporal_pattern_2".to_string()])
+    fn identify_temporal_anomaly_patterns(
+        &self,
+        anomaly_results: &[AnomalyDetectionResult],
+    ) -> Result<Vec<String>> {
+        Ok(vec![
+            "temporal_pattern_1".to_string(),
+            "temporal_pattern_2".to_string(),
+        ])
     }
 
-    fn identify_correlation_patterns(&self, anomaly_results: &[AnomalyDetectionResult]) -> Result<Vec<String>> {
-        Ok(vec!["correlation_pattern_1".to_string(), "correlation_pattern_2".to_string()])
+    fn identify_correlation_patterns(
+        &self,
+        anomaly_results: &[AnomalyDetectionResult],
+    ) -> Result<Vec<String>> {
+        Ok(vec![
+            "correlation_pattern_1".to_string(),
+            "correlation_pattern_2".to_string(),
+        ])
     }
 
-    fn identify_recurrence_patterns(&self, anomaly_results: &[AnomalyDetectionResult]) -> Result<Vec<String>> {
-        Ok(vec!["recurrence_pattern_1".to_string(), "recurrence_pattern_2".to_string()])
+    fn identify_recurrence_patterns(
+        &self,
+        anomaly_results: &[AnomalyDetectionResult],
+    ) -> Result<Vec<String>> {
+        Ok(vec![
+            "recurrence_pattern_1".to_string(),
+            "recurrence_pattern_2".to_string(),
+        ])
     }
 
-    fn calculate_pattern_confidence(&self, anomaly_results: &[AnomalyDetectionResult]) -> Result<f64> {
+    fn calculate_pattern_confidence(
+        &self,
+        anomaly_results: &[AnomalyDetectionResult],
+    ) -> Result<f64> {
         Ok(0.85) // Default confidence
     }
 
-    fn predict_optimization_effectiveness(&self, performance_data: &[PerformanceSnapshot]) -> Result<f64> {
+    fn predict_optimization_effectiveness(
+        &self,
+        performance_data: &[PerformanceSnapshot],
+    ) -> Result<f64> {
         Ok(0.25) // Default 25% improvement
     }
 
-    fn calculate_optimization_confidence(&self, performance_data: &[PerformanceSnapshot]) -> Result<f64> {
+    fn calculate_optimization_confidence(
+        &self,
+        performance_data: &[PerformanceSnapshot],
+    ) -> Result<f64> {
         Ok(0.80) // Default 80% confidence
     }
 
-    fn estimate_implementation_timeline(&self, ml_recommendations: &[MLOptimizationRecommendation]) -> Result<Vec<String>> {
+    fn estimate_implementation_timeline(
+        &self,
+        ml_recommendations: &[MLOptimizationRecommendation],
+    ) -> Result<Vec<String>> {
         Ok(vec![
             "Phase 1: Analysis (1 week)".to_string(),
             "Phase 2: Implementation (2 weeks)".to_string(),
@@ -1185,7 +1226,10 @@ impl PerformanceAnalyticsEngine {
         ])
     }
 
-    fn assess_optimization_risks(&self, ml_recommendations: &[MLOptimizationRecommendation]) -> Result<RiskAssessment> {
+    fn assess_optimization_risks(
+        &self,
+        ml_recommendations: &[MLOptimizationRecommendation],
+    ) -> Result<RiskAssessment> {
         Ok(RiskAssessment {
             identified_risks: vec!["Implementation complexity".to_string()],
             risk_levels: {
@@ -1195,7 +1239,10 @@ impl PerformanceAnalyticsEngine {
             },
             mitigation_strategies: {
                 let mut strategies = HashMap::new();
-                strategies.insert("Implementation complexity".to_string(), "Gradual rollout".to_string());
+                strategies.insert(
+                    "Implementation complexity".to_string(),
+                    "Gradual rollout".to_string(),
+                );
                 strategies
             },
             overall_risk_score: 0.3,
@@ -1210,7 +1257,10 @@ impl PerformanceAnalyticsEngine {
         })
     }
 
-    fn perform_root_cause_analysis(&self, anomaly_results: &[AnomalyDetectionResult]) -> Result<Vec<String>> {
+    fn perform_root_cause_analysis(
+        &self,
+        anomaly_results: &[AnomalyDetectionResult],
+    ) -> Result<Vec<String>> {
         Ok(vec![
             "High CPU usage due to inefficient queries".to_string(),
             "Memory leak in validation cache".to_string(),
@@ -1221,43 +1271,73 @@ impl PerformanceAnalyticsEngine {
         Ok(0.7) // Default impact score
     }
 
-    fn run_neural_performance_prediction(&self, historical_data: &[&PerformanceMetric], horizon: Duration) -> Result<Vec<f64>> {
+    fn run_neural_performance_prediction(
+        &self,
+        historical_data: &[&PerformanceMetric],
+        horizon: Duration,
+    ) -> Result<Vec<f64>> {
         Ok(vec![0.8, 0.9, 0.85]) // Default predictions
     }
 
-    fn run_time_series_prediction(&self, historical_data: &[&PerformanceMetric], horizon: Duration) -> Result<Vec<f64>> {
+    fn run_time_series_prediction(
+        &self,
+        historical_data: &[&PerformanceMetric],
+        horizon: Duration,
+    ) -> Result<Vec<f64>> {
         Ok(vec![0.82, 0.88, 0.87]) // Default predictions
     }
 
     fn combine_prediction_models(&self, neural: &[f64], time_series: &[f64]) -> Result<Vec<f64>> {
-        Ok(neural.iter().zip(time_series.iter()).map(|(n, t)| (n + t) / 2.0).collect())
+        Ok(neural
+            .iter()
+            .zip(time_series.iter())
+            .map(|(n, t)| (n + t) / 2.0)
+            .collect())
     }
 
-    fn identify_performance_risk_factors(&self, historical_data: &[&PerformanceMetric]) -> Result<Vec<String>> {
-        Ok(vec!["Memory usage trend".to_string(), "CPU spikes".to_string()])
+    fn identify_performance_risk_factors(
+        &self,
+        historical_data: &[&PerformanceMetric],
+    ) -> Result<Vec<String>> {
+        Ok(vec![
+            "Memory usage trend".to_string(),
+            "CPU spikes".to_string(),
+        ])
     }
 
-    fn perform_scenario_analysis(&self, predictions: &[f64], risk_factors: &[String]) -> Result<Vec<String>> {
-        Ok(vec!["Best case: 20% improvement".to_string(), "Worst case: 5% degradation".to_string()])
+    fn perform_scenario_analysis(
+        &self,
+        predictions: &[f64],
+        risk_factors: &[String],
+    ) -> Result<Vec<String>> {
+        Ok(vec![
+            "Best case: 20% improvement".to_string(),
+            "Worst case: 5% degradation".to_string(),
+        ])
     }
 
     fn assess_current_capacity(&self) -> Result<f64> {
         Ok(0.75) // 75% current capacity
     }
 
-    fn forecast_demand(&self, planning_horizon: Duration, growth_assumptions: &GrowthAssumptions) -> Result<f64> {
+    fn forecast_demand(
+        &self,
+        planning_horizon: Duration,
+        growth_assumptions: &GrowthAssumptions,
+    ) -> Result<f64> {
         Ok(1.2 * 1.5) // Forecast based on growth assumptions - placeholder calculation
     }
 
-    fn calculate_resource_requirements(&self, demand_forecast: &f64) -> Result<HashMap<String, f64>> {
+    fn calculate_resource_requirements(
+        &self,
+        demand_forecast: &f64,
+    ) -> Result<HashMap<String, f64>> {
         let mut requirements = HashMap::new();
         requirements.insert("cpu".to_string(), demand_forecast * 1.1);
         requirements.insert("memory".to_string(), demand_forecast * 1.3);
         requirements.insert("storage".to_string(), demand_forecast * 1.5);
         Ok(requirements)
     }
-
-
 
     fn calculate_average_metric_value(
         &self,
@@ -1293,7 +1373,11 @@ impl PerformanceAnalyticsEngine {
 
         Some(MemoryTrendAnalysis {
             trend_analysis: TrendAnalysis {
-                trend_direction: if slope > 0.0 { TrendDirection::Increasing } else { TrendDirection::Decreasing },
+                trend_direction: if slope > 0.0 {
+                    TrendDirection::Increasing
+                } else {
+                    TrendDirection::Decreasing
+                },
                 trend_strength: slope.abs(),
                 confidence: 0.8, // placeholder
                 slope,
@@ -1369,7 +1453,10 @@ impl PerformanceAnalyticsEngine {
 
     // Additional missing methods for capacity planning
 
-    fn identify_capacity_optimization_opportunities(&self, _current_capacity: &f64) -> Result<Vec<OptimizationOpportunity>> {
+    fn identify_capacity_optimization_opportunities(
+        &self,
+        _current_capacity: &f64,
+    ) -> Result<Vec<OptimizationOpportunity>> {
         Ok(vec![
             OptimizationOpportunity {
                 area: "Memory Management".to_string(),
@@ -1386,7 +1473,12 @@ impl PerformanceAnalyticsEngine {
         ])
     }
 
-    fn generate_scaling_strategies(&self, _current_capacity: &f64, _demand_forecast: &f64, _resource_requirements: &HashMap<String, f64>) -> Result<Vec<ScalingStrategy>> {
+    fn generate_scaling_strategies(
+        &self,
+        _current_capacity: &f64,
+        _demand_forecast: &f64,
+        _resource_requirements: &HashMap<String, f64>,
+    ) -> Result<Vec<ScalingStrategy>> {
         Ok(vec![
             ScalingStrategy {
                 strategy_name: "Horizontal Scaling".to_string(),
@@ -1413,7 +1505,10 @@ impl PerformanceAnalyticsEngine {
         ])
     }
 
-    fn perform_capacity_cost_analysis(&self, _scaling_strategies: &[ScalingStrategy]) -> Result<CostAnalysis> {
+    fn perform_capacity_cost_analysis(
+        &self,
+        _scaling_strategies: &[ScalingStrategy],
+    ) -> Result<CostAnalysis> {
         let mut current_costs = HashMap::new();
         current_costs.insert("infrastructure".to_string(), 10000.0);
         current_costs.insert("maintenance".to_string(), 2000.0);
@@ -1434,7 +1529,10 @@ impl PerformanceAnalyticsEngine {
         })
     }
 
-    fn assess_capacity_risks(&self, _scaling_strategies: &[ScalingStrategy]) -> Result<RiskAssessment> {
+    fn assess_capacity_risks(
+        &self,
+        _scaling_strategies: &[ScalingStrategy],
+    ) -> Result<RiskAssessment> {
         let identified_risks = vec![
             "Migration complexity".to_string(),
             "Temporary performance degradation".to_string(),
@@ -1447,9 +1545,18 @@ impl PerformanceAnalyticsEngine {
         risk_levels.insert("financial".to_string(), 0.15);
 
         let mut mitigation_strategies = HashMap::new();
-        mitigation_strategies.insert("technical".to_string(), "Staged rollout with rollback plan".to_string());
-        mitigation_strategies.insert("operational".to_string(), "Enhanced monitoring and alerting".to_string());
-        mitigation_strategies.insert("financial".to_string(), "Cost monitoring and budget controls".to_string());
+        mitigation_strategies.insert(
+            "technical".to_string(),
+            "Staged rollout with rollback plan".to_string(),
+        );
+        mitigation_strategies.insert(
+            "operational".to_string(),
+            "Enhanced monitoring and alerting".to_string(),
+        );
+        mitigation_strategies.insert(
+            "financial".to_string(),
+            "Cost monitoring and budget controls".to_string(),
+        );
 
         Ok(RiskAssessment {
             identified_risks,
@@ -1459,36 +1566,60 @@ impl PerformanceAnalyticsEngine {
         })
     }
 
-    fn create_capacity_implementation_roadmap(&self, _scaling_strategies: &[ScalingStrategy]) -> Result<ImplementationRoadmap> {
+    fn create_capacity_implementation_roadmap(
+        &self,
+        _scaling_strategies: &[ScalingStrategy],
+    ) -> Result<ImplementationRoadmap> {
         let phases = vec![
             ImplementationPhase {
                 phase_name: "Planning and Design".to_string(),
                 duration: Duration::from_secs(7 * 24 * 3600), // 1 week
                 resources_required: vec!["Architects".to_string(), "Engineers".to_string()],
-                deliverables: vec!["Architecture design".to_string(), "Implementation plan".to_string()],
+                deliverables: vec![
+                    "Architecture design".to_string(),
+                    "Implementation plan".to_string(),
+                ],
             },
             ImplementationPhase {
                 phase_name: "Implementation".to_string(),
                 duration: Duration::from_secs(14 * 24 * 3600), // 2 weeks
                 resources_required: vec!["Engineers".to_string(), "DevOps".to_string()],
-                deliverables: vec!["Deployed infrastructure".to_string(), "Configuration updates".to_string()],
+                deliverables: vec![
+                    "Deployed infrastructure".to_string(),
+                    "Configuration updates".to_string(),
+                ],
             },
             ImplementationPhase {
                 phase_name: "Testing and Validation".to_string(),
                 duration: Duration::from_secs(7 * 24 * 3600), // 1 week
-                resources_required: vec!["QA Engineers".to_string(), "Performance analysts".to_string()],
-                deliverables: vec!["Test results".to_string(), "Performance validation".to_string()],
+                resources_required: vec![
+                    "QA Engineers".to_string(),
+                    "Performance analysts".to_string(),
+                ],
+                deliverables: vec![
+                    "Test results".to_string(),
+                    "Performance validation".to_string(),
+                ],
             },
         ];
 
         let mut dependencies = HashMap::new();
-        dependencies.insert("Implementation".to_string(), vec!["Planning and Design".to_string()]);
-        dependencies.insert("Testing and Validation".to_string(), vec!["Implementation".to_string()]);
+        dependencies.insert(
+            "Implementation".to_string(),
+            vec!["Planning and Design".to_string()],
+        );
+        dependencies.insert(
+            "Testing and Validation".to_string(),
+            vec!["Implementation".to_string()],
+        );
 
         Ok(ImplementationRoadmap {
             phases,
             total_duration: Duration::from_secs(28 * 24 * 3600), // 4 weeks
-            critical_path: vec!["Planning and Design".to_string(), "Implementation".to_string()],
+            critical_path: vec![
+                "Planning and Design".to_string(),
+                "Implementation".to_string(),
+            ],
             dependencies,
         })
     }
@@ -1517,20 +1648,29 @@ impl PerformanceAnalyticsEngine {
             monitoring_frequency,
             alert_thresholds,
             dashboard_config: DashboardConfig {
-                panels: vec!["Performance overview".to_string(), "Resource utilization".to_string()],
+                panels: vec![
+                    "Performance overview".to_string(),
+                    "Resource utilization".to_string(),
+                ],
                 refresh_interval: Duration::from_secs(30),
                 alert_channels: vec!["email".to_string(), "slack".to_string()],
             },
         })
     }
 
-    fn generate_implementation_phases(&self, _strategy_type: &StrategyType) -> Result<Vec<ImplementationPhase>> {
+    fn generate_implementation_phases(
+        &self,
+        _strategy_type: &StrategyType,
+    ) -> Result<Vec<ImplementationPhase>> {
         Ok(vec![
             ImplementationPhase {
                 phase_name: "Analysis and Planning".to_string(),
                 duration: Duration::from_secs(7 * 24 * 3600),
                 resources_required: vec!["Analysts".to_string(), "Architects".to_string()],
-                deliverables: vec!["Analysis report".to_string(), "Implementation plan".to_string()],
+                deliverables: vec![
+                    "Analysis report".to_string(),
+                    "Implementation plan".to_string(),
+                ],
             },
             ImplementationPhase {
                 phase_name: "Development and Testing".to_string(),
@@ -1541,7 +1681,10 @@ impl PerformanceAnalyticsEngine {
         ])
     }
 
-    fn generate_neural_network_recommendation(&self, _performance_data: &[PerformanceSnapshot]) -> Result<MLOptimizationRecommendation> {
+    fn generate_neural_network_recommendation(
+        &self,
+        _performance_data: &[PerformanceSnapshot],
+    ) -> Result<MLOptimizationRecommendation> {
         Ok(MLOptimizationRecommendation {
             recommendation_type: "Neural Network Optimization".to_string(),
             confidence: 0.85,
@@ -1550,7 +1693,10 @@ impl PerformanceAnalyticsEngine {
         })
     }
 
-    fn generate_decision_tree_recommendation(&self, _performance_data: &[PerformanceSnapshot]) -> Result<MLOptimizationRecommendation> {
+    fn generate_decision_tree_recommendation(
+        &self,
+        _performance_data: &[PerformanceSnapshot],
+    ) -> Result<MLOptimizationRecommendation> {
         Ok(MLOptimizationRecommendation {
             recommendation_type: "Decision Tree Optimization".to_string(),
             confidence: 0.78,
@@ -1559,7 +1705,10 @@ impl PerformanceAnalyticsEngine {
         })
     }
 
-    fn generate_ensemble_recommendation(&self, _performance_data: &[PerformanceSnapshot]) -> Result<MLOptimizationRecommendation> {
+    fn generate_ensemble_recommendation(
+        &self,
+        _performance_data: &[PerformanceSnapshot],
+    ) -> Result<MLOptimizationRecommendation> {
         Ok(MLOptimizationRecommendation {
             recommendation_type: "Ensemble Method Optimization".to_string(),
             confidence: 0.92,
@@ -1568,7 +1717,10 @@ impl PerformanceAnalyticsEngine {
         })
     }
 
-    fn calculate_current_resource_utilization(&self, _performance_data: &[PerformanceSnapshot]) -> Result<HashMap<String, f64>> {
+    fn calculate_current_resource_utilization(
+        &self,
+        _performance_data: &[PerformanceSnapshot],
+    ) -> Result<HashMap<String, f64>> {
         let mut utilization = HashMap::new();
         utilization.insert("cpu".to_string(), 65.5);
         utilization.insert("memory".to_string(), 72.3);
@@ -1577,7 +1729,10 @@ impl PerformanceAnalyticsEngine {
         Ok(utilization)
     }
 
-    fn calculate_optimal_resource_allocation(&self, _current_utilization: &HashMap<String, f64>) -> Result<HashMap<String, f64>> {
+    fn calculate_optimal_resource_allocation(
+        &self,
+        _current_utilization: &HashMap<String, f64>,
+    ) -> Result<HashMap<String, f64>> {
         let mut optimal = HashMap::new();
         optimal.insert("cpu".to_string(), 75.0);
         optimal.insert("memory".to_string(), 80.0);
@@ -1888,7 +2043,6 @@ pub struct PerformanceRegression {
     pub confidence: f64,
     pub impact_assessment: String,
 }
-
 
 /// Performance recommendation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2398,7 +2552,6 @@ pub struct ResourceAllocation {
     pub parallel_workers: usize,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitoringPlan {
     pub metrics_to_monitor: Vec<String>,
@@ -2566,4 +2719,3 @@ pub struct ThroughputAnalysis {
     pub bottleneck_analysis: Vec<String>,
     pub improvement_potential: f64,
 }
-

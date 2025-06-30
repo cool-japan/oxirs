@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use crate::{
     cache::{CacheConfig, FederationCache},
-    planner::{StepType},
+    planner::StepType,
     service_executor::{JoinExecutor, ServiceExecutor, ServiceExecutorConfig},
 };
 
@@ -146,7 +146,7 @@ impl SparqlResultsData {
     pub fn len(&self) -> usize {
         self.bindings.len()
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.bindings.is_empty()
     }
@@ -234,7 +234,7 @@ impl RuntimeStatistics {
     pub fn update_group_end(&mut self, group_idx: usize, duration: Duration) {
         self.group_durations.insert(group_idx, duration);
         self.groups_executed += 1;
-        
+
         // Update average group time
         let total_duration: Duration = self.group_durations.values().sum();
         self.average_group_time = total_duration / self.groups_executed.max(1) as u32;
@@ -337,7 +337,8 @@ impl EnhancedPerformanceMonitor {
         if self.sequential_durations.is_empty() {
             Duration::from_secs(0)
         } else {
-            self.sequential_durations.iter().sum::<Duration>() / self.sequential_durations.len() as u32
+            self.sequential_durations.iter().sum::<Duration>()
+                / self.sequential_durations.len() as u32
         }
     }
 
@@ -373,7 +374,7 @@ impl EnhancedPerformanceMonitor {
     pub fn get_error_rate(&self) -> f64 {
         let total_errors: usize = self.error_counts.values().sum();
         let total_executions = self.step_durations.len();
-        
+
         if total_executions == 0 {
             0.0
         } else {

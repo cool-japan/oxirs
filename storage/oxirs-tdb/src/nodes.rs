@@ -977,18 +977,17 @@ impl NodeTable {
             Term::Variable(_) => 4,
         };
 
-        let serialized =
-            bincode::serialize(term).map_err(|e| anyhow!("Failed to serialize term: {}", e))?;
-
-        let original_size = serialized.len() as u32;
+        // Use compact binary encoding instead of bincode for better space efficiency
+        let compact_data = self.encode_term_compact(term)?;
+        let original_size = compact_data.len() as u32;
 
         // Apply compression if enabled and beneficial
         let (data, compression) = if self.config.enable_compression
-            && serialized.len() > self.config.compression_threshold
+            && compact_data.len() > self.config.compression_threshold
         {
-            self.compress_data(&serialized, term)?
+            self.compress_data(&compact_data, term)?
         } else {
-            (serialized, CompressionType::None)
+            (compact_data, CompressionType::None)
         };
 
         Ok(EncodedNode::new(
@@ -999,13 +998,179 @@ impl NodeTable {
         ))
     }
 
+    /// Compact binary encoding for terms - more space efficient than bincode
+    fn encode_term_compact(&self, term: &Term) -> Result<Vec<u8>> {
+        let mut data = Vec::new();
+        
+        match term {
+            Term::Iri(iri) => {
+                data.push(1u8); // Type discriminator
+                self.encode_string_compact(&mut data, iri)?;
+            }
+            Term::Literal { value, datatype, language } => {
+                data.push(2u8); // Type discriminator
+                
+                // Encode value
+                self.encode_string_compact(&mut data, value)?;
+                
+                // Encode optional datatype (bit 0 in flags)
+                // Encode optional language (bit 1 in flags)
+                let mut flags = 0u8;
+                if datatype.is_some() { flags |= 0x01; }
+                if language.is_some() { flags |= 0x02; }
+                data.push(flags);
+                
+                if let Some(dt) = datatype {
+                    self.encode_string_compact(&mut data, dt)?;
+                }
+                if let Some(lang) = language {
+                    self.encode_string_compact(&mut data, lang)?;
+                }
+            }
+            Term::BlankNode(id) => {
+                data.push(3u8); // Type discriminator
+                self.encode_string_compact(&mut data, id)?;
+            }
+            Term::Variable(name) => {
+                data.push(4u8); // Type discriminator
+                self.encode_string_compact(&mut data, name)?;
+            }
+        }
+        
+        Ok(data)
+    }
+
+    /// Encode string with variable-length encoding
+    fn encode_string_compact(&self, data: &mut Vec<u8>, s: &str) -> Result<()> {
+        let bytes = s.as_bytes();
+        
+        // Use variable-length encoding for length (more efficient for small strings)
+        self.encode_varint(data, bytes.len() as u64);
+        data.extend_from_slice(bytes);
+        
+        Ok(())
+    }
+
+    /// Variable-length integer encoding (LEB128-style)
+    fn encode_varint(&self, data: &mut Vec<u8>, mut value: u64) {
+        while value >= 0x80 {
+            data.push((value & 0x7F) as u8 | 0x80);
+            value >>= 7;
+        }
+        data.push(value as u8);
+    }
+
+    /// Decode variable-length integer
+    fn decode_varint(&self, data: &[u8], offset: &mut usize) -> Result<u64> {
+        let mut result = 0u64;
+        let mut shift = 0;
+        
+        while *offset < data.len() {
+            let byte = data[*offset];
+            *offset += 1;
+            
+            result |= ((byte & 0x7F) as u64) << shift;
+            
+            if (byte & 0x80) == 0 {
+                return Ok(result);
+            }
+            
+            shift += 7;
+            if shift >= 64 {
+                return Err(anyhow!("Variable integer too large"));
+            }
+        }
+        
+        Err(anyhow!("Incomplete variable integer"))
+    }
+
+    /// Decode compact string
+    fn decode_string_compact(&self, data: &[u8], offset: &mut usize) -> Result<String> {
+        let len = self.decode_varint(data, offset)? as usize;
+        
+        if *offset + len > data.len() {
+            return Err(anyhow!("String length exceeds data bounds"));
+        }
+        
+        let string_bytes = &data[*offset..*offset + len];
+        *offset += len;
+        
+        String::from_utf8(string_bytes.to_vec())
+            .map_err(|e| anyhow!("Invalid UTF-8 in encoded string: {}", e))
+    }
+
     fn decode_term(&self, encoded: &EncodedNode) -> Result<Term> {
         let data = match encoded.compression {
             CompressionType::None => encoded.data.clone(),
             _ => self.decompress_data(&encoded.data, encoded.compression)?,
         };
 
+        // Try compact binary format first (new format)
+        if let Ok(term) = self.decode_term_compact(&data) {
+            return Ok(term);
+        }
+
+        // Fall back to bincode for legacy compatibility
         bincode::deserialize(&data).map_err(|e| anyhow!("Failed to deserialize term: {}", e))
+    }
+
+    /// Decode compact binary format
+    fn decode_term_compact(&self, data: &[u8]) -> Result<Term> {
+        if data.is_empty() {
+            return Err(anyhow!("Empty data for term decoding"));
+        }
+        
+        let mut offset = 0;
+        let term_type = data[offset];
+        offset += 1;
+        
+        match term_type {
+            1 => {
+                // IRI
+                let iri = self.decode_string_compact(data, &mut offset)?;
+                Ok(Term::Iri(iri))
+            }
+            2 => {
+                // Literal
+                let value = self.decode_string_compact(data, &mut offset)?;
+                
+                if offset >= data.len() {
+                    return Err(anyhow!("Missing flags byte in literal"));
+                }
+                
+                let flags = data[offset];
+                offset += 1;
+                
+                let datatype = if (flags & 0x01) != 0 {
+                    Some(self.decode_string_compact(data, &mut offset)?)
+                } else {
+                    None
+                };
+                
+                let language = if (flags & 0x02) != 0 {
+                    Some(self.decode_string_compact(data, &mut offset)?)
+                } else {
+                    None
+                };
+                
+                Ok(Term::Literal {
+                    value,
+                    datatype,
+                    language,
+                })
+            }
+            3 => {
+                // BlankNode
+                let id = self.decode_string_compact(data, &mut offset)?;
+                Ok(Term::BlankNode(id))
+            }
+            4 => {
+                // Variable
+                let name = self.decode_string_compact(data, &mut offset)?;
+                Ok(Term::Variable(name))
+            }
+            _ => Err(anyhow!("Unknown term type: {}", term_type)),
+        }
     }
 
     fn compress_data(&self, data: &[u8], term: &Term) -> Result<(Vec<u8>, CompressionType)> {

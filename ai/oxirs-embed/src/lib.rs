@@ -117,15 +117,18 @@
 pub mod api;
 pub mod application_tasks;
 pub mod batch_processing;
+pub mod biological_computing;
 pub mod biomedical_embeddings;
 pub mod caching;
 pub mod causal_representation_learning;
 pub mod cloud_integration;
 pub mod compression;
+pub mod consciousness_aware_embeddings;
 pub mod contextual_embeddings;
 pub mod continual_learning;
 pub mod cross_domain_transfer;
 pub mod delta;
+pub mod diffusion_embeddings;
 pub mod enterprise_knowledge;
 pub mod evaluation;
 pub mod federated_learning;
@@ -133,11 +136,13 @@ pub mod gpu_acceleration;
 pub mod graphql_api;
 pub mod inference;
 pub mod integration;
+pub mod mamba_attention;
 pub mod model_registry;
 pub mod models;
 pub mod monitoring;
 pub mod multimodal;
 pub mod neural_symbolic_integration;
+pub mod neuro_evolution;
 pub mod novel_architectures;
 pub mod persistence;
 pub mod quantum_circuits;
@@ -457,6 +462,10 @@ pub use compression::{
     ModelCompressionManager, NASConfig, OptimizationTarget, PruningConfig, PruningMethod,
     QuantizationConfig, QuantizationMethod,
 };
+pub use consciousness_aware_embeddings::{
+    AttentionMechanism, ConsciousnessAwareEmbedding, ConsciousnessInsights, ConsciousnessLevel,
+    MetaCognition, WorkingMemory,
+};
 pub use contextual_embeddings::{
     AdaptationEngine, AdaptationRecord, AdaptationState, AdaptationStrategy, AdaptationType,
     ContextCache, ContextFusionMethod, ContextProcessor, ContextType, ContextualConfig,
@@ -536,7 +545,7 @@ pub use neural_symbolic_integration::{
     RuleBasedConfig, SymbolicReasoningConfig,
 };
 pub use novel_architectures::{
-    ActivationType, ArchitectureParams, ArchitectureState, ArchitectureType, AttentionMechanism,
+    ActivationType, ArchitectureParams, ArchitectureState, ArchitectureType,
     CurvatureComputation, CurvatureMethod, CurvatureType, DynamicsConfig, EntanglementStructure,
     EquivarianceGroup, FlowType, GeometricConfig, GeometricParams, GeometricSpace, GeometricState,
     GraphTransformerParams, GraphTransformerState, HyperbolicDistance, HyperbolicInit,

@@ -56,16 +56,20 @@ pub mod bitmap_index;
 pub mod block_manager;
 pub mod btree;
 pub mod checkpoint;
+pub mod compact_encoding;
 pub mod compression;
 pub mod config;
 pub mod dictionary;
 pub mod filesystem;
 pub mod hash_index;
 pub mod lock_manager;
+pub mod metrics;
 pub mod mvcc;
 pub mod nodes;
+pub mod optimistic_concurrency;
 pub mod page;
 pub mod production_hardening;
+pub mod query_optimizer;
 pub mod storage;
 pub mod timestamp_ordering;
 pub mod transactions;
@@ -94,6 +98,9 @@ pub use checkpoint::{
     CheckpointConfig, CheckpointManagerStats, CheckpointMetadata, CheckpointType, DirtyPageStats,
     DirtyPageTracker, OnlineCheckpointManager, PageModificationInfo,
 };
+pub use compact_encoding::{
+    CompactDecoder, CompactEncoder, CompactEncodingScheme, EncodingStats,
+};
 pub use compression::{
     AdaptiveCompressor, AdvancedCompressionType, ColumnStoreCompressor, CompressedData,
     CompressionMetadata,
@@ -111,12 +118,24 @@ pub use lock_manager::{
 };
 pub use mvcc::{TransactionId, Version};
 pub use nodes::{NodeId, NodeTable, Term};
+pub use optimistic_concurrency::{
+    ConflictType, OptimisticConcurrencyController, OptimisticConfig, OptimisticStats,
+    TransactionInfo, TransactionPhase, ValidationResult, VersionVector, WriteOperation,
+};
 pub use production_hardening::{
     CircuitBreaker, EdgeCaseValidator, HealthMetrics, HealthMonitor, ResourceLimits,
 };
 pub use timestamp_ordering::{
     CausalRelation, ClockSyncManager, HybridLogicalClock, LamportTimestamp,
     NodeId as TimestampNodeId, TimestampBundle, TimestampManager, TimestampStats, VectorClock,
+};
+pub use query_optimizer::{
+    IndexType, OptimizationRecommendation, PatternType, QueryCostModel, QueryOptimizer,
+    QueryPattern, QueryStatisticsSummary, QueryStats,
+};
+pub use metrics::{
+    ComprehensiveMetrics, ErrorMetrics, MetricsCollector, MetricsReport, MetricsStatistics,
+    QueryMetrics, StorageMetrics, SystemMetrics, TimeSeriesMetrics,
 };
 pub use triple_store::{Quad, Triple, TripleStore, TripleStoreConfig, TripleStoreStats};
 
@@ -255,6 +274,8 @@ pub struct TdbStore {
     filesystem: TdbFileSystem,
     triple_store: TripleStore,
     health_monitor: HealthMonitor,
+    query_optimizer: QueryOptimizer,
+    metrics_collector: MetricsCollector,
 }
 
 impl TdbStore {
@@ -328,12 +349,16 @@ impl TdbStore {
         };
 
         let triple_store = TripleStore::with_config(triple_store_config)?;
+        let query_optimizer = QueryOptimizer::new();
+        let metrics_collector = MetricsCollector::new(std::time::Duration::from_secs(60));
 
         Ok(Self {
             config,
             filesystem,
             triple_store,
             health_monitor,
+            query_optimizer,
+            metrics_collector,
         })
     }
 
@@ -462,17 +487,17 @@ impl TdbStore {
     pub fn insert_triple(&self, subject: &Term, predicate: &Term, object: &Term) -> Result<()> {
         // Fast path validation - only check term types without expensive string validation
         match subject {
-            Term::Iri(_) | Term::BlankNode(_) => {},
+            Term::Iri(_) | Term::BlankNode(_) => {}
             _ => return Err(anyhow!("Subject must be an IRI or blank node")),
         };
 
         match predicate {
-            Term::Iri(_) => {},
+            Term::Iri(_) => {}
             _ => return Err(anyhow!("Predicate must be an IRI")),
         };
 
         match object {
-            Term::Iri(_) | Term::BlankNode(_) | Term::Literal { .. } => {},
+            Term::Iri(_) | Term::BlankNode(_) | Term::Literal { .. } => {}
             _ => return Err(anyhow!("Invalid object term type")),
         };
 
@@ -730,6 +755,183 @@ impl TdbStore {
     pub fn get_operation_stats(&self) -> std::collections::HashMap<String, f64> {
         self.health_monitor.get_operation_stats()
     }
+
+    /// Get query optimization recommendation for a triple pattern
+    pub fn get_query_recommendation(
+        &self,
+        subject: Option<NodeId>,
+        predicate: Option<NodeId>,
+        object: Option<NodeId>,
+    ) -> Result<OptimizationRecommendation> {
+        let pattern = QueryPattern::new(subject, predicate, object);
+        let store_stats = self.get_stats()?;
+        self.query_optimizer.recommend_optimization(&pattern, &store_stats)
+    }
+
+    /// Get query execution statistics summary
+    pub fn get_query_statistics(&self) -> Result<QueryStatisticsSummary> {
+        self.query_optimizer.get_statistics_summary()
+    }
+
+    /// Record query execution performance for optimization
+    pub fn record_query_performance(
+        &self,
+        pattern: QueryPattern,
+        execution_time: std::time::Duration,
+        result_count: u64,
+        index_used: IndexType,
+    ) -> Result<()> {
+        let stats = QueryStats {
+            pattern,
+            execution_time,
+            result_count,
+            index_used,
+            cost: execution_time.as_secs_f64() * 1000.0, // Convert to cost units
+            timestamp: std::time::Instant::now(),
+        };
+        self.query_optimizer.record_execution(stats)
+    }
+
+    /// Clear query optimization history
+    pub fn clear_query_history(&self) -> Result<()> {
+        self.query_optimizer.clear_history()
+    }
+
+    /// Get the query optimizer reference
+    pub fn query_optimizer(&self) -> &QueryOptimizer {
+        &self.query_optimizer
+    }
+
+    /// Get the metrics collector reference
+    pub fn metrics_collector(&self) -> &MetricsCollector {
+        &self.metrics_collector
+    }
+
+    /// Generate comprehensive metrics report
+    pub fn generate_metrics_report(&self, duration: std::time::Duration) -> Result<MetricsReport> {
+        self.metrics_collector.generate_report(duration)
+    }
+
+    /// Get current system metrics snapshot
+    pub fn get_current_metrics(&self) -> Result<ComprehensiveMetrics> {
+        self.metrics_collector.get_current_metrics()
+    }
+
+    /// Record query performance for metrics and optimization
+    pub fn record_query_metrics(
+        &self,
+        pattern: QueryPattern,
+        execution_time: std::time::Duration,
+        result_count: u64,
+        index_used: IndexType,
+    ) -> Result<()> {
+        // Record for query optimizer
+        self.record_query_performance(pattern.clone(), execution_time, result_count, index_used)?;
+
+        // Record for metrics collector
+        let mut labels = std::collections::HashMap::new();
+        labels.insert("pattern_type".to_string(), format!("{:?}", pattern.pattern_type()));
+        labels.insert("index_used".to_string(), format!("{:?}", index_used));
+        labels.insert("result_count".to_string(), result_count.to_string());
+
+        self.metrics_collector.record_query_time(execution_time, labels)?;
+
+        Ok(())
+    }
+
+    /// Record system metrics
+    pub fn record_system_metrics(&self, metrics: SystemMetrics) -> Result<()> {
+        self.metrics_collector.record_system_metrics(metrics)
+    }
+
+    /// Record error for monitoring
+    pub fn record_error(&self, error_type: &str) -> Result<()> {
+        self.metrics_collector.record_error(error_type)
+    }
+
+    /// Get performance statistics for various metrics
+    pub fn get_performance_stats(&self, duration: std::time::Duration) -> Result<PerformanceStatsSummary> {
+        let query_stats = self.metrics_collector.get_query_stats(duration)?;
+        let error_stats = self.metrics_collector.get_error_stats(duration)?;
+        let memory_stats = self.metrics_collector.get_memory_stats(duration)?;
+        let cpu_stats = self.metrics_collector.get_cpu_stats(duration)?;
+        let throughput_stats = self.metrics_collector.get_throughput_stats(duration)?;
+
+        Ok(PerformanceStatsSummary {
+            query_performance: query_stats,
+            error_rates: error_stats,
+            memory_usage: memory_stats,
+            cpu_usage: cpu_stats,
+            throughput: throughput_stats,
+            period: duration,
+        })
+    }
+
+    /// Export metrics report as JSON
+    pub fn export_metrics_json(&self, duration: std::time::Duration) -> Result<String> {
+        let report = self.generate_metrics_report(duration)?;
+        report.to_json()
+    }
+
+    /// Export metrics report as CSV
+    pub fn export_metrics_csv(&self, duration: std::time::Duration) -> Result<String> {
+        let report = self.generate_metrics_report(duration)?;
+        Ok(report.to_csv())
+    }
+
+    /// Check if automatic metrics collection should occur
+    pub fn should_collect_metrics(&self) -> bool {
+        self.metrics_collector.should_collect()
+    }
+
+    /// Trigger metrics collection
+    pub fn collect_metrics(&self) -> Result<()> {
+        if self.should_collect_metrics() {
+            // Collect current system state
+            let stats = self.get_stats()?;
+            let storage_metrics = StorageMetrics {
+                total_triples: stats.total_triples,
+                database_size_bytes: stats.total_triples * 100, // Estimated bytes per triple
+                index_size_bytes: stats.total_triples * 50, // Estimated index size
+                compression_ratio: 0.8, // Estimated compression ratio
+                active_transactions: 0, // Would need actual transaction count
+                completed_transactions: 0, // Would need actual transaction count
+                failed_transactions: 0, // Would need actual error count
+                wal_size_bytes: 0, // Would need actual WAL size
+                checkpoint_count: 0, // Would need actual checkpoint count
+                avg_checkpoint_duration_ms: 0.0,
+                buffer_pool_hit_rate: 0.95, // Estimated buffer pool hit rate
+                dirty_pages: 0, // Would need actual dirty page count
+            };
+
+            // Create basic system metrics (in production, these would come from system monitoring)
+            let system_metrics = SystemMetrics {
+                cpu_usage: 0.0, // Would be collected from system
+                memory_usage: 0, // Would be collected from system
+                memory_available: 0, // Would be collected from system
+                disk_read_rate: 0,
+                disk_write_rate: 0,
+                network_io_rate: 0,
+                active_threads: std::thread::available_parallelism().map(|p| p.get() as u32).unwrap_or(1),
+                timestamp: std::time::SystemTime::now(),
+            };
+
+            self.record_system_metrics(system_metrics)?;
+            self.metrics_collector.mark_collected()?;
+        }
+        Ok(())
+    }
+}
+
+/// Performance statistics summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceStatsSummary {
+    pub query_performance: MetricsStatistics,
+    pub error_rates: MetricsStatistics,
+    pub memory_usage: MetricsStatistics,
+    pub cpu_usage: MetricsStatistics,
+    pub throughput: MetricsStatistics,
+    pub period: std::time::Duration,
 }
 
 /// Database transaction handle

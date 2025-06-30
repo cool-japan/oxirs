@@ -373,7 +373,8 @@ impl MmapIndex {
                 if key.as_str() >= prefix {
                     self.search_prefix_recursive(node.children[i], prefix, results)?;
                 }
-                if (key.starts_with(prefix) || key.as_str() > prefix) && i + 1 < node.children.len() {
+                if (key.starts_with(prefix) || key.as_str() > prefix) && i + 1 < node.children.len()
+                {
                     self.search_prefix_recursive(node.children[i + 1], prefix, results)?;
                 }
                 if !key.starts_with(prefix) && key.as_str() > prefix {

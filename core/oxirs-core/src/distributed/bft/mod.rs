@@ -18,7 +18,10 @@ pub mod state_machine;
 pub mod types;
 
 // Re-export main types for backward compatibility
-pub use detection::{ByzantineDetector, CollusionDetector, EquivocationDetector, PartitionDetector, ReplayDetector, ResourceMonitor, TimingAnalysis};
+pub use detection::{
+    ByzantineDetector, CollusionDetector, EquivocationDetector, PartitionDetector, ReplayDetector,
+    ResourceMonitor, TimingAnalysis,
+};
 pub use messages::BftMessage;
 pub use node::{BftNode, ConsensusState, NodeStatus};
 pub use state_machine::RdfStateMachine;
@@ -159,7 +162,7 @@ mod tests {
     #[test]
     fn test_threat_level_assessment() {
         let detector = ByzantineDetector::new(3);
-        
+
         // New node should have low threat level
         let threat = detector.get_threat_assessment(0);
         assert_eq!(threat, ThreatLevel::Low);

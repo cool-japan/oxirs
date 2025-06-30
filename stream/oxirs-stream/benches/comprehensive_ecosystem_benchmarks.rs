@@ -17,7 +17,7 @@
 //! - **Memory Efficiency**: <10GB for 100 services
 //! - **Scalability**: Linear scaling to 1000+ partitions
 
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -27,10 +27,10 @@ use uuid::Uuid;
 
 // Import OxiRS components
 use oxirs_stream::{
-    StreamManager, StreamConfig, Backend, Producer, Consumer, Event, EventMetadata,
-    RdfPatchEvent, SparqlUpdateEvent, PerformanceOptimizer, BackendOptimizer,
-    ConnectionPool, EventSourcingManager, CQRSSystem, TimeTravel, SecurityManager,
-    MultiRegionReplication, PatternDetector, WindowAggregator, StreamProcessor,
+    Backend, BackendOptimizer, CQRSSystem, ConnectionPool, Consumer, Event, EventMetadata,
+    EventSourcingManager, MultiRegionReplication, PatternDetector, PerformanceOptimizer, Producer,
+    RdfPatchEvent, SecurityManager, SparqlUpdateEvent, StreamConfig, StreamManager,
+    StreamProcessor, TimeTravel, WindowAggregator,
 };
 
 /// Comprehensive benchmark configuration
@@ -49,7 +49,12 @@ pub struct BenchmarkConfig {
 impl Default for BenchmarkConfig {
     fn default() -> Self {
         Self {
-            stream_backends: vec![Backend::Memory, Backend::Kafka, Backend::Nats, Backend::Redis],
+            stream_backends: vec![
+                Backend::Memory,
+                Backend::Kafka,
+                Backend::Nats,
+                Backend::Redis,
+            ],
             event_sizes: vec![100, 1000, 10000, 100000], // bytes
             batch_sizes: vec![1, 10, 100, 1000],
             concurrency_levels: vec![1, 10, 50, 100],
@@ -146,7 +151,11 @@ impl MetricsCollector {
             latency_p99_ms: percentile(&sorted_latencies, 0.99),
             memory_usage_mb: memory_samples.iter().sum::<f64>() / memory_samples.len() as f64,
             cpu_usage_percent: 0.0, // Would be collected from system metrics
-            error_rate: if total_operations > 0 { errors as f64 / total_operations as f64 } else { 0.0 },
+            error_rate: if total_operations > 0 {
+                errors as f64 / total_operations as f64
+            } else {
+                0.0
+            },
             cache_hit_rate: 0.0, // Would be collected from cache statistics
             network_throughput_mbps: 0.0, // Would be collected from network monitoring
         }
@@ -172,7 +181,7 @@ impl EcosystemBenchmarkSuite {
                 .worker_threads(num_cpus::get())
                 .enable_all()
                 .build()
-                .expect("Failed to create Tokio runtime")
+                .expect("Failed to create Tokio runtime"),
         );
 
         let metrics_collector = Arc::new(MetricsCollector::new());
@@ -219,344 +228,307 @@ impl EcosystemBenchmarkSuite {
     /// Benchmark stream throughput across different backends
     fn benchmark_stream_throughput(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("stream_throughput");
-        
+
         for backend in &self.config.stream_backends {
             for &batch_size in &self.config.batch_sizes {
-                let benchmark_id = BenchmarkId::new(
-                    format!("{:?}", backend),
-                    batch_size
-                );
-                
+                let benchmark_id = BenchmarkId::new(format!("{:?}", backend), batch_size);
+
                 group.throughput(Throughput::Elements(batch_size as u64));
                 group.bench_with_input(
                     benchmark_id,
                     &(backend, batch_size),
                     |b, &(backend, batch_size)| {
-                        b.to_async(&*self.runtime).iter(|| {
-                            self.run_throughput_benchmark(*backend, batch_size)
-                        });
-                    }
+                        b.to_async(&*self.runtime)
+                            .iter(|| self.run_throughput_benchmark(*backend, batch_size));
+                    },
                 );
             }
         }
-        
+
         group.finish();
     }
 
     /// Benchmark stream latency
     fn benchmark_stream_latency(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("stream_latency");
-        
+
         for backend in &self.config.stream_backends {
             for &event_size in &self.config.event_sizes {
-                let benchmark_id = BenchmarkId::new(
-                    format!("{:?}", backend),
-                    event_size
-                );
-                
+                let benchmark_id = BenchmarkId::new(format!("{:?}", backend), event_size);
+
                 group.bench_with_input(
                     benchmark_id,
                     &(backend, event_size),
                     |b, &(backend, event_size)| {
-                        b.to_async(&*self.runtime).iter(|| {
-                            self.run_latency_benchmark(*backend, event_size)
-                        });
-                    }
+                        b.to_async(&*self.runtime)
+                            .iter(|| self.run_latency_benchmark(*backend, event_size));
+                    },
                 );
             }
         }
-        
+
         group.finish();
     }
 
     /// Benchmark memory efficiency
     fn benchmark_stream_memory_efficiency(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("stream_memory");
-        
+
         for &concurrency in &self.config.concurrency_levels {
             let benchmark_id = BenchmarkId::new("memory_usage", concurrency);
-            
-            group.bench_with_input(
-                benchmark_id,
-                &concurrency,
-                |b, &concurrency| {
-                    b.to_async(&*self.runtime).iter(|| {
-                        self.run_memory_benchmark(concurrency)
-                    });
-                }
-            );
+
+            group.bench_with_input(benchmark_id, &concurrency, |b, &concurrency| {
+                b.to_async(&*self.runtime)
+                    .iter(|| self.run_memory_benchmark(concurrency));
+            });
         }
-        
+
         group.finish();
     }
 
     /// Benchmark scalability
     fn benchmark_stream_scalability(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("stream_scalability");
-        
+
         for &concurrency in &self.config.concurrency_levels {
             let benchmark_id = BenchmarkId::new("concurrent_producers", concurrency);
-            
+
             group.throughput(Throughput::Elements(concurrency as u64 * 1000));
-            group.bench_with_input(
-                benchmark_id,
-                &concurrency,
-                |b, &concurrency| {
-                    b.to_async(&*self.runtime).iter(|| {
-                        self.run_scalability_benchmark(concurrency)
-                    });
-                }
-            );
+            group.bench_with_input(benchmark_id, &concurrency, |b, &concurrency| {
+                b.to_async(&*self.runtime)
+                    .iter(|| self.run_scalability_benchmark(concurrency));
+            });
         }
-        
+
         group.finish();
     }
 
     /// Benchmark federation query performance
     fn benchmark_federation_query_performance(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("federation_queries");
-        
+
         let query_types = vec![
             ("simple", "SELECT * WHERE { ?s ?p ?o } LIMIT 10"),
             ("complex", "SELECT ?name ?age WHERE { ?person foaf:name ?name . ?person foaf:age ?age . FILTER(?age > 25) }"),
             ("federated", "SELECT ?name WHERE { SERVICE <http://example.org/sparql> { ?person foaf:name ?name } }"),
         ];
-        
+
         for (query_name, query) in query_types {
-            group.bench_function(
-                query_name,
-                |b| b.to_async(&*self.runtime).iter(|| {
-                    self.run_federation_query_benchmark(query)
-                })
-            );
+            group.bench_function(query_name, |b| {
+                b.to_async(&*self.runtime)
+                    .iter(|| self.run_federation_query_benchmark(query))
+            });
         }
-        
+
         group.finish();
     }
 
     /// Benchmark federation cache efficiency
     fn benchmark_federation_cache_efficiency(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("federation_cache");
-        
+
         group.bench_function("cache_miss", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_cache_miss_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_cache_miss_benchmark());
         });
-        
+
         group.bench_function("cache_hit", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_cache_hit_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_cache_hit_benchmark());
         });
-        
+
         group.finish();
     }
 
     /// Benchmark service discovery
     fn benchmark_federation_service_discovery(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("service_discovery");
-        
+
         let service_counts = vec![10, 50, 100, 500];
-        
+
         for &count in &service_counts {
             group.bench_with_input(
                 BenchmarkId::new("discovery_time", count),
                 &count,
                 |b, &count| {
-                    b.to_async(&*self.runtime).iter(|| {
-                        self.run_service_discovery_benchmark(count)
-                    });
-                }
+                    b.to_async(&*self.runtime)
+                        .iter(|| self.run_service_discovery_benchmark(count));
+                },
             );
         }
-        
+
         group.finish();
     }
 
     /// Benchmark fault tolerance
     fn benchmark_federation_fault_tolerance(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("fault_tolerance");
-        
+
         group.bench_function("service_failure_recovery", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_fault_tolerance_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_fault_tolerance_benchmark());
         });
-        
+
         group.finish();
     }
 
     /// Benchmark stream-federation integration
     fn benchmark_stream_federation_integration(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("stream_federation_integration");
-        
+
         group.bench_function("stream_to_federation", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_integration_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_integration_benchmark());
         });
-        
+
         group.finish();
     }
 
     /// Benchmark real-time updates
     fn benchmark_real_time_updates(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("real_time_updates");
-        
+
         for &update_rate in &[100, 1000, 10000] {
             group.bench_with_input(
                 BenchmarkId::new("updates_per_sec", update_rate),
                 &update_rate,
                 |b, &update_rate| {
-                    b.to_async(&*self.runtime).iter(|| {
-                        self.run_real_time_updates_benchmark(update_rate)
-                    });
-                }
+                    b.to_async(&*self.runtime)
+                        .iter(|| self.run_real_time_updates_benchmark(update_rate));
+                },
             );
         }
-        
+
         group.finish();
     }
 
     /// Benchmark multi-backend performance
     fn benchmark_multi_backend_performance(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("multi_backend");
-        
+
         group.bench_function("backend_switching", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_multi_backend_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_multi_backend_benchmark());
         });
-        
+
         group.finish();
     }
 
     /// Benchmark event sourcing performance
     fn benchmark_event_sourcing_performance(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("event_sourcing");
-        
+
         for &event_count in &[1000, 10000, 100000] {
             group.bench_with_input(
                 BenchmarkId::new("event_replay", event_count),
                 &event_count,
                 |b, &event_count| {
-                    b.to_async(&*self.runtime).iter(|| {
-                        self.run_event_sourcing_benchmark(event_count)
-                    });
-                }
+                    b.to_async(&*self.runtime)
+                        .iter(|| self.run_event_sourcing_benchmark(event_count));
+                },
             );
         }
-        
+
         group.finish();
     }
 
     /// Benchmark CQRS performance
     fn benchmark_cqrs_performance(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("cqrs");
-        
+
         group.bench_function("command_processing", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_cqrs_command_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_cqrs_command_benchmark());
         });
-        
+
         group.bench_function("query_processing", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_cqrs_query_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_cqrs_query_benchmark());
         });
-        
+
         group.finish();
     }
 
     /// Benchmark time-travel queries
     fn benchmark_time_travel_queries(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("time_travel");
-        
+
         group.bench_function("historical_query", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_time_travel_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_time_travel_benchmark());
         });
-        
+
         group.finish();
     }
 
     /// Benchmark security features
     fn benchmark_security_features(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("security");
-        
+
         group.bench_function("authentication", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_security_auth_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_security_auth_benchmark());
         });
-        
+
         group.bench_function("encryption", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_security_encryption_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_security_encryption_benchmark());
         });
-        
+
         group.finish();
     }
 
     /// Benchmark multi-region replication
     fn benchmark_multi_region_replication(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("multi_region");
-        
+
         group.bench_function("cross_region_sync", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_multi_region_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_multi_region_benchmark());
         });
-        
+
         group.finish();
     }
 
     /// Benchmark high load stress testing
     fn benchmark_high_load_stress(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("stress_test");
-        
+
         group.bench_function("high_load", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_high_load_stress_test()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_high_load_stress_test());
         });
-        
+
         group.finish();
     }
 
     /// Benchmark concurrent operations
     fn benchmark_concurrent_operations(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("concurrent_operations");
-        
+
         for &concurrency in &[10, 50, 100, 500] {
             group.bench_with_input(
                 BenchmarkId::new("concurrent_queries", concurrency),
                 &concurrency,
                 |b, &concurrency| {
-                    b.to_async(&*self.runtime).iter(|| {
-                        self.run_concurrent_operations_benchmark(concurrency)
-                    });
-                }
+                    b.to_async(&*self.runtime)
+                        .iter(|| self.run_concurrent_operations_benchmark(concurrency));
+                },
             );
         }
-        
+
         group.finish();
     }
 
     /// Benchmark resource exhaustion scenarios
     fn benchmark_resource_exhaustion(&self, c: &mut Criterion) {
         let mut group = c.benchmark_group("resource_exhaustion");
-        
+
         group.bench_function("memory_pressure", |b| {
-            b.to_async(&*self.runtime).iter(|| {
-                self.run_memory_pressure_benchmark()
-            });
+            b.to_async(&*self.runtime)
+                .iter(|| self.run_memory_pressure_benchmark());
         });
-        
+
         group.finish();
     }
 
@@ -570,7 +542,10 @@ impl EcosystemBenchmarkSuite {
         };
 
         let stream_manager = StreamManager::new(config).await.unwrap();
-        let producer = stream_manager.create_producer(backend, "benchmark-topic").await.unwrap();
+        let producer = stream_manager
+            .create_producer(backend, "benchmark-topic")
+            .await
+            .unwrap();
 
         let start_time = Instant::now();
         let mut events_sent = 0u64;
@@ -578,7 +553,10 @@ impl EcosystemBenchmarkSuite {
         for _ in 0..batch_size {
             let event = Event::RdfPatch(RdfPatchEvent {
                 patch_id: Uuid::new_v4(),
-                patch_data: format!("A <http://example.org/subject{}> <http://example.org/predicate> \"Object\" .", events_sent),
+                patch_data: format!(
+                    "A <http://example.org/subject{}> <http://example.org/predicate> \"Object\" .",
+                    events_sent
+                ),
                 metadata: EventMetadata {
                     timestamp: chrono::Utc::now(),
                     source: "benchmark".to_string(),
@@ -594,7 +572,7 @@ impl EcosystemBenchmarkSuite {
 
         let duration = start_time.elapsed();
         let throughput = events_sent as f64 / duration.as_secs_f64();
-        
+
         self.metrics_collector.record_throughput(throughput).await;
         events_sent
     }
@@ -607,12 +585,18 @@ impl EcosystemBenchmarkSuite {
         };
 
         let stream_manager = StreamManager::new(config).await.unwrap();
-        let producer = stream_manager.create_producer(backend, "latency-topic").await.unwrap();
+        let producer = stream_manager
+            .create_producer(backend, "latency-topic")
+            .await
+            .unwrap();
 
         let large_data = "x".repeat(event_size);
         let event = Event::RdfPatch(RdfPatchEvent {
             patch_id: Uuid::new_v4(),
-            patch_data: format!("A <http://example.org/subject> <http://example.org/predicate> \"{}\" .", large_data),
+            patch_data: format!(
+                "A <http://example.org/subject> <http://example.org/predicate> \"{}\" .",
+                large_data
+            ),
             metadata: EventMetadata {
                 timestamp: chrono::Utc::now(),
                 source: "latency-benchmark".to_string(),
@@ -637,7 +621,7 @@ impl EcosystemBenchmarkSuite {
             let permit = semaphore.clone().acquire_owned().await.unwrap();
             let handle = tokio::spawn(async move {
                 let _permit = permit; // Keep permit alive
-                
+
                 // Simulate memory-intensive operations
                 let config = StreamConfig {
                     backend: Backend::Memory,
@@ -646,7 +630,10 @@ impl EcosystemBenchmarkSuite {
                 };
 
                 let stream_manager = StreamManager::new(config).await.unwrap();
-                let producer = stream_manager.create_producer(Backend::Memory, "memory-topic").await.unwrap();
+                let producer = stream_manager
+                    .create_producer(Backend::Memory, "memory-topic")
+                    .await
+                    .unwrap();
 
                 // Create many events to test memory usage
                 for i in 0..1000 {
@@ -690,7 +677,7 @@ impl EcosystemBenchmarkSuite {
             let permit = semaphore.clone().acquire_owned().await.unwrap();
             let handle = tokio::spawn(async move {
                 let _permit = permit; // Keep permit alive
-                
+
                 let config = StreamConfig {
                     backend: Backend::Memory,
                     enable_performance_optimization: true,
@@ -698,7 +685,10 @@ impl EcosystemBenchmarkSuite {
                 };
 
                 let stream_manager = StreamManager::new(config).await.unwrap();
-                let producer = stream_manager.create_producer(Backend::Memory, "scale-topic").await.unwrap();
+                let producer = stream_manager
+                    .create_producer(Backend::Memory, "scale-topic")
+                    .await
+                    .unwrap();
 
                 let mut events_sent = 0u64;
                 for i in 0..1000 {
@@ -736,10 +726,12 @@ impl EcosystemBenchmarkSuite {
         // This would create a federation engine and execute the query
         // For now, we'll simulate the execution time
         let simulated_execution_time = Duration::from_millis(50 + (query.len() as u64 / 10));
-        
+
         tokio::time::sleep(simulated_execution_time).await;
-        self.metrics_collector.record_latency(simulated_execution_time).await;
-        
+        self.metrics_collector
+            .record_latency(simulated_execution_time)
+            .await;
+
         simulated_execution_time
     }
 
@@ -858,7 +850,7 @@ impl EcosystemBenchmarkSuite {
         for handle in handles {
             handle.await.unwrap();
         }
-        
+
         start_time.elapsed()
     }
 
@@ -875,7 +867,7 @@ fn percentile(sorted_data: &[f64], p: f64) -> f64 {
     if sorted_data.is_empty() {
         return 0.0;
     }
-    
+
     let index = ((sorted_data.len() - 1) as f64 * p) as usize;
     sorted_data.get(index).copied().unwrap_or(0.0)
 }
@@ -884,7 +876,7 @@ fn percentile(sorted_data: &[f64], p: f64) -> f64 {
 fn comprehensive_ecosystem_benchmarks(c: &mut Criterion) {
     let config = BenchmarkConfig::default();
     let suite = EcosystemBenchmarkSuite::new(config);
-    
+
     suite.run_all_benchmarks(c);
 }
 
@@ -907,12 +899,12 @@ mod tests {
     #[tokio::test]
     async fn test_metrics_collector() {
         let collector = MetricsCollector::new();
-        
+
         collector.record_latency(Duration::from_millis(100)).await;
         collector.record_throughput(1000.0).await;
         collector.record_error().await;
         collector.record_memory(50.0).await;
-        
+
         let metrics = collector.calculate_metrics(1).await;
         assert!(metrics.latency_p50_ms > 0.0);
         assert!(metrics.throughput_events_per_sec > 0.0);
@@ -924,7 +916,7 @@ mod tests {
     async fn test_benchmark_suite_creation() {
         let config = BenchmarkConfig::default();
         let suite = EcosystemBenchmarkSuite::new(config);
-        
+
         // Test that we can run a simple benchmark
         let result = suite.run_throughput_benchmark(Backend::Memory, 10).await;
         assert!(result > 0);
@@ -933,7 +925,7 @@ mod tests {
     #[test]
     fn test_percentile_calculation() {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
-        
+
         assert_eq!(percentile(&data, 0.5), 5.0); // 50th percentile
         assert_eq!(percentile(&data, 0.9), 9.0); // 90th percentile
         assert_eq!(percentile(&data, 1.0), 10.0); // 100th percentile

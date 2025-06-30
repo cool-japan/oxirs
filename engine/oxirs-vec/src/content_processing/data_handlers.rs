@@ -3,11 +3,9 @@
 //! This module provides handlers for JSON, CSV, and other structured data formats.
 
 #[cfg(feature = "content-processing")]
-use crate::{
-    content_processing::{
-        ContentExtractionConfig, DocumentFormat, ExtractedContent, FormatHandler,
-        DocumentStructure, ProcessingStats, ExtractedTable, ContentLocation
-    }
+use crate::content_processing::{
+    ContentExtractionConfig, ContentLocation, DocumentFormat, DocumentStructure, ExtractedContent,
+    ExtractedTable, FormatHandler, ProcessingStats,
 };
 #[cfg(feature = "content-processing")]
 use anyhow::Result;

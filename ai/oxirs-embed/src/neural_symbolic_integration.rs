@@ -876,11 +876,25 @@ impl NeuralSymbolicModel {
         let model_id = Uuid::new_v4();
         let dimensions = config.base_config.dimensions;
 
-        // Initialize neural layers
+        // Initialize neural layers with proper dimensions
         let mut neural_layers = Vec::new();
-        for layer_config in &config.architecture_config.neural_config.layers {
+        let layer_configs = &config.architecture_config.neural_config.layers;
+        
+        for (i, layer_config) in layer_configs.iter().enumerate() {
+            let input_size = if i == 0 {
+                dimensions // First layer takes configured input dimension
+            } else {
+                layer_configs[i - 1].size // Subsequent layers take previous layer's output
+            };
+            
+            let output_size = if i == layer_configs.len() - 1 {
+                dimensions // Last layer outputs configured dimension
+            } else {
+                layer_config.size // Middle layers use configured size
+            };
+            
             neural_layers.push(Array2::from_shape_fn(
-                (layer_config.size, dimensions),
+                (output_size, input_size),
                 |_| rand::random::<f32>() * 0.1,
             ));
         }
@@ -1616,7 +1630,13 @@ mod tests {
 
     #[test]
     fn test_integrated_forward() {
-        let config = NeuralSymbolicConfig::default();
+        let config = NeuralSymbolicConfig {
+            base_config: ModelConfig {
+                dimensions: 3, // Match input array size
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let model = NeuralSymbolicModel::new(config);
 
         let input = Array1::from_vec(vec![1.0, 0.5, 0.0]);

@@ -8,7 +8,11 @@
 use anyhow::Result;
 
 pub mod backward;
+pub mod cache;
+pub mod comprehensive_tutorial;
+pub mod debug;
 pub mod forward;
+pub mod getting_started;
 pub mod integration;
 pub mod owl;
 pub mod performance;

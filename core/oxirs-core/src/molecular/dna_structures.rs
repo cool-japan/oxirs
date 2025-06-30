@@ -1,15 +1,16 @@
 //! DNA-inspired data structures for RDF storage
 
-use crate::error::OxirsResult;
-use crate::model::{Subject, Predicate, Object, Term, Triple};
-use super::types::*;
 use super::replication::ReplicationMachinery;
+use super::types::*;
+use crate::error::OxirsResult;
+use crate::model::{Object, Predicate, Subject, Term, Triple};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// DNA-inspired data structure for RDF storage
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DnaDataStructure {
     /// Primary DNA strand (main data)
     pub primary_strand: Vec<NucleotideData>,
@@ -24,20 +25,20 @@ pub struct DnaDataStructure {
 }
 
 /// Nucleotide representation for RDF data
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NucleotideData {
     /// Adenine - represents subjects
-    Adenine(Arc<Term>),
+    Adenine(Term),
     /// Thymine - represents predicates
-    Thymine(Arc<Term>),
+    Thymine(Term),
     /// Guanine - represents objects
-    Guanine(Arc<Term>),
+    Guanine(Term),
     /// Cytosine - represents special markers
     Cytosine(SpecialMarker),
 }
 
 /// Special markers for DNA structure
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SpecialMarker {
     /// Start of gene (triple boundary)
     StartCodon,
@@ -72,19 +73,27 @@ impl DnaDataStructure {
     /// Encode a triple into nucleotide sequence
     pub fn encode_triple(&mut self, triple: &Triple) -> OxirsResult<()> {
         // Add start codon
-        self.primary_strand.push(NucleotideData::Cytosine(SpecialMarker::StartCodon));
+        self.primary_strand
+            .push(NucleotideData::Cytosine(SpecialMarker::StartCodon));
 
         // Encode subject as Adenine
-        self.primary_strand.push(NucleotideData::Adenine(Arc::new(triple.subject().clone().into())));
+        self.primary_strand.push(NucleotideData::Adenine(
+            triple.subject().clone().into(),
+        ));
 
         // Encode predicate as Thymine
-        self.primary_strand.push(NucleotideData::Thymine(Arc::new(triple.predicate().clone().into())));
+        self.primary_strand.push(NucleotideData::Thymine(
+            triple.predicate().clone().into(),
+        ));
 
         // Encode object as Guanine
-        self.primary_strand.push(NucleotideData::Guanine(Arc::new(triple.object().clone().into())));
+        self.primary_strand.push(NucleotideData::Guanine(
+            triple.object().clone().into(),
+        ));
 
         // Add stop codon
-        self.primary_strand.push(NucleotideData::Cytosine(SpecialMarker::StopCodon));
+        self.primary_strand
+            .push(NucleotideData::Cytosine(SpecialMarker::StopCodon));
 
         // Generate complementary strand
         self.synthesize_complementary_strand()?;
@@ -95,15 +104,20 @@ impl DnaDataStructure {
     /// Synthesize complementary strand for validation
     fn synthesize_complementary_strand(&mut self) -> OxirsResult<()> {
         self.complementary_strand.clear();
-        
+
         for nucleotide in &self.primary_strand {
             let complement = match nucleotide {
                 NucleotideData::Adenine(term) => NucleotideData::Thymine(term.clone()),
                 NucleotideData::Thymine(term) => NucleotideData::Adenine(term.clone()),
-                NucleotideData::Guanine(term) => NucleotideData::Cytosine(SpecialMarker::Enhancer(term.to_string())),
-                NucleotideData::Cytosine(marker) => NucleotideData::Guanine(Arc::new(Term::NamedNode(
-                    crate::model::NamedNode::new(&format!("marker:{}", marker.type_name())).unwrap()
-                ))),
+                NucleotideData::Guanine(term) => {
+                    NucleotideData::Cytosine(SpecialMarker::Enhancer(term.to_string()))
+                }
+                NucleotideData::Cytosine(marker) => {
+                    NucleotideData::Guanine(Term::NamedNode(
+                        crate::model::NamedNode::new(&format!("marker:{}", marker.type_name()))
+                            .unwrap(),
+                    ))
+                }
             };
             self.complementary_strand.push(complement);
         }
@@ -114,7 +128,7 @@ impl DnaDataStructure {
     /// Decode nucleotide sequence back to triples
     pub fn decode_triples(&self) -> OxirsResult<Vec<Triple>> {
         let mut triples = Vec::new();
-        let mut current_triple_data: Vec<Arc<Term>> = Vec::new();
+        let mut current_triple_data: Vec<Term> = Vec::new();
         let mut in_gene = false;
 
         for nucleotide in &self.primary_strand {
@@ -128,12 +142,12 @@ impl DnaDataStructure {
                         if let (Some(subject), Some(predicate), Some(object)) = (
                             current_triple_data.get(0),
                             current_triple_data.get(1),
-                            current_triple_data.get(2)
+                            current_triple_data.get(2),
                         ) {
                             if let (Ok(s), Ok(p), Ok(o)) = (
-                                Subject::try_from(subject.as_ref().clone()),
-                                Predicate::try_from(predicate.as_ref().clone()),
-                                Object::try_from(object.as_ref().clone()),
+                                Subject::try_from(subject.clone()),
+                                Predicate::try_from(predicate.clone()),
+                                Object::try_from(object.clone()),
                             ) {
                                 triples.push(Triple::new(s, p, o));
                             }
@@ -142,9 +156,9 @@ impl DnaDataStructure {
                     in_gene = false;
                     current_triple_data.clear();
                 }
-                NucleotideData::Adenine(term) |
-                NucleotideData::Thymine(term) |
-                NucleotideData::Guanine(term) => {
+                NucleotideData::Adenine(term)
+                | NucleotideData::Thymine(term)
+                | NucleotideData::Guanine(term) => {
                     if in_gene {
                         current_triple_data.push(term.clone());
                     }
@@ -175,7 +189,11 @@ impl DnaDataStructure {
         }
 
         // Check complementary base pairing rules
-        for (primary, complement) in self.primary_strand.iter().zip(self.complementary_strand.iter()) {
+        for (primary, complement) in self
+            .primary_strand
+            .iter()
+            .zip(self.complementary_strand.iter())
+        {
             if !self.is_valid_base_pair(primary, complement) {
                 return false;
             }
@@ -202,10 +220,11 @@ impl DnaDataStructure {
 
     /// Get memory usage estimate
     pub fn memory_usage(&self) -> usize {
-        std::mem::size_of::<Self>() +
-        self.primary_strand.capacity() * std::mem::size_of::<NucleotideData>() +
-        self.complementary_strand.capacity() * std::mem::size_of::<NucleotideData>() +
-        self.genetic_markers.capacity() * (std::mem::size_of::<String>() + std::mem::size_of::<usize>())
+        std::mem::size_of::<Self>()
+            + self.primary_strand.capacity() * std::mem::size_of::<NucleotideData>()
+            + self.complementary_strand.capacity() * std::mem::size_of::<NucleotideData>()
+            + self.genetic_markers.capacity()
+                * (std::mem::size_of::<String>() + std::mem::size_of::<usize>())
     }
 }
 
@@ -246,7 +265,7 @@ mod tests {
     #[test]
     fn test_triple_encoding_decoding() {
         let mut dna = DnaDataStructure::new();
-        
+
         let triple = Triple::new(
             NamedNode::new("http://example.org/subject").unwrap(),
             NamedNode::new("http://example.org/predicate").unwrap(),
@@ -255,7 +274,7 @@ mod tests {
 
         dna.encode_triple(&triple).unwrap();
         let decoded = dna.decode_triples().unwrap();
-        
+
         assert_eq!(decoded.len(), 1);
         assert_eq!(decoded[0], triple);
     }
@@ -263,7 +282,7 @@ mod tests {
     #[test]
     fn test_genetic_markers() {
         let mut dna = DnaDataStructure::new();
-        
+
         dna.add_genetic_marker("test_marker".to_string(), 42);
         assert_eq!(dna.find_by_marker("test_marker"), Some(42));
         assert_eq!(dna.find_by_marker("nonexistent"), None);
@@ -272,7 +291,7 @@ mod tests {
     #[test]
     fn test_strand_integrity() {
         let mut dna = DnaDataStructure::new();
-        
+
         let triple = Triple::new(
             NamedNode::new("http://example.org/s").unwrap(),
             NamedNode::new("http://example.org/p").unwrap(),

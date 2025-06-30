@@ -3,11 +3,9 @@
 //! This module provides handlers for Microsoft Office documents (DOCX, PPTX, XLSX).
 
 #[cfg(feature = "content-processing")]
-use crate::{
-    content_processing::{
-        ContentExtractionConfig, DocumentFormat, ExtractedContent, FormatHandler,
-        DocumentStructure, Heading, ContentLocation, ProcessingStats, ExtractedTable
-    }
+use crate::content_processing::{
+    ContentExtractionConfig, ContentLocation, DocumentFormat, DocumentStructure, ExtractedContent,
+    ExtractedTable, FormatHandler, Heading, ProcessingStats,
 };
 #[cfg(feature = "content-processing")]
 use anyhow::{anyhow, Result};

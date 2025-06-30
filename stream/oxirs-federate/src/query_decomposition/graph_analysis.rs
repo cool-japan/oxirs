@@ -3,9 +3,9 @@
 //! This module contains functionality for building query graphs, analyzing their structure,
 //! and finding connected components for decomposition.
 
-use std::collections::{HashMap, HashSet, VecDeque};
-use petgraph::graph::NodeIndex;
 use anyhow::Result;
+use petgraph::graph::NodeIndex;
+use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::debug;
 
 use crate::planner::{QueryInfo, TriplePattern};
@@ -56,7 +56,11 @@ impl QueryDecomposer {
             if let Some(ref object) = pattern.object {
                 if object.starts_with('?') {
                     if let Some(&var_node) = variable_nodes.get(object) {
-                        graph.connect_pattern_to_variable(pattern_node, var_node, VariableRole::Object);
+                        graph.connect_pattern_to_variable(
+                            pattern_node,
+                            var_node,
+                            VariableRole::Object,
+                        );
                     }
                 }
             }
@@ -139,32 +143,32 @@ impl QueryDecomposer {
     /// Analyze graph structure for optimization opportunities
     pub fn analyze_graph_structure(&self, graph: &QueryGraph) -> GraphStructureAnalysis {
         let mut analysis = GraphStructureAnalysis::new();
-        
+
         // Count different types of nodes
         analysis.variable_count = graph.variable_nodes.len();
         analysis.pattern_count = graph.pattern_nodes.len();
         analysis.filter_count = graph.filter_nodes.len();
-        
+
         // Analyze connectivity patterns
         analysis.connectivity_analysis = self.analyze_connectivity(graph);
-        
+
         // Detect common patterns
         analysis.detected_patterns = self.detect_query_patterns(graph);
-        
+
         analysis
     }
 
     /// Analyze connectivity in the graph
     fn analyze_connectivity(&self, graph: &QueryGraph) -> ConnectivityAnalysis {
         let mut analysis = ConnectivityAnalysis::new();
-        
+
         // Calculate node degrees
         for &node in graph.pattern_nodes() {
             let degree = graph.neighbors(node).count();
             analysis.node_degrees.insert(node, degree);
             analysis.max_degree = analysis.max_degree.max(degree);
         }
-        
+
         // Detect hub nodes (high-degree nodes)
         let threshold = (analysis.max_degree as f64 * 0.7) as usize;
         for (&node, &degree) in &analysis.node_degrees {
@@ -172,29 +176,29 @@ impl QueryDecomposer {
                 analysis.hub_nodes.push(node);
             }
         }
-        
+
         analysis
     }
 
     /// Detect common query patterns
     fn detect_query_patterns(&self, graph: &QueryGraph) -> Vec<DetectedPattern> {
         let mut patterns = Vec::new();
-        
+
         // Detect star patterns
         if let Some(star) = self.detect_star_pattern(graph) {
             patterns.push(DetectedPattern::Star(star));
         }
-        
+
         // Detect chain patterns
         if let Some(chain) = self.detect_chain_pattern(graph) {
             patterns.push(DetectedPattern::Chain(chain));
         }
-        
+
         // Detect cyclic patterns
         if self.detect_cycles(graph) {
             patterns.push(DetectedPattern::Cycle);
         }
-        
+
         patterns
     }
 
@@ -238,22 +242,24 @@ impl QueryDecomposer {
     ) -> Vec<NodeIndex> {
         let mut chain = vec![current];
         visited.insert(current);
-        
-        let neighbors: Vec<_> = graph.neighbors(current)
+
+        let neighbors: Vec<_> = graph
+            .neighbors(current)
             .filter(|&n| !visited.contains(&n))
             .collect();
-        
+
         if neighbors.len() == 1 {
             let next = neighbors[0];
-            let next_neighbors: Vec<_> = graph.neighbors(next)
+            let next_neighbors: Vec<_> = graph
+                .neighbors(next)
                 .filter(|&n| !visited.contains(&n))
                 .collect();
-            
+
             if next_neighbors.len() <= 1 {
                 chain.extend(self.follow_chain(graph, next, visited));
             }
         }
-        
+
         chain
     }
 

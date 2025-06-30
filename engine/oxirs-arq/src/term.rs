@@ -3,7 +3,8 @@
 //! This module provides a complete implementation of RDF terms with full datatype support,
 //! SPARQL-compliant comparison and ordering, variable binding, and expression evaluation.
 
-use crate::algebra::{Iri, Literal, Term as AlgebraTerm, Variable};
+use crate::algebra::{Iri, Literal, Term as AlgebraTerm, TriplePattern, Variable};
+use crate::path::PropertyPath;
 use anyhow::{anyhow, bail, Result};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
 use ordered_float::OrderedFloat;
@@ -62,6 +63,18 @@ pub enum Term {
     Literal(LiteralValue),
     /// Variable (for query patterns)
     Variable(String),
+    /// Quoted triple (RDF-star support)
+    QuotedTriple(Box<QuotedTripleValue>),
+    /// Property path expression
+    PropertyPath(PropertyPath),
+}
+
+/// Quoted triple representation for RDF-star
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct QuotedTripleValue {
+    pub subject: Term,
+    pub predicate: Term,
+    pub object: Term,
 }
 
 /// Literal value with parsed datatype
@@ -125,6 +138,20 @@ impl Term {
         Term::Variable(name.to_string())
     }
 
+    /// Create a quoted triple term
+    pub fn quoted_triple(subject: Term, predicate: Term, object: Term) -> Self {
+        Term::QuotedTriple(Box::new(QuotedTripleValue {
+            subject,
+            predicate,
+            object,
+        }))
+    }
+
+    /// Create a property path term
+    pub fn property_path(path: PropertyPath) -> Self {
+        Term::PropertyPath(path)
+    }
+
     /// Check if term is a variable
     pub fn is_variable(&self) -> bool {
         matches!(self, Term::Variable(_))
@@ -148,6 +175,16 @@ impl Term {
     /// Check if term is a literal
     pub fn is_literal(&self) -> bool {
         matches!(self, Term::Literal(_))
+    }
+
+    /// Check if term is a quoted triple
+    pub fn is_quoted_triple(&self) -> bool {
+        matches!(self, Term::QuotedTriple(_))
+    }
+
+    /// Check if term is a property path
+    pub fn is_property_path(&self) -> bool {
+        matches!(self, Term::PropertyPath(_))
     }
 }
 
@@ -353,7 +390,7 @@ impl Ord for Term {
     fn cmp(&self, other: &Self) -> Ordering {
         use Term::*;
 
-        // Order: Unbound < Blank < IRI < Literal
+        // Order: Variable < BlankNode < Iri < Literal < QuotedTriple < PropertyPath
         match (self, other) {
             (Variable(_), Variable(_)) => Ordering::Equal,
             (Variable(_), _) => Ordering::Less,
@@ -364,10 +401,18 @@ impl Ord for Term {
             (_, BlankNode(_)) => Ordering::Greater,
 
             (Iri(a), Iri(b)) => a.cmp(b),
-            (Iri(_), Literal(_)) => Ordering::Less,
-            (Literal(_), Iri(_)) => Ordering::Greater,
+            (Iri(_), Literal(_) | QuotedTriple(_) | PropertyPath(_)) => Ordering::Less,
+            (Literal(_) | QuotedTriple(_) | PropertyPath(_), Iri(_)) => Ordering::Greater,
 
             (Literal(a), Literal(b)) => a.cmp(b),
+            (Literal(_), QuotedTriple(_) | PropertyPath(_)) => Ordering::Less,
+            (QuotedTriple(_) | PropertyPath(_), Literal(_)) => Ordering::Greater,
+
+            (QuotedTriple(a), QuotedTriple(b)) => a.cmp(b),
+            (QuotedTriple(_), PropertyPath(_)) => Ordering::Less,
+            (PropertyPath(_), QuotedTriple(_)) => Ordering::Greater,
+
+            (PropertyPath(a), PropertyPath(b)) => a.cmp(b),
         }
     }
 }
@@ -518,6 +563,12 @@ pub fn matches_pattern(pattern: &Term, term: &Term, bindings: &mut BindingContex
         (Term::Iri(p), Term::Iri(t)) => p == t,
         (Term::BlankNode(p), Term::BlankNode(t)) => p == t,
         (Term::Literal(p), Term::Literal(t)) => p == t,
+        (Term::QuotedTriple(p), Term::QuotedTriple(t)) => {
+            matches_pattern(&p.subject, &t.subject, bindings)
+                && matches_pattern(&p.predicate, &t.predicate, bindings)
+                && matches_pattern(&p.object, &t.object, bindings)
+        }
+        (Term::PropertyPath(p), Term::PropertyPath(t)) => p == t,
         _ => false,
     }
 }
@@ -529,6 +580,10 @@ impl fmt::Display for Term {
             Term::BlankNode(id) => write!(f, "_:{}", id),
             Term::Literal(lit) => write!(f, "{}", lit),
             Term::Variable(var) => write!(f, "?{}", var),
+            Term::QuotedTriple(triple) => {
+                write!(f, "<<{} {} {}>>", triple.subject, triple.predicate, triple.object)
+            }
+            Term::PropertyPath(path) => write!(f, "{}", path),
         }
     }
 }
@@ -562,16 +617,14 @@ impl Term {
             }
             AlgebraTerm::BlankNode(bn) => Term::blank_node(bn),
             AlgebraTerm::Variable(var) => Term::variable(var.as_str()),
-            AlgebraTerm::QuotedTriple(_) => {
-                // For now, serialize quoted triples as literals
-                // TODO: Implement proper quoted triple support in term representation
-                Term::literal("<< quoted triple >>")
+            AlgebraTerm::QuotedTriple(quoted_triple) => {
+                Term::QuotedTriple(Box::new(QuotedTripleValue {
+                    subject: Term::from_algebra_term(&quoted_triple.subject),
+                    predicate: Term::from_algebra_term(&quoted_triple.predicate),
+                    object: Term::from_algebra_term(&quoted_triple.object),
+                }))
             }
-            AlgebraTerm::PropertyPath(_) => {
-                // For now, serialize property paths as literals
-                // TODO: Implement proper property path support in term representation
-                Term::literal("<< property path >>")
-            }
+            AlgebraTerm::PropertyPath(path) => Term::PropertyPath(path.clone()),
         }
     }
 
@@ -590,6 +643,14 @@ impl Term {
                 },
             }),
             Term::Variable(var) => AlgebraTerm::Variable(Variable::new(var).unwrap()),
+            Term::QuotedTriple(triple) => {
+                AlgebraTerm::QuotedTriple(Box::new(TriplePattern {
+                    subject: triple.subject.to_algebra_term(),
+                    predicate: triple.predicate.to_algebra_term(),
+                    object: triple.object.to_algebra_term(),
+                }))
+            }
+            Term::PropertyPath(path) => AlgebraTerm::PropertyPath(path.clone()),
         }
     }
 
@@ -610,7 +671,7 @@ impl Term {
                 }
                 _ => Ok(!lit_val.lexical_form.is_empty()),
             },
-            Term::Iri(_) | Term::BlankNode(_) => Ok(true),
+            Term::Iri(_) | Term::BlankNode(_) | Term::QuotedTriple(_) | Term::PropertyPath(_) => Ok(true),
             Term::Variable(_) => bail!("Cannot evaluate variable as boolean"),
         }
     }
@@ -619,8 +680,8 @@ impl Term {
     pub fn to_numeric(&self) -> Result<NumericValue> {
         match self {
             Term::Literal(lit_val) => lit_val.to_numeric(),
-            Term::Iri(_) | Term::BlankNode(_) => {
-                bail!("Cannot convert IRI or blank node to numeric")
+            Term::Iri(_) | Term::BlankNode(_) | Term::QuotedTriple(_) | Term::PropertyPath(_) => {
+                bail!("Cannot convert IRI, blank node, quoted triple, or property path to numeric")
             }
             Term::Variable(_) => bail!("Cannot convert unbound variable to numeric"),
         }
@@ -715,5 +776,52 @@ mod tests {
         // Second match with same variable should check equality
         let term2 = Term::literal("other");
         assert!(!matches_pattern(&pattern, &term2, &mut ctx));
+    }
+
+    #[test]
+    fn test_quoted_triple_term() {
+        let subject = Term::iri("http://example.org/subject");
+        let predicate = Term::iri("http://example.org/predicate");
+        let object = Term::literal("object");
+
+        let quoted_triple = Term::quoted_triple(subject.clone(), predicate.clone(), object.clone());
+        assert!(quoted_triple.is_quoted_triple());
+
+        // Test display format
+        let display = format!("{}", quoted_triple);
+        assert!(display.starts_with("<<"));
+        assert!(display.ends_with(">>"));
+    }
+
+    #[test]
+    fn test_property_path_term() {
+        use crate::path::PropertyPath;
+
+        let direct_path = PropertyPath::Direct(Term::iri("http://example.org/prop"));
+        let path_term = Term::property_path(direct_path);
+        assert!(path_term.is_property_path());
+    }
+
+    #[test]
+    fn test_term_ordering_with_new_variants() {
+        let var = Term::variable("x");
+        let blank = Term::blank_node("b1");
+        let iri = Term::iri("http://example.org");
+        let lit = Term::literal("test");
+        let quoted = Term::quoted_triple(
+            Term::iri("http://example.org/s"),
+            Term::iri("http://example.org/p"),
+            Term::iri("http://example.org/o"),
+        );
+        let path = Term::property_path(crate::path::PropertyPath::Direct(
+            Term::iri("http://example.org/prop"),
+        ));
+
+        // Test ordering: Variable < BlankNode < Iri < Literal < QuotedTriple < PropertyPath
+        assert!(var < blank);
+        assert!(blank < iri);
+        assert!(iri < lit);
+        assert!(lit < quoted);
+        assert!(quoted < path);
     }
 }

@@ -40,13 +40,31 @@ pub struct TranslationConfig {
 impl Default for TranslationConfig {
     fn default() -> Self {
         let mut namespace_prefixes = HashMap::new();
-        namespace_prefixes.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-        namespace_prefixes.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-        namespace_prefixes.insert("owl".to_string(), "http://www.w3.org/2002/07/owl#".to_string());
-        namespace_prefixes.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
+        namespace_prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        namespace_prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        namespace_prefixes.insert(
+            "owl".to_string(),
+            "http://www.w3.org/2002/07/owl#".to_string(),
+        );
+        namespace_prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
         namespace_prefixes.insert("foaf".to_string(), "http://xmlns.com/foaf/0.1/".to_string());
-        namespace_prefixes.insert("dc".to_string(), "http://purl.org/dc/elements/1.1/".to_string());
-        namespace_prefixes.insert("dcterms".to_string(), "http://purl.org/dc/terms/".to_string());
+        namespace_prefixes.insert(
+            "dc".to_string(),
+            "http://purl.org/dc/elements/1.1/".to_string(),
+        );
+        namespace_prefixes.insert(
+            "dcterms".to_string(),
+            "http://purl.org/dc/terms/".to_string(),
+        );
 
         Self {
             default_namespace: "http://example.org/data/".to_string(),
@@ -348,14 +366,18 @@ impl GraphQLToSparqlTranslator {
                 "id" => {
                     // Handle ID equality filter
                     if let Some(id_str) = arg_value.as_str() {
-                        let filter = format!("FILTER({} = <{}{}>)", subject_var, self.config.default_namespace, id_str);
+                        let filter = format!(
+                            "FILTER({} = <{}{}>)",
+                            subject_var, self.config.default_namespace, id_str
+                        );
                         sparql_builder.add_filter(&filter);
                     }
                 }
                 "where" => {
                     // Handle complex where conditions
                     if let Some(where_obj) = arg_value.as_object() {
-                        self.process_where_conditions(where_obj, subject_var, sparql_builder).await?;
+                        self.process_where_conditions(where_obj, subject_var, sparql_builder)
+                            .await?;
                     }
                 }
                 "limit" => {
@@ -378,7 +400,10 @@ impl GraphQLToSparqlTranslator {
                     }
                 }
                 _ => {
-                    warnings.push(format!("Unknown argument '{}' ignored in translation", arg_name));
+                    warnings.push(format!(
+                        "Unknown argument '{}' ignored in translation",
+                        arg_name
+                    ));
                 }
             }
         }
@@ -395,26 +420,34 @@ impl GraphQLToSparqlTranslator {
     ) -> Result<()> {
         for (field_name, condition_value) in conditions {
             let predicate = self.get_predicate_for_field(field_name, "String")?;
-            
+
             if let Some(condition_str) = condition_value.as_str() {
                 // Simple equality condition
-                let object_value = if condition_str.starts_with("http://") || condition_str.starts_with("https://") {
+                let object_value = if condition_str.starts_with("http://")
+                    || condition_str.starts_with("https://")
+                {
                     format!("<{}>", condition_str)
                 } else {
                     format!("\"{}\"", condition_str)
                 };
-                
+
                 let triple_pattern = TriplePattern {
                     subject: Some(subject_var.to_string()),
                     predicate: Some(predicate.clone()),
                     object: Some(object_value.clone()),
                     pattern_string: format!("{} {} {}", subject_var, predicate, object_value),
                 };
-                
+
                 sparql_builder.add_triple_pattern(&triple_pattern);
             } else if let Some(condition_obj) = condition_value.as_object() {
                 // Handle complex conditions (eq, ne, gt, lt, etc.)
-                self.process_complex_condition(field_name, condition_obj, subject_var, sparql_builder).await?;
+                self.process_complex_condition(
+                    field_name,
+                    condition_obj,
+                    subject_var,
+                    sparql_builder,
+                )
+                .await?;
             }
         }
 
@@ -450,12 +483,25 @@ impl GraphQLToSparqlTranslator {
                 "gte" => format!("FILTER({} >= {})", object_var, self.format_value(value)),
                 "lt" => format!("FILTER({} < {})", object_var, self.format_value(value)),
                 "lte" => format!("FILTER({} <= {})", object_var, self.format_value(value)),
-                "contains" => format!("FILTER(CONTAINS(LCASE(STR({})), LCASE(\"{}\")))", object_var, value.as_str().unwrap_or("")),
-                "startsWith" => format!("FILTER(STRSTARTS(LCASE(STR({})), LCASE(\"{}\")))", object_var, value.as_str().unwrap_or("")),
-                "endsWith" => format!("FILTER(STRENDS(LCASE(STR({})), LCASE(\"{}\")))", object_var, value.as_str().unwrap_or("")),
+                "contains" => format!(
+                    "FILTER(CONTAINS(LCASE(STR({})), LCASE(\"{}\")))",
+                    object_var,
+                    value.as_str().unwrap_or("")
+                ),
+                "startsWith" => format!(
+                    "FILTER(STRSTARTS(LCASE(STR({})), LCASE(\"{}\")))",
+                    object_var,
+                    value.as_str().unwrap_or("")
+                ),
+                "endsWith" => format!(
+                    "FILTER(STRENDS(LCASE(STR({})), LCASE(\"{}\")))",
+                    object_var,
+                    value.as_str().unwrap_or("")
+                ),
                 "in" => {
                     if let Some(values) = value.as_array() {
-                        let value_list = values.iter()
+                        let value_list = values
+                            .iter()
                             .map(|v| self.format_value(v))
                             .collect::<Vec<_>>()
                             .join(", ");
@@ -486,13 +532,31 @@ impl GraphQLToSparqlTranslator {
     ) -> Result<()> {
         match field.name.as_str() {
             name if name.starts_with("create") => {
-                self.process_create_mutation(field, sparql_builder, variable_mappings, triple_patterns).await?;
+                self.process_create_mutation(
+                    field,
+                    sparql_builder,
+                    variable_mappings,
+                    triple_patterns,
+                )
+                .await?;
             }
             name if name.starts_with("update") => {
-                self.process_update_mutation(field, sparql_builder, variable_mappings, triple_patterns).await?;
+                self.process_update_mutation(
+                    field,
+                    sparql_builder,
+                    variable_mappings,
+                    triple_patterns,
+                )
+                .await?;
             }
             name if name.starts_with("delete") => {
-                self.process_delete_mutation(field, sparql_builder, variable_mappings, triple_patterns).await?;
+                self.process_delete_mutation(
+                    field,
+                    sparql_builder,
+                    variable_mappings,
+                    triple_patterns,
+                )
+                .await?;
             }
             _ => {
                 warnings.push(format!("Unknown mutation type: {}", field.name));
@@ -512,12 +576,13 @@ impl GraphQLToSparqlTranslator {
     ) -> Result<()> {
         // Extract entity type from mutation name
         let entity_type = field.name.strip_prefix("create").unwrap_or(&field.name);
-        
+
         if !field.arguments.is_empty() {
             if let Some(data_arg) = field.arguments.get("data") {
                 if let Some(data_obj) = data_arg.as_object() {
                     // Generate URI for new entity
-                    let entity_uri = format!("{}{}_{}",
+                    let entity_uri = format!(
+                        "{}{}_{}",
                         self.config.default_namespace,
                         entity_type.to_lowercase(),
                         uuid::Uuid::new_v4()
@@ -528,8 +593,14 @@ impl GraphQLToSparqlTranslator {
                         let type_triple = TriplePattern {
                             subject: Some(format!("<{}>", entity_uri)),
                             predicate: Some(type_predicate),
-                            object: Some(format!("<{}{}>", self.config.default_namespace, entity_type)),
-                            pattern_string: format!("<{}> {} <{}{}>", entity_uri, "rdf:type", self.config.default_namespace, entity_type),
+                            object: Some(format!(
+                                "<{}{}>",
+                                self.config.default_namespace, entity_type
+                            )),
+                            pattern_string: format!(
+                                "<{}> {} <{}{}>",
+                                entity_uri, "rdf:type", self.config.default_namespace, entity_type
+                            ),
                         };
                         triple_patterns.push(type_triple.clone());
                         sparql_builder.add_insert_triple(&type_triple);
@@ -537,14 +608,20 @@ impl GraphQLToSparqlTranslator {
 
                     // Add property triples
                     for (property, value) in data_obj {
-                        let predicate = self.get_predicate_for_field(property, &self.infer_type_from_value(value))?;
+                        let predicate = self.get_predicate_for_field(
+                            property,
+                            &self.infer_type_from_value(value),
+                        )?;
                         let object_value = self.format_value(value);
 
                         let property_triple = TriplePattern {
                             subject: Some(format!("<{}>", entity_uri)),
                             predicate: Some(predicate.clone()),
                             object: Some(object_value.clone()),
-                            pattern_string: format!("<{}> {} {}", entity_uri, predicate, object_value),
+                            pattern_string: format!(
+                                "<{}> {} {}",
+                                entity_uri, predicate, object_value
+                            ),
                         };
                         triple_patterns.push(property_triple.clone());
                         sparql_builder.add_insert_triple(&property_triple);
@@ -571,7 +648,7 @@ impl GraphQLToSparqlTranslator {
             if let (Some(where_clause), Some(data)) = (args.get("where"), args.get("data")) {
                 // Process WHERE clause to identify entity
                 let entity_var = "?entity".to_string();
-                
+
                 if let Some(where_obj) = where_clause.as_object() {
                     for (field_name, condition_value) in where_obj {
                         let predicate = self.get_predicate_for_field(field_name, "String")?;
@@ -581,7 +658,10 @@ impl GraphQLToSparqlTranslator {
                             subject: Some(entity_var.clone()),
                             predicate: Some(predicate.clone()),
                             object: Some(object_value.clone()),
-                            pattern_string: format!("{} {} {}", entity_var, predicate, object_value),
+                            pattern_string: format!(
+                                "{} {} {}",
+                                entity_var, predicate, object_value
+                            ),
                         };
                         triple_patterns.push(where_triple.clone());
                         sparql_builder.add_where_triple(&where_triple);
@@ -591,7 +671,10 @@ impl GraphQLToSparqlTranslator {
                 // Process data to update
                 if let Some(data_obj) = data.as_object() {
                     for (property, new_value) in data_obj {
-                        let predicate = self.get_predicate_for_field(property, &self.infer_type_from_value(new_value))?;
+                        let predicate = self.get_predicate_for_field(
+                            property,
+                            &self.infer_type_from_value(new_value),
+                        )?;
                         let old_value_var = format!("?old_{}", property);
                         let new_object_value = self.format_value(new_value);
 
@@ -600,7 +683,10 @@ impl GraphQLToSparqlTranslator {
                             subject: Some(entity_var.clone()),
                             predicate: Some(predicate.clone()),
                             object: Some(old_value_var.clone()),
-                            pattern_string: format!("{} {} {}", entity_var, predicate, old_value_var),
+                            pattern_string: format!(
+                                "{} {} {}",
+                                entity_var, predicate, old_value_var
+                            ),
                         };
                         sparql_builder.add_delete_triple(&delete_triple);
 
@@ -609,7 +695,10 @@ impl GraphQLToSparqlTranslator {
                             subject: Some(entity_var.clone()),
                             predicate: Some(predicate.clone()),
                             object: Some(new_object_value.clone()),
-                            pattern_string: format!("{} {} {}", entity_var, predicate, new_object_value),
+                            pattern_string: format!(
+                                "{} {} {}",
+                                entity_var, predicate, new_object_value
+                            ),
                         };
                         sparql_builder.add_insert_triple(&insert_triple);
                     }
@@ -632,7 +721,7 @@ impl GraphQLToSparqlTranslator {
         if !args.is_empty() {
             if let Some(where_clause) = args.get("where") {
                 let entity_var = "?entity".to_string();
-                
+
                 if let Some(where_obj) = where_clause.as_object() {
                     for (field_name, condition_value) in where_obj {
                         let predicate = self.get_predicate_for_field(field_name, "String")?;
@@ -642,7 +731,10 @@ impl GraphQLToSparqlTranslator {
                             subject: Some(entity_var.clone()),
                             predicate: Some(predicate.clone()),
                             object: Some(object_value.clone()),
-                            pattern_string: format!("{} {} {}", entity_var, predicate, object_value),
+                            pattern_string: format!(
+                                "{} {} {}",
+                                entity_var, predicate, object_value
+                            ),
                         };
                         triple_patterns.push(where_triple.clone());
                         sparql_builder.add_where_triple(&where_triple);
@@ -740,7 +832,7 @@ impl GraphQLToSparqlTranslator {
     fn parse_graphql_query(&self, query: &str) -> Result<ParsedGraphQLQuery> {
         // This is a simplified parser - in production, use a proper GraphQL parser
         let trimmed = query.trim();
-        
+
         let operation_type = if trimmed.starts_with("query") {
             "query"
         } else if trimmed.starts_with("mutation") {
@@ -752,9 +844,13 @@ impl GraphQLToSparqlTranslator {
         };
 
         // Extract operation name and selection set (simplified)
-        let selection_start = trimmed.find('{').ok_or_else(|| anyhow!("Invalid GraphQL query: no selection set found"))?;
-        let selection_end = trimmed.rfind('}').ok_or_else(|| anyhow!("Invalid GraphQL query: unclosed selection set"))?;
-        
+        let selection_start = trimmed
+            .find('{')
+            .ok_or_else(|| anyhow!("Invalid GraphQL query: no selection set found"))?;
+        let selection_end = trimmed
+            .rfind('}')
+            .ok_or_else(|| anyhow!("Invalid GraphQL query: unclosed selection set"))?;
+
         let selection_content = &trimmed[selection_start + 1..selection_end];
         let selection_set = self.parse_selection_set(selection_content)?;
 
@@ -771,7 +867,11 @@ impl GraphQLToSparqlTranslator {
     /// Parse GraphQL selection set (simplified)
     fn parse_selection_set(&self, content: &str) -> Result<Vec<Selection>> {
         let mut fields = Vec::new();
-        let lines: Vec<&str> = content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+        let lines: Vec<&str> = content
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .collect();
 
         for line in lines {
             if let Some(field) = self.parse_field_line(line)? {
@@ -807,13 +907,19 @@ impl GraphQLToSparqlTranslator {
     }
 
     /// Extract operation from parsed query
-    fn extract_operation<'a>(&self, parsed_query: &'a ParsedGraphQLQuery) -> Result<&'a GraphQLOperation> {
+    fn extract_operation<'a>(
+        &self,
+        parsed_query: &'a ParsedGraphQLQuery,
+    ) -> Result<&'a GraphQLOperation> {
         Ok(&parsed_query.operation)
     }
 
     /// Count total fields in selection set
     fn count_fields(&self, selection_set: &[Selection]) -> usize {
-        selection_set.iter().map(|field| 1 + self.count_fields(&field.selection_set)).sum()
+        selection_set
+            .iter()
+            .map(|field| 1 + self.count_fields(&field.selection_set))
+            .sum()
     }
 
     /// Calculate maximum nesting depth
@@ -918,9 +1024,16 @@ impl SparqlQueryBuilder {
 
         // Add ORDER BY
         if !self.order_by.is_empty() {
-            let order_clauses: Vec<String> = self.order_by
+            let order_clauses: Vec<String> = self
+                .order_by
                 .iter()
-                .map(|(var, asc)| if *asc { var.clone() } else { format!("DESC({})", var) })
+                .map(|(var, asc)| {
+                    if *asc {
+                        var.clone()
+                    } else {
+                        format!("DESC({})", var)
+                    }
+                })
                 .collect();
             query.push_str(&format!("ORDER BY {}\n", order_clauses.join(" ")));
         }
@@ -1045,7 +1158,7 @@ mod tests {
     #[tokio::test]
     async fn test_simple_query_translation() {
         let translator = GraphQLToSparqlTranslator::new();
-        
+
         let graphql_query = r#"
             query {
                 user(id: "123") {
@@ -1067,7 +1180,7 @@ mod tests {
     #[tokio::test]
     async fn test_mutation_translation() {
         let translator = GraphQLToSparqlTranslator::new();
-        
+
         let graphql_mutation = r#"
             mutation {
                 createUser(data: { name: "John Doe", email: "john@example.com" }) {
@@ -1087,9 +1200,18 @@ mod tests {
     #[test]
     fn test_value_formatting() {
         let translator = GraphQLToSparqlTranslator::new();
-        
-        assert_eq!(translator.format_value(&serde_json::Value::String("test".to_string())), "\"test\"");
-        assert_eq!(translator.format_value(&serde_json::Value::Number(serde_json::Number::from(42))), "\"42\"^^xsd:integer");
-        assert_eq!(translator.format_value(&serde_json::Value::Bool(true)), "\"true\"^^xsd:boolean");
+
+        assert_eq!(
+            translator.format_value(&serde_json::Value::String("test".to_string())),
+            "\"test\""
+        );
+        assert_eq!(
+            translator.format_value(&serde_json::Value::Number(serde_json::Number::from(42))),
+            "\"42\"^^xsd:integer"
+        );
+        assert_eq!(
+            translator.format_value(&serde_json::Value::Bool(true)),
+            "\"true\"^^xsd:boolean"
+        );
     }
 }

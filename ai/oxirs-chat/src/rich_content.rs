@@ -262,7 +262,10 @@ pub enum GraphLayout {
     Grid,
     Tree,
     Cluster,
-    Custom { algorithm: String, parameters: HashMap<String, f64> },
+    Custom {
+        algorithm: String,
+        parameters: HashMap<String, f64>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -14,11 +14,7 @@ use crate::{
 };
 
 use super::{
-    graph_analysis::*,
-    plan_generation::*,
-    cost_estimation::*,
-    pattern_analysis::*,
-    types::*,
+    cost_estimation::*, graph_analysis::*, pattern_analysis::*, plan_generation::*, types::*,
 };
 
 impl QueryDecomposer {
@@ -45,7 +41,7 @@ impl QueryDecomposer {
         registry: &ServiceRegistry,
     ) -> Result<DecompositionResult> {
         let start_time = Instant::now();
-        
+
         info!(
             "Decomposing query with {} patterns",
             query_info.patterns.len()
@@ -264,7 +260,12 @@ impl QueryDecomposer {
         let total_patterns: usize = component_plans
             .iter()
             .flat_map(|plans| plans.iter())
-            .map(|plan| plan.steps.iter().map(|step| step.patterns.len()).sum::<usize>())
+            .map(|plan| {
+                plan.steps
+                    .iter()
+                    .map(|step| step.patterns.len())
+                    .sum::<usize>()
+            })
             .max()
             .unwrap_or(0);
 

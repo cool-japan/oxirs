@@ -1,7 +1,7 @@
 //! Supporting types and statistics for SHACL shape processing
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 /// Statistics about shape parsing cache
@@ -50,6 +50,8 @@ pub struct ShapeParsingConfig {
     pub enable_performance_tracking: bool,
     /// Cache parsed shapes
     pub enable_caching: bool,
+    /// Namespace prefixes for IRI resolution
+    pub namespaces: HashMap<String, String>,
 }
 
 impl Default for ShapeParsingConfig {
@@ -59,6 +61,7 @@ impl Default for ShapeParsingConfig {
             strict_mode: false,
             enable_performance_tracking: true,
             enable_caching: true,
+            namespaces: HashMap::new(),
         }
     }
 }

@@ -16,8 +16,8 @@ use crate::{
     service_executor::{JoinExecutor, ServiceExecutor},
 };
 
-use super::types::*;
 use super::step_execution::{execute_parallel_group, execute_step};
+use super::types::*;
 
 impl FederatedExecutor {
     /// Create a new federated executor with default configuration

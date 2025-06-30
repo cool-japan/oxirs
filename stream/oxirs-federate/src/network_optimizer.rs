@@ -7,13 +7,17 @@ use anyhow::{anyhow, Result};
 use brotli::{enc::BrotliEncoderParams, CompressorWriter, Decompressor};
 use bytes::{Bytes, BytesMut};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
+use lz4_flex::{compress_prepend_size, decompress_size_prepended};
+use rmp_serde::{from_slice, to_vec};
 use serde::{Deserialize, Serialize};
+use serde_cbor;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
+use zstd::{decode_all, encode_all};
 
 use crate::{FederatedService, ServiceRegistry};
 
@@ -426,36 +430,51 @@ impl NetworkOptimizer {
     }
 
     async fn compress_lz4(&self, data: &[u8]) -> Result<Bytes> {
-        // TODO: Add lz4_flex dependency and implement proper compression
-        warn!("LZ4 compression not available, returning uncompressed data");
-        Ok(Bytes::from(data.to_vec()))
+        let compressed = compress_prepend_size(data);
+        debug!("LZ4 compressed {} bytes to {} bytes", data.len(), compressed.len());
+        Ok(Bytes::from(compressed))
     }
 
     async fn decompress_lz4(&self, data: &[u8]) -> Result<Bytes> {
-        // TODO: Add lz4_flex dependency and implement proper decompression
-        warn!("LZ4 decompression not available, returning data as-is");
-        Ok(Bytes::from(data.to_vec()))
+        let decompressed = decompress_size_prepended(data)
+            .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
+        debug!("LZ4 decompressed {} bytes to {} bytes", data.len(), decompressed.len());
+        Ok(Bytes::from(decompressed))
     }
 
     async fn compress_zstd(&self, data: &[u8]) -> Result<Bytes> {
-        // TODO: Add zstd dependency and implement proper compression
-        warn!("Zstd compression not available, returning uncompressed data");
-        Ok(Bytes::from(data.to_vec()))
+        let compressed = encode_all(data, 6) // Level 6 for good balance
+            .map_err(|e| anyhow!("Zstd compression failed: {}", e))?;
+        debug!("Zstd compressed {} bytes to {} bytes", data.len(), compressed.len());
+        Ok(Bytes::from(compressed))
     }
 
     async fn decompress_zstd(&self, data: &[u8]) -> Result<Bytes> {
-        // TODO: Add zstd dependency and implement proper decompression
-        warn!("Zstd decompression not available, returning data as-is");
-        Ok(Bytes::from(data.to_vec()))
+        let decompressed = decode_all(data)
+            .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?;
+        debug!("Zstd decompressed {} bytes to {} bytes", data.len(), decompressed.len());
+        Ok(Bytes::from(decompressed))
     }
 
     async fn encode_data(&self, data: &[u8], format: &EncodingFormat) -> Result<Vec<u8>> {
         match format {
             EncodingFormat::Json => Ok(data.to_vec()),
             EncodingFormat::MessagePack => {
-                // TODO: Add rmp_serde dependency and implement proper MessagePack encoding
-                warn!("MessagePack encoding not available, returning JSON encoded data");
-                Ok(data.to_vec())
+                // Parse JSON and encode as MessagePack
+                match serde_json::from_slice::<serde_json::Value>(data) {
+                    Ok(value) => {
+                        let encoded = to_vec(&value)
+                            .map_err(|e| anyhow!("MessagePack encoding failed: {}", e))?;
+                        debug!("MessagePack encoded {} bytes to {} bytes", data.len(), encoded.len());
+                        Ok(encoded)
+                    }
+                    Err(_) => {
+                        // If not valid JSON, return as binary MessagePack
+                        let encoded = to_vec(&data)
+                            .map_err(|e| anyhow!("MessagePack encoding failed: {}", e))?;
+                        Ok(encoded)
+                    }
+                }
             }
             EncodingFormat::ProtocolBuffers => {
                 // For generic data, we'll use a simple wrapper
@@ -468,9 +487,21 @@ impl NetworkOptimizer {
                 Ok(data.to_vec())
             }
             EncodingFormat::Cbor => {
-                // TODO: Add serde_cbor dependency and implement proper CBOR encoding
-                warn!("CBOR encoding not available, returning JSON encoded data");
-                Ok(data.to_vec())
+                // Parse JSON and encode as CBOR
+                match serde_json::from_slice::<serde_json::Value>(data) {
+                    Ok(value) => {
+                        let encoded = serde_cbor::to_vec(&value)
+                            .map_err(|e| anyhow!("CBOR encoding failed: {}", e))?;
+                        debug!("CBOR encoded {} bytes to {} bytes", data.len(), encoded.len());
+                        Ok(encoded)
+                    }
+                    Err(_) => {
+                        // If not valid JSON, encode raw data as CBOR bytes
+                        let encoded = serde_cbor::to_vec(&data)
+                            .map_err(|e| anyhow!("CBOR encoding failed: {}", e))?;
+                        Ok(encoded)
+                    }
+                }
             }
         }
     }

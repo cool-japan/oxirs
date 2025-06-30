@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use oxirs_shacl::ShapeId;
 use crate::{Result, ShaclAiError};
+use oxirs_shacl::ShapeId;
 
 /// Collaboration engine for managing collaborative shape development
 #[derive(Debug)]

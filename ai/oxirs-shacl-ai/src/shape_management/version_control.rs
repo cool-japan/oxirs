@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
-use oxirs_shacl::ShapeId;
 use crate::{Result, ShaclAiError};
+use oxirs_shacl::ShapeId;
 
 /// Version identifier for shapes
 pub type VersionId = String;

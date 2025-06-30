@@ -247,7 +247,9 @@ impl ParallelValidationEngine {
                         context = context.with_path(path.clone());
                     }
 
-                    let estimated_cost = self.dependency_analyzer.estimate_constraint_cost(constraint);
+                    let estimated_cost = self
+                        .dependency_analyzer
+                        .estimate_constraint_cost(constraint);
                     let priority = self.calculate_priority(constraint, estimated_cost);
 
                     work_items.push(ValidationWorkItem {
@@ -262,9 +264,11 @@ impl ParallelValidationEngine {
 
         // Sort by priority and cost for optimal scheduling
         work_items.sort_by(|a, b| {
-            a.priority
-                .cmp(&b.priority)
-                .then_with(|| a.estimated_cost.partial_cmp(&b.estimated_cost).unwrap_or(std::cmp::Ordering::Equal))
+            a.priority.cmp(&b.priority).then_with(|| {
+                a.estimated_cost
+                    .partial_cmp(&b.estimated_cost)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
         });
 
         Ok(work_items)
@@ -272,8 +276,10 @@ impl ParallelValidationEngine {
 
     /// Calculate priority for a constraint (lower = higher priority)
     fn calculate_priority(&self, constraint: &Constraint, estimated_cost: f64) -> usize {
-        let selectivity = self.dependency_analyzer.estimate_constraint_selectivity(constraint);
-        
+        let selectivity = self
+            .dependency_analyzer
+            .estimate_constraint_selectivity(constraint);
+
         // High selectivity and low cost = high priority (low value)
         let priority_score = selectivity * estimated_cost;
         (priority_score * 1000.0) as usize
@@ -322,7 +328,10 @@ impl ParallelValidationEngine {
     ) -> Result<Vec<ValidationWorkResult>> {
         let results = Arc::new(Mutex::new(Vec::new()));
         let work_queues: Arc<Vec<Mutex<Vec<ValidationWorkItem>>>> = Arc::new(
-            work_chunks.into_iter().map(|chunk| Mutex::new(chunk)).collect(),
+            work_chunks
+                .into_iter()
+                .map(|chunk| Mutex::new(chunk))
+                .collect(),
         );
 
         let mut handles = Vec::new();
@@ -339,12 +348,7 @@ impl ParallelValidationEngine {
             let handle = thread::spawn(move || {
                 active_workers.fetch_add(1, Ordering::SeqCst);
 
-                let worker_results = Self::worker_thread(
-                    worker_id,
-                    cache,
-                    work_queues,
-                    config,
-                );
+                let worker_results = Self::worker_thread(worker_id, cache, work_queues, config);
 
                 // Collect results
                 if let Ok(mut results_guard) = results.lock() {
@@ -359,9 +363,9 @@ impl ParallelValidationEngine {
 
         // Wait for all workers to complete
         for handle in handles {
-            handle.join().map_err(|_| {
-                ShaclError::ValidationEngine("Worker thread panicked".to_string())
-            })?;
+            handle
+                .join()
+                .map_err(|_| ShaclError::ValidationEngine("Worker thread panicked".to_string()))?;
         }
 
         let final_results = results.lock().unwrap().clone();
@@ -414,18 +418,24 @@ impl ParallelValidationEngine {
             let start_time = Instant::now();
 
             // Check cache first
-            let result = if let Some(cached_result) = cache.get(&work_item.constraint, &work_item.context) {
-                cached_result
-            } else {
-                // In practice, this would evaluate the constraint against a thread-safe store
-                // For now, we'll create a placeholder result
-                ConstraintEvaluationResult::satisfied() // Simplified
-            };
+            let result =
+                if let Some(cached_result) = cache.get(&work_item.constraint, &work_item.context) {
+                    cached_result
+                } else {
+                    // In practice, this would evaluate the constraint against a thread-safe store
+                    // For now, we'll create a placeholder result
+                    ConstraintEvaluationResult::satisfied() // Simplified
+                };
 
             let execution_time = start_time.elapsed();
 
             // Cache the result if not from cache
-            cache.put(&work_item.constraint, &work_item.context, result.clone(), execution_time);
+            cache.put(
+                &work_item.constraint,
+                &work_item.context,
+                result.clone(),
+                execution_time,
+            );
 
             worker_results.push(ValidationWorkResult {
                 work_item,
@@ -445,7 +455,7 @@ impl ParallelValidationEngine {
         results: &[ValidationWorkResult],
     ) -> f64 {
         let total_sequential_time: Duration = results.iter().map(|r| r.execution_time).sum();
-        
+
         if parallel_time.as_nanos() > 0 {
             total_sequential_time.as_nanos() as f64 / parallel_time.as_nanos() as f64
         } else {
@@ -475,8 +485,9 @@ impl ParallelValidationEngine {
                 let variance: f64 = worker_item_counts
                     .values()
                     .map(|&count| (count as f64 - mean).powi(2))
-                    .sum::<f64>() / worker_item_counts.len() as f64;
-                
+                    .sum::<f64>()
+                    / worker_item_counts.len() as f64;
+
                 stats.load_balance_score = 1.0 / (1.0 + variance.sqrt());
             }
 

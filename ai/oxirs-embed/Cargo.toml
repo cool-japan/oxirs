@@ -33,6 +33,7 @@ tempfile = "3.8"
 async-graphql = "7.0"
 tokio-stream = { version = "0.1", features = ["sync"] }
 futures-util = "0.3"
+regex = "1.10"
 
 # Federated learning dependencies
 bincode = "1.3"

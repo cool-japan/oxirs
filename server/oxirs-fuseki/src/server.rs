@@ -17,7 +17,7 @@ use axum::{
     extract::{MatchedPath, Request, State},
     http::{HeaderMap, Method, StatusCode},
     middleware::{self, Next},
-    response::{Html, Json, Response},
+    response::{Html, IntoResponse, Json, Response},
     routing::{delete, get, post},
     Router,
 };
@@ -874,7 +874,10 @@ async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
         {
             match metrics_service.get_prometheus_metrics().await {
                 Ok(metrics_text) => (
-                    [(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                    [(
+                        axum::http::header::CONTENT_TYPE,
+                        "text/plain; charset=utf-8",
+                    )],
                     metrics_text,
                 )
                     .into_response(),
@@ -903,11 +906,11 @@ async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
 async fn metrics_summary_handler(State(state): State<AppState>) -> impl IntoResponse {
     if let Some(metrics_service) = &state.metrics_service {
         let summary = metrics_service.get_summary().await;
-        axum::Json(summary)
+        axum::Json(summary).into_response()
     } else {
         axum::Json(serde_json::json!({
             "error": "Metrics service not available"
-        }))
+        })).into_response()
     }
 }
 

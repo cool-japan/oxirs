@@ -599,7 +599,7 @@ impl BlockchainValidator {
         let successful_validations = results.values().filter(|r| r.validation_outcome).count();
 
         let strategy_clone = strategy.clone();
-        
+
         let final_outcome = match strategy {
             CrossChainAggregation::Unanimous => successful_validations == total_networks,
             CrossChainAggregation::Majority => successful_validations > total_networks / 2,
@@ -1874,7 +1874,6 @@ impl PrivacyProtocol for HomomorphicProtocol {
 }
 
 // Error handling for blockchain operations
-
 
 impl ShaclAiError {
     pub fn BlockchainTimeout(message: String) -> Self {

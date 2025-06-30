@@ -12,23 +12,25 @@ pub mod security;
 pub mod standard;
 
 // Re-export key types
-pub use constraints::{CompositeConstraint, CompositionType, CustomConstraint, ComponentExecutionResult};
+pub use constraints::{
+    ComponentExecutionResult, CompositeConstraint, CompositionType, CustomConstraint,
+};
 pub use metadata::{
-    ComponentLibrary, ComponentMetadata, ParameterConstraint, ParameterDefinition, ValidationRule,
-    ValidationRuleType, ValidationCondition
+    ComponentLibrary, ComponentMetadata, ParameterConstraint, ParameterDefinition,
+    ValidationCondition, ValidationRule, ValidationRuleType,
 };
 pub use performance::{
-    ComponentPerformanceStats, ComponentExecutionContext, ExecutionMetrics, MemoryUsageStats,
-    ErrorStats, ErrorTrend
+    ComponentExecutionContext, ComponentPerformanceStats, ErrorStats, ErrorTrend, ExecutionMetrics,
+    MemoryUsageStats,
 };
 pub use registry::CustomConstraintRegistry;
 pub use security::{
-    SecurityPolicy, SecurityViolation, SecurityViolationType, SparqlOperation, SandboxingLevel,
-    ResourceQuotas
+    ResourceQuotas, SandboxingLevel, SecurityPolicy, SecurityViolation, SecurityViolationType,
+    SparqlOperation,
 };
 pub use standard::{
     EmailValidationComponent, RangeConstraintComponent, RegexConstraintComponent,
-    SparqlConstraintComponent, UrlValidationComponent
+    SparqlConstraintComponent, UrlValidationComponent,
 };
 
 use crate::{ConstraintComponentId, Result};
@@ -63,9 +65,9 @@ pub trait CustomConstraintComponent: Send + Sync + std::fmt::Debug {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxirs_core::model::{Literal, NamedNode};
     use crate::constraints::ConstraintContext;
     use crate::ShapeId;
+    use oxirs_core::model::{Literal, NamedNode};
 
     #[test]
     fn test_registry_registration() {

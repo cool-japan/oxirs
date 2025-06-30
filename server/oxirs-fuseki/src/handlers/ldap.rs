@@ -334,7 +334,7 @@ pub async fn get_ldap_groups(
 }
 
 /// Get current LDAP configuration (without sensitive data)
-pub async fn get_ldap_config(State(state): State<Arc<AppState>>) -> Result<Response, StatusCode> {
+pub async fn get_ldap_config(State(state): State<AppState>) -> Result<Response, StatusCode> {
     debug!("Getting LDAP configuration");
 
     // Check if LDAP is configured

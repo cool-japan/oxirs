@@ -30,11 +30,11 @@ pub struct PerformanceTestConfig {
 impl Default for PerformanceTestConfig {
     fn default() -> Self {
         Self {
-            event_count: 10_000, // Reduced for faster tests
-            concurrent_producers: 4, // Reduced for faster tests
-            concurrent_consumers: 4, // Reduced for faster tests
+            event_count: 10_000,                   // Reduced for faster tests
+            concurrent_producers: 4,               // Reduced for faster tests
+            concurrent_consumers: 4,               // Reduced for faster tests
             test_duration: Duration::from_secs(5), // Reduced for faster tests
-            target_throughput: 10_000.0, // Adjusted for reduced scale
+            target_throughput: 10_000.0,           // Adjusted for reduced scale
             target_latency_p99: Duration::from_millis(10),
             target_success_rate: 0.99, // Slightly relaxed for smaller samples
         }
@@ -242,9 +242,9 @@ mod throughput_tests {
             PerformanceTestConfig {
                 event_count: 50, // Minimal for smoke test
                 concurrent_producers: 1,
-                concurrent_consumers: 1, 
+                concurrent_consumers: 1,
                 test_duration: Duration::from_millis(500), // Very fast
-                target_throughput: 100.0, // Adjusted for minimal scale
+                target_throughput: 100.0,                  // Adjusted for minimal scale
                 ..Default::default()
             }
         };
@@ -275,14 +275,16 @@ mod throughput_tests {
         } else {
             350.0 // Realistic for minimal test scale (50 events in 500ms)
         };
-        
+
         assert!(
             metrics.success_rate() >= min_success_rate,
-            "Success rate should be >= {}%", min_success_rate * 100.0
+            "Success rate should be >= {}%",
+            min_success_rate * 100.0
         );
         assert!(
             metrics.average_throughput() >= min_throughput,
-            "Throughput should be >= {} events/sec", min_throughput
+            "Throughput should be >= {} events/sec",
+            min_throughput
         );
 
         Ok(())
@@ -707,7 +709,7 @@ mod scalability_tests {
         // Only check improvement for full performance tests
         if std::env::var("OXIRS_FULL_PERF_TEST").unwrap_or_default() == "1" {
             let min_improvement_factor = 1.2; // 20% improvement for full tests
-            
+
             assert!(
                 max_producer_throughput >= single_producer_throughput * min_improvement_factor,
                 "Should see at least modest throughput improvement with many producers (memory backend has lock contention). Single: {}, Max: {}",
@@ -1083,7 +1085,7 @@ mod resource_usage_tests {
         } else {
             10 // Faster test
         };
-        
+
         let memory_monitor = tokio::spawn(async move {
             let mut samples = Vec::new();
 
@@ -1098,12 +1100,13 @@ mod resource_usage_tests {
         });
 
         // Generate load - reduced for faster tests
-        let (events_per_batch, batch_count) = if std::env::var("OXIRS_FULL_PERF_TEST").unwrap_or_default() == "1" {
-            (1000, 100) // Full test
-        } else {
-            (100, 20) // Faster test
-        };
-        
+        let (events_per_batch, batch_count) =
+            if std::env::var("OXIRS_FULL_PERF_TEST").unwrap_or_default() == "1" {
+                (1000, 100) // Full test
+            } else {
+                (100, 20) // Faster test
+            };
+
         for batch in 0..batch_count {
             let events = create_performance_test_events(events_per_batch, batch);
 

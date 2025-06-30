@@ -962,6 +962,7 @@ impl Default for ConcurrentGraph {
 
 /// Thread pool for concurrent graph operations
 pub struct GraphThreadPool {
+    #[cfg(feature = "parallel")]
     pool: rayon::ThreadPool,
     max_batch_size: usize,
 }
@@ -969,27 +970,48 @@ pub struct GraphThreadPool {
 impl GraphThreadPool {
     /// Create a new graph thread pool
     pub fn new() -> Result<Self> {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .thread_name(|index| format!("oxirs-graph-{}", index))
-            .build()
-            .map_err(|e| crate::OxirsError::ConcurrencyError(e.to_string()))?;
+        #[cfg(feature = "parallel")]
+        {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(num_cpus::get())
+                .thread_name(|index| format!("oxirs-graph-{}", index))
+                .build()
+                .map_err(|e| crate::OxirsError::ConcurrencyError(e.to_string()))?;
 
-        Ok(Self {
-            pool,
-            max_batch_size: 10_000,
-        })
+            Ok(Self {
+                pool,
+                max_batch_size: 10_000,
+            })
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            Ok(Self {
+                max_batch_size: 10_000,
+            })
+        }
     }
 
     /// Create a thread pool with custom configuration
     pub fn with_config(num_threads: usize, max_batch_size: usize) -> Result<Self> {
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .thread_name(|index| format!("oxirs-graph-{}", index))
-            .build()
-            .map_err(|e| crate::OxirsError::ConcurrencyError(e.to_string()))?;
+        #[cfg(feature = "parallel")]
+        {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(num_threads)
+                .thread_name(|index| format!("oxirs-graph-{}", index))
+                .build()
+                .map_err(|e| crate::OxirsError::ConcurrencyError(e.to_string()))?;
 
-        Ok(Self { pool, max_batch_size })
+            Ok(Self {
+                pool,
+                max_batch_size,
+            })
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            Ok(Self {
+                max_batch_size,
+            })
+        }
     }
 
     /// Process triples concurrently
@@ -998,9 +1020,15 @@ impl GraphThreadPool {
         F: Fn(Triple) -> R + Sync + Send,
         R: Send,
     {
-        self.pool.install(|| {
-            triples.into_par_iter().map(processor).collect()
-        })
+        #[cfg(feature = "parallel")]
+        {
+            self.pool
+                .install(|| triples.into_par_iter().map(processor).collect())
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            triples.into_iter().map(processor).collect()
+        }
     }
 
     /// Process graph operations concurrently
@@ -1009,9 +1037,15 @@ impl GraphThreadPool {
         F: Fn(Graph) -> R + Sync + Send,
         R: Send,
     {
-        self.pool.install(|| {
-            graphs.into_par_iter().map(processor).collect()
-        })
+        #[cfg(feature = "parallel")]
+        {
+            self.pool
+                .install(|| graphs.into_par_iter().map(processor).collect())
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            graphs.into_iter().map(processor).collect()
+        }
     }
 
     /// Parallel merge multiple graphs
@@ -1020,17 +1054,26 @@ impl GraphThreadPool {
             return Graph::new();
         }
 
-        self.pool.install(|| {
-            graphs
-                .into_par_iter()
-                .reduce(Graph::new, |mut acc, graph| {
+        #[cfg(feature = "parallel")]
+        {
+            self.pool.install(|| {
+                graphs.into_par_iter().reduce(Graph::new, |mut acc, graph| {
                     acc.merge(&graph);
                     acc
                 })
-        })
+            })
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            graphs.into_iter().fold(Graph::new(), |mut acc, graph| {
+                acc.merge(&graph);
+                acc
+            })
+        }
     }
 
-    /// Get the underlying thread pool
+    /// Get the underlying thread pool (only available with parallel feature)
+    #[cfg(feature = "parallel")]
     pub fn inner(&self) -> &rayon::ThreadPool {
         &self.pool
     }
@@ -1052,7 +1095,7 @@ mod concurrent_tests {
     #[test]
     fn test_concurrent_graph_basic_operations() {
         let graph = ConcurrentGraph::new();
-        
+
         let triple = Triple::new(
             NamedNode::new("http://example.org/s").unwrap(),
             NamedNode::new("http://example.org/p").unwrap(),
@@ -1064,7 +1107,7 @@ mod concurrent_tests {
         assert!(graph.contains_triple(&triple));
         assert_eq!(graph.len(), 1);
         assert!(!graph.is_empty());
-        
+
         // Test removal
         assert!(graph.remove_triple(&triple));
         assert!(!graph.contains_triple(&triple));
@@ -1075,16 +1118,16 @@ mod concurrent_tests {
     #[test]
     fn test_concurrent_access() {
         let graph = ConcurrentGraph::new();
-        
+
         let counter = Arc::new(AtomicUsize::new(0));
 
         // Spawn multiple reader threads
         let mut handles = vec![];
-        
+
         for i in 0..10 {
             let g = graph.clone();
             let c = counter.clone();
-            
+
             handles.push(thread::spawn(move || {
                 for j in 0..100 {
                     let triple = Triple::new(
@@ -1092,11 +1135,11 @@ mod concurrent_tests {
                         NamedNode::new("http://example.org/p").unwrap(),
                         Literal::new(&format!("value{}", j)),
                     );
-                    
+
                     if g.add_triple(triple) {
                         c.fetch_add(1, Ordering::Relaxed);
                     }
-                    
+
                     // Small delay to encourage interleaving
                     thread::sleep(Duration::from_nanos(1));
                 }
@@ -1137,7 +1180,7 @@ mod concurrent_tests {
 
         // Merge graphs
         graph1.merge_concurrent(&graph2);
-        
+
         assert_eq!(graph1.len(), 200);
         assert_eq!(graph2.len(), 100);
     }
@@ -1145,7 +1188,7 @@ mod concurrent_tests {
     #[test]
     fn test_graph_thread_pool() {
         let pool = GraphThreadPool::new().unwrap();
-        
+
         // Create test triples
         let triples: Vec<Triple> = (0..1000)
             .map(|i| {

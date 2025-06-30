@@ -11,18 +11,71 @@ use oxirs_core::{
 };
 
 use crate::{
-    constraints::*, iri_resolver::*, optimization::*, paths::*, report::*, sparql::*, targets::*, 
-    Constraint, ConstraintComponentId, PropertyPath, Result, ShaclError, Shape, ShapeId, Target, 
+    constraints::*, iri_resolver::*, optimization::*, paths::*, report::*, sparql::*, targets::*,
+    Constraint, ConstraintComponentId, PropertyPath, Result, ShaclError, Shape, ShapeId, Target,
     ValidationConfig, ValidationReport,
 };
 
 use super::{
-    ConstraintCacheKey, ConstraintEvaluationResult, ValidationViolation, 
     cache::{ConstraintCache, InheritanceCache},
     stats::ValidationStats,
+    ConstraintCacheKey, ConstraintEvaluationResult, ValidationViolation,
 };
 
 /// Core SHACL validation engine
+///
+/// The `ValidationEngine` is the core component responsible for validating RDF data
+/// against SHACL shapes. It supports various validation strategies and optimization
+/// techniques for different use cases.
+///
+/// ## Features
+///
+/// - **Multiple validation strategies**: Sequential, parallel, incremental, and streaming
+/// - **Constraint caching**: Intelligent caching of constraint evaluation results
+/// - **Performance optimization**: Advanced optimization engine for large datasets
+/// - **Error recovery**: Graceful handling of malformed data and constraints
+/// - **Extensibility**: Support for custom constraint components and functions
+///
+/// ## Example
+///
+/// ```rust
+/// use oxirs_shacl::{ValidationEngine, ValidationConfig, Shape, ShapeId};
+/// use indexmap::IndexMap;
+/// use oxirs_core::Store;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// // Prepare shapes (normally loaded from RDF)
+/// let shapes = IndexMap::new();
+/// let config = ValidationConfig::default();
+///
+/// // Create validation engine
+/// let engine = ValidationEngine::new(&shapes, config);
+///
+/// // Validate a store
+/// // let store = Store::new()?;
+/// // let report = engine.validate_store(&store)?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## Validation Strategies
+///
+/// The engine supports different validation strategies optimized for different scenarios:
+///
+/// - **Sequential**: Single-threaded validation, best for small datasets
+/// - **Parallel**: Multi-threaded validation, optimal for large datasets
+/// - **Incremental**: Only validates changes, ideal for real-time applications
+/// - **Streaming**: Memory-efficient validation for very large datasets
+/// - **Optimized**: Uses advanced optimization techniques and caching
+///
+/// ## Performance Considerations
+///
+/// For optimal performance:
+/// - Use parallel strategy for datasets > 10,000 triples
+/// - Enable constraint caching for repeated validations
+/// - Use incremental validation for real-time scenarios
+/// - Configure memory limits for streaming validation
+///
 #[derive(Debug)]
 pub struct ValidationEngine<'a> {
     /// Reference to shapes to validate against
@@ -79,7 +132,7 @@ impl<'a> ValidationEngine<'a> {
 
     /// Create a new validation engine with custom IRI resolver
     pub fn with_iri_resolver(
-        shapes: &'a IndexMap<ShapeId, Shape>, 
+        shapes: &'a IndexMap<ShapeId, Shape>,
         config: ValidationConfig,
         iri_resolver: IriResolver,
     ) -> Self {
@@ -333,7 +386,8 @@ impl<'a> ValidationEngine<'a> {
         }
 
         // Stop if we've reached the maximum violation limit
-        if self.config.max_violations > 0 && report.violation_count() >= self.config.max_violations {
+        if self.config.max_violations > 0 && report.violation_count() >= self.config.max_violations
+        {
             return true;
         }
 
@@ -376,7 +430,9 @@ impl<'a> ValidationEngine<'a> {
                         focus_node.clone(),
                         shape.id.clone(),
                         component_id.clone(),
-                        constraint.severity().unwrap_or_else(|| shape.severity.clone()),
+                        constraint
+                            .severity()
+                            .unwrap_or_else(|| shape.severity.clone()),
                     )
                     .with_value(violating_value.unwrap_or_else(|| focus_node.clone()))
                     .with_message(message.unwrap_or_else(|| {
@@ -404,7 +460,7 @@ impl<'a> ValidationEngine<'a> {
         // For now, just return the shape's own constraints
         // TODO: Implement proper inheritance resolution
         let mut constraints = IndexMap::new();
-        
+
         if let Some(shape) = self.shapes.get(shape_id) {
             for constraint in &shape.constraints {
                 constraints.insert(constraint.component_id(), constraint.clone());
@@ -412,7 +468,8 @@ impl<'a> ValidationEngine<'a> {
         }
 
         // Cache the result
-        self.inheritance_cache.insert(shape_id.clone(), constraints.clone());
+        self.inheritance_cache
+            .insert(shape_id.clone(), constraints.clone());
 
         Ok(constraints)
     }

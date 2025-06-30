@@ -83,11 +83,11 @@ impl BftMessage {
     /// Extract view number from message (if applicable)
     pub fn view(&self) -> Option<ViewNumber> {
         match self {
-            BftMessage::PrePrepare { view, .. } |
-            BftMessage::Prepare { view, .. } |
-            BftMessage::Commit { view, .. } |
-            BftMessage::Reply { view, .. } |
-            BftMessage::NewView { view, .. } => Some(*view),
+            BftMessage::PrePrepare { view, .. }
+            | BftMessage::Prepare { view, .. }
+            | BftMessage::Commit { view, .. }
+            | BftMessage::Reply { view, .. }
+            | BftMessage::NewView { view, .. } => Some(*view),
             BftMessage::ViewChange { new_view, .. } => Some(*new_view),
             _ => None,
         }
@@ -96,10 +96,10 @@ impl BftMessage {
     /// Extract sequence number from message (if applicable)
     pub fn sequence(&self) -> Option<SequenceNumber> {
         match self {
-            BftMessage::PrePrepare { sequence, .. } |
-            BftMessage::Prepare { sequence, .. } |
-            BftMessage::Commit { sequence, .. } |
-            BftMessage::Reply { sequence, .. } => Some(*sequence),
+            BftMessage::PrePrepare { sequence, .. }
+            | BftMessage::Prepare { sequence, .. }
+            | BftMessage::Commit { sequence, .. }
+            | BftMessage::Reply { sequence, .. } => Some(*sequence),
             BftMessage::Checkpoint { sequence, .. } => Some(*sequence),
             BftMessage::ViewChange { last_sequence, .. } => Some(*last_sequence),
             _ => None,
@@ -109,28 +109,27 @@ impl BftMessage {
     /// Extract node ID from message (if applicable)
     pub fn node_id(&self) -> Option<NodeId> {
         match self {
-            BftMessage::Prepare { node_id, .. } |
-            BftMessage::Commit { node_id, .. } |
-            BftMessage::Checkpoint { node_id, .. } |
-            BftMessage::ViewChange { node_id, .. } => Some(*node_id),
+            BftMessage::Prepare { node_id, .. }
+            | BftMessage::Commit { node_id, .. }
+            | BftMessage::Checkpoint { node_id, .. }
+            | BftMessage::ViewChange { node_id, .. } => Some(*node_id),
             _ => None,
         }
     }
 
     /// Check if message is a consensus message
     pub fn is_consensus_message(&self) -> bool {
-        matches!(self, 
-            BftMessage::PrePrepare { .. } |
-            BftMessage::Prepare { .. } |
-            BftMessage::Commit { .. }
+        matches!(
+            self,
+            BftMessage::PrePrepare { .. } | BftMessage::Prepare { .. } | BftMessage::Commit { .. }
         )
     }
 
     /// Check if message is a view change related message
     pub fn is_view_change_message(&self) -> bool {
-        matches!(self, 
-            BftMessage::ViewChange { .. } |
-            BftMessage::NewView { .. }
+        matches!(
+            self,
+            BftMessage::ViewChange { .. } | BftMessage::NewView { .. }
         )
     }
 }

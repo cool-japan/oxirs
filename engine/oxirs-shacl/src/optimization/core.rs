@@ -1239,9 +1239,9 @@ impl IncrementalValidationEngine {
         node: &Term,
     ) -> Result<Vec<oxirs_core::model::Triple>> {
         use oxirs_core::model::Quad;
-        
+
         let mut triples = Vec::new();
-        
+
         // Create a pattern to match triples with this node as subject
         for quad in store.iter() {
             match quad {
@@ -1268,7 +1268,7 @@ impl IncrementalValidationEngine {
                 }
             }
         }
-        
+
         Ok(triples)
     }
 
@@ -1279,9 +1279,9 @@ impl IncrementalValidationEngine {
         node: &Term,
     ) -> Result<Vec<oxirs_core::model::Triple>> {
         use oxirs_core::model::Quad;
-        
+
         let mut triples = Vec::new();
-        
+
         // Create a pattern to match triples with this node as object
         for quad in store.iter() {
             match quad {
@@ -1308,7 +1308,7 @@ impl IncrementalValidationEngine {
                 }
             }
         }
-        
+
         Ok(triples)
     }
 
@@ -1339,13 +1339,13 @@ impl IncrementalValidationEngine {
 
         for node in nodes {
             let node_key = format!("{:?}", node);
-            
+
             // Check if we have a previous snapshot for this node
             if let Some(previous_snapshot) = snapshots.get(&node_key) {
                 // Compute current hashes
                 let current_property_hash = self.hash_node_properties(store, node)?;
                 let current_constraint_hash = self.hash_constraints(current_constraints);
-                
+
                 // Check for property changes
                 if current_property_hash != previous_snapshot.properties_hash {
                     delta.nodes_with_property_changes.push(NodePropertyChange {
@@ -1356,16 +1356,18 @@ impl IncrementalValidationEngine {
                         detected_at: std::time::SystemTime::now(),
                     });
                 }
-                
+
                 // Check for constraint changes
                 if current_constraint_hash != previous_snapshot.constraints_hash {
-                    delta.nodes_with_constraint_changes.push(NodeConstraintChange {
-                        node: node.clone(),
-                        previous_constraints_hash: previous_snapshot.constraints_hash,
-                        current_constraints_hash: current_constraint_hash,
-                        changed_shapes: vec![], // Could be enhanced to track specific shape changes
-                        detected_at: std::time::SystemTime::now(),
-                    });
+                    delta
+                        .nodes_with_constraint_changes
+                        .push(NodeConstraintChange {
+                            node: node.clone(),
+                            previous_constraints_hash: previous_snapshot.constraints_hash,
+                            current_constraints_hash: current_constraint_hash,
+                            changed_shapes: vec![], // Could be enhanced to track specific shape changes
+                            detected_at: std::time::SystemTime::now(),
+                        });
                 }
             } else {
                 // New node detected
@@ -1374,9 +1376,9 @@ impl IncrementalValidationEngine {
         }
 
         // Detect deleted nodes (in snapshots but not in current nodes)
-        let current_node_keys: std::collections::HashSet<String> = 
+        let current_node_keys: std::collections::HashSet<String> =
             nodes.iter().map(|n| format!("{:?}", n)).collect();
-        
+
         for snapshot_key in snapshots.keys() {
             if !current_node_keys.contains(snapshot_key) {
                 // Try to reconstruct the term (simplified approach)
@@ -1401,11 +1403,14 @@ impl IncrementalValidationEngine {
         // Generate events for property changes
         for property_change in &delta.nodes_with_property_changes {
             let event_id = format!(
-                "prop_change_{}_{}", 
-                property_change.node.as_str(), 
-                timestamp.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
+                "prop_change_{}_{}",
+                property_change.node.as_str(),
+                timestamp
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
             );
-            
+
             let payload = serde_json::json!({
                 "node": property_change.node.as_str(),
                 "previous_hash": property_change.previous_hash,
@@ -1429,11 +1434,14 @@ impl IncrementalValidationEngine {
         // Generate events for constraint changes
         for constraint_change in &delta.nodes_with_constraint_changes {
             let event_id = format!(
-                "constraint_change_{}_{}", 
-                constraint_change.node.as_str(), 
-                timestamp.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
+                "constraint_change_{}_{}",
+                constraint_change.node.as_str(),
+                timestamp
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
             );
-            
+
             let payload = serde_json::json!({
                 "node": constraint_change.node.as_str(),
                 "previous_constraints_hash": constraint_change.previous_constraints_hash,
@@ -1454,11 +1462,14 @@ impl IncrementalValidationEngine {
         // Generate events for new nodes
         for new_node in &delta.new_nodes {
             let event_id = format!(
-                "node_added_{}_{}", 
-                new_node.as_str(), 
-                timestamp.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
+                "node_added_{}_{}",
+                new_node.as_str(),
+                timestamp
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
             );
-            
+
             let payload = serde_json::json!({
                 "node": new_node.as_str(),
                 "detected_at": timestamp
@@ -1480,11 +1491,14 @@ impl IncrementalValidationEngine {
         // Generate events for deleted nodes
         for deleted_node in &delta.deleted_nodes {
             let event_id = format!(
-                "node_removed_{}_{}", 
-                deleted_node.as_str(), 
-                timestamp.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
+                "node_removed_{}_{}",
+                deleted_node.as_str(),
+                timestamp
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
             );
-            
+
             let payload = serde_json::json!({
                 "node": deleted_node.as_str(),
                 "detected_at": timestamp
@@ -1512,14 +1526,15 @@ impl IncrementalValidationEngine {
         // 1. Actual before/after triple comparison
         // 2. Property-specific change detection
         // 3. Integration with store change logs
-        
+
         let mut changes = Vec::new();
         let current_triples = self.query_node_triples_as_subject(store, node)?;
-        
+
         // For each triple, we could compare with cached previous state
         // For now, we'll create a placeholder change indicating some property changed
         if !current_triples.is_empty() {
-            for triple in current_triples.iter().take(5) { // Limit for performance
+            for triple in current_triples.iter().take(5) {
+                // Limit for performance
                 changes.push(PropertyChange {
                     subject: node.clone(),
                     property: triple.predicate().clone(),
@@ -1530,7 +1545,7 @@ impl IncrementalValidationEngine {
                 });
             }
         }
-        
+
         Ok(changes)
     }
 
@@ -1539,7 +1554,9 @@ impl IncrementalValidationEngine {
         // This is a simplified implementation that could be enhanced
         // In practice, you'd want a more robust term serialization/deserialization
         if key.starts_with("NamedNode(") {
-            let iri = key.trim_start_matches("NamedNode(\"").trim_end_matches("\")");
+            let iri = key
+                .trim_start_matches("NamedNode(\"")
+                .trim_end_matches("\")");
             oxirs_core::model::NamedNode::new(iri)
                 .map(Term::NamedNode)
                 .map_err(|e| ShaclError::ValidationEngine(format!("Invalid IRI: {}", e)))

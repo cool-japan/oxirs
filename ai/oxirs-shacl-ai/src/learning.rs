@@ -263,8 +263,7 @@ impl ShapeLearner {
             }
 
             // Add property shape as a property constraint to the node shape
-            // For now, just add a simplified constraint
-            // TODO: Implement proper property shape inclusion
+            shape.add_property_shape(property_shape);
         }
 
         self.stats.classes_analyzed += 1;
@@ -1330,30 +1329,93 @@ impl ShapeLearner {
     /// Convert a pattern to a shape
     fn pattern_to_shape(
         &mut self,
-        _store: &Store,
+        store: &Store,
         pattern: &Pattern,
-        _graph_name: Option<&str>,
+        graph_name: Option<&str>,
     ) -> Result<Shape> {
-        // Create shape based on pattern type
+        // Create shape based on pattern type with enhanced logic
         match pattern {
             Pattern::ClassUsage {
-                class, confidence, ..
+                class, confidence, frequency, ..
             } if *confidence >= self.config.min_confidence => {
-                let shape_id = ShapeId::new(format!("{}Shape", class.as_str()));
-                Ok(ShapeFactory::node_shape_with_class(shape_id, class.clone()))
+                let shape_id = ShapeId::new(format!(
+                    "{}Shape_{}",
+                    class.as_str().replace(['/', ':', '#'], "_"),
+                    uuid::Uuid::new_v4().to_string()[..8].to_string()
+                ));
+                
+                let mut shape = ShapeFactory::node_shape_with_class(shape_id, class.clone());
+                
+                // Add severity based on confidence
+                if *confidence > 0.9 {
+                    shape.set_severity(Some(Severity::Violation));
+                } else if *confidence > 0.7 {
+                    shape.set_severity(Some(Severity::Warning));
+                } else {
+                    shape.set_severity(Some(Severity::Info));
+                }
+                
+                // Add additional properties if frequency is high
+                if *frequency > self.config.min_support {
+                    if let Ok(properties) = self.discover_properties_for_class(store, class, graph_name) {
+                        for property in properties.into_iter().take(5) { // Limit to top 5 properties
+                            let property_path = PropertyPath::predicate(property.clone());
+                            let property_shape_id = ShapeId::new(format!(
+                                "{}_{}PropertyShape",
+                                shape_id.as_str(),
+                                property.as_str().replace(['/', ':', '#'], "_")
+                            ));
+                            let property_shape = Shape::property_shape(property_shape_id, property_path);
+                            shape.add_property_shape(property_shape);
+                        }
+                    }
+                }
+                
+                Ok(shape)
             }
             Pattern::PropertyUsage {
                 property,
                 confidence,
+                frequency,
                 ..
             } if *confidence >= self.config.min_confidence => {
-                let shape_id = ShapeId::new(format!("{}PropertyShape", property.as_str()));
+                let shape_id = ShapeId::new(format!(
+                    "{}PropertyShape_{}",
+                    property.as_str().replace(['/', ':', '#'], "_"),
+                    uuid::Uuid::new_v4().to_string()[..8].to_string()
+                ));
                 let property_path = PropertyPath::predicate(property.clone());
-                Ok(Shape::property_shape(shape_id, property_path))
+                let mut shape = Shape::property_shape(shape_id, property_path);
+                
+                // Add constraints based on frequency and confidence
+                if *frequency > self.config.min_support * 2.0 {
+                    // High frequency suggests required property
+                    shape.add_constraint(
+                        ConstraintComponentId::new("sh:minCount"),
+                        Constraint::MinCount(MinCountConstraint { min_count: 1 }),
+                    );
+                }
+                
+                // Set severity based on confidence
+                if *confidence > 0.9 {
+                    shape.set_severity(Some(Severity::Violation));
+                } else if *confidence > 0.7 {
+                    shape.set_severity(Some(Severity::Warning));
+                } else {
+                    shape.set_severity(Some(Severity::Info));
+                }
+                
+                Ok(shape)
             }
-            _ => Err(ShaclAiError::ShapeLearning(
-                "Pattern does not meet confidence threshold".to_string(),
-            )),
+            _ => Err(ShaclAiError::ShapeLearning(format!(
+                "Pattern does not meet confidence threshold (min: {}, actual: {})",
+                self.config.min_confidence,
+                match pattern {
+                    Pattern::ClassUsage { confidence, .. } => *confidence,
+                    Pattern::PropertyUsage { confidence, .. } => *confidence,
+                    _ => 0.0,
+                }
+            ))),
         }
     }
 
@@ -1510,6 +1572,163 @@ pub struct TemporalPatterns {
 
     /// Range of dates in days
     pub date_range_days: i64,
+}
+
+impl ShapeLearner {
+    /// Adaptive learning enhancement: adjust parameters based on success rates
+    pub fn adapt_learning_parameters(&mut self) -> Result<()> {
+        tracing::info!("Adapting learning parameters based on performance statistics");
+        
+        let success_rate = if self.stats.total_shapes_learned > 0 {
+            (self.stats.total_shapes_learned as f64) / 
+            ((self.stats.total_shapes_learned + self.stats.failed_shapes) as f64)
+        } else {
+            1.0 // Default to optimistic start
+        };
+        
+        tracing::debug!("Current success rate: {:.2}%", success_rate * 100.0);
+        
+        // Adapt confidence threshold based on success rate
+        if success_rate < 0.5 {
+            // Low success rate - reduce confidence threshold to be more permissive
+            self.config.min_confidence = (self.config.min_confidence * 0.95).max(0.1);
+            self.config.min_support = (self.config.min_support * 0.95).max(0.05);
+            tracing::info!("Reduced thresholds - confidence: {:.3}, support: {:.3}", 
+                         self.config.min_confidence, self.config.min_support);
+        } else if success_rate > 0.9 {
+            // High success rate - increase confidence threshold to be more selective
+            self.config.min_confidence = (self.config.min_confidence * 1.05).min(0.95);
+            self.config.min_support = (self.config.min_support * 1.05).min(0.5);
+            tracing::info!("Increased thresholds - confidence: {:.3}, support: {:.3}", 
+                         self.config.min_confidence, self.config.min_support);
+        }
+        
+        // Adapt max shapes based on current performance
+        if self.stats.classes_analyzed > 0 {
+            let shapes_per_class = self.stats.total_shapes_learned as f64 / self.stats.classes_analyzed as f64;
+            if shapes_per_class > 3.0 {
+                // Too many shapes per class - reduce max shapes
+                self.config.max_shapes = (self.config.max_shapes as f64 * 0.9) as usize;
+                tracing::info!("Reduced max_shapes to {}", self.config.max_shapes);
+            } else if shapes_per_class < 1.0 {
+                // Too few shapes - increase max shapes
+                self.config.max_shapes = (self.config.max_shapes as f64 * 1.1) as usize;
+                tracing::info!("Increased max_shapes to {}", self.config.max_shapes);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Enhanced learning with reinforcement learning integration
+    pub fn learn_with_reinforcement(
+        &mut self,
+        store: &Store,
+        graph_name: Option<&str>,
+        validation_feedback: Option<&ValidationReport>,
+    ) -> Result<Vec<Shape>> {
+        tracing::info!("Starting reinforcement learning enhanced shape discovery");
+        
+        // Use reinforcement learning if available
+        if let Some(ref mut rl_agent) = self.rl_agent {
+            // Define actions: adjust confidence, support, or max_shapes
+            let actions = vec![
+                Action::new("increase_confidence".to_string(), vec![0.05]),
+                Action::new("decrease_confidence".to_string(), vec![-0.05]),
+                Action::new("increase_support".to_string(), vec![0.02]),
+                Action::new("decrease_support".to_string(), vec![-0.02]),
+            ];
+            
+            // Create state vector from current statistics
+            let state = vec![
+                self.config.min_confidence,
+                self.config.min_support,
+                self.stats.total_shapes_learned as f64 / 100.0, // Normalize
+                self.stats.failed_shapes as f64 / 100.0, // Normalize
+            ];
+            
+            // Get action from RL agent
+            if let Ok(action) = rl_agent.select_action(&state) {
+                tracing::debug!("RL selected action: {}", action.name);
+                
+                // Apply the action
+                match action.name.as_str() {
+                    "increase_confidence" => {
+                        self.config.min_confidence = (self.config.min_confidence + action.parameters[0]).min(0.95);
+                    }
+                    "decrease_confidence" => {
+                        self.config.min_confidence = (self.config.min_confidence + action.parameters[0]).max(0.1);
+                    }
+                    "increase_support" => {
+                        self.config.min_support = (self.config.min_support + action.parameters[0]).min(0.5);
+                    }
+                    "decrease_support" => {
+                        self.config.min_support = (self.config.min_support + action.parameters[0]).max(0.05);
+                    }
+                    _ => {}
+                }
+            }
+            
+            // Learn shapes with adjusted parameters
+            let shapes = self.learn_shapes_from_store(store, graph_name)?;
+            
+            // Calculate reward based on validation feedback
+            if let Some(validation_report) = validation_feedback {
+                let reward = if validation_report.conforms {
+                    1.0 // Positive reward for successful validation
+                } else {
+                    -0.5 // Negative reward for validation failures
+                };
+                
+                let new_state = vec![
+                    self.config.min_confidence,
+                    self.config.min_support,
+                    self.stats.total_shapes_learned as f64 / 100.0,
+                    self.stats.failed_shapes as f64 / 100.0,
+                ];
+                
+                // Update RL agent with experience
+                if let Err(e) = rl_agent.update(&state, &actions[0], reward, &new_state) {
+                    tracing::warn!("Failed to update RL agent: {}", e);
+                }
+            }
+            
+            Ok(shapes)
+        } else {
+            // Fall back to standard learning
+            self.learn_shapes_from_store(store, graph_name)
+        }
+    }
+    
+    /// Get adaptive learning recommendations based on current performance
+    pub fn get_learning_recommendations(&self) -> Vec<String> {
+        let mut recommendations = Vec::new();
+        
+        let success_rate = if self.stats.total_shapes_learned > 0 {
+            (self.stats.total_shapes_learned as f64) / 
+            ((self.stats.total_shapes_learned + self.stats.failed_shapes) as f64)
+        } else {
+            1.0
+        };
+        
+        if success_rate < 0.3 {
+            recommendations.push("Consider lowering confidence threshold for more permissive learning".to_string());
+            recommendations.push("Increase training data diversity".to_string());
+        } else if success_rate > 0.95 {
+            recommendations.push("Consider raising confidence threshold for more selective learning".to_string());
+            recommendations.push("Enable reinforcement learning for fine-tuning".to_string());
+        }
+        
+        if self.stats.classes_analyzed > 20 && self.stats.total_shapes_learned < 10 {
+            recommendations.push("Increase max_shapes limit for broader coverage".to_string());
+        }
+        
+        if !self.config.enable_reinforcement_learning && self.stats.total_shapes_learned > 50 {
+            recommendations.push("Enable reinforcement learning for adaptive optimization".to_string());
+        }
+        
+        recommendations
+    }
 }
 
 #[cfg(test)]

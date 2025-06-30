@@ -201,8 +201,10 @@ impl AdaptiveBatcher {
         if new_size != current {
             self.current_batch_size.store(new_size, Ordering::Relaxed);
             self.stats.adaptations.fetch_add(1, Ordering::Relaxed);
-            debug!("Adapted batch size from {} to {} (avg latency: {:?})", 
-                   current, new_size, avg_latency);
+            debug!(
+                "Adapted batch size from {} to {} (avg latency: {:?})",
+                current, new_size, avg_latency
+            );
         }
 
         new_size
@@ -218,11 +220,13 @@ impl AdaptiveBatcher {
         }
 
         self.stats.total_batches.fetch_add(1, Ordering::Relaxed);
-        self.stats.total_events.fetch_add(batch_size as u64, Ordering::Relaxed);
+        self.stats
+            .total_events
+            .fetch_add(batch_size as u64, Ordering::Relaxed);
         self.stats
             .average_latency_ms
             .store(latency.as_millis() as u64, Ordering::Relaxed);
-        
+
         let total_events = self.stats.total_events.load(Ordering::Relaxed);
         let total_batches = self.stats.total_batches.load(Ordering::Relaxed);
         if total_batches > 0 {
@@ -237,8 +241,12 @@ impl AdaptiveBatcher {
         BatchingStats {
             total_batches: AtomicU64::new(self.stats.total_batches.load(Ordering::Relaxed)),
             total_events: AtomicU64::new(self.stats.total_events.load(Ordering::Relaxed)),
-            average_batch_size: AtomicU64::new(self.stats.average_batch_size.load(Ordering::Relaxed)),
-            average_latency_ms: AtomicU64::new(self.stats.average_latency_ms.load(Ordering::Relaxed)),
+            average_batch_size: AtomicU64::new(
+                self.stats.average_batch_size.load(Ordering::Relaxed),
+            ),
+            average_latency_ms: AtomicU64::new(
+                self.stats.average_latency_ms.load(Ordering::Relaxed),
+            ),
             throughput_eps: AtomicU64::new(self.stats.throughput_eps.load(Ordering::Relaxed)),
             adaptations: AtomicU64::new(self.stats.adaptations.load(Ordering::Relaxed)),
         }
@@ -369,7 +377,7 @@ impl ParallelEventProcessor {
 
         // Get optimal batch size
         let optimal_batch_size = self.adaptive_batcher.get_optimal_batch_size().await;
-        
+
         // Convert to zero-copy events if enabled
         let zero_copy_events = if self.config.enable_zero_copy {
             self.convert_to_zero_copy(events).await?
@@ -418,19 +426,17 @@ impl ParallelEventProcessor {
     }
 
     /// Convert events to zero-copy format
-    async fn convert_to_zero_copy(
-        &self,
-        events: Vec<StreamEvent>,
-    ) -> Result<Vec<ZeroCopyEvent>> {
+    async fn convert_to_zero_copy(&self, events: Vec<StreamEvent>) -> Result<Vec<ZeroCopyEvent>> {
         let mut zero_copy_events = Vec::with_capacity(events.len());
         let mut buffer = self.memory_pool.allocate().await;
 
         for event in events {
             let start_offset = buffer.len();
-            
+
             // Serialize event efficiently
-            let serialized = if self.config.enable_compression 
-                && serde_json::to_string(&event)?.len() > self.config.compression_threshold {
+            let serialized = if self.config.enable_compression
+                && serde_json::to_string(&event)?.len() > self.config.compression_threshold
+            {
                 // Use compression for large events
                 self.compress_event(&event)?
             } else {
@@ -480,10 +486,7 @@ impl ParallelEventProcessor {
     }
 
     /// Apply event filters for pre-processing optimization
-    async fn apply_event_filters(
-        &self,
-        events: Vec<ZeroCopyEvent>,
-    ) -> Result<Vec<ZeroCopyEvent>> {
+    async fn apply_event_filters(&self, events: Vec<ZeroCopyEvent>) -> Result<Vec<ZeroCopyEvent>> {
         let filters = self.event_filters.read().await;
         if filters.is_empty() {
             return Ok(events);
@@ -499,18 +502,18 @@ impl ParallelEventProcessor {
                 let passes_filter = (filter.filter_fn)(&event);
                 let filter_time = filter_start.elapsed();
 
-                filter.stats
+                filter
+                    .stats
                     .events_processed
                     .fetch_add(1, Ordering::Relaxed);
-                filter.stats
+                filter
+                    .stats
                     .processing_time_ns
                     .fetch_add(filter_time.as_nanos() as u64, Ordering::Relaxed);
 
                 if !passes_filter {
                     should_include = false;
-                    filter.stats
-                        .events_filtered
-                        .fetch_add(1, Ordering::Relaxed);
+                    filter.stats.events_filtered.fetch_add(1, Ordering::Relaxed);
                     break;
                 }
             }
@@ -540,7 +543,7 @@ impl ParallelEventProcessor {
             let task = tokio::spawn(async move {
                 let _permit = semaphore.acquire().await?;
                 let batch_result = Self::process_event_batch(chunk_events).await?;
-                
+
                 stats
                     .parallel_batches_processed
                     .fetch_add(1, Ordering::Relaxed);
@@ -595,7 +598,10 @@ impl ParallelEventProcessor {
     }
 
     /// Process events using regular (non-optimized) path
-    async fn process_events_regular(&self, events: Vec<StreamEvent>) -> Result<Vec<ProcessingResult>> {
+    async fn process_events_regular(
+        &self,
+        events: Vec<StreamEvent>,
+    ) -> Result<Vec<ProcessingResult>> {
         let mut results = Vec::with_capacity(events.len());
 
         for event in events {
@@ -639,7 +645,9 @@ impl ParallelEventProcessor {
                 self.stats.total_processing_time_ms.load(Ordering::Relaxed),
             ),
             parallel_batches_processed: AtomicU64::new(
-                self.stats.parallel_batches_processed.load(Ordering::Relaxed),
+                self.stats
+                    .parallel_batches_processed
+                    .load(Ordering::Relaxed),
             ),
             zero_copy_optimizations: AtomicU64::new(
                 self.stats.zero_copy_optimizations.load(Ordering::Relaxed),
@@ -710,7 +718,8 @@ impl StreamEventMetadata for StreamEvent {
             _ => {
                 // For unmatched event types, return a static reference
                 use std::sync::LazyLock;
-                static DEFAULT_METADATA: LazyLock<EventMetadata> = LazyLock::new(|| EventMetadata::default());
+                static DEFAULT_METADATA: LazyLock<EventMetadata> =
+                    LazyLock::new(|| EventMetadata::default());
                 &DEFAULT_METADATA
             }
         }
@@ -746,13 +755,13 @@ mod tests {
     #[tokio::test]
     async fn test_memory_pool() {
         let pool = MemoryPool::new(10, 1024);
-        
+
         let buffer1 = pool.allocate().await;
         assert_eq!(buffer1.len(), 0);
         assert_eq!(buffer1.capacity(), 1024);
-        
+
         pool.deallocate(buffer1).await;
-        
+
         let stats = pool.get_stats();
         assert_eq!(stats.allocations.load(Ordering::Relaxed), 1);
         assert_eq!(stats.deallocations.load(Ordering::Relaxed), 1);
@@ -761,14 +770,14 @@ mod tests {
     #[tokio::test]
     async fn test_adaptive_batcher() {
         let batcher = AdaptiveBatcher::new(10, 1000);
-        
+
         let initial_size = batcher.get_optimal_batch_size().await;
         assert!(initial_size > 0);
-        
+
         // Record some latencies
         batcher.record_latency(Duration::from_millis(15), 100).await;
         batcher.record_latency(Duration::from_millis(20), 100).await;
-        
+
         let stats = batcher.get_stats();
         assert_eq!(stats.total_batches.load(Ordering::Relaxed), 2);
     }
@@ -781,14 +790,14 @@ mod tests {
             max_batch_size: 100,
             ..Default::default()
         };
-        
+
         let processor = ParallelEventProcessor::new(config);
-        
+
         let events: Vec<StreamEvent> = (0..1000).map(create_test_event).collect();
         let results = processor.process_events_optimized(events).await.unwrap();
-        
+
         assert_eq!(results.len(), 1000);
-        
+
         let stats = processor.get_stats();
         assert_eq!(stats.total_events_processed.load(Ordering::Relaxed), 1000);
     }
@@ -801,14 +810,14 @@ mod tests {
             compression_threshold: 500,
             ..Default::default()
         };
-        
+
         let processor = ParallelEventProcessor::new(config);
-        
+
         let events: Vec<StreamEvent> = (0..100).map(create_test_event).collect();
         let results = processor.process_events_optimized(events).await.unwrap();
-        
+
         assert_eq!(results.len(), 100);
-        
+
         let stats = processor.get_stats();
         assert!(stats.zero_copy_optimizations.load(Ordering::Relaxed) > 0);
     }
@@ -819,20 +828,22 @@ mod tests {
             enable_event_filtering: true,
             ..Default::default()
         };
-        
+
         let processor = ParallelEventProcessor::new(config);
-        
+
         // Add a filter that only allows even IDs
-        processor.add_event_filter(
-            "even_only".to_string(),
-            |event| {
-                event.metadata.event_id.ends_with(|c: char| c.is_ascii_digit() && c.to_digit(10).unwrap() % 2 == 0)
-            }
-        ).await;
-        
+        processor
+            .add_event_filter("even_only".to_string(), |event| {
+                event
+                    .metadata
+                    .event_id
+                    .ends_with(|c: char| c.is_ascii_digit() && c.to_digit(10).unwrap() % 2 == 0)
+            })
+            .await;
+
         let events: Vec<StreamEvent> = (0..100).map(create_test_event).collect();
         let results = processor.process_events_optimized(events).await.unwrap();
-        
+
         // Should filter out roughly half the events
         assert!(results.len() < 100);
         assert!(results.len() > 40); // Approximately 50 events should pass

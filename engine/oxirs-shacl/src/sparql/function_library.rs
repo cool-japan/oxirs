@@ -52,26 +52,26 @@ impl SparqlFunctionLibrary {
         security_policy: Option<FunctionSecurityPolicy>,
     ) -> Result<()> {
         let function_name = function.metadata().name.clone();
-        
+
         // Validate function metadata
         self.validate_function_metadata(function.metadata())?;
-        
+
         // Set security policy
         let policy = security_policy.unwrap_or_else(|| FunctionSecurityPolicy::default());
         self.validate_security_policy(&policy)?;
-        
+
         // Register function
         {
             let mut functions = self.functions.write().unwrap();
             functions.insert(function_name.clone(), function);
         }
-        
+
         // Register security policy
         {
             let mut policies = self.security_policies.write().unwrap();
             policies.insert(function_name.clone(), policy);
         }
-        
+
         println!("Registered custom SPARQL function: {}", function_name);
         Ok(())
     }
@@ -82,12 +82,12 @@ impl SparqlFunctionLibrary {
             let mut functions = self.functions.write().unwrap();
             functions.remove(function_name);
         }
-        
+
         {
             let mut policies = self.security_policies.write().unwrap();
             policies.remove(function_name);
         }
-        
+
         println!("Unregistered custom SPARQL function: {}", function_name);
         Ok(())
     }
@@ -100,36 +100,40 @@ impl SparqlFunctionLibrary {
         context: &ExecutionContext,
     ) -> Result<FunctionExecutionResult> {
         let start_time = Instant::now();
-        
+
         // Get function and security policy
         let (function, policy) = {
             let functions = self.functions.read().unwrap();
             let policies = self.security_policies.read().unwrap();
-            
-            let function = functions.get(function_name)
-                .ok_or_else(|| ShaclError::ValidationEngine(format!("Function not found: {}", function_name)))?
+
+            let function = functions
+                .get(function_name)
+                .ok_or_else(|| {
+                    ShaclError::ValidationEngine(format!("Function not found: {}", function_name))
+                })?
                 .clone();
-            
-            let policy = policies.get(function_name)
+
+            let policy = policies
+                .get(function_name)
                 .cloned()
                 .unwrap_or_else(|| FunctionSecurityPolicy::default());
-            
+
             (function, policy)
         };
 
         // Create sandboxed execution environment
         let sandbox = FunctionSandbox::new(&policy, &self.global_security);
-        
+
         // Execute function in sandbox
         let result = sandbox.execute(function.as_ref(), args, context)?;
-        
+
         // Record execution metrics
         let execution_time = start_time.elapsed();
         {
             let mut monitor = self.execution_monitor.write().unwrap();
             monitor.record_execution(function_name, execution_time, result.memory_used);
         }
-        
+
         Ok(result)
     }
 
@@ -137,25 +141,28 @@ impl SparqlFunctionLibrary {
     pub fn load_library(&mut self, library: FunctionLibrary) -> Result<()> {
         // Validate library metadata
         self.validate_library_metadata(&library.metadata)?;
-        
+
         // Resolve dependencies
         self.dependency_resolver.resolve_dependencies(&library)?;
-        
+
         // Check version compatibility
         self.version_manager.check_compatibility(&library)?;
-        
+
         // Load all functions from the library
         for function in &library.functions {
-            let security_policy = library.security_policies.get(&function.metadata().name).cloned();
+            let security_policy = library
+                .security_policies
+                .get(&function.metadata().name)
+                .cloned();
             self.register_function(function.clone(), security_policy)?;
         }
-        
+
         // Register library
         {
             let mut libraries = self.libraries.write().unwrap();
             libraries.insert(library.metadata.name.clone(), library);
         }
-        
+
         Ok(())
     }
 
@@ -164,31 +171,32 @@ impl SparqlFunctionLibrary {
         // Get library
         let library = {
             let libraries = self.libraries.read().unwrap();
-            libraries.get(library_name)
-                .ok_or_else(|| ShaclError::ValidationEngine(format!("Library not found: {}", library_name)))?
+            libraries
+                .get(library_name)
+                .ok_or_else(|| {
+                    ShaclError::ValidationEngine(format!("Library not found: {}", library_name))
+                })?
                 .clone()
         };
-        
+
         // Unregister all functions from the library
         for function in &library.functions {
             self.unregister_function(&function.metadata().name)?;
         }
-        
+
         // Remove library
         {
             let mut libraries = self.libraries.write().unwrap();
             libraries.remove(library_name);
         }
-        
+
         Ok(())
     }
 
     /// Get list of available functions
     pub fn list_functions(&self) -> Vec<FunctionMetadata> {
         let functions = self.functions.read().unwrap();
-        functions.values()
-            .map(|f| f.metadata().clone())
-            .collect()
+        functions.values().map(|f| f.metadata().clone()).collect()
     }
 
     /// Get execution statistics
@@ -205,35 +213,49 @@ impl SparqlFunctionLibrary {
     /// Validate function metadata
     fn validate_function_metadata(&self, metadata: &FunctionMetadata) -> Result<()> {
         if metadata.name.is_empty() {
-            return Err(ShaclError::ValidationEngine("Function name cannot be empty".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Function name cannot be empty".to_string(),
+            ));
         }
-        
-        if !metadata.name.chars().all(|c| c.is_alphanumeric() || c == '_') {
-            return Err(ShaclError::ValidationEngine("Function name contains invalid characters".to_string()));
+
+        if !metadata
+            .name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_')
+        {
+            return Err(ShaclError::ValidationEngine(
+                "Function name contains invalid characters".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
     /// Validate security policy
     fn validate_security_policy(&self, policy: &FunctionSecurityPolicy) -> Result<()> {
         if policy.max_execution_time > self.global_security.max_function_execution_time {
-            return Err(ShaclError::ValidationEngine("Function execution time exceeds global limit".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Function execution time exceeds global limit".to_string(),
+            ));
         }
-        
+
         if policy.max_memory_per_call > self.global_security.max_function_memory {
-            return Err(ShaclError::ValidationEngine("Function memory limit exceeds global limit".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Function memory limit exceeds global limit".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
     /// Validate library metadata
     fn validate_library_metadata(&self, metadata: &LibraryMetadata) -> Result<()> {
         if metadata.name.is_empty() {
-            return Err(ShaclError::ValidationEngine("Library name cannot be empty".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Library name cannot be empty".to_string(),
+            ));
         }
-        
+
         // Check for version conflicts
         let libraries = self.libraries.read().unwrap();
         if let Some(existing) = libraries.get(&metadata.name) {
@@ -244,7 +266,7 @@ impl SparqlFunctionLibrary {
                 )));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -253,22 +275,25 @@ impl SparqlFunctionLibrary {
 pub trait DynamicFunction: Send + Sync {
     /// Execute the function with given arguments
     fn execute(&self, args: &[Term], context: &ExecutionContext) -> Result<Term>;
-    
+
     /// Get function metadata
     fn metadata(&self) -> &FunctionMetadata;
-    
+
     /// Get function security requirements
     fn security_policy(&self) -> FunctionSecurityPolicy {
         FunctionSecurityPolicy::default()
     }
-    
+
     /// Validate function arguments
     fn validate_args(&self, args: &[Term]) -> Result<()> {
         let metadata = self.metadata();
         if args.len() < metadata.min_args || args.len() > metadata.max_args {
             return Err(ShaclError::ValidationEngine(format!(
                 "Function {} expects {}-{} arguments, got {}",
-                metadata.name, metadata.min_args, metadata.max_args, args.len()
+                metadata.name,
+                metadata.min_args,
+                metadata.max_args,
+                args.len()
             )));
         }
         Ok(())
@@ -464,7 +489,10 @@ impl FunctionSandbox {
 
         // Calculate metrics
         let execution_time = start_time.elapsed();
-        let memory_used = self.resource_monitor.current_memory_usage().saturating_sub(start_memory);
+        let memory_used = self
+            .resource_monitor
+            .current_memory_usage()
+            .saturating_sub(start_memory);
 
         // Validate execution time
         if execution_time > self.policy.max_execution_time {
@@ -479,8 +507,7 @@ impl FunctionSandbox {
         if memory_used > self.policy.max_memory_per_call {
             return Err(ShaclError::ValidationEngine(format!(
                 "Function memory usage {} exceeded limit {}",
-                memory_used,
-                self.policy.max_memory_per_call
+                memory_used, self.policy.max_memory_per_call
             )));
         }
 
@@ -500,7 +527,7 @@ impl FunctionSandbox {
         context: &ExecutionContext,
     ) -> Result<()> {
         let required_permissions = &function.security_policy().required_permissions;
-        
+
         for permission in required_permissions {
             if !context.permissions.contains(permission) {
                 return Err(ShaclError::ValidationEngine(format!(
@@ -509,7 +536,7 @@ impl FunctionSandbox {
                 )));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -570,7 +597,12 @@ impl ExecutionMonitor {
         }
     }
 
-    fn record_execution(&mut self, function_name: &str, execution_time: Duration, memory_used: usize) {
+    fn record_execution(
+        &mut self,
+        function_name: &str,
+        execution_time: Duration,
+        memory_used: usize,
+    ) {
         let record = ExecutionRecord {
             timestamp: SystemTime::now(),
             execution_time,
@@ -673,7 +705,10 @@ impl Default for SecurityConfig {
             max_function_memory: 128 * 1024 * 1024, // 128MB
             enable_network_access: false,
             enable_filesystem_access: false,
-            allowed_function_categories: [FunctionCategory::String, FunctionCategory::Math].iter().cloned().collect(),
+            allowed_function_categories: [FunctionCategory::String, FunctionCategory::Math]
+                .iter()
+                .cloned()
+                .collect(),
             default_sandbox_level: SandboxLevel::Strict,
         }
     }

@@ -789,9 +789,10 @@ impl PropertyPathEvaluator {
 
         // Parse the query string into a Query object
         let parser = oxirs_core::query::parser::SparqlParser::new();
-        let parsed_query = parser.parse(query)
+        let parsed_query = parser
+            .parse(query)
             .map_err(|e| ShaclError::PropertyPath(format!("Query parsing failed: {}", e)))?;
-        
+
         let result = query_engine
             .execute_query(&parsed_query, store)
             .map_err(|e| ShaclError::PropertyPath(format!("Path query execution failed: {}", e)))?;
@@ -1062,7 +1063,12 @@ impl PropertyPathEvaluator {
 
         // Special handling for sequence paths - use intermediate variables for better debugging
         let where_clause = if let PropertyPath::Sequence(paths) = path {
-            return self.generate_sequence_sparql_query(start_node, paths, graph_name, optimization_hints);
+            return self.generate_sequence_sparql_query(
+                start_node,
+                paths,
+                graph_name,
+                optimization_hints,
+            );
         } else if matches!(path, PropertyPath::Alternative(_)) {
             self.generate_union_based_alternative_query(start_node, path, graph_name)?
         } else {
@@ -1732,7 +1738,6 @@ impl PathEvaluationStats {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1992,7 +1997,7 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
         Term::Literal(literal) => {
             // Format literal with proper escaping and datatype/language tags
             let value = literal.value().replace('\\', "\\\\").replace('"', "\\\"");
-            
+
             let datatype = literal.datatype();
             if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
                 // Simple string literals don't need datatype annotation
@@ -2002,10 +2007,8 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
             }
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),
-        Term::QuotedTriple(_) => {
-            Err(ShaclError::PropertyPath(
-                "Quoted triples not supported in property path queries".to_string(),
-            ))
-        }
+        Term::QuotedTriple(_) => Err(ShaclError::PropertyPath(
+            "Quoted triples not supported in property path queries".to_string(),
+        )),
     }
 }

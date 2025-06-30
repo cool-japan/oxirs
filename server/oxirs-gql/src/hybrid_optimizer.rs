@@ -581,8 +581,8 @@ impl HybridQueryOptimizer {
             parsing_time: Duration::from_millis(0),
             validation_time: Duration::from_millis(0),
             planning_time: Duration::from_millis(0),
-            field_count: 0, // Would be computed from the document
-            depth: 0, // Would be computed from the document
+            field_count: 0,      // Would be computed from the document
+            depth: 0,            // Would be computed from the document
             complexity_score: 0, // Would be computed from the document
             cache_hit: false,
             error_count: if success { 0 } else { 1 },

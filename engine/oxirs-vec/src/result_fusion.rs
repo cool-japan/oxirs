@@ -4,7 +4,7 @@
 //! multiple sources, including federated endpoints, different similarity metrics,
 //! and heterogeneous scoring schemes.
 
-use crate::{Vector, sparql_integration::VectorServiceResult};
+use crate::{sparql_integration::VectorServiceResult, Vector};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

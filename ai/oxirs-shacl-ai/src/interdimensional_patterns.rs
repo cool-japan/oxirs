@@ -94,7 +94,7 @@ impl Default for InterdimensionalConfig {
             max_dimensions: 16, // Support up to 16 parallel dimensions
             coherence_threshold: 0.75,
             max_temporal_displacement: Duration::from_secs(3600), // 1 hour
-            max_spatial_distance: 1000.0, // Abstract spatial units
+            max_spatial_distance: 1000.0,                         // Abstract spatial units
             enable_quantum_superposition: true,
             enable_parallel_universes: true,
             bridge_construction_threshold: 0.8,
@@ -746,38 +746,58 @@ impl InterdimensionalPatternEngine {
     }
 
     /// Initialize pattern recognition algorithms
-    fn initialize_pattern_algorithms() -> HashMap<PatternType, Box<dyn PatternRecognizer + Send + Sync>> {
-        let mut algorithms: HashMap<PatternType, Box<dyn PatternRecognizer + Send + Sync>> = HashMap::new();
-        
+    fn initialize_pattern_algorithms(
+    ) -> HashMap<PatternType, Box<dyn PatternRecognizer + Send + Sync>> {
+        let mut algorithms: HashMap<PatternType, Box<dyn PatternRecognizer + Send + Sync>> =
+            HashMap::new();
+
         algorithms.insert(PatternType::Causal, Box::new(CausalPatternRecognizer));
-        algorithms.insert(PatternType::Structural, Box::new(StructuralPatternRecognizer));
+        algorithms.insert(
+            PatternType::Structural,
+            Box::new(StructuralPatternRecognizer),
+        );
         algorithms.insert(PatternType::Temporal, Box::new(TemporalPatternRecognizer));
-        algorithms.insert(PatternType::QuantumCoherence, Box::new(QuantumCoherencePatternRecognizer));
-        algorithms.insert(PatternType::InformationFlow, Box::new(InformationFlowPatternRecognizer));
-        algorithms.insert(PatternType::ConsciousnessResonance, Box::new(ConsciousnessResonancePatternRecognizer));
-        algorithms.insert(PatternType::LogicConsistency, Box::new(LogicConsistencyPatternRecognizer));
-        algorithms.insert(PatternType::ValidationOutcome, Box::new(ValidationOutcomePatternRecognizer));
+        algorithms.insert(
+            PatternType::QuantumCoherence,
+            Box::new(QuantumCoherencePatternRecognizer),
+        );
+        algorithms.insert(
+            PatternType::InformationFlow,
+            Box::new(InformationFlowPatternRecognizer),
+        );
+        algorithms.insert(
+            PatternType::ConsciousnessResonance,
+            Box::new(ConsciousnessResonancePatternRecognizer),
+        );
+        algorithms.insert(
+            PatternType::LogicConsistency,
+            Box::new(LogicConsistencyPatternRecognizer),
+        );
+        algorithms.insert(
+            PatternType::ValidationOutcome,
+            Box::new(ValidationOutcomePatternRecognizer),
+        );
         algorithms.insert(PatternType::MetaPattern, Box::new(MetaPatternRecognizer));
-        
+
         algorithms
     }
 
     /// Start the interdimensional pattern recognition engine
     pub async fn start(&self) -> Result<()> {
         info!("Starting interdimensional pattern recognition engine");
-        
+
         self.is_active.store(true, Ordering::Relaxed);
-        
+
         // Initialize base reality dimension
         let base_reality = self.create_base_reality_dimension().await?;
         self.active_dimensions.insert(base_reality.id, base_reality);
-        
+
         // Start background processes
         self.start_dimension_monitoring().await?;
         self.start_bridge_maintenance().await?;
         self.start_pattern_discovery().await?;
         self.start_metrics_collection().await?;
-        
+
         info!("Interdimensional pattern recognition engine is now active");
         Ok(())
     }
@@ -790,11 +810,14 @@ impl InterdimensionalPatternEngine {
         validation_context: &ValidationContext,
         target_patterns: HashSet<PatternType>,
     ) -> Result<InterdimensionalPatternResult> {
-        info!("Starting interdimensional pattern discovery for {} pattern types", target_patterns.len());
-        
+        info!(
+            "Starting interdimensional pattern discovery for {} pattern types",
+            target_patterns.len()
+        );
+
         let session_id = Uuid::new_v4();
         let start_time = Instant::now();
-        
+
         // Create pattern recognition session
         let session_config = PatternSessionConfig {
             sensitivity: self.config.pattern_sensitivity,
@@ -804,10 +827,14 @@ impl InterdimensionalPatternEngine {
             enable_causal_detection: self.config.enable_causal_loop_detection,
             priority: PatternPriority::Normal,
         };
-        
+
         let mut session = PatternSession {
             id: session_id,
-            dimensions: self.active_dimensions.iter().map(|entry| *entry.key()).collect(),
+            dimensions: self
+                .active_dimensions
+                .iter()
+                .map(|entry| *entry.key())
+                .collect(),
             target_patterns: target_patterns.clone(),
             state: SessionState::Initializing,
             config: session_config.clone(),
@@ -817,13 +844,15 @@ impl InterdimensionalPatternEngine {
             start_time,
             expected_completion: None,
         };
-        
+
         self.active_sessions.insert(session_id, session.clone());
-        
+
         // Step 1: Prepare dimensions for pattern analysis
-        let prepared_dimensions = self.prepare_dimensions_for_analysis(&session.dimensions).await?;
+        let prepared_dimensions = self
+            .prepare_dimensions_for_analysis(&session.dimensions)
+            .await?;
         session.state = SessionState::Active;
-        
+
         // Step 2: Execute pattern recognition across dimensions
         let mut all_patterns = Vec::new();
         for pattern_type in &target_patterns {
@@ -836,61 +865,72 @@ impl InterdimensionalPatternEngine {
                 all_patterns.extend(patterns);
             }
         }
-        
+
         session.discovered_patterns = all_patterns.clone();
         session.state = SessionState::Correlating;
-        
+
         // Step 3: Find cross-dimensional correlations
-        let correlations = self.find_dimensional_correlations(&all_patterns, &prepared_dimensions).await?;
+        let correlations = self
+            .find_dimensional_correlations(&all_patterns, &prepared_dimensions)
+            .await?;
         session.correlations = correlations.clone();
-        
+
         // Step 4: Analyze temporal-spatial relationships
         let temporal_spatial_patterns = if session_config.enable_temporal_analysis {
-            self.temporal_spatial.analyze_temporal_spatial_patterns(&all_patterns, &correlations).await?
+            self.temporal_spatial
+                .analyze_temporal_spatial_patterns(&all_patterns, &correlations)
+                .await?
         } else {
             Vec::new()
         };
-        
+
         // Step 5: Detect causal loops and paradoxes
         let causal_analysis = if session_config.enable_causal_detection {
-            self.detect_causal_loops(&correlations, &prepared_dimensions).await?
+            self.detect_causal_loops(&correlations, &prepared_dimensions)
+                .await?
         } else {
             CausalAnalysisResult::default()
         };
-        
+
         // Step 6: Validate pattern coherence across dimensions
-        let coherence_validation = self.validate_pattern_coherence(&all_patterns, &correlations).await?;
-        
+        let coherence_validation = self
+            .validate_pattern_coherence(&all_patterns, &correlations)
+            .await?;
+
         // Step 7: Generate validation implications
         session.state = SessionState::Synthesizing;
-        let validation_implications = self.generate_validation_implications(
-            &all_patterns,
-            &correlations,
-            &temporal_spatial_patterns,
-            &causal_analysis,
-        ).await?;
-        
+        let validation_implications = self
+            .generate_validation_implications(
+                &all_patterns,
+                &correlations,
+                &temporal_spatial_patterns,
+                &causal_analysis,
+            )
+            .await?;
+
         // Step 8: Construct dimensional bridges if beneficial
-        let constructed_bridges = if coherence_validation.overall_coherence > self.config.bridge_construction_threshold {
-            self.construct_beneficial_bridges(&correlations).await?
-        } else {
-            Vec::new()
-        };
-        
+        let constructed_bridges =
+            if coherence_validation.overall_coherence > self.config.bridge_construction_threshold {
+                self.construct_beneficial_bridges(&correlations).await?
+            } else {
+                Vec::new()
+            };
+
         session.state = SessionState::Completed;
         session.metrics.patterns_discovered = all_patterns.len();
         session.metrics.correlations_found = correlations.len();
         session.metrics.dimensions_analyzed = prepared_dimensions.len();
         session.metrics.processing_time = start_time.elapsed();
-        session.metrics.avg_pattern_confidence = 
-            all_patterns.iter().map(|p| p.confidence).sum::<f64>() / all_patterns.len().max(1) as f64;
-        
+        session.metrics.avg_pattern_confidence =
+            all_patterns.iter().map(|p| p.confidence).sum::<f64>()
+                / all_patterns.len().max(1) as f64;
+
         // Update session in storage
         self.active_sessions.insert(session_id, session.clone());
-        
+
         // Update global metrics
         self.update_global_metrics(&session).await?;
-        
+
         let result = InterdimensionalPatternResult {
             session_id,
             discovered_patterns: all_patterns,
@@ -903,10 +943,13 @@ impl InterdimensionalPatternEngine {
             session_metrics: session.metrics,
             processing_time: start_time.elapsed(),
         };
-        
-        info!("Interdimensional pattern discovery completed: {} patterns, {} correlations found", 
-              result.discovered_patterns.len(), result.dimensional_correlations.len());
-        
+
+        info!(
+            "Interdimensional pattern discovery completed: {} patterns, {} correlations found",
+            result.discovered_patterns.len(),
+            result.dimensional_correlations.len()
+        );
+
         Ok(result)
     }
 
@@ -948,18 +991,23 @@ impl InterdimensionalPatternEngine {
     /// Add a new dimension for pattern analysis
     pub async fn add_dimension(&self, dimension: RealityDimension) -> Result<()> {
         if self.active_dimensions.len() >= self.config.max_dimensions {
-            return Err(ShaclAiError::Configuration(
-                format!("Maximum dimensions ({}) already reached", self.config.max_dimensions)
-            ));
+            return Err(ShaclAiError::Configuration(format!(
+                "Maximum dimensions ({}) already reached",
+                self.config.max_dimensions
+            )));
         }
-        
+
         let dimension_id = dimension.id;
-        self.active_dimensions.insert(dimension_id, dimension.clone());
-        
+        self.active_dimensions
+            .insert(dimension_id, dimension.clone());
+
         // Attempt to create bridges to existing dimensions
         self.create_bridges_to_new_dimension(dimension_id).await?;
-        
-        info!("Added dimension {} of type {:?}", dimension_id, dimension.dimension_type);
+
+        info!(
+            "Added dimension {} of type {:?}",
+            dimension_id, dimension.dimension_type
+        );
         Ok(())
     }
 
@@ -970,7 +1018,7 @@ impl InterdimensionalPatternEngine {
         physics_variant: PhysicsVariant,
     ) -> Result<DimensionId> {
         let dimension_id = Uuid::new_v4();
-        
+
         let mut constants = PhysicalConstants::default();
         // Modify constants based on physics variant and deviation
         match physics_variant {
@@ -986,7 +1034,7 @@ impl InterdimensionalPatternEngine {
             }
             _ => {} // Other variants handled differently
         }
-        
+
         let dimension = RealityDimension {
             id: dimension_id,
             dimension_type: DimensionType::ParallelUniverse {
@@ -1025,12 +1073,14 @@ impl InterdimensionalPatternEngine {
             },
             last_sync: Instant::now(),
         };
-        
+
         self.add_dimension(dimension).await?;
-        
-        info!("Created parallel universe {} with deviation {} and physics {:?}", 
-              dimension_id, deviation_factor, physics_variant);
-        
+
+        info!(
+            "Created parallel universe {} with deviation {} and physics {:?}",
+            dimension_id, deviation_factor, physics_variant
+        );
+
         Ok(dimension_id)
     }
 
@@ -1041,26 +1091,29 @@ impl InterdimensionalPatternEngine {
 
     /// Get active dimensions
     pub async fn get_active_dimensions(&self) -> Vec<RealityDimension> {
-        self.active_dimensions.iter().map(|entry| entry.value().clone()).collect()
+        self.active_dimensions
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
     }
 
     /// Shutdown the interdimensional pattern engine
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down interdimensional pattern recognition engine");
-        
+
         self.is_active.store(false, Ordering::Relaxed);
-        
+
         // Close all dimensional bridges
         for bridge_ref in self.dimensional_bridges.iter() {
             let mut bridge = bridge_ref.value().clone();
             bridge.state = BridgeState::Closed;
         }
-        
+
         // Clear all data structures
         self.active_dimensions.clear();
         self.dimensional_bridges.clear();
         self.active_sessions.clear();
-        
+
         info!("Interdimensional pattern recognition engine shutdown complete");
         Ok(())
     }

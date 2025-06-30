@@ -67,10 +67,8 @@ fn test_constraint_evaluation_result() {
     // Test violated result
     let violating_value = Term::Literal(Literal::new("invalid"));
     let message = "Constraint violated".to_string();
-    let violated = ConstraintEvaluationResult::violated(
-        Some(violating_value.clone()),
-        Some(message.clone()),
-    );
+    let violated =
+        ConstraintEvaluationResult::violated(Some(violating_value.clone()), Some(message.clone()));
 
     assert!(!violated.is_satisfied());
     assert!(violated.is_violated());
@@ -106,7 +104,7 @@ fn test_constraint_cache_key() {
 #[test]
 fn test_constraint_cache() {
     let cache = ConstraintCache::new();
-    
+
     let key = ConstraintCacheKey {
         focus_node: Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
         shape_id: ShapeId::new("test_shape"),
@@ -141,7 +139,7 @@ fn test_inheritance_cache() {
     let cache = InheritanceCache::new();
     let shape_id = ShapeId::new("test_shape");
     let mut constraints = IndexMap::new();
-    
+
     let constraint = Constraint::NodeKind(crate::constraints::NodeKindConstraint {
         node_kind: crate::constraints::NodeKind::Iri,
     });
@@ -216,19 +214,19 @@ fn create_test_engine() -> ValidationEngine<'static> {
 #[test]
 fn test_cache_manager() {
     let manager = CacheManager::new();
-    
+
     // Test cache access
     let _constraint_cache = manager.constraint_cache();
     let _inheritance_cache = manager.inheritance_cache();
-    
+
     // Test statistics
     let stats = manager.statistics();
     assert_eq!(stats.constraint_cache_size, 0);
     assert_eq!(stats.inheritance_cache_size, 0);
-    
+
     // Test cache clearing
     manager.clear_all();
-    
+
     let stats_after_clear = manager.statistics();
     assert_eq!(stats_after_clear.constraint_cache_size, 0);
 }
@@ -242,7 +240,7 @@ fn test_cache_statistics_summary() {
         constraint_cache_misses: 20,
         constraint_cache_hit_rate: 0.8,
     };
-    
+
     let summary = stats.summary();
     assert!(summary.contains("constraint_size=100"));
     assert!(summary.contains("inheritance_size=50"));

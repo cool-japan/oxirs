@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -22,6 +22,10 @@ pub struct SecurityConfig {
     pub authorization: AuthzConfig,
     /// Encryption configuration
     pub encryption: EncryptionConfig,
+    /// Post-quantum cryptography configuration
+    pub post_quantum: PostQuantumConfig,
+    /// Quantum-resistant certificates configuration
+    pub quantum_resistant_certs: QuantumResistantCerts,
     /// Audit logging configuration
     pub audit: AuditConfig,
     /// Threat detection configuration
@@ -38,6 +42,8 @@ impl Default for SecurityConfig {
             authentication: AuthConfig::default(),
             authorization: AuthzConfig::default(),
             encryption: EncryptionConfig::default(),
+            post_quantum: PostQuantumConfig::default(),
+            quantum_resistant_certs: QuantumResistantCerts::default(),
             audit: AuditConfig::default(),
             threat_detection: ThreatDetectionConfig::default(),
             rate_limiting: RateLimitConfig::default(),
@@ -104,9 +110,9 @@ impl Default for MfaConfig {
 /// Multi-factor authentication methods
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MfaMethod {
-    TOTP,    // Time-based One-Time Password
-    SMS,     // SMS-based codes
-    Email,   // Email-based codes
+    TOTP,     // Time-based One-Time Password
+    SMS,      // SMS-based codes
+    Email,    // Email-based codes
     Hardware, // Hardware keys (FIDO2/WebAuthn)
 }
 
@@ -231,14 +237,40 @@ pub struct RbacConfig {
 impl Default for RbacConfig {
     fn default() -> Self {
         let mut role_permissions = HashMap::new();
-        role_permissions.insert("viewer".to_string(), vec![Permission::Read, Permission::Query]);
-        role_permissions.insert("user".to_string(), vec![Permission::Read, Permission::Write, Permission::Stream, Permission::Query]);
-        role_permissions.insert("admin".to_string(), vec![Permission::Read, Permission::Write, Permission::Delete, Permission::Admin, Permission::Execute, Permission::Stream, Permission::Query, Permission::Configure]);
-        
+        role_permissions.insert(
+            "viewer".to_string(),
+            vec![Permission::Read, Permission::Query],
+        );
+        role_permissions.insert(
+            "user".to_string(),
+            vec![
+                Permission::Read,
+                Permission::Write,
+                Permission::Stream,
+                Permission::Query,
+            ],
+        );
+        role_permissions.insert(
+            "admin".to_string(),
+            vec![
+                Permission::Read,
+                Permission::Write,
+                Permission::Delete,
+                Permission::Admin,
+                Permission::Execute,
+                Permission::Stream,
+                Permission::Query,
+                Permission::Configure,
+            ],
+        );
+
         let mut role_hierarchy = HashMap::new();
-        role_hierarchy.insert("admin".to_string(), vec!["user".to_string(), "viewer".to_string()]);
+        role_hierarchy.insert(
+            "admin".to_string(),
+            vec!["user".to_string(), "viewer".to_string()],
+        );
         role_hierarchy.insert("user".to_string(), vec!["viewer".to_string()]);
-        
+
         Self {
             enabled: true,
             default_role: "viewer".to_string(),
@@ -404,9 +436,44 @@ impl Default for FieldLevelEncryption {
 /// Encryption algorithms
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EncryptionAlgorithm {
+    // Classical symmetric encryption
     AES256GCM,
     AES256CBC,
     ChaCha20Poly1305,
+    
+    // Post-quantum key encapsulation mechanisms (KEMs)
+    Kyber512,
+    Kyber768,
+    Kyber1024,
+    
+    // Lattice-based encryption
+    NewHope1024,
+    FrodoKEM640,
+    FrodoKEM976,
+    FrodoKEM1344,
+    
+    // Multivariate-based encryption
+    Rainbow1,
+    Rainbow3,
+    Rainbow5,
+    
+    // Hash-based signatures with encryption
+    SPHINCS_Plus128s,
+    SPHINCS_Plus256s,
+    
+    // Isogeny-based encryption
+    SIKE_P434,
+    SIKE_P503,
+    SIKE_P751,
+    
+    // Code-based encryption
+    McEliece348864,
+    McEliece460896,
+    McEliece6688128,
+    
+    // Hybrid classical-quantum
+    HybridAES_Kyber768,
+    HybridChaCha20_NewHope,
 }
 
 /// TLS versions
@@ -447,9 +514,165 @@ pub enum KeyProvider {
 /// Key derivation functions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum KeyDerivation {
+    // Classical key derivation
     PBKDF2,
     Scrypt,
     Argon2,
+    
+    // Post-quantum key derivation
+    LatticeBasedKDF,
+    HashBasedKDF,
+    CodeBasedKDF,
+    
+    // Quantum-resistant hybrid approaches
+    HybridArgon2_Lattice,
+    HybridScrypt_Hash,
+}
+
+/// Post-quantum signature algorithms
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PostQuantumSignature {
+    // Lattice-based signatures
+    Dilithium2,
+    Dilithium3,
+    Dilithium5,
+    
+    // Hash-based signatures
+    SPHINCS_Plus_SHA2_128s,
+    SPHINCS_Plus_SHA2_128f,
+    SPHINCS_Plus_SHA2_192s,
+    SPHINCS_Plus_SHA2_192f,
+    SPHINCS_Plus_SHA2_256s,
+    SPHINCS_Plus_SHA2_256f,
+    SPHINCS_Plus_SHAKE_128s,
+    SPHINCS_Plus_SHAKE_128f,
+    SPHINCS_Plus_SHAKE_192s,
+    SPHINCS_Plus_SHAKE_192f,
+    SPHINCS_Plus_SHAKE_256s,
+    SPHINCS_Plus_SHAKE_256f,
+    
+    // Multivariate signatures
+    Rainbow_I_Classic,
+    Rainbow_I_Circumzenithal,
+    Rainbow_I_Compressed,
+    Rainbow_III_Classic,
+    Rainbow_III_Circumzenithal,
+    Rainbow_III_Compressed,
+    Rainbow_V_Classic,
+    Rainbow_V_Circumzenithal,
+    Rainbow_V_Compressed,
+    
+    // Falcon signatures
+    Falcon_512,
+    Falcon_1024,
+    
+    // PICNIC signatures
+    Picnic_L1_FS,
+    Picnic_L1_UR,
+    Picnic_L3_FS,
+    Picnic_L3_UR,
+    Picnic_L5_FS,
+    Picnic_L5_UR,
+}
+
+/// Post-quantum cryptography configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PostQuantumConfig {
+    pub enabled: bool,
+    pub primary_kem: Option<EncryptionAlgorithm>,
+    pub signature_algorithm: Option<PostQuantumSignature>,
+    pub hybrid_mode: bool,
+    pub classical_fallback: bool,
+    pub quantum_security_level: QuantumSecurityLevel,
+    pub key_size_preferences: KeySizePreferences,
+}
+
+impl Default for PostQuantumConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            primary_kem: Some(EncryptionAlgorithm::Kyber768),
+            signature_algorithm: Some(PostQuantumSignature::Dilithium3),
+            hybrid_mode: true,
+            classical_fallback: true,
+            quantum_security_level: QuantumSecurityLevel::Level3,
+            key_size_preferences: KeySizePreferences::default(),
+        }
+    }
+}
+
+/// Quantum security levels (NIST standardization levels)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum QuantumSecurityLevel {
+    Level1,  // Equivalent to AES-128
+    Level2,  // Equivalent to SHA-256
+    Level3,  // Equivalent to AES-192
+    Level4,  // Equivalent to SHA-384
+    Level5,  // Equivalent to AES-256
+}
+
+/// Key size preferences for post-quantum algorithms
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeySizePreferences {
+    pub prefer_smaller_keys: bool,
+    pub prefer_faster_signing: bool,
+    pub prefer_faster_verification: bool,
+    pub max_signature_size_kb: Option<u32>,
+    pub max_public_key_size_kb: Option<u32>,
+}
+
+impl Default for KeySizePreferences {
+    fn default() -> Self {
+        Self {
+            prefer_smaller_keys: true,
+            prefer_faster_signing: false,
+            prefer_faster_verification: true,
+            max_signature_size_kb: Some(50),
+            max_public_key_size_kb: Some(10),
+        }
+    }
+}
+
+/// Quantum-resistant certificate configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantumResistantCerts {
+    pub enabled: bool,
+    pub use_hybrid_certificates: bool,
+    pub pq_signature_algorithm: PostQuantumSignature,
+    pub classical_signature_fallback: bool,
+    pub certificate_chain_validation: PQCertValidation,
+}
+
+impl Default for QuantumResistantCerts {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            use_hybrid_certificates: true,
+            pq_signature_algorithm: PostQuantumSignature::Dilithium3,
+            classical_signature_fallback: true,
+            certificate_chain_validation: PQCertValidation::default(),
+        }
+    }
+}
+
+/// Post-quantum certificate validation rules
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PQCertValidation {
+    pub require_pq_signatures: bool,
+    pub allow_mixed_chain: bool,
+    pub minimum_security_level: QuantumSecurityLevel,
+    pub validate_quantum_resistance: bool,
+}
+
+impl Default for PQCertValidation {
+    fn default() -> Self {
+        Self {
+            require_pq_signatures: false,
+            allow_mixed_chain: true,
+            minimum_security_level: QuantumSecurityLevel::Level3,
+            validate_quantum_resistance: true,
+        }
+    }
 }
 
 /// Audit configuration
@@ -494,8 +717,8 @@ pub enum AuditEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuditLogFormat {
     JSON,
-    CEF,   // Common Event Format
-    LEEF,  // Log Event Extended Format
+    CEF,  // Common Event Format
+    LEEF, // Log Event Extended Format
     Syslog,
 }
 
@@ -641,7 +864,7 @@ impl Default for EscalationConfig {
         thresholds.insert(ThreatSeverity::Medium, 5);
         thresholds.insert(ThreatSeverity::High, 1);
         thresholds.insert(ThreatSeverity::Critical, 1);
-        
+
         Self {
             enabled: true,
             thresholds,
@@ -738,17 +961,17 @@ impl SecurityContext {
     pub fn has_permission(&self, permission: &Permission) -> bool {
         self.permissions.contains(permission)
     }
-    
+
     /// Check if user has role
     pub fn has_role(&self, role: &str) -> bool {
         self.roles.contains(role)
     }
-    
+
     /// Check if user has any of the specified roles
     pub fn has_any_role(&self, roles: &[String]) -> bool {
         roles.iter().any(|role| self.roles.contains(role))
     }
-    
+
     /// Get attribute value
     pub fn get_attribute(&self, name: &str) -> Option<&String> {
         self.attributes.get(name)
@@ -786,19 +1009,21 @@ impl SecurityManager {
             metrics: Arc::new(RwLock::new(SecurityMetrics::default())),
         }
     }
-    
+
     /// Authenticate a request
     pub async fn authenticate(&self, credentials: &Credentials) -> Result<SecurityContext> {
         let start_time = Instant::now();
-        
+
         // Check rate limits first
         if self.config.rate_limiting.enabled {
-            self.rate_limiter.check_limit(&credentials.identifier()).await?;
+            self.rate_limiter
+                .check_limit(&credentials.identifier())
+                .await?;
         }
-        
+
         // Perform authentication
         let result = self.auth_provider.authenticate(credentials).await;
-        
+
         // Log audit event
         let audit_event = AuditLogEntry {
             event_type: AuditEvent::Authentication,
@@ -808,9 +1033,9 @@ impl SecurityManager {
             success: result.is_ok(),
             details: format!("Authentication attempt for {}", credentials.identifier()),
         };
-        
+
         let _ = self.audit_logger.log(audit_event).await;
-        
+
         // Update metrics
         {
             let mut metrics = self.metrics.write().await;
@@ -822,28 +1047,39 @@ impl SecurityManager {
             }
             metrics.authentication_latency_ms = start_time.elapsed().as_millis() as f64;
         }
-        
+
         // Check for threats
         if result.is_err() {
-            let _ = self.threat_detector.detect_threat(&ThreatContext {
-                event_type: "authentication_failure".to_string(),
-                user_id: credentials.user_id().map(|s| s.to_string()),
-                ip_address: credentials.ip_address().map(|s| s.to_string()),
-                timestamp: Utc::now(),
-                details: HashMap::new(),
-            }).await;
+            let _ = self
+                .threat_detector
+                .detect_threat(&ThreatContext {
+                    event_type: "authentication_failure".to_string(),
+                    user_id: credentials.user_id().map(|s| s.to_string()),
+                    ip_address: credentials.ip_address().map(|s| s.to_string()),
+                    timestamp: Utc::now(),
+                    details: HashMap::new(),
+                })
+                .await;
         }
-        
+
         result
     }
-    
+
     /// Authorize a request
-    pub async fn authorize(&self, context: &SecurityContext, resource: &str, action: &Permission) -> Result<bool> {
+    pub async fn authorize(
+        &self,
+        context: &SecurityContext,
+        resource: &str,
+        action: &Permission,
+    ) -> Result<bool> {
         let start_time = Instant::now();
-        
-        let result = self.authz_provider.authorize(context, resource, action).await;
+
+        let result = self
+            .authz_provider
+            .authorize(context, resource, action)
+            .await;
         let success = result.as_ref().map(|&b| b).unwrap_or(false);
-        
+
         // Log audit event
         let audit_event = AuditLogEntry {
             event_type: AuditEvent::Authorization,
@@ -853,9 +1089,9 @@ impl SecurityManager {
             success,
             details: format!("Authorization check for {} on {}", action, resource),
         };
-        
+
         let _ = self.audit_logger.log(audit_event).await;
-        
+
         // Update metrics
         {
             let mut metrics = self.metrics.write().await;
@@ -867,12 +1103,17 @@ impl SecurityManager {
             }
             metrics.authorization_latency_ms = start_time.elapsed().as_millis() as f64;
         }
-        
+
         result
     }
-    
+
     /// Log data access
-    pub async fn log_data_access(&self, context: &SecurityContext, resource: &str, operation: &str) -> Result<()> {
+    pub async fn log_data_access(
+        &self,
+        context: &SecurityContext,
+        resource: &str,
+        operation: &str,
+    ) -> Result<()> {
         let audit_event = AuditLogEntry {
             event_type: AuditEvent::DataAccess,
             timestamp: Utc::now(),
@@ -881,10 +1122,10 @@ impl SecurityManager {
             success: true,
             details: format!("Data access: {} on {}", operation, resource),
         };
-        
+
         self.audit_logger.log(audit_event).await
     }
-    
+
     /// Get security metrics
     pub async fn get_metrics(&self) -> SecurityMetrics {
         self.metrics.read().await.clone()
@@ -902,7 +1143,12 @@ pub trait AuthenticationProvider: Send + Sync {
 /// Authorization provider trait
 #[async_trait::async_trait]
 pub trait AuthorizationProvider: Send + Sync {
-    async fn authorize(&self, context: &SecurityContext, resource: &str, action: &Permission) -> Result<bool>;
+    async fn authorize(
+        &self,
+        context: &SecurityContext,
+        resource: &str,
+        action: &Permission,
+    ) -> Result<bool>;
     async fn get_user_permissions(&self, user_id: &str) -> Result<HashSet<Permission>>;
     async fn get_user_roles(&self, user_id: &str) -> Result<HashSet<String>>;
 }
@@ -931,10 +1177,23 @@ pub trait RateLimiter: Send + Sync {
 /// Credentials for authentication
 #[derive(Debug, Clone)]
 pub enum Credentials {
-    ApiKey { key: String, ip_address: Option<String> },
-    JWT { token: String, ip_address: Option<String> },
-    UserPassword { username: String, password: String, ip_address: Option<String> },
-    Certificate { cert: Vec<u8>, ip_address: Option<String> },
+    ApiKey {
+        key: String,
+        ip_address: Option<String>,
+    },
+    JWT {
+        token: String,
+        ip_address: Option<String>,
+    },
+    UserPassword {
+        username: String,
+        password: String,
+        ip_address: Option<String>,
+    },
+    Certificate {
+        cert: Vec<u8>,
+        ip_address: Option<String>,
+    },
 }
 
 impl Credentials {
@@ -946,20 +1205,20 @@ impl Credentials {
             Credentials::Certificate { .. } => "certificate".to_string(),
         }
     }
-    
+
     pub fn user_id(&self) -> Option<&str> {
         match self {
             Credentials::UserPassword { username, .. } => Some(username),
             _ => None,
         }
     }
-    
+
     pub fn ip_address(&self) -> Option<&str> {
         match self {
-            Credentials::ApiKey { ip_address, .. } |
-            Credentials::JWT { ip_address, .. } |
-            Credentials::UserPassword { ip_address, .. } |
-            Credentials::Certificate { ip_address, .. } => ip_address.as_deref(),
+            Credentials::ApiKey { ip_address, .. }
+            | Credentials::JWT { ip_address, .. }
+            | Credentials::UserPassword { ip_address, .. }
+            | Credentials::Certificate { ip_address, .. } => ip_address.as_deref(),
         }
     }
 }
@@ -1023,10 +1282,309 @@ pub struct SecurityMetrics {
     pub authorization_latency_ms: f64,
 }
 
+/// Post-quantum cryptographic engine for advanced security operations
+pub struct PostQuantumCryptoEngine {
+    config: Arc<PostQuantumConfig>,
+    key_store: Arc<RwLock<HashMap<String, PostQuantumKeyPair>>>,
+    signature_cache: Arc<RwLock<HashMap<String, SignatureInfo>>>,
+    metrics: Arc<RwLock<PQCryptoMetrics>>,
+}
+
+impl PostQuantumCryptoEngine {
+    /// Create a new post-quantum crypto engine
+    pub fn new(config: PostQuantumConfig) -> Self {
+        Self {
+            config: Arc::new(config),
+            key_store: Arc::new(RwLock::new(HashMap::new())),
+            signature_cache: Arc::new(RwLock::new(HashMap::new())),
+            metrics: Arc::new(RwLock::new(PQCryptoMetrics::default())),
+        }
+    }
+
+    /// Generate a new post-quantum key pair
+    pub async fn generate_keypair(&self, algorithm: &PostQuantumSignature) -> Result<PostQuantumKeyPair> {
+        let start_time = Instant::now();
+        
+        let keypair = match algorithm {
+            PostQuantumSignature::Dilithium2 | 
+            PostQuantumSignature::Dilithium3 | 
+            PostQuantumSignature::Dilithium5 => {
+                self.generate_dilithium_keypair(algorithm).await?
+            },
+            PostQuantumSignature::SPHINCS_Plus_SHA2_128s |
+            PostQuantumSignature::SPHINCS_Plus_SHA2_256s => {
+                self.generate_sphincs_keypair(algorithm).await?
+            },
+            PostQuantumSignature::Falcon_512 |
+            PostQuantumSignature::Falcon_1024 => {
+                self.generate_falcon_keypair(algorithm).await?
+            },
+            _ => {
+                return Err(anyhow!("Algorithm {:?} not yet implemented", algorithm));
+            }
+        };
+
+        // Update metrics
+        {
+            let mut metrics = self.metrics.write().await;
+            metrics.key_generation_count += 1;
+            metrics.avg_key_generation_time_ms = 
+                (metrics.avg_key_generation_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
+        }
+
+        // Store the key pair
+        {
+            let mut store = self.key_store.write().await;
+            store.insert(keypair.id.clone(), keypair.clone());
+        }
+
+        Ok(keypair)
+    }
+
+    /// Sign data using post-quantum signature
+    pub async fn sign(&self, key_id: &str, data: &[u8]) -> Result<PostQuantumSignature> {
+        let start_time = Instant::now();
+        
+        let key_store = self.key_store.read().await;
+        let keypair = key_store.get(key_id)
+            .ok_or_else(|| anyhow!("Key not found: {}", key_id))?;
+
+        let signature = match keypair.algorithm {
+            PostQuantumSignature::Dilithium3 => {
+                self.dilithium_sign(&keypair.private_key, data).await?
+            },
+            PostQuantumSignature::SPHINCS_Plus_SHA2_256s => {
+                self.sphincs_sign(&keypair.private_key, data).await?
+            },
+            PostQuantumSignature::Falcon_1024 => {
+                self.falcon_sign(&keypair.private_key, data).await?
+            },
+            _ => {
+                return Err(anyhow!("Signing with {:?} not implemented", keypair.algorithm));
+            }
+        };
+
+        // Update metrics
+        {
+            let mut metrics = self.metrics.write().await;
+            metrics.signature_count += 1;
+            metrics.avg_signing_time_ms = 
+                (metrics.avg_signing_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
+        }
+
+        Ok(signature)
+    }
+
+    /// Verify post-quantum signature
+    pub async fn verify(&self, public_key: &[u8], data: &[u8], signature: &[u8], 
+                       algorithm: &PostQuantumSignature) -> Result<bool> {
+        let start_time = Instant::now();
+        
+        let is_valid = match algorithm {
+            PostQuantumSignature::Dilithium3 => {
+                self.dilithium_verify(public_key, data, signature).await?
+            },
+            PostQuantumSignature::SPHINCS_Plus_SHA2_256s => {
+                self.sphincs_verify(public_key, data, signature).await?
+            },
+            PostQuantumSignature::Falcon_1024 => {
+                self.falcon_verify(public_key, data, signature).await?
+            },
+            _ => {
+                return Err(anyhow!("Verification for {:?} not implemented", algorithm));
+            }
+        };
+
+        // Update metrics
+        {
+            let mut metrics = self.metrics.write().await;
+            metrics.verification_count += 1;
+            metrics.avg_verification_time_ms = 
+                (metrics.avg_verification_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
+            if is_valid {
+                metrics.successful_verifications += 1;
+            }
+        }
+
+        Ok(is_valid)
+    }
+
+    /// Perform key encapsulation using post-quantum KEM
+    pub async fn encapsulate(&self, public_key: &[u8], algorithm: &EncryptionAlgorithm) -> Result<(Vec<u8>, Vec<u8>)> {
+        match algorithm {
+            EncryptionAlgorithm::Kyber768 => {
+                self.kyber_encapsulate(public_key).await
+            },
+            EncryptionAlgorithm::NewHope1024 => {
+                self.newhope_encapsulate(public_key).await
+            },
+            EncryptionAlgorithm::FrodoKEM976 => {
+                self.frodokem_encapsulate(public_key).await
+            },
+            _ => {
+                Err(anyhow!("KEM algorithm {:?} not implemented", algorithm))
+            }
+        }
+    }
+
+    /// Perform key decapsulation using post-quantum KEM
+    pub async fn decapsulate(&self, private_key: &[u8], ciphertext: &[u8], 
+                            algorithm: &EncryptionAlgorithm) -> Result<Vec<u8>> {
+        match algorithm {
+            EncryptionAlgorithm::Kyber768 => {
+                self.kyber_decapsulate(private_key, ciphertext).await
+            },
+            EncryptionAlgorithm::NewHope1024 => {
+                self.newhope_decapsulate(private_key, ciphertext).await
+            },
+            EncryptionAlgorithm::FrodoKEM976 => {
+                self.frodokem_decapsulate(private_key, ciphertext).await
+            },
+            _ => {
+                Err(anyhow!("KEM algorithm {:?} not implemented", algorithm))
+            }
+        }
+    }
+
+    // Private implementation methods (stubs for now - would integrate with actual PQ crypto libraries)
+    
+    async fn generate_dilithium_keypair(&self, _variant: &PostQuantumSignature) -> Result<PostQuantumKeyPair> {
+        // Placeholder implementation - would use actual Dilithium library
+        Ok(PostQuantumKeyPair {
+            id: Uuid::new_v4().to_string(),
+            algorithm: _variant.clone(),
+            public_key: vec![0u8; 1312], // Dilithium3 public key size
+            private_key: vec![0u8; 4000], // Dilithium3 private key size
+            created_at: Utc::now(),
+        })
+    }
+
+    async fn generate_sphincs_keypair(&self, _variant: &PostQuantumSignature) -> Result<PostQuantumKeyPair> {
+        // Placeholder implementation - would use actual SPHINCS+ library
+        Ok(PostQuantumKeyPair {
+            id: Uuid::new_v4().to_string(),
+            algorithm: _variant.clone(),
+            public_key: vec![0u8; 32], // SPHINCS+ public key size
+            private_key: vec![0u8; 64], // SPHINCS+ private key size
+            created_at: Utc::now(),
+        })
+    }
+
+    async fn generate_falcon_keypair(&self, _variant: &PostQuantumSignature) -> Result<PostQuantumKeyPair> {
+        // Placeholder implementation - would use actual Falcon library
+        Ok(PostQuantumKeyPair {
+            id: Uuid::new_v4().to_string(),
+            algorithm: _variant.clone(),
+            public_key: vec![0u8; 1793], // Falcon-1024 public key size
+            private_key: vec![0u8; 2305], // Falcon-1024 private key size
+            created_at: Utc::now(),
+        })
+    }
+
+    async fn dilithium_sign(&self, _private_key: &[u8], _data: &[u8]) -> Result<PostQuantumSignature> {
+        // Placeholder - would implement actual Dilithium signing
+        Ok(PostQuantumSignature::Dilithium3)
+    }
+
+    async fn sphincs_sign(&self, _private_key: &[u8], _data: &[u8]) -> Result<PostQuantumSignature> {
+        // Placeholder - would implement actual SPHINCS+ signing
+        Ok(PostQuantumSignature::SPHINCS_Plus_SHA2_256s)
+    }
+
+    async fn falcon_sign(&self, _private_key: &[u8], _data: &[u8]) -> Result<PostQuantumSignature> {
+        // Placeholder - would implement actual Falcon signing
+        Ok(PostQuantumSignature::Falcon_1024)
+    }
+
+    async fn dilithium_verify(&self, _public_key: &[u8], _data: &[u8], _signature: &[u8]) -> Result<bool> {
+        // Placeholder - would implement actual Dilithium verification
+        Ok(true)
+    }
+
+    async fn sphincs_verify(&self, _public_key: &[u8], _data: &[u8], _signature: &[u8]) -> Result<bool> {
+        // Placeholder - would implement actual SPHINCS+ verification
+        Ok(true)
+    }
+
+    async fn falcon_verify(&self, _public_key: &[u8], _data: &[u8], _signature: &[u8]) -> Result<bool> {
+        // Placeholder - would implement actual Falcon verification
+        Ok(true)
+    }
+
+    async fn kyber_encapsulate(&self, _public_key: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+        // Placeholder - would implement actual Kyber KEM
+        Ok((vec![0u8; 1088], vec![0u8; 32])) // (ciphertext, shared_secret)
+    }
+
+    async fn newhope_encapsulate(&self, _public_key: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+        // Placeholder - would implement actual NewHope KEM
+        Ok((vec![0u8; 2048], vec![0u8; 32])) // (ciphertext, shared_secret)
+    }
+
+    async fn frodokem_encapsulate(&self, _public_key: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+        // Placeholder - would implement actual FrodoKEM
+        Ok((vec![0u8; 15744], vec![0u8; 24])) // (ciphertext, shared_secret)
+    }
+
+    async fn kyber_decapsulate(&self, _private_key: &[u8], _ciphertext: &[u8]) -> Result<Vec<u8>> {
+        // Placeholder - would implement actual Kyber decapsulation
+        Ok(vec![0u8; 32]) // shared_secret
+    }
+
+    async fn newhope_decapsulate(&self, _private_key: &[u8], _ciphertext: &[u8]) -> Result<Vec<u8>> {
+        // Placeholder - would implement actual NewHope decapsulation
+        Ok(vec![0u8; 32]) // shared_secret
+    }
+
+    async fn frodokem_decapsulate(&self, _private_key: &[u8], _ciphertext: &[u8]) -> Result<Vec<u8>> {
+        // Placeholder - would implement actual FrodoKEM decapsulation
+        Ok(vec![0u8; 24]) // shared_secret
+    }
+
+    /// Get current metrics
+    pub async fn get_metrics(&self) -> PQCryptoMetrics {
+        self.metrics.read().await.clone()
+    }
+}
+
+/// Post-quantum key pair
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PostQuantumKeyPair {
+    pub id: String,
+    pub algorithm: PostQuantumSignature,
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Signature information for caching
+#[derive(Debug, Clone)]
+struct SignatureInfo {
+    signature: Vec<u8>,
+    algorithm: PostQuantumSignature,
+    created_at: DateTime<Utc>,
+}
+
+/// Post-quantum cryptography metrics
+#[derive(Debug, Clone, Default)]
+pub struct PQCryptoMetrics {
+    pub key_generation_count: u64,
+    pub signature_count: u64,
+    pub verification_count: u64,
+    pub successful_verifications: u64,
+    pub avg_key_generation_time_ms: f64,
+    pub avg_signing_time_ms: f64,
+    pub avg_verification_time_ms: f64,
+    pub encapsulation_count: u64,
+    pub decapsulation_count: u64,
+    pub avg_encapsulation_time_ms: f64,
+    pub avg_decapsulation_time_ms: f64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_security_config_defaults() {
         let config = SecurityConfig::default();
@@ -1035,7 +1593,7 @@ mod tests {
         assert!(config.encryption.at_rest.enabled);
         assert!(config.audit.enabled);
     }
-    
+
     #[test]
     fn test_security_context_permissions() {
         let mut context = SecurityContext {
@@ -1049,29 +1607,29 @@ mod tests {
             authentication_method: None,
             authenticated_at: None,
         };
-        
+
         context.permissions.insert(Permission::Read);
         assert!(context.has_permission(&Permission::Read));
         assert!(!context.has_permission(&Permission::Write));
     }
-    
+
     #[test]
     fn test_credentials_identifier() {
         let creds = Credentials::ApiKey {
             key: "test_key".to_string(),
             ip_address: None,
         };
-        
+
         assert_eq!(creds.identifier(), "api_key:test_key");
     }
-    
+
     #[test]
     fn test_rbac_config_default_roles() {
         let rbac = RbacConfig::default();
         assert!(rbac.role_permissions.contains_key("admin"));
         assert!(rbac.role_permissions.contains_key("user"));
         assert!(rbac.role_permissions.contains_key("viewer"));
-        
+
         let admin_perms = rbac.role_permissions.get("admin").unwrap();
         assert!(admin_perms.contains(&Permission::Admin));
         assert!(admin_perms.contains(&Permission::Read));

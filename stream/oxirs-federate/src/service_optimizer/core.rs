@@ -721,15 +721,13 @@ impl ServiceOptimizer {
         service_clauses
     }
 
-
-
     /// Check if services are independent (no shared variables)
     fn are_services_independent(&self, services: &[OptimizedServiceClause]) -> bool {
         for i in 0..services.len() {
             for j in i + 1..services.len() {
                 let vars_i = self.extract_service_variables(&services[i]);
                 let vars_j = self.extract_service_variables(&services[j]);
-                
+
                 // If services share variables, they're not independent
                 if !vars_i.is_disjoint(&vars_j) {
                     return false;
@@ -747,7 +745,11 @@ impl ServiceOptimizer {
     }
 
     /// Update service performance metrics
-    pub fn update_service_performance(&self, service_id: &str, metrics: &ServicePerformanceMetrics) {
+    pub fn update_service_performance(
+        &self,
+        service_id: &str,
+        metrics: &ServicePerformanceMetrics,
+    ) {
         // Note: Arc<StatisticsCache> doesn't allow mutable access, this is a design issue
         // For now, we'll need to make StatisticsCache methods work with Arc/Mutex
         // self.statistics_cache.update_service_performance(service_id, metrics);
@@ -759,11 +761,18 @@ impl ServiceOptimizer {
         // Note: Arc<StatisticsCache> doesn't allow mutable access, this is a design issue
         // For now, we'll need to make StatisticsCache methods work with Arc/Mutex
         // self.statistics_cache.update_service_ranking(service_id, ranking);
-        debug!("Service ranking update requested for {}: {}", service_id, ranking);
+        debug!(
+            "Service ranking update requested for {}: {}",
+            service_id, ranking
+        );
     }
 
     /// Estimate service cost for a pattern
-    pub fn estimate_service_cost(&self, pattern: &TriplePattern, service: &FederatedService) -> f64 {
+    pub fn estimate_service_cost(
+        &self,
+        pattern: &TriplePattern,
+        service: &FederatedService,
+    ) -> f64 {
         // Basic cost estimation based on pattern complexity and service performance
         let base_cost = 1.0;
         let complexity_factor = match self.calculate_pattern_complexity(pattern) {
@@ -775,25 +784,40 @@ impl ServiceOptimizer {
     }
 
     /// Calculate pattern selectivity for result size estimation
-    pub fn calculate_pattern_selectivity(&self, pattern: &TriplePattern, service: &FederatedService, registry: &ServiceRegistry) -> f64 {
+    pub fn calculate_pattern_selectivity(
+        &self,
+        pattern: &TriplePattern,
+        service: &FederatedService,
+        registry: &ServiceRegistry,
+    ) -> f64 {
         // Simple selectivity calculation - more specific patterns have lower selectivity
         let mut selectivity = 1.0;
-        
+
         // More bound terms = lower selectivity (fewer results)
-        if pattern.subject.is_some() { selectivity *= 0.1; }
-        if pattern.predicate.is_some() { selectivity *= 0.3; }
-        if pattern.object.is_some() { selectivity *= 0.1; }
-        
+        if pattern.subject.is_some() {
+            selectivity *= 0.1;
+        }
+        if pattern.predicate.is_some() {
+            selectivity *= 0.3;
+        }
+        if pattern.object.is_some() {
+            selectivity *= 0.1;
+        }
+
         selectivity
     }
 
     /// Get service-specific result size factor
-    pub fn get_service_result_size_factor(&self, service: &FederatedService, registry: &ServiceRegistry) -> f64 {
+    pub fn get_service_result_size_factor(
+        &self,
+        service: &FederatedService,
+        registry: &ServiceRegistry,
+    ) -> f64 {
         // Factor based on service characteristics - large endpoints return more results
         match service.endpoint.as_str() {
             url if url.contains("wikidata") => 2.0, // Wikidata typically returns many results
             url if url.contains("dbpedia") => 1.5,  // DBpedia has substantial data
-            _ => 1.0, // Default factor
+            _ => 1.0,                               // Default factor
         }
     }
 
@@ -804,7 +828,7 @@ impl ServiceOptimizer {
             .iter()
             .filter(|term| term.as_ref().map_or(false, |t| t.starts_with('?')))
             .count();
-            
+
         match var_count {
             0..=1 => PatternComplexity::Simple,
             2 => PatternComplexity::Medium,
@@ -813,7 +837,12 @@ impl ServiceOptimizer {
     }
 
     /// ML-based result size estimation (stub implementation)
-    pub fn estimate_result_size_ml(&self, pattern: &TriplePattern, service: &FederatedService, registry: &ServiceRegistry) -> Result<u64> {
+    pub fn estimate_result_size_ml(
+        &self,
+        pattern: &TriplePattern,
+        service: &FederatedService,
+        registry: &ServiceRegistry,
+    ) -> Result<u64> {
         // TODO: Implement actual ML model for result size prediction
         // For now, return a simple heuristic-based estimate
         let base_size = 1000u64;
@@ -826,7 +855,11 @@ impl ServiceOptimizer {
     }
 
     /// Estimate range selectivity factor for numeric/temporal predicates
-    pub fn estimate_range_selectivity_factor(&self, pattern: &TriplePattern, service: &FederatedService) -> Result<f64> {
+    pub fn estimate_range_selectivity_factor(
+        &self,
+        pattern: &TriplePattern,
+        service: &FederatedService,
+    ) -> Result<f64> {
         // TODO: Implement range-based selectivity analysis
         // For now, return a default factor
         Ok(1.0)

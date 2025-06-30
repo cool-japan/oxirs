@@ -33,6 +33,621 @@ use crate::{
     Result, ShaclAiError,
 };
 
+/// Advanced model selection strategies for dynamic orchestration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ModelSelectionStrategy {
+    /// Performance-based selection using historical metrics
+    PerformanceBased,
+    /// Adaptive selection based on data characteristics
+    DataAdaptive,
+    /// Ensemble-weighted selection with dynamic weights
+    EnsembleWeighted,
+    /// Reinforcement learning-based selection
+    ReinforcementLearning,
+    /// Meta-learning approach for model selection
+    MetaLearning,
+    /// Hybrid approach combining multiple strategies
+    Hybrid(Vec<ModelSelectionStrategy>),
+}
+
+/// Data characteristics for adaptive model selection
+#[derive(Debug, Clone)]
+pub struct DataCharacteristics {
+    pub graph_size: usize,
+    pub complexity_score: f64,
+    pub sparsity_ratio: f64,
+    pub hierarchy_depth: u32,
+    pub pattern_diversity: f64,
+    pub semantic_richness: f64,
+}
+
+/// Model performance metrics for selection
+#[derive(Debug, Clone)]
+pub struct ModelPerformanceMetrics {
+    pub accuracy: f64,
+    pub precision: f64,
+    pub recall: f64,
+    pub f1_score: f64,
+    pub training_time: std::time::Duration,
+    pub inference_time: std::time::Duration,
+    pub memory_usage: f64,
+    pub confidence_calibration: f64,
+    pub robustness_score: f64,
+}
+
+/// Advanced model selector for dynamic orchestration
+#[derive(Debug)]
+pub struct AdvancedModelSelector {
+    /// Selection strategy
+    strategy: ModelSelectionStrategy,
+    /// Performance history
+    model_performance_history: HashMap<String, Vec<ModelPerformanceMetrics>>,
+    /// Data characteristics cache
+    data_characteristics_cache: HashMap<String, DataCharacteristics>,
+    /// Model selection statistics
+    selection_stats: ModelSelectionStats,
+}
+
+/// Statistics for model selection
+#[derive(Debug, Default, Clone)]
+pub struct ModelSelectionStats {
+    pub total_selections: usize,
+    pub successful_selections: usize,
+    pub average_performance_improvement: f64,
+    pub selection_time: std::time::Duration,
+}
+
+impl AdvancedModelSelector {
+    /// Create a new advanced model selector
+    pub fn new(strategy: ModelSelectionStrategy) -> Self {
+        Self {
+            strategy,
+            model_performance_history: HashMap::new(),
+            data_characteristics_cache: HashMap::new(),
+            selection_stats: ModelSelectionStats::default(),
+        }
+    }
+
+    /// Select the best models for the given data characteristics
+    pub fn select_optimal_models(
+        &mut self,
+        available_models: &[String],
+        data_characteristics: &DataCharacteristics,
+        performance_requirements: &PerformanceRequirements,
+    ) -> Result<ModelSelectionResult> {
+        let start_time = Instant::now();
+        tracing::info!(
+            "Selecting optimal models using strategy: {:?}",
+            self.strategy
+        );
+
+        let selected_models = match &self.strategy {
+            ModelSelectionStrategy::PerformanceBased => {
+                self.select_by_performance(available_models, performance_requirements)?
+            }
+            ModelSelectionStrategy::DataAdaptive => {
+                self.select_by_data_characteristics(available_models, data_characteristics)?
+            }
+            ModelSelectionStrategy::EnsembleWeighted => {
+                self.select_by_ensemble_weighting(available_models, data_characteristics)?
+            }
+            ModelSelectionStrategy::ReinforcementLearning => {
+                self.select_by_reinforcement_learning(available_models, data_characteristics)?
+            }
+            ModelSelectionStrategy::MetaLearning => {
+                self.select_by_meta_learning(available_models, data_characteristics)?
+            }
+            ModelSelectionStrategy::Hybrid(strategies) => {
+                self.select_by_hybrid_approach(available_models, data_characteristics, strategies)?
+            }
+        };
+
+        let selection_time = start_time.elapsed();
+        self.selection_stats.total_selections += 1;
+        self.selection_stats.selection_time += selection_time;
+
+        tracing::info!(
+            "Selected {} models in {:?}: {:?}",
+            selected_models.models.len(),
+            selection_time,
+            selected_models.models
+        );
+
+        Ok(selected_models)
+    }
+
+    /// Performance-based model selection
+    fn select_by_performance(
+        &self,
+        available_models: &[String],
+        requirements: &PerformanceRequirements,
+    ) -> Result<ModelSelectionResult> {
+        let mut model_scores = Vec::new();
+
+        for model_name in available_models {
+            if let Some(history) = self.model_performance_history.get(model_name) {
+                if let Some(latest_metrics) = history.last() {
+                    let score = self.calculate_performance_score(latest_metrics, requirements);
+                    model_scores.push((model_name.clone(), score, latest_metrics.clone()));
+                }
+            } else {
+                // Default score for models without history
+                model_scores.push((
+                    model_name.clone(),
+                    0.5,
+                    ModelPerformanceMetrics {
+                        accuracy: 0.5,
+                        precision: 0.5,
+                        recall: 0.5,
+                        f1_score: 0.5,
+                        training_time: std::time::Duration::from_secs(60),
+                        inference_time: std::time::Duration::from_millis(10),
+                        memory_usage: 100.0,
+                        confidence_calibration: 0.5,
+                        robustness_score: 0.5,
+                    },
+                ));
+            }
+        }
+
+        // Sort by score (descending)
+        model_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        // Select top models
+        let selected_models: Vec<_> = model_scores
+            .into_iter()
+            .take(3) // Select top 3 models
+            .map(|(name, score, metrics)| SelectedModel {
+                model_name: name,
+                selection_score: score,
+                expected_performance: metrics,
+                selection_reason: "Performance-based selection".to_string(),
+            })
+            .collect();
+
+        Ok(ModelSelectionResult {
+            models: selected_models,
+            selection_strategy: ModelSelectionStrategy::PerformanceBased,
+            confidence: 0.8,
+            selection_rationale: "Selected based on historical performance metrics".to_string(),
+        })
+    }
+
+    /// Data-adaptive model selection
+    fn select_by_data_characteristics(
+        &self,
+        available_models: &[String],
+        characteristics: &DataCharacteristics,
+    ) -> Result<ModelSelectionResult> {
+        let mut model_suitability = Vec::new();
+
+        for model_name in available_models {
+            let suitability_score = match model_name.as_str() {
+                "GraphNeuralNetwork" => {
+                    // GNNs are better for complex, large graphs
+                    let graph_size_score = (characteristics.graph_size as f64 / 10000.0).min(1.0);
+                    let complexity_score = characteristics.complexity_score;
+                    (graph_size_score + complexity_score) / 2.0
+                }
+                "DecisionTree" => {
+                    // Decision trees work well for interpretable, less complex data
+                    let interpretability_score = 1.0 - characteristics.complexity_score;
+                    let sparsity_score = characteristics.sparsity_ratio;
+                    (interpretability_score + sparsity_score) / 2.0
+                }
+                "AssociationRules" => {
+                    // Association rules work well for dense, pattern-rich data
+                    let density_score = 1.0 - characteristics.sparsity_ratio;
+                    let pattern_score = characteristics.pattern_diversity;
+                    (density_score + pattern_score) / 2.0
+                }
+                _ => 0.5, // Default score
+            };
+
+            model_suitability.push((model_name.clone(), suitability_score));
+        }
+
+        // Sort by suitability (descending)
+        model_suitability.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        let selected_models: Vec<_> = model_suitability
+            .into_iter()
+            .take(2) // Select top 2 models for data characteristics
+            .map(|(name, score)| SelectedModel {
+                model_name: name.clone(),
+                selection_score: score,
+                expected_performance: ModelPerformanceMetrics {
+                    accuracy: score * 0.9 + 0.1,
+                    precision: score * 0.85 + 0.15,
+                    recall: score * 0.8 + 0.2,
+                    f1_score: score * 0.82 + 0.18,
+                    training_time: std::time::Duration::from_secs(
+                        (60.0 * (1.0 - score + 0.2)) as u64,
+                    ),
+                    inference_time: std::time::Duration::from_millis(
+                        (20.0 * (1.0 - score + 0.3)) as u64,
+                    ),
+                    memory_usage: 100.0 * (1.0 - score + 0.5),
+                    confidence_calibration: score * 0.9,
+                    robustness_score: score * 0.85,
+                },
+                selection_reason: format!("Data-adaptive selection for {}", name),
+            })
+            .collect();
+
+        Ok(ModelSelectionResult {
+            models: selected_models,
+            selection_strategy: ModelSelectionStrategy::DataAdaptive,
+            confidence: 0.85,
+            selection_rationale: "Selected based on data characteristics analysis".to_string(),
+        })
+    }
+
+    /// Ensemble-weighted model selection
+    fn select_by_ensemble_weighting(
+        &self,
+        available_models: &[String],
+        characteristics: &DataCharacteristics,
+    ) -> Result<ModelSelectionResult> {
+        let mut ensemble_weights = HashMap::new();
+
+        // Calculate weights based on model diversity and complementarity
+        for model_name in available_models {
+            let weight = match model_name.as_str() {
+                "GraphNeuralNetwork" => 0.4, // Strong for structural patterns
+                "DecisionTree" => 0.3,        // Good for interpretability
+                "AssociationRules" => 0.3,    // Good for frequent patterns
+                _ => 0.1,
+            };
+
+            // Adjust weights based on data characteristics
+            let adjusted_weight = weight * (1.0 + characteristics.complexity_score * 0.2);
+            ensemble_weights.insert(model_name.clone(), adjusted_weight);
+        }
+
+        // Normalize weights
+        let total_weight: f64 = ensemble_weights.values().sum();
+        for weight in ensemble_weights.values_mut() {
+            *weight /= total_weight;
+        }
+
+        let selected_models: Vec<_> = ensemble_weights
+            .into_iter()
+            .filter(|(_, weight)| *weight > 0.15) // Minimum weight threshold
+            .map(|(name, weight)| SelectedModel {
+                model_name: name.clone(),
+                selection_score: weight,
+                expected_performance: ModelPerformanceMetrics {
+                    accuracy: weight * 0.95 + 0.05,
+                    precision: weight * 0.9 + 0.1,
+                    recall: weight * 0.85 + 0.15,
+                    f1_score: weight * 0.87 + 0.13,
+                    training_time: std::time::Duration::from_secs((90.0 * (1.0 - weight)) as u64),
+                    inference_time: std::time::Duration::from_millis((15.0 * (1.0 - weight)) as u64),
+                    memory_usage: 120.0 * (1.0 - weight + 0.3),
+                    confidence_calibration: weight * 0.95,
+                    robustness_score: weight * 0.9,
+                },
+                selection_reason: format!("Ensemble-weighted selection with weight {:.3}", weight),
+            })
+            .collect();
+
+        Ok(ModelSelectionResult {
+            models: selected_models,
+            selection_strategy: ModelSelectionStrategy::EnsembleWeighted,
+            confidence: 0.9,
+            selection_rationale: "Selected using ensemble weighting for optimal diversity".to_string(),
+        })
+    }
+
+    /// Reinforcement learning-based model selection
+    fn select_by_reinforcement_learning(
+        &self,
+        available_models: &[String],
+        _characteristics: &DataCharacteristics,
+    ) -> Result<ModelSelectionResult> {
+        // Simplified RL-based selection - in practice, this would use actual RL algorithms
+        let mut rl_scores = HashMap::new();
+
+        for model_name in available_models {
+            // Calculate reward-based score from performance history
+            let score = if let Some(history) = self.model_performance_history.get(model_name) {
+                // Calculate average reward (simplified)
+                let avg_performance: f64 = history.iter().map(|m| m.accuracy).sum::<f64>() / history.len() as f64;
+                let exploration_bonus = 0.1 / (history.len() as f64 + 1.0); // UCB-like exploration
+                avg_performance + exploration_bonus
+            } else {
+                0.6 // Higher initial score for exploration
+            };
+
+            rl_scores.insert(model_name.clone(), score);
+        }
+
+        let mut sorted_models: Vec<_> = rl_scores.into_iter().collect();
+        sorted_models.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        let selected_models: Vec<_> = sorted_models
+            .into_iter()
+            .take(2) // Select top 2 models for RL
+            .map(|(name, score)| SelectedModel {
+                model_name: name.clone(),
+                selection_score: score,
+                expected_performance: ModelPerformanceMetrics {
+                    accuracy: score * 0.92 + 0.08,
+                    precision: score * 0.88 + 0.12,
+                    recall: score * 0.84 + 0.16,
+                    f1_score: score * 0.86 + 0.14,
+                    training_time: std::time::Duration::from_secs((70.0 * (1.0 - score + 0.1)) as u64),
+                    inference_time: std::time::Duration::from_millis((12.0 * (1.0 - score + 0.2)) as u64),
+                    memory_usage: 110.0 * (1.0 - score + 0.4),
+                    confidence_calibration: score * 0.92,
+                    robustness_score: score * 0.88,
+                },
+                selection_reason: format!("RL-based selection with score {:.3}", score),
+            })
+            .collect();
+
+        Ok(ModelSelectionResult {
+            models: selected_models,
+            selection_strategy: ModelSelectionStrategy::ReinforcementLearning,
+            confidence: 0.75,
+            selection_rationale: "Selected using reinforcement learning with exploration-exploitation balance".to_string(),
+        })
+    }
+
+    /// Meta-learning approach for model selection
+    fn select_by_meta_learning(
+        &self,
+        available_models: &[String],
+        characteristics: &DataCharacteristics,
+    ) -> Result<ModelSelectionResult> {
+        // Meta-learning: learn which models work best for which data characteristics
+        let mut meta_scores = HashMap::new();
+
+        for model_name in available_models {
+            // Calculate meta-learning score based on similarity to past successful cases
+            let score = self.calculate_meta_learning_score(model_name, characteristics);
+            meta_scores.insert(model_name.clone(), score);
+        }
+
+        let mut sorted_models: Vec<_> = meta_scores.into_iter().collect();
+        sorted_models.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        let selected_models: Vec<_> = sorted_models
+            .into_iter()
+            .take(3) // Select top 3 models for meta-learning
+            .map(|(name, score)| SelectedModel {
+                model_name: name.clone(),
+                selection_score: score,
+                expected_performance: ModelPerformanceMetrics {
+                    accuracy: score * 0.94 + 0.06,
+                    precision: score * 0.91 + 0.09,
+                    recall: score * 0.87 + 0.13,
+                    f1_score: score * 0.89 + 0.11,
+                    training_time: std::time::Duration::from_secs((80.0 * (1.0 - score + 0.05)) as u64),
+                    inference_time: std::time::Duration::from_millis((10.0 * (1.0 - score + 0.15)) as u64),
+                    memory_usage: 105.0 * (1.0 - score + 0.35),
+                    confidence_calibration: score * 0.96,
+                    robustness_score: score * 0.93,
+                },
+                selection_reason: format!("Meta-learning selection with score {:.3}", score),
+            })
+            .collect();
+
+        Ok(ModelSelectionResult {
+            models: selected_models,
+            selection_strategy: ModelSelectionStrategy::MetaLearning,
+            confidence: 0.88,
+            selection_rationale: "Selected using meta-learning from similar data characteristics".to_string(),
+        })
+    }
+
+    /// Hybrid approach combining multiple strategies
+    fn select_by_hybrid_approach(
+        &self,
+        available_models: &[String],
+        characteristics: &DataCharacteristics,
+        strategies: &[ModelSelectionStrategy],
+    ) -> Result<ModelSelectionResult> {
+        let mut combined_scores = HashMap::new();
+
+        // Initialize scores
+        for model_name in available_models {
+            combined_scores.insert(model_name.clone(), 0.0);
+        }
+
+        // Apply each strategy and combine scores
+        for strategy in strategies {
+            let strategy_result = match strategy {
+                ModelSelectionStrategy::PerformanceBased => {
+                    self.select_by_performance(available_models, &PerformanceRequirements::default())?
+                }
+                ModelSelectionStrategy::DataAdaptive => {
+                    self.select_by_data_characteristics(available_models, characteristics)?
+                }
+                ModelSelectionStrategy::EnsembleWeighted => {
+                    self.select_by_ensemble_weighting(available_models, characteristics)?
+                }
+                _ => continue, // Skip recursive hybrid strategies
+            };
+
+            // Weight each strategy equally (could be made configurable)
+            let strategy_weight = 1.0 / strategies.len() as f64;
+
+            for selected_model in strategy_result.models {
+                if let Some(score) = combined_scores.get_mut(&selected_model.model_name) {
+                    *score += selected_model.selection_score * strategy_weight;
+                }
+            }
+        }
+
+        let mut sorted_models: Vec<_> = combined_scores.into_iter().collect();
+        sorted_models.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        let selected_models: Vec<_> = sorted_models
+            .into_iter()
+            .take(3) // Select top 3 models for hybrid approach
+            .map(|(name, score)| SelectedModel {
+                model_name: name.clone(),
+                selection_score: score,
+                expected_performance: ModelPerformanceMetrics {
+                    accuracy: score * 0.96 + 0.04,
+                    precision: score * 0.93 + 0.07,
+                    recall: score * 0.89 + 0.11,
+                    f1_score: score * 0.91 + 0.09,
+                    training_time: std::time::Duration::from_secs((75.0 * (1.0 - score + 0.03)) as u64),
+                    inference_time: std::time::Duration::from_millis((8.0 * (1.0 - score + 0.1)) as u64),
+                    memory_usage: 100.0 * (1.0 - score + 0.3),
+                    confidence_calibration: score * 0.98,
+                    robustness_score: score * 0.95,
+                },
+                selection_reason: format!("Hybrid selection combining {} strategies with score {:.3}", strategies.len(), score),
+            })
+            .collect();
+
+        Ok(ModelSelectionResult {
+            models: selected_models,
+            selection_strategy: ModelSelectionStrategy::Hybrid(strategies.to_vec()),
+            confidence: 0.92,
+            selection_rationale: format!("Selected using hybrid approach combining {} strategies for robust performance", strategies.len()),
+        })
+    }
+
+    /// Calculate performance score for a model given requirements
+    fn calculate_performance_score(
+        &self,
+        metrics: &ModelPerformanceMetrics,
+        requirements: &PerformanceRequirements,
+    ) -> f64 {
+        let accuracy_score = (metrics.accuracy / requirements.min_accuracy).min(1.0);
+        let precision_score = (metrics.precision / requirements.min_precision).min(1.0);
+        let recall_score = (metrics.recall / requirements.min_recall).min(1.0);
+        let speed_score = (requirements.max_inference_time.as_millis() as f64
+            / metrics.inference_time.as_millis() as f64)
+            .min(1.0);
+
+        // Weighted combination
+        (accuracy_score * 0.3 + precision_score * 0.25 + recall_score * 0.25 + speed_score * 0.2)
+    }
+
+    /// Calculate meta-learning score for a model
+    fn calculate_meta_learning_score(
+        &self,
+        model_name: &str,
+        characteristics: &DataCharacteristics,
+    ) -> f64 {
+        // Simplified meta-learning: calculate similarity to past successful cases
+        let mut similarity_scores = Vec::new();
+
+        for (cached_key, cached_characteristics) in &self.data_characteristics_cache {
+            if let Some(performance_history) = self.model_performance_history.get(model_name) {
+                if !performance_history.is_empty() {
+                    let similarity = self.calculate_data_similarity(characteristics, cached_characteristics);
+                    let performance = performance_history.last().unwrap().accuracy;
+                    similarity_scores.push(similarity * performance);
+                }
+            }
+        }
+
+        if similarity_scores.is_empty() {
+            0.5 // Default score
+        } else {
+            similarity_scores.iter().sum::<f64>() / similarity_scores.len() as f64
+        }
+    }
+
+    /// Calculate similarity between data characteristics
+    fn calculate_data_similarity(
+        &self,
+        char1: &DataCharacteristics,
+        char2: &DataCharacteristics,
+    ) -> f64 {
+        let size_similarity = 1.0 - ((char1.graph_size as f64 - char2.graph_size as f64).abs() / (char1.graph_size as f64 + char2.graph_size as f64)).min(1.0);
+        let complexity_similarity = 1.0 - (char1.complexity_score - char2.complexity_score).abs();
+        let sparsity_similarity = 1.0 - (char1.sparsity_ratio - char2.sparsity_ratio).abs();
+        let hierarchy_similarity = 1.0 - ((char1.hierarchy_depth as f64 - char2.hierarchy_depth as f64).abs() / (char1.hierarchy_depth as f64 + char2.hierarchy_depth as f64 + 1.0)).min(1.0);
+
+        (size_similarity + complexity_similarity + sparsity_similarity + hierarchy_similarity) / 4.0
+    }
+
+    /// Update performance history for a model
+    pub fn update_performance_history(
+        &mut self,
+        model_name: &str,
+        metrics: ModelPerformanceMetrics,
+    ) {
+        self.model_performance_history
+            .entry(model_name.to_string())
+            .or_insert_with(Vec::new)
+            .push(metrics);
+
+        // Keep only recent history (last 10 entries)
+        if let Some(history) = self.model_performance_history.get_mut(model_name) {
+            if history.len() > 10 {
+                history.remove(0);
+            }
+        }
+    }
+
+    /// Cache data characteristics for future reference
+    pub fn cache_data_characteristics(&mut self, key: String, characteristics: DataCharacteristics) {
+        self.data_characteristics_cache.insert(key, characteristics);
+
+        // Limit cache size
+        if self.data_characteristics_cache.len() > 100 {
+            let keys_to_remove: Vec<_> = self.data_characteristics_cache.keys().take(10).cloned().collect();
+            for key in keys_to_remove {
+                self.data_characteristics_cache.remove(&key);
+            }
+        }
+    }
+
+    /// Get selection statistics
+    pub fn get_selection_stats(&self) -> &ModelSelectionStats {
+        &self.selection_stats
+    }
+}
+
+/// Performance requirements for model selection
+#[derive(Debug, Clone)]
+pub struct PerformanceRequirements {
+    pub min_accuracy: f64,
+    pub min_precision: f64,
+    pub min_recall: f64,
+    pub max_inference_time: std::time::Duration,
+    pub max_memory_usage: f64,
+}
+
+impl Default for PerformanceRequirements {
+    fn default() -> Self {
+        Self {
+            min_accuracy: 0.8,
+            min_precision: 0.75,
+            min_recall: 0.7,
+            max_inference_time: std::time::Duration::from_millis(100),
+            max_memory_usage: 500.0,
+        }
+    }
+}
+
+/// Result of model selection
+#[derive(Debug, Clone)]
+pub struct ModelSelectionResult {
+    pub models: Vec<SelectedModel>,
+    pub selection_strategy: ModelSelectionStrategy,
+    pub confidence: f64,
+    pub selection_rationale: String,
+}
+
+/// Selected model with metadata
+#[derive(Debug, Clone)]
+pub struct SelectedModel {
+    pub model_name: String,
+    pub selection_score: f64,
+    pub expected_performance: ModelPerformanceMetrics,
+    pub selection_reason: String,
+}
+
 /// Comprehensive AI orchestrator for SHACL shape learning
 #[derive(Debug)]
 pub struct AiOrchestrator {
@@ -65,6 +680,9 @@ pub struct AiOrchestrator {
 
     /// Neural pattern recognizer
     neural_pattern_recognizer: Arc<Mutex<NeuralPatternRecognizer>>,
+
+    /// Advanced model selector for dynamic orchestration
+    model_selector: Arc<Mutex<AdvancedModelSelector>>,
 
     /// Configuration
     config: AiOrchestratorConfig,
@@ -105,6 +723,15 @@ pub struct AiOrchestratorConfig {
 
     /// Enable continuous improvement
     pub enable_continuous_improvement: bool,
+
+    /// Model selection strategy for dynamic orchestration
+    pub model_selection_strategy: ModelSelectionStrategy,
+
+    /// Enable advanced model selection
+    pub enable_advanced_model_selection: bool,
+
+    /// Performance requirements for model selection
+    pub performance_requirements: PerformanceRequirements,
 }
 
 impl Default for AiOrchestratorConfig {
@@ -120,6 +747,13 @@ impl Default for AiOrchestratorConfig {
             enable_adaptive_learning: true,
             learning_rate_adaptation: 0.95,
             enable_continuous_improvement: true,
+            model_selection_strategy: ModelSelectionStrategy::Hybrid(vec![
+                ModelSelectionStrategy::PerformanceBased,
+                ModelSelectionStrategy::DataAdaptive,
+                ModelSelectionStrategy::EnsembleWeighted,
+            ]),
+            enable_advanced_model_selection: true,
+            performance_requirements: PerformanceRequirements::default(),
         }
     }
 }
@@ -558,6 +1192,9 @@ impl AiOrchestrator {
         };
         let association_learner = AssociationRuleLearner::new(ar_config);
 
+        // Initialize advanced model selector
+        let model_selector = AdvancedModelSelector::new(config.model_selection_strategy.clone());
+
         Self {
             gnn_ensemble: Arc::new(Mutex::new(gnn_ensemble)),
             decision_tree: Arc::new(Mutex::new(decision_tree)),
@@ -569,6 +1206,7 @@ impl AiOrchestrator {
             optimization_engine: Arc::new(Mutex::new(OptimizationEngine::new())),
             analytics_engine: Arc::new(Mutex::new(AnalyticsEngine::new())),
             neural_pattern_recognizer: Arc::new(Mutex::new(NeuralPatternRecognizer::new())),
+            model_selector: Arc::new(Mutex::new(model_selector)),
             config,
             stats: AiOrchestratorStats::default(),
         }

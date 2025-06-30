@@ -137,9 +137,13 @@ pub enum ReplicationStrategy {
     /// Replicate only specific event types
     SelectiveReplication { event_types: HashSet<String> },
     /// Partition-based replication
-    PartitionBased { partition_strategy: PartitionStrategy },
+    PartitionBased {
+        partition_strategy: PartitionStrategy,
+    },
     /// Geography-based replication
-    GeographyBased { region_groups: HashMap<String, Vec<String>> },
+    GeographyBased {
+        region_groups: HashMap<String, Vec<String>>,
+    },
 }
 
 /// Partition strategy for replication
@@ -212,7 +216,10 @@ pub enum ReplicationStatus {
     /// Successfully replicated
     Success { timestamp: DateTime<Utc> },
     /// Replication failed
-    Failed { error: String, timestamp: DateTime<Utc> },
+    Failed {
+        error: String,
+        timestamp: DateTime<Utc>,
+    },
     /// Replication in progress
     InProgress { started_at: DateTime<Utc> },
 }
@@ -242,25 +249,26 @@ impl VectorClock {
     pub fn update(&mut self, other: &VectorClock) {
         for (region, other_clock) in &other.clocks {
             let current = self.clocks.get(region).unwrap_or(&0);
-            self.clocks.insert(region.clone(), (*current).max(*other_clock));
+            self.clocks
+                .insert(region.clone(), (*current).max(*other_clock));
         }
     }
 
     /// Check if this clock happens before another
     pub fn happens_before(&self, other: &VectorClock) -> bool {
         let mut strictly_less = false;
-        
+
         for region in self.clocks.keys().chain(other.clocks.keys()) {
             let self_clock = self.clocks.get(region).unwrap_or(&0);
             let other_clock = other.clocks.get(region).unwrap_or(&0);
-            
+
             if self_clock > other_clock {
                 return false; // Not happens-before
             } else if self_clock < other_clock {
                 strictly_less = true;
             }
         }
-        
+
         strictly_less
     }
 
@@ -372,7 +380,7 @@ impl MultiRegionReplicationManager {
     /// Create a new multi-region replication manager
     pub fn new(config: ReplicationConfig, current_region: String) -> Self {
         let health_monitor = Arc::new(RegionHealthMonitor::new(config.health_check_interval));
-        
+
         Self {
             config,
             current_region,
@@ -390,10 +398,10 @@ impl MultiRegionReplicationManager {
         let region_id = region_config.region_id.clone();
         let mut regions = self.regions.write().await;
         regions.insert(region_id.clone(), region_config);
-        
+
         // Initialize health monitoring for this region
         self.health_monitor.add_region(region_id.clone()).await;
-        
+
         info!("Added region {} to replication topology", region_id);
         Ok(())
     }
@@ -444,21 +452,26 @@ impl MultiRegionReplicationManager {
                     self.replicate_to_all_regions(&replicated_event).await?;
                 }
             }
-            ReplicationStrategy::PartitionBased { ref partition_strategy } => {
-                self.replicate_partitioned(&replicated_event, partition_strategy).await?;
+            ReplicationStrategy::PartitionBased {
+                ref partition_strategy,
+            } => {
+                self.replicate_partitioned(&replicated_event, partition_strategy)
+                    .await?;
             }
             ReplicationStrategy::GeographyBased { ref region_groups } => {
-                self.replicate_by_geography(&replicated_event, region_groups).await?;
+                self.replicate_by_geography(&replicated_event, region_groups)
+                    .await?;
             }
         }
 
         // Record statistics
         let replication_latency = start_time.elapsed();
-        self.stats.total_events_replicated.fetch_add(1, Ordering::Relaxed);
-        self.stats.average_replication_latency_ms.store(
-            replication_latency.as_millis() as u64,
-            Ordering::Relaxed,
-        );
+        self.stats
+            .total_events_replicated
+            .fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .average_replication_latency_ms
+            .store(replication_latency.as_millis() as u64, Ordering::Relaxed);
 
         info!(
             "Replicated event {} to {} regions in {:?}",
@@ -490,14 +503,19 @@ impl MultiRegionReplicationManager {
     }
 
     /// Detect conflicts in replicated events
-    async fn detect_conflict(&self, replicated_event: &ReplicatedEvent) -> Result<Option<ConflictInfo>> {
+    async fn detect_conflict(
+        &self,
+        replicated_event: &ReplicatedEvent,
+    ) -> Result<Option<ConflictInfo>> {
         // Simple conflict detection based on vector clocks
         let vector_clock = self.vector_clock.lock().await;
-        
+
         if vector_clock.is_concurrent(&replicated_event.replication_metadata.vector_clock) {
             // Potential conflict detected
-            self.stats.conflicts_detected.fetch_add(1, Ordering::Relaxed);
-            
+            self.stats
+                .conflicts_detected
+                .fetch_add(1, Ordering::Relaxed);
+
             let conflict_info = ConflictInfo {
                 conflict_type: ConflictType::WriteWrite,
                 conflicting_events: vec![replicated_event.event.clone()],
@@ -505,11 +523,14 @@ impl MultiRegionReplicationManager {
                 resolved_at: None,
                 resolution_result: None,
             };
-            
-            warn!("Conflict detected for event {}", replicated_event.replication_metadata.replication_id);
+
+            warn!(
+                "Conflict detected for event {}",
+                replicated_event.replication_metadata.replication_id
+            );
             return Ok(Some(conflict_info));
         }
-        
+
         Ok(None)
     }
 
@@ -519,14 +540,17 @@ impl MultiRegionReplicationManager {
             ConflictResolution::LastWriteWins => {
                 // Resolve by timestamp
                 conflict_info.resolution_result = Some(
-                    conflict_info.conflicting_events
+                    conflict_info
+                        .conflicting_events
                         .iter()
                         .max_by_key(|e| e.metadata().timestamp)
                         .unwrap()
-                        .clone()
+                        .clone(),
                 );
                 conflict_info.resolved_at = Some(Utc::now());
-                self.stats.conflicts_resolved.fetch_add(1, Ordering::Relaxed);
+                self.stats
+                    .conflicts_resolved
+                    .fetch_add(1, Ordering::Relaxed);
             }
             ConflictResolution::Manual => {
                 // Queue for manual resolution
@@ -534,7 +558,10 @@ impl MultiRegionReplicationManager {
                 queue.push_back(conflict_info);
             }
             _ => {
-                warn!("Conflict resolution strategy not implemented: {:?}", self.config.conflict_resolution);
+                warn!(
+                    "Conflict resolution strategy not implemented: {:?}",
+                    self.config.conflict_resolution
+                );
             }
         }
 
@@ -545,7 +572,7 @@ impl MultiRegionReplicationManager {
     async fn get_target_regions(&self, _event: &StreamEvent) -> Result<Vec<String>> {
         let regions = self.regions.read().await;
         let healthy_regions = self.health_monitor.get_healthy_regions().await;
-        
+
         Ok(regions
             .keys()
             .filter(|region_id| {
@@ -570,7 +597,9 @@ impl MultiRegionReplicationManager {
                 let task = tokio::spawn(async move {
                     match Self::send_to_region(event_clone, region_config_clone).await {
                         Ok(_) => {
-                            stats.successful_replications.fetch_add(1, Ordering::Relaxed);
+                            stats
+                                .successful_replications
+                                .fetch_add(1, Ordering::Relaxed);
                         }
                         Err(e) => {
                             stats.failed_replications.fetch_add(1, Ordering::Relaxed);
@@ -603,12 +632,13 @@ impl MultiRegionReplicationManager {
     ) -> Result<()> {
         // Simulate network call - in real implementation, this would use HTTP/gRPC
         time::sleep(Duration::from_millis(50)).await;
-        
+
         // Simulate occasional failures
-        if fastrand::f32() < 0.05 { // 5% failure rate
+        if fastrand::f32() < 0.05 {
+            // 5% failure rate
             return Err(anyhow!("Simulated network failure"));
         }
-        
+
         Ok(())
     }
 
@@ -666,17 +696,17 @@ impl MultiRegionReplicationManager {
                 self.stats.conflicts_resolved.load(Ordering::Relaxed),
             ),
             average_replication_latency_ms: AtomicU64::new(
-                self.stats.average_replication_latency_ms.load(Ordering::Relaxed),
+                self.stats
+                    .average_replication_latency_ms
+                    .load(Ordering::Relaxed),
             ),
             cross_region_bandwidth_bytes: AtomicU64::new(
-                self.stats.cross_region_bandwidth_bytes.load(Ordering::Relaxed),
+                self.stats
+                    .cross_region_bandwidth_bytes
+                    .load(Ordering::Relaxed),
             ),
-            region_failures: AtomicU64::new(
-                self.stats.region_failures.load(Ordering::Relaxed),
-            ),
-            failover_events: AtomicU64::new(
-                self.stats.failover_events.load(Ordering::Relaxed),
-            ),
+            region_failures: AtomicU64::new(self.stats.region_failures.load(Ordering::Relaxed)),
+            failover_events: AtomicU64::new(self.stats.failover_events.load(Ordering::Relaxed)),
         }
     }
 
@@ -746,7 +776,9 @@ impl RegionHealthMonitor {
     /// Check health of a specific region
     async fn check_region_health(&self, region_id: &str) -> Result<()> {
         let start_time = Instant::now();
-        self.stats.total_health_checks.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .total_health_checks
+            .fetch_add(1, Ordering::Relaxed);
 
         // Simulate health check - in real implementation, this would ping the region
         let is_healthy = fastrand::f32() > 0.1; // 90% success rate
@@ -765,10 +797,12 @@ impl RegionHealthMonitor {
             } else {
                 health.recent_errors += 1;
                 health.health_score = (health.health_score - 0.2).max(0.0);
-                
+
                 if health.recent_errors > 3 {
                     health.is_healthy = false;
-                    self.stats.failed_health_checks.fetch_add(1, Ordering::Relaxed);
+                    self.stats
+                        .failed_health_checks
+                        .fetch_add(1, Ordering::Relaxed);
                 }
             }
         }
@@ -862,8 +896,14 @@ mod tests {
         let manager = MultiRegionReplicationManager::new(config, "us-west-1".to_string());
 
         // Add regions
-        manager.add_region(create_test_region("us-east-1")).await.unwrap();
-        manager.add_region(create_test_region("eu-west-1")).await.unwrap();
+        manager
+            .add_region(create_test_region("us-east-1"))
+            .await
+            .unwrap();
+        manager
+            .add_region(create_test_region("eu-west-1"))
+            .await
+            .unwrap();
 
         let regions = manager.regions.read().await;
         assert_eq!(regions.len(), 2);
@@ -900,7 +940,7 @@ mod tests {
         assert_eq!(healthy_regions.len(), 2);
 
         monitor.check_all_regions().await.unwrap();
-        
+
         let stats = &monitor.stats;
         assert!(stats.total_health_checks.load(Ordering::Relaxed) >= 2);
     }
@@ -909,7 +949,10 @@ mod tests {
     fn test_replication_config() {
         let config = ReplicationConfig {
             strategy: ReplicationStrategy::SelectiveReplication {
-                event_types: ["TripleAdded", "TripleRemoved"].iter().map(|s| s.to_string()).collect(),
+                event_types: ["TripleAdded", "TripleRemoved"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             },
             conflict_resolution: ConflictResolution::RegionPriority {
                 priority_order: vec!["us-west-1".to_string(), "us-east-1".to_string()],

@@ -4,14 +4,14 @@
 //! including ML-based estimation, network latency modeling, and multi-objective optimization.
 
 use anyhow::Result;
+use chrono::Timelike;
 use std::time::Duration;
 use tracing::debug;
-use chrono::Timelike;
 
-use crate::{FederatedService, ServiceRegistry};
 use crate::planner::TriplePattern;
+use crate::{FederatedService, ServiceRegistry};
 
-use super::{ServiceOptimizer, types::*};
+use super::{types::*, ServiceOptimizer};
 
 impl ServiceOptimizer {
     /// Advanced result size estimation using statistical models
@@ -150,8 +150,8 @@ impl ServiceOptimizer {
             object_specificity,
             service_data_size_factor,
             pattern_complexity: PatternComplexity::Medium, // Default complexity
-            has_variables: true, // Default assumption for patterns
-            is_star_pattern: false, // Default to false, can be enhanced
+            has_variables: true,                           // Default assumption for patterns
+            is_star_pattern: false,                        // Default to false, can be enhanced
         })
     }
 
@@ -162,7 +162,10 @@ impl ServiceOptimizer {
         _service: &FederatedService,
     ) -> Result<f64> {
         // Check if predicate suggests numeric or temporal data
-        let predicate_lower = pattern.predicate.as_ref().map_or(String::new(), |p| p.to_lowercase());
+        let predicate_lower = pattern
+            .predicate
+            .as_ref()
+            .map_or(String::new(), |p| p.to_lowercase());
 
         if predicate_lower.contains("age")
             || predicate_lower.contains("year")
@@ -226,26 +229,28 @@ impl ServiceOptimizer {
         weights: &OptimizationWeights,
     ) -> Result<Vec<OptimizedServiceSelection>> {
         debug!("Starting multi-objective source selection optimization");
-        
+
         let mut optimized_selections = Vec::new();
-        
+
         for pattern in patterns {
             let mut service_scores = Vec::new();
-            
+
             for service in candidate_services {
                 // Calculate multiple objectives
-                let cost_score = self.calculate_cost_objective(pattern, service, registry).await?;
+                let cost_score = self
+                    .calculate_cost_objective(pattern, service, registry)
+                    .await?;
                 let quality_score = self.calculate_quality_objective(pattern, service, registry)?;
                 let latency_score = self.calculate_latency_objective(pattern, service, registry)?;
-                let reliability_score = self.calculate_reliability_objective(pattern, service, registry)?;
-                
+                let reliability_score =
+                    self.calculate_reliability_objective(pattern, service, registry)?;
+
                 // Weighted combination of objectives
-                let combined_score = 
-                    (cost_score * weights.network_cost_weight) +
-                    (quality_score * weights.result_quality_weight) +
-                    (latency_score * weights.execution_time_weight) +
-                    (reliability_score * weights.service_reliability_weight);
-                
+                let combined_score = (cost_score * weights.network_cost_weight)
+                    + (quality_score * weights.result_quality_weight)
+                    + (latency_score * weights.execution_time_weight)
+                    + (reliability_score * weights.service_reliability_weight);
+
                 service_scores.push(ServiceObjectiveScore {
                     service_id: service.id.clone(),
                     execution_time_score: latency_score,
@@ -256,39 +261,53 @@ impl ServiceOptimizer {
                     total_score: combined_score,
                 });
             }
-            
+
             // Sort by total score (higher is better)
             service_scores.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap());
-            
+
             // Select top services based on Pareto optimality
             let pareto_optimal = self.find_pareto_optimal_services(&service_scores);
-            
+
             optimized_selections.push(OptimizedServiceSelection {
-                selected_services: pareto_optimal.iter().map(|s| s.service_id.clone()).collect(),
+                selected_services: pareto_optimal
+                    .iter()
+                    .map(|s| s.service_id.clone())
+                    .collect(),
                 total_score: pareto_optimal.first().map(|s| s.total_score).unwrap_or(0.0),
                 metadata: OptimizationMetadata {
                     algorithm_used: "multi_objective_weighted".to_string(),
                     optimization_time: std::time::Instant::now().elapsed(),
                     alternatives_considered: candidate_services.len(),
                     confidence_level: ConfidenceLevel::High,
-                    factors_considered: vec!["cost".to_string(), "quality".to_string(), "latency".to_string(), "reliability".to_string()],
+                    factors_considered: vec![
+                        "cost".to_string(),
+                        "quality".to_string(),
+                        "latency".to_string(),
+                        "reliability".to_string(),
+                    ],
                 },
-                execution_plan: format!("Multi-objective optimization selected {} services", pareto_optimal.len()),
+                execution_plan: format!(
+                    "Multi-objective optimization selected {} services",
+                    pareto_optimal.len()
+                ),
                 estimated_cost: pareto_optimal.iter().map(|s| s.cost_score).sum(),
             });
         }
-        
+
         Ok(optimized_selections)
     }
-    
+
     /// Dynamic source ranking with real-time updates
     pub fn update_dynamic_source_rankings(
         &mut self,
         performance_updates: &[ServicePerformanceUpdate],
         registry: &ServiceRegistry,
     ) -> Result<()> {
-        debug!("Updating dynamic source rankings with {} performance updates", performance_updates.len());
-        
+        debug!(
+            "Updating dynamic source rankings with {} performance updates",
+            performance_updates.len()
+        );
+
         for update in performance_updates {
             // Create performance metrics from update data
             let metrics = ServicePerformanceMetrics {
@@ -302,28 +321,31 @@ impl ServiceOptimizer {
                 cpu_utilization: None,
                 memory_utilization: None,
             };
-            
+
             // Update service performance metrics
             self.update_service_performance(&update.service_id, &metrics);
-            
+
             // Get previous ranking for comparison
-            let previous_ranking = self.statistics_cache.get_service_ranking(&update.service_id).unwrap_or(0.5);
-            
+            let previous_ranking = self
+                .statistics_cache
+                .get_service_ranking(&update.service_id)
+                .unwrap_or(0.5);
+
             // Recalculate ranking scores
             if let Some(service) = registry.get_service(&update.service_id) {
                 let new_ranking = self.calculate_dynamic_ranking_score(service, registry)?;
                 self.update_service_ranking(&update.service_id, new_ranking);
-                
+
                 // Trigger re-ranking of related services if significant change
                 if (new_ranking - previous_ranking).abs() > 0.1 {
                     self.trigger_related_service_reranking(&update.service_id, registry)?;
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Calculate cost objective (lower cost = higher score)
     async fn calculate_cost_objective(
         &self,
@@ -331,11 +353,13 @@ impl ServiceOptimizer {
         service: &FederatedService,
         registry: &ServiceRegistry,
     ) -> Result<f64> {
-        let estimated_cost = self.estimate_service_cost(service, &[pattern.clone()], &[]).await;
+        let estimated_cost = self
+            .estimate_service_cost(service, &[pattern.clone()], &[])
+            .await;
         // Normalize and invert (lower cost = higher score)
         Ok(1.0 / (1.0 + estimated_cost / 1000.0))
     }
-    
+
     /// Calculate quality objective based on data completeness and accuracy
     fn calculate_quality_objective(
         &self,
@@ -345,22 +369,24 @@ impl ServiceOptimizer {
     ) -> Result<f64> {
         // Use service metadata to determine quality score
         let mut quality_score = 0.7; // Base quality
-        
+
         // Consider historical success rate
         if let Some(success_rate) = service.performance.success_rate {
             quality_score += success_rate * 0.2;
         }
-        
+
         // Consider data freshness
         if let Some(last_update) = service.performance.last_updated {
-            let age_hours = chrono::Utc::now().signed_duration_since(last_update).num_hours();
+            let age_hours = chrono::Utc::now()
+                .signed_duration_since(last_update)
+                .num_hours();
             let freshness_factor = (1.0 / (1.0 + age_hours as f64 / 24.0)).min(1.0);
             quality_score += freshness_factor * 0.1;
         }
-        
+
         Ok(quality_score.min(1.0))
     }
-    
+
     /// Calculate latency objective (lower latency = higher score)
     fn calculate_latency_objective(
         &self,
@@ -368,14 +394,16 @@ impl ServiceOptimizer {
         service: &FederatedService,
         _registry: &ServiceRegistry,
     ) -> Result<f64> {
-        let avg_latency_ms = service.performance.average_response_time
+        let avg_latency_ms = service
+            .performance
+            .average_response_time
             .map(|d| d.as_millis() as f64)
             .unwrap_or(1000.0);
-        
+
         // Normalize latency (lower latency = higher score)
         Ok(1.0 / (1.0 + avg_latency_ms / 1000.0))
     }
-    
+
     /// Calculate reliability objective based on uptime and error rates
     fn calculate_reliability_objective(
         &self,
@@ -384,58 +412,59 @@ impl ServiceOptimizer {
         _registry: &ServiceRegistry,
     ) -> Result<f64> {
         let mut reliability_score = 0.8; // Base reliability
-        
+
         // Factor in success rate
         if let Some(success_rate) = service.performance.success_rate {
             reliability_score = success_rate;
         }
-        
+
         // Factor in error rate
         if let Some(error_rate) = service.performance.error_rate {
             reliability_score *= (1.0 - error_rate);
         }
-        
+
         Ok(reliability_score.min(1.0))
     }
-    
+
     /// Find Pareto optimal services (non-dominated solutions)
     fn find_pareto_optimal_services(
         &self,
         service_scores: &[ServiceObjectiveScore],
     ) -> Vec<ServiceObjectiveScore> {
         let mut pareto_optimal = Vec::new();
-        
+
         for candidate in service_scores {
             let mut is_dominated = false;
-            
+
             // Check if any other service dominates this candidate
             for other in service_scores {
                 if other.service_id != candidate.service_id {
                     // A service dominates if it's better in all objectives
-                    if other.cost_score >= candidate.cost_score &&
-                       other.quality_score >= candidate.quality_score &&
-                       other.latency_score >= candidate.latency_score &&
-                       other.reliability_score >= candidate.reliability_score &&
-                       (other.cost_score > candidate.cost_score ||
-                        other.quality_score > candidate.quality_score ||
-                        other.latency_score > candidate.latency_score ||
-                        other.reliability_score > candidate.reliability_score) {
+                    if other.cost_score >= candidate.cost_score
+                        && other.quality_score >= candidate.quality_score
+                        && other.latency_score >= candidate.latency_score
+                        && other.reliability_score >= candidate.reliability_score
+                        && (other.cost_score > candidate.cost_score
+                            || other.quality_score > candidate.quality_score
+                            || other.latency_score > candidate.latency_score
+                            || other.reliability_score > candidate.reliability_score)
+                    {
                         is_dominated = true;
                         break;
                     }
                 }
             }
-            
+
             if !is_dominated {
                 pareto_optimal.push(candidate.clone());
             }
         }
-        
+
         // Sort by total score for easier selection
         pareto_optimal.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap());
         pareto_optimal
     }
-    
+
     /// Calculate dynamic ranking score based on current performance
     fn calculate_dynamic_ranking_score(
         &self,
@@ -443,21 +472,21 @@ impl ServiceOptimizer {
         _registry: &ServiceRegistry,
     ) -> Result<f64> {
         let mut score = 0.5; // Base score
-        
+
         // Factor in recent performance
         if let Some(avg_time) = service.performance.average_response_time {
             let time_factor = 1.0 / (1.0 + avg_time.as_millis() as f64 / 1000.0);
             score += time_factor * 0.3;
         }
-        
+
         // Factor in success rate
         if let Some(success_rate) = service.performance.success_rate {
             score += success_rate * 0.2;
         }
-        
+
         Ok(score.min(1.0))
     }
-    
+
     /// Trigger re-ranking of services related to the updated service
     fn trigger_related_service_reranking(
         &mut self,
@@ -1011,20 +1040,23 @@ impl ServiceOptimizer {
 
         // Execution time cost
         let estimated_time = self.estimate_execution_time(pattern, service, registry)?;
-        score.execution_cost = estimated_time.as_millis() as f64 * objectives.weight_balance.execution_time_weight;
+        score.execution_cost =
+            estimated_time.as_millis() as f64 * objectives.weight_balance.execution_time_weight;
 
         // Network latency cost
         let request_size = self.estimate_request_size(pattern)?;
         let response_size = self.estimate_result_size_advanced(pattern, service, registry)?;
         let network_latency =
             self.estimate_network_latency_advanced(service, request_size, response_size, registry)?;
-        score.network_cost = network_latency.as_millis() as f64 * objectives.weight_balance.network_cost_weight;
+        score.network_cost =
+            network_latency.as_millis() as f64 * objectives.weight_balance.network_cost_weight;
 
         // Resource usage cost (based on query complexity and service load)
         let complexity_cost = self.calculate_pattern_complexity_cost(pattern);
         let load_factor = self.get_service_load_factor(service, registry);
         // Add resource usage as part of execution cost
-        score.execution_cost += complexity_cost * load_factor * objectives.weight_balance.execution_time_weight;
+        score.execution_cost +=
+            complexity_cost * load_factor * objectives.weight_balance.execution_time_weight;
 
         // Reliability bonus (bonus for high-capacity services)
         let reliability_score =
@@ -1037,16 +1069,24 @@ impl ServiceOptimizer {
             } else {
                 0.0 // No bonus for unknown capacity
             };
-        score.reliability_bonus = reliability_score * if objectives.maximize_reliability { 1.0 } else { 0.0 };
+        score.reliability_bonus = reliability_score
+            * if objectives.maximize_reliability {
+                1.0
+            } else {
+                0.0
+            };
 
         // Quality penalty (penalty for low-quality services)
         let quality_score = self.calculate_service_quality_score(service, registry);
-        score.quality_penalty = (100.0 - quality_score) * if objectives.maximize_quality { 1.0 } else { 0.0 };
+        score.quality_penalty = (100.0 - quality_score)
+            * if objectives.maximize_quality {
+                1.0
+            } else {
+                0.0
+            };
 
         // Calculate total cost (lower is better)
-        score.total_cost = score.execution_cost
-            + score.network_cost
-            + score.quality_penalty
+        score.total_cost = score.execution_cost + score.network_cost + score.quality_penalty
             - score.reliability_bonus; // Subtract reliability bonus since it's a benefit
 
         Ok(score)

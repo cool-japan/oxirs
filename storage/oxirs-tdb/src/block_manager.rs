@@ -410,7 +410,10 @@ impl BlockManager {
                     let remaining_metadata =
                         BlockMetadata::new(remaining_id, remaining_offset, remaining_size);
 
-                    println!("Creating remaining block: id={}, size={}, offset={}", remaining_id, remaining_size, remaining_offset);
+                    println!(
+                        "Creating remaining block: id={}, size={}, offset={}",
+                        remaining_id, remaining_size, remaining_offset
+                    );
                     free_blocks.add_free_block(remaining_metadata.clone());
                     println!("Added remaining block to free_blocks");
 
@@ -776,8 +779,14 @@ impl BlockManager {
         let free_blocks = self.free_blocks.read().unwrap();
         let (free_space, free_count, _) = free_blocks.get_stats();
 
-        println!("get_stats: FreeBlockTracker reports free_space={}, free_count={}", free_space, free_count);
-        println!("get_stats: Number of entries in free_blocks.block_metadata: {}", free_blocks.block_metadata.len());
+        println!(
+            "get_stats: FreeBlockTracker reports free_space={}, free_count={}",
+            free_space, free_count
+        );
+        println!(
+            "get_stats: Number of entries in free_blocks.block_metadata: {}",
+            free_blocks.block_metadata.len()
+        );
 
         stats.free_space = free_space;
         stats.free_blocks = free_count;
@@ -1140,40 +1149,58 @@ mod tests {
         let large_block = manager.allocate_block(8192).unwrap();
         println!("After allocating large block:");
         let stats1 = manager.get_stats();
-        println!("  allocated_blocks: {}, free_blocks: {}", stats1.allocated_blocks, stats1.free_blocks);
-        
+        println!(
+            "  allocated_blocks: {}, free_blocks: {}",
+            stats1.allocated_blocks, stats1.free_blocks
+        );
+
         manager.deallocate_block(large_block).unwrap();
         println!("After deallocating large block:");
         let stats2 = manager.get_stats();
-        println!("  allocated_blocks: {}, free_blocks: {}", stats2.allocated_blocks, stats2.free_blocks);
+        println!(
+            "  allocated_blocks: {}, free_blocks: {}",
+            stats2.allocated_blocks, stats2.free_blocks
+        );
 
         // Allocate a smaller block (should split the large one)
         println!("Before allocating small block - checking if there are free blocks:");
         let stats_before = manager.get_stats();
-        println!("  free_blocks: {}, min_block_size: {}", stats_before.free_blocks, manager.config.min_block_size);
-        
+        println!(
+            "  free_blocks: {}, min_block_size: {}",
+            stats_before.free_blocks, manager.config.min_block_size
+        );
+
         let _small_block = manager.allocate_block(1024).unwrap();
         println!("After allocating small block:");
         let stats3 = manager.get_stats();
-        println!("  allocated_blocks: {}, free_blocks: {}", stats3.allocated_blocks, stats3.free_blocks);
+        println!(
+            "  allocated_blocks: {}, free_blocks: {}",
+            stats3.allocated_blocks, stats3.free_blocks
+        );
 
         let stats = manager.get_stats();
-        
+
         // Debug: let's see what's actually in the free_blocks structure
         {
             let free_blocks = manager.free_blocks.read().unwrap();
             println!("Final debug - free_blocks.block_metadata contents:");
             for (id, metadata) in &free_blocks.block_metadata {
-                println!("  Block {}: size={}, status={:?}, offset={}", id, metadata.size, metadata.status, metadata.offset);
+                println!(
+                    "  Block {}: size={}, status={:?}, offset={}",
+                    id, metadata.size, metadata.status, metadata.offset
+                );
             }
             println!("Final debug - blocks_by_size contents:");
             for (size, ids) in &free_blocks.blocks_by_size {
                 println!("  Size {}: {:?}", size, ids);
             }
         }
-        
+
         assert_eq!(stats.allocated_blocks, 1);
-        println!("Expected free_blocks=1, actual free_blocks={}", stats.free_blocks);
+        println!(
+            "Expected free_blocks=1, actual free_blocks={}",
+            stats.free_blocks
+        );
         assert_eq!(stats.free_blocks, 1); // Remaining part should be free
     }
 

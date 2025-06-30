@@ -9,13 +9,10 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tracing::{info, instrument};
 
-use crate::{
-    planner::ExecutionPlan,
-    ServiceRegistry,
-};
+use crate::{planner::ExecutionPlan, ServiceRegistry};
 
-use super::types::*;
 use super::step_execution::execute_step;
+use super::types::*;
 
 impl FederatedExecutor {
     /// Execute plan with adaptive optimization
@@ -378,7 +375,9 @@ impl FederatedExecutor {
         let avg_parallel_time = performance_monitor.get_average_parallel_time();
         let avg_sequential_time = performance_monitor.get_average_sequential_time();
 
-        if avg_parallel_time.as_millis() as f64 > avg_sequential_time.as_millis() as f64 * adaptive_config.performance_threshold {
+        if avg_parallel_time.as_millis() as f64
+            > avg_sequential_time.as_millis() as f64 * adaptive_config.performance_threshold
+        {
             // Parallel execution is not efficient
             if group_size >= adaptive_config.hybrid_batch_size {
                 return AdaptiveExecutionStrategy::Hybrid;
@@ -421,7 +420,7 @@ impl FederatedExecutor {
         // Check if average execution time has increased significantly
         let current_avg = runtime_stats.average_group_time;
         let threshold_duration = Duration::from_millis(adaptive_config.latency_threshold as u64);
-        
+
         if current_avg > threshold_duration {
             return true;
         }
@@ -440,7 +439,7 @@ impl FederatedExecutor {
     ) -> Result<Vec<String>> {
         // For now, return the original group
         // In a full implementation, this would analyze bottlenecks and reorder steps
-        
+
         // Identify primary bottleneck
         if let Some(bottleneck) = performance_monitor.get_primary_bottleneck() {
             match bottleneck {
@@ -541,7 +540,9 @@ impl FederatedExecutor {
         if avg_parallel_time.as_millis() as f64 > avg_sequential_time.as_millis() as f64 * 1.2 {
             // Parallel execution is not efficient, increase threshold
             adaptive_config.parallel_threshold += 1;
-        } else if (avg_parallel_time.as_millis() as f64) < avg_sequential_time.as_millis() as f64 * 0.8 {
+        } else if (avg_parallel_time.as_millis() as f64)
+            < avg_sequential_time.as_millis() as f64 * 0.8
+        {
             // Parallel execution is very efficient, decrease threshold
             adaptive_config.parallel_threshold =
                 adaptive_config.parallel_threshold.saturating_sub(1).max(2);
@@ -564,23 +565,32 @@ impl FederatedExecutor {
             "Groups executed: {}, Steps executed: {}",
             runtime_stats.groups_executed, runtime_stats.total_steps_executed
         );
-        info!("Success rate: {:.2}%", runtime_stats.get_success_rate() * 100.0);
         info!(
-            "Average group time: {:?}",
-            runtime_stats.average_group_time
+            "Success rate: {:.2}%",
+            runtime_stats.get_success_rate() * 100.0
         );
+        info!("Average group time: {:?}", runtime_stats.average_group_time);
         info!(
             "Peak memory usage: {} MB",
             runtime_stats.peak_memory_usage / 1024 / 1024
         );
-        info!("Peak CPU usage: {:.2}%", runtime_stats.peak_cpu_usage * 100.0);
-        
+        info!(
+            "Peak CPU usage: {:.2}%",
+            runtime_stats.peak_cpu_usage * 100.0
+        );
+
         if let Some(bottleneck) = performance_monitor.get_primary_bottleneck() {
             info!("Primary bottleneck: {:?}", bottleneck);
         }
-        
-        info!("Error rate: {:.2}%", performance_monitor.get_error_rate() * 100.0);
-        info!("Average step time: {:?}", performance_monitor.get_average_step_time());
+
+        info!(
+            "Error rate: {:.2}%",
+            performance_monitor.get_error_rate() * 100.0
+        );
+        info!(
+            "Average step time: {:?}",
+            performance_monitor.get_average_step_time()
+        );
         info!("=== End Insights ===");
     }
 }
