@@ -13,7 +13,7 @@ use crate::{EmbeddingModel, ModelConfig, TrainingStats, Vector, Triple};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{Array1, Array2, Axis};
+use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;

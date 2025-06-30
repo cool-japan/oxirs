@@ -124,7 +124,7 @@ pub struct ParameterDef {
     pub optional: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ValueType {
     String,
     Integer,

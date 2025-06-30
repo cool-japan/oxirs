@@ -460,49 +460,29 @@ impl TdbStore {
     /// - Duplicate triples are handled efficiently (no-op for exact duplicates)
     /// - Bulk insertions should be wrapped in transactions for better performance
     pub fn insert_triple(&self, subject: &Term, predicate: &Term, object: &Term) -> Result<()> {
-        // Robust validation with edge case handling
-        let subject_str = match subject {
-            Term::Iri(iri) => iri.as_str(),
-            Term::BlankNode(node) => &format!("_:{}", node),
+        // Fast path validation - only check term types without expensive string validation
+        match subject {
+            Term::Iri(_) | Term::BlankNode(_) => {},
             _ => return Err(anyhow!("Subject must be an IRI or blank node")),
         };
 
-        let predicate_str = match predicate {
-            Term::Iri(iri) => iri.as_str(),
+        match predicate {
+            Term::Iri(_) => {},
             _ => return Err(anyhow!("Predicate must be an IRI")),
         };
 
-        let object_str = match object {
-            Term::Iri(iri) => iri.as_str(),
-            Term::BlankNode(node) => &format!("_:{}", node),
-            Term::Literal { value, .. } => value.as_str(),
+        match object {
+            Term::Iri(_) | Term::BlankNode(_) | Term::Literal { .. } => {},
             _ => return Err(anyhow!("Invalid object term type")),
         };
 
-        // Validate with edge case handling
-        EdgeCaseValidator::validate_iri_robust(subject_str)?;
-        EdgeCaseValidator::validate_iri_robust(predicate_str)?;
+        // Execute directly without circuit breaker overhead for performance
+        let subject_id = self.triple_store.store_term(subject)?;
+        let predicate_id = self.triple_store.store_term(predicate)?;
+        let object_id = self.triple_store.store_term(object)?;
 
-        if object_str.starts_with("http://") || object_str.starts_with("https://") {
-            EdgeCaseValidator::validate_iri_robust(object_str)?;
-        } else {
-            let datatype = match object {
-                Term::Literal { datatype, .. } => datatype.as_deref(),
-                _ => None,
-            };
-            EdgeCaseValidator::validate_literal_robust(object_str, datatype)?;
-        }
-
-        // Execute with circuit breaker protection
-        self.health_monitor
-            .execute_with_protection("insert_triple", || {
-                let subject_id = self.triple_store.store_term(subject)?;
-                let predicate_id = self.triple_store.store_term(predicate)?;
-                let object_id = self.triple_store.store_term(object)?;
-
-                let triple = Triple::new(subject_id, predicate_id, object_id);
-                self.triple_store.insert_triple(&triple)
-            })
+        let triple = Triple::new(subject_id, predicate_id, object_id);
+        self.triple_store.insert_triple(&triple)
     }
 
     /// Insert a quad

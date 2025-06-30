@@ -685,8 +685,12 @@ impl MultiLanguageProcessor {
     }
 
     pub fn get_preferred_text(&self, texts: &HashMap<String, String>) -> Option<String> {
+        // Sort languages by weight in descending order
+        let mut sorted_langs: Vec<_> = self.language_weights.iter().collect();
+        sorted_langs.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
+
         // Try to find text in order of preference
-        for (lang, _) in self.language_weights.iter() {
+        for (lang, _) in sorted_langs {
             if let Some(text) = texts.get(lang) {
                 return Some(text.clone());
             }

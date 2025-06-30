@@ -98,6 +98,13 @@ pub use security::{
     Credentials, AuditLogEntry, ThreatAlert, SecurityMetrics, AuthenticationProvider,
     AuthorizationProvider, AuditLogger, ThreatDetector, RateLimiter,
 };
+pub use quantum_streaming::{
+    QuantumState, QuantumEvent, QuantumOperation, QuantumStreamProcessor, QuantumProcessingStats,
+};
+pub use consciousness_streaming::{
+    ConsciousnessLevel, EmotionalContext, DreamSequence, IntuitiveEngine, ConsciousnessStreamProcessor,
+    MeditationState, ConsciousnessStats,
+};
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -135,6 +142,8 @@ pub mod store_integration;
 pub mod time_travel;
 pub mod types;
 pub mod webhook;
+pub mod quantum_streaming;
+pub mod consciousness_streaming;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]

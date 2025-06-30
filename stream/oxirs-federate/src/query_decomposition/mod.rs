@@ -10,6 +10,7 @@
 //! - `plan_generation`: Plan generation strategies and advanced distribution algorithms
 //! - `cost_estimation`: Cost estimation algorithms for different execution strategies
 //! - `pattern_analysis`: Pattern analysis, selectivity estimation, and join pattern detection
+//! - `advanced_pattern_analysis`: ML-driven pattern analysis with sophisticated optimization
 
 pub mod types;
 pub mod core;
@@ -17,6 +18,7 @@ pub mod graph_analysis;
 pub mod plan_generation;
 pub mod cost_estimation;
 pub mod pattern_analysis;
+pub mod advanced_pattern_analysis;
 
 // Re-export main types and structs for public API
 pub use types::*;

@@ -5,7 +5,7 @@
 //! and advanced optimization techniques.
 
 use crate::error::OxirsResult;
-use crate::model::{NamedNode, Triple};
+use crate::model::Triple;
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
 use std::f64::consts::PI;
@@ -668,6 +668,7 @@ impl QuantumPulse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::NamedNode;
 
     #[test]
     fn test_quantum_processor_creation() {

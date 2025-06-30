@@ -208,7 +208,7 @@ pub struct TokenValidation {
 
 impl AuthService {
     /// Create a new authentication service
-    pub fn new(config: SecurityConfig) -> Self {
+    pub async fn new(config: SecurityConfig) -> FusekiResult<Self> {
         let users = config.users.clone();
 
         // Initialize OAuth2 service if configured
@@ -218,12 +218,13 @@ impl AuthService {
             .map(|oauth_config| OAuth2Service::new(oauth_config.clone()));
 
         // Initialize LDAP service if configured
-        let ldap_service = config
-            .ldap
-            .as_ref()
-            .map(|ldap_config| LdapService::new(ldap_config.clone()));
+        let ldap_service = if let Some(ldap_config) = config.ldap.as_ref() {
+            Some(LdapService::new(ldap_config.clone()).await?)
+        } else {
+            None
+        };
 
-        Self {
+        Ok(Self {
             config: Arc::new(config),
             users: Arc::new(RwLock::new(users)),
             sessions: Arc::new(RwLock::new(HashMap::new())),
@@ -233,7 +234,7 @@ impl AuthService {
             ldap_service,
             #[cfg(feature = "saml")]
             saml_provider: None, // TODO: Initialize from config when SAML config is added
-        }
+        })
     }
 
     /// Authenticate user with username/password
@@ -814,24 +815,20 @@ impl AuthService {
             .join(":");
 
         // Extract validity period
-        let not_before = cert
-            .validity()
-            .not_before
-            .timestamp()
-            .map(|ts| chrono::DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now()))
-            .unwrap_or_else(|| Utc::now());
+        let not_before = {
+            let ts = cert.validity().not_before.timestamp();
+            chrono::DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now())
+        };
 
-        let not_after = cert
-            .validity()
-            .not_after
-            .timestamp()
-            .map(|ts| chrono::DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now()))
-            .unwrap_or_else(|| Utc::now());
+        let not_after = {
+            let ts = cert.validity().not_after.timestamp();
+            chrono::DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now())
+        };
 
         // Extract key usage
         let mut key_usage = Vec::new();
-        if let Some(ext) = cert.extensions().get(&OID_X509_EXT_KEY_USAGE) {
-            if let Ok(ku) = ext.parsed_extension::<KeyUsage>() {
+        if let Some(ext) = cert.extensions().iter().find(|ext| ext.oid() == &OID_X509_EXT_KEY_USAGE) {
+            if let Ok(ku) = ext.parsed_extension::<x509_parser::extensions::KeyUsage>() {
                 if ku.digital_signature() {
                     key_usage.push("digitalSignature".to_string());
                 }
@@ -849,8 +846,8 @@ impl AuthService {
 
         // Extract extended key usage
         let mut extended_key_usage = Vec::new();
-        if let Some(ext) = cert.extensions().get(&OID_X509_EXT_EXTENDED_KEY_USAGE) {
-            if let Ok(eku) = ext.parsed_extension::<ExtendedKeyUsage>() {
+        if let Some(ext) = cert.extensions().iter().find(|ext| ext.oid() == &OID_X509_EXT_EXTENDED_KEY_USAGE) {
+            if let Ok(eku) = ext.parsed_extension::<x509_parser::extensions::ExtendedKeyUsage>() {
                 for purpose in eku.any {
                     let purpose_str = purpose.to_string();
                     if purpose_str == "1.3.6.1.5.5.7.3.2" {
@@ -2055,7 +2052,8 @@ where
     type Rejection = AuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let AuthUser(user) = AuthUser::from_request_parts(parts, state).await?;
+        let AuthUser(user) = AuthUser::from_request_parts(parts, state).await
+            .map_err(|_| AuthError::Unauthorized("Authentication required".to_string()))?;
 
         // For now, we'll extract the required permission from the request path
         // In a real implementation, this would be more sophisticated
@@ -2146,7 +2144,7 @@ fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::err
         let password = decoded_str[colon_pos + 1..].to_string();
         Ok((username, password))
     } else {
-        Err("Invalid Basic auth format".into())
+        Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid Basic auth format")))
     }
 }
 
@@ -2156,9 +2154,9 @@ mod tests {
     use crate::config::{CorsConfig, SameSitePolicy, SecurityConfig, SessionConfig};
     use std::collections::HashMap;
 
-    fn create_test_auth_service() -> AuthService {
+    async fn create_test_auth_service() -> AuthService {
         let mut users = HashMap::new();
-        let auth_service = AuthService::new(SecurityConfig::default());
+        let auth_service = AuthService::new(SecurityConfig::default()).await.unwrap();
 
         // Add test user
         let password_hash = auth_service.hash_password("test123").unwrap();
@@ -2179,7 +2177,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_password_hashing() {
-        let auth_service = create_test_auth_service();
+        let auth_service = create_test_auth_service().await;
         let password = "test123";
 
         let hash = auth_service.hash_password(password).unwrap();
@@ -2189,7 +2187,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_user_authentication() {
-        let auth_service = create_test_auth_service();
+        let auth_service = create_test_auth_service().await;
 
         // Valid authentication
         let result = auth_service
@@ -2215,7 +2213,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_session_management() {
-        let auth_service = create_test_auth_service();
+        let auth_service = create_test_auth_service().await;
 
         let user = User {
             username: "testuser".to_string(),
@@ -2272,7 +2270,7 @@ mod tests {
             permissions: vec![Permission::GlobalRead, Permission::SparqlQuery],
         };
 
-        let auth_service = create_test_auth_service();
+        let auth_service = create_test_auth_service().await;
 
         assert!(auth_service.has_permission(&user, &Permission::GlobalRead));
         assert!(auth_service.has_permission(&user, &Permission::SparqlQuery));

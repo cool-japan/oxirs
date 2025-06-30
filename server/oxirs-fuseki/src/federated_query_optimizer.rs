@@ -1477,25 +1477,35 @@ mod tests {
         let config = crate::config::MonitoringConfig {
             metrics: crate::config::MetricsConfig {
                 enabled: false,
-                port: 9000,
-                prometheus: crate::config::PrometheusConfig {
-                    enabled: false,
-                    endpoint: "/metrics".to_string(),
-                },
-                custom_metrics: std::collections::HashMap::new(),
+                endpoint: "/metrics".to_string(),
+                port: Some(9000),
+                namespace: "oxirs_fuseki".to_string(),
+                collect_system_metrics: true,
+                histogram_buckets: vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
             },
             health_checks: crate::config::HealthCheckConfig {
                 enabled: false,
-                interval: std::time::Duration::from_secs(30),
-                endpoint: "/health".to_string(),
-                timeout: std::time::Duration::from_secs(5),
+                interval_secs: 30,
+                timeout_secs: 5,
+                checks: vec!["store".to_string(), "memory".to_string()],
             },
             tracing: crate::config::TracingConfig {
                 enabled: false,
-                level: "info".to_string(),
-                format: "json".to_string(),
+                endpoint: None,
+                service_name: "oxirs-fuseki".to_string(),
+                sample_rate: 0.1,
                 output: crate::config::TracingOutput::Stdout,
             },
+            prometheus: Some(crate::config::PrometheusConfig {
+                enabled: false,
+                endpoint: "/metrics".to_string(),
+                port: Some(9090),
+                namespace: "oxirs_fuseki".to_string(),
+                job_name: "oxirs-fuseki".to_string(),
+                instance: "localhost:3030".to_string(),
+                scrape_interval_secs: 15,
+                timeout_secs: 10,
+            }),
         };
         let optimizer =
             FederatedQueryOptimizer::new(Arc::new(MetricsService::new(config).unwrap()));
@@ -1522,25 +1532,35 @@ mod tests {
         let config = crate::config::MonitoringConfig {
             metrics: crate::config::MetricsConfig {
                 enabled: false,
-                port: 9000,
-                prometheus: crate::config::PrometheusConfig {
-                    enabled: false,
-                    endpoint: "/metrics".to_string(),
-                },
-                custom_metrics: std::collections::HashMap::new(),
+                endpoint: "/metrics".to_string(),
+                port: Some(9000),
+                namespace: "oxirs_fuseki".to_string(),
+                collect_system_metrics: true,
+                histogram_buckets: vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
             },
             health_checks: crate::config::HealthCheckConfig {
                 enabled: false,
-                interval: std::time::Duration::from_secs(30),
-                endpoint: "/health".to_string(),
-                timeout: std::time::Duration::from_secs(5),
+                interval_secs: 30,
+                timeout_secs: 5,
+                checks: vec!["store".to_string(), "memory".to_string()],
             },
             tracing: crate::config::TracingConfig {
                 enabled: false,
-                level: "info".to_string(),
-                format: "json".to_string(),
+                endpoint: None,
+                service_name: "oxirs-fuseki".to_string(),
+                sample_rate: 0.1,
                 output: crate::config::TracingOutput::Stdout,
             },
+            prometheus: Some(crate::config::PrometheusConfig {
+                enabled: false,
+                endpoint: "/metrics".to_string(),
+                port: Some(9090),
+                namespace: "oxirs_fuseki".to_string(),
+                job_name: "oxirs-fuseki".to_string(),
+                instance: "localhost:3030".to_string(),
+                scrape_interval_secs: 15,
+                timeout_secs: 10,
+            }),
         };
         let optimizer =
             FederatedQueryOptimizer::new(Arc::new(MetricsService::new(config).unwrap()));

@@ -4,13 +4,12 @@
 //! in contiguous memory blocks, reducing memory fragmentation and improving
 //! cache locality.
 
-use crate::model::{NamedNode, Term, Triple, Variable};
+use crate::model::{Term, Triple};
 use bumpalo::Bump;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::mem;
 use std::sync::Arc;
 
 thread_local! {
@@ -307,7 +306,7 @@ impl<'parent> Drop for ScopedArena<'parent> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Literal;
+    use crate::{Literal, NamedNode};
     use std::thread;
 
     #[test]

@@ -264,12 +264,16 @@ pub mod server;
 pub mod subscriptions;
 pub mod types;
 pub mod validation;
+pub mod zero_trust_security;
 
 // Advanced performance modules
 pub mod advanced_cache;
+pub mod ai_query_predictor;
+pub mod async_streaming;
 pub mod benchmarking;
 pub mod dataloader;
 pub mod performance;
+pub mod predictive_analytics;
 
 // Organized module groups
 pub mod core;
@@ -279,14 +283,14 @@ pub mod features;
 pub mod networking;
 pub mod rdf;
 
-// Juniper-based implementation with proper RDF integration (WIP - disabled due to complex integration issues)
-// pub mod juniper_schema;
-// pub mod juniper_server; // Complex Hyper v1 version - disabled for now
-// pub mod simple_juniper_server; // Simplified version
+// Juniper-based implementation with proper RDF integration (enabled)
+pub mod juniper_schema;
+// pub mod juniper_server; // Complex Hyper v1 version - temporarily disabled due to API issues
+pub mod simple_juniper_server; // Simplified version
 
-// Future Juniper integration - comprehensive RDF GraphQL support planned
-// pub use juniper_schema::{Schema as JuniperSchema, GraphQLContext, create_schema};
-// pub use simple_juniper_server::{JuniperGraphQLServer, GraphQLServerConfig, GraphQLServerBuilder, start_graphql_server, start_graphql_server_with_config};
+// Juniper integration - comprehensive RDF GraphQL support
+pub use juniper_schema::{Schema as JuniperSchema, GraphQLContext, create_schema};
+pub use simple_juniper_server::{JuniperGraphQLServer, GraphQLServerConfig, GraphQLServerBuilder, start_graphql_server, start_graphql_server_with_config};
 
 #[cfg(test)]
 mod tests;

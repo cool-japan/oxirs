@@ -5,11 +5,10 @@
 //! filtering, aggregations, and real-time subscriptions.
 
 use crate::{CacheManager, EmbeddingModel, ModelRegistry};
-use anyhow::{anyhow, Result};
 use async_graphql::{
     Context, Enum, FieldResult, InputObject, Object, Schema, SimpleObject, Subscription, Union, ID,
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -174,7 +173,6 @@ pub struct CacheStats {
 }
 
 /// Input types for queries
-
 /// Embedding query input
 #[derive(InputObject)]
 pub struct EmbeddingQueryInput {

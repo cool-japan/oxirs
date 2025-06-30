@@ -94,7 +94,8 @@ impl Runtime {
         // Initialize authentication service
         if self.config.security.auth_required {
             info!("Initializing authentication service");
-            self.auth_service = Some(AuthService::new(self.config.security.clone()));
+            let auth_service = AuthService::new(self.config.security.clone()).await?;
+            self.auth_service = Some(auth_service);
         }
 
         // Initialize metrics service
@@ -186,7 +187,7 @@ impl Runtime {
 
         // Create application state
         let app_state = AppState {
-            store: self.store,
+            store: self.store.clone(),
             config: config.clone(),
             auth_service: self.auth_service.clone(),
             metrics_service: self.metrics_service.clone(),
@@ -201,11 +202,7 @@ impl Runtime {
 
         // Start subscription monitor for WebSocket notifications
         if let Some(subscription_manager) = &self.subscription_manager {
-            handlers::websocket::start_subscription_monitor(
-                subscription_manager.as_ref().clone(),
-                app_state.clone(),
-            )
-            .await;
+            subscription_manager.start().await;
         }
 
         // Build the application with comprehensive middleware
@@ -339,25 +336,26 @@ impl Runtime {
                 );
         }
 
-        // Multi-Factor Authentication routes (if MFA is enabled)
-        if self.config.security.mfa.enabled {
-            app = app
-                .route("/auth/mfa/enroll", post(handlers::mfa::enroll_mfa))
-                .route(
-                    "/auth/mfa/challenge/:type",
-                    post(handlers::mfa::create_mfa_challenge),
-                )
-                .route("/auth/mfa/verify", post(handlers::mfa::verify_mfa))
-                .route("/auth/mfa/status", get(handlers::mfa::get_mfa_status))
-                .route(
-                    "/auth/mfa/disable/:type",
-                    delete(handlers::mfa::disable_mfa),
-                )
-                .route(
-                    "/auth/mfa/backup-codes",
-                    post(handlers::mfa::regenerate_backup_codes),
-                );
-        }
+        // Multi-Factor Authentication routes (disabled - MFA not yet implemented)
+        // TODO: Add MFA support to SecurityConfig
+        // if self.config.security.mfa.enabled {
+        //     app = app
+        //         .route("/auth/mfa/enroll", post(handlers::mfa::enroll_mfa))
+        //         .route(
+        //             "/auth/mfa/challenge/:type",
+        //             post(handlers::mfa::create_mfa_challenge),
+        //         )
+        //         .route("/auth/mfa/verify", post(handlers::mfa::verify_mfa))
+        //         .route("/auth/mfa/status", get(handlers::mfa::get_mfa_status))
+        //         .route(
+        //             "/auth/mfa/disable/:type",
+        //             delete(handlers::mfa::disable_mfa),
+        //         )
+        //         .route(
+        //             "/auth/mfa/backup-codes",
+        //             post(handlers::mfa::regenerate_backup_codes),
+        //         );
+        // }
 
         // Health check routes
         app = app
@@ -366,13 +364,14 @@ impl Runtime {
             .route("/health/ready", get(readiness_handler));
 
         // Metrics routes (if enabled)
-        if let Some(metrics_service) = &self.metrics_service {
-            let metrics_router = metrics_service.create_router();
-            app = app.nest("/", metrics_router);
+        if state.metrics_service.is_some() {
+            app = app
+                .route("/metrics", get(metrics_handler))
+                .route("/metrics/summary", get(metrics_summary_handler));
         }
 
         // Performance monitoring routes (if enabled)
-        if let Some(_performance_service) = &self.performance_service {
+        if let Some(_performance_service) = &state.performance_service {
             app = app
                 .route("/$/performance", get(performance_info_handler))
                 .route("/$/performance/cache", get(cache_stats_handler))
@@ -383,7 +382,7 @@ impl Runtime {
         }
 
         // Query optimization routes (if enabled)
-        if let Some(_query_optimizer) = &self.query_optimizer {
+        if let Some(_query_optimizer) = &state.query_optimizer {
             app = app
                 .route("/$/optimization", get(optimization_stats_handler))
                 .route("/$/optimization/plans", get(optimization_plans_handler))
@@ -865,6 +864,50 @@ pub async fn optimization_detailed_stats_handler(
         Err(FusekiError::service_unavailable(
             "Query optimizer not available",
         ))
+    }
+}
+
+/// Metrics endpoint handler
+async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+    if let Some(metrics_service) = &state.metrics_service {
+        #[cfg(feature = "metrics")]
+        {
+            match metrics_service.get_prometheus_metrics().await {
+                Ok(metrics_text) => (
+                    [(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                    metrics_text,
+                )
+                    .into_response(),
+                Err(e) => (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to generate metrics: {}", e),
+                )
+                    .into_response(),
+            }
+        }
+        #[cfg(not(feature = "metrics"))]
+        {
+            let summary = metrics_service.get_summary().await;
+            axum::Json(summary).into_response()
+        }
+    } else {
+        (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "Metrics service not available",
+        )
+            .into_response()
+    }
+}
+
+/// Metrics summary handler
+async fn metrics_summary_handler(State(state): State<AppState>) -> impl IntoResponse {
+    if let Some(metrics_service) = &state.metrics_service {
+        let summary = metrics_service.get_summary().await;
+        axum::Json(summary)
+    } else {
+        axum::Json(serde_json::json!({
+            "error": "Metrics service not available"
+        }))
     }
 }
 

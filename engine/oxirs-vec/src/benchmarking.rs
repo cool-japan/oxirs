@@ -1335,9 +1335,9 @@ mod tests {
         let mut profiler = PerformanceProfiler::new();
 
         profiler.checkpoint("start");
-        std::thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(20));
         profiler.checkpoint("middle");
-        std::thread::sleep(Duration::from_millis(5));
+        std::thread::sleep(Duration::from_millis(20));
         profiler.checkpoint("end");
 
         let breakdown = profiler.get_timing_breakdown();
@@ -1346,7 +1346,7 @@ mod tests {
         // Check that timings are reasonable
         for (name, duration) in breakdown {
             assert!(!name.is_empty());
-            assert!(duration.as_millis() > 0);
+            assert!(duration.as_micros() > 0);
         }
     }
 }

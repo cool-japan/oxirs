@@ -74,7 +74,7 @@ pub struct LdapGroupInfo {
 
 /// Handle LDAP login
 pub async fn ldap_login(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Json(request): Json<LdapLoginRequest>,
 ) -> Result<Response, StatusCode> {
     debug!("LDAP login attempt for user: {}", request.username);
@@ -209,7 +209,7 @@ pub async fn ldap_login(
 
 /// Test LDAP connection
 pub async fn test_ldap_connection(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Query(params): Query<LdapTestParams>,
 ) -> Result<Response, StatusCode> {
     debug!("Testing LDAP connection");
@@ -275,7 +275,7 @@ pub async fn test_ldap_connection(
 
 /// Get user groups from LDAP
 pub async fn get_ldap_groups(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Query(params): Query<LdapGroupParams>,
 ) -> Result<Response, StatusCode> {
     debug!("Getting LDAP groups for user: {}", params.username);

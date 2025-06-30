@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
@@ -2613,4 +2614,1222 @@ impl AlertHandler for ConsoleAlertHandler {
         }
         Ok(())
     }
+}
+
+// ============================================================================
+// QUERY ANSWERING AND REASONING TASK EVALUATION
+// ============================================================================
+
+/// Query answering evaluation suite
+pub struct QueryAnsweringEvaluator {
+    /// Configuration for query evaluation
+    config: QueryEvaluationConfig,
+    /// Knowledge base for query answering
+    knowledge_base: Vec<(String, String, String)>,
+    /// Query templates and patterns
+    query_templates: Vec<QueryTemplate>,
+}
+
+/// Configuration for query answering evaluation
+#[derive(Debug, Clone)]
+pub struct QueryEvaluationConfig {
+    /// Types of queries to evaluate
+    pub query_types: Vec<QueryType>,
+    /// Maximum number of queries to generate
+    pub max_queries: usize,
+    /// Evaluation metrics to compute
+    pub metrics: Vec<QueryMetric>,
+    /// Enable compositional reasoning
+    pub enable_compositional_reasoning: bool,
+    /// Enable multi-hop reasoning
+    pub enable_multihop_reasoning: bool,
+    /// Maximum reasoning depth
+    pub max_reasoning_depth: usize,
+}
+
+impl Default for QueryEvaluationConfig {
+    fn default() -> Self {
+        Self {
+            query_types: vec![
+                QueryType::EntityRetrieval,
+                QueryType::RelationPrediction,
+                QueryType::PathQuery,
+                QueryType::IntersectionQuery,
+                QueryType::UnionQuery,
+                QueryType::NegationQuery,
+            ],
+            max_queries: 1000,
+            metrics: vec![
+                QueryMetric::Accuracy,
+                QueryMetric::Recall,
+                QueryMetric::Precision,
+                QueryMetric::F1Score,
+                QueryMetric::MeanReciprocalRank,
+                QueryMetric::HitsAtK(1),
+                QueryMetric::HitsAtK(3),
+                QueryMetric::HitsAtK(10),
+            ],
+            enable_compositional_reasoning: true,
+            enable_multihop_reasoning: true,
+            max_reasoning_depth: 3,
+        }
+    }
+}
+
+/// Types of queries for evaluation
+#[derive(Debug, Clone)]
+pub enum QueryType {
+    /// Simple entity retrieval: "Find entities of type X"
+    EntityRetrieval,
+    /// Relation prediction: "What relation connects X and Y?"
+    RelationPrediction,
+    /// Path queries: "Find entities connected to X via path P"
+    PathQuery,
+    /// Intersection queries: "Find entities that are both X and Y"
+    IntersectionQuery,
+    /// Union queries: "Find entities that are either X or Y"
+    UnionQuery,
+    /// Negation queries: "Find entities that are X but not Y"
+    NegationQuery,
+    /// Existential queries: "Does there exist an X such that P(X)?"
+    ExistentialQuery,
+    /// Counting queries: "How many X satisfy condition P?"
+    CountingQuery,
+    /// Comparison queries: "Which entity has more/less of property P?"
+    ComparisonQuery,
+    /// Temporal queries: "When did event X happen?"
+    TemporalQuery,
+}
+
+/// Query evaluation metrics
+#[derive(Debug, Clone)]
+pub enum QueryMetric {
+    Accuracy,
+    Precision,
+    Recall,
+    F1Score,
+    MeanReciprocalRank,
+    HitsAtK(usize),
+    AveragePrecision,
+    NDCG(usize),
+}
+
+/// Query template for generating test queries
+#[derive(Debug, Clone)]
+pub struct QueryTemplate {
+    /// Type of query
+    pub query_type: QueryType,
+    /// Template pattern (e.g., "Find ?x where (?x, hasType, Person)")
+    pub pattern: String,
+    /// Variables in the template
+    pub variables: Vec<String>,
+    /// Expected result type
+    pub result_type: QueryResultType,
+    /// Difficulty level (1-5)
+    pub difficulty: usize,
+}
+
+/// Types of query results
+#[derive(Debug, Clone)]
+pub enum QueryResultType {
+    EntityList(Vec<String>),
+    Triple(String, String, String),
+    Boolean(bool),
+    Count(usize),
+    Score(f64),
+}
+
+/// Query evaluation results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryEvaluationResults {
+    /// Total number of queries evaluated
+    pub total_queries: usize,
+    /// Results per query type
+    pub results_by_type: HashMap<String, TypeSpecificResults>,
+    /// Overall metrics
+    pub overall_metrics: HashMap<String, f64>,
+    /// Detailed per-query results
+    pub detailed_results: Vec<QueryResult>,
+    /// Reasoning depth analysis
+    pub reasoning_depth_analysis: HashMap<usize, f64>,
+    /// Evaluation time
+    pub evaluation_time_seconds: f64,
+}
+
+/// Results for a specific query type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TypeSpecificResults {
+    pub query_count: usize,
+    pub accuracy: f64,
+    pub precision: f64,
+    pub recall: f64,
+    pub f1_score: f64,
+    pub mrr: f64,
+    pub hits_at_k: HashMap<usize, f64>,
+}
+
+/// Result for a single query
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryResult {
+    pub query_id: String,
+    pub query_type: String,
+    pub query_text: String,
+    pub expected_result: String,
+    pub predicted_result: String,
+    pub correct: bool,
+    pub confidence: f64,
+    pub reasoning_steps: Vec<ReasoningStep>,
+    pub evaluation_time_ms: f64,
+}
+
+/// A single reasoning step
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReasoningStep {
+    pub step_type: String,
+    pub description: String,
+    pub intermediate_result: String,
+    pub confidence: f64,
+}
+
+impl QueryAnsweringEvaluator {
+    /// Create a new query answering evaluator
+    pub fn new(knowledge_base: Vec<(String, String, String)>) -> Self {
+        Self {
+            config: QueryEvaluationConfig::default(),
+            knowledge_base,
+            query_templates: Self::generate_default_templates(),
+        }
+    }
+
+    /// Configure the evaluator
+    pub fn with_config(mut self, config: QueryEvaluationConfig) -> Self {
+        self.config = config;
+        self
+    }
+
+    /// Evaluate query answering capabilities
+    pub async fn evaluate_query_answering(
+        &self,
+        model: &dyn EmbeddingModel,
+    ) -> Result<QueryEvaluationResults> {
+        let start_time = std::time::Instant::now();
+        info!("Starting query answering evaluation");
+
+        // Generate test queries
+        let test_queries = self.generate_test_queries()?;
+        
+        let mut detailed_results = Vec::new();
+        let mut results_by_type: HashMap<String, Vec<QueryResult>> = HashMap::new();
+        let mut reasoning_depth_scores: HashMap<usize, Vec<f64>> = HashMap::new();
+
+        for query in test_queries.iter().take(self.config.max_queries) {
+            let result = self.evaluate_single_query(model, query).await?;
+            
+            // Track reasoning depth
+            let depth = result.reasoning_steps.len();
+            reasoning_depth_scores.entry(depth).or_default().push(
+                if result.correct { 1.0 } else { 0.0 }
+            );
+            
+            results_by_type
+                .entry(result.query_type.clone())
+                .or_default()
+                .push(result.clone());
+            
+            detailed_results.push(result);
+        }
+
+        // Compute aggregate metrics
+        let overall_metrics = self.compute_overall_metrics(&detailed_results);
+        let results_by_type = self.compute_type_specific_results(results_by_type);
+        let reasoning_depth_analysis = self.compute_reasoning_depth_analysis(reasoning_depth_scores);
+
+        let evaluation_time = start_time.elapsed().as_secs_f64();
+        
+        info!(
+            "Query answering evaluation completed in {:.2}s - Overall accuracy: {:.3}",
+            evaluation_time,
+            overall_metrics.get("accuracy").unwrap_or(&0.0)
+        );
+
+        Ok(QueryEvaluationResults {
+            total_queries: detailed_results.len(),
+            results_by_type,
+            overall_metrics,
+            detailed_results,
+            reasoning_depth_analysis,
+            evaluation_time_seconds: evaluation_time,
+        })
+    }
+
+    /// Generate default query templates
+    fn generate_default_templates() -> Vec<QueryTemplate> {
+        vec![
+            QueryTemplate {
+                query_type: QueryType::EntityRetrieval,
+                pattern: "Find all entities of type ?type".to_string(),
+                variables: vec!["type".to_string()],
+                result_type: QueryResultType::EntityList(vec![]),
+                difficulty: 1,
+            },
+            QueryTemplate {
+                query_type: QueryType::RelationPrediction,
+                pattern: "What relation connects ?subject and ?object?".to_string(),
+                variables: vec!["subject".to_string(), "object".to_string()],
+                result_type: QueryResultType::Triple("".to_string(), "".to_string(), "".to_string()),
+                difficulty: 2,
+            },
+            QueryTemplate {
+                query_type: QueryType::PathQuery,
+                pattern: "Find entities connected to ?entity via ?relation".to_string(),
+                variables: vec!["entity".to_string(), "relation".to_string()],
+                result_type: QueryResultType::EntityList(vec![]),
+                difficulty: 2,
+            },
+            QueryTemplate {
+                query_type: QueryType::IntersectionQuery,
+                pattern: "Find entities that are both ?type1 and ?type2".to_string(),
+                variables: vec!["type1".to_string(), "type2".to_string()],
+                result_type: QueryResultType::EntityList(vec![]),
+                difficulty: 3,
+            },
+            QueryTemplate {
+                query_type: QueryType::ExistentialQuery,
+                pattern: "Does there exist ?entity such that (?entity, ?relation, ?target)?".to_string(),
+                variables: vec!["entity".to_string(), "relation".to_string(), "target".to_string()],
+                result_type: QueryResultType::Boolean(false),
+                difficulty: 3,
+            },
+            QueryTemplate {
+                query_type: QueryType::CountingQuery,
+                pattern: "How many entities satisfy (?entity, ?relation, ?target)?".to_string(),
+                variables: vec!["entity".to_string(), "relation".to_string(), "target".to_string()],
+                result_type: QueryResultType::Count(0),
+                difficulty: 4,
+            },
+        ]
+    }
+
+    /// Generate test queries from templates
+    fn generate_test_queries(&self) -> Result<Vec<TestQuery>> {
+        let mut queries = Vec::new();
+        
+        // Extract entities and relations from knowledge base
+        let entities: HashSet<String> = self.knowledge_base.iter()
+            .flat_map(|(s, _, o)| vec![s.clone(), o.clone()])
+            .collect();
+        let relations: HashSet<String> = self.knowledge_base.iter()
+            .map(|(_, p, _)| p.clone())
+            .collect();
+        
+        let entities: Vec<String> = entities.into_iter().collect();
+        let relations: Vec<String> = relations.into_iter().collect();
+        
+        for template in &self.query_templates {
+            // Generate multiple queries per template
+            for _ in 0..10 {
+                let query = self.instantiate_template(template, &entities, &relations)?;
+                queries.push(query);
+            }
+        }
+        
+        Ok(queries)
+    }
+
+    /// Instantiate a query template with specific entities/relations
+    fn instantiate_template(
+        &self,
+        template: &QueryTemplate,
+        entities: &[String],
+        relations: &[String],
+    ) -> Result<TestQuery> {
+        let mut query_text = template.pattern.clone();
+        let mut expected_result = template.result_type.clone();
+        
+        // Simple template instantiation (in practice, would be more sophisticated)
+        match template.query_type {
+            QueryType::EntityRetrieval => {
+                if !relations.is_empty() {
+                    let relation = &relations[rand::random::<usize>() % relations.len()];
+                    query_text = query_text.replace("?type", relation);
+                    
+                    // Find entities connected by this relation
+                    let connected_entities: Vec<String> = self.knowledge_base.iter()
+                        .filter(|(_, p, _)| p == relation)
+                        .flat_map(|(s, _, o)| vec![s.clone(), o.clone()])
+                        .collect::<HashSet<_>>()
+                        .into_iter()
+                        .collect();
+                    
+                    expected_result = QueryResultType::EntityList(connected_entities);
+                }
+            },
+            QueryType::RelationPrediction => {
+                if entities.len() >= 2 {
+                    let subject = &entities[rand::random::<usize>() % entities.len()];
+                    let object = &entities[rand::random::<usize>() % entities.len()];
+                    
+                    query_text = query_text.replace("?subject", subject);
+                    query_text = query_text.replace("?object", object);
+                    
+                    // Find relation between these entities
+                    if let Some((_, relation, _)) = self.knowledge_base.iter()
+                        .find(|(s, _, o)| s == subject && o == object) {
+                        expected_result = QueryResultType::Triple(
+                            subject.clone(), 
+                            relation.clone(), 
+                            object.clone()
+                        );
+                    }
+                }
+            },
+            QueryType::ExistentialQuery => {
+                if !entities.is_empty() && !relations.is_empty() {
+                    let entity = &entities[rand::random::<usize>() % entities.len()];
+                    let relation = &relations[rand::random::<usize>() % relations.len()];
+                    let target = &entities[rand::random::<usize>() % entities.len()];
+                    
+                    query_text = query_text.replace("?entity", entity);
+                    query_text = query_text.replace("?relation", relation);
+                    query_text = query_text.replace("?target", target);
+                    
+                    let exists = self.knowledge_base.iter()
+                        .any(|(s, p, o)| s == entity && p == relation && o == target);
+                    
+                    expected_result = QueryResultType::Boolean(exists);
+                }
+            },
+            _ => {
+                // Simplified for other query types
+                if !entities.is_empty() {
+                    let entity = &entities[rand::random::<usize>() % entities.len()];
+                    query_text = query_text.replace("?entity", entity);
+                }
+            }
+        }
+        
+        Ok(TestQuery {
+            id: Uuid::new_v4().to_string(),
+            query_type: template.query_type.clone(),
+            text: query_text,
+            expected_result,
+            difficulty: template.difficulty,
+        })
+    }
+
+    /// Evaluate a single query
+    async fn evaluate_single_query(
+        &self,
+        model: &dyn EmbeddingModel,
+        query: &TestQuery,
+    ) -> Result<QueryResult> {
+        let start_time = std::time::Instant::now();
+        
+        // Perform reasoning based on query type
+        let (predicted_result, reasoning_steps, confidence) = match query.query_type {
+            QueryType::EntityRetrieval => self.perform_entity_retrieval(model, query).await?,
+            QueryType::RelationPrediction => self.perform_relation_prediction(model, query).await?,
+            QueryType::ExistentialQuery => self.perform_existential_query(model, query).await?,
+            QueryType::PathQuery => self.perform_path_query(model, query).await?,
+            _ => {
+                // Simplified evaluation for other types
+                (format!("not_implemented"), vec![], 0.5)
+            }
+        };
+        
+        // Check correctness
+        let correct = self.check_correctness(&query.expected_result, &predicted_result);
+        
+        let evaluation_time = start_time.elapsed().as_millis() as f64;
+        
+        Ok(QueryResult {
+            query_id: query.id.clone(),
+            query_type: format!("{:?}", query.query_type),
+            query_text: query.text.clone(),
+            expected_result: format!("{:?}", query.expected_result),
+            predicted_result,
+            correct,
+            confidence,
+            reasoning_steps,
+            evaluation_time_ms: evaluation_time,
+        })
+    }
+
+    /// Perform entity retrieval
+    async fn perform_entity_retrieval(
+        &self,
+        model: &dyn EmbeddingModel,
+        query: &TestQuery,
+    ) -> Result<(String, Vec<ReasoningStep>, f64)> {
+        let mut reasoning_steps = Vec::new();
+        
+        // Extract relation from query (simplified parsing)
+        let relation = query.text.split_whitespace().last().unwrap_or("unknown");
+        
+        reasoning_steps.push(ReasoningStep {
+            step_type: "relation_extraction".to_string(),
+            description: format!("Extracted relation: {}", relation),
+            intermediate_result: relation.to_string(),
+            confidence: 0.9,
+        });
+        
+        // Find entities connected by this relation
+        let connected_entities: HashSet<String> = self.knowledge_base.iter()
+            .filter(|(_, p, _)| p == relation)
+            .flat_map(|(s, _, o)| vec![s.clone(), o.clone()])
+            .collect();
+        
+        reasoning_steps.push(ReasoningStep {
+            step_type: "entity_retrieval".to_string(),
+            description: format!("Found {} entities connected by {}", connected_entities.len(), relation),
+            intermediate_result: format!("{:?}", connected_entities),
+            confidence: 0.8,
+        });
+        
+        let result = format!("{:?}", connected_entities.into_iter().collect::<Vec<_>>());
+        Ok((result, reasoning_steps, 0.8))
+    }
+
+    /// Perform relation prediction
+    async fn perform_relation_prediction(
+        &self,
+        model: &dyn EmbeddingModel,
+        query: &TestQuery,
+    ) -> Result<(String, Vec<ReasoningStep>, f64)> {
+        let mut reasoning_steps = Vec::new();
+        
+        // Extract entities from query (simplified)
+        let words: Vec<&str> = query.text.split_whitespace().collect();
+        let subject = words.get(words.len().saturating_sub(3)).unwrap_or(&"unknown");
+        let object = words.get(words.len().saturating_sub(1)).unwrap_or(&"unknown");
+        
+        reasoning_steps.push(ReasoningStep {
+            step_type: "entity_extraction".to_string(),
+            description: format!("Extracted entities: {} and {}", subject, object),
+            intermediate_result: format!("subject: {}, object: {}", subject, object),
+            confidence: 0.85,
+        });
+        
+        // Find relation between entities
+        let mut best_relation = "unknown".to_string();
+        let mut best_score = 0.0;
+        
+        for (s, p, o) in &self.knowledge_base {
+            if s == subject && o == object {
+                // Use model to score this relation
+                if let Ok(score) = model.score_triple(s, p, o) {
+                    if score > best_score {
+                        best_score = score;
+                        best_relation = p.clone();
+                    }
+                }
+            }
+        }
+        
+        reasoning_steps.push(ReasoningStep {
+            step_type: "relation_scoring".to_string(),
+            description: format!("Best relation: {} with score {:.3}", best_relation, best_score),
+            intermediate_result: best_relation.clone(),
+            confidence: best_score.min(1.0),
+        });
+        
+        Ok((best_relation, reasoning_steps, best_score.min(1.0)))
+    }
+
+    /// Perform existential query
+    async fn perform_existential_query(
+        &self,
+        model: &dyn EmbeddingModel,
+        query: &TestQuery,
+    ) -> Result<(String, Vec<ReasoningStep>, f64)> {
+        let mut reasoning_steps = Vec::new();
+        
+        // Extract components (simplified parsing)
+        let words: Vec<&str> = query.text.split_whitespace().collect();
+        let entity = words.get(3).unwrap_or(&"unknown");
+        let relation = words.get(6).unwrap_or(&"unknown");
+        let target = words.get(8).unwrap_or(&"unknown");
+        
+        reasoning_steps.push(ReasoningStep {
+            step_type: "query_parsing".to_string(),
+            description: format!("Parsed query: {} {} {}", entity, relation, target),
+            intermediate_result: format!("({}, {}, {})", entity, relation, target),
+            confidence: 0.9,
+        });
+        
+        // Check if triple exists
+        let exists = self.knowledge_base.iter()
+            .any(|(s, p, o)| s == entity && p == relation && o == target);
+        
+        // Also check model score
+        let model_score = model.score_triple(entity, relation, target).unwrap_or(0.0);
+        
+        reasoning_steps.push(ReasoningStep {
+            step_type: "existence_check".to_string(),
+            description: format!("Triple exists in KB: {}, Model score: {:.3}", exists, model_score),
+            intermediate_result: format!("exists: {}, score: {:.3}", exists, model_score),
+            confidence: if exists { 0.95 } else { model_score.abs().min(0.8) },
+        });
+        
+        let final_result = exists || model_score > 0.5;
+        let confidence = if exists { 0.95 } else { model_score.min(0.8) };
+        
+        Ok((final_result.to_string(), reasoning_steps, confidence))
+    }
+
+    /// Perform path query
+    async fn perform_path_query(
+        &self,
+        model: &dyn EmbeddingModel,
+        query: &TestQuery,
+    ) -> Result<(String, Vec<ReasoningStep>, f64)> {
+        let mut reasoning_steps = Vec::new();
+        
+        // Extract entity and relation (simplified)
+        let words: Vec<&str> = query.text.split_whitespace().collect();
+        let entity = words.get(3).unwrap_or(&"unknown");
+        let relation = words.get(6).unwrap_or(&"unknown");
+        
+        reasoning_steps.push(ReasoningStep {
+            step_type: "path_query_parsing".to_string(),
+            description: format!("Finding entities connected to {} via {}", entity, relation),
+            intermediate_result: format!("start: {}, relation: {}", entity, relation),
+            confidence: 0.9,
+        });
+        
+        // Find connected entities
+        let mut connected = Vec::new();
+        for (s, p, o) in &self.knowledge_base {
+            if s == entity && p == relation {
+                connected.push(o.clone());
+            } else if o == entity && p == relation {
+                connected.push(s.clone());
+            }
+        }
+        
+        reasoning_steps.push(ReasoningStep {
+            step_type: "path_traversal".to_string(),
+            description: format!("Found {} connected entities", connected.len()),
+            intermediate_result: format!("{:?}", connected),
+            confidence: 0.85,
+        });
+        
+        Ok((format!("{:?}", connected), reasoning_steps, 0.85))
+    }
+
+    /// Check if prediction is correct
+    fn check_correctness(&self, expected: &QueryResultType, predicted: &str) -> bool {
+        match expected {
+            QueryResultType::Boolean(expected_bool) => {
+                predicted.parse::<bool>().map(|p| p == *expected_bool).unwrap_or(false)
+            },
+            QueryResultType::EntityList(expected_entities) => {
+                // Simple string comparison (in practice would be more sophisticated)
+                let predicted_str = predicted.to_lowercase();
+                expected_entities.iter().any(|e| predicted_str.contains(&e.to_lowercase()))
+            },
+            QueryResultType::Triple(s, p, o) => {
+                let expected_str = format!("{} {} {}", s, p, o);
+                predicted.contains(&expected_str)
+            },
+            _ => false,
+        }
+    }
+
+    /// Compute overall metrics
+    fn compute_overall_metrics(&self, results: &[QueryResult]) -> HashMap<String, f64> {
+        let mut metrics = HashMap::new();
+        
+        if results.is_empty() {
+            return metrics;
+        }
+        
+        let correct_count = results.iter().filter(|r| r.correct).count();
+        let accuracy = correct_count as f64 / results.len() as f64;
+        metrics.insert("accuracy".to_string(), accuracy);
+        
+        let avg_confidence = results.iter().map(|r| r.confidence).sum::<f64>() / results.len() as f64;
+        metrics.insert("average_confidence".to_string(), avg_confidence);
+        
+        let avg_reasoning_steps = results.iter()
+            .map(|r| r.reasoning_steps.len() as f64)
+            .sum::<f64>() / results.len() as f64;
+        metrics.insert("average_reasoning_steps".to_string(), avg_reasoning_steps);
+        
+        let avg_evaluation_time = results.iter()
+            .map(|r| r.evaluation_time_ms)
+            .sum::<f64>() / results.len() as f64;
+        metrics.insert("average_evaluation_time_ms".to_string(), avg_evaluation_time);
+        
+        metrics
+    }
+
+    /// Compute type-specific results
+    fn compute_type_specific_results(
+        &self,
+        results_by_type: HashMap<String, Vec<QueryResult>>,
+    ) -> HashMap<String, TypeSpecificResults> {
+        let mut type_results = HashMap::new();
+        
+        for (query_type, results) in results_by_type {
+            if results.is_empty() {
+                continue;
+            }
+            
+            let correct_count = results.iter().filter(|r| r.correct).count();
+            let accuracy = correct_count as f64 / results.len() as f64;
+            
+            // Simplified precision/recall/F1 calculation
+            let precision = accuracy; // Simplified
+            let recall = accuracy;    // Simplified
+            let f1_score = if precision + recall > 0.0 {
+                2.0 * precision * recall / (precision + recall)
+            } else {
+                0.0
+            };
+            
+            // Simplified MRR calculation
+            let mrr = results.iter()
+                .map(|r| if r.correct { 1.0 } else { 0.0 })
+                .sum::<f64>() / results.len() as f64;
+            
+            let mut hits_at_k = HashMap::new();
+            hits_at_k.insert(1, accuracy);
+            hits_at_k.insert(3, accuracy);
+            hits_at_k.insert(10, accuracy);
+            
+            type_results.insert(query_type, TypeSpecificResults {
+                query_count: results.len(),
+                accuracy,
+                precision,
+                recall,
+                f1_score,
+                mrr,
+                hits_at_k,
+            });
+        }
+        
+        type_results
+    }
+
+    /// Compute reasoning depth analysis
+    fn compute_reasoning_depth_analysis(
+        &self,
+        depth_scores: HashMap<usize, Vec<f64>>,
+    ) -> HashMap<usize, f64> {
+        let mut depth_analysis = HashMap::new();
+        
+        for (depth, scores) in depth_scores {
+            let avg_score = scores.iter().sum::<f64>() / scores.len() as f64;
+            depth_analysis.insert(depth, avg_score);
+        }
+        
+        depth_analysis
+    }
+}
+
+/// Test query structure
+#[derive(Debug, Clone)]
+struct TestQuery {
+    id: String,
+    query_type: QueryType,
+    text: String,
+    expected_result: QueryResultType,
+    difficulty: usize,
+}
+
+// ============================================================================
+// REASONING TASK EVALUATION
+// ============================================================================
+
+/// Reasoning task evaluator for complex logical reasoning
+pub struct ReasoningTaskEvaluator {
+    config: ReasoningEvaluationConfig,
+    knowledge_base: Vec<(String, String, String)>,
+    reasoning_rules: Vec<ReasoningRule>,
+}
+
+/// Configuration for reasoning evaluation
+#[derive(Debug, Clone)]
+pub struct ReasoningEvaluationConfig {
+    /// Types of reasoning to evaluate
+    pub reasoning_types: Vec<ReasoningType>,
+    /// Maximum reasoning depth
+    pub max_depth: usize,
+    /// Enable inductive reasoning
+    pub enable_inductive: bool,
+    /// Enable deductive reasoning
+    pub enable_deductive: bool,
+    /// Enable abductive reasoning
+    pub enable_abductive: bool,
+    /// Reasoning timeout (seconds)
+    pub reasoning_timeout: u64,
+}
+
+impl Default for ReasoningEvaluationConfig {
+    fn default() -> Self {
+        Self {
+            reasoning_types: vec![
+                ReasoningType::Deductive,
+                ReasoningType::Inductive,
+                ReasoningType::Abductive,
+                ReasoningType::Analogical,
+                ReasoningType::Causal,
+                ReasoningType::Temporal,
+            ],
+            max_depth: 5,
+            enable_inductive: true,
+            enable_deductive: true,
+            enable_abductive: true,
+            reasoning_timeout: 30,
+        }
+    }
+}
+
+/// Types of reasoning tasks
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReasoningType {
+    /// Deductive reasoning: general to specific
+    Deductive,
+    /// Inductive reasoning: specific to general
+    Inductive,
+    /// Abductive reasoning: hypothesis generation
+    Abductive,
+    /// Analogical reasoning: similarity-based
+    Analogical,
+    /// Causal reasoning: cause-effect relationships
+    Causal,
+    /// Temporal reasoning: time-based relationships
+    Temporal,
+    /// Counterfactual reasoning: what-if scenarios
+    Counterfactual,
+    /// Compositional reasoning: part-whole relationships
+    Compositional,
+}
+
+/// Reasoning rule for inference
+#[derive(Debug, Clone)]
+pub struct ReasoningRule {
+    pub rule_id: String,
+    pub rule_type: ReasoningType,
+    pub premises: Vec<String>,
+    pub conclusion: String,
+    pub confidence: f64,
+}
+
+/// Reasoning evaluation results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReasoningEvaluationResults {
+    pub total_tasks: usize,
+    pub results_by_type: HashMap<String, ReasoningTypeResults>,
+    pub overall_metrics: HashMap<String, f64>,
+    pub reasoning_chains: Vec<ReasoningChain>,
+    pub evaluation_time_seconds: f64,
+}
+
+/// Results for a specific reasoning type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReasoningTypeResults {
+    pub task_count: usize,
+    pub success_rate: f64,
+    pub average_depth: f64,
+    pub average_confidence: f64,
+    pub average_time_ms: f64,
+}
+
+/// A complete reasoning chain
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReasoningChain {
+    pub task_id: String,
+    pub reasoning_type: String,
+    pub initial_facts: Vec<String>,
+    pub reasoning_steps: Vec<ReasoningStep>,
+    pub final_conclusion: String,
+    pub success: bool,
+    pub confidence: f64,
+}
+
+impl ReasoningTaskEvaluator {
+    /// Create new reasoning task evaluator
+    pub fn new(knowledge_base: Vec<(String, String, String)>) -> Self {
+        Self {
+            config: ReasoningEvaluationConfig::default(),
+            knowledge_base,
+            reasoning_rules: Self::generate_default_rules(),
+        }
+    }
+
+    /// Evaluate reasoning capabilities
+    pub async fn evaluate_reasoning(
+        &self,
+        model: &dyn EmbeddingModel,
+    ) -> Result<ReasoningEvaluationResults> {
+        let start_time = std::time::Instant::now();
+        info!("Starting reasoning task evaluation");
+
+        let mut reasoning_chains = Vec::new();
+        let mut results_by_type: HashMap<String, Vec<ReasoningChain>> = HashMap::new();
+
+        for reasoning_type in &self.config.reasoning_types {
+            let tasks = self.generate_reasoning_tasks(reasoning_type, 20)?;
+            
+            for task in tasks {
+                let chain = self.evaluate_reasoning_task(model, &task).await?;
+                
+                results_by_type
+                    .entry(format!("{:?}", reasoning_type))
+                    .or_default()
+                    .push(chain.clone());
+                
+                reasoning_chains.push(chain);
+            }
+        }
+
+        let overall_metrics = self.compute_reasoning_metrics(&reasoning_chains);
+        let results_by_type = self.compute_type_specific_reasoning_results(results_by_type);
+        
+        let evaluation_time = start_time.elapsed().as_secs_f64();
+        
+        info!(
+            "Reasoning evaluation completed in {:.2}s - Success rate: {:.3}",
+            evaluation_time,
+            overall_metrics.get("success_rate").unwrap_or(&0.0)
+        );
+
+        Ok(ReasoningEvaluationResults {
+            total_tasks: reasoning_chains.len(),
+            results_by_type,
+            overall_metrics,
+            reasoning_chains,
+            evaluation_time_seconds: evaluation_time,
+        })
+    }
+
+    /// Generate default reasoning rules
+    fn generate_default_rules() -> Vec<ReasoningRule> {
+        vec![
+            ReasoningRule {
+                rule_id: "transitivity".to_string(),
+                rule_type: ReasoningType::Deductive,
+                premises: vec![
+                    "?x related_to ?y".to_string(),
+                    "?y related_to ?z".to_string(),
+                ],
+                conclusion: "?x related_to ?z".to_string(),
+                confidence: 0.8,
+            },
+            ReasoningRule {
+                rule_id: "subclass_inheritance".to_string(),
+                rule_type: ReasoningType::Deductive,
+                premises: vec![
+                    "?x is_a ?class".to_string(),
+                    "?class subclass_of ?superclass".to_string(),
+                ],
+                conclusion: "?x is_a ?superclass".to_string(),
+                confidence: 0.9,
+            },
+            ReasoningRule {
+                rule_id: "causal_inference".to_string(),
+                rule_type: ReasoningType::Causal,
+                premises: vec![
+                    "?x causes ?y".to_string(),
+                    "?y occurs".to_string(),
+                ],
+                conclusion: "?x likely_occurred".to_string(),
+                confidence: 0.7,
+            },
+        ]
+    }
+
+    /// Generate reasoning tasks for a specific type
+    fn generate_reasoning_tasks(
+        &self,
+        reasoning_type: &ReasoningType,
+        count: usize,
+    ) -> Result<Vec<ReasoningTask>> {
+        let mut tasks = Vec::new();
+        
+        for i in 0..count {
+            let task = match reasoning_type {
+                ReasoningType::Deductive => self.generate_deductive_task(i)?,
+                ReasoningType::Inductive => self.generate_inductive_task(i)?,
+                ReasoningType::Abductive => self.generate_abductive_task(i)?,
+                ReasoningType::Causal => self.generate_causal_task(i)?,
+                _ => self.generate_generic_task(reasoning_type, i)?,
+            };
+            tasks.push(task);
+        }
+        
+        Ok(tasks)
+    }
+
+    /// Generate a deductive reasoning task
+    fn generate_deductive_task(&self, id: usize) -> Result<ReasoningTask> {
+        // Create a simple deductive reasoning scenario
+        let premises = vec![
+            "All humans are mortal".to_string(),
+            "Socrates is human".to_string(),
+        ];
+        let expected_conclusion = "Socrates is mortal".to_string();
+        
+        Ok(ReasoningTask {
+            task_id: format!("deductive_{}", id),
+            reasoning_type: ReasoningType::Deductive,
+            premises,
+            expected_conclusion,
+            difficulty: 2,
+        })
+    }
+
+    /// Generate an inductive reasoning task
+    fn generate_inductive_task(&self, id: usize) -> Result<ReasoningTask> {
+        let premises = vec![
+            "Bird1 can fly".to_string(),
+            "Bird2 can fly".to_string(),
+            "Bird3 can fly".to_string(),
+        ];
+        let expected_conclusion = "All birds can fly".to_string();
+        
+        Ok(ReasoningTask {
+            task_id: format!("inductive_{}", id),
+            reasoning_type: ReasoningType::Inductive,
+            premises,
+            expected_conclusion,
+            difficulty: 3,
+        })
+    }
+
+    /// Generate an abductive reasoning task
+    fn generate_abductive_task(&self, id: usize) -> Result<ReasoningTask> {
+        let premises = vec![
+            "The grass is wet".to_string(),
+            "Rain makes grass wet".to_string(),
+        ];
+        let expected_conclusion = "It rained".to_string();
+        
+        Ok(ReasoningTask {
+            task_id: format!("abductive_{}", id),
+            reasoning_type: ReasoningType::Abductive,
+            premises,
+            expected_conclusion,
+            difficulty: 3,
+        })
+    }
+
+    /// Generate a causal reasoning task
+    fn generate_causal_task(&self, id: usize) -> Result<ReasoningTask> {
+        let premises = vec![
+            "Smoking causes cancer".to_string(),
+            "John smokes".to_string(),
+        ];
+        let expected_conclusion = "John has increased cancer risk".to_string();
+        
+        Ok(ReasoningTask {
+            task_id: format!("causal_{}", id),
+            reasoning_type: ReasoningType::Causal,
+            premises,
+            expected_conclusion,
+            difficulty: 3,
+        })
+    }
+
+    /// Generate a generic reasoning task
+    fn generate_generic_task(&self, reasoning_type: &ReasoningType, id: usize) -> Result<ReasoningTask> {
+        Ok(ReasoningTask {
+            task_id: format!("{:?}_{}", reasoning_type, id),
+            reasoning_type: reasoning_type.clone(),
+            premises: vec!["Generic premise".to_string()],
+            expected_conclusion: "Generic conclusion".to_string(),
+            difficulty: 2,
+        })
+    }
+
+    /// Evaluate a single reasoning task
+    async fn evaluate_reasoning_task(
+        &self,
+        model: &dyn EmbeddingModel,
+        task: &ReasoningTask,
+    ) -> Result<ReasoningChain> {
+        let mut reasoning_steps = Vec::new();
+        let mut current_facts = task.premises.clone();
+        let mut overall_confidence = 1.0;
+        
+        // Simulate reasoning process
+        for step in 0..self.config.max_depth {
+            let step_result = self.perform_reasoning_step(
+                model,
+                &current_facts,
+                &task.reasoning_type,
+                step,
+            ).await?;
+            
+            reasoning_steps.push(step_result.reasoning_step.clone());
+            overall_confidence *= step_result.confidence;
+            
+            current_facts.push(step_result.new_fact);
+            
+            // Check if we've reached the expected conclusion
+            if self.check_reasoning_conclusion(&current_facts, &task.expected_conclusion) {
+                break;
+            }
+        }
+        
+        let success = self.check_reasoning_conclusion(&current_facts, &task.expected_conclusion);
+        
+        Ok(ReasoningChain {
+            task_id: task.task_id.clone(),
+            reasoning_type: format!("{:?}", task.reasoning_type),
+            initial_facts: task.premises.clone(),
+            reasoning_steps,
+            final_conclusion: task.expected_conclusion.clone(),
+            success,
+            confidence: overall_confidence,
+        })
+    }
+
+    /// Perform a single reasoning step
+    async fn perform_reasoning_step(
+        &self,
+        model: &dyn EmbeddingModel,
+        current_facts: &[String],
+        reasoning_type: &ReasoningType,
+        step: usize,
+    ) -> Result<ReasoningStepResult> {
+        let step_type = format!("{:?}_step_{}", reasoning_type, step);
+        
+        // Apply reasoning rules based on current facts
+        for rule in &self.reasoning_rules {
+            if rule.rule_type == *reasoning_type || matches!(reasoning_type, ReasoningType::Deductive) {
+                if let Some(new_fact) = self.apply_rule(rule, current_facts) {
+                    return Ok(ReasoningStepResult {
+                        reasoning_step: ReasoningStep {
+                            step_type,
+                            description: format!("Applied rule: {}", rule.rule_id),
+                            intermediate_result: new_fact.clone(),
+                            confidence: rule.confidence,
+                        },
+                        new_fact,
+                        confidence: rule.confidence,
+                    });
+                }
+            }
+        }
+        
+        // If no rule applies, generate a generic reasoning step
+        let new_fact = format!("Inferred fact from step {}", step);
+        Ok(ReasoningStepResult {
+            reasoning_step: ReasoningStep {
+                step_type,
+                description: "Generic reasoning step".to_string(),
+                intermediate_result: new_fact.clone(),
+                confidence: 0.5,
+            },
+            new_fact,
+            confidence: 0.5,
+        })
+    }
+
+    /// Apply a reasoning rule to current facts
+    fn apply_rule(&self, rule: &ReasoningRule, facts: &[String]) -> Option<String> {
+        // Simplified rule application
+        if rule.premises.len() <= facts.len() {
+            // Check if all premises are satisfied (simplified matching)
+            let mut premises_satisfied = 0;
+            for premise in &rule.premises {
+                if facts.iter().any(|fact| fact.contains(&premise.replace("?x", "").replace("?y", "").replace("?z", ""))) {
+                    premises_satisfied += 1;
+                }
+            }
+            
+            if premises_satisfied >= rule.premises.len() {
+                return Some(rule.conclusion.clone());
+            }
+        }
+        
+        None
+    }
+
+    /// Check if reasoning has reached expected conclusion
+    fn check_reasoning_conclusion(&self, current_facts: &[String], expected: &str) -> bool {
+        current_facts.iter().any(|fact| 
+            fact.to_lowercase().contains(&expected.to_lowercase()) ||
+            expected.to_lowercase().contains(&fact.to_lowercase())
+        )
+    }
+
+    /// Compute reasoning metrics
+    fn compute_reasoning_metrics(&self, chains: &[ReasoningChain]) -> HashMap<String, f64> {
+        let mut metrics = HashMap::new();
+        
+        if chains.is_empty() {
+            return metrics;
+        }
+        
+        let success_count = chains.iter().filter(|c| c.success).count();
+        let success_rate = success_count as f64 / chains.len() as f64;
+        metrics.insert("success_rate".to_string(), success_rate);
+        
+        let avg_confidence = chains.iter().map(|c| c.confidence).sum::<f64>() / chains.len() as f64;
+        metrics.insert("average_confidence".to_string(), avg_confidence);
+        
+        let avg_steps = chains.iter()
+            .map(|c| c.reasoning_steps.len() as f64)
+            .sum::<f64>() / chains.len() as f64;
+        metrics.insert("average_reasoning_steps".to_string(), avg_steps);
+        
+        metrics
+    }
+
+    /// Compute type-specific reasoning results
+    fn compute_type_specific_reasoning_results(
+        &self,
+        results_by_type: HashMap<String, Vec<ReasoningChain>>,
+    ) -> HashMap<String, ReasoningTypeResults> {
+        let mut type_results = HashMap::new();
+        
+        for (reasoning_type, chains) in results_by_type {
+            if chains.is_empty() {
+                continue;
+            }
+            
+            let success_count = chains.iter().filter(|c| c.success).count();
+            let success_rate = success_count as f64 / chains.len() as f64;
+            
+            let average_depth = chains.iter()
+                .map(|c| c.reasoning_steps.len() as f64)
+                .sum::<f64>() / chains.len() as f64;
+            
+            let average_confidence = chains.iter()
+                .map(|c| c.confidence)
+                .sum::<f64>() / chains.len() as f64;
+            
+            type_results.insert(reasoning_type, ReasoningTypeResults {
+                task_count: chains.len(),
+                success_rate,
+                average_depth,
+                average_confidence,
+                average_time_ms: 100.0, // Placeholder
+            });
+        }
+        
+        type_results
+    }
+}
+
+/// Single reasoning task
+#[derive(Debug, Clone)]
+struct ReasoningTask {
+    task_id: String,
+    reasoning_type: ReasoningType,
+    premises: Vec<String>,
+    expected_conclusion: String,
+    difficulty: usize,
+}
+
+/// Result of a single reasoning step
+#[derive(Debug)]
+struct ReasoningStepResult {
+    reasoning_step: ReasoningStep,
+    new_fact: String,
+    confidence: f64,
 }

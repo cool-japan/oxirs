@@ -9,10 +9,9 @@ use json_event_parser::{JsonEvent, WriterJsonSerializer};
 // use oxrdf::{
 //     GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, TermRef,
 // };
-use crate::model::iri::{Iri, IriParseError, NamedNodeRef};
+use crate::model::iri::{Iri, IriParseError};
 use crate::model::node::NamedOrBlankNodeRef;
 use crate::model::quad::GraphNameRef;
-use crate::model::term::BlankNodeRef;
 use crate::model::triple::{ObjectRef, PredicateRef, SubjectRef};
 use crate::model::*;
 use crate::optimization::TermRef;

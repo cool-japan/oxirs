@@ -48,7 +48,7 @@ impl Clone for SubscriptionManager {
 }
 
 /// Individual subscription state
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Subscription {
     pub id: String,
     pub query: String,
@@ -376,6 +376,7 @@ async fn handle_websocket_connection(
     // Handle incoming messages
     let subscription_manager_clone = subscription_manager.clone();
     let state_clone = state.clone();
+    let tx_clone_incoming = tx.clone();
     let incoming_task = tokio::spawn(async move {
         while let Some(msg) = receiver.next().await {
             match msg {
@@ -384,7 +385,7 @@ async fn handle_websocket_connection(
                         &text,
                         &subscription_manager_clone,
                         &state_clone,
-                        &tx,
+                        &tx_clone_incoming,
                     )
                     .await
                     {
@@ -417,13 +418,14 @@ async fn handle_websocket_connection(
     // Handle change notifications
     let mut change_receiver = subscription_manager.subscribe_to_changes();
     let subscription_manager_clone = subscription_manager.clone();
+    let state_clone2 = state.clone();
     let tx_clone = tx.clone();
     let change_task = tokio::spawn(async move {
         while let Ok(notification) = change_receiver.recv().await {
             if let Err(e) = handle_change_notification(
                 notification,
                 &subscription_manager_clone,
-                &state,
+                &state_clone2,
                 &tx_clone,
             )
             .await
@@ -602,6 +604,7 @@ async fn handle_status_request(
     request: SubscriptionRequest,
     subscription_manager: &SubscriptionManager,
 ) -> FusekiResult<SubscriptionResponse> {
+    let subscription_id_clone = request.subscription_id.clone();
     let data = if let Some(subscription_id) = request.subscription_id {
         // Get specific subscription status
         subscription_manager
@@ -619,7 +622,7 @@ async fn handle_status_request(
 
     Ok(SubscriptionResponse {
         action: "get_status".to_string(),
-        subscription_id: request.subscription_id,
+        subscription_id: subscription_id_clone,
         success: true,
         data,
         error: None,

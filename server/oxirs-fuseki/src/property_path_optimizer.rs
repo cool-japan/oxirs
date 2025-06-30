@@ -1065,6 +1065,58 @@ impl AdvancedPropertyPathOptimizer {
         total_memory
     }
 
+    /// Estimate total cost for execution plan
+    async fn estimate_total_cost(&self, execution_plan: &EnhancedPathExecutionPlan) -> FusekiResult<f64> {
+        let mut total_cost = 0.0;
+
+        // Base cost from the execution plan
+        total_cost += execution_plan.estimated_cost;
+
+        // Add cost for each step
+        for step in &execution_plan.steps {
+            total_cost += step.estimated_cost;
+        }
+
+        // Apply strategy-specific multipliers
+        match &execution_plan.strategy {
+            PathExecutionStrategy::ForwardTraversal => {
+                total_cost *= 1.0; // Baseline
+            }
+            PathExecutionStrategy::BackwardTraversal => {
+                total_cost *= self.cost_model.inverse_multiplier;
+            }
+            PathExecutionStrategy::BidirectionalMeet { .. } => {
+                total_cost *= 0.7; // Usually more efficient
+            }
+            PathExecutionStrategy::IndexLookup { .. } => {
+                total_cost *= self.cost_model.index_reduction_factor;
+            }
+            PathExecutionStrategy::MaterializedView { .. } => {
+                total_cost *= 0.1; // Very efficient for precomputed views
+            }
+            PathExecutionStrategy::ParallelAlternatives => {
+                total_cost *= self.cost_model.alternative_multiplier;
+            }
+            PathExecutionStrategy::BreadthFirst { .. } | 
+            PathExecutionStrategy::DepthFirst { .. } => {
+                total_cost *= 1.5; // Search algorithms have overhead
+            }
+            PathExecutionStrategy::DynamicProgramming => {
+                total_cost *= 2.0; // Higher initial cost but better for complex patterns
+            }
+            PathExecutionStrategy::Hybrid { strategies } => {
+                // Average cost of strategies with some overhead
+                total_cost *= 1.2 + (strategies.len() as f64 * 0.1);
+            }
+        }
+
+        // Add memory cost factor
+        let memory_cost = execution_plan.memory_requirements as f64 * self.cost_model.memory_factor;
+        total_cost += memory_cost;
+
+        Ok(total_cost)
+    }
+
     fn is_parallelizable(
         &self,
         strategy: &PathExecutionStrategy,
@@ -1238,35 +1290,32 @@ impl AdvancedPropertyPathOptimizer {
 
     // Statistics recording
     async fn record_cache_hit(&self) {
-        if let Ok(mut stats) = self.statistics.write().await {
-            stats.cache_hits += 1;
-        }
+        let mut stats = self.statistics.write().await;
+        stats.cache_hits += 1;
     }
 
     async fn record_cache_miss(&self) {
-        if let Ok(mut stats) = self.statistics.write().await {
-            stats.cache_misses += 1;
-        }
+        let mut stats = self.statistics.write().await;
+        stats.cache_misses += 1;
     }
 
     async fn record_optimization_stats(&self, path: &str, time_ms: f64, success: bool) {
-        if let Ok(mut stats) = self.statistics.write().await {
-            stats.total_executions += 1;
+        let mut stats = self.statistics.write().await;
+        stats.total_executions += 1;
 
-            // Update running average
-            let n = stats.total_executions as f64;
-            stats.average_execution_time_ms =
-                (stats.average_execution_time_ms * (n - 1.0) + time_ms) / n;
+        // Update running average
+        let n = stats.total_executions as f64;
+        stats.average_execution_time_ms =
+            (stats.average_execution_time_ms * (n - 1.0) + time_ms) / n;
 
-            if success {
-                stats.optimization_successes += 1;
-            } else {
-                stats.optimization_failures += 1;
-            }
-
-            // Track path frequency
-            *stats.path_frequency.entry(path.to_string()).or_insert(0) += 1;
+        if success {
+            stats.optimization_successes += 1;
+        } else {
+            stats.optimization_failures += 1;
         }
+
+        // Track path frequency
+        *stats.path_frequency.entry(path.to_string()).or_insert(0) += 1;
     }
 }
 

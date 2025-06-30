@@ -4,7 +4,6 @@ use crate::{EmbeddingModel, Vector};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
-use chrono::{DateTime, Utc};
 
 /// Integration bridge between oxirs-embed and vector stores
 pub struct VectorStoreBridge {

@@ -324,8 +324,8 @@ impl TripleStore {
     pub fn begin_transaction(&self) -> Result<TransactionId> {
         let tx_id = self.mvcc_storage.begin_transaction(false)?;
 
-        // Update stats
-        if let Ok(mut stats) = self.stats.lock() {
+        // Update stats (non-blocking for performance)
+        if let Ok(mut stats) = self.stats.try_lock() {
             stats.active_transactions += 1;
         }
 
@@ -348,8 +348,8 @@ impl TripleStore {
     pub fn commit_transaction(&self, tx_id: TransactionId) -> Result<Version> {
         let version = self.mvcc_storage.commit_transaction(tx_id)?;
 
-        // Update stats
-        if let Ok(mut stats) = self.stats.lock() {
+        // Update stats (non-blocking for performance)
+        if let Ok(mut stats) = self.stats.try_lock() {
             stats.active_transactions = stats.active_transactions.saturating_sub(1);
             stats.completed_transactions += 1;
         }
@@ -547,8 +547,8 @@ impl TripleStore {
             Ok(()) => {
                 self.commit_transaction(tx_id)?;
 
-                // Update stats after successful commit
-                if let Ok(mut stats) = self.stats.lock() {
+                // Update stats after successful commit (reduced frequency for performance)
+                if let Ok(mut stats) = self.stats.try_lock() {
                     stats.insert_count += 1;
                     stats.total_triples += 1;
                 }
@@ -556,7 +556,38 @@ impl TripleStore {
                 Ok(())
             }
             Err(e) => {
-                self.abort_transaction(tx_id)?;
+                let _ = self.abort_transaction(tx_id); // Don't propagate abort errors
+                Err(e)
+            }
+        }
+    }
+
+    /// Insert multiple triples in a single transaction (more efficient for bulk operations)
+    pub fn insert_triples_bulk(&self, triples: &[Triple]) -> Result<()> {
+        if triples.is_empty() {
+            return Ok(());
+        }
+
+        let tx_id = self.begin_transaction()?;
+
+        for triple in triples {
+            if let Err(e) = self.insert_triple_tx(tx_id, triple) {
+                let _ = self.abort_transaction(tx_id);
+                return Err(e);
+            }
+        }
+
+        match self.commit_transaction(tx_id) {
+            Ok(_) => {
+                // Update stats for bulk operation
+                if let Ok(mut stats) = self.stats.try_lock() {
+                    stats.insert_count += triples.len() as u64;
+                    stats.total_triples += triples.len() as u64;
+                }
+                Ok(())
+            }
+            Err(e) => {
+                let _ = self.abort_transaction(tx_id);
                 Err(e)
             }
         }

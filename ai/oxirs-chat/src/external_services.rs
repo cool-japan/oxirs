@@ -105,6 +105,76 @@ pub struct SpeechConfig {
     pub api_key: Option<String>,
     pub supported_languages: Vec<String>,
     pub enabled: bool,
+    pub voice_models: Vec<VoiceModel>,
+    pub real_time_streaming: bool,
+    pub noise_cancellation: bool,
+    pub speech_enhancement: bool,
+    pub speaker_diarization: bool,
+    pub emotion_detection: bool,
+    pub custom_vocabulary: Vec<String>,
+}
+
+/// Voice model configuration for TTS
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceModel {
+    pub id: String,
+    pub name: String,
+    pub language: String,
+    pub gender: VoiceGender,
+    pub age_range: VoiceAgeRange,
+    pub voice_type: VoiceType,
+    pub sample_rate: u32,
+    pub neural_voice: bool,
+}
+
+/// Voice gender options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VoiceGender {
+    Male,
+    Female,
+    Neutral,
+}
+
+/// Voice age range options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VoiceAgeRange {
+    Child,
+    Young,
+    Adult,
+    Senior,
+}
+
+/// Voice type characteristics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VoiceType {
+    Conversational,
+    News,
+    Narrative,
+    Assistant,
+    Customer,
+    Educational,
+    Emotional,
+}
+
+/// Advanced speech processing options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpeechProcessingOptions {
+    pub enable_punctuation: bool,
+    pub enable_profanity_filter: bool,
+    pub enable_automatic_formatting: bool,
+    pub enable_word_timestamps: bool,
+    pub enable_confidence_scores: bool,
+    pub enable_speaker_identification: bool,
+    pub language_detection_mode: LanguageDetectionMode,
+    pub audio_quality_enhancement: bool,
+}
+
+/// Language detection modes for speech
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LanguageDetectionMode {
+    None,
+    Automatic,
+    Constrained(Vec<String>),
 }
 
 /// External services integration manager
@@ -214,13 +284,28 @@ impl ExternalServicesManager {
         Ok(results)
     }
 
-    /// Translate text
+    /// Translate text with automatic language detection
     pub async fn translate(&self, text: &str, target_language: &str) -> Result<TranslationResult> {
+        // First detect the source language
+        let source_language = self.detect_language(text).await?;
+        self.translate_with_source(text, &source_language.language_code, target_language).await
+    }
+
+    /// Translate text with known source language
+    pub async fn translate_with_source(
+        &self, 
+        text: &str, 
+        source_language: &str, 
+        target_language: &str
+    ) -> Result<TranslationResult> {
         for trans_config in &self.config.translation_services {
             if !trans_config.enabled
                 || !trans_config
                     .supported_languages
                     .contains(&target_language.to_string())
+                || !trans_config
+                    .supported_languages
+                    .contains(&source_language.to_string())
             {
                 continue;
             }
@@ -228,7 +313,7 @@ impl ExternalServicesManager {
             self.rate_limiter.check_limit().await?;
 
             match self
-                .translate_text(trans_config, text, target_language)
+                .translate_text_advanced(trans_config, text, source_language, target_language)
                 .await
             {
                 Ok(result) => return Ok(result),
@@ -239,13 +324,115 @@ impl ExternalServicesManager {
         }
 
         Err(anyhow!(
-            "No translation service available for language: {}",
+            "No translation service available for {} -> {}",
+            source_language,
             target_language
         ))
     }
 
-    /// Convert speech to text
+    /// Detect the language of input text
+    pub async fn detect_language(&self, text: &str) -> Result<LanguageDetectionResult> {
+        for trans_config in &self.config.translation_services {
+            if !trans_config.enabled {
+                continue;
+            }
+
+            self.rate_limiter.check_limit().await?;
+
+            match self.detect_text_language(trans_config, text).await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    warn!("Language detection service {} failed: {}", trans_config.name, e);
+                }
+            }
+        }
+
+        Err(anyhow!("No language detection service available"))
+    }
+
+    /// Batch translate multiple texts
+    pub async fn batch_translate(
+        &self, 
+        texts: &[String], 
+        target_language: &str
+    ) -> Result<Vec<TranslationResult>> {
+        let mut results = Vec::new();
+        
+        for text in texts {
+            match self.translate(text, target_language).await {
+                Ok(result) => results.push(result),
+                Err(e) => {
+                    warn!("Failed to translate text '{}': {}", text, e);
+                    // Continue with other texts even if one fails
+                }
+            }
+        }
+        
+        Ok(results)
+    }
+
+    /// Get supported language pairs for translation
+    pub fn get_supported_language_pairs(&self) -> Vec<LanguagePair> {
+        let mut pairs = Vec::new();
+        
+        for trans_config in &self.config.translation_services {
+            if !trans_config.enabled {
+                continue;
+            }
+            
+            // Generate all possible pairs from supported languages
+            for source in &trans_config.supported_languages {
+                for target in &trans_config.supported_languages {
+                    if source != target {
+                        pairs.push(LanguagePair {
+                            source_language: source.clone(),
+                            target_language: target.clone(),
+                            service: trans_config.name.clone(),
+                        });
+                    }
+                }
+            }
+        }
+        
+        pairs
+    }
+
+    /// Check if a specific language pair is supported
+    pub fn is_language_pair_supported(&self, source: &str, target: &str) -> bool {
+        for trans_config in &self.config.translation_services {
+            if trans_config.enabled 
+                && trans_config.supported_languages.contains(&source.to_string())
+                && trans_config.supported_languages.contains(&target.to_string())
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Convert speech to text with advanced processing options
     pub async fn speech_to_text(&self, audio_data: &[u8], language: &str) -> Result<SpeechResult> {
+        let options = SpeechProcessingOptions {
+            enable_punctuation: true,
+            enable_profanity_filter: false,
+            enable_automatic_formatting: true,
+            enable_word_timestamps: true,
+            enable_confidence_scores: true,
+            enable_speaker_identification: false,
+            language_detection_mode: LanguageDetectionMode::None,
+            audio_quality_enhancement: true,
+        };
+        
+        self.speech_to_text_with_options(audio_data, language, &options).await
+    }
+
+    /// Convert speech to text with custom processing options
+    pub async fn speech_to_text_with_options(
+        &self, 
+        audio_data: &[u8], 
+        language: &str,
+        options: &SpeechProcessingOptions
+    ) -> Result<SpeechResult> {
         for speech_config in &self.config.speech_services {
             if !speech_config.enabled
                 || speech_config.speech_to_text_url.is_none()
@@ -259,7 +446,7 @@ impl ExternalServicesManager {
             self.rate_limiter.check_limit().await?;
 
             match self
-                .convert_speech_to_text(speech_config, audio_data, language)
+                .convert_speech_to_text_advanced(speech_config, audio_data, language, options)
                 .await
             {
                 Ok(result) => return Ok(result),
@@ -278,8 +465,149 @@ impl ExternalServicesManager {
         ))
     }
 
-    /// Convert text to speech
+    /// Real-time streaming speech recognition
+    pub async fn streaming_speech_to_text(
+        &self,
+        audio_stream: tokio::sync::mpsc::Receiver<Vec<u8>>,
+        language: &str,
+        options: &SpeechProcessingOptions,
+    ) -> Result<tokio::sync::mpsc::Receiver<PartialSpeechResult>> {
+        // Find a speech service with real-time streaming support
+        for speech_config in &self.config.speech_services {
+            if !speech_config.enabled
+                || !speech_config.real_time_streaming
+                || speech_config.speech_to_text_url.is_none()
+                || !speech_config
+                    .supported_languages
+                    .contains(&language.to_string())
+            {
+                continue;
+            }
+
+            return self
+                .create_streaming_speech_connection(speech_config, audio_stream, language, options)
+                .await;
+        }
+
+        Err(anyhow!(
+            "No streaming speech-to-text service available for language: {}",
+            language
+        ))
+    }
+
+    /// Convert text to speech with default voice
     pub async fn text_to_speech(&self, text: &str, language: &str) -> Result<Vec<u8>> {
+        // Use first available voice model for the language
+        for speech_config in &self.config.speech_services {
+            if let Some(voice_model) = speech_config
+                .voice_models
+                .iter()
+                .find(|v| v.language == language)
+            {
+                return self
+                    .text_to_speech_with_voice(text, language, voice_model)
+                    .await;
+            }
+        }
+
+        // Fallback to basic TTS if no voice models configured
+        self.text_to_speech_basic(text, language).await
+    }
+
+    /// Convert text to speech with specific voice model
+    pub async fn text_to_speech_with_voice(
+        &self,
+        text: &str,
+        language: &str,
+        voice_model: &VoiceModel,
+    ) -> Result<Vec<u8>> {
+        for speech_config in &self.config.speech_services {
+            if !speech_config.enabled
+                || speech_config.text_to_speech_url.is_none()
+                || !speech_config
+                    .voice_models
+                    .iter()
+                    .any(|v| v.id == voice_model.id)
+            {
+                continue;
+            }
+
+            self.rate_limiter.check_limit().await?;
+
+            match self
+                .convert_text_to_speech_with_voice(speech_config, text, voice_model)
+                .await
+            {
+                Ok(audio_data) => return Ok(audio_data),
+                Err(e) => {
+                    warn!(
+                        "Text-to-speech service {} failed: {}",
+                        speech_config.name, e
+                    );
+                }
+            }
+        }
+
+        Err(anyhow!(
+            "No text-to-speech service available for voice: {}",
+            voice_model.name
+        ))
+    }
+
+    /// Get available voice models for a language
+    pub fn get_voice_models(&self, language: &str) -> Vec<&VoiceModel> {
+        let mut models = Vec::new();
+        for speech_config in &self.config.speech_services {
+            if speech_config.enabled {
+                models.extend(
+                    speech_config
+                        .voice_models
+                        .iter()
+                        .filter(|v| v.language == language)
+                );
+            }
+        }
+        models
+    }
+
+    /// Get recommended voice model based on preferences
+    pub fn get_recommended_voice(
+        &self,
+        language: &str,
+        gender: Option<VoiceGender>,
+        voice_type: Option<VoiceType>,
+        neural_preferred: bool,
+    ) -> Option<&VoiceModel> {
+        let mut candidates: Vec<&VoiceModel> = self.get_voice_models(language);
+
+        // Filter by gender if specified
+        if let Some(preferred_gender) = gender {
+            candidates.retain(|v| std::mem::discriminant(&v.gender) == std::mem::discriminant(&preferred_gender));
+        }
+
+        // Filter by voice type if specified
+        if let Some(preferred_type) = voice_type {
+            candidates.retain(|v| std::mem::discriminant(&v.voice_type) == std::mem::discriminant(&preferred_type));
+        }
+
+        // Prefer neural voices if requested
+        if neural_preferred {
+            let neural_voices: Vec<&VoiceModel> = candidates
+                .iter()
+                .filter(|v| v.neural_voice)
+                .copied()
+                .collect();
+            if !neural_voices.is_empty() {
+                candidates = neural_voices;
+            }
+        }
+
+        // Return the first candidate or None if no matches
+        candidates.first().copied()
+    }
+
+    /// Basic text-to-speech fallback method
+    async fn text_to_speech_basic(&self, text: &str, language: &str) -> Result<Vec<u8>> {
         for speech_config in &self.config.speech_services {
             if !speech_config.enabled
                 || speech_config.text_to_speech_url.is_none()
@@ -293,7 +621,7 @@ impl ExternalServicesManager {
             self.rate_limiter.check_limit().await?;
 
             match self
-                .convert_text_to_speech(speech_config, text, language)
+                .convert_text_to_speech_basic(speech_config, text, language)
                 .await
             {
                 Ok(audio_data) => return Ok(audio_data),
@@ -575,6 +903,36 @@ pub struct TranslationResult {
     pub source_language: String,
     pub target_language: String,
     pub confidence: f32,
+    pub detected_language: Option<String>,
+    pub alternative_translations: Vec<String>,
+    pub processing_time_ms: u64,
+}
+
+/// Language detection result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanguageDetectionResult {
+    pub service: String,
+    pub language_code: String,
+    pub language_name: String,
+    pub confidence: f32,
+    pub alternative_languages: Vec<LanguageCandidate>,
+    pub text_sample: String,
+}
+
+/// Alternative language candidate from detection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanguageCandidate {
+    pub language_code: String,
+    pub language_name: String,
+    pub confidence: f32,
+}
+
+/// Language pair for translation capabilities
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanguagePair {
+    pub source_language: String,
+    pub target_language: String,
+    pub service: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -583,6 +941,74 @@ pub struct SpeechResult {
     pub text: String,
     pub confidence: f32,
     pub language: String,
+    pub word_timestamps: Option<Vec<WordTimestamp>>,
+    pub speaker_info: Option<Vec<SpeakerInfo>>,
+    pub emotion_analysis: Option<EmotionAnalysis>,
+    pub processing_time_ms: u64,
+}
+
+/// Enhanced result type for partial speech recognition (streaming)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartialSpeechResult {
+    pub service: String,
+    pub partial_text: String,
+    pub is_final: bool,
+    pub confidence: f32,
+    pub language: String,
+    pub timestamp: std::time::SystemTime,
+}
+
+/// Word-level timestamp information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WordTimestamp {
+    pub word: String,
+    pub start_time_ms: u64,
+    pub end_time_ms: u64,
+    pub confidence: f32,
+}
+
+/// Speaker identification information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpeakerInfo {
+    pub speaker_id: String,
+    pub start_time_ms: u64,
+    pub end_time_ms: u64,
+    pub confidence: f32,
+    pub speaker_characteristics: Option<SpeakerCharacteristics>,
+}
+
+/// Speaker voice characteristics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpeakerCharacteristics {
+    pub estimated_gender: Option<VoiceGender>,
+    pub estimated_age_range: Option<VoiceAgeRange>,
+    pub voice_energy: f32,
+    pub speaking_rate: f32,
+}
+
+/// Emotion analysis results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmotionAnalysis {
+    pub primary_emotion: Emotion,
+    pub emotion_scores: HashMap<Emotion, f32>,
+    pub valence: f32,  // Positive/negative sentiment
+    pub arousal: f32,  // Energy level
+    pub confidence: f32,
+}
+
+/// Detected emotions
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum Emotion {
+    Joy,
+    Sadness,
+    Anger,
+    Fear,
+    Surprise,
+    Disgust,
+    Neutral,
+    Excitement,
+    Frustration,
+    Confusion,
 }
 
 // Internal response types for external APIs

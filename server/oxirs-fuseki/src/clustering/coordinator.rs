@@ -17,8 +17,16 @@ use crate::{
 };
 use oxirs_core::{query::QueryResults, Quad, Triple};
 
-/// Query result for distributed operations
-pub type QueryResult = QueryResults;
+/// Serializable query result for distributed operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum QueryResult {
+    /// Boolean result (for ASK queries)
+    Boolean(bool),
+    /// Raw result data (serialized as JSON string)
+    Data(String),
+    /// Error result
+    Error(String),
+}
 
 /// Query request for distributed execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,23 +73,40 @@ pub struct DistributedWrite {
     pub timeout: Duration,
 }
 
+/// Serializable triple for distributed operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableTriple {
+    pub subject: String,
+    pub predicate: String,
+    pub object: String,
+}
+
+/// Serializable quad for distributed operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableQuad {
+    pub subject: String,
+    pub predicate: String,
+    pub object: String,
+    pub graph: String,
+}
+
 /// Write operation types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WriteOperation {
     /// Add triple
     AddTriple {
-        triple: Triple,
+        triple: SerializableTriple,
         graph: Option<String>,
     },
     /// Remove triple
     RemoveTriple {
-        triple: Triple,
+        triple: SerializableTriple,
         graph: Option<String>,
     },
     /// Add quad
-    AddQuad { quad: Quad },
+    AddQuad { quad: SerializableQuad },
     /// Remove quad
-    RemoveQuad { quad: Quad },
+    RemoveQuad { quad: SerializableQuad },
     /// Clear graph
     ClearGraph { graph: String },
 }
@@ -375,7 +400,7 @@ impl QueryCoordinator {
     /// Execute query locally
     async fn execute_local_query(&self, query: &DistributedQuery) -> FusekiResult<QueryResult> {
         // TODO: Implement actual query execution
-        Ok(QueryResults::Boolean(false))
+        Ok(QueryResult::Boolean(false))
     }
 
     /// Execute write locally
@@ -517,7 +542,7 @@ mod tests {
     #[test]
     fn test_consistency_level_calculation() {
         let config = ReplicationConfig::default();
-        let store = Arc::new(Store::new_memory());
+        let store = Arc::new(Store::new().unwrap());
         let coordinator = QueryCoordinator::new(config, store);
 
         assert_eq!(

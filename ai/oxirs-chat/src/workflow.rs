@@ -964,3 +964,782 @@ impl DataExporter {
         }
     }
 }
+
+// Enhanced Collaborative Features for Version 1.1
+
+/// Collaborative workspace manager for real-time team coordination
+pub struct CollaborativeWorkspaceManager {
+    workspaces: HashMap<String, CollaborativeWorkspace>,
+    active_sessions: HashMap<String, CollaborativeSession>,
+    presence_tracker: PresenceTracker,
+    message_bus: CollaborativeMessageBus,
+    shared_document_manager: SharedDocumentManager,
+    decision_tracker: CollaborativeDecisionTracker,
+}
+
+impl CollaborativeWorkspaceManager {
+    /// Create a new collaborative workspace manager
+    pub fn new() -> Self {
+        Self {
+            workspaces: HashMap::new(),
+            active_sessions: HashMap::new(),
+            presence_tracker: PresenceTracker::new(),
+            message_bus: CollaborativeMessageBus::new(),
+            shared_document_manager: SharedDocumentManager::new(),
+            decision_tracker: CollaborativeDecisionTracker::new(),
+        }
+    }
+
+    /// Create a new collaborative workspace
+    pub async fn create_workspace(&mut self, request: CreateWorkspaceRequest) -> Result<WorkspaceId> {
+        let workspace_id = WorkspaceId(Uuid::new_v4().to_string());
+        
+        let workspace = CollaborativeWorkspace {
+            id: workspace_id.clone(),
+            name: request.name,
+            description: request.description,
+            owner: request.owner,
+            members: request.initial_members,
+            permissions: request.permissions,
+            shared_documents: Vec::new(),
+            active_collaborations: Vec::new(),
+            settings: request.settings.unwrap_or_default(),
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+        };
+
+        self.workspaces.insert(workspace_id.0.clone(), workspace);
+        
+        info!("Created collaborative workspace: {}", workspace_id.0);
+        Ok(workspace_id)
+    }
+
+    /// Join a collaborative session
+    pub async fn join_session(
+        &mut self, 
+        workspace_id: &WorkspaceId, 
+        user_id: &str,
+        user_info: UserInfo
+    ) -> Result<SessionToken> {
+        let session_token = SessionToken(Uuid::new_v4().to_string());
+        
+        let session = CollaborativeSession {
+            token: session_token.clone(),
+            workspace_id: workspace_id.clone(),
+            user_id: user_id.to_string(),
+            user_info,
+            joined_at: SystemTime::now(),
+            last_activity: SystemTime::now(),
+            active_documents: Vec::new(),
+            permissions: self.get_user_permissions(workspace_id, user_id)?,
+        };
+
+        self.active_sessions.insert(session_token.0.clone(), session);
+        
+        // Update presence
+        self.presence_tracker.user_joined(workspace_id, user_id).await?;
+        
+        // Notify other users
+        self.message_bus.broadcast_user_joined(workspace_id, user_id).await?;
+        
+        Ok(session_token)
+    }
+
+    /// Leave a collaborative session
+    pub async fn leave_session(&mut self, session_token: &SessionToken) -> Result<()> {
+        if let Some(session) = self.active_sessions.remove(&session_token.0) {
+            // Update presence
+            self.presence_tracker.user_left(&session.workspace_id, &session.user_id).await?;
+            
+            // Notify other users
+            self.message_bus.broadcast_user_left(&session.workspace_id, &session.user_id).await?;
+            
+            info!("User {} left session", session.user_id);
+        }
+        
+        Ok(())
+    }
+
+    /// Start collaborative editing on a document
+    pub async fn start_collaborative_editing(
+        &mut self,
+        session_token: &SessionToken,
+        document_id: &str,
+        document_type: DocumentType,
+    ) -> Result<CollaborativeEditingSession> {
+        let session = self.active_sessions.get(session_token.0.as_str())
+            .ok_or_else(|| anyhow!("Invalid session token"))?;
+
+        let editing_session = self.shared_document_manager
+            .start_editing_session(
+                &session.workspace_id,
+                document_id,
+                &session.user_id,
+                document_type,
+            ).await?;
+
+        Ok(editing_session)
+    }
+
+    /// Send real-time message to workspace
+    pub async fn send_message(
+        &mut self,
+        session_token: &SessionToken,
+        message: CollaborativeMessage,
+    ) -> Result<MessageId> {
+        let session = self.active_sessions.get(session_token.0.as_str())
+            .ok_or_else(|| anyhow!("Invalid session token"))?;
+
+        let message_id = self.message_bus
+            .send_message(&session.workspace_id, &session.user_id, message)
+            .await?;
+
+        Ok(message_id)
+    }
+
+    /// Start a collaborative decision process
+    pub async fn start_decision_process(
+        &mut self,
+        session_token: &SessionToken,
+        decision_request: DecisionRequest,
+    ) -> Result<DecisionId> {
+        let session = self.active_sessions.get(session_token.0.as_str())
+            .ok_or_else(|| anyhow!("Invalid session token"))?;
+
+        let decision_id = self.decision_tracker
+            .start_decision(&session.workspace_id, &session.user_id, decision_request)
+            .await?;
+
+        Ok(decision_id)
+    }
+
+    /// Get current workspace presence
+    pub async fn get_workspace_presence(&self, workspace_id: &WorkspaceId) -> Result<Vec<UserPresence>> {
+        self.presence_tracker.get_workspace_presence(workspace_id).await
+    }
+
+    /// Get workspace activity feed
+    pub async fn get_activity_feed(
+        &self,
+        workspace_id: &WorkspaceId,
+        since: Option<SystemTime>,
+        limit: usize,
+    ) -> Result<Vec<ActivityEvent>> {
+        // Implementation would fetch recent activities
+        Ok(Vec::new()) // Placeholder
+    }
+
+    fn get_user_permissions(&self, workspace_id: &WorkspaceId, user_id: &str) -> Result<UserPermissions> {
+        // Implementation would check user permissions
+        Ok(UserPermissions::default())
+    }
+}
+
+/// Collaborative workspace configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollaborativeWorkspace {
+    pub id: WorkspaceId,
+    pub name: String,
+    pub description: Option<String>,
+    pub owner: String,
+    pub members: Vec<WorkspaceMember>,
+    pub permissions: WorkspacePermissions,
+    pub shared_documents: Vec<SharedDocument>,
+    pub active_collaborations: Vec<ActiveCollaboration>,
+    pub settings: WorkspaceSettings,
+    pub created_at: SystemTime,
+    pub updated_at: SystemTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceId(pub String);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionToken(pub String);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageId(pub String);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionId(pub String);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceMember {
+    pub user_id: String,
+    pub role: WorkspaceRole,
+    pub permissions: UserPermissions,
+    pub joined_at: SystemTime,
+    pub last_active: SystemTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum WorkspaceRole {
+    Owner,
+    Admin,
+    Editor,
+    Viewer,
+    Guest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPermissions {
+    pub can_edit_documents: bool,
+    pub can_create_documents: bool,
+    pub can_delete_documents: bool,
+    pub can_invite_users: bool,
+    pub can_manage_permissions: bool,
+    pub can_start_decisions: bool,
+    pub can_vote: bool,
+    pub can_moderate: bool,
+}
+
+impl Default for UserPermissions {
+    fn default() -> Self {
+        Self {
+            can_edit_documents: true,
+            can_create_documents: true,
+            can_delete_documents: false,
+            can_invite_users: false,
+            can_manage_permissions: false,
+            can_start_decisions: true,
+            can_vote: true,
+            can_moderate: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspacePermissions {
+    pub public_readable: bool,
+    pub allow_anonymous_access: bool,
+    pub require_approval_for_members: bool,
+    pub default_member_permissions: UserPermissions,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceSettings {
+    pub enable_real_time_editing: bool,
+    pub enable_presence_awareness: bool,
+    pub enable_chat: bool,
+    pub enable_video_calls: bool,
+    pub enable_decision_voting: bool,
+    pub auto_save_interval: std::time::Duration,
+    pub max_concurrent_editors: usize,
+    pub session_timeout: std::time::Duration,
+}
+
+impl Default for WorkspaceSettings {
+    fn default() -> Self {
+        Self {
+            enable_real_time_editing: true,
+            enable_presence_awareness: true,
+            enable_chat: true,
+            enable_video_calls: false,
+            enable_decision_voting: true,
+            auto_save_interval: std::time::Duration::from_secs(10),
+            max_concurrent_editors: 50,
+            session_timeout: std::time::Duration::from_hours(8),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateWorkspaceRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub owner: String,
+    pub initial_members: Vec<WorkspaceMember>,
+    pub permissions: WorkspacePermissions,
+    pub settings: Option<WorkspaceSettings>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserInfo {
+    pub name: String,
+    pub email: String,
+    pub avatar_url: Option<String>,
+    pub timezone: String,
+    pub preferences: UserPreferences,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPreferences {
+    pub enable_notifications: bool,
+    pub notification_types: Vec<NotificationType>,
+    pub presence_status: PresenceStatus,
+    pub auto_join_calls: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PresenceStatus {
+    Online,
+    Away,
+    Busy,
+    DoNotDisturb,
+    Offline,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollaborativeSession {
+    pub token: SessionToken,
+    pub workspace_id: WorkspaceId,
+    pub user_id: String,
+    pub user_info: UserInfo,
+    pub joined_at: SystemTime,
+    pub last_activity: SystemTime,
+    pub active_documents: Vec<String>,
+    pub permissions: UserPermissions,
+}
+
+/// Presence tracking for real-time collaboration awareness
+pub struct PresenceTracker {
+    workspace_presence: HashMap<String, Vec<UserPresence>>,
+}
+
+impl PresenceTracker {
+    pub fn new() -> Self {
+        Self {
+            workspace_presence: HashMap::new(),
+        }
+    }
+
+    pub async fn user_joined(&mut self, workspace_id: &WorkspaceId, user_id: &str) -> Result<()> {
+        let presence = UserPresence {
+            user_id: user_id.to_string(),
+            status: PresenceStatus::Online,
+            last_seen: SystemTime::now(),
+            current_activity: Some("Joined workspace".to_string()),
+            cursor_position: None,
+            viewing_document: None,
+        };
+
+        self.workspace_presence
+            .entry(workspace_id.0.clone())
+            .or_insert_with(Vec::new)
+            .push(presence);
+
+        Ok(())
+    }
+
+    pub async fn user_left(&mut self, workspace_id: &WorkspaceId, user_id: &str) -> Result<()> {
+        if let Some(users) = self.workspace_presence.get_mut(&workspace_id.0) {
+            users.retain(|u| u.user_id != user_id);
+        }
+        Ok(())
+    }
+
+    pub async fn get_workspace_presence(&self, workspace_id: &WorkspaceId) -> Result<Vec<UserPresence>> {
+        Ok(self.workspace_presence
+            .get(&workspace_id.0)
+            .cloned()
+            .unwrap_or_default())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPresence {
+    pub user_id: String,
+    pub status: PresenceStatus,
+    pub last_seen: SystemTime,
+    pub current_activity: Option<String>,
+    pub cursor_position: Option<CursorPosition>,
+    pub viewing_document: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CursorPosition {
+    pub document_id: String,
+    pub line: u32,
+    pub column: u32,
+    pub selection_start: Option<(u32, u32)>,
+    pub selection_end: Option<(u32, u32)>,
+}
+
+/// Real-time messaging system for collaboration
+pub struct CollaborativeMessageBus {
+    message_history: HashMap<String, Vec<CollaborativeMessage>>,
+    subscribers: HashMap<String, Vec<String>>, // workspace_id -> user_ids
+}
+
+impl CollaborativeMessageBus {
+    pub fn new() -> Self {
+        Self {
+            message_history: HashMap::new(),
+            subscribers: HashMap::new(),
+        }
+    }
+
+    pub async fn send_message(
+        &mut self,
+        workspace_id: &WorkspaceId,
+        sender_id: &str,
+        message: CollaborativeMessage,
+    ) -> Result<MessageId> {
+        let message_id = MessageId(Uuid::new_v4().to_string());
+        
+        let timestamped_message = CollaborativeMessage {
+            id: Some(message_id.clone()),
+            sender_id: sender_id.to_string(),
+            timestamp: Some(SystemTime::now()),
+            ..message
+        };
+
+        self.message_history
+            .entry(workspace_id.0.clone())
+            .or_insert_with(Vec::new)
+            .push(timestamped_message);
+
+        // Broadcast to subscribers (implementation would use real-time channels)
+        self.broadcast_message(workspace_id, &message_id).await?;
+
+        Ok(message_id)
+    }
+
+    pub async fn broadcast_user_joined(&self, workspace_id: &WorkspaceId, user_id: &str) -> Result<()> {
+        // Implementation would broadcast presence updates
+        debug!("Broadcasting user joined: {} in workspace {}", user_id, workspace_id.0);
+        Ok(())
+    }
+
+    pub async fn broadcast_user_left(&self, workspace_id: &WorkspaceId, user_id: &str) -> Result<()> {
+        // Implementation would broadcast presence updates
+        debug!("Broadcasting user left: {} in workspace {}", user_id, workspace_id.0);
+        Ok(())
+    }
+
+    async fn broadcast_message(&self, workspace_id: &WorkspaceId, message_id: &MessageId) -> Result<()> {
+        // Implementation would use WebSocket or other real-time protocol
+        debug!("Broadcasting message {} to workspace {}", message_id.0, workspace_id.0);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollaborativeMessage {
+    pub id: Option<MessageId>,
+    pub sender_id: String,
+    pub message_type: MessageType,
+    pub content: String,
+    pub thread_id: Option<String>,
+    pub reply_to: Option<MessageId>,
+    pub mentions: Vec<String>,
+    pub attachments: Vec<MessageAttachment>,
+    pub reactions: Vec<MessageReaction>,
+    pub timestamp: Option<SystemTime>,
+    pub edited_at: Option<SystemTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MessageType {
+    Text,
+    System,
+    Notification,
+    DocumentUpdate,
+    VideoCall,
+    Decision,
+    Poll,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageAttachment {
+    pub file_id: String,
+    pub filename: String,
+    pub file_type: String,
+    pub size_bytes: u64,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageReaction {
+    pub emoji: String,
+    pub user_id: String,
+    pub timestamp: SystemTime,
+}
+
+/// Shared document management for collaborative editing
+pub struct SharedDocumentManager {
+    documents: HashMap<String, SharedDocument>,
+    editing_sessions: HashMap<String, Vec<CollaborativeEditingSession>>,
+}
+
+impl SharedDocumentManager {
+    pub fn new() -> Self {
+        Self {
+            documents: HashMap::new(),
+            editing_sessions: HashMap::new(),
+        }
+    }
+
+    pub async fn start_editing_session(
+        &mut self,
+        workspace_id: &WorkspaceId,
+        document_id: &str,
+        user_id: &str,
+        document_type: DocumentType,
+    ) -> Result<CollaborativeEditingSession> {
+        let session = CollaborativeEditingSession {
+            session_id: Uuid::new_v4().to_string(),
+            workspace_id: workspace_id.clone(),
+            document_id: document_id.to_string(),
+            user_id: user_id.to_string(),
+            document_type,
+            started_at: SystemTime::now(),
+            last_edit: SystemTime::now(),
+            cursor_position: None,
+            pending_operations: Vec::new(),
+        };
+
+        self.editing_sessions
+            .entry(document_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(session.clone());
+
+        Ok(session)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SharedDocument {
+    pub id: String,
+    pub name: String,
+    pub document_type: DocumentType,
+    pub content: String,
+    pub version: u64,
+    pub created_by: String,
+    pub created_at: SystemTime,
+    pub last_modified_by: String,
+    pub last_modified_at: SystemTime,
+    pub collaborators: Vec<String>,
+    pub permissions: DocumentPermissions,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DocumentType {
+    SparqlQuery,
+    MarkdownDocument,
+    JsonDocument,
+    CodeFile { language: String },
+    Whiteboard,
+    Spreadsheet,
+    Presentation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentPermissions {
+    pub public_readable: bool,
+    pub editors: Vec<String>,
+    pub viewers: Vec<String>,
+    pub allow_comments: bool,
+    pub allow_suggestions: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollaborativeEditingSession {
+    pub session_id: String,
+    pub workspace_id: WorkspaceId,
+    pub document_id: String,
+    pub user_id: String,
+    pub document_type: DocumentType,
+    pub started_at: SystemTime,
+    pub last_edit: SystemTime,
+    pub cursor_position: Option<CursorPosition>,
+    pub pending_operations: Vec<EditOperation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditOperation {
+    pub operation_id: String,
+    pub operation_type: OperationType,
+    pub position: TextPosition,
+    pub content: String,
+    pub timestamp: SystemTime,
+    pub user_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum OperationType {
+    Insert,
+    Delete,
+    Replace,
+    FormatApply,
+    Comment,
+    Suggestion,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TextPosition {
+    pub line: u32,
+    pub column: u32,
+    pub offset: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveCollaboration {
+    pub collaboration_id: String,
+    pub collaboration_type: CollaborationType,
+    pub participants: Vec<String>,
+    pub started_by: String,
+    pub started_at: SystemTime,
+    pub status: CollaborationStatus,
+    pub context: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CollaborationType {
+    DocumentEditing,
+    VideoCall,
+    ScreenShare,
+    Brainstorming,
+    DecisionMaking,
+    ReviewSession,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CollaborationStatus {
+    Active,
+    Paused,
+    Completed,
+    Cancelled,
+}
+
+/// Collaborative decision-making system
+pub struct CollaborativeDecisionTracker {
+    active_decisions: HashMap<String, DecisionProcess>,
+}
+
+impl CollaborativeDecisionTracker {
+    pub fn new() -> Self {
+        Self {
+            active_decisions: HashMap::new(),
+        }
+    }
+
+    pub async fn start_decision(
+        &mut self,
+        workspace_id: &WorkspaceId,
+        initiator_id: &str,
+        request: DecisionRequest,
+    ) -> Result<DecisionId> {
+        let decision_id = DecisionId(Uuid::new_v4().to_string());
+        
+        let decision_process = DecisionProcess {
+            id: decision_id.clone(),
+            workspace_id: workspace_id.clone(),
+            initiator_id: initiator_id.to_string(),
+            title: request.title,
+            description: request.description,
+            decision_type: request.decision_type,
+            options: request.options,
+            eligible_voters: request.eligible_voters,
+            votes: HashMap::new(),
+            comments: Vec::new(),
+            deadline: request.deadline,
+            status: DecisionStatus::Open,
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+        };
+
+        self.active_decisions.insert(decision_id.0.clone(), decision_process);
+
+        Ok(decision_id)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionRequest {
+    pub title: String,
+    pub description: String,
+    pub decision_type: DecisionType,
+    pub options: Vec<DecisionOption>,
+    pub eligible_voters: Vec<String>,
+    pub deadline: Option<SystemTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionProcess {
+    pub id: DecisionId,
+    pub workspace_id: WorkspaceId,
+    pub initiator_id: String,
+    pub title: String,
+    pub description: String,
+    pub decision_type: DecisionType,
+    pub options: Vec<DecisionOption>,
+    pub eligible_voters: Vec<String>,
+    pub votes: HashMap<String, Vote>, // user_id -> vote
+    pub comments: Vec<DecisionComment>,
+    pub deadline: Option<SystemTime>,
+    pub status: DecisionStatus,
+    pub created_at: SystemTime,
+    pub updated_at: SystemTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DecisionType {
+    SingleChoice,
+    MultipleChoice,
+    Ranking,
+    YesNo,
+    Consensus,
+    Budget,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionOption {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub proposed_by: String,
+    pub vote_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vote {
+    pub voter_id: String,
+    pub option_ids: Vec<String>,
+    pub ranking: Option<Vec<String>>,
+    pub comment: Option<String>,
+    pub timestamp: SystemTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionComment {
+    pub id: String,
+    pub author_id: String,
+    pub content: String,
+    pub timestamp: SystemTime,
+    pub replies: Vec<DecisionComment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DecisionStatus {
+    Open,
+    Closed,
+    Cancelled,
+    Implemented,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivityEvent {
+    pub id: String,
+    pub workspace_id: WorkspaceId,
+    pub event_type: ActivityEventType,
+    pub actor_id: String,
+    pub target_id: Option<String>,
+    pub description: String,
+    pub timestamp: SystemTime,
+    pub metadata: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ActivityEventType {
+    UserJoined,
+    UserLeft,
+    DocumentCreated,
+    DocumentEdited,
+    DocumentShared,
+    MessageSent,
+    DecisionStarted,
+    DecisionVoted,
+    CollaborationStarted,
+    CollaborationEnded,
+}

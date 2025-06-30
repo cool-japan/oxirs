@@ -276,7 +276,9 @@ impl ServiceExecutor {
         for pattern in patterns {
             query.push_str(&format!(
                 "  {} {} {} .\n",
-                pattern.subject, pattern.predicate, pattern.object
+                pattern.subject.as_deref().unwrap_or("?s"),
+                pattern.predicate.as_deref().unwrap_or("?p"), 
+                pattern.object.as_deref().unwrap_or("?o")
             ));
         }
 
@@ -1122,7 +1124,9 @@ impl JoinExecutor {
         for pattern in patterns {
             query.push_str(&format!(
                 "  {} {} {} .\n",
-                pattern.subject, pattern.predicate, pattern.object
+                pattern.subject.as_deref().unwrap_or("?s"),
+                pattern.predicate.as_deref().unwrap_or("?p"), 
+                pattern.object.as_deref().unwrap_or("?o")
             ));
         }
 

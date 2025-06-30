@@ -575,16 +575,15 @@ impl AdvancedSubqueryOptimizer {
     }
 
     async fn update_statistics(&self, rewrites_count: usize, optimization_time: f64) {
-        if let Ok(mut stats) = self.statistics.write().await {
-            stats.total_subqueries_optimized += 1;
-            stats.successful_rewrites += rewrites_count as u64;
+        let mut stats = self.statistics.write().await;
+        stats.total_subqueries_optimized += 1;
+        stats.successful_rewrites += rewrites_count as u64;
 
-            // Update average optimization time
-            let total_time =
-                stats.average_optimization_time_ms * stats.total_subqueries_optimized as f64;
-            stats.average_optimization_time_ms =
-                (total_time + optimization_time) / (stats.total_subqueries_optimized as f64);
-        }
+        // Update average optimization time
+        let total_time =
+            stats.average_optimization_time_ms * stats.total_subqueries_optimized as f64;
+        stats.average_optimization_time_ms =
+            (total_time + optimization_time) / (stats.total_subqueries_optimized as f64);
     }
 }
 

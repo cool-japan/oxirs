@@ -713,7 +713,7 @@ mod tests {
         let client2 = pool.get_client("cluster1").await.unwrap();
 
         // Should reuse the same client instance
-        assert!(std::ptr::eq(&*client1 as *const _, &*client2 as *const _));
+        assert!(Arc::ptr_eq(&client1, &client2));
     }
 
     #[tokio::test]

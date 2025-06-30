@@ -644,7 +644,7 @@ mod tests {
     #[tokio::test]
     async fn test_ldap_service_creation() {
         let config = create_test_ldap_config();
-        let service = LdapService::new(config);
+        let service = LdapService::new(config).await.unwrap();
 
         assert_eq!(service.config.server, "ldap://localhost:389");
         assert_eq!(service.config.user_base_dn, "ou=users,dc=example,dc=com");
@@ -668,7 +668,7 @@ mod tests {
     #[tokio::test]
     async fn test_group_mapping() {
         let config = create_test_ldap_config();
-        let service = LdapService::new(config);
+        let service = LdapService::new(config).await.unwrap();
 
         let groups = vec![
             "cn=administrators,ou=groups,dc=example,dc=com".to_string(),
@@ -683,7 +683,7 @@ mod tests {
     #[tokio::test]
     async fn test_user_caching() {
         let config = create_test_ldap_config();
-        let service = LdapService::new(config);
+        let service = LdapService::new(config).await.unwrap();
 
         let user = User {
             username: "testuser".to_string(),

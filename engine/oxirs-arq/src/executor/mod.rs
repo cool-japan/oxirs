@@ -227,6 +227,15 @@ impl QueryExecutor {
                 let pattern_results = self.execute_serial(pattern, dataset)?;
                 Ok(self.apply_slice(pattern_results, *offset, *limit))
             }
+            Algebra::Group { pattern, variables, aggregates } => {
+                let pattern_results = self.execute_serial(pattern, dataset)?;
+                self.apply_group_by(pattern_results, variables, aggregates)
+            }
+            Algebra::LeftJoin { left, right, filter } => {
+                let left_results = self.execute_serial(left, dataset)?;
+                let right_results = self.execute_serial(right, dataset)?;
+                self.apply_left_join(left_results, right_results, filter)
+            }
             _ => {
                 // Default implementation for other operators
                 Ok(Solution::new())
@@ -557,22 +566,163 @@ impl QueryExecutor {
 
     /// Join two solutions
     fn join_solutions(&self, left: Solution, right: Solution) -> Result<Solution> {
-        // Simplified join implementation
         let mut result = Solution::new();
 
         for left_binding in &left {
             for right_binding in &right {
-                // Simple merge - in practice would check for variable compatibility
+                // Check for variable compatibility before merging
+                let mut is_compatible = true;
                 let mut merged = left_binding.clone();
+                
                 for (var, term) in right_binding {
-                    if !merged.contains_key(var) {
+                    if let Some(existing_term) = merged.get(var) {
+                        // Variable exists in both bindings - they must have the same value
+                        if existing_term != term {
+                            is_compatible = false;
+                            break;
+                        }
+                    } else {
+                        // Variable only exists in right binding - add it
                         merged.insert(var.clone(), term.clone());
                     }
                 }
-                result.push(merged);
+                
+                if is_compatible {
+                    result.push(merged);
+                }
             }
         }
 
+        Ok(result)
+    }
+
+    /// Apply GROUP BY with aggregation
+    fn apply_group_by(
+        &self,
+        solution: Solution,
+        variables: &[crate::algebra::GroupCondition],
+        aggregates: &[(crate::algebra::Variable, crate::algebra::Aggregate)],
+    ) -> Result<Solution> {
+        use std::collections::HashMap;
+        
+        // Group bindings by grouping variables
+        let mut groups: HashMap<Vec<(crate::algebra::Variable, crate::algebra::Term)>, Vec<&crate::algebra::Binding>> = HashMap::new();
+        
+        for binding in &solution {
+            let mut group_key = Vec::new();
+            for group_condition in variables {
+                if let crate::algebra::Expression::Variable(var) = &group_condition.expr {
+                    if let Some(term) = binding.get(var) {
+                        group_key.push((var.clone(), term.clone()));
+                    }
+                }
+            }
+            groups.entry(group_key).or_insert_with(Vec::new).push(binding);
+        }
+        
+        // If no grouping variables, create single group with all bindings
+        if variables.is_empty() && !solution.is_empty() {
+            let mut all_bindings = Vec::new();
+            for binding in &solution {
+                all_bindings.push(binding);
+            }
+            groups.insert(Vec::new(), all_bindings);
+        }
+        
+        let mut result = Solution::new();
+        
+        // Process each group
+        for (group_key, group_bindings) in groups {
+            let mut group_result = crate::algebra::Binding::new();
+            
+            // Add grouping variables to result
+            for (var, term) in group_key {
+                group_result.insert(var, term);
+            }
+            
+            // Calculate aggregates
+            for (agg_var, aggregate) in aggregates {
+                let agg_value = self.calculate_aggregate(aggregate, &group_bindings)?;
+                group_result.insert(agg_var.clone(), agg_value);
+            }
+            
+            result.push(group_result);
+        }
+        
+        Ok(result)
+    }
+
+    /// Calculate aggregate value
+    fn calculate_aggregate(
+        &self,
+        aggregate: &crate::algebra::Aggregate,
+        bindings: &[&crate::algebra::Binding],
+    ) -> Result<crate::algebra::Term> {
+        match aggregate {
+            crate::algebra::Aggregate::Count { distinct: false, expr: None } => {
+                // COUNT(*)
+                let count = bindings.len();
+                Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                    value: count.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#integer"
+                    )),
+                }))
+            }
+            _ => {
+                // For now, return a default value for other aggregates
+                Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                    value: "0".to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#integer"
+                    )),
+                }))
+            }
+        }
+    }
+
+    /// Apply LEFT JOIN (OPTIONAL)
+    fn apply_left_join(
+        &self,
+        left: Solution,
+        right: Solution,
+        _conditions: &Option<crate::algebra::Expression>,
+    ) -> Result<Solution> {
+        let mut result = Solution::new();
+        
+        for left_binding in &left {
+            let mut has_join = false;
+            
+            // Try to join with each right binding
+            for right_binding in &right {
+                let mut is_compatible = true;
+                let mut merged = left_binding.clone();
+                
+                for (var, term) in right_binding {
+                    if let Some(existing_term) = merged.get(var) {
+                        if existing_term != term {
+                            is_compatible = false;
+                            break;
+                        }
+                    } else {
+                        merged.insert(var.clone(), term.clone());
+                    }
+                }
+                
+                if is_compatible {
+                    result.push(merged);
+                    has_join = true;
+                }
+            }
+            
+            // If no join found, include left binding alone (LEFT JOIN behavior)
+            if !has_join {
+                result.push(left_binding.clone());
+            }
+        }
+        
         Ok(result)
     }
 
@@ -604,39 +754,67 @@ impl QueryExecutor {
 
     /// Hash join implementation
     fn hash_join(&self, build_side: Solution, probe_side: Solution) -> Result<Solution> {
-        use std::collections::HashMap;
+        use std::collections::{HashMap, HashSet};
 
-        // Build hash table from smaller side
+        // Find shared variables between build and probe sides
+        let build_vars: HashSet<_> = if let Some(first_binding) = build_side.first() {
+            first_binding.keys().collect()
+        } else {
+            return Ok(Solution::new());
+        };
+        
+        let probe_vars: HashSet<_> = if let Some(first_binding) = probe_side.first() {
+            first_binding.keys().collect()
+        } else {
+            return Ok(Solution::new());
+        };
+        
+        let shared_vars: Vec<_> = build_vars.intersection(&probe_vars).cloned().collect();
+
+        // Build hash table using only shared variables as keys
         let mut hash_table: HashMap<
             Vec<(crate::algebra::Variable, crate::algebra::Term)>,
             Vec<&crate::algebra::Binding>,
         > = HashMap::new();
 
         for binding in &build_side {
-            let key: Vec<_> = binding
+            let key: Vec<_> = shared_vars
                 .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
+                .filter_map(|var| binding.get(var).map(|term| ((*var).clone(), term.clone())))
                 .collect();
             hash_table.entry(key).or_insert_with(Vec::new).push(binding);
         }
 
-        // Probe with larger side
+        // Probe with shared variables as keys
         let mut result = Solution::new();
         for probe_binding in &probe_side {
-            let probe_key: Vec<_> = probe_binding
+            let probe_key: Vec<_> = shared_vars
                 .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
+                .filter_map(|var| probe_binding.get(var).map(|term| ((*var).clone(), term.clone())))
                 .collect();
 
             if let Some(matching_bindings) = hash_table.get(&probe_key) {
                 for &build_binding in matching_bindings {
+                    // Check for variable compatibility and merge
+                    let mut is_compatible = true;
                     let mut merged = probe_binding.clone();
+                    
                     for (var, term) in build_binding {
-                        if !merged.contains_key(var) {
+                        if let Some(existing_term) = merged.get(var) {
+                            // Variable exists in both - they must have same value
+                            if existing_term != term {
+                                is_compatible = false;
+                                break;
+                            }
+                        } else {
+                            // Variable only in build side - add it
                             merged.insert(var.clone(), term.clone());
                         }
                     }
-                    result.push(merged);
+                    
+                    if is_compatible {
+                        result.push(merged);
+                    }
                 }
             }
         }
@@ -726,40 +904,77 @@ impl QueryExecutor {
     fn lookup_by_subject(
         &self,
         pattern: &crate::algebra::TriplePattern,
-        _dataset: &dyn Dataset,
+        dataset: &dyn Dataset,
     ) -> Result<Solution> {
-        // Placeholder implementation - would use actual dataset indices
-        self.create_sample_binding(pattern)
+        // Use dataset to find matching triples
+        self.execute_pattern_with_dataset(pattern, dataset)
     }
 
     /// Lookup by predicate index  
     fn lookup_by_predicate(
         &self,
         pattern: &crate::algebra::TriplePattern,
-        _dataset: &dyn Dataset,
+        dataset: &dyn Dataset,
     ) -> Result<Solution> {
-        // Placeholder implementation - would use actual dataset indices
-        self.create_sample_binding(pattern)
+        // Use dataset to find matching triples
+        self.execute_pattern_with_dataset(pattern, dataset)
     }
 
     /// Lookup by object index
     fn lookup_by_object(
         &self,
         pattern: &crate::algebra::TriplePattern,
-        _dataset: &dyn Dataset,
+        dataset: &dyn Dataset,
     ) -> Result<Solution> {
-        // Placeholder implementation - would use actual dataset indices
-        self.create_sample_binding(pattern)
+        // Use dataset to find matching triples
+        self.execute_pattern_with_dataset(pattern, dataset)
     }
 
     /// Full scan pattern
     fn full_scan_pattern(
         &self,
         pattern: &crate::algebra::TriplePattern,
-        _dataset: &dyn Dataset,
+        dataset: &dyn Dataset,
     ) -> Result<Solution> {
-        // Placeholder implementation - would use actual dataset scanning
-        self.create_sample_binding(pattern)
+        // Use dataset to find matching triples
+        self.execute_pattern_with_dataset(pattern, dataset)
+    }
+
+    /// Execute pattern using dataset to find actual matches
+    fn execute_pattern_with_dataset(
+        &self,
+        pattern: &crate::algebra::TriplePattern,
+        dataset: &dyn Dataset,
+    ) -> Result<Solution> {
+        let mut solution = Solution::new();
+        
+        // Find matching triples from dataset
+        let triples = dataset.find_triples(pattern)?;
+        
+        for (s, p, o) in triples {
+            let mut binding = crate::algebra::Binding::new();
+            
+            // Bind variables based on pattern
+            if let crate::algebra::Term::Variable(var) = &pattern.subject {
+                binding.insert(var.clone(), s);
+            }
+            if let crate::algebra::Term::Variable(var) = &pattern.predicate {
+                binding.insert(var.clone(), p);
+            }
+            if let crate::algebra::Term::Variable(var) = &pattern.object {
+                binding.insert(var.clone(), o);
+            }
+            
+            // Only add binding if it has variables (otherwise it's just a test for existence)
+            if !binding.is_empty() {
+                solution.push(binding);
+            } else {
+                // If no variables but we found a match, create empty binding to indicate success
+                solution.push(crate::algebra::Binding::new());
+            }
+        }
+        
+        Ok(solution)
     }
 
     /// Create sample binding for pattern

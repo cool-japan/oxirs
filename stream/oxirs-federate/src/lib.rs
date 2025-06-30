@@ -24,8 +24,17 @@
 
 use anyhow::{anyhow, Result};
 use oxirs_core::{Graph, Quad, Term, Triple};
-use oxirs_gql::types::Schema as GraphQLSchema;
+// Temporarily commented out due to compilation issues in oxirs-gql
+// use oxirs_gql::types::Schema as GraphQLSchema;
 use serde::{Deserialize, Serialize};
+
+// Placeholder for GraphQLSchema until oxirs-gql compilation is fixed
+#[derive(Debug, Clone)]
+pub struct GraphQLSchema {
+    pub types: HashMap<String, String>,
+    pub queries: Vec<String>,
+    pub mutations: Vec<String>,
+}
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -37,6 +46,7 @@ pub mod cache;
 pub mod capability_assessment;
 pub mod connection_pool_manager;
 pub mod discovery;
+pub mod distributed_tracing;
 pub mod executor;
 pub mod graphql;
 pub mod integration;
@@ -63,6 +73,7 @@ pub use cache::*;
 pub use capability_assessment::*;
 pub use connection_pool_manager::*;
 pub use discovery::*;
+pub use distributed_tracing::*;
 pub use executor::*;
 pub use graphql::*;
 pub use integration::*;
@@ -75,6 +86,10 @@ pub use nats_federation::*;
 pub use network_optimizer::*;
 pub use planner::*;
 pub use query_decomposition::*;
+pub use query_decomposition::advanced_pattern_analysis::{
+    AdvancedPatternAnalyzer, PatternAnalysisResult, ServiceRecommendation,
+    OptimizationOpportunity, ComplexityAssessment,
+};
 pub use request_batcher::*;
 pub use result_streaming::*;
 pub use service::*;

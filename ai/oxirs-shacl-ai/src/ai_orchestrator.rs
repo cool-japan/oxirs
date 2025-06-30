@@ -1857,7 +1857,7 @@ impl AiOrchestrator {
                     // Weighted confidence aggregation
                     self.merge_confident_shapes(existing, &shape, adaptive_weight)?;
                 } else {
-                    let mut weighted_shape = shape;
+                    let mut weighted_shape = shape.clone();
                     weighted_shape.confidence *= adaptive_weight;
                     aggregated_shapes.insert(shape_key, weighted_shape);
                 }

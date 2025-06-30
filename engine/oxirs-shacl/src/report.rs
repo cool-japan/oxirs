@@ -145,6 +145,28 @@ impl ValidationReport {
             ))),
         }
     }
+    
+    /// Generate a representation of the report in any supported format
+    pub fn to_format(&self, format: &str) -> Result<String> {
+        match format.to_lowercase().as_str() {
+            // RDF formats
+            "turtle" | "ttl" => self.to_turtle(),
+            "json-ld" | "jsonld" => self.to_json_ld(),
+            "rdf-xml" | "rdfxml" | "xml" => self.to_rdf_xml(),
+            "n-triples" | "nt" => self.to_n_triples(),
+            
+            // Non-RDF formats
+            "json" => self.to_json(),
+            "html" => self.to_html(),
+            "csv" => self.to_csv(),
+            "tsv" => self.to_tsv(),
+            
+            _ => Err(ShaclError::ReportGeneration(format!(
+                "Unsupported format: {}. Supported formats: turtle, json-ld, rdf-xml, n-triples, json, html, csv, tsv",
+                format
+            ))),
+        }
+    }
 
     /// Generate a Turtle representation
     fn to_turtle(&self) -> Result<String> {
@@ -1712,6 +1734,178 @@ impl ValidationReport {
             .replace('"', "&quot;")
             .replace('\'', "&#x27;")
     }
+
+    /// Generate a CSV (Comma-Separated Values) representation for tabular analysis
+    pub fn to_csv(&self) -> Result<String> {
+        let mut csv = String::new();
+        
+        // CSV Header
+        csv.push_str("Focus Node,Source Shape,Constraint Component,Result Severity,Result Path,Value,Message,Details\n");
+        
+        for violation in &self.violations {
+            // Focus Node
+            csv.push_str(&self.escape_csv_field(&violation.focus_node.as_str()));
+            csv.push(',');
+            
+            // Source Shape
+            csv.push_str(&self.escape_csv_field(&violation.source_shape.as_str()));
+            csv.push(',');
+            
+            // Constraint Component
+            csv.push_str(&self.escape_csv_field(&violation.source_constraint_component.as_str()));
+            csv.push(',');
+            
+            // Result Severity
+            csv.push_str(&self.escape_csv_field(&violation.result_severity.to_string()));
+            csv.push(',');
+            
+            // Result Path
+            let path_str = if let Some(path) = &violation.result_path {
+                self.format_path_for_csv(path)?
+            } else {
+                String::new()
+            };
+            csv.push_str(&self.escape_csv_field(&path_str));
+            csv.push(',');
+            
+            // Value
+            let value_str = if let Some(value) = &violation.value {
+                value.as_str().to_string()
+            } else {
+                String::new()
+            };
+            csv.push_str(&self.escape_csv_field(&value_str));
+            csv.push(',');
+            
+            // Message
+            let message_str = violation.result_message.as_deref().unwrap_or("");
+            csv.push_str(&self.escape_csv_field(message_str));
+            csv.push(',');
+            
+            // Details
+            let details_str = if !violation.details.is_empty() {
+                violation.details.join("; ")
+            } else {
+                String::new()
+            };
+            csv.push_str(&self.escape_csv_field(&details_str));
+            
+            csv.push('\n');
+        }
+        
+        Ok(csv)
+    }
+    
+    /// Generate a TSV (Tab-Separated Values) representation for tabular analysis
+    pub fn to_tsv(&self) -> Result<String> {
+        let mut tsv = String::new();
+        
+        // TSV Header
+        tsv.push_str("Focus Node\tSource Shape\tConstraint Component\tResult Severity\tResult Path\tValue\tMessage\tDetails\n");
+        
+        for violation in &self.violations {
+            // Focus Node
+            tsv.push_str(&self.escape_tsv_field(&violation.focus_node.as_str()));
+            tsv.push('\t');
+            
+            // Source Shape
+            tsv.push_str(&self.escape_tsv_field(&violation.source_shape.as_str()));
+            tsv.push('\t');
+            
+            // Constraint Component
+            tsv.push_str(&self.escape_tsv_field(&violation.source_constraint_component.as_str()));
+            tsv.push('\t');
+            
+            // Result Severity
+            tsv.push_str(&self.escape_tsv_field(&violation.result_severity.to_string()));
+            tsv.push('\t');
+            
+            // Result Path
+            let path_str = if let Some(path) = &violation.result_path {
+                self.format_path_for_csv(path)?
+            } else {
+                String::new()
+            };
+            tsv.push_str(&self.escape_tsv_field(&path_str));
+            tsv.push('\t');
+            
+            // Value
+            let value_str = if let Some(value) = &violation.value {
+                value.as_str().to_string()
+            } else {
+                String::new()
+            };
+            tsv.push_str(&self.escape_tsv_field(&value_str));
+            tsv.push('\t');
+            
+            // Message
+            let message_str = violation.result_message.as_deref().unwrap_or("");
+            tsv.push_str(&self.escape_tsv_field(message_str));
+            tsv.push('\t');
+            
+            // Details
+            let details_str = if !violation.details.is_empty() {
+                violation.details.join("; ")
+            } else {
+                String::new()
+            };
+            tsv.push_str(&self.escape_tsv_field(&details_str));
+            
+            tsv.push('\n');
+        }
+        
+        Ok(tsv)
+    }
+    
+    /// Format property path for CSV/TSV display (simplified)
+    fn format_path_for_csv(&self, path: &PropertyPath) -> Result<String> {
+        match path {
+            PropertyPath::Predicate(pred) => Ok(pred.as_str().to_string()),
+            PropertyPath::Inverse(inner_path) => {
+                Ok(format!("^{}", self.format_path_for_csv(inner_path)?))
+            }
+            PropertyPath::Sequence(paths) => {
+                let path_strs: Result<Vec<String>> = paths
+                    .iter()
+                    .map(|p| self.format_path_for_csv(p))
+                    .collect();
+                Ok(format!("({})", path_strs?.join(" / ")))
+            }
+            PropertyPath::Alternative(paths) => {
+                let path_strs: Result<Vec<String>> = paths
+                    .iter()
+                    .map(|p| self.format_path_for_csv(p))
+                    .collect();
+                Ok(format!("({})", path_strs?.join(" | ")))
+            }
+            PropertyPath::ZeroOrMore(inner_path) => {
+                Ok(format!("{}*", self.format_path_for_csv(inner_path)?))
+            }
+            PropertyPath::OneOrMore(inner_path) => {
+                Ok(format!("{}+", self.format_path_for_csv(inner_path)?))
+            }
+            PropertyPath::ZeroOrOne(inner_path) => {
+                Ok(format!("{}?", self.format_path_for_csv(inner_path)?))
+            }
+        }
+    }
+    
+    /// Escape CSV field (handle commas, quotes, newlines)
+    fn escape_csv_field(&self, field: &str) -> String {
+        if field.contains(',') || field.contains('"') || field.contains('\n') || field.contains('\r') {
+            format!("\"{}\"", field.replace('"', "\"\""))
+        } else {
+            field.to_string()
+        }
+    }
+    
+    /// Escape TSV field (handle tabs, newlines)
+    fn escape_tsv_field(&self, field: &str) -> String {
+        field
+            .replace('\t', "\\t")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+    }
 }
 
 impl Default for ValidationReport {
@@ -2046,5 +2240,107 @@ mod tests {
         let json = report.to_json().unwrap();
         assert!(json.contains("\"conforms\": true"));
         assert!(json.contains("\"violations\": []"));
+    }
+
+    #[test]
+    fn test_csv_serialization() {
+        let mut report = ValidationReport::new();
+        
+        let violation = ValidationViolation::new(
+            Term::NamedNode(NamedNode::new("http://example.org/john").unwrap()),
+            ShapeId::new("http://example.org/PersonShape"),
+            ConstraintComponentId::new("sh:ClassConstraintComponent"),
+            Severity::Violation,
+        );
+        
+        report.add_violation(violation);
+        
+        let csv = report.to_csv().unwrap();
+        
+        // Check header
+        assert!(csv.starts_with("Focus Node,Source Shape,Constraint Component,Result Severity"));
+        // Check data row
+        assert!(csv.contains("http://example.org/john"));
+        assert!(csv.contains("http://example.org/PersonShape"));
+        assert!(csv.contains("sh:ClassConstraintComponent"));
+        assert!(csv.contains("Violation"));
+    }
+
+    #[test]
+    fn test_tsv_serialization() {
+        let mut report = ValidationReport::new();
+        
+        let violation = ValidationViolation::new(
+            Term::NamedNode(NamedNode::new("http://example.org/jane").unwrap()),
+            ShapeId::new("http://example.org/PersonShape"),
+            ConstraintComponentId::new("sh:MinCountConstraintComponent"),
+            Severity::Warning,
+        );
+        
+        report.add_violation(violation);
+        
+        let tsv = report.to_tsv().unwrap();
+        
+        // Check header (tab-separated)
+        assert!(tsv.starts_with("Focus Node\tSource Shape\tConstraint Component\tResult Severity"));
+        // Check data row
+        assert!(tsv.contains("http://example.org/jane"));
+        assert!(tsv.contains("http://example.org/PersonShape"));
+        assert!(tsv.contains("sh:MinCountConstraintComponent"));
+        assert!(tsv.contains("Warning"));
+    }
+
+    #[test]
+    fn test_csv_field_escaping() {
+        let report = ValidationReport::new();
+        
+        // Test CSV field escaping with commas and quotes
+        let field_with_comma = "test,value";
+        let escaped = report.escape_csv_field(field_with_comma);
+        assert_eq!(escaped, "\"test,value\"");
+        
+        let field_with_quote = "test\"value";
+        let escaped = report.escape_csv_field(field_with_quote);
+        assert_eq!(escaped, "\"test\"\"value\"");
+        
+        let normal_field = "test_value";
+        let escaped = report.escape_csv_field(normal_field);
+        assert_eq!(escaped, "test_value");
+    }
+
+    #[test]
+    fn test_tsv_field_escaping() {
+        let report = ValidationReport::new();
+        
+        // Test TSV field escaping with tabs and newlines
+        let field_with_tab = "test\tvalue";
+        let escaped = report.escape_tsv_field(field_with_tab);
+        assert_eq!(escaped, "test\\tvalue");
+        
+        let field_with_newline = "test\nvalue";
+        let escaped = report.escape_tsv_field(field_with_newline);
+        assert_eq!(escaped, "test\\nvalue");
+    }
+
+    #[test]
+    fn test_to_format_dispatch() {
+        let report = ValidationReport::new();
+        
+        // Test CSV format dispatch
+        let csv = report.to_format("csv").unwrap();
+        assert!(csv.contains("Focus Node,Source Shape"));
+        
+        // Test TSV format dispatch
+        let tsv = report.to_format("tsv").unwrap();
+        assert!(tsv.contains("Focus Node\tSource Shape"));
+        
+        // Test JSON format dispatch
+        let json = report.to_format("json").unwrap();
+        assert!(json.contains("\"conforms\": true"));
+        
+        // Test unsupported format
+        let result = report.to_format("unsupported");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unsupported format"));
     }
 }

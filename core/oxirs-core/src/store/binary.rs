@@ -3,9 +3,9 @@
 //! This implementation is extracted and adapted from Oxigraph's binary_encoder.rs
 //! to provide zero-dependency binary serialization with optimal storage efficiency.
 
-use crate::store::encoding::{EncodedQuad, EncodedTerm, EncodedTriple, SmallString, StrHash};
+use crate::store::encoding::{EncodedQuad, EncodedTerm, SmallString, StrHash};
 use crate::OxirsError;
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Read};
 use std::mem::size_of;
 
 /// Maximum size of an encoded term in bytes

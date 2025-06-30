@@ -9,7 +9,7 @@ use anyhow::Result;
 use oxirs_embed::{
     caching::EvictionPolicy,
     // Evaluation and benchmarking
-    evaluation::{BenchmarkSuite, EvaluationSuite},
+    evaluation::{AdvancedEvaluator, QueryAnsweringEvaluator},
 
     models::gnn::AggregationType,
 
@@ -90,8 +90,8 @@ struct AIPlatform {
     cache_manager: CacheManager,
 
     // Evaluation infrastructure
-    evaluation_suite: EvaluationSuite,
-    benchmark_suite: BenchmarkSuite,
+    evaluation_suite: AdvancedEvaluator,
+    benchmark_suite: HashMap<String, f32>,
 }
 
 impl AIPlatform {
@@ -251,8 +251,8 @@ impl AIPlatform {
                 "protein:HER2".to_string(),
             ),
         ];
-        let evaluation_suite = EvaluationSuite::new(test_triples, validation_triples);
-        let benchmark_suite = BenchmarkSuite::new();
+        let evaluation_suite = AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
+        let benchmark_suite = HashMap::new();
         println!("   ✅ Evaluation framework initialized");
 
         println!("🎉 OxiRS AI Platform ready for production!\n");

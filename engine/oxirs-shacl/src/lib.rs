@@ -52,6 +52,7 @@ use oxirs_core::{
     OxirsError, Store,
 };
 
+pub mod analytics;
 pub mod constraints;
 pub mod custom_components;
 pub mod iri_resolver;
@@ -68,6 +69,7 @@ pub mod validation;
 pub mod vocabulary;
 
 // Re-export key types for convenience
+pub use analytics::*;
 pub use constraints::*;
 pub use custom_components::*;
 pub use iri_resolver::*;
@@ -78,6 +80,7 @@ pub use security::*;
 pub use shape_import::*;
 pub use shape_inheritance::*;
 pub use shapes::*;
+pub use sparql::*;
 pub use targets::*;
 pub use validation::*;
 

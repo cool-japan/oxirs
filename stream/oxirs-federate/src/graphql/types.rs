@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 use crate::{executor::GraphQLResponse, QueryResultData, StepResult};
 
@@ -516,4 +518,94 @@ pub enum SchemaErrorType {
     CircularDependency,
     InvalidDirective,
     ConflictingDefinitions,
+}
+
+/// Federated subscription stream
+#[derive(Debug)]
+pub struct FederatedSubscriptionStream {
+    pub query: String,
+    pub variables: Option<serde_json::Value>,
+    pub service_subscriptions: Vec<ServiceSubscription>,
+    pub connection_id: String,
+    pub active: bool,
+}
+
+impl FederatedSubscriptionStream {
+    pub fn new(
+        query: String,
+        variables: Option<serde_json::Value>,
+        service_subscriptions: Vec<ServiceSubscription>,
+    ) -> Self {
+        Self {
+            query,
+            variables,
+            service_subscriptions,
+            connection_id: uuid::Uuid::new_v4().to_string(),
+            active: false,
+        }
+    }
+}
+
+/// Service-specific subscription
+#[derive(Debug, Clone)]
+pub struct ServiceSubscription {
+    pub service_id: String,
+    pub query: String,
+    pub variables: HashMap<String, serde_json::Value>,
+    pub stream_active: bool,
+}
+
+/// Subscription event from a service
+#[derive(Debug, Clone)]
+pub struct SubscriptionEvent {
+    pub service_id: String,
+    pub data: serde_json::Value,
+    pub errors: Vec<GraphQLError>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub event_id: String,
+}
+
+/// Subscription operation types
+#[derive(Debug, Clone)]
+pub enum SubscriptionOperation {
+    Start {
+        query: String,
+        variables: Option<serde_json::Value>,
+    },
+    Stop,
+    ConnectionInit,
+}
+
+/// Federation event for real-time propagation
+#[derive(Debug, Clone)]
+pub struct FederationEvent {
+    pub event_type: FederationEventType,
+    pub service_id: String,
+    pub data: serde_json::Value,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub event_id: String,
+}
+
+/// Types of federation events
+#[derive(Debug, Clone)]
+pub enum FederationEventType {
+    EntityUpdate,
+    SchemaChange,
+    ServiceAvailability,
+}
+
+/// GraphQL error structure (enhanced)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphQLError {
+    pub message: String,
+    pub locations: Option<Vec<GraphQLLocation>>,
+    pub path: Option<Vec<serde_json::Value>>,
+    pub extensions: Option<serde_json::Value>,
+}
+
+/// GraphQL error location
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphQLLocation {
+    pub line: u32,
+    pub column: u32,
 }

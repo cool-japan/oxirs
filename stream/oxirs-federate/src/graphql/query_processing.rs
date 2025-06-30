@@ -10,31 +10,263 @@ use tracing::debug;
 use super::types::*;
 
 impl GraphQLFederation {
-    /// Decompose a GraphQL query for federation
+    /// Decompose a GraphQL query for federation with advanced planning
     pub async fn decompose_query(&self, query: &str) -> Result<Vec<ServiceQuery>> {
         debug!("Decomposing GraphQL query for federation");
 
         // Parse the query into an AST-like structure
         let parsed_query = self.parse_graphql_query(query)?;
 
+        // Validate query complexity
+        let complexity = self.analyze_query_complexity(&parsed_query)?;
+        if complexity.total_complexity > self.config.max_query_complexity {
+            return Err(anyhow!(
+                "Query complexity {} exceeds maximum allowed {}",
+                complexity.total_complexity,
+                self.config.max_query_complexity
+            ));
+        }
+
         // Get the unified schema to understand field ownership
         let unified_schema = self.create_unified_schema().await?;
 
-        // Analyze field ownership across services
+        // Analyze field ownership and dependencies
         let field_ownership = self.analyze_field_ownership(&parsed_query, &unified_schema)?;
-
-        // Decompose into service-specific queries
-        let service_queries = self.create_service_queries(&parsed_query, &field_ownership)?;
+        
+        // Check for entity resolution requirements
+        let entity_requirements = self.analyze_entity_requirements(&parsed_query, &unified_schema)?;
+        
+        // Generate execution plan with entity resolution
+        let execution_plan = self.create_execution_plan(&parsed_query, &field_ownership, &entity_requirements)?;
+        
+        // Decompose into optimized service-specific queries
+        let service_queries = self.create_optimized_service_queries(&execution_plan, &parsed_query, &field_ownership)?;
 
         debug!(
-            "Decomposed query into {} service queries",
-            service_queries.len()
+            "Decomposed query into {} service queries with {} entity resolution steps",
+            service_queries.len(),
+            entity_requirements.len()
         );
         Ok(service_queries)
     }
 
+    /// Analyze entity resolution requirements
+    fn analyze_entity_requirements(
+        &self,
+        query: &ParsedQuery,
+        schema: &UnifiedSchema,
+    ) -> Result<Vec<EntityReference>> {
+        let mut entity_requirements = Vec::new();
+        
+        // Analyze selections for entity references
+        self.collect_entity_requirements_from_selections(
+            &query.selection_set,
+            schema,
+            &mut entity_requirements,
+        )?;
+        
+        Ok(entity_requirements)
+    }
+    
+    /// Collect entity requirements from selections
+    fn collect_entity_requirements_from_selections(
+        &self,
+        selections: &[Selection],
+        schema: &UnifiedSchema,
+        entity_requirements: &mut Vec<EntityReference>,
+    ) -> Result<()> {
+        for selection in selections {
+            // Check if this field represents an entity
+            if let Some(field_def) = schema.queries.get(&selection.name) {
+                // Check if the return type is an entity
+                let return_type = self.extract_base_type(&field_def.field_type);
+                if self.is_entity_type(&return_type, schema) {
+                    entity_requirements.push(EntityReference {
+                        entity_type: return_type,
+                        key_fields: vec!["id".to_string()], // Default key field
+                        required_fields: self.extract_required_fields(&selection.selection_set),
+                        service_id: self.determine_service_for_entity(&return_type, schema)?,
+                    });
+                }
+            }
+            
+            // Recursively check nested selections
+            self.collect_entity_requirements_from_selections(
+                &selection.selection_set,
+                schema,
+                entity_requirements,
+            )?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Check if a type is an entity type
+    fn is_entity_type(&self, type_name: &str, schema: &UnifiedSchema) -> bool {
+        // Check if type exists and could be an entity
+        schema.types.contains_key(type_name) && 
+        !matches!(type_name, "String" | "Int" | "Float" | "Boolean" | "ID")
+    }
+    
+    /// Extract required fields from selection set
+    fn extract_required_fields(&self, selections: &[Selection]) -> Vec<String> {
+        selections.iter().map(|s| s.name.clone()).collect()
+    }
+    
+    /// Determine which service owns an entity type
+    fn determine_service_for_entity(&self, entity_type: &str, schema: &UnifiedSchema) -> Result<String> {
+        if let Some(services) = schema.schema_mapping.get(entity_type) {
+            if let Some(service) = services.first() {
+                Ok(service.clone())
+            } else {
+                Err(anyhow!("No service found for entity type: {}", entity_type))
+            }
+        } else {
+            Err(anyhow!("Entity type not found in schema mapping: {}", entity_type))
+        }
+    }
+    
+    /// Create execution plan with entity resolution
+    fn create_execution_plan(
+        &self,
+        query: &ParsedQuery,
+        field_ownership: &FieldOwnership,
+        entity_requirements: &[EntityReference],
+    ) -> Result<ExecutionPlan> {
+        let mut steps = Vec::new();
+        let mut step_counter = 0;
+        
+        // Create steps for entity resolution if needed
+        for entity_req in entity_requirements {
+            steps.push(ExecutionStep {
+                step_id: format!("entity_resolution_{}", step_counter),
+                step_type: StepType::EntityResolution,
+                service_id: Some(entity_req.service_id.clone()),
+                query_fragment: format!(
+                    "_entities(representations: [{{__typename: \"{}\", id: \"$id\"}}])",
+                    entity_req.entity_type
+                ),
+                dependencies: Vec::new(),
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            });
+            step_counter += 1;
+        }
+        
+        // Create steps for field resolution
+        for (service_id, fields) in &field_ownership.service_to_fields {
+            if !fields.is_empty() {
+                steps.push(ExecutionStep {
+                    step_id: format!("service_query_{}", step_counter),
+                    step_type: StepType::GraphQLQuery,
+                    service_id: Some(service_id.clone()),
+                    query_fragment: fields.join(", "),
+                    dependencies: Vec::new(),
+                    estimated_cost: fields.len() as f64,
+                    timeout: std::time::Duration::from_secs(30),
+                    retry_config: None,
+                });
+                step_counter += 1;
+            }
+        }
+        
+        // Add result stitching step
+        steps.push(ExecutionStep {
+            step_id: "result_stitching".to_string(),
+            step_type: StepType::ResultStitching,
+            service_id: None,
+            query_fragment: String::new(),
+            dependencies: steps.iter().map(|s| s.step_id.clone()).collect(),
+            estimated_cost: 0.5,
+            timeout: std::time::Duration::from_secs(10),
+            retry_config: None,
+        });
+        
+        Ok(ExecutionPlan {
+            query_id: uuid::Uuid::new_v4().to_string(),
+            steps,
+            estimated_total_cost: 0.0, // Will be calculated
+            max_parallelism: 4,
+            planning_time: std::time::Duration::from_millis(0),
+            cache_key: None,
+            metadata: HashMap::new(),
+            parallelizable_steps: Vec::new(),
+        })
+    }
+    
+    /// Create optimized service queries with entity resolution
+    fn create_optimized_service_queries(
+        &self,
+        execution_plan: &ExecutionPlan,
+        query: &ParsedQuery,
+        field_ownership: &FieldOwnership,
+    ) -> Result<Vec<ServiceQuery>> {
+        let mut service_queries = Vec::new();
+        
+        // Generate queries from execution plan steps
+        for step in &execution_plan.steps {
+            if let Some(service_id) = &step.service_id {
+                match step.step_type {
+                    StepType::GraphQLQuery => {
+                        let fields = field_ownership.service_to_fields.get(service_id)
+                            .cloned()
+                            .unwrap_or_default();
+                        
+                        if !fields.is_empty() {
+                            let operation_type = match query.operation_type {
+                                GraphQLOperationType::Query => "query",
+                                GraphQLOperationType::Mutation => "mutation",
+                                GraphQLOperationType::Subscription => "subscription",
+                            };
+                            
+                            let service_query = format!(
+                                "{} {{ {} }}",
+                                operation_type,
+                                fields.join(" ")
+                            );
+                            
+                            service_queries.push(ServiceQuery {
+                                service_id: service_id.clone(),
+                                query: service_query,
+                                variables: None,
+                            });
+                        }
+                    }
+                    StepType::EntityResolution => {
+                        // Create entity resolution query
+                        let entity_query = format!(
+                            "query($_representations: [_Any!]!) {{ {} }}",
+                            step.query_fragment
+                        );
+                        
+                        service_queries.push(ServiceQuery {
+                            service_id: service_id.clone(),
+                            query: entity_query,
+                            variables: Some(serde_json::json!({
+                                "representations": []
+                            })),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        
+        Ok(service_queries)
+    }
+    
+    /// Extract base type name, removing List/NonNull wrappers
+    fn extract_base_type(&self, type_str: &str) -> String {
+        type_str
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .trim_end_matches('!')
+            .to_string()
+    }
+
     /// Parse a GraphQL query string into a structured representation
-    fn parse_graphql_query(&self, query: &str) -> Result<ParsedQuery> {
+    pub fn parse_graphql_query(&self, query: &str) -> Result<ParsedQuery> {
         // This is a simplified parser - in production, use a proper GraphQL parser like graphql-parser
         let query = query.trim();
 
@@ -273,7 +505,7 @@ impl GraphQLFederation {
     }
 
     /// Create service-specific queries based on field ownership
-    fn create_service_queries(
+    pub fn create_service_queries(
         &self,
         query: &ParsedQuery,
         ownership: &FieldOwnership,

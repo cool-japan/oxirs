@@ -599,6 +599,7 @@ pub struct MonitoringConfig {
     pub metrics: MetricsConfig,
     pub health_checks: HealthCheckConfig,
     pub tracing: TracingConfig,
+    pub prometheus: Option<PrometheusConfig>,
 }
 
 /// Metrics configuration
@@ -617,6 +618,28 @@ pub struct MetricsConfig {
     pub collect_system_metrics: bool,
 
     pub histogram_buckets: Vec<f64>,
+}
+
+/// Prometheus configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct PrometheusConfig {
+    pub enabled: bool,
+
+    #[validate(length(min = 1))]
+    pub endpoint: String,
+
+    #[validate(range(min = 1, max = 65535))]
+    pub port: Option<u16>,
+
+    pub namespace: String,
+
+    pub job_name: String,
+
+    pub instance: String,
+
+    pub scrape_interval_secs: u64,
+
+    pub timeout_secs: u64,
 }
 
 /// Health check configuration
@@ -643,6 +666,19 @@ pub struct TracingConfig {
     pub service_name: String,
 
     pub sample_rate: f64,
+
+    pub output: TracingOutput,
+}
+
+/// Tracing output options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TracingOutput {
+    Stdout,
+    Stderr,
+    File,
+    Jaeger,
+    Otlp,
 }
 
 /// Performance configuration
@@ -822,7 +858,9 @@ impl Default for ServerConfig {
                     endpoint: None,
                     service_name: "oxirs-fuseki".to_string(),
                     sample_rate: 0.1,
+                    output: TracingOutput::Stdout,
                 },
+                prometheus: None,
             },
             performance: PerformanceConfig {
                 caching: CacheConfig {
@@ -1064,6 +1102,7 @@ impl Default for MonitoringConfig {
             metrics: MetricsConfig::default(),
             health_checks: HealthCheckConfig::default(),
             tracing: TracingConfig::default(),
+            prometheus: None,
         }
     }
 }
@@ -1099,6 +1138,58 @@ impl Default for TracingConfig {
             endpoint: None,
             service_name: "oxirs-fuseki".to_string(),
             sample_rate: 1.0,
+            output: TracingOutput::Stdout,
+        }
+    }
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            auth_required: false,
+            users: HashMap::new(),
+            jwt: None,
+            oauth: None,
+            ldap: None,
+            rate_limiting: None,
+            cors: CorsConfig::default(),
+            session: SessionConfig::default(),
+            authentication: AuthenticationConfig::default(),
+            api_keys: None,
+            certificate: None,
+            saml: None,
+        }
+    }
+}
+
+impl Default for AuthenticationConfig {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
+impl Default for CorsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            allow_origins: vec!["*".to_string()],
+            allow_methods: vec!["GET".to_string(), "POST".to_string(), "OPTIONS".to_string()],
+            allow_headers: vec!["Content-Type".to_string(), "Authorization".to_string()],
+            expose_headers: vec![],
+            allow_credentials: false,
+            max_age_secs: 3600,
+        }
+    }
+}
+
+impl Default for SessionConfig {
+    fn default() -> Self {
+        Self {
+            secret: "default-session-secret-change-in-production".to_string(),
+            timeout_secs: 3600,
+            secure: false,
+            http_only: true,
+            same_site: SameSitePolicy::Lax,
         }
     }
 }
@@ -1335,7 +1426,9 @@ mod tests {
                 endpoint: None,
                 service_name: "test".to_string(),
                 sample_rate: 0.1,
+                output: TracingOutput::Stdout,
             },
+            prometheus: None,
         };
 
         assert!(monitoring.validate().is_ok());

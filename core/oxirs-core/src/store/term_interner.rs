@@ -3,11 +3,10 @@
 //! This module provides efficient term interning specifically designed for RDF data,
 //! with separate interners for subjects, predicates, and objects to maximize cache locality.
 
-use crate::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject, Term};
+use crate::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject};
 use anyhow::{Context, Result};
 use bimap::BiMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;

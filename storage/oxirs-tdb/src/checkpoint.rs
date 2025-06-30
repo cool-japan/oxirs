@@ -662,7 +662,8 @@ impl OnlineCheckpointManager {
         // 3. Handle the "fuzziness" by recording which pages might be inconsistent
         // 4. Use the WAL to ensure consistency during recovery
 
-        thread::sleep(Duration::from_millis(100)); // Simulate I/O
+        // Use a shorter sleep in tests to prevent hanging
+        thread::sleep(Duration::from_millis(10)); // Reduced from 100ms to prevent test hangs
 
         let end_lsn = 0; // Would come from WAL
         let size_bytes = dirty_pages.len() as u64 * 8192; // Assume 8KB pages
@@ -688,7 +689,8 @@ impl OnlineCheckpointManager {
         // 3. Ensure consistent state
         // 4. Resume transactions
 
-        thread::sleep(Duration::from_millis(500)); // Simulate longer I/O
+        // Use a shorter sleep in tests to prevent hanging
+        thread::sleep(Duration::from_millis(20)); // Reduced from 500ms to prevent test hangs
 
         let end_lsn = 0; // Would come from WAL
         let size_bytes = dirty_pages.len() as u64 * 8192; // Assume 8KB pages
@@ -806,8 +808,8 @@ impl OnlineCheckpointManager {
                 last_checkpoint = Instant::now();
             }
 
-            // Sleep for a short interval
-            thread::sleep(Duration::from_secs(1));
+            // Sleep for a short interval (reduced for tests)
+            thread::sleep(Duration::from_millis(100));
         }
     }
 }

@@ -420,11 +420,11 @@ impl SparqlVectorService {
             ],
         });
 
-        // vec:search(query_text, limit) -> results (as per TODO.md Phase 4.1.1)
+        // vec:search(query_text, limit, threshold, metric, cross_language, languages) -> results (Enhanced version)
         self.register_function(VectorServiceFunction {
             name: "search".to_string(),
-            arity: 2,
-            description: "Search for resources similar to query text".to_string(),
+            arity: 6,
+            description: "Search for resources similar to query text with cross-language support".to_string(),
             parameters: vec![
                 VectorServiceParameter {
                     name: "query_text".to_string(),
@@ -438,14 +438,38 @@ impl SparqlVectorService {
                     required: false,
                     description: "Maximum number of results to return".to_string(),
                 },
+                VectorServiceParameter {
+                    name: "threshold".to_string(),
+                    param_type: VectorParameterType::Number,
+                    required: false,
+                    description: "Minimum similarity threshold for results".to_string(),
+                },
+                VectorServiceParameter {
+                    name: "metric".to_string(),
+                    param_type: VectorParameterType::String,
+                    required: false,
+                    description: "Similarity metric to use".to_string(),
+                },
+                VectorServiceParameter {
+                    name: "cross_language".to_string(),
+                    param_type: VectorParameterType::String,
+                    required: false,
+                    description: "Enable cross-language search (true/false)".to_string(),
+                },
+                VectorServiceParameter {
+                    name: "languages".to_string(),
+                    param_type: VectorParameterType::String,
+                    required: false,
+                    description: "Comma-separated list of target languages (e.g., 'en,es,fr,de')".to_string(),
+                },
             ],
         });
 
-        // vec:searchIn(query, graph, limit) -> results (as per TODO.md Phase 4.1.1)
+        // vec:searchIn(query, graph, limit, scope, threshold) -> results (Enhanced version)
         self.register_function(VectorServiceFunction {
             name: "searchIn".to_string(),
-            arity: 3,
-            description: "Search for resources within a specific graph".to_string(),
+            arity: 5,
+            description: "Search for resources within a specific graph with advanced options".to_string(),
             parameters: vec![
                 VectorServiceParameter {
                     name: "query".to_string(),
@@ -464,6 +488,18 @@ impl SparqlVectorService {
                     param_type: VectorParameterType::Number,
                     required: false,
                     description: "Maximum number of results to return".to_string(),
+                },
+                VectorServiceParameter {
+                    name: "scope".to_string(),
+                    param_type: VectorParameterType::String,
+                    required: false,
+                    description: "Search scope: 'exact', 'children', 'parents', 'hierarchy', 'related'".to_string(),
+                },
+                VectorServiceParameter {
+                    name: "threshold".to_string(),
+                    param_type: VectorParameterType::Number,
+                    required: false,
+                    description: "Minimum similarity threshold for results".to_string(),
                 },
             ],
         });
@@ -1138,8 +1174,36 @@ impl SparqlVectorService {
             self.config.default_metric
         };
 
-        // Execute text-based search
-        let results = self.vector_store.similarity_search(query_text, limit)?;
+        // Check for cross-language search parameter
+        let enable_cross_language = if args.len() > 4 {
+            match &args[4] {
+                VectorServiceArg::String(flag) => flag.eq_ignore_ascii_case("true") || flag == "1",
+                VectorServiceArg::Number(n) => *n != 0.0,
+                _ => false,
+            }
+        } else {
+            false
+        };
+
+        // Check for target languages parameter
+        let target_languages = if args.len() > 5 {
+            match &args[5] {
+                VectorServiceArg::String(langs) => {
+                    langs.split(',').map(|s| s.trim().to_string()).collect()
+                },
+                _ => vec!["en".to_string(), "es".to_string(), "fr".to_string(), "de".to_string()],
+            }
+        } else {
+            vec!["en".to_string(), "es".to_string(), "fr".to_string(), "de".to_string()]
+        };
+
+        // Execute cross-language search if enabled
+        let results = if enable_cross_language {
+            self.execute_cross_language_search(query_text, limit, threshold, &target_languages)?
+        } else {
+            // Standard single-language search
+            self.vector_store.similarity_search(query_text, limit)?
+        };
 
         if self.config.enable_explanations {
             // Return detailed results with explanations
@@ -1200,17 +1264,47 @@ impl SparqlVectorService {
             self.config.default_limit
         };
 
+        // Optional search scope parameter
+        let search_scope = if args.len() > 3 {
+            match &args[3] {
+                VectorServiceArg::String(scope_str) => match scope_str.as_str() {
+                    "exact" => GraphSearchScope::Exact,
+                    "children" => GraphSearchScope::IncludeChildren,
+                    "parents" => GraphSearchScope::IncludeParents,
+                    "hierarchy" => GraphSearchScope::FullHierarchy,
+                    "related" => GraphSearchScope::Related,
+                    _ => GraphSearchScope::Exact,
+                },
+                _ => GraphSearchScope::Exact,
+            }
+        } else {
+            GraphSearchScope::Exact
+        };
+
+        // Optional threshold parameter
+        let threshold = if args.len() > 4 {
+            match &args[4] {
+                VectorServiceArg::Number(t) => *t as f32,
+                _ => self.config.default_threshold,
+            }
+        } else {
+            self.config.default_threshold
+        };
+
         // Use graph-aware search if available
         let results: Vec<(String, f32)> = if let Some(ref graph_search) = self.graph_aware_search {
-            // Create graph context for search
+            // Create enhanced graph context for search
+            let mut context_weights = HashMap::new();
+            context_weights.insert(graph_uri.clone(), 1.0);
+            
             let graph_context = GraphContext {
                 primary_graph: graph_uri.clone(),
                 additional_graphs: Vec::new(),
-                scope: GraphSearchScope::Exact,
-                context_weights: HashMap::new(),
+                scope: search_scope,
+                context_weights,
             };
 
-            // Perform graph-aware search
+            // Perform graph-aware search with threshold filtering
             let graph_results = graph_search.search_in_graph(
                 &self.vector_store,
                 query_text,
@@ -1218,22 +1312,21 @@ impl SparqlVectorService {
                 limit,
             )?;
 
-            // Convert to simple (String, f32) tuples
+            // Convert to simple (String, f32) tuples and apply threshold
             graph_results
                 .into_iter()
+                .filter(|result| result.final_score >= threshold)
                 .map(|result| (result.resource, result.final_score))
                 .collect()
         } else {
-            // Fallback to regular search with simple graph filtering
-            let all_results = self.vector_store.similarity_search(query_text, limit * 2)?;
+            // Enhanced fallback with better graph filtering
+            let all_results = self.vector_store.similarity_search(query_text, limit * 3)?;
 
-            // Filter results to only include items from the specified graph
-            // This is a simplified approach - in practice would use proper graph membership
+            // Multi-level graph filtering approach
             all_results
                 .into_iter()
-                .filter(|(uri, _)| {
-                    // Simple heuristic: check if URI contains graph URI or is prefixed by it
-                    uri.starts_with(graph_uri) || uri.contains(&graph_uri.replace("http://", ""))
+                .filter(|(uri, score)| {
+                    *score >= threshold && self.is_resource_in_graph(uri, graph_uri, search_scope)
                 })
                 .take(limit)
                 .collect()
@@ -1264,6 +1357,320 @@ impl SparqlVectorService {
             ))
         } else {
             Ok(VectorServiceResult::SimilarityList(results))
+        }
+    }
+
+    /// Execute cross-language search with query translation and multilingual embedding
+    fn execute_cross_language_search(
+        &mut self,
+        query_text: &str,
+        limit: usize,
+        threshold: f32,
+        target_languages: &[String],
+    ) -> Result<Vec<(String, f32)>> {
+        let mut all_results = Vec::new();
+        let mut language_weights = HashMap::new();
+        
+        // Detect query language
+        let detected_language = self.detect_language(query_text);
+        
+        // Start with original query (highest weight)
+        let original_results = self.vector_store.similarity_search(query_text, limit)?;
+        for (uri, score) in original_results {
+            all_results.push((uri, score * 1.0)); // Full weight for original language
+        }
+        
+        // Generate translated queries for each target language
+        for target_lang in target_languages {
+            if target_lang != &detected_language {
+                // Generate language-specific variations
+                let translated_queries = self.generate_cross_language_queries(query_text, target_lang);
+                
+                // Weight for this language (slightly lower than original)
+                let lang_weight = if target_lang == "en" { 0.95 } else { 0.85 };
+                language_weights.insert(target_lang.clone(), lang_weight);
+                
+                for translated_query in translated_queries {
+                    let lang_results = self.vector_store.similarity_search(&translated_query, limit / 2)?;
+                    for (uri, score) in lang_results {
+                        all_results.push((uri, score * lang_weight));
+                    }
+                }
+            }
+        }
+        
+        // Aggregate and deduplicate results
+        let aggregated_results = self.aggregate_multilingual_results(all_results, threshold)?;
+        
+        // Sort by final score and return top results
+        let mut final_results: Vec<(String, f32)> = aggregated_results.into_iter().collect();
+        final_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        final_results.truncate(limit);
+        
+        Ok(final_results)
+    }
+    
+    /// Simple language detection heuristic
+    fn detect_language(&self, text: &str) -> String {
+        // Simple heuristic-based language detection
+        let text_lower = text.to_lowercase();
+        
+        // Common language patterns
+        if text_lower.contains("the ") || text_lower.contains("and ") || text_lower.contains("that ") {
+            "en".to_string()
+        } else if text_lower.contains("el ") || text_lower.contains("la ") || text_lower.contains("que ") {
+            "es".to_string()
+        } else if text_lower.contains("le ") || text_lower.contains("la ") || text_lower.contains("que ") {
+            "fr".to_string()
+        } else if text_lower.contains("der ") || text_lower.contains("die ") || text_lower.contains("das ") {
+            "de".to_string()
+        } else {
+            "en".to_string() // Default to English
+        }
+    }
+    
+    /// Generate cross-language query variations
+    fn generate_cross_language_queries(&self, query: &str, target_lang: &str) -> Vec<String> {
+        let mut variations = Vec::new();
+        
+        // For now, implement basic term substitution
+        // In production, this would use proper translation APIs
+        let translations = self.get_basic_translations(query, target_lang);
+        variations.extend(translations);
+        
+        // Add transliteration variations
+        let transliterations = self.generate_transliterations(query, target_lang);
+        variations.extend(transliterations);
+        
+        // Add stemmed/root form variations
+        let stemmed_variants = self.generate_stemmed_variants(query, target_lang);
+        variations.extend(stemmed_variants);
+        
+        // Remove duplicates and empty strings
+        variations.sort();
+        variations.dedup();
+        variations.retain(|s| !s.trim().is_empty());
+        
+        if variations.is_empty() {
+            variations.push(query.to_string()); // Fallback to original
+        }
+        
+        variations
+    }
+    
+    /// Basic translation lookup (simplified implementation)
+    fn get_basic_translations(&self, query: &str, target_lang: &str) -> Vec<String> {
+        let mut translations = Vec::new();
+        
+        // Basic translation dictionary (in production, use proper translation service)
+        let basic_dict = match target_lang {
+            "es" => vec![
+                ("artificial intelligence", "inteligencia artificial"),
+                ("machine learning", "aprendizaje automático"),
+                ("data science", "ciencia de datos"),
+                ("neural network", "red neuronal"),
+                ("deep learning", "aprendizaje profundo"),
+            ],
+            "fr" => vec![
+                ("artificial intelligence", "intelligence artificielle"),
+                ("machine learning", "apprentissage automatique"),
+                ("data science", "science des données"),
+                ("neural network", "réseau de neurones"),
+                ("deep learning", "apprentissage profond"),
+            ],
+            "de" => vec![
+                ("artificial intelligence", "künstliche Intelligenz"),
+                ("machine learning", "maschinelles Lernen"),
+                ("data science", "Datenwissenschaft"),
+                ("neural network", "neuronales Netzwerk"),
+                ("deep learning", "tiefes Lernen"),
+            ],
+            _ => vec![],
+        };
+        
+        let query_lower = query.to_lowercase();
+        for (en_term, target_term) in basic_dict {
+            if query_lower.contains(en_term) {
+                let translated = query_lower.replace(en_term, target_term);
+                translations.push(translated);
+            }
+        }
+        
+        translations
+    }
+    
+    /// Generate transliteration variations for different scripts
+    fn generate_transliterations(&self, query: &str, target_lang: &str) -> Vec<String> {
+        let mut transliterations = Vec::new();
+        
+        // For languages with different scripts, generate transliterations
+        match target_lang {
+            "ru" => {
+                // Cyrillic transliteration (simplified)
+                let latin_to_cyrillic = vec![
+                    ("ai", "ай"), ("machine", "машин"), ("data", "дата"),
+                    ("network", "сеть"), ("learning", "обучение"),
+                ];
+                
+                let mut transliterated = query.to_lowercase();
+                for (latin, cyrillic) in latin_to_cyrillic {
+                    transliterated = transliterated.replace(latin, cyrillic);
+                }
+                if transliterated != query.to_lowercase() {
+                    transliterations.push(transliterated);
+                }
+            },
+            "ar" => {
+                // Arabic transliteration (simplified)
+                let latin_to_arabic = vec![
+                    ("data", "بيانات"), ("machine", "آلة"), ("network", "شبكة"),
+                ];
+                
+                let mut transliterated = query.to_lowercase();
+                for (latin, arabic) in latin_to_arabic {
+                    transliterated = transliterated.replace(latin, arabic);
+                }
+                if transliterated != query.to_lowercase() {
+                    transliterations.push(transliterated);
+                }
+            },
+            _ => {
+                // For Latin-script languages, no transliteration needed
+            }
+        }
+        
+        transliterations
+    }
+    
+    /// Generate stemmed variants for better cross-language matching
+    fn generate_stemmed_variants(&self, query: &str, target_lang: &str) -> Vec<String> {
+        let mut variants = Vec::new();
+        
+        // Simple stemming rules by language
+        let words: Vec<&str> = query.split_whitespace().collect();
+        
+        for word in words {
+            let stemmed = match target_lang {
+                "es" => {
+                    // Spanish stemming rules (simplified)
+                    let word_lower = word.to_lowercase();
+                    if word_lower.ends_with("ción") {
+                        word_lower.replace("ción", "")
+                    } else if word_lower.ends_with("mente") {
+                        word_lower.replace("mente", "")
+                    } else {
+                        word_lower
+                    }
+                },
+                "fr" => {
+                    // French stemming rules (simplified)
+                    let word_lower = word.to_lowercase();
+                    if word_lower.ends_with("tion") {
+                        word_lower.replace("tion", "")
+                    } else if word_lower.ends_with("ement") {
+                        word_lower.replace("ement", "")
+                    } else {
+                        word_lower
+                    }
+                },
+                "de" => {
+                    // German stemming rules (simplified)
+                    let word_lower = word.to_lowercase();
+                    if word_lower.ends_with("ung") {
+                        word_lower.replace("ung", "")
+                    } else if word_lower.ends_with("keit") {
+                        word_lower.replace("keit", "")
+                    } else {
+                        word_lower
+                    }
+                },
+                _ => word.to_lowercase(),
+            };
+            
+            if stemmed != word.to_lowercase() && !stemmed.is_empty() {
+                variants.push(stemmed);
+            }
+        }
+        
+        if !variants.is_empty() {
+            variants = vec![variants.join(" ")];
+        }
+        
+        variants
+    }
+    
+    /// Aggregate and deduplicate multilingual search results
+    fn aggregate_multilingual_results(&self, results: Vec<(String, f32)>, threshold: f32) -> Result<HashMap<String, f32>> {
+        let mut aggregated: HashMap<String, Vec<f32>> = HashMap::new();
+        
+        // Group scores by URI
+        for (uri, score) in results {
+            if score >= threshold {
+                aggregated.entry(uri).or_insert_with(Vec::new).push(score);
+            }
+        }
+        
+        // Calculate final scores using weighted average
+        let mut final_results = HashMap::new();
+        for (uri, scores) in aggregated {
+            let final_score = if scores.len() == 1 {
+                scores[0]
+            } else {
+                // Use maximum score with slight boost for multilingual matches
+                let max_score = scores.iter().fold(0.0f32, |acc, &x| acc.max(x));
+                let diversity_bonus = (scores.len() - 1) as f32 * 0.05; // Small bonus for cross-language matches
+                (max_score + diversity_bonus).min(1.0)
+            };
+            
+            final_results.insert(uri, final_score);
+        }
+        
+        Ok(final_results)
+    }
+
+    /// Enhanced graph membership check with multiple heuristics
+    fn is_resource_in_graph(&self, resource_uri: &str, graph_uri: &str, scope: GraphSearchScope) -> bool {
+        // Primary check: resource URI is prefixed by graph URI
+        if resource_uri.starts_with(graph_uri) {
+            return true;
+        }
+        
+        // Secondary check: resource contains graph domain
+        let domain_string = graph_uri
+            .replace("http://", "")
+            .replace("https://", "");
+        let graph_domain = domain_string
+            .split('/')
+            .next()
+            .unwrap_or("");
+        
+        if !graph_domain.is_empty() && resource_uri.contains(graph_domain) {
+            return true;
+        }
+        
+        // Tertiary check: namespace-based matching
+        if let Some(graph_namespace) = graph_uri.split('#').next() {
+            if resource_uri.starts_with(graph_namespace) {
+                return true;
+            }
+        }
+        
+        // Scope-specific checks
+        match scope {
+            GraphSearchScope::Exact => false,
+            GraphSearchScope::IncludeChildren | 
+            GraphSearchScope::IncludeParents |
+            GraphSearchScope::FullHierarchy |
+            GraphSearchScope::Related => {
+                // For hierarchical scopes, be more permissive
+                // Check if the resource path contains the graph path segments
+                let graph_segments: Vec<&str> = graph_uri.split('/').collect();
+                let resource_segments: Vec<&str> = resource_uri.split('/').collect();
+                
+                graph_segments.iter().all(|&graph_seg| {
+                    resource_segments.iter().any(|&res_seg| res_seg.contains(graph_seg))
+                })
+            }
         }
     }
 

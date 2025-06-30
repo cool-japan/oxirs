@@ -31,27 +31,33 @@ impl QueryDecomposer {
             pattern_nodes.push(pattern_node);
 
             // Connect pattern to its variables
-            if pattern.subject.starts_with('?') {
-                if let Some(&var_node) = variable_nodes.get(&pattern.subject) {
-                    graph.connect_pattern_to_variable(
-                        pattern_node,
-                        var_node,
-                        VariableRole::Subject,
-                    );
+            if let Some(ref subject) = pattern.subject {
+                if subject.starts_with('?') {
+                    if let Some(&var_node) = variable_nodes.get(subject) {
+                        graph.connect_pattern_to_variable(
+                            pattern_node,
+                            var_node,
+                            VariableRole::Subject,
+                        );
+                    }
                 }
             }
-            if pattern.predicate.starts_with('?') {
-                if let Some(&var_node) = variable_nodes.get(&pattern.predicate) {
-                    graph.connect_pattern_to_variable(
-                        pattern_node,
-                        var_node,
-                        VariableRole::Predicate,
-                    );
+            if let Some(ref predicate) = pattern.predicate {
+                if predicate.starts_with('?') {
+                    if let Some(&var_node) = variable_nodes.get(predicate) {
+                        graph.connect_pattern_to_variable(
+                            pattern_node,
+                            var_node,
+                            VariableRole::Predicate,
+                        );
+                    }
                 }
             }
-            if pattern.object.starts_with('?') {
-                if let Some(&var_node) = variable_nodes.get(&pattern.object) {
-                    graph.connect_pattern_to_variable(pattern_node, var_node, VariableRole::Object);
+            if let Some(ref object) = pattern.object {
+                if object.starts_with('?') {
+                    if let Some(&var_node) = variable_nodes.get(object) {
+                        graph.connect_pattern_to_variable(pattern_node, var_node, VariableRole::Object);
+                    }
                 }
             }
         }
@@ -82,8 +88,8 @@ impl QueryDecomposer {
         let mut visited = HashSet::new();
 
         for node in graph.pattern_nodes() {
-            if !visited.contains(&node) {
-                let component = self.explore_component(graph, node, &mut visited);
+            if !visited.contains(node) {
+                let component = self.explore_component(graph, *node, &mut visited);
                 components.push(component);
             }
         }

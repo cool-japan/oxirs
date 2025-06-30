@@ -5,9 +5,8 @@
 
 use anyhow::{bail, Context, Result};
 use lru::LruCache;
-use memmap2::{Mmap, MmapMut, MmapOptions};
+use memmap2::{Mmap, MmapOptions};
 use parking_lot::{Mutex, RwLock};
-use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
@@ -374,10 +373,8 @@ impl MmapIndex {
                 if key.as_str() >= prefix {
                     self.search_prefix_recursive(node.children[i], prefix, results)?;
                 }
-                if key.starts_with(prefix) || key.as_str() > prefix {
-                    if i + 1 < node.children.len() {
-                        self.search_prefix_recursive(node.children[i + 1], prefix, results)?;
-                    }
+                if (key.starts_with(prefix) || key.as_str() > prefix) && i + 1 < node.children.len() {
+                    self.search_prefix_recursive(node.children[i + 1], prefix, results)?;
                 }
                 if !key.starts_with(prefix) && key.as_str() > prefix {
                     break;

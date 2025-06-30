@@ -319,14 +319,38 @@ impl HnswIndex {
         self.distance_calculations
             .fetch_add(1, AtomicOrdering::Relaxed);
 
-        if self.config.enable_simd {
+        if self.config.enable_simd && v1.len() >= 8 {
             self.stats
                 .simd_operations
                 .fetch_add(1, AtomicOrdering::Relaxed);
-            // Use oxirs-core SIMD operations through the similarity metric
-            self.config.metric.similarity(v1, v2).unwrap_or(0.0)
+            
+            // Use oxirs-core SIMD operations for maximum performance
+            let similarity = match self.config.metric {
+                crate::similarity::SimilarityMetric::Cosine => {
+                    // Convert cosine distance to similarity
+                    1.0 - oxirs_core::simd::SimdOps::cosine_distance(v1, v2)
+                },
+                crate::similarity::SimilarityMetric::Euclidean => {
+                    // Convert Euclidean distance to similarity (normalized)
+                    let distance = oxirs_core::simd::SimdOps::euclidean_distance(v1, v2);
+                    let max_possible_distance = (v1.len() as f32).sqrt() * 2.0; // Assuming normalized vectors
+                    1.0 - (distance / max_possible_distance).min(1.0)
+                },
+                crate::similarity::SimilarityMetric::Manhattan => {
+                    // Convert Manhattan distance to similarity (normalized)
+                    let distance = oxirs_core::simd::SimdOps::manhattan_distance(v1, v2);
+                    let max_possible_distance = v1.len() as f32 * 2.0; // Assuming normalized vectors
+                    1.0 - (distance / max_possible_distance).min(1.0)
+                },
+                _ => {
+                    // Fallback to standard similarity metric for other types
+                    self.config.metric.similarity(v1, v2).unwrap_or(0.0)
+                }
+            };
+            
+            similarity.clamp(0.0, 1.0)
         } else {
-            // Fallback to regular calculation
+            // Fallback to regular calculation for small vectors or when SIMD is disabled
             self.config.metric.similarity(v1, v2).unwrap_or(0.0)
         }
     }
@@ -381,14 +405,146 @@ impl HnswIndex {
             .prefetch_operations
             .fetch_add(1, AtomicOrdering::Relaxed);
 
+        // Prefetch memory for better cache performance
         for &candidate_id in candidates.iter().take(self.config.prefetch_distance) {
             if candidate_id < self.nodes.len() {
-                // Prefetch the vector data for better cache performance
-                let _prefetch = &self.nodes[candidate_id].vector_data_f32;
-                // The actual prefetch would use platform-specific instructions
-                // For now, this serves as documentation of the intent
+                // Prefetch the vector data and node metadata
+                let node = &self.nodes[candidate_id];
+                let vector_ptr = node.vector_data_f32.as_ptr();
+                
+                // Use compiler intrinsics for memory prefetching when available
+                #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+                unsafe {
+                    // Prefetch for read with temporal locality (T0 - closest cache level)
+                    #[cfg(target_feature = "sse")]
+                    std::arch::x86_64::_mm_prefetch(
+                        vector_ptr as *const i8,
+                        std::arch::x86_64::_MM_HINT_T0
+                    );
+                }
+                
+                // For non-x86 architectures or when intrinsics aren't available,
+                // still access the memory to trigger cache loading
+                #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+                {
+                    let _prefetch_trigger = node.vector_data_f32.get(0);
+                }
+                
+                // Prefetch node connections data as well for graph traversal
+                if !node.connections.is_empty() {
+                    let _connections_prefetch = node.connections.get(0);
+                }
             }
         }
+    }
+
+    /// Advanced SIMD batch distance calculation for maximum performance
+    fn simd_batch_distances(&self, query: &[f32], candidates: &[usize]) -> Vec<f32> {
+        let mut distances = Vec::with_capacity(candidates.len());
+        
+        if !self.config.enable_simd || candidates.len() < 4 {
+            // Fallback to regular batch processing
+            return self.batch_similarity(query, candidates);
+        }
+        
+        self.stats
+            .simd_operations
+            .fetch_add(1, AtomicOrdering::Relaxed);
+        
+        // Process candidates in chunks optimal for SIMD operations
+        const SIMD_CHUNK_SIZE: usize = 8; // Process 8 vectors at a time for AVX
+        
+        // Prefetch data if enabled
+        if self.config.enable_prefetch {
+            self.prefetch_candidates(candidates);
+        }
+        
+        for chunk in candidates.chunks(SIMD_CHUNK_SIZE) {
+            for &candidate_id in chunk {
+                if candidate_id < self.nodes.len() {
+                    let similarity = match self.config.metric {
+                        crate::similarity::SimilarityMetric::Cosine => {
+                            1.0 - oxirs_core::simd::SimdOps::cosine_distance(
+                                query, 
+                                &self.nodes[candidate_id].vector_data_f32
+                            )
+                        },
+                        crate::similarity::SimilarityMetric::Euclidean => {
+                            let distance = oxirs_core::simd::SimdOps::euclidean_distance(
+                                query, 
+                                &self.nodes[candidate_id].vector_data_f32
+                            );
+                            let max_dist = (query.len() as f32).sqrt() * 2.0;
+                            1.0 - (distance / max_dist).min(1.0)
+                        },
+                        crate::similarity::SimilarityMetric::Manhattan => {
+                            let distance = oxirs_core::simd::SimdOps::manhattan_distance(
+                                query, 
+                                &self.nodes[candidate_id].vector_data_f32
+                            );
+                            let max_dist = query.len() as f32 * 2.0;
+                            1.0 - (distance / max_dist).min(1.0)
+                        },
+                        _ => {
+                            // Use fallback for other metrics
+                            self.similarity_optimized(query, &self.nodes[candidate_id].vector_data_f32)
+                        }
+                    };
+                    distances.push(similarity.clamp(0.0, 1.0));
+                } else {
+                    distances.push(0.0);
+                }
+            }
+        }
+        
+        distances
+    }
+    
+    /// Cache-aware node ordering for improved memory access patterns
+    fn optimize_node_layout(&mut self) {
+        if !self.config.cache_friendly_layout {
+            return;
+        }
+        
+        // Sort nodes by access frequency for better cache locality
+        let mut node_indices: Vec<usize> = (0..self.nodes.len()).collect();
+        node_indices.sort_by(|&a, &b| {
+            self.nodes[b].access_count.cmp(&self.nodes[a].access_count)
+        });
+        
+        // Reorder nodes to put frequently accessed ones first
+        let mut new_nodes = Vec::with_capacity(self.nodes.len());
+        let mut old_to_new_mapping = HashMap::new();
+        
+        for (new_idx, &old_idx) in node_indices.iter().enumerate() {
+            if !self.nodes[old_idx].uri.is_empty() {
+                old_to_new_mapping.insert(old_idx, new_idx);
+                new_nodes.push(self.nodes[old_idx].clone());
+            }
+        }
+        
+        // Update connections to use new indices
+        for node in &mut new_nodes {
+            for layer_connections in &mut node.connections {
+                let updated_connections: HashSet<usize> = layer_connections
+                    .iter()
+                    .filter_map(|&old_id| old_to_new_mapping.get(&old_id).copied())
+                    .collect();
+                *layer_connections = updated_connections;
+            }
+        }
+        
+        // Update URI mapping and entry point
+        self.uri_to_id.clear();
+        for (new_idx, node) in new_nodes.iter().enumerate() {
+            self.uri_to_id.insert(node.uri.clone(), new_idx);
+        }
+        
+        if let Some(old_entry) = self.entry_point {
+            self.entry_point = old_to_new_mapping.get(&old_entry).copied();
+        }
+        
+        self.nodes = new_nodes;
     }
 
     /// Generate a random level for a new node
@@ -450,27 +606,61 @@ impl HnswIndex {
                 break;
             }
 
-            // Check connections of the current candidate
+            // Check connections of the current candidate with SIMD optimization
             if layer < self.nodes[candidate.id].connections.len() {
-                for &neighbor_id in &self.nodes[candidate.id].connections[layer] {
-                    if !visited.contains(&neighbor_id) && neighbor_id < self.nodes.len() {
+                // Collect unvisited neighbors for batch processing
+                let unvisited_neighbors: Vec<usize> = self.nodes[candidate.id].connections[layer]
+                    .iter()
+                    .copied()
+                    .filter(|&neighbor_id| !visited.contains(&neighbor_id) && neighbor_id < self.nodes.len())
+                    .collect();
+                
+                if !unvisited_neighbors.is_empty() {
+                    // Mark all as visited before processing
+                    for &neighbor_id in &unvisited_neighbors {
                         visited.insert(neighbor_id);
-                        let distance = 1.0
-                            - self.similarity_optimized(
-                                &query_f32,
-                                &self.nodes[neighbor_id].vector_data_f32,
-                            );
-                        let neighbor_candidate = Candidate {
-                            distance,
-                            id: neighbor_id,
-                        };
+                    }
+                    
+                    // Use SIMD batch processing for multiple neighbors when beneficial
+                    if self.config.enable_simd && unvisited_neighbors.len() >= 4 {
+                        let similarities = self.simd_batch_distances(&query_f32, &unvisited_neighbors);
+                        
+                        for (i, &neighbor_id) in unvisited_neighbors.iter().enumerate() {
+                            let distance = 1.0 - similarities[i];
+                            let neighbor_candidate = Candidate {
+                                distance,
+                                id: neighbor_id,
+                            };
 
-                        if distance < lowerbound || w.len() < num_closest {
-                            candidates.push(neighbor_candidate.clone());
-                            w.push(std::cmp::Reverse(neighbor_candidate));
+                            if distance < lowerbound || w.len() < num_closest {
+                                candidates.push(neighbor_candidate.clone());
+                                w.push(std::cmp::Reverse(neighbor_candidate));
 
-                            if w.len() > num_closest {
-                                w.pop();
+                                if w.len() > num_closest {
+                                    w.pop();
+                                }
+                            }
+                        }
+                    } else {
+                        // Process individually for small neighbor sets
+                        for &neighbor_id in &unvisited_neighbors {
+                            let distance = 1.0
+                                - self.similarity_optimized(
+                                    &query_f32,
+                                    &self.nodes[neighbor_id].vector_data_f32,
+                                );
+                            let neighbor_candidate = Candidate {
+                                distance,
+                                id: neighbor_id,
+                            };
+
+                            if distance < lowerbound || w.len() < num_closest {
+                                candidates.push(neighbor_candidate.clone());
+                                w.push(std::cmp::Reverse(neighbor_candidate));
+
+                                if w.len() > num_closest {
+                                    w.pop();
+                                }
                             }
                         }
                     }
@@ -1382,6 +1572,22 @@ impl HnswIndex {
         }
 
         Some(&self.nodes[id])
+    }
+
+    /// Optimize index layout for better cache performance
+    pub fn optimize_cache_layout(&mut self) {
+        self.optimize_node_layout();
+    }
+    
+    /// Get performance statistics about the index
+    pub fn performance_stats(&self) -> &HnswPerformanceStats {
+        &self.stats
+    }
+    
+    /// Reset performance statistics
+    pub fn reset_performance_stats(&mut self) {
+        self.stats = HnswPerformanceStats::default();
+        self.distance_calculations.store(0, AtomicOrdering::Relaxed);
     }
 
     /// Get statistics about the index

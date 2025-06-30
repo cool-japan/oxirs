@@ -857,11 +857,20 @@ impl QueryParser {
         let mut patterns = Vec::new();
 
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
+            // Skip whitespace and newlines before parsing each pattern
+            self.skip_whitespace_and_newlines();
+            
+            // Check again if we've reached the end after skipping whitespace
+            if self.is_at_end() || matches!(self.peek(), Some(Token::RightBrace)) {
+                break;
+            }
+            
             let pattern = self.parse_graph_pattern_or_union()?;
             patterns.push(pattern);
 
-            // Skip optional dots
+            // Skip optional dots and whitespace
             self.match_token(&Token::Dot);
+            self.skip_whitespace_and_newlines();
         }
 
         if patterns.is_empty() {
@@ -880,15 +889,19 @@ impl QueryParser {
     }
 
     fn parse_graph_pattern_or_union(&mut self) -> Result<Algebra> {
-        let mut left = self.parse_graph_pattern()?;
+        let left = self.parse_graph_pattern()?;
 
         // Check for UNION after the first pattern
-        while self.match_token(&Token::Union) {
-            let right = self.parse_graph_pattern()?;
-            left = Algebra::Union {
+        self.skip_whitespace_and_newlines();
+        if self.match_token(&Token::Union) {
+            // Skip whitespace and newlines after UNION token
+            self.skip_whitespace_and_newlines();
+            // Parse the rest recursively to get right-associativity
+            let right = self.parse_graph_pattern_or_union()?;
+            return Ok(Algebra::Union {
                 left: Box::new(left),
                 right: Box::new(right),
-            };
+            });
         }
 
         Ok(left)
@@ -910,6 +923,8 @@ impl QueryParser {
             Some(Token::LeftBrace) => {
                 self.advance(); // consume {
                 let pattern = self.parse_group_graph_pattern()?;
+                // Skip whitespace and newlines before expecting the closing brace
+                self.skip_whitespace_and_newlines();
                 self.expect_token(Token::RightBrace)?;
                 Ok(pattern)
             }

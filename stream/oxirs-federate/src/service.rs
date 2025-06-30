@@ -1250,6 +1250,24 @@ pub struct FederatedService {
     pub status: Option<ServiceStatusInfo>,
 }
 
+impl Default for FederatedService {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            endpoint: String::new(),
+            service_type: ServiceType::Sparql,
+            capabilities: HashSet::new(),
+            data_patterns: vec!["*".to_string()],
+            auth: None,
+            metadata: ServiceMetadata::default(),
+            extended_metadata: None,
+            performance: ServicePerformance::default(),
+            status: Some(ServiceStatusInfo::default()),
+        }
+    }
+}
+
 impl FederatedService {
     /// Create a new SPARQL service
     pub fn new_sparql(id: String, name: String, endpoint: String) -> Self {
@@ -1357,16 +1375,22 @@ impl Default for ServiceMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServicePerformance {
     pub average_response_time: Option<Duration>,
+    pub avg_response_time_ms: f64,
+    pub reliability_score: f64,
     pub max_concurrent_requests: Option<usize>,
     pub rate_limit: Option<RateLimit>,
     pub estimated_dataset_size: Option<u64>,
     pub supported_result_formats: Vec<String>,
+    pub success_rate: Option<f64>,
+    pub error_rate: Option<f64>,
 }
 
 impl Default for ServicePerformance {
     fn default() -> Self {
         Self {
             average_response_time: None,
+            avg_response_time_ms: 100.0,
+            reliability_score: 0.9,
             max_concurrent_requests: None,
             rate_limit: None,
             estimated_dataset_size: None,
@@ -1374,6 +1398,8 @@ impl Default for ServicePerformance {
                 "application/sparql-results+json".to_string(),
                 "application/sparql-results+xml".to_string(),
             ],
+            success_rate: None,
+            error_rate: None,
         }
     }
 }

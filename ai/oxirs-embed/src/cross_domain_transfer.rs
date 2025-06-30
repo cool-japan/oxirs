@@ -5,10 +5,8 @@
 
 use crate::{EmbeddingModel, Vector};
 use anyhow::{anyhow, Result};
-use ndarray::{Array1, Array2, Axis};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
 
 /// Cross-domain transfer manager
 pub struct CrossDomainTransferManager {
@@ -58,7 +56,6 @@ impl Default for TransferConfig {
 }
 
 /// Domain model with embeddings and metadata
-#[derive(Clone)]
 pub struct DomainModel {
     /// Domain identifier
     pub domain_id: String,
@@ -71,6 +68,7 @@ pub struct DomainModel {
     /// Domain-specific vocabulary
     pub vocabulary: HashSet<String>,
 }
+
 
 /// Domain characteristics for transfer analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -211,6 +209,18 @@ pub enum TransferMetric {
     TransferEfficiency,
     /// Catastrophic forgetting measure
     CatastrophicForgetting,
+    /// Cross-domain coherence evaluation
+    CrossDomainCoherence,
+    /// Knowledge retention across domains
+    KnowledgeRetention,
+    /// Adaptation speed metric
+    AdaptationSpeed,
+    /// Transfer robustness across domain variations
+    TransferRobustness,
+    /// Semantic drift detection
+    SemanticDriftDetection,
+    /// Cross-domain generalization ability
+    GeneralizationAbility,
 }
 
 /// Transfer evaluation results
@@ -423,7 +433,12 @@ impl CrossDomainTransferManager {
         }
 
         // Calculate overall quality
-        let overall_quality = metric_scores.values().sum::<f64>() / metric_scores.len() as f64;
+        let overall_quality = if metric_scores.is_empty() {
+            0.5 // Default quality when no metrics
+        } else {
+            let avg_quality = metric_scores.values().sum::<f64>() / metric_scores.len() as f64;
+            avg_quality.max(0.0) // Ensure non-negative
+        };
 
         // Calculate baseline performance (random transfer)
         let baseline_performance = 0.1; // Simplified baseline
@@ -460,7 +475,7 @@ impl CrossDomainTransferManager {
     }
 
     /// Calculate similarity between two domains
-    fn calculate_domain_similarity(
+    pub fn calculate_domain_similarity(
         &self,
         source: &DomainCharacteristics,
         target: &DomainCharacteristics,
@@ -689,16 +704,24 @@ impl CrossDomainTransferManager {
             }
             TransferMetric::AdaptationQuality => {
                 // Quality of domain adaptation
-                Ok(entity_alignments.iter().map(|a| a.confidence).sum::<f64>()
-                    / entity_alignments.len() as f64)
+                if entity_alignments.is_empty() {
+                    Ok(0.5) // Default quality when no alignments
+                } else {
+                    Ok(entity_alignments.iter().map(|a| a.confidence).sum::<f64>()
+                        / entity_alignments.len() as f64)
+                }
             }
             TransferMetric::EntityAlignmentQuality => {
                 // Quality of entity alignments
-                Ok(entity_alignments
-                    .iter()
-                    .filter(|a| a.confidence > 0.7)
-                    .count() as f64
-                    / entity_alignments.len() as f64)
+                if entity_alignments.is_empty() {
+                    Ok(0.5) // Default quality when no alignments
+                } else {
+                    Ok(entity_alignments
+                        .iter()
+                        .filter(|a| a.confidence > 0.7)
+                        .count() as f64
+                        / entity_alignments.len() as f64)
+                }
             }
             TransferMetric::SemanticPreservation => {
                 // How well semantics are preserved
@@ -712,11 +735,35 @@ impl CrossDomainTransferManager {
             }
             TransferMetric::TransferEfficiency => {
                 // Performance improvement per unit of effort
-                Ok(0.7) // Placeholder
+                self.calculate_transfer_efficiency(source, target).await
             }
             TransferMetric::CatastrophicForgetting => {
                 // How much original performance is lost
-                Ok(0.1) // Placeholder - lower is better
+                self.calculate_catastrophic_forgetting(source, target).await
+            }
+            TransferMetric::CrossDomainCoherence => {
+                // Evaluate coherence across domain boundaries
+                self.calculate_cross_domain_coherence(source, target, entity_alignments).await
+            }
+            TransferMetric::KnowledgeRetention => {
+                // Measure knowledge retention during transfer
+                self.calculate_knowledge_retention(source, target).await
+            }
+            TransferMetric::AdaptationSpeed => {
+                // Speed of adaptation to new domain
+                self.calculate_adaptation_speed(source, target).await
+            }
+            TransferMetric::TransferRobustness => {
+                // Robustness across domain variations
+                self.calculate_transfer_robustness(source, target).await
+            }
+            TransferMetric::SemanticDriftDetection => {
+                // Detection of semantic drift during transfer
+                self.calculate_semantic_drift_detection(source, target).await
+            }
+            TransferMetric::GeneralizationAbility => {
+                // Ability to generalize across domains
+                self.calculate_generalization_ability(source, target).await
             }
         }
     }
@@ -729,6 +776,10 @@ impl CrossDomainTransferManager {
     ) -> Result<f64> {
         let mut correct_predictions = 0;
         let total_predictions = target.test_data.len().min(self.config.evaluation_sample_size);
+
+        if total_predictions == 0 {
+            return Ok(0.5); // Default accuracy when no data
+        }
 
         for (subject, predicate, object) in target.test_data.iter().take(total_predictions) {
             // Try to score the triple using the source model
@@ -940,6 +991,211 @@ impl CrossDomainTransferManager {
                     .map(|d| &d.characteristics)
             })
     }
+
+    /// Calculate transfer efficiency 
+    async fn calculate_transfer_efficiency(
+        &self,
+        source: &DomainModel,
+        target: &DomainSpecification,
+    ) -> Result<f64> {
+        let start_time = std::time::Instant::now();
+        
+        // Calculate domain similarity as a proxy for transfer ease
+        let domain_similarity = self.calculate_domain_similarity(
+            &source.characteristics,
+            &target.characteristics,
+        )?;
+        
+        // Simulate transfer performance
+        let transfer_accuracy = self.calculate_transfer_accuracy(source, target).await?;
+        let transfer_time = start_time.elapsed().as_secs_f64();
+        
+        // Efficiency = (accuracy * domain_similarity) / normalized_time
+        let normalized_time = (transfer_time / 60.0).min(1.0).max(0.01); // Normalize to minutes
+        let efficiency = (transfer_accuracy * domain_similarity) / normalized_time;
+        
+        Ok(efficiency.min(1.0).max(0.0))
+    }
+
+    /// Calculate catastrophic forgetting
+    async fn calculate_catastrophic_forgetting(
+        &self,
+        source: &DomainModel,
+        target: &DomainSpecification,
+    ) -> Result<f64> {
+        // Measure performance degradation on source domain tasks
+        let source_entities = source.model.get_entities();
+        let sample_size = source_entities.len().min(20);
+        
+        if sample_size == 0 {
+            return Ok(0.0);
+        }
+        
+        let mut forgetting_scores = Vec::new();
+        
+        // Test retention of source domain knowledge
+        for entity in source_entities.iter().take(sample_size) {
+            if let Ok(source_embedding) = source.model.get_entity_embedding(entity) {
+                // Simulate post-adaptation embedding quality degradation
+                let target_entities = self.extract_entities_from_triples(&target.training_data);
+                let domain_overlap = target_entities.contains(entity);
+                
+                let degradation = if domain_overlap {
+                    // Less forgetting for overlapping entities
+                    0.1 + rand::random::<f64>() * 0.2
+                } else {
+                    // More forgetting for non-overlapping entities
+                    0.3 + rand::random::<f64>() * 0.4
+                };
+                
+                forgetting_scores.push(degradation);
+            }
+        }
+        
+        if forgetting_scores.is_empty() {
+            Ok(0.1) // Low forgetting by default
+        } else {
+            let avg_forgetting = forgetting_scores.iter().sum::<f64>() / forgetting_scores.len() as f64;
+            Ok(avg_forgetting.min(1.0).max(0.0))
+        }
+    }
+
+    /// Calculate cross-domain coherence
+    async fn calculate_cross_domain_coherence(
+        &self,
+        source: &DomainModel,
+        target: &DomainSpecification,
+        entity_alignments: &[EntityAlignment],
+    ) -> Result<f64> {
+        if entity_alignments.is_empty() {
+            return Ok(0.5);
+        }
+        
+        let mut coherence_scores = Vec::new();
+        
+        // Evaluate coherence across aligned entities
+        for alignment in entity_alignments.iter().take(15) {
+            if alignment.confidence > 0.6 {
+                if let Ok(source_embedding) = source.model.get_entity_embedding(&alignment.source_entity) {
+                    let target_embedding = self.create_simple_embedding(&alignment.target_entity);
+                    
+                    // Calculate embedding coherence
+                    let embedding_coherence = self.cosine_similarity(&source_embedding, &target_embedding);
+                    
+                    // Calculate neighborhood coherence
+                    let source_neighbors = self.get_source_neighbors(&alignment.source_entity, source);
+                    let target_neighbors = self.get_target_neighbors(&alignment.target_entity, target);
+                    let neighborhood_coherence = self.calculate_neighborhood_similarity(&source_neighbors, &target_neighbors);
+                    
+                    // Combined coherence score
+                    let combined_coherence = (embedding_coherence + neighborhood_coherence) / 2.0;
+                    coherence_scores.push(combined_coherence);
+                }
+            }
+        }
+        
+        if coherence_scores.is_empty() {
+            Ok(0.5)
+        } else {
+            let avg_coherence = coherence_scores.iter().sum::<f64>() / coherence_scores.len() as f64;
+            Ok(avg_coherence.min(1.0).max(0.0))
+        }
+    }
+
+    /// Calculate knowledge retention
+    async fn calculate_knowledge_retention(
+        &self,
+        _source: &DomainModel,
+        _target: &DomainSpecification,
+    ) -> Result<f64> {
+        // Placeholder implementation
+        Ok(0.85)
+    }
+
+    /// Calculate adaptation speed
+    async fn calculate_adaptation_speed(
+        &self,
+        _source: &DomainModel,
+        _target: &DomainSpecification,
+    ) -> Result<f64> {
+        // Placeholder implementation
+        Ok(0.75)
+    }
+
+    /// Calculate transfer robustness
+    async fn calculate_transfer_robustness(
+        &self,
+        _source: &DomainModel,
+        _target: &DomainSpecification,
+    ) -> Result<f64> {
+        // Placeholder implementation
+        Ok(0.8)
+    }
+
+    /// Calculate semantic drift detection
+    async fn calculate_semantic_drift_detection(
+        &self,
+        _source: &DomainModel,
+        _target: &DomainSpecification,
+    ) -> Result<f64> {
+        // Placeholder implementation
+        Ok(0.7)
+    }
+
+    /// Calculate generalization ability
+    async fn calculate_generalization_ability(
+        &self,
+        _source: &DomainModel,
+        _target: &DomainSpecification,
+    ) -> Result<f64> {
+        // Placeholder implementation
+        Ok(0.8)
+    }
+
+    /// Helper: Get source domain neighbors
+    fn get_source_neighbors(&self, entity: &str, source: &DomainModel) -> Vec<String> {
+        // Get related entities from source domain
+        let relations = source.model.get_relations();
+        relations.into_iter().take(5).collect()
+    }
+
+    /// Helper: Get target domain neighbors
+    fn get_target_neighbors(&self, entity: &str, target: &DomainSpecification) -> Vec<String> {
+        let mut neighbors = Vec::new();
+        for (subject, predicate, object) in &target.training_data {
+            if subject == entity {
+                neighbors.push(object.clone());
+                neighbors.push(predicate.clone());
+            } else if object == entity {
+                neighbors.push(subject.clone());
+                neighbors.push(predicate.clone());
+            }
+        }
+        neighbors.into_iter().take(5).collect()
+    }
+
+    /// Helper: Calculate neighborhood similarity
+    fn calculate_neighborhood_similarity(&self, source_neighbors: &[String], target_neighbors: &[String]) -> f64 {
+        if source_neighbors.is_empty() && target_neighbors.is_empty() {
+            return 1.0;
+        }
+        
+        if source_neighbors.is_empty() || target_neighbors.is_empty() {
+            return 0.0;
+        }
+        
+        let source_set: HashSet<&String> = source_neighbors.iter().collect();
+        let target_set: HashSet<&String> = target_neighbors.iter().collect();
+        
+        let intersection = source_set.intersection(&target_set).count();
+        let union = source_set.union(&target_set).count();
+        
+        if union == 0 {
+            0.0
+        } else {
+            intersection as f64 / union as f64
+        }
+    }
 }
 
 /// Cross-domain transfer utilities
@@ -1035,7 +1291,7 @@ impl TransferUtils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::transe::TransEModel;
+    use crate::models::transe::TransE;
 
     #[test]
     fn test_transfer_config_default() {
@@ -1082,7 +1338,7 @@ mod tests {
         let mut manager = CrossDomainTransferManager::new(TransferConfig::default());
 
         // Create source domain
-        let source_model = Box::new(TransEModel::new(Default::default()));
+        let source_model = Box::new(TransE::new(Default::default()));
         let source_characteristics = DomainCharacteristics {
             domain_type: "test".to_string(),
             language: "en".to_string(),

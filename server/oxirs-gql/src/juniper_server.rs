@@ -8,10 +8,13 @@ use crate::RdfStore;
 use std::sync::Arc;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use juniper_hyper::playground;
 use anyhow::{Result, anyhow};
+use juniper_hyper::{graphql, graphiql};
 use hyper::{Method, Request, Response, StatusCode, body::Incoming};
-use hyper::body::Bytes;
-use hyper_util::rt::TokioIo;
+use hyper::body::{Bytes, Body};
+use hyper::service::service_fn;
+use hyper_util::rt::{TokioIo, TokioExecutor};
 use hyper_util::server::conn::auto::Builder;
 use tokio::net::TcpListener;
 use tracing::{info, warn, error, debug};
@@ -53,7 +56,7 @@ impl Default for GraphQLServerConfig {
 
 /// The main GraphQL server using Juniper
 pub struct JuniperGraphQLServer {
-    schema: Schema,
+    schema: Arc<Schema>,
     context: GraphQLContext,
     config: GraphQLServerConfig,
 }
@@ -61,7 +64,7 @@ pub struct JuniperGraphQLServer {
 impl JuniperGraphQLServer {
     /// Create a new GraphQL server with an RDF store
     pub fn new(store: Arc<RdfStore>) -> Self {
-        let schema = create_schema();
+        let schema = Arc::new(create_schema());
         let context = GraphQLContext { store };
         let config = GraphQLServerConfig::default();
         
@@ -74,7 +77,7 @@ impl JuniperGraphQLServer {
 
     /// Create a new GraphQL server with custom configuration
     pub fn with_config(store: Arc<RdfStore>, config: GraphQLServerConfig) -> Self {
-        let schema = create_schema();
+        let schema = Arc::new(create_schema());
         let context = GraphQLContext { store };
         
         Self {
@@ -93,48 +96,49 @@ impl JuniperGraphQLServer {
         let context = self.context.clone();
         let config = self.config.clone();
         
-        let make_svc = make_service_fn(move |_conn| {
-            let schema = schema.clone();
-            let context = context.clone();
-            let config = config.clone();
-            
-            async move {
-                Ok::<_, Infallible>(service_fn(move |req| {
-                    Self::handle_request(req, schema.clone(), context.clone(), config.clone())
-                }))
-            }
-        });
-
-        // Create and configure the server
-        let server = Server::bind(&addr).serve(make_svc);
+        // Create TCP listener
+        let listener = TcpListener::bind(addr).await?;
         
         info!("GraphQL server running on http://{}", addr);
         info!("GraphQL endpoint: http://{}/graphql", addr);
         
-        if config.enable_graphiql {
-            info!("GraphiQL interface: http://{}/graphiql", addr);
+        // Accept connections in a loop
+        loop {
+            let (stream, _) = match listener.accept().await {
+                Ok(result) => result,
+                Err(e) => {
+                    error!("Failed to accept connection: {}", e);
+                    continue;
+                }
+            };
+            
+            let schema_clone = schema.clone();
+            let context_clone = context.clone();
+            let config_clone = config.clone();
+            
+            // Handle each connection in a separate task
+            tokio::spawn(async move {
+                let io = TokioIo::new(stream);
+                let builder = Builder::new(TokioExecutor::new());
+                
+                let service = service_fn(move |req| {
+                    Self::handle_request(req, (*schema_clone).clone(), context_clone.clone(), config_clone.clone())
+                });
+                
+                if let Err(e) = builder.serve_connection(io, service).await {
+                    error!("Connection error: {}", e);
+                }
+            });
         }
-        
-        if config.enable_playground {
-            info!("GraphQL Playground: http://{}/playground", addr);
-        }
-
-        // Run the server
-        if let Err(e) = server.await {
-            error!("Server error: {}", e);
-            return Err(anyhow!("Server failed: {}", e));
-        }
-
-        Ok(())
     }
 
     /// Handle individual HTTP requests
     async fn handle_request(
-        req: Request<Body>,
+        req: Request<Incoming>,
         schema: Schema,
         context: GraphQLContext,
         config: GraphQLServerConfig,
-    ) -> Result<Response<Body>, Infallible> {
+    ) -> Result<Response<String>, Infallible> {
         let response = match Self::handle_request_inner(req, schema, context, config).await {
             Ok(response) => response,
             Err(err) => {
@@ -142,7 +146,7 @@ impl JuniperGraphQLServer {
                 Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .header("content-type", "application/json")
-                    .body(Body::from(format!(
+                    .body(format!(
                         r#"{{"errors": [{{ "message": "{}" }}]}}"#,
                         err.to_string().replace('"', "\\\"")
                     )))
@@ -155,11 +159,11 @@ impl JuniperGraphQLServer {
 
     /// Inner request handling with proper error propagation
     async fn handle_request_inner(
-        req: Request<Body>,
+        req: Request<Incoming>,
         schema: Schema,
         context: GraphQLContext,
         config: GraphQLServerConfig,
-    ) -> Result<Response<Body>> {
+    ) -> Result<Response<String>> {
         let method = req.method();
         let path = req.uri().path();
         
@@ -225,15 +229,15 @@ impl JuniperGraphQLServer {
                     "timestamp": chrono::Utc::now().to_rfc3339(),
                     "endpoints": {
                         "graphql": "/graphql",
-                        "graphiql": if config.enable_graphiql { "/graphiql" } else { serde_json::Value::Null },
-                        "playground": if config.enable_playground { "/playground" } else { serde_json::Value::Null }
+                        "graphiql": if config.enable_graphiql { serde_json::Value::String("/graphiql".to_string()) } else { serde_json::Value::Null },
+                        "playground": if config.enable_playground { serde_json::Value::String("/playground".to_string()) } else { serde_json::Value::Null }
                     }
                 });
 
                 Ok(response_builder
                     .status(StatusCode::OK)
                     .header("content-type", "application/json")
-                    .body(Body::from(health_info.to_string()))?)
+                    .body(health_info.to_string())?)
             }
 
             // Schema introspection endpoint (SDL)
@@ -300,7 +304,7 @@ impl JuniperGraphQLServer {
                 Ok(response_builder
                     .status(StatusCode::OK)
                     .header("content-type", "text/plain")
-                    .body(Body::from(sdl))?)
+                    .body(sdl)?)
             }
 
             // Root endpoint - redirect to GraphiQL or provide info
@@ -330,7 +334,7 @@ impl JuniperGraphQLServer {
                     Ok(response_builder
                         .status(StatusCode::OK)
                         .header("content-type", "application/json")
-                        .body(Body::from(info.to_string()))?)
+                        .body(info.to_string())?)
                 }
             }
 
@@ -352,7 +356,7 @@ impl JuniperGraphQLServer {
                 Ok(response_builder
                     .status(StatusCode::NOT_FOUND)
                     .header("content-type", "application/json")
-                    .body(Body::from(error_response.to_string()))?)
+                    .body(error_response.to_string())?
             }
         }
     }

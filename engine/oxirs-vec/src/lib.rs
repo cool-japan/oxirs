@@ -34,6 +34,7 @@
 
 use anyhow::Result;
 
+pub mod adaptive_compression;
 pub mod advanced_caching;
 pub mod advanced_metrics;
 pub mod advanced_result_merging;
@@ -51,6 +52,7 @@ pub mod gnn_embeddings;
 pub mod gpu_acceleration;
 pub mod graph_aware_search;
 pub mod graph_indices;
+pub mod hierarchical_similarity;
 pub mod hnsw;
 pub mod index;
 pub mod ivf;
@@ -63,6 +65,7 @@ pub mod pq;
 pub mod real_time_analytics;
 pub mod result_fusion;
 pub mod rdf_content_enhancement;
+pub mod rdf_integration;
 pub mod similarity;
 pub mod sparql_integration;
 pub mod sparql_service_endpoint;
@@ -73,6 +76,10 @@ pub mod tree_indices;
 pub mod word2vec;
 
 // Re-export commonly used types
+pub use adaptive_compression::{
+    AdaptiveCompressor, CompressionMetrics, CompressionPriorities, MultiLevelCompression,
+    VectorStats,
+};
 pub use advanced_caching::{
     BackgroundCacheWorker, CacheAnalysisReport, CacheAnalyzer, CacheConfig, CacheEntry,
     CacheInvalidator, CacheKey, CacheStats, CacheWarmer, EvictionPolicy, InvalidationStats,
@@ -124,6 +131,11 @@ pub use graph_indices::{
     DelaunayGraph, GraphIndex, GraphIndexConfig, GraphType, NSWGraph, ONNGGraph, PANNGGraph,
     RNGGraph,
 };
+pub use hierarchical_similarity::{
+    ConceptHierarchy, HierarchicalSimilarity, HierarchicalSimilarityConfig,
+    HierarchicalSimilarityResult, HierarchicalSimilarityStats, SimilarityContext,
+    SimilarityExplanation, SimilarityTaskType,
+};
 pub use hnsw::{HnswConfig, HnswIndex};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use ivf::{IvfConfig, IvfIndex, IvfStats, QuantizationStrategy};
@@ -148,6 +160,10 @@ pub use rdf_content_enhancement::{
     ComponentWeights, MultiLanguageProcessor, PathConstraint, PathDirection, PropertyAggregator,
     PropertyPath, RdfContentConfig, RdfContentProcessor, RdfContext, RdfEntity, RdfValue,
     TemporalInfo,
+};
+pub use rdf_integration::{
+    RdfIntegrationStats, RdfTermMapping, RdfTermMetadata, RdfTermType, RdfVectorConfig,
+    RdfVectorIntegration, RdfVectorSearchResult, SearchMetadata,
 };
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{

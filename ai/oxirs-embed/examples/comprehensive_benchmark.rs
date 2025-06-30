@@ -13,7 +13,7 @@ use oxirs_embed::{
     // Caching
     caching::{CacheConfig, CacheManager},
     // Evaluation
-    evaluation::EvaluationSuite,
+    evaluation::AdvancedEvaluator,
     ComplEx,
     DistMult,
     // Core trait
@@ -235,7 +235,7 @@ async fn benchmark_transe(triples: &[Triple], config: ModelConfig) -> Result<Mod
         .collect();
 
     // Evaluation
-    let mut eval_suite = EvaluationSuite::new(test_triples, train_triples);
+    let mut eval_suite = AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
     eval_suite.generate_negative_samples(&model)?;
     let eval_results = eval_suite.evaluate(&model)?;
 
@@ -318,7 +318,7 @@ async fn benchmark_model_impl<M: oxirs_embed::EmbeddingModel>(
         .collect();
 
     // Evaluation
-    let mut eval_suite = EvaluationSuite::new(test_triples, train_triples);
+    let mut eval_suite = AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
     eval_suite.generate_negative_samples(model)?;
     let eval_results = eval_suite.evaluate(model)?;
 
@@ -338,7 +338,7 @@ async fn benchmark_model_impl<M: oxirs_embed::EmbeddingModel>(
 
 /// Check if performance meets TODO.md requirements
 fn check_requirements(
-    eval_results: &oxirs_embed::evaluation::EvaluationResults,
+    eval_results: &oxirs_embed::evaluation::AdvancedEvaluationResults,
     training_time: f64,
     inference_latency: f64,
 ) -> bool {
@@ -348,7 +348,7 @@ fn check_requirements(
     // - Scalability: Handle 1M+ entities and 10M+ relations
 
     let fast_inference = inference_latency < 100.0; // <100ms requirement
-    let good_quality = eval_results.mean_reciprocal_rank > 0.3; // Reasonable quality threshold
+    let good_quality = eval_results.basic_metrics.mrr > 0.3; // Reasonable quality threshold
     let reasonable_training = training_time < 3600.0; // <1 hour for this dataset size
 
     fast_inference && good_quality && reasonable_training

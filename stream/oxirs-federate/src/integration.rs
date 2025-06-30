@@ -611,6 +611,12 @@ mod tests {
             error: None,
             execution_time: Duration::from_millis(150),
             service_id: Some("test-service".to_string()),
+            memory_used: 1024,
+            result_size: 256,
+            success: true,
+            error_message: None,
+            service_response_time: Duration::from_millis(100),
+            cache_hit: false,
         };
 
         let result = integrator

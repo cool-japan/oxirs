@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
+use bloom::BloomFilter as ExternalBloomFilter;
 
 use crate::planner::planning::{FilterExpression, TriplePattern};
 use crate::ServiceCapability;
@@ -67,10 +68,11 @@ pub enum ExecutionStrategy {
     Parallel,
     Pipeline,
     Adaptive,
+    ParallelWithJoin,
 }
 
 /// Optimized query result
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OptimizedQuery {
     pub services: Vec<OptimizedServiceClause>,
     pub global_filters: Vec<FilterExpression>,
@@ -85,7 +87,13 @@ pub struct ServiceOptimizerConfig {
     pub enable_pattern_grouping: bool,
     pub enable_filter_pushdown: bool,
     pub enable_cost_estimation: bool,
+    pub enable_service_merging: bool,
     pub max_join_complexity: usize,
+    pub max_patterns_for_values: usize,
+    pub streaming_threshold: usize,
+    pub min_patterns_for_subquery: usize,
+    pub default_batch_size: usize,
+    pub service_timeout_ms: u64,
 }
 
 impl Default for ServiceOptimizerConfig {
@@ -94,7 +102,13 @@ impl Default for ServiceOptimizerConfig {
             enable_pattern_grouping: true,
             enable_filter_pushdown: true,
             enable_cost_estimation: true,
+            enable_service_merging: true,
             max_join_complexity: 5,
+            max_patterns_for_values: 10,
+            streaming_threshold: 1000,
+            min_patterns_for_subquery: 3,
+            default_batch_size: 100,
+            service_timeout_ms: 30000,
         }
     }
 }
@@ -434,6 +448,10 @@ pub struct ServiceBloomFilter {
     pub hash_functions: u32,
     pub false_positive_rate: f64,
     pub estimated_cardinality: u64,
+    pub predicate_filter: ExternalBloomFilter,
+    pub resource_filter: ExternalBloomFilter,
+    pub last_updated: DateTime<Utc>,
+    pub estimated_elements: u64,
 }
 
 /// Bloom filter query result
@@ -444,6 +462,9 @@ pub struct BloomFilterResult {
     pub possibly_contains: bool,
     pub confidence: f64,
     pub estimated_selectivity: f64,
+    pub membership_probability: f64,
+    pub likely_matches: bool,
+    pub false_positive_rate: f64,
 }
 
 /// Query context for optimization
@@ -490,6 +511,10 @@ pub struct QueryFeatures {
     pub has_union: bool,
     pub complexity_score: f64,
     pub estimated_selectivity: f64,
+    pub predicate_distribution: HashMap<String, usize>,
+    pub namespace_distribution: HashMap<String, usize>,
+    pub pattern_type_distribution: HashMap<String, usize>,
+    pub has_joins: bool,
 }
 
 /// Similar query for recommendation
@@ -542,6 +567,7 @@ pub struct ServiceObjectiveScore {
     pub quality_score: f64,
     pub cost_score: f64,
     pub reliability_score: f64,
+    pub latency_score: f64,
     pub total_score: f64,
 }
 
@@ -575,6 +601,10 @@ pub struct ServiceCapacityAnalysis {
     pub utilization_percentage: f64,
     pub projected_capacity: f64,
     pub bottleneck_factors: Vec<String>,
+    pub max_concurrent_queries: u32,
+    pub current_utilization: f64,
+    pub scaling_suggestions: Vec<String>,
+    pub recommended_max_load: u32,
 }
 
 /// Cost objectives for optimization
@@ -605,4 +635,31 @@ pub struct PredicateStats {
     pub frequency: u64,
     pub selectivity: f64,
     pub avg_result_size: u64,
+}
+
+/// Simple Bloom filter implementation
+#[derive(Debug, Clone)]
+pub struct BloomFilter {
+    pub bits: Vec<bool>,
+    pub hash_count: u32,
+    pub size: usize,
+}
+
+impl BloomFilter {
+    pub fn new(size: usize, hash_count: u32) -> Self {
+        Self {
+            bits: vec![false; size],
+            hash_count,
+            size,
+        }
+    }
+
+    pub fn contains(&self, _item: &str) -> bool {
+        // Placeholder implementation
+        false
+    }
+
+    pub fn insert(&mut self, _item: &str) {
+        // Placeholder implementation
+    }
 }

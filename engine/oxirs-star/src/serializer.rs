@@ -272,6 +272,20 @@ impl<W: Write> StreamingSerializer<W> {
                     let object = self.format_term_turtle(&triple.object)?;
                     format!("{} {} {} .\n", subject, predicate, object)
                 }
+                StarFormat::TrigStar => {
+                    // TriG-star format with default graph
+                    let subject = self.format_term_ntriples(&triple.subject)?;
+                    let predicate = self.format_term_ntriples(&triple.predicate)?;
+                    let object = self.format_term_ntriples(&triple.object)?;
+                    format!("{} {} {} .\n", subject, predicate, object)
+                }
+                StarFormat::NQuadsStar => {
+                    // N-Quads-star format with default graph
+                    let subject = self.format_term_ntriples(&triple.subject)?;
+                    let predicate = self.format_term_ntriples(&triple.predicate)?;
+                    let object = self.format_term_ntriples(&triple.object)?;
+                    format!("{} {} {} <> .\n", subject, predicate, object) // <> represents default graph
+                }
                 _ => return Err(StarError::serialization_error(
                     format!("Streaming not yet implemented for format {:?}", format)
                 )),
@@ -328,6 +342,8 @@ impl<W: Write> StreamingSerializer<W> {
             StarTerm::Variable(var) => Ok(format!("?{}", var.name)),
         }
     }
+
+
 }
 
 /// Parallel serializer for multi-threaded processing
@@ -342,6 +358,54 @@ impl ParallelSerializer {
         Self {
             num_threads,
             batch_size,
+        }
+    }
+
+    /// Static method for formatting term in N-Triples
+    fn format_term_ntriples(term: &StarTerm) -> StarResult<String> {
+        match term {
+            StarTerm::NamedNode(node) => Ok(format!("<{}>", node.iri)),
+            StarTerm::BlankNode(node) => Ok(format!("_:{}", node.id)),
+            StarTerm::Literal(literal) => {
+                let mut result = format!("\"{}\"", StarSerializer::escape_literal(&literal.value));
+                if let Some(ref lang) = literal.language {
+                    result.push_str(&format!("@{}", lang));
+                } else if let Some(ref datatype) = literal.datatype {
+                    result.push_str(&format!("^^<{}>", datatype.iri));
+                }
+                Ok(result)
+            }
+            StarTerm::QuotedTriple(triple) => {
+                let subject = Self::format_term_ntriples(&triple.subject)?;
+                let predicate = Self::format_term_ntriples(&triple.predicate)?;
+                let object = Self::format_term_ntriples(&triple.object)?;
+                Ok(format!("<< {} {} {} >>", subject, predicate, object))
+            }
+            StarTerm::Variable(var) => Ok(format!("?{}", var.name)),
+        }
+    }
+
+    /// Static method for formatting term in Turtle
+    fn format_term_turtle(term: &StarTerm) -> StarResult<String> {
+        match term {
+            StarTerm::NamedNode(node) => Ok(format!("<{}>", node.iri)),
+            StarTerm::BlankNode(node) => Ok(format!("_:{}", node.id)),
+            StarTerm::Literal(literal) => {
+                let mut result = format!("\"{}\"", StarSerializer::escape_literal(&literal.value));
+                if let Some(ref lang) = literal.language {
+                    result.push_str(&format!("@{}", lang));
+                } else if let Some(ref datatype) = literal.datatype {
+                    result.push_str(&format!("^^<{}>", datatype.iri));
+                }
+                Ok(result)
+            }
+            StarTerm::QuotedTriple(triple) => {
+                let subject = Self::format_term_turtle(&triple.subject)?;
+                let predicate = Self::format_term_turtle(&triple.predicate)?;
+                let object = Self::format_term_turtle(&triple.object)?;
+                Ok(format!("<< {} {} {} >>", subject, predicate, object))
+            }
+            StarTerm::Variable(var) => Ok(format!("?{}", var.name)),
         }
     }
 
@@ -396,6 +460,26 @@ impl ParallelSerializer {
                         Self::format_term_ntriples(&triple.predicate)?,
                         Self::format_term_ntriples(&triple.object)?)
                 }
+                StarFormat::TurtleStar => {
+                    format!("{} {} {} .\n",
+                        Self::format_term_turtle(&triple.subject)?,
+                        Self::format_term_turtle(&triple.predicate)?,
+                        Self::format_term_turtle(&triple.object)?)
+                }
+                StarFormat::TrigStar => {
+                    // TriG-star format with default graph
+                    format!("{} {} {} .\n",
+                        Self::format_term_ntriples(&triple.subject)?,
+                        Self::format_term_ntriples(&triple.predicate)?,
+                        Self::format_term_ntriples(&triple.object)?)
+                }
+                StarFormat::NQuadsStar => {
+                    // N-Quads-star format with default graph
+                    format!("{} {} {} <> .\n",
+                        Self::format_term_ntriples(&triple.subject)?,
+                        Self::format_term_ntriples(&triple.predicate)?,
+                        Self::format_term_ntriples(&triple.object)?)
+                }
                 _ => return Err(StarError::serialization_error(
                     format!("Parallel serialization not yet implemented for format {:?}", format)
                 )),
@@ -411,29 +495,6 @@ impl ParallelSerializer {
         Ok(())
     }
 
-    /// Format term for N-Triples (static method for thread safety)
-    fn format_term_ntriples(term: &StarTerm) -> StarResult<String> {
-        match term {
-            StarTerm::NamedNode(node) => Ok(format!("<{}>", node.iri)),
-            StarTerm::BlankNode(node) => Ok(format!("_:{}", node.id)),
-            StarTerm::Literal(literal) => {
-                let mut result = format!("\"{}\"", StarSerializer::escape_literal(&literal.value));
-                if let Some(ref lang) = literal.language {
-                    result.push_str(&format!("@{}", lang));
-                } else if let Some(ref datatype) = literal.datatype {
-                    result.push_str(&format!("^^<{}>", datatype.iri));
-                }
-                Ok(result)
-            }
-            StarTerm::QuotedTriple(triple) => {
-                let subject = Self::format_term_ntriples(&triple.subject)?;
-                let predicate = Self::format_term_ntriples(&triple.predicate)?;
-                let object = Self::format_term_ntriples(&triple.object)?;
-                Ok(format!("<< {} {} {} >>", subject, predicate, object))
-            }
-            StarTerm::Variable(var) => Ok(format!("?{}", var.name)),
-        }
-    }
 }
 
 /// Chunked iterator for processing large collections in batches

@@ -443,7 +443,7 @@ impl ConstraintDependencyAnalyzer {
     }
 
     /// Estimate the cost of evaluating a constraint
-    fn estimate_constraint_cost(&self, constraint: &Constraint) -> f64 {
+    pub fn estimate_constraint_cost(&self, constraint: &Constraint) -> f64 {
         let base_cost = match constraint {
             Constraint::Class(_) => self.cost_estimates.get("class").copied().unwrap_or(5.0),
             Constraint::Datatype(_) => self.cost_estimates.get("datatype").copied().unwrap_or(1.0),
@@ -469,7 +469,7 @@ impl ConstraintDependencyAnalyzer {
     }
 
     /// Estimate the selectivity of a constraint (how many results it will filter out)
-    fn estimate_constraint_selectivity(&self, constraint: &Constraint) -> f64 {
+    pub fn estimate_constraint_selectivity(&self, constraint: &Constraint) -> f64 {
         match constraint {
             // Very selective constraints (eliminate many candidates)
             Constraint::Class(_) => 0.8,
@@ -1194,19 +1194,122 @@ impl IncrementalValidationEngine {
         hasher.finish()
     }
 
-    /// Hash node properties for change detection
+    /// Hash node properties for change detection with comprehensive RDF triple analysis
     fn hash_node_properties(&self, store: &Store, node: &Term) -> Result<u64> {
         use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hash;
         let mut hasher = DefaultHasher::new();
 
-        // In practice, this would query the store for all triples where node is subject
-        // For now, we'll use a simplified hash based on the node itself
-        format!("{:?}", node).hash(&mut hasher);
+        // Hash all triples where this node is the subject
+        match self.query_node_triples_as_subject(store, node) {
+            Ok(subject_triples) => {
+                for triple in subject_triples {
+                    triple.subject().as_str().hash(&mut hasher);
+                    triple.predicate().as_str().hash(&mut hasher);
+                    triple.object().as_str().hash(&mut hasher);
+                }
+            }
+            Err(_) => {
+                // Fallback to node-only hash if store query fails
+                node.as_str().hash(&mut hasher);
+            }
+        }
 
-        // TODO: Implement actual property querying when store interface is available
-        // Example: for triple in store.triples_with_subject(node) { triple.hash(&mut hasher); }
+        // Hash all triples where this node is the object (to detect incoming references)
+        match self.query_node_triples_as_object(store, node) {
+            Ok(object_triples) => {
+                for triple in object_triples {
+                    triple.subject().as_str().hash(&mut hasher);
+                    triple.predicate().as_str().hash(&mut hasher);
+                    triple.object().as_str().hash(&mut hasher);
+                }
+            }
+            Err(_) => {
+                // Continue without incoming reference detection if query fails
+            }
+        }
 
         Ok(hasher.finish())
+    }
+
+    /// Query store for all triples where the node is the subject
+    fn query_node_triples_as_subject(
+        &self,
+        store: &Store,
+        node: &Term,
+    ) -> Result<Vec<oxirs_core::model::Triple>> {
+        use oxirs_core::model::Quad;
+        
+        let mut triples = Vec::new();
+        
+        // Create a pattern to match triples with this node as subject
+        for quad in store.iter() {
+            match quad {
+                Ok(Quad::Triple(triple)) => {
+                    if &triple.subject() == node {
+                        triples.push(triple);
+                    }
+                }
+                Ok(Quad::Quad(quad)) => {
+                    let triple = oxirs_core::model::Triple::new(
+                        quad.subject().clone(),
+                        quad.predicate().clone(),
+                        quad.object().clone(),
+                    );
+                    if &quad.subject() == node {
+                        triples.push(triple);
+                    }
+                }
+                Err(e) => {
+                    return Err(ShaclError::ValidationEngine(format!(
+                        "Store iteration error: {}",
+                        e
+                    )));
+                }
+            }
+        }
+        
+        Ok(triples)
+    }
+
+    /// Query store for all triples where the node is the object
+    fn query_node_triples_as_object(
+        &self,
+        store: &Store,
+        node: &Term,
+    ) -> Result<Vec<oxirs_core::model::Triple>> {
+        use oxirs_core::model::Quad;
+        
+        let mut triples = Vec::new();
+        
+        // Create a pattern to match triples with this node as object
+        for quad in store.iter() {
+            match quad {
+                Ok(Quad::Triple(triple)) => {
+                    if &triple.object() == node {
+                        triples.push(triple);
+                    }
+                }
+                Ok(Quad::Quad(quad)) => {
+                    let triple = oxirs_core::model::Triple::new(
+                        quad.subject().clone(),
+                        quad.predicate().clone(),
+                        quad.object().clone(),
+                    );
+                    if &quad.object() == node {
+                        triples.push(triple);
+                    }
+                }
+                Err(e) => {
+                    return Err(ShaclError::ValidationEngine(format!(
+                        "Store iteration error: {}",
+                        e
+                    )));
+                }
+            }
+        }
+        
+        Ok(triples)
     }
 
     /// Clear validation history
@@ -1223,15 +1326,251 @@ impl IncrementalValidationEngine {
                 / (1024 * 1024),
         }
     }
+
+    /// Compute detailed change delta between current state and cached snapshots
+    pub fn compute_change_delta(
+        &self,
+        store: &Store,
+        current_constraints: &[Constraint],
+        nodes: &[Term],
+    ) -> Result<ChangesDelta> {
+        let mut delta = ChangesDelta::new();
+        let snapshots = self.previous_results.read().unwrap();
+
+        for node in nodes {
+            let node_key = format!("{:?}", node);
+            
+            // Check if we have a previous snapshot for this node
+            if let Some(previous_snapshot) = snapshots.get(&node_key) {
+                // Compute current hashes
+                let current_property_hash = self.hash_node_properties(store, node)?;
+                let current_constraint_hash = self.hash_constraints(current_constraints);
+                
+                // Check for property changes
+                if current_property_hash != previous_snapshot.properties_hash {
+                    delta.nodes_with_property_changes.push(NodePropertyChange {
+                        node: node.clone(),
+                        previous_hash: previous_snapshot.properties_hash,
+                        current_hash: current_property_hash,
+                        property_changes: self.compute_property_changes(store, node)?,
+                        detected_at: std::time::SystemTime::now(),
+                    });
+                }
+                
+                // Check for constraint changes
+                if current_constraint_hash != previous_snapshot.constraints_hash {
+                    delta.nodes_with_constraint_changes.push(NodeConstraintChange {
+                        node: node.clone(),
+                        previous_constraints_hash: previous_snapshot.constraints_hash,
+                        current_constraints_hash: current_constraint_hash,
+                        changed_shapes: vec![], // Could be enhanced to track specific shape changes
+                        detected_at: std::time::SystemTime::now(),
+                    });
+                }
+            } else {
+                // New node detected
+                delta.new_nodes.push(node.clone());
+            }
+        }
+
+        // Detect deleted nodes (in snapshots but not in current nodes)
+        let current_node_keys: std::collections::HashSet<String> = 
+            nodes.iter().map(|n| format!("{:?}", n)).collect();
+        
+        for snapshot_key in snapshots.keys() {
+            if !current_node_keys.contains(snapshot_key) {
+                // Try to reconstruct the term (simplified approach)
+                if let Ok(term) = self.reconstruct_term_from_key(snapshot_key) {
+                    delta.deleted_nodes.push(term);
+                }
+            }
+        }
+
+        Ok(delta)
+    }
+
+    /// Generate change events for external system integration
+    pub fn generate_change_events(
+        &self,
+        delta: &ChangesDelta,
+        validation_results: &[crate::constraints::ConstraintEvaluationResult],
+    ) -> Vec<ChangeEvent> {
+        let mut events = Vec::new();
+        let timestamp = std::time::SystemTime::now();
+
+        // Generate events for property changes
+        for property_change in &delta.nodes_with_property_changes {
+            let event_id = format!(
+                "prop_change_{}_{}", 
+                property_change.node.as_str(), 
+                timestamp.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
+            );
+            
+            let payload = serde_json::json!({
+                "node": property_change.node.as_str(),
+                "previous_hash": property_change.previous_hash,
+                "current_hash": property_change.current_hash,
+                "detected_at": property_change.detected_at
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+            });
+
+            events.push(ChangeEvent {
+                event_type: ChangeEventType::NodePropertiesChanged,
+                node: property_change.node.clone(),
+                shape_context: None,
+                payload,
+                timestamp,
+                event_id,
+            });
+        }
+
+        // Generate events for constraint changes
+        for constraint_change in &delta.nodes_with_constraint_changes {
+            let event_id = format!(
+                "constraint_change_{}_{}", 
+                constraint_change.node.as_str(), 
+                timestamp.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
+            );
+            
+            let payload = serde_json::json!({
+                "node": constraint_change.node.as_str(),
+                "previous_constraints_hash": constraint_change.previous_constraints_hash,
+                "current_constraints_hash": constraint_change.current_constraints_hash,
+                "changed_shapes": constraint_change.changed_shapes
+            });
+
+            events.push(ChangeEvent {
+                event_type: ChangeEventType::ShapeConstraintsChanged,
+                node: constraint_change.node.clone(),
+                shape_context: None,
+                payload,
+                timestamp,
+                event_id,
+            });
+        }
+
+        // Generate events for new nodes
+        for new_node in &delta.new_nodes {
+            let event_id = format!(
+                "node_added_{}_{}", 
+                new_node.as_str(), 
+                timestamp.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
+            );
+            
+            let payload = serde_json::json!({
+                "node": new_node.as_str(),
+                "detected_at": timestamp
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+            });
+
+            events.push(ChangeEvent {
+                event_type: ChangeEventType::NodeAdded,
+                node: new_node.clone(),
+                shape_context: None,
+                payload,
+                timestamp,
+                event_id,
+            });
+        }
+
+        // Generate events for deleted nodes
+        for deleted_node in &delta.deleted_nodes {
+            let event_id = format!(
+                "node_removed_{}_{}", 
+                deleted_node.as_str(), 
+                timestamp.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
+            );
+            
+            let payload = serde_json::json!({
+                "node": deleted_node.as_str(),
+                "detected_at": timestamp
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+            });
+
+            events.push(ChangeEvent {
+                event_type: ChangeEventType::NodeRemoved,
+                node: deleted_node.clone(),
+                shape_context: None,
+                payload,
+                timestamp,
+                event_id,
+            });
+        }
+
+        events
+    }
+
+    /// Compute specific property changes for a node (simplified implementation)
+    fn compute_property_changes(&self, store: &Store, node: &Term) -> Result<Vec<PropertyChange>> {
+        // This is a simplified implementation that could be enhanced with:
+        // 1. Actual before/after triple comparison
+        // 2. Property-specific change detection
+        // 3. Integration with store change logs
+        
+        let mut changes = Vec::new();
+        let current_triples = self.query_node_triples_as_subject(store, node)?;
+        
+        // For each triple, we could compare with cached previous state
+        // For now, we'll create a placeholder change indicating some property changed
+        if !current_triples.is_empty() {
+            for triple in current_triples.iter().take(5) { // Limit for performance
+                changes.push(PropertyChange {
+                    subject: node.clone(),
+                    property: triple.predicate().clone(),
+                    change_type: PropertyChangeType::Modified, // Simplified assumption
+                    old_value: None, // Would need previous state comparison
+                    new_value: Some(triple.object().clone()),
+                    timestamp: std::time::SystemTime::now(),
+                });
+            }
+        }
+        
+        Ok(changes)
+    }
+
+    /// Reconstruct term from string key (simplified approach)
+    fn reconstruct_term_from_key(&self, key: &str) -> Result<Term> {
+        // This is a simplified implementation that could be enhanced
+        // In practice, you'd want a more robust term serialization/deserialization
+        if key.starts_with("NamedNode(") {
+            let iri = key.trim_start_matches("NamedNode(\"").trim_end_matches("\")");
+            oxirs_core::model::NamedNode::new(iri)
+                .map(Term::NamedNode)
+                .map_err(|e| ShaclError::ValidationEngine(format!("Invalid IRI: {}", e)))
+        } else {
+            Err(ShaclError::ValidationEngine(format!(
+                "Unsupported term key format: {}",
+                key
+            )))
+        }
+    }
 }
 
-/// Result of incremental validation
+/// Enhanced result of incremental validation with delta processing
 #[derive(Debug, Clone)]
 pub struct IncrementalValidationResult {
+    /// Nodes that were revalidated due to changes
     pub revalidated_nodes: usize,
+    /// Nodes that were skipped (no changes detected)
     pub skipped_nodes: usize,
+    /// New violations found during incremental validation
     pub new_violations: usize,
+    /// Total processing time for incremental validation
     pub total_processing_time: Duration,
+    /// Detailed change delta information
+    pub change_delta: ChangesDelta,
+    /// Specific violations that were resolved (no longer violations)
+    pub resolved_violations: Vec<crate::validation::ValidationViolation>,
+    /// Specific new violations found
+    pub new_violation_details: Vec<crate::validation::ValidationViolation>,
+    /// Change events for external systems
+    pub change_events: Vec<ChangeEvent>,
 }
 
 impl IncrementalValidationResult {
@@ -1241,9 +1580,14 @@ impl IncrementalValidationResult {
             skipped_nodes: 0,
             new_violations: 0,
             total_processing_time: Duration::ZERO,
+            change_delta: ChangesDelta::new(),
+            resolved_violations: Vec::new(),
+            new_violation_details: Vec::new(),
+            change_events: Vec::new(),
         }
     }
 
+    /// Get the efficiency ratio (percentage of nodes skipped)
     pub fn efficiency_ratio(&self) -> f64 {
         let total_nodes = self.revalidated_nodes + self.skipped_nodes;
         if total_nodes == 0 {
@@ -1252,6 +1596,166 @@ impl IncrementalValidationResult {
             self.skipped_nodes as f64 / total_nodes as f64
         }
     }
+
+    /// Get the net change in violations (positive = more violations, negative = fewer)
+    pub fn net_violation_change(&self) -> i32 {
+        self.new_violation_details.len() as i32 - self.resolved_violations.len() as i32
+    }
+
+    /// Check if this incremental validation improved overall conformance
+    pub fn improved_conformance(&self) -> bool {
+        self.resolved_violations.len() > self.new_violation_details.len()
+    }
+
+    /// Get summary of changes for reporting
+    pub fn change_summary(&self) -> String {
+        format!(
+            "Incremental validation: {} nodes revalidated, {} skipped ({}% efficiency), {} net violation change",
+            self.revalidated_nodes,
+            self.skipped_nodes,
+            (self.efficiency_ratio() * 100.0) as u32,
+            self.net_violation_change()
+        )
+    }
+}
+
+/// Comprehensive delta information about detected changes
+#[derive(Debug, Clone)]
+pub struct ChangesDelta {
+    /// Nodes that had property changes
+    pub nodes_with_property_changes: Vec<NodePropertyChange>,
+    /// Nodes that had constraint changes (shape modifications)
+    pub nodes_with_constraint_changes: Vec<NodeConstraintChange>,
+    /// New nodes detected
+    pub new_nodes: Vec<oxirs_core::model::Term>,
+    /// Deleted nodes detected
+    pub deleted_nodes: Vec<oxirs_core::model::Term>,
+    /// Property-level changes
+    pub property_changes: Vec<PropertyChange>,
+}
+
+impl ChangesDelta {
+    fn new() -> Self {
+        Self {
+            nodes_with_property_changes: Vec::new(),
+            nodes_with_constraint_changes: Vec::new(),
+            new_nodes: Vec::new(),
+            deleted_nodes: Vec::new(),
+            property_changes: Vec::new(),
+        }
+    }
+
+    /// Check if any significant changes were detected
+    pub fn has_changes(&self) -> bool {
+        !self.nodes_with_property_changes.is_empty()
+            || !self.nodes_with_constraint_changes.is_empty()
+            || !self.new_nodes.is_empty()
+            || !self.deleted_nodes.is_empty()
+            || !self.property_changes.is_empty()
+    }
+
+    /// Get total number of changed entities
+    pub fn total_changes(&self) -> usize {
+        self.nodes_with_property_changes.len()
+            + self.nodes_with_constraint_changes.len()
+            + self.new_nodes.len()
+            + self.deleted_nodes.len()
+            + self.property_changes.len()
+    }
+}
+
+/// Details about property changes for a specific node
+#[derive(Debug, Clone)]
+pub struct NodePropertyChange {
+    /// The node that changed
+    pub node: oxirs_core::model::Term,
+    /// Hash before the change
+    pub previous_hash: u64,
+    /// Hash after the change
+    pub current_hash: u64,
+    /// Specific property changes (if available)
+    pub property_changes: Vec<PropertyChange>,
+    /// Timestamp of change detection
+    pub detected_at: std::time::SystemTime,
+}
+
+/// Details about constraint changes affecting a node
+#[derive(Debug, Clone)]
+pub struct NodeConstraintChange {
+    /// The node affected by constraint changes
+    pub node: oxirs_core::model::Term,
+    /// Hash of constraints before the change
+    pub previous_constraints_hash: u64,
+    /// Hash of constraints after the change
+    pub current_constraints_hash: u64,
+    /// Shape IDs that changed
+    pub changed_shapes: Vec<crate::ShapeId>,
+    /// Timestamp of change detection
+    pub detected_at: std::time::SystemTime,
+}
+
+/// Specific property-level change information
+#[derive(Debug, Clone)]
+pub struct PropertyChange {
+    /// Subject of the changed triple
+    pub subject: oxirs_core::model::Term,
+    /// Property/predicate that changed
+    pub property: oxirs_core::model::NamedNode,
+    /// Change type
+    pub change_type: PropertyChangeType,
+    /// Old value (for modifications and deletions)
+    pub old_value: Option<oxirs_core::model::Term>,
+    /// New value (for modifications and additions)
+    pub new_value: Option<oxirs_core::model::Term>,
+    /// Timestamp of the change
+    pub timestamp: std::time::SystemTime,
+}
+
+/// Type of property change
+#[derive(Debug, Clone, PartialEq)]
+pub enum PropertyChangeType {
+    /// Property value was added
+    Added,
+    /// Property value was modified
+    Modified,
+    /// Property value was deleted
+    Deleted,
+}
+
+/// Change events for external system integration
+#[derive(Debug, Clone)]
+pub struct ChangeEvent {
+    /// Event type
+    pub event_type: ChangeEventType,
+    /// Node affected by the change
+    pub node: oxirs_core::model::Term,
+    /// Shape context (if applicable)
+    pub shape_context: Option<crate::ShapeId>,
+    /// Event payload with detailed information
+    pub payload: serde_json::Value,
+    /// Event timestamp
+    pub timestamp: std::time::SystemTime,
+    /// Event ID for tracking
+    pub event_id: String,
+}
+
+/// Types of change events
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChangeEventType {
+    /// Node validation status changed
+    ValidationStatusChanged,
+    /// New violation detected
+    ViolationAdded,
+    /// Violation resolved
+    ViolationResolved,
+    /// Node properties changed
+    NodePropertiesChanged,
+    /// Shape constraints changed
+    ShapeConstraintsChanged,
+    /// New node added to validation scope
+    NodeAdded,
+    /// Node removed from validation scope
+    NodeRemoved,
 }
 
 /// Statistics for incremental validation

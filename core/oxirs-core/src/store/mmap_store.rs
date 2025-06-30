@@ -8,17 +8,16 @@
 //! - Support for concurrent readers
 //! - Automatic recovery from crashes
 
-use crate::model::{BlankNode, GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject};
+use crate::model::{GraphName, Object, Predicate, Quad, Subject};
 use crate::store::mmap_index::{IndexEntry, MmapIndex};
 use crate::store::term_interner::TermInterner;
 use anyhow::{bail, Context, Result};
 use blake3::Hasher;
-use memmap2::{Mmap, MmapMut, MmapOptions};
+use memmap2::{Mmap, MmapOptions};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Seek, SeekFrom, Write};
-use std::marker::PhantomData;
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -795,6 +794,7 @@ impl<'a> Iterator for QuadIterator<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{BlankNode, Literal, NamedNode};
     use tempfile::TempDir;
 
     #[test]

@@ -8,11 +8,13 @@
 //! - `source_selection`: Advanced source selection algorithms including pattern coverage analysis
 //! - `cost_analysis`: Advanced cost-based selection algorithms with ML-based estimation
 //! - `types`: Type definitions and data structures used throughout the module
+//! - `enhanced_optimizer`: ML-driven enhanced optimizer with advanced pattern analysis
 
 pub mod core;
 pub mod source_selection;
 pub mod cost_analysis;
 pub mod types;
+pub mod enhanced_optimizer;
 
 // Re-export main types and structs for public API
 pub use core::ServiceOptimizer;

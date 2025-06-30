@@ -119,9 +119,11 @@ pub mod application_tasks;
 pub mod batch_processing;
 pub mod biomedical_embeddings;
 pub mod caching;
+pub mod causal_representation_learning;
 pub mod cloud_integration;
 pub mod compression;
 pub mod contextual_embeddings;
+pub mod continual_learning;
 pub mod cross_domain_transfer;
 pub mod delta;
 pub mod federated_learning;
@@ -135,9 +137,12 @@ pub mod model_registry;
 pub mod models;
 pub mod monitoring;
 pub mod multimodal;
+pub mod neural_symbolic_integration;
 pub mod novel_architectures;
 pub mod persistence;
 pub mod research_networks;
+pub mod real_time_fine_tuning;
+pub mod real_time_optimization;
 pub mod training;
 pub mod utils;
 pub mod vision_language_graph;
@@ -484,21 +489,21 @@ pub use enterprise_knowledge::{
     RecommendationReason, SalesMetrics, Skill, SkillCategory, Team, TeamPerformance,
 };
 pub use evaluation::{
-    BenchmarkReport,
-    BenchmarkSuite,
-    DriftAlert,
-    DriftDetector,
-    DriftDetectorConfig,
-    DriftThresholds,
-    EvaluationConfig,
-    EvaluationMetric,
-    EvaluationResults,
-    EvaluationSuite,
-    ModelComparison,
-    QualityMonitor,
-    QualityMonitorConfig,
-    QualitySnapshot,
-    TripleEvaluationResult,
+    QueryAnsweringEvaluator,
+    QueryEvaluationConfig,
+    QueryEvaluationResults,
+    QueryType,
+    QueryMetric,
+    QueryTemplate,
+    QueryResult,
+    TypeSpecificResults,
+    ReasoningTaskEvaluator,
+    ReasoningEvaluationConfig,
+    ReasoningEvaluationResults,
+    ReasoningType,
+    ReasoningRule,
+    ReasoningChain,
+    ReasoningStep,
 };
 pub use gpu_acceleration::{
     GpuAccelerationConfig, GpuAccelerationManager, GpuMemoryPool, GpuPerformanceStats,
@@ -548,6 +553,23 @@ pub use vision_language_graph::{
     ReadoutFunction, TaskCategory, TaskSpecificParams, TrainingObjective, TransferLearningConfig,
     TransferStrategy, VisionArchitecture, VisionEncoder, VisionEncoderConfig, VisionLanguageGraphConfig,
     VisionLanguageGraphModel, VisionLanguageGraphStats, ViTConfig, ZeroShotConfig, ZeroShotMethod,
+};
+pub use causal_representation_learning::{
+    CausalRepresentationConfig, CausalRepresentationModel, CausalDiscoveryConfig, CausalDiscoveryAlgorithm,
+    StructuralCausalModelConfig, InterventionConfig, CounterfactualConfig, DisentanglementConfig,
+    ConstraintSettings, ScoreSettings, IndependenceTest, CausalGraph, DisentanglementMethod,
+    CounterfactualQuery, ExplanationType,
+};
+pub use continual_learning::{
+    ContinualLearningConfig, ContinualLearningModel, MemoryConfig, RegularizationConfig,
+    ArchitectureConfig, TaskConfig, ReplayConfig, MemoryType, MemoryUpdateStrategy,
+    ConsolidationConfig, TaskDetection, BoundaryDetection, TaskSwitching, ReplayMethod,
+};
+pub use neural_symbolic_integration::{
+    NeuralSymbolicConfig, NeuralSymbolicModel, SymbolicReasoningConfig, LogicIntegrationConfig,
+    KnowledgeIntegrationConfig, NeuroSymbolicArchitectureConfig, ConstraintSatisfactionConfig,
+    ReasoningEngine, LogicProgrammingConfig, RuleBasedConfig, OntologicalConfig,
+    ConstraintType, KnowledgeRule, LogicalFormula,
 };
 
 #[cfg(feature = "tucker")]

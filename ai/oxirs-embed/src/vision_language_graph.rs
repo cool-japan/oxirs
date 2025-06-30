@@ -817,7 +817,7 @@ impl VisionEncoder {
         vit_parameters.insert(
             "patch_embedding".to_string(),
             Array2::from_shape_fn(
-                (config.vision_dim, config.channels * config.patch_size.0 * config.patch_size.1),
+                (config.channels * config.patch_size.0 * config.patch_size.1, config.vision_dim),
                 |_| (rand::random::<f32>() - 0.5) * 0.1
             )
         );
@@ -870,11 +870,12 @@ impl VisionEncoder {
                 ]);
                 
                 // Flatten patch
-                let flattened_patch = patch.into_shape(c * patch_h * patch_w).unwrap();
+                let patch_owned = patch.to_owned();
+                let flattened_patch = patch_owned.into_shape(c * patch_h * patch_w).unwrap();
                 
                 // Project to embedding space
                 if let Some(patch_embedding_matrix) = self.vit_parameters.get("patch_embedding") {
-                    let embedding = patch_embedding_matrix.dot(&flattened_patch);
+                    let embedding = flattened_patch.dot(patch_embedding_matrix);
                     patch_embeddings.row_mut(patch_idx).assign(&embedding);
                 }
             }
@@ -1095,11 +1096,20 @@ impl GraphEncoder {
             );
         }
         
-        // Graph readout parameters
+        // Graph readout parameters (for attention mechanism)
         graph_parameters.insert(
             "readout".to_string(),
             Array2::from_shape_fn(
-                (config.graph_dim, config.node_dim),
+                (config.node_dim, 1), // Single attention score per node
+                |_| (rand::random::<f32>() - 0.5) * 0.1
+            )
+        );
+        
+        // Graph projection parameters (from node_dim to graph_dim)
+        graph_parameters.insert(
+            "graph_projection".to_string(),
+            Array2::from_shape_fn(
+                (config.node_dim, config.graph_dim),
                 |_| (rand::random::<f32>() - 0.5) * 0.1
             )
         );
@@ -1165,28 +1175,42 @@ impl GraphEncoder {
     
     /// Graph-level readout
     fn graph_readout(&self, node_embeddings: &Array2<f32>) -> Result<Array1<f32>> {
-        match self.config.readout {
+        let node_level_embedding = match self.config.readout {
             ReadoutFunction::GlobalMean => {
-                Ok(node_embeddings.mean_axis(Axis(0)).unwrap())
+                node_embeddings.mean_axis(Axis(0)).unwrap()
             }
             ReadoutFunction::GlobalMax => {
-                Ok(node_embeddings.fold_axis(Axis(0), f32::NEG_INFINITY, |&a, &b| a.max(b)))
+                node_embeddings.fold_axis(Axis(0), f32::NEG_INFINITY, |&a, &b| a.max(b))
             }
             ReadoutFunction::GlobalSum => {
-                Ok(node_embeddings.sum_axis(Axis(0)))
+                node_embeddings.sum_axis(Axis(0))
             }
             ReadoutFunction::GlobalAttention => {
                 if let Some(readout_matrix) = self.graph_parameters.get("readout") {
                     // Attention-based readout
-                    let attention_scores = node_embeddings.dot(readout_matrix);
-                    let attention_weights = self.softmax_2d(&attention_scores);
-                    let weighted_nodes = &attention_weights * node_embeddings;
-                    Ok(weighted_nodes.sum_axis(Axis(0)))
+                    let attention_scores = node_embeddings.dot(readout_matrix); // (num_nodes, 1)
+                    let attention_scores_1d = attention_scores.column(0).to_owned(); // (num_nodes,)
+                    let attention_weights = self.softmax_1d(&attention_scores_1d); // (num_nodes,)
+                    
+                    // Weighted average of node embeddings
+                    let mut weighted_sum = Array1::zeros(node_embeddings.ncols());
+                    for (i, &weight) in attention_weights.iter().enumerate() {
+                        let node_emb = node_embeddings.row(i);
+                        weighted_sum = weighted_sum + weight * &node_emb;
+                    }
+                    weighted_sum
                 } else {
-                    Ok(node_embeddings.mean_axis(Axis(0)).unwrap())
+                    node_embeddings.mean_axis(Axis(0)).unwrap()
                 }
             }
-            _ => Ok(node_embeddings.mean_axis(Axis(0)).unwrap()),
+            _ => node_embeddings.mean_axis(Axis(0)).unwrap(),
+        };
+        
+        // Project from node_dim to graph_dim
+        if let Some(projection_matrix) = self.graph_parameters.get("graph_projection") {
+            Ok(projection_matrix.t().dot(&node_level_embedding))
+        } else {
+            Ok(node_level_embedding)
         }
     }
     
@@ -1200,6 +1224,16 @@ impl GraphEncoder {
             if sum > 0.0 {
                 row /= sum;
             }
+        }
+        result
+    }
+    
+    fn softmax_1d(&self, x: &Array1<f32>) -> Array1<f32> {
+        let max_val = x.fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        let mut result = x.mapv(|v| (v - max_val).exp());
+        let sum = result.sum();
+        if sum > 0.0 {
+            result /= sum;
         }
         result
     }
@@ -1988,13 +2022,13 @@ mod tests {
         let mut model = VisionLanguageGraphModel::new(config);
         
         let support_examples = vec![
-            (Array1::from_shape_fn(768, |_| rand::random::<f32>()), "cat".to_string()),
-            (Array1::from_shape_fn(768, |_| rand::random::<f32>()), "dog".to_string()),
+            (Array1::from_shape_fn(512, |_| rand::random::<f32>()), "cat".to_string()),
+            (Array1::from_shape_fn(512, |_| rand::random::<f32>()), "dog".to_string()),
         ];
         
         let query_examples = vec![
-            Array1::from_shape_fn(768, |_| rand::random::<f32>()),
-            Array1::from_shape_fn(768, |_| rand::random::<f32>()),
+            Array1::from_shape_fn(512, |_| rand::random::<f32>()),
+            Array1::from_shape_fn(512, |_| rand::random::<f32>()),
         ];
         
         let predictions = model.few_shot_adapt(&support_examples, &query_examples).unwrap();

@@ -1034,7 +1034,7 @@ impl QueryExecutor {
 /// WebSocket endpoint handler
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
-    State(state): State<Arc<crate::server::AppState>>,
+    State(state): State<crate::server::AppState>,
     user: Option<AuthUser>,
 ) -> Response {
     if let Some(ref subscription_manager) = state.subscription_manager {

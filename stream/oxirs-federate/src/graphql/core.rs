@@ -300,7 +300,7 @@ impl GraphQLFederation {
         );
 
         // Query for federation support
-        let _federation_query = r#"
+        let federation_query = r#"
             query FederationIntrospection {
                 _service {
                     sdl
@@ -308,7 +308,21 @@ impl GraphQLFederation {
                 __schema {
                     types {
                         name
+                        kind
+                        description
                         fields {
+                            name
+                            type {
+                                name
+                                kind
+                            }
+                        }
+                    }
+                    directives {
+                        name
+                        description
+                        locations
+                        args {
                             name
                             type {
                                 name
@@ -320,29 +334,22 @@ impl GraphQLFederation {
             }
         "#;
 
-        // In a real implementation, this would make an HTTP request to the service
-        // For now, return mock data
-        let mock_sdl = r#"
-            extend type Query {
-                me: User
-            }
-            
-            type User @key(fields: "id") {
-                id: ID!
-                username: String!
-                email: String! @external
-            }
-        "#;
-
+        // Execute the introspection query
+        let response = self.execute_introspection_query(service_endpoint, federation_query).await?;
+        
+        // Parse the response to extract federation capabilities
+        let capabilities = self.parse_federation_capabilities(&response)?;
+        
+        // Extract SDL from response or generate from schema
+        let sdl = self.extract_or_generate_sdl(&response).await?;
+        
+        // Extract entity types from the schema
+        let entity_types = self.extract_entity_types(&response)?;
+        
         Ok(FederationServiceInfo {
-            sdl: mock_sdl.to_string(),
-            capabilities: FederationCapabilities {
-                federation_version: "2.0".to_string(),
-                supports_entities: true,
-                supports_entity_interfaces: true,
-                supports_progressive_override: false,
-            },
-            entity_types: vec!["User".to_string()],
+            sdl,
+            capabilities,
+            entity_types,
         })
     }
 
@@ -398,6 +405,507 @@ impl GraphQLFederation {
     /// Check if a type is a built-in GraphQL scalar type
     pub fn is_builtin_type(&self, type_name: &str) -> bool {
         matches!(type_name, "String" | "Int" | "Float" | "Boolean" | "ID")
+    }
+
+    /// Federated subscription support with real-time event propagation
+    pub async fn create_federated_subscription(
+        &self,
+        subscription_query: &str,
+        variables: Option<serde_json::Value>,
+    ) -> Result<FederatedSubscriptionStream> {
+        debug!("Creating federated subscription");
+        
+        // Parse the subscription query
+        let parsed_query = self.parse_graphql_query(subscription_query)?;
+        
+        if !matches!(parsed_query.operation_type, GraphQLOperationType::Subscription) {
+            return Err(anyhow!("Query is not a subscription"));
+        }
+        
+        // Decompose subscription across services
+        let service_subscriptions = self.decompose_subscription(&parsed_query).await?;
+        
+        // Create federated subscription stream
+        let stream = FederatedSubscriptionStream::new(
+            subscription_query.to_string(),
+            variables,
+            service_subscriptions,
+        );
+        
+        Ok(stream)
+    }
+    
+    /// Decompose subscription query across federated services
+    async fn decompose_subscription(&self, query: &ParsedQuery) -> Result<Vec<ServiceSubscription>> {
+        let mut service_subscriptions = Vec::new();
+        
+        // Get unified schema
+        let unified_schema = self.create_unified_schema().await?;
+        
+        // Analyze field ownership for subscription fields
+        let field_ownership = self.analyze_field_ownership(query, &unified_schema)?;
+        
+        // Create service-specific subscriptions
+        for (service_id, fields) in &field_ownership.service_to_fields {
+            if !fields.is_empty() {
+                let subscription_query = self.build_service_subscription_query(fields, query)?;
+                
+                service_subscriptions.push(ServiceSubscription {
+                    service_id: service_id.clone(),
+                    query: subscription_query,
+                    variables: query.variables.clone(),
+                    stream_active: false,
+                });
+            }
+        }
+        
+        Ok(service_subscriptions)
+    }
+    
+    /// Build subscription query for a specific service
+    fn build_service_subscription_query(
+        &self,
+        fields: &[String],
+        original_query: &ParsedQuery,
+    ) -> Result<String> {
+        let operation_name = original_query.operation_name
+            .as_ref()
+            .map(|name| format!(" {}", name))
+            .unwrap_or_default();
+        
+        // Build subscription with service-specific fields
+        let subscription_query = format!(
+            "subscription{} {{ {} }}",
+            operation_name,
+            fields.join(" ")
+        );
+        
+        Ok(subscription_query)
+    }
+    
+    /// Merge subscription events from multiple services
+    pub async fn merge_subscription_events(
+        &self,
+        events: Vec<SubscriptionEvent>,
+    ) -> Result<GraphQLResponse> {
+        debug!("Merging {} subscription events", events.len());
+        
+        let mut merged_data = serde_json::Map::new();
+        let mut all_errors = Vec::new();
+        
+        // Merge events based on their source service and field ownership
+        for event in events {
+            if let Some(data) = event.data.as_object() {
+                for (key, value) in data {
+                    // Handle conflicts by service priority or timestamp
+                    if merged_data.contains_key(key) {
+                        // Use most recent event for conflicts
+                        if event.timestamp > self.get_field_timestamp(&merged_data, key) {
+                            merged_data.insert(key.clone(), value.clone());
+                        }
+                    } else {
+                        merged_data.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+            
+            all_errors.extend(event.errors);
+        }
+        
+        Ok(GraphQLResponse {
+            data: serde_json::Value::Object(merged_data),
+            errors: all_errors,
+            extensions: None,
+        })
+    }
+    
+    /// Get timestamp of a field in merged data (placeholder implementation)
+    fn get_field_timestamp(&self, _data: &serde_json::Map<String, serde_json::Value>, _field: &str) -> chrono::DateTime<chrono::Utc> {
+        chrono::Utc::now() // Simplified - in real implementation would track field timestamps
+    }
+    
+    /// Handle subscription connection management
+    pub async fn manage_subscription_connections(
+        &self,
+        connection_id: &str,
+        operation: SubscriptionOperation,
+    ) -> Result<()> {
+        match operation {
+            SubscriptionOperation::Start { query, variables } => {
+                debug!("Starting subscription connection: {}", connection_id);
+                let _subscription = self.create_federated_subscription(&query, variables).await?;
+                // Store subscription in connection manager
+                // Implementation would involve WebSocket connection management
+            }
+            SubscriptionOperation::Stop => {
+                debug!("Stopping subscription connection: {}", connection_id);
+                // Clean up subscription resources
+            }
+            SubscriptionOperation::ConnectionInit => {
+                debug!("Initializing subscription connection: {}", connection_id);
+                // Send connection ack
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle real-time event propagation across federation
+    pub async fn propagate_federation_event(
+        &self,
+        event: FederationEvent,
+    ) -> Result<()> {
+        debug!("Propagating federation event: {:?}", event.event_type);
+        
+        match event.event_type {
+            FederationEventType::EntityUpdate => {
+                // Invalidate caches and notify dependent services
+                self.handle_entity_update_propagation(&event).await?
+            }
+            FederationEventType::SchemaChange => {
+                // Update schema and revalidate subscriptions
+                self.handle_schema_change_propagation(&event).await?
+            }
+            FederationEventType::ServiceAvailability => {
+                // Update service status and reroute queries
+                self.handle_service_availability_change(&event).await?
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle entity update propagation
+    async fn handle_entity_update_propagation(&self, event: &FederationEvent) -> Result<()> {
+        debug!("Handling entity update propagation");
+        
+        // Extract entity information from event
+        if let Some(entity_type) = event.data.get("entityType").and_then(|v| v.as_str()) {
+            // Find all services that might be affected by this entity update
+            let schemas = self.schemas.read().await;
+            let mut affected_services = Vec::new();
+            
+            for (service_id, schema) in schemas.iter() {
+                if schema.types.contains_key(entity_type) {
+                    affected_services.push(service_id.clone());
+                }
+            }
+            
+            // Notify affected services about the entity update
+            for service_id in affected_services {
+                debug!("Notifying service {} about entity update", service_id);
+                // Implementation would send notification to service
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle schema change propagation
+    async fn handle_schema_change_propagation(&self, event: &FederationEvent) -> Result<()> {
+        debug!("Handling schema change propagation");
+        
+        if let Some(service_id) = event.data.get("serviceId").and_then(|v| v.as_str()) {
+            // Re-validate unified schema after change
+            if let Err(e) = self.create_unified_schema().await {
+                warn!("Schema validation failed after change in service {}: {}", service_id, e);
+            } else {
+                info!("Schema successfully updated for service {}", service_id);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle service availability changes
+    async fn handle_service_availability_change(&self, event: &FederationEvent) -> Result<()> {
+        debug!("Handling service availability change");
+        
+        if let Some(service_id) = event.data.get("serviceId").and_then(|v| v.as_str()) {
+            if let Some(available) = event.data.get("available").and_then(|v| v.as_bool()) {
+                if !available {
+                    warn!("Service {} is no longer available - implementing fallback strategies", service_id);
+                    // Implement circuit breaker and fallback logic
+                } else {
+                    info!("Service {} is now available", service_id);
+                    // Resume normal operation
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Execute introspection query against a GraphQL service
+    async fn execute_introspection_query(&self, endpoint: &str, query: &str) -> Result<serde_json::Value> {
+        let client = reqwest::Client::new();
+        let request_body = serde_json::json!({
+            "query": query
+        });
+
+        let response = client
+            .post(endpoint)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Introspection query failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let body: serde_json::Value = response.json().await?;
+        Ok(body)
+    }
+
+    /// Parse federation capabilities from introspection response
+    fn parse_federation_capabilities(&self, response: &serde_json::Value) -> Result<FederationCapabilities> {
+        let schema = response["data"]["__schema"]
+            .as_object()
+            .ok_or_else(|| anyhow!("Invalid introspection response: missing schema"))?;
+
+        let mut supports_entities = false;
+        let mut supports_entity_interfaces = false;
+        let mut supports_progressive_override = false;
+        let mut federation_version = "1.0".to_string();
+
+        // Check for federation directives
+        if let Some(directives) = schema["directives"].as_array() {
+            for directive in directives {
+                if let Some(name) = directive["name"].as_str() {
+                    match name {
+                        "key" => {
+                            supports_entities = true;
+                            federation_version = "2.0".to_string();
+                        }
+                        "external" | "requires" | "provides" => {
+                            supports_entities = true;
+                        }
+                        "extends" => {
+                            supports_entity_interfaces = true;
+                        }
+                        "override" => {
+                            supports_progressive_override = true;
+                            federation_version = "2.0".to_string();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        Ok(FederationCapabilities {
+            federation_version,
+            supports_entities,
+            supports_entity_interfaces,
+            supports_progressive_override,
+        })
+    }
+
+    /// Extract or generate SDL from introspection response
+    async fn extract_or_generate_sdl(&self, response: &serde_json::Value) -> Result<String> {
+        // First try to get SDL from _service field (if supported)
+        if let Some(service) = response["data"]["_service"].as_object() {
+            if let Some(sdl) = service["sdl"].as_str() {
+                return Ok(sdl.to_string());
+            }
+        }
+
+        // Fall back to generating SDL from schema introspection
+        self.generate_sdl_from_introspection(response)
+    }
+
+    /// Generate SDL from introspection response
+    fn generate_sdl_from_introspection(&self, response: &serde_json::Value) -> Result<String> {
+        let schema = response["data"]["__schema"]
+            .as_object()
+            .ok_or_else(|| anyhow!("Invalid introspection response: missing schema"))?;
+
+        let mut sdl = String::new();
+        
+        // Generate type definitions
+        if let Some(types) = schema["types"].as_array() {
+            for type_def in types {
+                if let Some(type_name) = type_def["name"].as_str() {
+                    // Skip built-in types
+                    if type_name.starts_with("__") || self.is_builtin_type(type_name) {
+                        continue;
+                    }
+
+                    if let Some(kind) = type_def["kind"].as_str() {
+                        match kind {
+                            "OBJECT" => {
+                                sdl.push_str(&self.generate_object_type_sdl(type_def)?);
+                            }
+                            "INTERFACE" => {
+                                sdl.push_str(&self.generate_interface_type_sdl(type_def)?);
+                            }
+                            "ENUM" => {
+                                sdl.push_str(&self.generate_enum_type_sdl(type_def)?);
+                            }
+                            "SCALAR" => {
+                                sdl.push_str(&format!("scalar {}\n\n", type_name));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(sdl)
+    }
+
+    /// Generate SDL for object type
+    fn generate_object_type_sdl(&self, type_def: &serde_json::Value) -> Result<String> {
+        let type_name = type_def["name"].as_str()
+            .ok_or_else(|| anyhow!("Missing type name"))?;
+        
+        let mut sdl = format!("type {} ", type_name);
+        
+        // Add directives (simplified - would need more sophisticated parsing)
+        if let Some(description) = type_def["description"].as_str() {
+            if description.contains("@key") {
+                sdl.push_str("@key(fields: \"id\") ");
+            }
+        }
+        
+        sdl.push_str("{\n");
+        
+        // Add fields
+        if let Some(fields) = type_def["fields"].as_array() {
+            for field in fields {
+                if let Some(field_name) = field["name"].as_str() {
+                    let field_type = self.extract_type_name_from_field(field)?;
+                    sdl.push_str(&format!("  {}: {}\n", field_name, field_type));
+                }
+            }
+        }
+        
+        sdl.push_str("}\n\n");
+        Ok(sdl)
+    }
+
+    /// Generate SDL for interface type
+    fn generate_interface_type_sdl(&self, type_def: &serde_json::Value) -> Result<String> {
+        let type_name = type_def["name"].as_str()
+            .ok_or_else(|| anyhow!("Missing type name"))?;
+        
+        let mut sdl = format!("interface {} {{\n", type_name);
+        
+        // Add fields
+        if let Some(fields) = type_def["fields"].as_array() {
+            for field in fields {
+                if let Some(field_name) = field["name"].as_str() {
+                    let field_type = self.extract_type_name_from_field(field)?;
+                    sdl.push_str(&format!("  {}: {}\n", field_name, field_type));
+                }
+            }
+        }
+        
+        sdl.push_str("}\n\n");
+        Ok(sdl)
+    }
+
+    /// Generate SDL for enum type
+    fn generate_enum_type_sdl(&self, type_def: &serde_json::Value) -> Result<String> {
+        let type_name = type_def["name"].as_str()
+            .ok_or_else(|| anyhow!("Missing type name"))?;
+        
+        let mut sdl = format!("enum {} {{\n", type_name);
+        
+        // Add enum values
+        if let Some(enum_values) = type_def["enumValues"].as_array() {
+            for enum_value in enum_values {
+                if let Some(value_name) = enum_value["name"].as_str() {
+                    sdl.push_str(&format!("  {}\n", value_name));
+                }
+            }
+        }
+        
+        sdl.push_str("}\n\n");
+        Ok(sdl)
+    }
+
+    /// Extract type name from field definition
+    fn extract_type_name_from_field(&self, field: &serde_json::Value) -> Result<String> {
+        self.extract_type_name_recursive(&field["type"])
+    }
+
+    /// Recursively extract type name handling NON_NULL and LIST wrappers
+    fn extract_type_name_recursive(&self, type_ref: &serde_json::Value) -> Result<String> {
+        if let Some(kind) = type_ref["kind"].as_str() {
+            match kind {
+                "NON_NULL" => {
+                    let inner_type = self.extract_type_name_recursive(&type_ref["ofType"])?;
+                    Ok(format!("{}!", inner_type))
+                }
+                "LIST" => {
+                    let inner_type = self.extract_type_name_recursive(&type_ref["ofType"])?;
+                    Ok(format!("[{}]", inner_type))
+                }
+                _ => {
+                    if let Some(name) = type_ref["name"].as_str() {
+                        Ok(name.to_string())
+                    } else {
+                        Err(anyhow!("Missing type name"))
+                    }
+                }
+            }
+        } else {
+            Err(anyhow!("Missing type kind"))
+        }
+    }
+
+    /// Extract entity types from introspection response
+    fn extract_entity_types(&self, response: &serde_json::Value) -> Result<Vec<String>> {
+        let schema = response["data"]["__schema"]
+            .as_object()
+            .ok_or_else(|| anyhow!("Invalid introspection response: missing schema"))?;
+
+        let mut entity_types = Vec::new();
+
+        if let Some(types) = schema["types"].as_array() {
+            for type_def in types {
+                if let Some(type_name) = type_def["name"].as_str() {
+                    // Skip built-in types
+                    if type_name.starts_with("__") {
+                        continue;
+                    }
+
+                    // Check if this is an entity type (simplified detection)
+                    if self.is_entity_type(type_def) {
+                        entity_types.push(type_name.to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(entity_types)
+    }
+
+    /// Check if a type is an entity type (has key fields)
+    fn is_entity_type(&self, type_def: &serde_json::Value) -> bool {
+        // Simplified check - look for @key directive in description or check for id field
+        if let Some(description) = type_def["description"].as_str() {
+            if description.contains("@key") {
+                return true;
+            }
+        }
+
+        // Check if type has an 'id' field (common pattern for entities)
+        if let Some(fields) = type_def["fields"].as_array() {
+            for field in fields {
+                if field["name"].as_str() == Some("id") {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     /// Parse a value from string format to JSON value (helper method)

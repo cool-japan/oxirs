@@ -1865,11 +1865,11 @@ impl EmbeddingModel for TransformerEmbedding {
     }
 
     async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        #[cfg(feature = "transformer-models")]
+        #[cfg(feature = "neural-models")]
         {
             self.encode_texts(texts).await
         }
-        #[cfg(not(feature = "transformer-models"))]
+        #[cfg(not(feature = "neural-models"))]
         {
             // Fallback implementation using simple TF-IDF-like embeddings
             let mut embeddings = Vec::new();
@@ -1944,7 +1944,7 @@ impl TransformerEmbedding {
         Ok(Vector::new(embedding))
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     /// Encode texts using transformer models
     async fn encode_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         // In a real implementation, this would load the actual transformer model
@@ -1960,7 +1960,7 @@ impl TransformerEmbedding {
         }
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     /// Encode scientific text with domain-specific preprocessing
     async fn encode_scientific_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
@@ -1975,7 +1975,7 @@ impl TransformerEmbedding {
         Ok(embeddings)
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     /// Encode biomedical text with medical entity recognition
     async fn encode_biomedical_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
@@ -1990,7 +1990,7 @@ impl TransformerEmbedding {
         Ok(embeddings)
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     /// Encode code with syntax-aware processing
     async fn encode_code_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
@@ -2005,7 +2005,7 @@ impl TransformerEmbedding {
         Ok(embeddings)
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     /// Encode legal text with legal entity recognition
     async fn encode_legal_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
@@ -2020,7 +2020,7 @@ impl TransformerEmbedding {
         Ok(embeddings)
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     /// Encode news text with temporal and topic awareness
     async fn encode_news_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
@@ -2035,7 +2035,7 @@ impl TransformerEmbedding {
         Ok(embeddings)
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     /// Encode social media text with hashtag and mention processing
     async fn encode_social_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
@@ -2050,7 +2050,7 @@ impl TransformerEmbedding {
         Ok(embeddings)
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     /// Encode general text with standard BERT processing
     async fn encode_general_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
@@ -2063,7 +2063,7 @@ impl TransformerEmbedding {
         Ok(embeddings)
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     /// Core BERT encoding logic (simplified for now)
     fn bert_encode(&self, text: &str) -> Result<Vec<f32>> {
         // This is a simplified implementation
@@ -2130,7 +2130,7 @@ impl TransformerEmbedding {
     }
 
     // Domain-specific preprocessing methods
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     fn preprocess_scientific_text(&self, text: &str) -> String {
         // Remove citations, normalize equations, handle scientific notation
         text.to_lowercase()
@@ -2138,7 +2138,7 @@ impl TransformerEmbedding {
             .replace(char::is_numeric, " ")
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     fn preprocess_biomedical_text(&self, text: &str) -> String {
         // Normalize gene names, drug names, medical terms
         text.to_lowercase()
@@ -2146,13 +2146,13 @@ impl TransformerEmbedding {
             .replace("protein", "PROTEIN")
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     fn preprocess_code_text(&self, text: &str) -> String {
         // Normalize identifiers, handle syntax
         text.replace("_", " ").replace("CamelCase", "camel case")
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     fn preprocess_legal_text(&self, text: &str) -> String {
         // Handle legal citations, normalize terms
         text.to_lowercase()
@@ -2160,13 +2160,13 @@ impl TransformerEmbedding {
             .replace("§", "section")
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     fn preprocess_news_text(&self, text: &str) -> String {
         // Remove bylines, normalize quotes
         text.replace("\"", "").replace("'", "")
     }
 
-    #[cfg(feature = "transformer-models")]
+    #[cfg(feature = "neural-models")]
     fn preprocess_social_text(&self, text: &str) -> String {
         // Handle hashtags, mentions, emojis
         text.replace("#", "hashtag ")

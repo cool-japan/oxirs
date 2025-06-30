@@ -301,7 +301,52 @@ impl StatisticsCollector {
                     .variable_selectivity
                     .insert(var.clone(), current * 0.9);
             }
-            _ => {}
+            Term::QuotedTriple(triple) => {
+                // Recursively update statistics for the quoted triple's components
+                self.update_term_statistics(&triple.subject, TermPosition::Subject)?;
+                self.update_term_statistics(&triple.predicate, TermPosition::Predicate)?;
+                self.update_term_statistics(&triple.object, TermPosition::Object)?;
+                
+                // Track quoted triple complexity using pattern cardinality
+                let quoted_key = format!("<<{} {} {}>>", triple.subject, triple.predicate, triple.object);
+                *self.stats.pattern_cardinality.entry(quoted_key).or_insert(0) += 1;
+            }
+            Term::PropertyPath(path) => {
+                // Property paths are complex patterns that affect selectivity
+                // Track as a special type of predicate usage
+                let path_key = format!("path:{}", path);
+                *self.stats.pattern_cardinality.entry(path_key).or_insert(0) += 1;
+                
+                // Property paths typically increase cardinality estimates
+                if position == TermPosition::Predicate {
+                    // Add to predicate frequency to track path usage
+                    *self.stats.predicate_frequency.entry(format!("path:{}", path)).or_insert(0) += 1;
+                }
+            }
+            Term::BlankNode(id) => {
+                // Track blank node usage for cardinality estimation
+                match position {
+                    TermPosition::Subject => {
+                        *self
+                            .stats
+                            .subject_cardinality
+                            .entry(format!("_:{}", id))
+                            .or_insert(0) += 1;
+                    }
+                    TermPosition::Object => {
+                        *self
+                            .stats
+                            .object_cardinality
+                            .entry(format!("_:{}", id))
+                            .or_insert(0) += 1;
+                    }
+                    TermPosition::Predicate => {
+                        // Blank nodes as predicates are unusual but possible in some contexts
+                        let blank_predicate_key = format!("blank_predicate:{}", id);
+                        *self.stats.pattern_cardinality.entry(blank_predicate_key).or_insert(0) += 1;
+                    }
+                }
+            }
         }
         Ok(())
     }

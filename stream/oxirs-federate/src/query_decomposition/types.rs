@@ -261,6 +261,53 @@ impl CostEstimator {
     pub fn estimate_join_cost(&self, left_size: u64, right_size: u64) -> f64 {
         self.join_cost_factor * ((left_size * right_size) as f64).log10()
     }
+
+    /// Estimate cost for a single pattern on a service
+    pub fn estimate_single_pattern_cost(
+        &self,
+        service: &FederatedService,
+        pattern: &TriplePattern,
+    ) -> f64 {
+        let mut cost = self.base_cost;
+        
+        // Add network latency cost
+        cost += self.network_cost_factor;
+        
+        // Add pattern complexity cost
+        let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
+            .iter()
+            .filter(|p| p.as_ref().map_or(false, |s| s.starts_with('?')))
+            .count();
+            
+        cost += match var_count {
+            0 => 10.0,  // All constants - very fast
+            1 => 25.0,  // One variable
+            2 => 50.0,  // Two variables
+            3 => 100.0, // All variables - expensive
+            _ => 100.0,
+        };
+        
+        // Service-specific adjustments
+        if service.endpoint.contains("localhost") {
+            cost *= 0.5; // Local services are faster
+        }
+        
+        cost
+    }
+
+    /// Estimate network latency cost between services
+    pub fn estimate_network_cost(
+        &self,
+        _source_service: &FederatedService,
+        _target_service: &FederatedService,
+        _data_size: u64,
+    ) -> f64 {
+        // Simple network cost model
+        let latency_factor = 10.0;
+        let processing_factor = 5.0;
+        
+        (latency_factor + processing_factor) * self.network_cost_factor
+    }
 }
 
 /// Advanced distribution algorithms
@@ -345,4 +392,136 @@ impl Default for NetworkOptimization {
             connection_pooling: true,
         }
     }
+}
+
+/// Pattern coverage analysis for source selection
+#[derive(Debug, Clone)]
+pub struct PatternCoverage {
+    pub pattern_index: usize,
+    pub pattern: TriplePattern,
+    pub service_coverage: Vec<ServiceCoverage>,
+}
+
+/// Service coverage information for a pattern
+#[derive(Debug, Clone)]
+pub struct ServiceCoverage {
+    pub service_id: String,
+    pub coverage_score: f64,
+    pub confidence: f64,
+    pub estimated_result_count: u64,
+}
+
+/// Range information for range-based source selection
+#[derive(Debug, Clone)]
+pub struct RangeInfo {
+    pub range_type: RangeType,
+    pub min_value: Option<String>,
+    pub max_value: Option<String>,
+    pub predicate: String,
+}
+
+/// Types of data ranges
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RangeType {
+    Numeric,
+    Temporal,
+    Spatial,
+}
+
+/// Range match result
+#[derive(Debug, Clone)]
+pub struct RangeMatch {
+    pub service_id: String,
+    pub overlap_score: f64,
+    pub estimated_coverage: f64,
+}
+
+/// Simple Bloom filter implementation for membership testing
+#[derive(Debug, Clone)]
+pub struct ServiceBloomFilter {
+    bits: Vec<bool>,
+    hash_functions: usize,
+    capacity: usize,
+}
+
+impl ServiceBloomFilter {
+    pub fn new(capacity: usize) -> Self {
+        let optimal_bits = (capacity as f64 * (-2.0_f64.ln())).ceil() as usize;
+        Self {
+            bits: vec![false; optimal_bits],
+            hash_functions: 3, // Simplified - would calculate optimal number
+            capacity,
+        }
+    }
+    
+    pub fn insert(&mut self, item: &str) {
+        for i in 0..self.hash_functions {
+            let hash = self.hash(item, i);
+            let index = hash % self.bits.len();
+            self.bits[index] = true;
+        }
+    }
+    
+    pub fn contains(&self, item: &str) -> bool {
+        for i in 0..self.hash_functions {
+            let hash = self.hash(item, i);
+            let index = hash % self.bits.len();
+            if !self.bits[index] {
+                return false;
+            }
+        }
+        true
+    }
+    
+    fn hash(&self, item: &str, seed: usize) -> usize {
+        use std::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
+        
+        let mut hasher = DefaultHasher::new();
+        item.hash(&mut hasher);
+        seed.hash(&mut hasher);
+        hasher.finish() as usize
+    }
+}
+
+/// Machine learning training data
+#[derive(Debug, Clone)]
+pub struct MLTrainingData {
+    pub training_examples: Vec<MLTrainingExample>,
+    pub feature_weights: HashMap<String, f64>,
+    pub model_version: String,
+}
+
+/// Single ML training example
+#[derive(Debug, Clone)]
+pub struct MLTrainingExample {
+    pub pattern: TriplePattern,
+    pub selected_service: String,
+    pub features: HashMap<String, f64>,
+    pub outcome_score: f64,
+}
+
+/// ML prediction result
+#[derive(Debug, Clone)]
+pub struct MLPrediction {
+    pub service_id: String,
+    pub confidence_score: f64,
+    pub feature_vector: HashMap<String, f64>,
+    pub prediction_metadata: MLPredictionMetadata,
+}
+
+/// Metadata for ML predictions
+#[derive(Debug, Clone)]
+pub struct MLPredictionMetadata {
+    pub model_version: String,
+    pub features_used: Vec<String>,
+    pub prediction_time: std::time::SystemTime,
+}
+
+/// Data overlap analysis result
+#[derive(Debug, Clone)]
+pub struct DataOverlap {
+    pub source_service: String,
+    pub target_service: String,
+    pub overlap_score: f64,
 }

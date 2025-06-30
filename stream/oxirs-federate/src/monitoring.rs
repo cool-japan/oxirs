@@ -470,6 +470,361 @@ impl FederationMonitor {
             query_trends,
             top_errors: self.get_top_errors(&metrics).await,
             performance_summary: self.get_performance_summary(&metrics).await,
+            bottlenecks: self.identify_bottlenecks(&metrics).await,
+            performance_regressions: self.detect_performance_regressions(&metrics).await,
+            optimization_recommendations: self.generate_optimization_recommendations(&metrics).await,
+        }
+    }
+
+    /// Identify performance bottlenecks
+    pub async fn identify_bottlenecks(&self, metrics: &FederationMetrics) -> Vec<BottleneckReport> {
+        let mut bottlenecks = Vec::new();
+
+        // Identify slow services
+        for (service_id, service_metrics) in &metrics.service_metrics {
+            if service_metrics.avg_duration > Duration::from_secs(2) {
+                bottlenecks.push(BottleneckReport {
+                    bottleneck_type: BottleneckType::SlowService,
+                    component: service_id.clone(),
+                    severity: if service_metrics.avg_duration > Duration::from_secs(5) {
+                        BottleneckSeverity::Critical
+                    } else if service_metrics.avg_duration > Duration::from_secs(3) {
+                        BottleneckSeverity::High
+                    } else {
+                        BottleneckSeverity::Medium
+                    },
+                    description: format!(
+                        "Service {} has high average response time: {:?}",
+                        service_id, service_metrics.avg_duration
+                    ),
+                    metric_value: service_metrics.avg_duration.as_millis() as f64,
+                    threshold: 2000.0, // 2 seconds in milliseconds
+                    impact_score: self.calculate_service_impact_score(service_metrics),
+                });
+            }
+        }
+
+        // Identify high error rate services
+        for (service_id, service_metrics) in &metrics.service_metrics {
+            let error_rate = if service_metrics.total_requests > 0 {
+                service_metrics.failed_requests as f64 / service_metrics.total_requests as f64
+            } else {
+                0.0
+            };
+
+            if error_rate > 0.05 {
+                bottlenecks.push(BottleneckReport {
+                    bottleneck_type: BottleneckType::HighErrorRate,
+                    component: service_id.clone(),
+                    severity: if error_rate > 0.2 {
+                        BottleneckSeverity::Critical
+                    } else if error_rate > 0.1 {
+                        BottleneckSeverity::High
+                    } else {
+                        BottleneckSeverity::Medium
+                    },
+                    description: format!(
+                        "Service {} has high error rate: {:.2}%",
+                        service_id, error_rate * 100.0
+                    ),
+                    metric_value: error_rate * 100.0,
+                    threshold: 5.0, // 5% error rate threshold
+                    impact_score: error_rate * service_metrics.total_requests as f64,
+                });
+            }
+        }
+
+        // Identify poor cache performance
+        for (cache_name, cache_metrics) in &metrics.cache_metrics {
+            if cache_metrics.hit_rate < 0.5 && cache_metrics.total_requests > 100 {
+                bottlenecks.push(BottleneckReport {
+                    bottleneck_type: BottleneckType::PoorCachePerformance,
+                    component: format!("Cache: {}", cache_name),
+                    severity: if cache_metrics.hit_rate < 0.2 {
+                        BottleneckSeverity::High
+                    } else {
+                        BottleneckSeverity::Medium
+                    },
+                    description: format!(
+                        "Cache {} has low hit rate: {:.2}%",
+                        cache_name, cache_metrics.hit_rate * 100.0
+                    ),
+                    metric_value: cache_metrics.hit_rate * 100.0,
+                    threshold: 50.0, // 50% hit rate threshold
+                    impact_score: (1.0 - cache_metrics.hit_rate) * cache_metrics.total_requests as f64,
+                });
+            }
+        }
+
+        // Sort by impact score (highest first)
+        bottlenecks.sort_by(|a, b| b.impact_score.partial_cmp(&a.impact_score).unwrap());
+
+        bottlenecks
+    }
+
+    /// Detect performance regressions
+    pub async fn detect_performance_regressions(&self, metrics: &FederationMetrics) -> Vec<RegressionReport> {
+        let mut regressions = Vec::new();
+
+        // Analyze recent query performance compared to historical averages
+        let recent_window = Duration::from_secs(300); // Last 5 minutes
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        for (query_type, type_metrics) in &metrics.query_type_metrics {
+            // Filter recent queries
+            let recent_queries: Vec<&QueryRecord> = metrics
+                .recent_queries
+                .iter()
+                .filter(|q| {
+                    q.query_type == *query_type
+                        && (current_time - q.timestamp) < recent_window.as_secs()
+                })
+                .collect();
+
+            if recent_queries.len() >= 10 {
+                let recent_avg_duration: Duration = recent_queries
+                    .iter()
+                    .map(|q| q.duration)
+                    .sum::<Duration>() / recent_queries.len() as u32;
+
+                let historical_avg = type_metrics.avg_duration;
+                
+                // Check for significant performance degradation (>50% increase)
+                if recent_avg_duration > historical_avg + Duration::from_millis(500)
+                    && recent_avg_duration.as_millis() as f64 > historical_avg.as_millis() as f64 * 1.5
+                {
+                    let degradation_factor = recent_avg_duration.as_millis() as f64 
+                        / historical_avg.as_millis() as f64;
+
+                    regressions.push(RegressionReport {
+                        component: format!("Query Type: {}", query_type),
+                        regression_type: RegressionType::ResponseTimeIncrease,
+                        severity: if degradation_factor > 3.0 {
+                            RegressionSeverity::Critical
+                        } else if degradation_factor > 2.0 {
+                            RegressionSeverity::High
+                        } else {
+                            RegressionSeverity::Medium
+                        },
+                        description: format!(
+                            "Query type {} response time increased from {:?} to {:?} ({:.1}x degradation)",
+                            query_type, historical_avg, recent_avg_duration, degradation_factor
+                        ),
+                        historical_value: historical_avg.as_millis() as f64,
+                        current_value: recent_avg_duration.as_millis() as f64,
+                        detected_at: current_time,
+                        confidence: self.calculate_regression_confidence(&recent_queries, type_metrics),
+                    });
+                }
+
+                // Check for error rate increases
+                let recent_error_rate = recent_queries
+                    .iter()
+                    .filter(|q| !q.success)
+                    .count() as f64 / recent_queries.len() as f64;
+
+                let historical_error_rate = if type_metrics.total_count > 0 {
+                    type_metrics.error_count as f64 / type_metrics.total_count as f64
+                } else {
+                    0.0
+                };
+
+                if recent_error_rate > historical_error_rate + 0.1 
+                    && recent_error_rate > historical_error_rate * 2.0 
+                {
+                    regressions.push(RegressionReport {
+                        component: format!("Query Type: {}", query_type),
+                        regression_type: RegressionType::ErrorRateIncrease,
+                        severity: if recent_error_rate > 0.2 {
+                            RegressionSeverity::Critical
+                        } else if recent_error_rate > 0.1 {
+                            RegressionSeverity::High
+                        } else {
+                            RegressionSeverity::Medium
+                        },
+                        description: format!(
+                            "Query type {} error rate increased from {:.2}% to {:.2}%",
+                            query_type, 
+                            historical_error_rate * 100.0,
+                            recent_error_rate * 100.0
+                        ),
+                        historical_value: historical_error_rate * 100.0,
+                        current_value: recent_error_rate * 100.0,
+                        detected_at: current_time,
+                        confidence: self.calculate_regression_confidence(&recent_queries, type_metrics),
+                    });
+                }
+            }
+        }
+
+        regressions
+    }
+
+    /// Generate optimization recommendations
+    pub async fn generate_optimization_recommendations(&self, metrics: &FederationMetrics) -> Vec<OptimizationRecommendation> {
+        let mut recommendations = Vec::new();
+
+        // Analyze cache performance
+        for (cache_name, cache_metrics) in &metrics.cache_metrics {
+            if cache_metrics.hit_rate < 0.7 && cache_metrics.total_requests > 50 {
+                recommendations.push(OptimizationRecommendation {
+                    category: OptimizationCategory::Caching,
+                    priority: if cache_metrics.hit_rate < 0.3 {
+                        OptimizationPriority::High
+                    } else {
+                        OptimizationPriority::Medium
+                    },
+                    title: format!("Improve {} Cache Hit Rate", cache_name),
+                    description: format!(
+                        "Cache {} has a {:.1}% hit rate. Consider increasing cache size, \
+                        improving cache key strategies, or extending TTL values.",
+                        cache_name, cache_metrics.hit_rate * 100.0
+                    ),
+                    estimated_impact: self.calculate_cache_improvement_impact(cache_metrics),
+                    implementation_effort: ImplementationEffort::Low,
+                    metrics_to_monitor: vec![
+                        "cache_hit_rate".to_string(),
+                        "cache_miss_rate".to_string(),
+                        "response_time".to_string(),
+                    ],
+                });
+            }
+        }
+
+        // Analyze service performance
+        for (service_id, service_metrics) in &metrics.service_metrics {
+            if service_metrics.avg_duration > Duration::from_secs(1) {
+                recommendations.push(OptimizationRecommendation {
+                    category: OptimizationCategory::Performance,
+                    priority: if service_metrics.avg_duration > Duration::from_secs(3) {
+                        OptimizationPriority::High
+                    } else {
+                        OptimizationPriority::Medium
+                    },
+                    title: format!("Optimize {} Service Performance", service_id),
+                    description: format!(
+                        "Service {} has an average response time of {:?}. Consider \
+                        implementing connection pooling, query optimization, or scaling the service.",
+                        service_id, service_metrics.avg_duration
+                    ),
+                    estimated_impact: self.calculate_service_optimization_impact(service_metrics),
+                    implementation_effort: ImplementationEffort::High,
+                    metrics_to_monitor: vec![
+                        "service_response_time".to_string(),
+                        "service_throughput".to_string(),
+                        "error_rate".to_string(),
+                    ],
+                });
+            }
+
+            // Check for load balancing opportunities
+            if service_metrics.total_requests > 1000 && service_metrics.avg_duration > Duration::from_millis(500) {
+                recommendations.push(OptimizationRecommendation {
+                    category: OptimizationCategory::Scaling,
+                    priority: OptimizationPriority::Medium,
+                    title: format!("Consider Load Balancing for {}", service_id),
+                    description: format!(
+                        "Service {} handles {} requests with {}ms average response time. \
+                        Load balancing could improve performance and reliability.",
+                        service_id, service_metrics.total_requests, service_metrics.avg_duration.as_millis()
+                    ),
+                    estimated_impact: "20-40% performance improvement".to_string(),
+                    implementation_effort: ImplementationEffort::High,
+                    metrics_to_monitor: vec![
+                        "request_distribution".to_string(),
+                        "service_utilization".to_string(),
+                        "response_time_variance".to_string(),
+                    ],
+                });
+            }
+        }
+
+        // Analyze query patterns
+        for (query_type, type_metrics) in &metrics.query_type_metrics {
+            if type_metrics.avg_duration > Duration::from_millis(200) && type_metrics.total_count > 100 {
+                recommendations.push(OptimizationRecommendation {
+                    category: OptimizationCategory::QueryOptimization,
+                    priority: OptimizationPriority::Medium,
+                    title: format!("Optimize {} Queries", query_type),
+                    description: format!(
+                        "{} queries have an average execution time of {:?}. Consider \
+                        query optimization, indexing, or result caching.",
+                        query_type, type_metrics.avg_duration
+                    ),
+                    estimated_impact: self.calculate_query_optimization_impact(type_metrics),
+                    implementation_effort: ImplementationEffort::Medium,
+                    metrics_to_monitor: vec![
+                        "query_execution_time".to_string(),
+                        "query_complexity".to_string(),
+                        "cache_utilization".to_string(),
+                    ],
+                });
+            }
+        }
+
+        // Sort by priority and estimated impact
+        recommendations.sort_by(|a, b| {
+            let priority_cmp = b.priority.cmp(&a.priority);
+            if priority_cmp == std::cmp::Ordering::Equal {
+                // If same priority, sort by estimated impact (higher first)
+                b.estimated_impact.len().cmp(&a.estimated_impact.len())
+            } else {
+                priority_cmp
+            }
+        });
+
+        recommendations
+    }
+
+    // Helper methods for calculations
+
+    fn calculate_service_impact_score(&self, service_metrics: &ServiceMetrics) -> f64 {
+        let duration_score = service_metrics.avg_duration.as_millis() as f64 / 1000.0; // Convert to seconds
+        let volume_score = service_metrics.total_requests as f64 / 100.0; // Normalize request volume
+        duration_score * volume_score
+    }
+
+    fn calculate_regression_confidence(&self, recent_queries: &[&QueryRecord], type_metrics: &QueryTypeMetrics) -> f64 {
+        let sample_size_score = (recent_queries.len() as f64 / 50.0).min(1.0); // Max confidence at 50 samples
+        let historical_data_score = (type_metrics.total_count as f64 / 100.0).min(1.0); // Max confidence at 100 historical queries
+        (sample_size_score + historical_data_score) / 2.0
+    }
+
+    fn calculate_cache_improvement_impact(&self, cache_metrics: &CacheMetrics) -> String {
+        let potential_improvement = (0.8 - cache_metrics.hit_rate) * 100.0;
+        if potential_improvement > 30.0 {
+            format!("High impact: Up to {:.0}% improvement in cache performance", potential_improvement)
+        } else if potential_improvement > 15.0 {
+            format!("Medium impact: Up to {:.0}% improvement in cache performance", potential_improvement)
+        } else {
+            format!("Low impact: Up to {:.0}% improvement in cache performance", potential_improvement)
+        }
+    }
+
+    fn calculate_service_optimization_impact(&self, service_metrics: &ServiceMetrics) -> String {
+        let current_duration = service_metrics.avg_duration.as_millis();
+        if current_duration > 3000 {
+            "High impact: 40-60% response time improvement".to_string()
+        } else if current_duration > 1000 {
+            "Medium impact: 20-40% response time improvement".to_string()
+        } else {
+            "Low impact: 10-20% response time improvement".to_string()
+        }
+    }
+
+    fn calculate_query_optimization_impact(&self, type_metrics: &QueryTypeMetrics) -> String {
+        let avg_duration = type_metrics.avg_duration.as_millis();
+        let query_volume = type_metrics.total_count;
+
+        if avg_duration > 1000 && query_volume > 1000 {
+            "High impact: 30-50% performance improvement".to_string()
+        } else if avg_duration > 500 || query_volume > 500 {
+            "Medium impact: 15-30% performance improvement".to_string()
+        } else {
+            "Low impact: 5-15% performance improvement".to_string()
         }
     }
 
@@ -771,6 +1126,9 @@ pub struct PerformanceReport {
     pub query_trends: HashMap<String, QueryTrend>,
     pub top_errors: Vec<ErrorSummary>,
     pub performance_summary: PerformanceSummary,
+    pub bottlenecks: Vec<BottleneckReport>,
+    pub performance_regressions: Vec<RegressionReport>,
+    pub optimization_recommendations: Vec<OptimizationRecommendation>,
 }
 
 /// Query performance trend
@@ -797,6 +1155,109 @@ pub struct PerformanceSummary {
     pub healthy_services: usize,
     pub avg_query_time: Duration,
     pub cache_efficiency: f64,
+}
+
+/// Bottleneck analysis report
+#[derive(Debug, Clone, Serialize)]
+pub struct BottleneckReport {
+    pub bottleneck_type: BottleneckType,
+    pub component: String,
+    pub severity: BottleneckSeverity,
+    pub description: String,
+    pub metric_value: f64,
+    pub threshold: f64,
+    pub impact_score: f64,
+}
+
+/// Types of performance bottlenecks
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum BottleneckType {
+    SlowService,
+    HighErrorRate,
+    PoorCachePerformance,
+    NetworkLatency,
+    ResourceContention,
+    QueryComplexity,
+}
+
+/// Severity levels for bottlenecks
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum BottleneckSeverity {
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    Critical = 4,
+}
+
+/// Performance regression report
+#[derive(Debug, Clone, Serialize)]
+pub struct RegressionReport {
+    pub component: String,
+    pub regression_type: RegressionType,
+    pub severity: RegressionSeverity,
+    pub description: String,
+    pub historical_value: f64,
+    pub current_value: f64,
+    pub detected_at: u64,
+    pub confidence: f64,
+}
+
+/// Types of performance regressions
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum RegressionType {
+    ResponseTimeIncrease,
+    ErrorRateIncrease,
+    ThroughputDecrease,
+    CacheHitRateDecrease,
+}
+
+/// Severity levels for regressions
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum RegressionSeverity {
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    Critical = 4,
+}
+
+/// Optimization recommendation
+#[derive(Debug, Clone, Serialize)]
+pub struct OptimizationRecommendation {
+    pub category: OptimizationCategory,
+    pub priority: OptimizationPriority,
+    pub title: String,
+    pub description: String,
+    pub estimated_impact: String,
+    pub implementation_effort: ImplementationEffort,
+    pub metrics_to_monitor: Vec<String>,
+}
+
+/// Categories of optimizations
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum OptimizationCategory {
+    Caching,
+    Performance,
+    Scaling,
+    QueryOptimization,
+    NetworkOptimization,
+    ResourceUtilization,
+}
+
+/// Priority levels for optimization recommendations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum OptimizationPriority {
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    Critical = 4,
+}
+
+/// Implementation effort estimation
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum ImplementationEffort {
+    Low,    // Hours to 1 day
+    Medium, // 1-3 days
+    High,   // 1+ weeks
 }
 
 #[cfg(test)]

@@ -39,7 +39,7 @@ pub struct MetricsRegistry {
 }
 
 /// System-level metrics
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct SystemMetrics {
     pub cpu_usage_percent: f64,
     pub memory_usage_bytes: u64,
@@ -248,7 +248,7 @@ impl MetricsService {
 
         // Update Prometheus metrics
         counter!("http_requests_total", "method" => metrics.method.clone(), "status" => metrics.status.to_string()).increment(1);
-        histogram!("http_request_duration_seconds", "method" => metrics.method)
+        histogram!("http_request_duration_seconds", "method" => metrics.method.clone())
             .record(metrics.duration.as_secs_f64());
 
         debug!(
@@ -288,9 +288,11 @@ impl MetricsService {
             .push(duration.as_secs_f64());
 
         // Update Prometheus metrics
-        counter!("sparql_queries_total", "type" => query_type, "success" => success.to_string())
+        let query_type_str = query_type.to_string();
+        let success_str = success.to_string();
+        counter!("sparql_queries_total", "type" => query_type_str.clone(), "success" => success_str)
             .increment(1);
-        histogram!("sparql_query_duration_seconds", "type" => query_type)
+        histogram!("sparql_query_duration_seconds", "type" => query_type_str)
             .record(duration.as_secs_f64());
 
         info!(
@@ -334,8 +336,10 @@ impl MetricsService {
             .push(duration.as_secs_f64());
 
         // Update Prometheus metrics
-        counter!("sparql_updates_total", "operation" => operation_type, "success" => success.to_string()).increment(1);
-        histogram!("sparql_update_duration_seconds", "operation" => operation_type)
+        let operation_type_str = operation_type.to_string();
+        let success_str = success.to_string();
+        counter!("sparql_updates_total", "operation" => operation_type_str.clone(), "success" => success_str).increment(1);
+        histogram!("sparql_update_duration_seconds", "operation" => operation_type_str)
             .record(duration.as_secs_f64());
 
         info!(
@@ -368,7 +372,9 @@ impl MetricsService {
         }
 
         // Update Prometheus metrics
-        counter!("authentication_attempts_total", "method" => method, "success" => success.to_string()).increment(1);
+        let method_str = method.to_string();
+        let success_str = success.to_string();
+        counter!("authentication_attempts_total", "method" => method_str, "success" => success_str).increment(1);
 
         debug!(
             method = method,
@@ -400,9 +406,11 @@ impl MetricsService {
             .push(duration.as_secs_f64());
 
         // Update Prometheus metrics
-        counter!("cache_operations_total", "operation" => operation, "hit" => hit.to_string())
+        let operation_str = operation.to_string();
+        let hit_str = hit.to_string();
+        counter!("cache_operations_total", "operation" => operation_str.clone(), "hit" => hit_str)
             .increment(1);
-        histogram!("cache_operation_duration_seconds", "operation" => operation)
+        histogram!("cache_operation_duration_seconds", "operation" => operation_str)
             .record(duration.as_secs_f64());
     }
 
@@ -412,7 +420,8 @@ impl MetricsService {
         registry.gauges.insert(name.to_string(), value);
 
         // Update Prometheus gauge
-        gauge!(name, value);
+        let name_str = name.to_string();
+        gauge!(name_str).set(value);
     }
 
     /// Increment counter metric
@@ -421,7 +430,8 @@ impl MetricsService {
         *registry.counters.entry(name.to_string()).or_insert(0) += value;
 
         // Update Prometheus counter
-        counter!(name, value);
+        let name_str = name.to_string();
+        counter!(name_str).increment(value);
     }
 
     /// Get metrics summary
@@ -757,7 +767,7 @@ async fn readiness_handler(State(metrics): State<Arc<MetricsService>>) -> impl I
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{HealthCheckConfig, MetricsConfig, TracingConfig};
+    use crate::config::{HealthCheckConfig, MetricsConfig, TracingConfig, TracingOutput};
 
     fn create_test_metrics_service() -> MetricsService {
         let config = MonitoringConfig {
@@ -780,7 +790,9 @@ mod tests {
                 endpoint: None,
                 service_name: "test".to_string(),
                 sample_rate: 1.0,
+                output: TracingOutput::Stdout,
             },
+            prometheus: None,
         };
 
         MetricsService::new(config).unwrap()

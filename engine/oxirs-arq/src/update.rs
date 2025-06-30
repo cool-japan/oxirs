@@ -887,10 +887,18 @@ impl<'a> UpdateExecutor<'a> {
         match term {
             Term::Iri(iri) => Ok(NamedNode::new(iri.as_str())?.into()),
             Term::BlankNode(id) => Ok(BlankNode::new(id)?.into()),
-            _ => Err(OxirsError::Query(format!(
-                "Invalid subject term: {:?}",
-                term
-            ))),
+            Term::Variable(_) => Err(OxirsError::Query(
+                "Variables not allowed in concrete data".to_string(),
+            )),
+            Term::Literal(_) => Err(OxirsError::Query(
+                "Literals cannot be used as subjects".to_string(),
+            )),
+            Term::QuotedTriple(_) => Err(OxirsError::Query(
+                "Quoted triples not yet supported as subjects in concrete data".to_string(),
+            )),
+            Term::PropertyPath(_) => Err(OxirsError::Query(
+                "Property paths not allowed as subjects in concrete data".to_string(),
+            )),
         }
     }
 
@@ -898,10 +906,21 @@ impl<'a> UpdateExecutor<'a> {
     fn term_to_predicate(&self, term: &Term) -> Result<NamedNode, OxirsError> {
         match term {
             Term::Iri(iri) => NamedNode::new(iri.as_str()),
-            _ => Err(OxirsError::Query(format!(
-                "Invalid predicate term: {:?}",
-                term
-            ))),
+            Term::Variable(_) => Err(OxirsError::Query(
+                "Variables not allowed in concrete data".to_string(),
+            )),
+            Term::BlankNode(_) => Err(OxirsError::Query(
+                "Blank nodes cannot be used as predicates in most RDF contexts".to_string(),
+            )),
+            Term::Literal(_) => Err(OxirsError::Query(
+                "Literals cannot be used as predicates".to_string(),
+            )),
+            Term::QuotedTriple(_) => Err(OxirsError::Query(
+                "Quoted triples not supported as predicates in concrete data".to_string(),
+            )),
+            Term::PropertyPath(_) => Err(OxirsError::Query(
+                "Property paths not allowed as predicates in concrete data".to_string(),
+            )),
         }
     }
 

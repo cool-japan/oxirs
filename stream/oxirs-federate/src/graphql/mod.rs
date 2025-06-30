@@ -21,6 +21,7 @@ pub mod translation;
 // Re-export main types and structs for public API
 pub use types::*;
 pub use core::*;
+pub use entity_resolution::*;
 
 #[cfg(test)]
 mod tests {

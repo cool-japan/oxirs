@@ -929,7 +929,7 @@ impl ServiceDelegator {
     pub async fn execute_federated_query(&self, query: &str) -> FusekiResult<QueryResult> {
         // Parse query string
         let parsed_query = parse_query(query)
-            .map_err(|e| crate::error::FusekiError::QueryParsing(e.to_string()))?;
+            .map_err(|e| crate::error::FusekiError::query_parsing(e.to_string()))?;
         
         // Plan federated execution
         let plan = self.federation_planner.plan_federated_query(&parsed_query).await?;

@@ -332,7 +332,7 @@ impl StreamingManager {
     }
 
     /// Initialize streaming connections
-    pub async fn initialize(&self) -> Result<()> {
+    pub async fn initialize(&self) -> FusekiResult<()> {
         // Initialize Kafka if configured
         if let Some(kafka_config) = &self.config.kafka {
             tracing::info!("Initializing Kafka streaming");

@@ -522,7 +522,7 @@ impl ServiceOptimizer {
 
                     filters.push(FilterExpression {
                         expression,
-                        variables,
+                        variables: variables.into_iter().collect(),
                     });
                 }
             }
@@ -763,6 +763,83 @@ impl ServiceOptimizer {
     }
 
     /// Estimate service cost for a pattern
+    pub fn estimate_service_cost(&self, pattern: &TriplePattern, service: &FederatedService) -> f64 {
+        // Basic cost estimation based on pattern complexity and service performance
+        let base_cost = 1.0;
+        let complexity_factor = match self.calculate_pattern_complexity(pattern) {
+            PatternComplexity::Simple => 0.5,
+            PatternComplexity::Medium => 1.0,
+            PatternComplexity::Complex => 2.0,
+        };
+        base_cost * complexity_factor
+    }
+
+    /// Calculate pattern selectivity for result size estimation
+    pub fn calculate_pattern_selectivity(&self, pattern: &TriplePattern, service: &FederatedService, registry: &ServiceRegistry) -> f64 {
+        // Simple selectivity calculation - more specific patterns have lower selectivity
+        let mut selectivity = 1.0;
+        
+        // More bound terms = lower selectivity (fewer results)
+        if pattern.subject.is_some() { selectivity *= 0.1; }
+        if pattern.predicate.is_some() { selectivity *= 0.3; }
+        if pattern.object.is_some() { selectivity *= 0.1; }
+        
+        selectivity
+    }
+
+    /// Get service-specific result size factor
+    pub fn get_service_result_size_factor(&self, service: &FederatedService, registry: &ServiceRegistry) -> f64 {
+        // Factor based on service characteristics - large endpoints return more results
+        match service.endpoint.as_str() {
+            url if url.contains("wikidata") => 2.0, // Wikidata typically returns many results
+            url if url.contains("dbpedia") => 1.5,  // DBpedia has substantial data
+            _ => 1.0, // Default factor
+        }
+    }
+
+    /// Calculate pattern complexity for cost estimation
+    pub fn calculate_pattern_complexity(&self, pattern: &TriplePattern) -> PatternComplexity {
+        // Simple heuristic: more variables = more complex
+        let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
+            .iter()
+            .filter(|term| term.as_ref().map_or(false, |t| t.starts_with('?')))
+            .count();
+            
+        match var_count {
+            0..=1 => PatternComplexity::Simple,
+            2 => PatternComplexity::Medium,
+            _ => PatternComplexity::Complex,
+        }
+    }
+
+    /// ML-based result size estimation (stub implementation)
+    pub fn estimate_result_size_ml(&self, pattern: &TriplePattern, service: &FederatedService, registry: &ServiceRegistry) -> Result<u64> {
+        // TODO: Implement actual ML model for result size prediction
+        // For now, return a simple heuristic-based estimate
+        let base_size = 1000u64;
+        let complexity_factor = match self.calculate_pattern_complexity(pattern) {
+            PatternComplexity::Simple => 0.5,
+            PatternComplexity::Medium => 1.0,
+            PatternComplexity::Complex => 2.0,
+        };
+        Ok((base_size as f64 * complexity_factor) as u64)
+    }
+
+    /// Estimate range selectivity factor for numeric/temporal predicates
+    pub fn estimate_range_selectivity_factor(&self, pattern: &TriplePattern, service: &FederatedService) -> Result<f64> {
+        // TODO: Implement range-based selectivity analysis
+        // For now, return a default factor
+        Ok(1.0)
+    }
+
+    /// Extract all variables used by a service
+    pub fn extract_service_variables(&self, service: &OptimizedService) -> HashSet<String> {
+        let mut variables = HashSet::new();
+        for pattern in &service.patterns {
+            variables.extend(self.extract_pattern_variables(pattern));
+        }
+        variables
+    }
 
     /// Get the configuration
     pub fn config(&self) -> &ServiceOptimizerConfig {

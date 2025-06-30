@@ -203,12 +203,7 @@ impl PerformanceService {
             format,
             execution_time_ms,
             cached_at: SystemTime::now(),
-            ttl_seconds: self
-                .config
-                .caching
-                .as_ref()
-                .map(|c| c.ttl_seconds)
-                .unwrap_or(300),
+            ttl_seconds: self.config.caching.ttl_secs,
             hit_count: 0,
         };
 
@@ -349,7 +344,7 @@ impl PerformanceService {
         );
         stats.insert(
             "query_cache_capacity".to_string(),
-            serde_json::json!(self.query_cache.max_capacity()),
+            serde_json::json!(self.config.caching.max_size),
         );
 
         // Prepared query cache stats

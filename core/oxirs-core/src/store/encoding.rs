@@ -6,7 +6,6 @@
 use crate::model::{
     BlankNode, BlankNodeRef, Literal, LiteralRef, NamedNode, NamedNodeRef, Term, TermRef,
 };
-use crate::OxirsError;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{Debug, Display};

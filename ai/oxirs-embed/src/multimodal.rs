@@ -468,8 +468,8 @@ impl MultiModalEmbedding {
 
         let alignment_network = AlignmentNetwork::new(
             "CrossModalAttention".to_string(),
-            config.unified_dim,
-            config.unified_dim,
+            config.text_dim,
+            config.kg_dim,
             config.unified_dim / 2,
             config.unified_dim,
         );

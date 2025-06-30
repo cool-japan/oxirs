@@ -11,8 +11,9 @@ use oxirs_core::{
 // Vector search integration now properly enabled
 use oxirs_embed::{
     models::{ComplEx, RotatE, TransE},
-    EmbeddingModel, Vector, ModelConfig, ModelStats, TrainingStats, Triple as EmbedTriple,
+    EmbeddingModel, Vector as EmbedVector, ModelConfig, ModelStats, TrainingStats, Triple as EmbedTriple,
 };
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use async_trait::async_trait;
 use oxirs_vec::{VectorIndex, SearchResult as VectorSearchResult};
@@ -23,6 +24,7 @@ use oxirs_vec::{
         SearchResult as VecSearchResult,
     },
     similarity,
+    Vector,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -55,7 +57,6 @@ impl EnhancedVectorIndex {
     pub fn new(dimension: usize, embedding_strategy: EmbeddingStrategy) -> Result<Self> {
         let config = IndexConfig {
             index_type: IndexType::Hnsw,
-            dimension,
             distance_metric: DistanceMetric::Cosine,
             ..Default::default()
         };
@@ -104,7 +105,7 @@ impl EnhancedVectorIndex {
     }
 
     /// Search for similar documents using semantic similarity
-    pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchDocument>> {
+    pub async fn search(&mut self, query: &str, limit: usize) -> Result<Vec<SearchDocument>> {
         // Generate embedding for query
         let query_vector = self.embedding_manager.get_embedding(&EmbeddableContent::Text(query.to_string()))?;
 
@@ -308,13 +309,13 @@ impl EmbeddingModel for EnhancedEmbeddingModel {
         })
     }
 
-    fn get_entity_embedding(&self, _entity: &str) -> Result<Vector> {
+    fn get_entity_embedding(&self, _entity: &str) -> Result<EmbedVector> {
         // For text embeddings, we could encode the entity as text
         // This is a simplified implementation
         Err(anyhow!("Entity embeddings not supported in this model"))
     }
 
-    fn get_relation_embedding(&self, _relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, _relation: &str) -> Result<EmbedVector> {
         // For text embeddings, we could encode the relation as text
         // This is a simplified implementation
         Err(anyhow!("Relation embeddings not supported in this model"))
@@ -356,6 +357,10 @@ impl EmbeddingModel for EnhancedEmbeddingModel {
             num_relations: 0,
             num_triples: 0,
             dimensions: self.dimension,
+            is_trained: false,
+            model_type: "Enhanced".to_string(),
+            creation_time: chrono::Utc::now(),
+            last_training_time: None,
         }
     }
 
@@ -640,6 +645,11 @@ impl SimpleEmbeddingModel {
         Self { dimension }
     }
 
+    /// Convenience method to embed a single text string
+    pub fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        Ok(self.text_to_embedding(text))
+    }
+
     fn text_to_embedding(&self, text: &str) -> Vec<f32> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -735,11 +745,11 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         })
     }
 
-    fn get_entity_embedding(&self, _entity: &str) -> Result<Vector> {
+    fn get_entity_embedding(&self, _entity: &str) -> Result<EmbedVector> {
         Err(anyhow!("Entity embeddings not supported in this model"))
     }
 
-    fn get_relation_embedding(&self, _relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, _relation: &str) -> Result<EmbedVector> {
         Err(anyhow!("Relation embeddings not supported in this model"))
     }
 
@@ -773,6 +783,10 @@ impl EmbeddingModel for SimpleEmbeddingModel {
             num_relations: 0,
             num_triples: 0,
             dimensions: self.dimension,
+            is_trained: false,
+            model_type: "Enhanced".to_string(),
+            creation_time: chrono::Utc::now(),
+            last_training_time: None,
         }
     }
 
@@ -1111,7 +1125,7 @@ impl RAGSystem {
             ef_search: 100,
             distance_metric: DistanceMetric::Cosine,
             parallel: true,
-        })?;
+        });
 
         // Build vector index from RDF store
         Self::populate_vector_index(&mut vector_index, &*store, &*embedding_model).await?;
@@ -1144,7 +1158,7 @@ impl RAGSystem {
             distance_metric: DistanceMetric::Cosine,
             parallel: true,
         };
-        let vector_index = AdvancedVectorIndex::new(index_config)?;
+        let mut vector_index = AdvancedVectorIndex::new(index_config);
 
         // Build vector index from RDF store with enhanced embeddings
         Self::populate_vector_index(&mut vector_index, &*store, &enhanced_model).await?;
@@ -1199,7 +1213,7 @@ impl RAGSystem {
                         let id = format!("triple_{}_{}", batch_idx, i);
                         let metadata = Self::create_triple_metadata(triple);
 
-                        if let Err(e) = vector_index.insert(id, embedding) {
+                        if let Err(e) = vector_index.insert(id, Vector::new(embedding)) {
                             warn!("Failed to add triple to vector index: {}", e);
                         } else {
                             indexed_count += 1;
@@ -1303,10 +1317,10 @@ impl RAGSystem {
         // Stage 2: Enhanced retrieval (hybrid or semantic search)
         let search_results = if let Some(ref vector_index) = self.vector_index {
             if self.config.retrieval.use_hybrid_search {
-                self.hybrid_search(&query_context.query, vector_index)
+                self.hybrid_search(&query_context.query, vector_index.as_ref())
                     .await?
             } else {
-                self.semantic_search(&query_context.query, vector_index)
+                self.semantic_search(&query_context.query, vector_index.as_ref())
                     .await?
             }
         } else {
@@ -1362,14 +1376,19 @@ impl RAGSystem {
     ) -> Result<Vec<RagSearchResult>> {
         if let Some(ref embedding_model) = self.embedding_model {
             let query_embedding = embedding_model.encode(&[query.to_string()]).await?;
+            let query_vector = Vector::new(query_embedding[0].clone());
             let results =
-                vector_index.search(&query_embedding[0], self.config.retrieval.max_results)?;
+                vector_index.search_knn(&query_vector, self.config.retrieval.max_results)?;
 
             Ok(results
                 .into_iter()
-                .map(|r| RagSearchResult {
-                    triple: r.document, // Assuming document is a triple
-                    score: r.score,
+                .map(|(uri, score)| RagSearchResult {
+                    triple: Triple::new(
+                        NamedNode::new(&uri).unwrap_or_else(|_| NamedNode::new("http://example.org/unknown").unwrap()),
+                        NamedNode::new("http://example.org/unknown").unwrap(),
+                        NamedNode::new("http://example.org/unknown").unwrap(),
+                    ),
+                    score,
                     search_type: SearchType::Semantic,
                 })
                 .collect())
@@ -1398,7 +1417,7 @@ impl RAGSystem {
     }
 
     /// BM25-inspired keyword search
-    async fn keyword_search(&self, query: &str) -> Result<Vec<VectorSearchResult>> {
+    async fn keyword_search(&self, query: &str) -> Result<Vec<RagSearchResult>> {
         let mut results = Vec::new();
         let query_lower = query.to_lowercase();
         let query_terms: Vec<&str> = query_lower
@@ -1523,7 +1542,7 @@ impl RAGSystem {
     }
 
     /// Enhanced graph traversal with multiple strategies
-    async fn graph_traversal(&self, entities: &[ExtractedEntity]) -> Result<Vec<VectorSearchResult>> {
+    async fn graph_traversal(&self, entities: &[ExtractedEntity]) -> Result<Vec<RagSearchResult>> {
         let mut results = Vec::new();
         let mut visited_entities = HashSet::new();
 
@@ -1709,7 +1728,7 @@ impl RAGSystem {
             }
         }
 
-        let mut final_results: Vec<VectorSearchResult> = unique_results.into_values().collect();
+        let mut final_results: Vec<RagSearchResult> = unique_results.into_values().collect();
 
         // Apply graph-specific ranking factors
         for result in &mut final_results {
@@ -1892,7 +1911,7 @@ impl RAGSystem {
             }
         }
 
-        let mut final_results: Vec<VectorSearchResult> = unique_results.into_values().collect();
+        let mut final_results: Vec<RagSearchResult> = unique_results.into_values().collect();
 
         // Sort by relevance score
         final_results.sort_by(|a, b| {

@@ -617,10 +617,15 @@ impl ServiceOptimizer {
             }
 
             let service_filter = ServiceBloomFilter {
+                service_id: service.id.clone(),
+                predicate: "default".to_string(),
+                filter_data: Vec::new(),
+                hash_functions: 3,
+                false_positive_rate: 0.01,
+                estimated_cardinality: 10000,
                 predicate_filter,
                 resource_filter,
                 last_updated: chrono::Utc::now(),
-                false_positive_rate: 0.01,
                 estimated_elements: 10000,
             };
 
@@ -675,10 +680,14 @@ impl ServiceOptimizer {
             results.insert(
                 service_endpoint.clone(),
                 BloomFilterResult {
+                    service_id: service_endpoint.clone(),
+                    predicate: pattern.predicate.as_ref().unwrap_or(&"unknown".to_string()).clone(),
+                    possibly_contains: membership_probability > 0.5,
+                    confidence: 1.0 - filter.false_positive_rate,
+                    estimated_selectivity: membership_probability,
                     membership_probability,
-                    likely_matches,
+                    likely_matches: membership_probability > 0.7,
                     false_positive_rate: filter.false_positive_rate,
-                    confidence_score: 1.0 - filter.false_positive_rate,
                 },
             );
         }

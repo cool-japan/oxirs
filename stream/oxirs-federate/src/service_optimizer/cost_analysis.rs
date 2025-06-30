@@ -248,10 +248,11 @@ impl ServiceOptimizer {
                 
                 service_scores.push(ServiceObjectiveScore {
                     service_id: service.id.clone(),
-                    cost_score,
-                    quality_score, 
                     execution_time_score: latency_score,
+                    quality_score,
+                    cost_score,
                     reliability_score,
+                    latency_score,
                     total_score: combined_score,
                 });
             }

@@ -63,6 +63,8 @@ pub mod ai_orchestrator;
 pub mod analytics;
 pub mod blockchain_validation;
 pub mod collaborative_development;
+pub mod collective_consciousness;
+pub mod consciousness_validation;
 pub mod deployment;
 pub mod error_handling;
 pub mod evolution_strategies;
@@ -70,11 +72,13 @@ pub mod explainable_ai;
 pub mod federated_learning;
 pub mod forecasting_models;
 pub mod insights;
+pub mod interdimensional_patterns;
 pub mod learning;
 pub mod meta_learning;
 pub mod ml;
 pub mod multimodal_validation;
 pub mod neural_patterns;
+pub mod neuromorphic_validation;
 pub mod optimization;
 pub mod optimization_engine;
 pub mod patterns;
@@ -83,6 +87,7 @@ pub mod prediction;
 pub mod predictive_analytics;
 pub mod production_deployment;
 pub mod quality;
+pub mod quantum_consciousness_entanglement;
 pub mod quantum_neural_patterns;
 pub mod recommendation_systems;
 pub mod self_adaptive_ai;
@@ -142,6 +147,11 @@ pub use prediction::*;
 pub use predictive_analytics::*;
 pub use production_deployment::*;
 pub use quality::*;
+pub use quantum_consciousness_entanglement::{
+    BellState, EntanglementId, EntanglementPair, EntanglementStatus, MeasurementBasis,
+    QuantumConsciousnessEntanglement, QuantumEntanglementConfig, QuantumEntanglementState,
+    QuantumEntanglementValidationResult, QuantumInformation,
+};
 pub use quantum_neural_patterns::*;
 pub use recommendation_systems::*;
 pub use self_adaptive_ai::*;
@@ -156,6 +166,17 @@ pub use blockchain_validation::{
     BlockchainValidator, CrossChainAggregation, CrossChainValidationResult, PrivacyLevel,
     PrivateValidationResult, SmartContractValidationResult, ValidationMode,
 };
+pub use collective_consciousness::{
+    AgentCapabilities, AgentStats, AgentStatus, CollectiveConfig, CollectiveConsciousnessNetwork,
+    CollectiveInsight, CollectiveMetrics, CollectiveValidationResult, ConsciousnessAgent, ConsciousnessId,
+    ConsensusDecision, ConsensusResult, ConsensusType, InterdimensionalPattern, QuantumEffect,
+    Reality, SynthesizedReality, ValidationContext, ValidationSpecialization,
+};
+pub use consciousness_validation::{
+    ConsciousnessLevel, ConsciousnessValidator, ConsciousnessValidationResult, 
+    ConsciousnessValidatorConfig, ConsciousnessValidatorStats, DreamInsight, DreamState,
+    EmotionalContext, Emotion, IntuitiveInsight, IntuitiveInsightType, ValidationStrategy,
+};
 pub use explainable_ai::{
     AdaptationExplanation, AuditTrail, DecisionTree, DecisionType, ExplainableAI,
     ExplainableAIConfig, ExplanationDepth, FeatureImportanceAnalysis, InterpretabilityReport,
@@ -165,9 +186,18 @@ pub use federated_learning::{
     AggregationStrategy, ConsensusAlgorithm, FederatedLearningCoordinator, FederatedNode,
     FederationStats, PrivacyLevel as FederatedPrivacyLevel,
 };
+pub use interdimensional_patterns::{
+    BridgeType, CausalDirection, DimensionalBridge, DimensionalCorrelation, DimensionType,
+    DiscoveredPattern, InterdimensionalConfig, InterdimensionalPatternEngine, 
+    InterdimensionalPatternResult, PatternType, PhysicsVariant, RealityDimension,
+};
 pub use multimodal_validation::{
     ContentType, MultiModalConfig, MultiModalValidator, MultiModalValidationReport,
     ValidationIssue,
+};
+pub use neuromorphic_validation::{
+    NeuromorphicValidationNetwork, NeuromorphicValidationResult, NeuronType, NeuronState,
+    SpikeStatistics, ValidationDecision, ValidationNeuron, SpikeEvent,
 };
 pub use streaming_adaptation::{
     AdaptationEvent, AdaptationEventType, RealTimeAdaptationStats, RealTimeMetrics, StreamType,

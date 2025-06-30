@@ -46,6 +46,9 @@ pub enum FusekiError {
     #[error("Parse error: {message}")]
     Parse { message: String },
 
+    #[error("Query parsing error: {message}")]
+    QueryParsing { message: String },
+
     #[error("Validation error: {message}")]
     Validation { message: String },
 
@@ -145,6 +148,7 @@ impl FusekiError {
             FusekiError::InvalidQuery { .. }
             | FusekiError::InvalidUpdate { .. }
             | FusekiError::Parse { .. }
+            | FusekiError::QueryParsing { .. }
             | FusekiError::Validation { .. }
             | FusekiError::ValidatorError(..)
             | FusekiError::InvalidUrl(..) => StatusCode::BAD_REQUEST,
@@ -197,6 +201,7 @@ impl FusekiError {
             FusekiError::Configuration { .. } => "configuration_error",
             FusekiError::Store { .. } => "store_error",
             FusekiError::Parse { .. } => "parse_error",
+            FusekiError::QueryParsing { .. } => "query_parsing_error",
             FusekiError::Validation { .. } => "validation_error",
             FusekiError::ValidatorError(..) => "validation_error",
             FusekiError::RateLimit => "rate_limit_exceeded",
@@ -352,6 +357,12 @@ impl FusekiError {
         }
     }
 
+    pub fn query_parsing(message: impl Into<String>) -> Self {
+        Self::QueryParsing {
+            message: message.into(),
+        }
+    }
+
     pub fn validation(message: impl Into<String>) -> Self {
         Self::Validation {
             message: message.into(),
@@ -400,6 +411,12 @@ impl FusekiError {
 
     pub fn forbidden(message: impl Into<String>) -> Self {
         Self::Authorization {
+            message: message.into(),
+        }
+    }
+
+    pub fn server_error(message: impl Into<String>) -> Self {
+        Self::Internal {
             message: message.into(),
         }
     }
@@ -493,7 +510,7 @@ mod tests {
 
     #[test]
     fn test_into_fuseki_error_trait() {
-        let result: Result<i32, &str> = Err("test error");
+        let result: std::result::Result<i32, &str> = Err("test error");
         let fuseki_result = result.into_fuseki_error();
 
         assert!(fuseki_result.is_err());
@@ -505,7 +522,7 @@ mod tests {
 
     #[test]
     fn test_with_context_trait() {
-        let result: Result<i32, &str> = Err("original error");
+        let result: std::result::Result<i32, &str> = Err("original error");
         let fuseki_result = result.with_context("processing request");
 
         assert!(fuseki_result.is_err());
