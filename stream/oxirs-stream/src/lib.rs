@@ -85,9 +85,19 @@ pub use store_integration::{
     UpdateFilter, UpdateNotification,
 };
 // Stream, StreamConsumer, and StreamProducer are defined below in this module
+pub use biological_computing::{
+    AminoAcid, BiologicalProcessingStats, BiologicalStreamProcessor, Cell, CellState,
+    CellularAutomaton, ComputationalFunction, DNASequence, EvolutionaryOptimizer, FunctionalDomain,
+    Individual, Nucleotide, ProteinStructure, SequenceMetadata,
+};
 pub use consciousness_streaming::{
     ConsciousnessLevel, ConsciousnessStats, ConsciousnessStreamProcessor, DreamSequence,
     EmotionalContext, IntuitiveEngine, MeditationState,
+};
+pub use quantum_communication::{
+    BellState, EntanglementDistribution, QuantumCommConfig, QuantumCommSystem,
+    QuantumOperation as QuantumCommOperation, QuantumSecurityProtocol,
+    QuantumState as QuantumCommState, Qubit,
 };
 pub use quantum_streaming::{
     QuantumEvent, QuantumOperation, QuantumProcessingStats, QuantumState, QuantumStreamProcessor,
@@ -98,28 +108,19 @@ pub use security::{
     RateLimiter, SecurityConfig as StreamSecurityConfig, SecurityContext, SecurityManager,
     SecurityMetrics, SessionConfig, ThreatAlert, ThreatDetectionConfig, ThreatDetector,
 };
-pub use biological_computing::{
-    AminoAcid, BiologicalProcessingStats, BiologicalStreamProcessor, Cell, CellState, CellularAutomaton,
-    ComputationalFunction, DNASequence, EvolutionaryOptimizer, FunctionalDomain, Individual, Nucleotide,
-    ProteinStructure, SequenceMetadata,
-};
 pub use time_travel::{
     AggregationType, TemporalAggregations, TemporalFilter, TemporalOrdering, TemporalProjection,
     TemporalQuery, TemporalQueryResult, TemporalResultMetadata, TemporalStatistics, TimePoint,
     TimeRange as TimeTravelTimeRange, TimeTravelConfig, TimeTravelEngine, TimeTravelMetrics,
     TimelinePoint,
 };
+pub use wasm_edge_computing::{
+    EdgeExecutionResult, EdgeLocation, OptimizationLevel, ProcessingSpecialization, WasmEdgeConfig,
+    WasmEdgeProcessor, WasmPlugin, WasmResourceLimits,
+};
 pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
     WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata,
-};
-pub use wasm_edge_computing::{
-    EdgeExecutionResult, EdgeLocation, OptimizationLevel, ProcessingSpecialization, 
-    WasmEdgeConfig, WasmEdgeProcessor, WasmPlugin, WasmResourceLimits,
-};
-pub use quantum_communication::{
-    BellState, EntanglementDistribution, QuantumCommConfig, QuantumCommSystem, 
-    QuantumOperation as QuantumCommOperation, QuantumSecurityProtocol, QuantumState as QuantumCommState, Qubit,
 };
 
 #[cfg(test)]
@@ -149,6 +150,7 @@ pub mod patch;
 pub mod performance_optimizer;
 pub mod processing;
 pub mod producer;
+pub mod quantum_communication;
 pub mod quantum_streaming;
 pub mod reconnect;
 pub mod reliability;
@@ -160,9 +162,8 @@ pub mod state;
 pub mod store_integration;
 pub mod time_travel;
 pub mod types;
-pub mod webhook;
 pub mod wasm_edge_computing;
-pub mod quantum_communication;
+pub mod webhook;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]

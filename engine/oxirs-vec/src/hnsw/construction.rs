@@ -9,11 +9,11 @@ impl HnswIndex {
     /// Add a new vector to the index
     pub fn add_vector(&mut self, uri: String, vector: Vector) -> Result<()> {
         // Check if URI already exists
-        if self.uri_to_id.contains_key(&uri) {
+        if self.uri_to_id().contains_key(&uri) {
             return Err(anyhow::anyhow!("URI {} already exists", uri));
         }
 
-        let node_id = self.nodes.len();
+        let node_id = self.nodes().len();
 
         // Generate random level for the new node
         let level = self.generate_random_level();
@@ -22,12 +22,12 @@ impl HnswIndex {
         let node = Node::new(uri.clone(), vector, level);
 
         // Add node to the index
-        self.nodes.push(node);
-        self.uri_to_id.insert(uri, node_id);
+        self.nodes_mut().push(node);
+        self.uri_to_id_mut().insert(uri, node_id);
 
         // If this is the first node, set it as entry point
-        if self.entry_point.is_none() {
-            self.entry_point = Some(node_id);
+        if self.entry_point().is_none() {
+            self.set_entry_point(Some(node_id));
             return Ok(());
         }
 
@@ -38,7 +38,7 @@ impl HnswIndex {
         // 3. Connecting the new node to existing nodes
         // 4. Pruning connections if necessary
 
-        self.stats
+        self.stats_mut()
             .total_insertions
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -51,15 +51,15 @@ impl HnswIndex {
         // Real implementation would use exponential decay
 
         // Update RNG state (simple linear congruential generator)
-        self.rng_state = self.rng_state.wrapping_mul(1103515245).wrapping_add(12345);
-        let random_value = (self.rng_state >> 16) as f64 / 65535.0;
+        *self.rng_state_mut() = self.rng_state().wrapping_mul(1103515245).wrapping_add(12345);
+        let random_value = (self.rng_state() >> 16) as f64 / 65535.0;
 
         let mut level = 0;
-        let mut prob = 1.0 / self.level_multiplier;
+        let mut prob = 1.0 / self.level_multiplier();
 
         while random_value < prob && level < 16 {
             level += 1;
-            prob *= 1.0 / self.level_multiplier;
+            prob *= 1.0 / self.level_multiplier();
         }
 
         level

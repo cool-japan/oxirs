@@ -108,14 +108,17 @@ impl CircuitBreaker {
     /// Check if call should be allowed
     pub async fn allow_call(&self) -> bool {
         let current_state = self.state.read().await.clone();
-        
+
         match current_state {
             CircuitState::Closed => {
                 // Check if we should predict failure using ML
                 if self.config.enable_ml_prediction {
                     if let Some(failure_probability) = self.predict_failure_probability().await {
                         if failure_probability > 0.8 {
-                            warn!("ML model predicts high failure probability: {:.2}", failure_probability);
+                            warn!(
+                                "ML model predicts high failure probability: {:.2}",
+                                failure_probability
+                            );
                             // Still allow call but monitor closely
                         }
                     }
@@ -155,18 +158,18 @@ impl CircuitBreaker {
     /// Record successful call
     pub async fn record_success(&self, response_time_ms: u64) {
         self.success_count.fetch_add(1, Ordering::Relaxed);
-        
+
         // Record response time
         let mut response_times = self.response_times.write().await;
         response_times.push((Utc::now(), response_time_ms));
-        
+
         // Maintain window size
         let window_duration = Duration::seconds(self.config.window_size_seconds as i64);
         let cutoff_time = Utc::now() - window_duration;
         response_times.retain(|(time, _)| *time > cutoff_time);
 
         let current_state = self.state.read().await.clone();
-        
+
         match current_state {
             CircuitState::HalfOpen => {
                 let successes = self.success_count.load(Ordering::Relaxed);
@@ -185,21 +188,21 @@ impl CircuitBreaker {
                 }
             }
         }
-        
+
         debug!("Recorded success: {}ms response time", response_time_ms);
     }
 
     /// Record failed call
     pub async fn record_failure(&self, error_type: &str) {
         self.failure_count.fetch_add(1, Ordering::Relaxed);
-        
+
         let now = Utc::now();
         *self.last_failure_time.write().await = Some(now);
-        
+
         // Record failure pattern
         let mut failure_patterns = self.failure_patterns.write().await;
         failure_patterns.push(now);
-        
+
         // Maintain window size
         let window_duration = Duration::seconds(self.config.window_size_seconds as i64);
         let cutoff_time = now - window_duration;
@@ -211,7 +214,7 @@ impl CircuitBreaker {
         }
 
         let current_state = self.state.read().await.clone();
-        
+
         match current_state {
             CircuitState::Closed => {
                 let threshold = if self.config.enable_adaptive_thresholds {
@@ -219,7 +222,7 @@ impl CircuitBreaker {
                 } else {
                     self.config.failure_threshold
                 };
-                
+
                 let failures = self.failure_count.load(Ordering::Relaxed);
                 if failures >= threshold as u64 {
                     self.transition_to_open().await;
@@ -233,26 +236,29 @@ impl CircuitBreaker {
                 // Already open, update failure time
             }
         }
-        
-        warn!("Recorded failure: {} (state: {:?})", error_type, current_state);
+
+        warn!(
+            "Recorded failure: {} (state: {:?})",
+            error_type, current_state
+        );
     }
 
     /// Calculate adaptive threshold based on historical data
     async fn calculate_adaptive_threshold(&self) -> u32 {
         let failure_patterns = self.failure_patterns.read().await;
         let response_times = self.response_times.read().await;
-        
+
         // Simple adaptive algorithm based on recent activity
         let base_threshold = self.config.failure_threshold;
         let recent_failures = failure_patterns.len();
         let recent_calls = response_times.len();
-        
+
         if recent_calls == 0 {
             return base_threshold;
         }
-        
+
         let failure_rate = recent_failures as f64 / recent_calls as f64;
-        
+
         // Adjust threshold based on failure rate trends
         if failure_rate > 0.1 {
             // High failure rate, lower threshold
@@ -280,36 +286,50 @@ impl CircuitBreaker {
     async fn extract_ml_features(&self) -> MLFeatures {
         let failure_patterns = self.failure_patterns.read().await;
         let response_times = self.response_times.read().await;
-        
+
         let now = Utc::now();
         let recent_window = Duration::minutes(5);
         let cutoff_time = now - recent_window;
-        
+
         // Calculate recent failure rate
-        let recent_failures = failure_patterns.iter().filter(|&&t| t > cutoff_time).count();
-        let recent_calls = response_times.iter().filter(|(t, _)| *t > cutoff_time).count();
+        let recent_failures = failure_patterns
+            .iter()
+            .filter(|&&t| t > cutoff_time)
+            .count();
+        let recent_calls = response_times
+            .iter()
+            .filter(|(t, _)| *t > cutoff_time)
+            .count();
         let recent_failure_rate = if recent_calls > 0 {
             recent_failures as f64 / recent_calls as f64
         } else {
             0.0
         };
-        
+
         // Calculate response time trend
         let recent_response_times: Vec<u64> = response_times
             .iter()
             .filter(|(t, _)| *t > cutoff_time)
             .map(|(_, rt)| *rt)
             .collect();
-        
+
         let response_time_trend = if recent_response_times.len() >= 2 {
             let mid = recent_response_times.len() / 2;
-            let first_half_avg: f64 = recent_response_times[..mid].iter().map(|&x| x as f64).sum::<f64>() / mid as f64;
-            let second_half_avg: f64 = recent_response_times[mid..].iter().map(|&x| x as f64).sum::<f64>() / (recent_response_times.len() - mid) as f64;
+            let first_half_avg: f64 = recent_response_times[..mid]
+                .iter()
+                .map(|&x| x as f64)
+                .sum::<f64>()
+                / mid as f64;
+            let second_half_avg: f64 = recent_response_times[mid..]
+                .iter()
+                .map(|&x| x as f64)
+                .sum::<f64>()
+                / (recent_response_times.len() - mid) as f64;
             second_half_avg - first_half_avg
         } else {
             0.0
         };
-        
+
         // Calculate error pattern score (simplified)
         let error_pattern_score = if failure_patterns.len() >= 3 {
             // Check for increasing frequency of failures
@@ -317,7 +337,7 @@ impl CircuitBreaker {
                 .windows(2)
                 .map(|w| (w[1] - w[0]).num_seconds())
                 .collect();
-            
+
             if intervals.len() >= 2 {
                 let avg_interval = intervals.iter().sum::<i64>() as f64 / intervals.len() as f64;
                 1.0 / (1.0 + avg_interval / 60.0) // Normalize to 0-1 range
@@ -327,14 +347,18 @@ impl CircuitBreaker {
         } else {
             0.0
         };
-        
+
         // Time of day factor (simplified)
         let hour = now.hour() as f64;
-        let time_of_day_factor = if hour >= 9.0 && hour <= 17.0 { 1.0 } else { 0.5 };
-        
+        let time_of_day_factor = if hour >= 9.0 && hour <= 17.0 {
+            1.0
+        } else {
+            0.5
+        };
+
         // Load factor based on recent call volume
         let load_factor = std::cmp::min(recent_calls, 100) as f64 / 100.0;
-        
+
         MLFeatures {
             recent_failure_rate,
             response_time_trend,
@@ -391,14 +415,15 @@ impl CircuitBreaker {
         } else {
             0.0
         };
-        
+
         let response_times = self.response_times.read().await;
         let average_response_time_ms = if !response_times.is_empty() {
-            response_times.iter().map(|(_, rt)| *rt as f64).sum::<f64>() / response_times.len() as f64
+            response_times.iter().map(|(_, rt)| *rt as f64).sum::<f64>()
+                / response_times.len() as f64
         } else {
             0.0
         };
-        
+
         CircuitBreakerMetrics {
             state,
             failure_count,
@@ -424,12 +449,12 @@ impl CircuitBreaker {
         self.rejected_calls.store(0, Ordering::Relaxed);
         self.response_times.write().await.clear();
         self.failure_patterns.write().await.clear();
-        
+
         // Reset ML model
         if self.config.enable_ml_prediction {
             *self.ml_model.write().await = Some(SimpleMLModel::new());
         }
-        
+
         info!("Circuit breaker reset to initial state");
     }
 }
@@ -452,13 +477,15 @@ impl SimpleMLModel {
             features.time_of_day_factor,
             features.load_factor,
         ];
-        
-        let weighted_sum: f64 = self.weights
+
+        let weighted_sum: f64 = self
+            .weights
             .iter()
             .zip(feature_vector.iter())
             .map(|(w, f)| w * f)
-            .sum::<f64>() + self.bias;
-        
+            .sum::<f64>()
+            + self.bias;
+
         // Sigmoid activation
         1.0 / (1.0 + (-weighted_sum).exp())
     }
@@ -471,18 +498,18 @@ impl SimpleMLModel {
             features.time_of_day_factor,
             features.load_factor,
         ];
-        
+
         let prediction = self.predict(features);
         let error = label - prediction;
-        
+
         // Update weights using gradient descent
         for (i, &feature) in feature_vector.iter().enumerate() {
             self.weights[i] += self.learning_rate * error * feature;
         }
         self.bias += self.learning_rate * error;
-        
+
         self.update_count += 1;
-        
+
         // Decay learning rate over time
         if self.update_count % 100 == 0 {
             self.learning_rate *= 0.95;
@@ -514,9 +541,9 @@ mod tests {
     async fn test_circuit_breaker_creation() {
         let config = CircuitBreakerConfig::default();
         let cb = CircuitBreaker::new(config);
-        
+
         assert!(cb.allow_call().await);
-        
+
         let metrics = cb.get_metrics().await;
         assert_eq!(metrics.state, CircuitState::Closed);
     }
@@ -529,11 +556,11 @@ mod tests {
             ..Default::default()
         };
         let cb = CircuitBreaker::new(config);
-        
+
         // First failure
         cb.record_failure("test_error").await;
         assert!(cb.allow_call().await);
-        
+
         // Second failure should open circuit
         cb.record_failure("test_error").await;
         let metrics = cb.get_metrics().await;
@@ -550,22 +577,22 @@ mod tests {
             ..Default::default()
         };
         let cb = CircuitBreaker::new(config);
-        
+
         // Trigger failure
         cb.record_failure("test_error").await;
         assert_eq!(cb.get_metrics().await.state, CircuitState::Open);
-        
+
         // Wait for timeout
         sleep(TokioDuration::from_secs(2)).await;
-        
+
         // Should transition to half-open
         assert!(cb.allow_call().await);
         assert_eq!(cb.get_metrics().await.state, CircuitState::HalfOpen);
-        
+
         // Record successes
         cb.record_success(50).await;
         cb.record_success(60).await;
-        
+
         // Should be closed now
         assert_eq!(cb.get_metrics().await.state, CircuitState::Closed);
     }

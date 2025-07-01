@@ -73,6 +73,82 @@ impl ColumnStoreCompressor {
         self.columns.push(column);
     }
 
+    /// Analyze column data to determine optimal compression strategy
+    pub fn analyze_column(&mut self, column_name: &str, values: &[Vec<u8>]) {
+        if values.is_empty() {
+            return;
+        }
+
+        // Simple analysis to determine best compression type
+        let mut unique_values = std::collections::HashSet::new();
+        let mut total_size = 0;
+        let mut is_sequential = true;
+        let mut last_value: Option<u64> = None;
+
+        for value in values {
+            unique_values.insert(value.clone());
+            total_size += value.len();
+
+            // Check if values are sequential (for delta compression)
+            if value.len() >= 8 {
+                let current_value = u64::from_le_bytes([
+                    value[0], value[1], value[2], value[3],
+                    value[4], value[5], value[6], value[7],
+                ]);
+                
+                if let Some(last) = last_value {
+                    if current_value != last + 1 {
+                        is_sequential = false;
+                    }
+                }
+                last_value = Some(current_value);
+            } else {
+                is_sequential = false;
+            }
+        }
+
+        let uniqueness_ratio = unique_values.len() as f64 / values.len() as f64;
+        let avg_size = total_size / values.len();
+
+        // Determine optimal compression strategy
+        let compression_type = if is_sequential {
+            ColumnCompressionType::Delta
+        } else if uniqueness_ratio < 0.1 {
+            // Many duplicate values - use run-length encoding
+            ColumnCompressionType::RunLength
+        } else if avg_size > 8 && uniqueness_ratio < 0.5 {
+            // Large values with moderate uniqueness - use dictionary
+            ColumnCompressionType::Dictionary
+        } else {
+            // Default to no compression
+            ColumnCompressionType::None
+        };
+
+        // Find existing column or create new one
+        if let Some(column) = self.columns.iter_mut().find(|c| c.name == column_name) {
+            column.compression = compression_type;
+        } else {
+            // Create new column with appropriate data type
+            let data_type = if avg_size <= 1 {
+                ColumnDataType::Int8
+            } else if avg_size <= 2 {
+                ColumnDataType::Int16
+            } else if avg_size <= 4 {
+                ColumnDataType::Int32
+            } else if avg_size <= 8 {
+                ColumnDataType::Int64
+            } else {
+                ColumnDataType::Binary
+            };
+
+            self.add_column(ColumnDefinition {
+                name: column_name.to_string(),
+                data_type,
+                compression: compression_type,
+            });
+        }
+    }
+
     /// Compress row-based data to column format
     pub fn compress_rows(&self, rows: &[Vec<u8>]) -> Result<Vec<u8>> {
         if rows.is_empty() {

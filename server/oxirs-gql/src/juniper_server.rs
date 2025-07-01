@@ -125,7 +125,7 @@ impl JuniperGraphQLServer {
                 let service = service_fn(move |req| {
                     Self::handle_request(
                         req,
-                        (*schema_clone).clone(),
+                        schema_clone.clone(),
                         context_clone.clone(),
                         config_clone.clone(),
                     )
@@ -141,7 +141,7 @@ impl JuniperGraphQLServer {
     /// Handle individual HTTP requests
     async fn handle_request(
         req: Request<Incoming>,
-        schema: Schema,
+        schema: Arc<Schema>,
         context: GraphQLContext,
         config: GraphQLServerConfig,
     ) -> Result<Response<String>, Infallible> {
@@ -166,7 +166,7 @@ impl JuniperGraphQLServer {
     /// Inner request handling with proper error propagation
     async fn handle_request_inner(
         req: Request<Incoming>,
-        schema: Schema,
+        schema: Arc<Schema>,
         context: GraphQLContext,
         config: GraphQLServerConfig,
     ) -> Result<Response<String>> {
@@ -198,7 +198,7 @@ impl JuniperGraphQLServer {
             // Main GraphQL endpoint
             (&Method::GET, "/graphql") | (&Method::POST, "/graphql") => {
                 debug!("Processing GraphQL request");
-                let response = graphql(schema, context, req).await;
+                let response = graphql(schema, Arc::new(context), req).await;
 
                 // Add CORS headers to GraphQL response
                 if config.cors_enabled {

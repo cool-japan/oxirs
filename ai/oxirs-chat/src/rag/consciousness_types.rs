@@ -6,9 +6,9 @@
 
 use super::*;
 use anyhow::Result;
-use std::collections::{HashMap, VecDeque};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
 
 // Essential data structures for enhanced consciousness system
 
@@ -60,7 +60,11 @@ impl WorkingMemory {
         })
     }
 
-    pub fn store_immediate(&mut self, query: &str, context: &AssembledContext) -> Result<WorkingMemoryTrace> {
+    pub fn store_immediate(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<WorkingMemoryTrace> {
         let item = WorkingMemoryItem {
             content: query.to_string(),
             timestamp: Utc::now(),
@@ -69,7 +73,7 @@ impl WorkingMemory {
         };
 
         self.current_items.push_back(item.clone());
-        
+
         if self.current_items.len() > self.capacity {
             self.current_items.pop_front(); // Forget oldest
         }
@@ -87,7 +91,11 @@ impl WorkingMemory {
 
     pub fn get_pressure(&self) -> Result<f64> {
         let load = self.get_load()?;
-        Ok(if load > self.load_threshold { load - self.load_threshold } else { 0.0 })
+        Ok(if load > self.load_threshold {
+            load - self.load_threshold
+        } else {
+            0.0
+        })
     }
 
     pub fn get_health(&self) -> Result<f64> {
@@ -127,13 +135,26 @@ impl EpisodicMemory {
         })
     }
 
-    pub fn create_episode(&mut self, query: &str, context: &AssembledContext, attention: &AttentionAllocation) -> Result<EpisodicMemoryEntry> {
+    pub fn create_episode(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+        attention: &AttentionAllocation,
+    ) -> Result<EpisodicMemoryEntry> {
         let episode = EpisodicMemoryEntry {
             id: uuid::Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
             query_content: query.to_string(),
-            context_summary: format!("Episode with {} semantic results", context.semantic_results.len()),
-            attention_focus: attention.targets.iter().take(3).map(|t| t.concept.clone()).collect(),
+            context_summary: format!(
+                "Episode with {} semantic results",
+                context.semantic_results.len()
+            ),
+            attention_focus: attention
+                .targets
+                .iter()
+                .take(3)
+                .map(|t| t.concept.clone())
+                .collect(),
             emotional_context: EmotionalContext {
                 valence: 0.0, // Would be computed from context
                 arousal: 0.5,
@@ -142,7 +163,7 @@ impl EpisodicMemory {
         };
 
         self.episodes.push_back(episode.clone());
-        
+
         if self.episodes.len() > self.max_episodes {
             self.episodes.pop_front();
         }
@@ -161,12 +182,17 @@ impl EpisodicMemory {
         let mut comparisons = 0;
 
         for i in 1..recent_episodes.len() {
-            let coherence = self.calculate_episode_coherence(recent_episodes[i-1], recent_episodes[i])?;
+            let coherence =
+                self.calculate_episode_coherence(recent_episodes[i - 1], recent_episodes[i])?;
             coherence_sum += coherence;
             comparisons += 1;
         }
 
-        Ok(if comparisons > 0 { coherence_sum / comparisons as f64 } else { 1.0 })
+        Ok(if comparisons > 0 {
+            coherence_sum / comparisons as f64
+        } else {
+            1.0
+        })
     }
 
     pub fn get_pressure(&self) -> Result<f64> {
@@ -180,15 +206,23 @@ impl EpisodicMemory {
         Ok((coherence + (1.0 - usage).max(0.0)) / 2.0)
     }
 
-    fn calculate_episode_coherence(&self, ep1: &EpisodicMemoryEntry, ep2: &EpisodicMemoryEntry) -> Result<f64> {
+    fn calculate_episode_coherence(
+        &self,
+        ep1: &EpisodicMemoryEntry,
+        ep2: &EpisodicMemoryEntry,
+    ) -> Result<f64> {
         // Simple coherence calculation based on attention overlap
         let focus1: std::collections::HashSet<_> = ep1.attention_focus.iter().collect();
         let focus2: std::collections::HashSet<_> = ep2.attention_focus.iter().collect();
-        
+
         let intersection_size = focus1.intersection(&focus2).count();
         let union_size = focus1.union(&focus2).count();
-        
-        Ok(if union_size > 0 { intersection_size as f64 / union_size as f64 } else { 0.0 })
+
+        Ok(if union_size > 0 {
+            intersection_size as f64 / union_size as f64
+        } else {
+            0.0
+        })
     }
 }
 
@@ -225,7 +259,11 @@ impl SemanticMemory {
         })
     }
 
-    pub fn update_associations(&mut self, query: &str, context: &AssembledContext) -> Result<SemanticMemoryUpdate> {
+    pub fn update_associations(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<SemanticMemoryUpdate> {
         let words: Vec<&str> = query.split_whitespace().collect();
         let mut updated_concepts = 0;
         let mut new_associations = 0;
@@ -233,12 +271,15 @@ impl SemanticMemory {
         for word in words {
             if word.len() > 3 {
                 let concept = word.to_lowercase();
-                let node = self.concept_network.entry(concept.clone()).or_insert_with(|| ConceptNode {
-                    concept: concept.clone(),
-                    activation_count: 0,
-                    associations: HashMap::new(),
-                    last_accessed: Utc::now(),
-                });
+                let node = self
+                    .concept_network
+                    .entry(concept.clone())
+                    .or_insert_with(|| ConceptNode {
+                        concept: concept.clone(),
+                        activation_count: 0,
+                        associations: HashMap::new(),
+                        last_accessed: Utc::now(),
+                    });
 
                 node.activation_count += 1;
                 node.last_accessed = Utc::now();
@@ -248,7 +289,8 @@ impl SemanticMemory {
                 for entity in &context.extracted_entities {
                     let association_strength = entity.confidence as f64;
                     if association_strength > self.association_strength_threshold {
-                        node.associations.insert(entity.text.clone(), association_strength);
+                        node.associations
+                            .insert(entity.text.clone(), association_strength);
                         new_associations += 1;
                     }
                 }
@@ -267,7 +309,9 @@ impl SemanticMemory {
             return Ok(0.0);
         }
 
-        let total_associations: usize = self.concept_network.values()
+        let total_associations: usize = self
+            .concept_network
+            .values()
             .map(|node| node.associations.len())
             .sum();
 
@@ -322,12 +366,20 @@ impl MemoryConsolidation {
         episodic_entry: &EpisodicMemoryEntry,
         semantic_update: &SemanticMemoryUpdate,
     ) -> Result<ConsolidationResult> {
-        let working_strength = if working_trace.storage_success { 1.0 } else { 0.5 };
+        let working_strength = if working_trace.storage_success {
+            1.0
+        } else {
+            0.5
+        };
         let episodic_strength = episodic_entry.emotional_context.significance;
         let semantic_strength = semantic_update.network_growth;
 
         let overall_strength = (working_strength + episodic_strength + semantic_strength) / 3.0;
-        let confidence = if overall_strength > self.consolidation_threshold { 0.9 } else { overall_strength };
+        let confidence = if overall_strength > self.consolidation_threshold {
+            0.9
+        } else {
+            overall_strength
+        };
 
         Ok(ConsolidationResult {
             strength: overall_strength,
@@ -426,7 +478,10 @@ impl NeuralActivation {
     pub fn get_evidence(&self) -> Vec<String> {
         vec![
             format!("Overall activation: {:.3}", self.overall_activation),
-            format!("Consciousness relevance: {:.3}", self.consciousness_relevance),
+            format!(
+                "Consciousness relevance: {:.3}",
+                self.consciousness_relevance
+            ),
             format!("Active concepts: {}", self.activation_map.len()),
         ]
     }
@@ -453,7 +508,7 @@ impl ConsciousnessIndicators {
         let activation_values: Vec<f64> = activation_map.values().copied().collect();
         let max_activation = activation_values.iter().fold(0.0, |a, b| a.max(*b));
         let avg_activation = activation_values.iter().sum::<f64>() / activation_values.len() as f64;
-        
+
         Ok((max_activation + avg_activation) / 2.0)
     }
 }
@@ -528,19 +583,33 @@ impl EnhancedMetacognitiveLayer {
         })
     }
 
-    fn assess_comprehensive_complexity(&self, query: &str, context: &AssembledContext, neural_activation: &NeuralActivation) -> Result<f64> {
+    fn assess_comprehensive_complexity(
+        &self,
+        query: &str,
+        context: &AssembledContext,
+        neural_activation: &NeuralActivation,
+    ) -> Result<f64> {
         let query_complexity = query.split_whitespace().count() as f64 / 20.0;
         let context_complexity = context.semantic_results.len() as f64 / 10.0;
         let neural_complexity = neural_activation.overall_activation;
-        
+
         Ok(((query_complexity + context_complexity + neural_complexity) / 3.0).min(1.0))
     }
 
-    fn calculate_enhanced_confidence(&self, query: &str, context: &AssembledContext, neural_activation: &NeuralActivation) -> Result<f64> {
+    fn calculate_enhanced_confidence(
+        &self,
+        query: &str,
+        context: &AssembledContext,
+        neural_activation: &NeuralActivation,
+    ) -> Result<f64> {
         let query_clarity = if query.contains('?') { 0.8 } else { 0.6 };
-        let context_availability = if !context.semantic_results.is_empty() { 0.9 } else { 0.3 };
+        let context_availability = if !context.semantic_results.is_empty() {
+            0.9
+        } else {
+            0.3
+        };
         let neural_confidence = neural_activation.confidence;
-        
+
         Ok((query_clarity + context_availability + neural_confidence) / 3.0)
     }
 
@@ -557,13 +626,22 @@ impl EnhancedMetacognitiveLayer {
     fn generate_self_reflection(&self, query: &str, context: &AssembledContext) -> Result<f64> {
         // Simple self-reflection score based on metacognitive awareness
         let query_understanding = if query.len() > 10 { 0.8 } else { 0.5 };
-        let context_utilization = if !context.semantic_results.is_empty() { 0.9 } else { 0.4 };
-        
+        let context_utilization = if !context.semantic_results.is_empty() {
+            0.9
+        } else {
+            0.4
+        };
+
         Ok((query_understanding + context_utilization + self.self_awareness) / 3.0)
     }
 
     fn calculate_monitoring_effectiveness(&self) -> Result<f64> {
-        Ok((self.strategy_monitoring + self.comprehension_monitoring + self.confidence_calibration) / 3.0)
+        Ok(
+            (self.strategy_monitoring
+                + self.comprehension_monitoring
+                + self.confidence_calibration)
+                / 3.0,
+        )
     }
 }
 

@@ -136,15 +136,16 @@ impl QueryProcessor {
         let unique_words = query.split_whitespace().collect::<HashSet<_>>().len();
         let question_words = ["what", "how", "why", "when", "where", "who", "which"];
         let query_lower = query.to_lowercase();
-        
-        let question_word_count = question_words.iter()
+
+        let question_word_count = question_words
+            .iter()
             .filter(|word| query_lower.contains(*word))
             .count();
 
-        let complexity = (word_count as f64 * 0.05) + 
-                        (unique_words as f64 * 0.1) +
-                        (question_word_count as f64 * 0.2);
-        
+        let complexity = (word_count as f64 * 0.05)
+            + (unique_words as f64 * 0.1)
+            + (question_word_count as f64 * 0.2);
+
         complexity.min(1.0)
     }
 }
@@ -179,4 +180,4 @@ pub enum QueryIntent {
     General,
 }
 
-use super::graph_traversal::{ExtractedEntity, EntityType};
+use super::graph_traversal::{EntityType, ExtractedEntity};

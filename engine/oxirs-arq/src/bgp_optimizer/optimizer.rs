@@ -1,7 +1,7 @@
 //! Main BGP optimizer implementation
 
 use crate::algebra::{Term, TriplePattern, Variable};
-use crate::bgp_optimizer::{OptimizedBGP, SelectivityInfo, PatternSelectivity, IndexUsagePlan};
+use crate::bgp_optimizer::{IndexUsagePlan, OptimizedBGP, PatternSelectivity, SelectivityInfo};
 use crate::optimizer::{IndexStatistics, IndexType, Statistics};
 use anyhow::Result;
 use oxirs_core::model::NamedNode;
@@ -26,13 +26,15 @@ impl<'a> BGPOptimizer<'a> {
     pub fn optimize_bgp(&self, patterns: Vec<TriplePattern>) -> Result<OptimizedBGP> {
         // Basic implementation - calculate simple selectivity
         let pattern_selectivities = self.calculate_pattern_selectivities(&patterns)?;
-        
+
         // Simple pattern reordering by selectivity
         let mut ordered_patterns = patterns.clone();
         ordered_patterns.sort_by(|a, b| {
             let sel_a = self.estimate_pattern_selectivity(a);
             let sel_b = self.estimate_pattern_selectivity(b);
-            sel_a.partial_cmp(&sel_b).unwrap_or(std::cmp::Ordering::Equal)
+            sel_a
+                .partial_cmp(&sel_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Calculate total cost
@@ -47,6 +49,10 @@ impl<'a> BGPOptimizer<'a> {
 
         // Create basic index plan
         let index_plan = IndexUsagePlan {
+            pattern_indexes: Vec::new(),
+            join_indexes: Vec::new(),
+            index_intersections: Vec::new(),
+            bloom_filter_candidates: Vec::new(),
             recommended_indices: Vec::new(),
             access_patterns: Vec::new(),
             estimated_cost_reduction: 0.0,
@@ -61,13 +67,16 @@ impl<'a> BGPOptimizer<'a> {
     }
 
     /// Calculate pattern selectivities
-    fn calculate_pattern_selectivities(&self, patterns: &[TriplePattern]) -> Result<Vec<PatternSelectivity>> {
+    fn calculate_pattern_selectivities(
+        &self,
+        patterns: &[TriplePattern],
+    ) -> Result<Vec<PatternSelectivity>> {
         let mut selectivities = Vec::new();
-        
+
         for pattern in patterns {
             let selectivity = self.estimate_pattern_selectivity(pattern);
             let cardinality = (1000.0 * selectivity) as usize; // Simple estimate
-            
+
             selectivities.push(PatternSelectivity {
                 pattern: pattern.clone(),
                 selectivity,
@@ -78,33 +87,35 @@ impl<'a> BGPOptimizer<'a> {
                     object_selectivity: 0.5,
                     type_selectivity: 0.5,
                     literal_selectivity: 0.5,
+                    index_factor: 1.0,
+                    distribution_factor: 1.0,
                 },
             });
         }
-        
+
         Ok(selectivities)
     }
 
     /// Estimate selectivity for a single pattern
     fn estimate_pattern_selectivity(&self, pattern: &TriplePattern) -> f64 {
-        let mut selectivity = 1.0;
-        
+        let mut selectivity: f64 = 1.0;
+
         // Reduce selectivity based on bound terms
         match &pattern.subject {
             Term::Variable(_) => selectivity *= 0.8,
             _ => selectivity *= 0.1,
         }
-        
+
         match &pattern.predicate {
             Term::Variable(_) => selectivity *= 0.8,
             _ => selectivity *= 0.1,
         }
-        
+
         match &pattern.object {
             Term::Variable(_) => selectivity *= 0.8,
             _ => selectivity *= 0.1,
         }
-        
-        selectivity.max(0.001) // Minimum selectivity
+
+        selectivity.max(0.001_f64) // Minimum selectivity
     }
 }

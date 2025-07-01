@@ -899,8 +899,3 @@ impl RealTimePerformanceMonitor {
     }
 }
 
-impl ConstraintEvaluationResult {
-    fn is_satisfied(&self) -> bool {
-        matches!(self, ConstraintEvaluationResult::Satisfied)
-    }
-}

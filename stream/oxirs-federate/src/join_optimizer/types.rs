@@ -167,7 +167,7 @@ impl RuntimeStatistics {
 
     pub fn record_execution_time(&mut self, duration: Duration) {
         self.query_execution_times.push(duration);
-        
+
         // Keep only recent measurements (sliding window)
         if self.query_execution_times.len() > 1000 {
             self.query_execution_times.remove(0);
@@ -220,7 +220,8 @@ impl JoinCostModel {
             JoinAlgorithm::SortMergeJoin => {
                 let sort_cost = (left_cardinality as f64).log2() * (left_cardinality as f64)
                     + (right_cardinality as f64).log2() * (right_cardinality as f64);
-                sort_cost * self.cpu_cost_factor + (left_cardinality + right_cardinality) as f64 * self.disk_io_cost_factor
+                sort_cost * self.cpu_cost_factor
+                    + (left_cardinality + right_cardinality) as f64 * self.disk_io_cost_factor
             }
             JoinAlgorithm::IndexJoin => {
                 (left_cardinality as f64) * (right_cardinality as f64).log2() * self.cpu_cost_factor
@@ -229,7 +230,7 @@ impl JoinCostModel {
 
         // Add network cost
         let network_cost = network_latency.as_millis() as f64 * self.network_cost_factor;
-        
+
         base_cost + network_cost
     }
 
@@ -267,7 +268,8 @@ impl AdaptiveExecutionController {
             return false;
         }
 
-        let performance_degradation = (historical_average - current_performance) / historical_average;
+        let performance_degradation =
+            (historical_average - current_performance) / historical_average;
         performance_degradation > self.adaptation_threshold
     }
 

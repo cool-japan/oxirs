@@ -115,7 +115,7 @@ impl CompactEncoder {
         }
 
         let original_size = node_ids.len() * 8; // 8 bytes per u64
-        let mut result = Vec::new();
+        let mut result: Vec<u8> = Vec::new();
 
         let encoded = match self.scheme {
             CompactEncodingScheme::VarInt => {

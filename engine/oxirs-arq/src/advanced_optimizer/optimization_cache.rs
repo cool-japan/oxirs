@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use crate::algebra::Algebra;
 
 /// Cache for optimization decisions and plans
+#[derive(Clone)]
 pub struct OptimizationCache {
     plan_cache: HashMap<u64, CachedPlan>,
     decision_cache: HashMap<u64, CachedDecision>,
@@ -56,7 +57,7 @@ pub enum DecisionType {
 }
 
 /// Cache performance statistics
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CacheStatistics {
     pub plan_hits: usize,
     pub plan_misses: usize,
@@ -95,23 +96,31 @@ impl OptimizationCache {
     }
 
     /// Get cached plan if available and not expired
-    pub fn get_cached_plan(&mut self, query_hash: u64) -> Option<&Algebra> {
+    pub fn get_cached_plan(&mut self, query_hash: u64) -> Option<Algebra> {
         self.statistics.total_lookups += 1;
 
-        if let Some(cached) = self.plan_cache.get_mut(&query_hash) {
-            if !self.is_expired(cached.creation_time) {
-                cached.access_count += 1;
-                cached.last_access = Instant::now();
-                self.statistics.plan_hits += 1;
-                return Some(&cached.optimized_plan);
-            } else {
-                // Remove expired entry
-                self.plan_cache.remove(&query_hash);
-            }
+        // Check if entry exists and is not expired
+        let should_remove = if let Some(cached) = self.plan_cache.get(&query_hash) {
+            self.is_expired(cached.creation_time)
+        } else {
+            false
+        };
+
+        if should_remove {
+            self.plan_cache.remove(&query_hash);
+            self.statistics.plan_misses += 1;
+            return None;
         }
 
-        self.statistics.plan_misses += 1;
-        None
+        if let Some(cached) = self.plan_cache.get_mut(&query_hash) {
+            cached.access_count += 1;
+            cached.last_access = Instant::now();
+            self.statistics.plan_hits += 1;
+            Some(cached.optimized_plan.clone())
+        } else {
+            self.statistics.plan_misses += 1;
+            None
+        }
     }
 
     /// Cache an optimization decision
@@ -124,21 +133,29 @@ impl OptimizationCache {
     }
 
     /// Get cached decision if available
-    pub fn get_cached_decision(&mut self, context_hash: u64) -> Option<&CachedDecision> {
+    pub fn get_cached_decision(&mut self, context_hash: u64) -> Option<CachedDecision> {
         self.statistics.total_lookups += 1;
 
-        if let Some(decision) = self.decision_cache.get(&context_hash) {
-            if !self.is_expired(decision.creation_time) {
-                self.statistics.decision_hits += 1;
-                return Some(decision);
-            } else {
-                // Remove expired entry
-                self.decision_cache.remove(&context_hash);
-            }
+        // Check if entry exists and is not expired
+        let should_remove = if let Some(decision) = self.decision_cache.get(&context_hash) {
+            self.is_expired(decision.creation_time)
+        } else {
+            false
+        };
+
+        if should_remove {
+            self.decision_cache.remove(&context_hash);
+            self.statistics.decision_misses += 1;
+            return None;
         }
 
-        self.statistics.decision_misses += 1;
-        None
+        if let Some(decision) = self.decision_cache.get(&context_hash) {
+            self.statistics.decision_hits += 1;
+            Some(decision.clone())
+        } else {
+            self.statistics.decision_misses += 1;
+            None
+        }
     }
 
     /// Get cache statistics
@@ -173,12 +190,30 @@ impl OptimizationCache {
         }
     }
 
+    /// Get overall cache hit ratio (combining plans and decisions)
+    pub fn hit_ratio(&self) -> f64 {
+        let total_hits = self.statistics.plan_hits + self.statistics.decision_hits;
+        let total_misses = self.statistics.plan_misses + self.statistics.decision_misses;
+        let total = total_hits + total_misses;
+        if total == 0 {
+            0.0
+        } else {
+            total_hits as f64 / total as f64
+        }
+    }
+
+    /// Get total number of requests made to the cache
+    pub fn total_requests(&self) -> usize {
+        self.statistics.total_lookups
+    }
+
     fn is_expired(&self, creation_time: Instant) -> bool {
         creation_time.elapsed() > Duration::from_secs(self.config.ttl_seconds)
     }
 
     fn evict_least_recently_used_plan(&mut self) {
-        if let Some((&key, _)) = self.plan_cache
+        if let Some((&key, _)) = self
+            .plan_cache
             .iter()
             .min_by_key(|(_, cached)| cached.last_access)
         {
@@ -188,7 +223,8 @@ impl OptimizationCache {
     }
 
     fn evict_oldest_decision(&mut self) {
-        if let Some((&key, _)) = self.decision_cache
+        if let Some((&key, _)) = self
+            .decision_cache
             .iter()
             .min_by_key(|(_, decision)| decision.creation_time)
         {

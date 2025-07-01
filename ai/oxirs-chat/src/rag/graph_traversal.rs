@@ -32,9 +32,7 @@ impl GraphTraversal {
                 visited_entities.insert(iri.clone());
 
                 // Basic entity traversal
-                let entity_triples = self
-                    .find_entity_triples(iri, max_depth)
-                    .await?;
+                let entity_triples = self.find_entity_triples(iri, max_depth).await?;
 
                 for triple in entity_triples {
                     results.push(RagSearchResult {
@@ -45,8 +43,7 @@ impl GraphTraversal {
                 }
 
                 // Enhanced entity expansion
-                let expanded_results =
-                    self.expand_entity_context(iri, entity.confidence).await?;
+                let expanded_results = self.expand_entity_context(iri, entity.confidence).await?;
                 results.extend(expanded_results);
             }
         }
@@ -159,8 +156,12 @@ impl GraphTraversal {
         }
 
         // For each type, find other entities of the same type (simplified implementation)
-        for type_triple in entity_types.iter().take(2) { // Limit to 2 types for performance
-            if let Ok(entities_of_type) = self.find_entities_of_type(&type_triple.object().to_string(), limit).await {
+        for type_triple in entity_types.iter().take(2) {
+            // Limit to 2 types for performance
+            if let Ok(entities_of_type) = self
+                .find_entities_of_type(&type_triple.object().to_string(), limit)
+                .await
+            {
                 same_type_triples.extend(entities_of_type);
             }
         }
@@ -198,19 +199,28 @@ impl GraphTraversal {
     }
 
     /// Remove duplicates and rank graph results
-    fn deduplicate_and_rank_graph_results(&self, mut results: Vec<RagSearchResult>) -> Result<Vec<RagSearchResult>> {
+    fn deduplicate_and_rank_graph_results(
+        &self,
+        mut results: Vec<RagSearchResult>,
+    ) -> Result<Vec<RagSearchResult>> {
         // Remove duplicates based on triple content
         let mut seen = HashSet::new();
         results.retain(|result| {
-            let key = format!("{}:{}:{}", 
-                result.triple.subject(), 
-                result.triple.predicate(), 
-                result.triple.object());
+            let key = format!(
+                "{}:{}:{}",
+                result.triple.subject(),
+                result.triple.predicate(),
+                result.triple.object()
+            );
             seen.insert(key)
         });
 
         // Sort by score (descending)
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(results)
     }

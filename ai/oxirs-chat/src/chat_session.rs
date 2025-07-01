@@ -1,14 +1,13 @@
 //! Chat session implementation and management
 
 use crate::messages::{Message, MessageRole};
-use crate::session_manager::{ChatConfig, SessionData, SessionState, ContextWindow, TopicTracker, SessionMetrics};
+use crate::session_manager::{
+    ChatConfig, ContextWindow, SessionData, SessionMetrics, SessionState, TopicTracker,
+};
 use crate::types::*;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
@@ -97,14 +96,18 @@ impl ChatSession {
 
         // Analyze topic changes
         if let Some(transition) = self.topic_tracker.analyze_message(&message) {
-            info!("Topic transition detected: {:?}", transition.transition_type);
+            info!(
+                "Topic transition detected: {:?}",
+                transition.transition_type
+            );
             self.performance_metrics.add_topic_transition();
         }
 
         // Add to context window
         let importance = self.calculate_message_importance(&message);
         let estimated_tokens = message.content.len() / 4; // Rough estimate
-        self.context_window.add_message(message.id.clone(), importance, estimated_tokens);
+        self.context_window
+            .add_message(message.id.clone(), importance, estimated_tokens);
 
         // Update metrics
         match message.role {
@@ -120,7 +123,10 @@ impl ChatSession {
         self.messages.push(message);
 
         // Check if context compression is needed
-        if self.context_window.needs_compression(self.config.max_context_tokens) {
+        if self
+            .context_window
+            .needs_compression(self.config.max_context_tokens)
+        {
             self.compress_context()?;
         }
 
@@ -136,14 +142,16 @@ impl ChatSession {
         }
 
         // Boost importance for SPARQL queries
-        if message.content.to_lowercase().contains("select") || 
-           message.content.to_lowercase().contains("construct") {
+        if message.content.to_lowercase().contains("select")
+            || message.content.to_lowercase().contains("construct")
+        {
             importance += 0.3;
         }
 
         // Boost importance for error messages
-        if message.content.to_lowercase().contains("error") ||
-           message.content.to_lowercase().contains("fail") {
+        if message.content.to_lowercase().contains("error")
+            || message.content.to_lowercase().contains("fail")
+        {
             importance += 0.4;
         }
 
@@ -160,12 +168,10 @@ impl ChatSession {
         // For now, we'll create a simple summary
         let recent_topics = self.topic_tracker.get_current_topic_summary();
         let message_count = self.context_window.get_context_messages().len();
-        
+
         let summary = format!(
             "Context summary: {} messages discussing {}. Recent topics include: {}",
-            message_count,
-            "various topics",
-            recent_topics
+            message_count, "various topics", recent_topics
         );
 
         self.context_window.compress_context(summary);
@@ -231,19 +237,22 @@ impl ChatSession {
     }
 
     pub fn get_messages_since(&self, since: chrono::DateTime<chrono::Utc>) -> Vec<&Message> {
-        self.messages.iter()
+        self.messages
+            .iter()
             .filter(|m| m.timestamp > since)
             .collect()
     }
 
     pub fn get_user_messages(&self) -> Vec<&Message> {
-        self.messages.iter()
+        self.messages
+            .iter()
             .filter(|m| matches!(m.role, MessageRole::User))
             .collect()
     }
 
     pub fn get_assistant_messages(&self) -> Vec<&Message> {
-        self.messages.iter()
+        self.messages
+            .iter()
             .filter(|m| matches!(m.role, MessageRole::Assistant))
             .collect()
     }

@@ -108,7 +108,11 @@ pub enum StreamError {
     WasmEdgeComputing(String),
 
     #[error("Performance optimization error: {metric}, expected: {expected}, actual: {actual}")]
-    PerformanceOptimization { metric: String, expected: f64, actual: f64 },
+    PerformanceOptimization {
+        metric: String,
+        expected: f64,
+        actual: f64,
+    },
 
     #[error("Other error: {0}")]
     Other(String),

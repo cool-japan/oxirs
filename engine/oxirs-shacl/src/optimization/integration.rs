@@ -95,7 +95,7 @@ impl OptimizedValidationEngine {
     /// Validate a store with optimization
     pub fn validate_store_optimized(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &IndexMap<ShapeId, Shape>,
     ) -> Result<ValidationReport> {
         let start_time = Instant::now();
@@ -156,7 +156,7 @@ impl OptimizedValidationEngine {
         // Use optimization engine for batch evaluation
         let results = {
             let mut opt_engine = self.optimization_engine.lock().unwrap();
-            opt_engine.optimize_and_evaluate(store, all_constraints_with_contexts)?
+            opt_engine.optimize_and_evaluate(store, all_constraints_with_contexts.clone())?
         };
 
         // Convert results to validation report
@@ -191,7 +191,7 @@ impl OptimizedValidationEngine {
     /// Validate with incremental optimization
     pub fn validate_incremental(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &IndexMap<ShapeId, Shape>,
         changed_nodes: Option<&[Term]>,
         force_revalidate: bool,
@@ -257,7 +257,7 @@ impl OptimizedValidationEngine {
     /// Validate large datasets with streaming optimization
     pub fn validate_streaming<I>(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &IndexMap<ShapeId, Shape>,
         node_stream: I,
     ) -> Result<ValidationReport>
@@ -297,7 +297,7 @@ impl OptimizedValidationEngine {
     /// Validate with parallel processing optimization
     pub fn validate_parallel(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &IndexMap<ShapeId, Shape>,
         max_threads: Option<usize>,
     ) -> Result<ValidationReport> {
@@ -441,7 +441,7 @@ impl OptimizedValidationEngine {
     /// Validate using a specific strategy
     pub fn validate_with_strategy(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &IndexMap<ShapeId, Shape>,
         strategy: ValidationStrategy,
         context: Option<ValidationContext>,
@@ -470,7 +470,7 @@ impl OptimizedValidationEngine {
     /// Basic validation without optimizations (for comparison)
     fn validate_basic(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &IndexMap<ShapeId, Shape>,
     ) -> Result<ValidationReport> {
         let mut report = ValidationReport::new();
@@ -539,7 +539,7 @@ impl OptimizedValidationEngine {
     /// Collect all target nodes from all shapes
     fn collect_all_target_nodes(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &IndexMap<ShapeId, Shape>,
     ) -> Result<Vec<Term>> {
         let mut all_nodes = Vec::new();

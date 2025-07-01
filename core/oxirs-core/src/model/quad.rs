@@ -36,6 +36,17 @@ impl fmt::Display for GraphName {
     }
 }
 
+impl AsRef<str> for GraphName {
+    fn as_ref(&self) -> &str {
+        match self {
+            GraphName::NamedNode(n) => n.as_str(),
+            GraphName::BlankNode(b) => b.as_str(),
+            GraphName::Variable(v) => v.name(),
+            GraphName::DefaultGraph => "DEFAULT",
+        }
+    }
+}
+
 impl From<NamedNode> for GraphName {
     fn from(node: NamedNode) -> Self {
         GraphName::NamedNode(node)

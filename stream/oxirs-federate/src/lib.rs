@@ -31,6 +31,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
+use crate::planner::planning::PlannerConfig;
 
 pub mod auth;
 pub mod auto_discovery;
@@ -97,11 +98,21 @@ pub use query_decomposition::*;
 pub use request_batcher::*;
 pub use result_streaming::*;
 pub use semantic_enhancer::*;
-pub use service::*;
+// Export main service types (from service.rs)
+pub use service::{
+    ServiceRegistry, ServiceType, ServiceCapability, FederatedService, 
+    ServiceRegistryConfig, ServiceRegistryStats, ServicePerformance, 
+    AuthConfig, AuthCredentials
+};
 pub use service_client::*;
 pub use service_executor::*;
 pub use service_optimizer::*;
-pub use service_registry::*;
+// Export specific types from service_registry (to avoid conflicts)
+pub use service_registry::{
+    ServiceRegistry as ServiceRegistryImpl, ServiceType as ServiceTypeImpl,
+    RegistryConfig, SparqlEndpoint, GraphQLService, HealthStatus as ServiceHealthStatus,
+    ServiceCapabilities
+};
 pub use source_selection::*;
 pub use streaming::*;
 pub use streaming_optimizer::*;

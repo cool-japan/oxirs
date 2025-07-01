@@ -9,7 +9,7 @@
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
-use oxirs_core::model::{triple::Triple, NamedNode, Subject, Predicate, Object};
+use oxirs_core::model::{triple::Triple, NamedNode, Object, Predicate, Subject};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -339,7 +339,8 @@ impl KnowledgeExtractionEngine {
             Regex::new(r"\bDr\. [A-Z][a-z]+\b")?,        // Dr. Name
             Regex::new(r"\bProf\. [A-Z][a-z]+\b")?,      // Prof. Name
         ];
-        self.entity_patterns.insert(EntityType::Person, person_patterns);
+        self.entity_patterns
+            .insert(EntityType::Person, person_patterns);
 
         // Organization patterns
         let org_patterns = vec![
@@ -347,19 +348,23 @@ impl KnowledgeExtractionEngine {
             Regex::new(r"\bUniversity of [A-Z][a-z]+\b")?,
             Regex::new(r"\b[A-Z][A-Z]+ Corporation\b")?,
         ];
-        self.entity_patterns.insert(EntityType::Organization, org_patterns);
+        self.entity_patterns
+            .insert(EntityType::Organization, org_patterns);
 
         // Location patterns
         let location_patterns = vec![
             Regex::new(r"\b[A-Z][a-z]+, [A-Z][A-Z]\b")?, // City, State
             Regex::new(r"\b[A-Z][a-z]+ [A-Z][a-z]+\b")?, // City Country
         ];
-        self.entity_patterns.insert(EntityType::Location, location_patterns);
+        self.entity_patterns
+            .insert(EntityType::Location, location_patterns);
 
         // Temporal patterns
         self.temporal_patterns = vec![
-            Regex::new(r"\b\d{4}-\d{2}-\d{2}\b")?,           // YYYY-MM-DD
-            Regex::new(r"\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b")?,
+            Regex::new(r"\b\d{4}-\d{2}-\d{2}\b")?, // YYYY-MM-DD
+            Regex::new(
+                r"\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b",
+            )?,
             Regex::new(r"\b(before|after|during|since|until) \d{4}\b")?,
         ];
 
@@ -368,13 +373,15 @@ impl KnowledgeExtractionEngine {
             Regex::new(r"(.+) is an? (.+)")?,
             Regex::new(r"(.+) type of (.+)")?,
         ];
-        self.relationship_patterns.insert(RelationshipType::IsA, isa_patterns);
+        self.relationship_patterns
+            .insert(RelationshipType::IsA, isa_patterns);
 
         let partof_patterns = vec![
             Regex::new(r"(.+) part of (.+)")?,
             Regex::new(r"(.+) component of (.+)")?,
         ];
-        self.relationship_patterns.insert(RelationshipType::PartOf, partof_patterns);
+        self.relationship_patterns
+            .insert(RelationshipType::PartOf, partof_patterns);
 
         Ok(())
     }
@@ -402,14 +409,17 @@ impl KnowledgeExtractionEngine {
     /// Initialize language detectors
     fn initialize_language_detectors(&mut self) -> Result<()> {
         // English detector
-        self.language_detectors.insert("en".to_string(), LanguageDetector {
-            language_code: "en".to_string(),
-            detection_patterns: vec![
-                Regex::new(r"\b(the|and|or|but|if|when|where)\b")?,
-                Regex::new(r"\b(is|are|was|were|have|has|had)\b")?,
-            ],
-            confidence_threshold: 0.7,
-        });
+        self.language_detectors.insert(
+            "en".to_string(),
+            LanguageDetector {
+                language_code: "en".to_string(),
+                detection_patterns: vec![
+                    Regex::new(r"\b(the|and|or|but|if|when|where)\b")?,
+                    Regex::new(r"\b(is|are|was|were|have|has|had)\b")?,
+                ],
+                confidence_threshold: 0.7,
+            },
+        );
 
         // Add more language detectors as needed
         Ok(())
@@ -418,7 +428,10 @@ impl KnowledgeExtractionEngine {
     /// Extract knowledge from text
     pub async fn extract_knowledge(&mut self, text: &str) -> Result<ExtractedKnowledge> {
         let start_time = std::time::Instant::now();
-        info!("Starting knowledge extraction from text of length: {}", text.len());
+        info!(
+            "Starting knowledge extraction from text of length: {}",
+            text.len()
+        );
 
         let knowledge_id = Uuid::new_v4().to_string();
         let mut extracted_triples = Vec::new();
@@ -439,7 +452,9 @@ impl KnowledgeExtractionEngine {
 
         // Extract relationships
         if self.config.enable_relationship_extraction {
-            extracted_relationships = self.extract_relationships(text, &extracted_entities).await?;
+            extracted_relationships = self
+                .extract_relationships(text, &extracted_entities)
+                .await?;
             debug!("Extracted {} relationships", extracted_relationships.len());
         }
 
@@ -452,19 +467,24 @@ impl KnowledgeExtractionEngine {
 
         // Discover schema elements
         if self.config.enable_schema_discovery {
-            schema_elements = self.discover_schema_elements(text, &extracted_entities).await?;
+            schema_elements = self
+                .discover_schema_elements(text, &extracted_entities)
+                .await?;
             debug!("Discovered {} schema elements", schema_elements.len());
         }
 
         // Extract temporal facts
         if self.config.enable_temporal_extraction {
-            temporal_facts = self.extract_temporal_facts(text, &extracted_entities).await?;
+            temporal_facts = self
+                .extract_temporal_facts(text, &extracted_entities)
+                .await?;
             debug!("Extracted {} temporal facts", temporal_facts.len());
         }
 
         // Validate facts if enabled
         if self.config.enable_fact_validation {
-            self.validate_extracted_facts(&mut extracted_triples, &extracted_relationships).await?;
+            self.validate_extracted_facts(&mut extracted_triples, &extracted_relationships)
+                .await?;
         }
 
         // Calculate overall confidence
@@ -573,7 +593,11 @@ impl KnowledgeExtractionEngine {
     }
 
     /// Extract relationships from text
-    async fn extract_relationships(&self, text: &str, entities: &[ExtractedEntity]) -> Result<Vec<ExtractedRelationship>> {
+    async fn extract_relationships(
+        &self,
+        text: &str,
+        entities: &[ExtractedEntity],
+    ) -> Result<Vec<ExtractedRelationship>> {
         let mut relationships = Vec::new();
 
         for (relationship_type, patterns) in &self.relationship_patterns {
@@ -600,7 +624,7 @@ impl KnowledgeExtractionEngine {
                                 source_position: TextPosition {
                                     start_offset: captures.get(0).unwrap().start(),
                                     end_offset: captures.get(0).unwrap().end(),
-                                    line_number: 1, // Simplified
+                                    line_number: 1,   // Simplified
                                     column_number: 1, // Simplified
                                 },
                             };
@@ -616,7 +640,11 @@ impl KnowledgeExtractionEngine {
     }
 
     /// Discover schema elements from text
-    async fn discover_schema_elements(&self, text: &str, entities: &[ExtractedEntity]) -> Result<Vec<SchemaElement>> {
+    async fn discover_schema_elements(
+        &self,
+        text: &str,
+        entities: &[ExtractedEntity],
+    ) -> Result<Vec<SchemaElement>> {
         let mut schema_elements = Vec::new();
 
         for rule in &self.schema_inference_rules {
@@ -640,13 +668,17 @@ impl KnowledgeExtractionEngine {
     }
 
     /// Extract temporal facts from text
-    async fn extract_temporal_facts(&self, text: &str, entities: &[ExtractedEntity]) -> Result<Vec<TemporalFact>> {
+    async fn extract_temporal_facts(
+        &self,
+        text: &str,
+        entities: &[ExtractedEntity],
+    ) -> Result<Vec<TemporalFact>> {
         let mut temporal_facts = Vec::new();
 
         for pattern in &self.temporal_patterns {
             for capture in pattern.find_iter(text) {
                 let temporal_text = capture.as_str();
-                
+
                 let temporal_fact = TemporalFact {
                     fact_id: Uuid::new_v4().to_string(),
                     subject: "temporal_entity".to_string(), // Would be linked to actual entities
@@ -670,11 +702,14 @@ impl KnowledgeExtractionEngine {
     }
 
     /// Validate extracted facts for consistency
-    async fn validate_extracted_facts(&self, 
-                                     triples: &mut Vec<Triple>, 
-                                     relationships: &[ExtractedRelationship]) -> Result<()> {
+    async fn validate_extracted_facts(
+        &self,
+        triples: &mut Vec<Triple>,
+        relationships: &[ExtractedRelationship],
+    ) -> Result<()> {
         // Remove low-confidence relationships
-        let valid_relationships: Vec<_> = relationships.iter()
+        let valid_relationships: Vec<_> = relationships
+            .iter()
             .filter(|r| r.confidence >= self.config.confidence_threshold)
             .collect();
 
@@ -688,9 +723,18 @@ impl KnowledgeExtractionEngine {
     /// Convert relationship to RDF triple
     fn relationship_to_triple(&self, relationship: &ExtractedRelationship) -> Result<Triple> {
         // This is a simplified conversion - real implementation would be more sophisticated
-        let subject = NamedNode::new(&format!("http://example.org/entity/{}", relationship.subject_entity))?;
-        let predicate = NamedNode::new(&format!("http://example.org/predicate/{}", relationship.predicate))?;
-        let object = NamedNode::new(&format!("http://example.org/entity/{}", relationship.object_entity))?;
+        let subject = NamedNode::new(&format!(
+            "http://example.org/entity/{}",
+            relationship.subject_entity
+        ))?;
+        let predicate = NamedNode::new(&format!(
+            "http://example.org/predicate/{}",
+            relationship.predicate
+        ))?;
+        let object = NamedNode::new(&format!(
+            "http://example.org/entity/{}",
+            relationship.object_entity
+        ))?;
 
         Ok(Triple::new(
             Subject::NamedNode(subject),
@@ -709,13 +753,22 @@ impl KnowledgeExtractionEngine {
     }
 
     fn get_column_number(&self, text: &str, offset: usize) -> usize {
-        text[..offset].chars().rev()
+        text[..offset]
+            .chars()
+            .rev()
             .take_while(|&c| c != '\n')
-            .count() + 1
+            .count()
+            + 1
     }
 
-    fn find_matching_entity(&self, text: &str, entities: &[ExtractedEntity]) -> Option<&ExtractedEntity> {
-        entities.iter().find(|e| e.entity_text == text || e.canonical_form == self.canonicalize_entity(text))
+    fn find_matching_entity(
+        &self,
+        text: &str,
+        entities: &[ExtractedEntity],
+    ) -> Option<&ExtractedEntity> {
+        entities
+            .iter()
+            .find(|e| e.entity_text == text || e.canonical_form == self.canonicalize_entity(text))
     }
 
     fn relationship_type_to_predicate(&self, rel_type: &RelationshipType) -> String {
@@ -742,10 +795,12 @@ impl KnowledgeExtractionEngine {
         }
     }
 
-    fn calculate_extraction_confidence(&self, 
-                                     entities: &[ExtractedEntity], 
-                                     relationships: &[ExtractedRelationship],
-                                     schema_elements: &[SchemaElement]) -> f64 {
+    fn calculate_extraction_confidence(
+        &self,
+        entities: &[ExtractedEntity],
+        relationships: &[ExtractedRelationship],
+        schema_elements: &[SchemaElement],
+    ) -> f64 {
         let mut total_confidence = 0.0;
         let mut count = 0;
 
@@ -780,7 +835,7 @@ mod tests {
     async fn test_knowledge_extraction_engine_creation() {
         let config = KnowledgeExtractionConfig::default();
         let engine = KnowledgeExtractionEngine::new(config);
-        
+
         assert!(engine.is_ok());
     }
 
@@ -788,10 +843,10 @@ mod tests {
     async fn test_entity_extraction() {
         let config = KnowledgeExtractionConfig::default();
         let mut engine = KnowledgeExtractionEngine::new(config).unwrap();
-        
+
         let text = "Dr. John Smith works at Microsoft Corp.";
         let result = engine.extract_knowledge(text).await;
-        
+
         assert!(result.is_ok());
         let knowledge = result.unwrap();
         assert!(!knowledge.extracted_entities.is_empty());
@@ -801,7 +856,7 @@ mod tests {
     fn test_canonicalize_entity() {
         let config = KnowledgeExtractionConfig::default();
         let engine = KnowledgeExtractionEngine::new(config).unwrap();
-        
+
         assert_eq!(engine.canonicalize_entity("  John Smith  "), "john smith");
     }
 }

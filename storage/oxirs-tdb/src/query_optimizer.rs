@@ -62,7 +62,7 @@ impl QueryPattern {
 }
 
 /// Pattern types for index selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PatternType {
     FullyBound,
     SubjectPredicate,
@@ -75,7 +75,7 @@ pub enum PatternType {
 }
 
 /// Available index types for query execution
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IndexType {
     SPO, // Subject-Predicate-Object
     POS, // Predicate-Object-Subject

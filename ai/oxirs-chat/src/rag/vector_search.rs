@@ -152,7 +152,9 @@ impl RagIndex {
         triple: Option<Triple>,
         metadata: HashMap<String, String>,
     ) -> Result<()> {
-        self.enhanced_index.add_document(id, content, triple, metadata).await
+        self.enhanced_index
+            .add_document(id, content, triple, metadata)
+            .await
     }
 
     /// Search for documents

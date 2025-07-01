@@ -7,10 +7,10 @@ use crate::{
     ml::{GraphData, ModelError, ModelMetrics},
     neural_patterns::{NeuralPattern, NeuralPatternRecognizer},
     neural_transformer_pattern_integration::{
-        NeuralTransformerPatternIntegration, NeuralTransformerConfig,
+        NeuralTransformerConfig, NeuralTransformerPatternIntegration,
     },
-    quantum_enhanced_pattern_optimizer::{QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig},
     optimization::OptimizationEngine,
+    quantum_enhanced_pattern_optimizer::{QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig},
     Result, ShaclAiError,
 };
 
@@ -19,7 +19,9 @@ use oxirs_core::{
     model::{Term, Variable},
     query::{
         algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern},
-        pattern_optimizer::{IndexStats, IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy},
+        pattern_optimizer::{
+            IndexStats, IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy,
+        },
     },
     OxirsError, Store,
 };
@@ -33,34 +35,34 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 pub struct RealTimeAdaptiveQueryOptimizer {
     /// Classical pattern optimizer
     pattern_optimizer: Arc<PatternOptimizer>,
-    
+
     /// Quantum-enhanced optimizer
     quantum_optimizer: Option<Arc<Mutex<QuantumEnhancedPatternOptimizer>>>,
-    
+
     /// Neural transformer integration
     neural_transformer: Arc<Mutex<NeuralTransformerPatternIntegration>>,
-    
+
     /// Performance monitor
     performance_monitor: Arc<Mutex<PerformanceMonitor>>,
-    
+
     /// Adaptive plan cache
     plan_cache: Arc<RwLock<AdaptivePlanCache>>,
-    
+
     /// ML-based plan selector
     plan_selector: Arc<Mutex<MLPlanSelector>>,
-    
+
     /// Real-time feedback processor
     feedback_processor: Arc<Mutex<FeedbackProcessor>>,
-    
+
     /// Online learning engine
     online_learner: Arc<Mutex<OnlineLearningEngine>>,
-    
+
     /// Query complexity analyzer
     complexity_analyzer: Arc<Mutex<QueryComplexityAnalyzer>>,
-    
+
     /// Configuration
     config: AdaptiveOptimizerConfig,
-    
+
     /// Runtime statistics
     stats: AdaptiveOptimizerStats,
 }
@@ -70,46 +72,46 @@ pub struct RealTimeAdaptiveQueryOptimizer {
 pub struct AdaptiveOptimizerConfig {
     /// Enable quantum optimization
     pub enable_quantum_optimization: bool,
-    
+
     /// Enable neural transformer optimization
     pub enable_neural_transformer: bool,
-    
+
     /// Enable real-time adaptation
     pub enable_realtime_adaptation: bool,
-    
+
     /// Enable online learning
     pub enable_online_learning: bool,
-    
+
     /// Performance monitoring window (in queries)
     pub performance_window_size: usize,
-    
+
     /// Plan cache size
     pub plan_cache_size: usize,
-    
+
     /// Adaptation threshold (performance degradation %)
     pub adaptation_threshold: f64,
-    
+
     /// Learning rate for online adaptation
     pub learning_rate: f64,
-    
+
     /// Minimum queries before adaptation
     pub min_queries_for_adaptation: usize,
-    
+
     /// Enable plan precomputation
     pub enable_plan_precomputation: bool,
-    
+
     /// Maximum parallel optimizations
     pub max_parallel_optimizations: usize,
-    
+
     /// Enable adaptive complexity analysis
     pub enable_adaptive_complexity: bool,
-    
+
     /// Query timeout threshold (milliseconds)
     pub query_timeout_threshold: u64,
-    
+
     /// Enable performance prediction
     pub enable_performance_prediction: bool,
-    
+
     /// Prediction confidence threshold
     pub prediction_confidence_threshold: f64,
 }
@@ -141,13 +143,13 @@ impl Default for AdaptiveOptimizerConfig {
 pub struct PerformanceMonitor {
     /// Recent performance records
     performance_history: VecDeque<QueryPerformanceRecord>,
-    
+
     /// Performance metrics aggregation
     aggregated_metrics: PerformanceMetrics,
-    
+
     /// Pattern performance tracking
     pattern_performance: HashMap<String, PatternPerformanceStats>,
-    
+
     /// Configuration
     config: AdaptiveOptimizerConfig,
 }
@@ -225,30 +227,31 @@ impl PerformanceMonitor {
             config,
         }
     }
-    
+
     /// Record query performance
     pub fn record_performance(&mut self, record: QueryPerformanceRecord) {
         // Add to history
         self.performance_history.push_back(record.clone());
-        
+
         // Maintain window size
         while self.performance_history.len() > self.config.performance_window_size {
             self.performance_history.pop_front();
         }
-        
+
         // Update pattern-specific performance
         self.update_pattern_performance(&record);
-        
+
         // Update aggregated metrics
         self.update_aggregated_metrics();
     }
-    
+
     /// Update pattern-specific performance statistics
     fn update_pattern_performance(&mut self, record: &QueryPerformanceRecord) {
         for pattern in &record.patterns {
             let pattern_signature = self.compute_pattern_signature(pattern);
-            
-            let stats = self.pattern_performance
+
+            let stats = self
+                .pattern_performance
                 .entry(pattern_signature.clone())
                 .or_insert_with(|| PatternPerformanceStats {
                     pattern_signature: pattern_signature.clone(),
@@ -260,27 +263,28 @@ impl PerformanceMonitor {
                     selectivity_estimate: 0.1,
                     last_updated: SystemTime::now(),
                 });
-            
+
             // Update running averages
             let prev_count = stats.execution_count as f64;
             let new_count = prev_count + 1.0;
-            
-            stats.avg_execution_time_ms = 
+
+            stats.avg_execution_time_ms =
                 (stats.avg_execution_time_ms * prev_count + record.execution_time_ms) / new_count;
-            
-            stats.success_rate = 
-                (stats.success_rate * prev_count + if record.success { 1.0 } else { 0.0 }) / new_count;
-            
+
+            stats.success_rate = (stats.success_rate * prev_count
+                + if record.success { 1.0 } else { 0.0 })
+                / new_count;
+
             stats.execution_count += 1;
             stats.last_updated = SystemTime::now();
-            
+
             // Update best plan type if this performed better
             if record.success && record.execution_time_ms < stats.avg_execution_time_ms {
                 stats.best_plan_type = record.plan_type.clone();
             }
         }
     }
-    
+
     /// Compute pattern signature for tracking
     fn compute_pattern_signature(&self, pattern: &AlgebraTriplePattern) -> String {
         let s_type = match &pattern.subject {
@@ -289,100 +293,106 @@ impl PerformanceMonitor {
             AlgebraTermPattern::BlankNode(_) => "BLANK",
             AlgebraTermPattern::Literal(_) => "LIT",
         };
-        
+
         let p_type = match &pattern.predicate {
             AlgebraTermPattern::Variable(_) => "VAR",
             AlgebraTermPattern::NamedNode(_) => "NODE",
             AlgebraTermPattern::BlankNode(_) => "BLANK",
             AlgebraTermPattern::Literal(_) => "LIT",
         };
-        
+
         let o_type = match &pattern.object {
             AlgebraTermPattern::Variable(_) => "VAR",
             AlgebraTermPattern::NamedNode(_) => "NODE",
             AlgebraTermPattern::BlankNode(_) => "BLANK",
             AlgebraTermPattern::Literal(_) => "LIT",
         };
-        
+
         format!("{}:{}:{}", s_type, p_type, o_type)
     }
-    
+
     /// Update aggregated performance metrics
     fn update_aggregated_metrics(&mut self) {
         if self.performance_history.is_empty() {
             return;
         }
-        
+
         let records: Vec<&QueryPerformanceRecord> = self.performance_history.iter().collect();
-        
+
         // Calculate execution time statistics
-        let mut execution_times: Vec<f64> = records.iter()
-            .map(|r| r.execution_time_ms)
-            .collect();
+        let mut execution_times: Vec<f64> = records.iter().map(|r| r.execution_time_ms).collect();
         execution_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        
-        self.aggregated_metrics.avg_execution_time_ms = 
+
+        self.aggregated_metrics.avg_execution_time_ms =
             execution_times.iter().sum::<f64>() / execution_times.len() as f64;
-        
+
         if !execution_times.is_empty() {
             let p95_idx = (execution_times.len() as f64 * 0.95) as usize;
             let p99_idx = (execution_times.len() as f64 * 0.99) as usize;
-            
-            self.aggregated_metrics.p95_execution_time_ms = 
-                execution_times.get(p95_idx.min(execution_times.len() - 1)).unwrap_or(&0.0).clone();
-            
-            self.aggregated_metrics.p99_execution_time_ms = 
-                execution_times.get(p99_idx.min(execution_times.len() - 1)).unwrap_or(&0.0).clone();
+
+            self.aggregated_metrics.p95_execution_time_ms = execution_times
+                .get(p95_idx.min(execution_times.len() - 1))
+                .unwrap_or(&0.0)
+                .clone();
+
+            self.aggregated_metrics.p99_execution_time_ms = execution_times
+                .get(p99_idx.min(execution_times.len() - 1))
+                .unwrap_or(&0.0)
+                .clone();
         }
-        
+
         // Calculate success rate
         let successful_queries = records.iter().filter(|r| r.success).count();
         self.aggregated_metrics.success_rate = successful_queries as f64 / records.len() as f64;
-        
+
         // Calculate memory usage
-        self.aggregated_metrics.avg_memory_usage_mb = 
+        self.aggregated_metrics.avg_memory_usage_mb =
             records.iter().map(|r| r.memory_usage_mb).sum::<f64>() / records.len() as f64;
-        
+
         // Calculate cache hit rate
         let total_hits: usize = records.iter().map(|r| r.cache_hits).sum();
         let total_requests: usize = records.iter().map(|r| r.cache_hits + r.cache_misses).sum();
-        
+
         self.aggregated_metrics.cache_hit_rate = if total_requests > 0 {
             total_hits as f64 / total_requests as f64
         } else {
             0.0
         };
-        
+
         // Calculate plan type distribution
         let mut plan_counts: HashMap<OptimizationPlanType, usize> = HashMap::new();
         for record in &records {
             *plan_counts.entry(record.plan_type.clone()).or_insert(0) += 1;
         }
-        
+
         for (plan_type, count) in plan_counts {
             let proportion = count as f64 / records.len() as f64;
-            self.aggregated_metrics.plan_type_distribution.insert(plan_type, proportion);
+            self.aggregated_metrics
+                .plan_type_distribution
+                .insert(plan_type, proportion);
         }
-        
+
         // Determine trend direction
         self.aggregated_metrics.trend_direction = self.calculate_trend_direction(&execution_times);
-        
+
         // Calculate confidence score
         self.aggregated_metrics.confidence_score = self.calculate_confidence_score();
     }
-    
+
     /// Calculate performance trend direction
     fn calculate_trend_direction(&self, execution_times: &[f64]) -> TrendDirection {
         if execution_times.len() < 10 {
             return TrendDirection::Stable;
         }
-        
+
         let mid_point = execution_times.len() / 2;
-        let first_half_avg: f64 = execution_times[..mid_point].iter().sum::<f64>() / mid_point as f64;
-        let second_half_avg: f64 = execution_times[mid_point..].iter().sum::<f64>() / (execution_times.len() - mid_point) as f64;
-        
+        let first_half_avg: f64 =
+            execution_times[..mid_point].iter().sum::<f64>() / mid_point as f64;
+        let second_half_avg: f64 = execution_times[mid_point..].iter().sum::<f64>()
+            / (execution_times.len() - mid_point) as f64;
+
         let change_ratio = (second_half_avg - first_half_avg) / first_half_avg;
-        
+
         if change_ratio > 0.1 {
             TrendDirection::Degrading
         } else if change_ratio < -0.1 {
@@ -391,43 +401,44 @@ impl PerformanceMonitor {
             TrendDirection::Stable
         }
     }
-    
+
     /// Calculate confidence score for metrics
     fn calculate_confidence_score(&self) -> f64 {
         let sample_size = self.performance_history.len() as f64;
         let max_sample_size = self.config.performance_window_size as f64;
-        
+
         // Base confidence on sample size
         let size_confidence = (sample_size / max_sample_size).min(1.0);
-        
+
         // Adjust for success rate
         let success_confidence = self.aggregated_metrics.success_rate;
-        
+
         // Combine confidences
         (size_confidence + success_confidence) / 2.0
     }
-    
+
     /// Get current performance metrics
     pub fn get_metrics(&self) -> PerformanceMetrics {
         self.aggregated_metrics.clone()
     }
-    
+
     /// Check if adaptation is needed
     pub fn needs_adaptation(&self) -> bool {
         if self.performance_history.len() < self.config.min_queries_for_adaptation {
             return false;
         }
-        
+
         match self.aggregated_metrics.trend_direction {
-            TrendDirection::Degrading => {
-                self.aggregated_metrics.confidence_score > 0.7
-            }
+            TrendDirection::Degrading => self.aggregated_metrics.confidence_score > 0.7,
             _ => false,
         }
     }
-    
+
     /// Get pattern performance for specific signature
-    pub fn get_pattern_performance(&self, pattern_signature: &str) -> Option<&PatternPerformanceStats> {
+    pub fn get_pattern_performance(
+        &self,
+        pattern_signature: &str,
+    ) -> Option<&PatternPerformanceStats> {
         self.pattern_performance.get(pattern_signature)
     }
 }
@@ -454,13 +465,13 @@ impl Default for PerformanceMetrics {
 pub struct AdaptivePlanCache {
     /// Cached plans
     cache: HashMap<String, CachedPlan>,
-    
+
     /// Plan access patterns
     access_patterns: HashMap<String, AccessPattern>,
-    
+
     /// Configuration
     config: AdaptiveOptimizerConfig,
-    
+
     /// Cache statistics
     stats: CacheStatistics,
 }
@@ -507,21 +518,21 @@ impl AdaptivePlanCache {
             stats: CacheStatistics::default(),
         }
     }
-    
+
     /// Get cached plan if available
     pub fn get(&mut self, cache_key: &str) -> Option<CachedPlan> {
         self.stats.total_requests += 1;
-        
+
         if let Some(mut plan) = self.cache.get_mut(cache_key) {
             plan.last_access_time = SystemTime::now();
             plan.access_count += 1;
-            
+
             // Update access pattern
             self.update_access_pattern(cache_key);
-            
+
             self.stats.cache_hits += 1;
             self.stats.hit_rate = self.stats.cache_hits as f64 / self.stats.total_requests as f64;
-            
+
             Some(plan.clone())
         } else {
             self.stats.cache_misses += 1;
@@ -529,9 +540,14 @@ impl AdaptivePlanCache {
             None
         }
     }
-    
+
     /// Store plan in cache
-    pub fn put(&mut self, cache_key: String, plan: OptimizedPatternPlan, plan_type: OptimizationPlanType) {
+    pub fn put(
+        &mut self,
+        cache_key: String,
+        plan: OptimizedPatternPlan,
+        plan_type: OptimizationPlanType,
+    ) {
         let cached_plan = CachedPlan {
             plan,
             plan_type,
@@ -542,38 +558,41 @@ impl AdaptivePlanCache {
             success_rate: 1.0,
             cache_key: cache_key.clone(),
         };
-        
+
         // Check if cache is full
         if self.cache.len() >= self.config.plan_cache_size {
             self.evict_least_valuable();
         }
-        
+
         self.cache.insert(cache_key.clone(), cached_plan);
         self.init_access_pattern(&cache_key);
     }
-    
+
     /// Update access pattern for cache entry
     fn update_access_pattern(&mut self, cache_key: &str) {
-        let pattern = self.access_patterns.entry(cache_key.to_string())
+        let pattern = self
+            .access_patterns
+            .entry(cache_key.to_string())
             .or_insert_with(AccessPattern::default);
-        
+
         pattern.frequency += 1.0;
         pattern.recency = 1.0; // Reset recency on access
-        
+
         // Apply decay to frequency over time
         pattern.frequency *= 0.99;
     }
-    
+
     /// Initialize access pattern for new entry
     fn init_access_pattern(&mut self, cache_key: &str) {
-        self.access_patterns.insert(cache_key.to_string(), AccessPattern::default());
+        self.access_patterns
+            .insert(cache_key.to_string(), AccessPattern::default());
     }
-    
+
     /// Evict least valuable cache entry
     fn evict_least_valuable(&mut self) {
         let mut least_valuable_key: Option<String> = None;
         let mut least_value = f64::INFINITY;
-        
+
         for (key, pattern) in &self.access_patterns {
             let value = self.calculate_cache_value(pattern);
             if value < least_value {
@@ -581,40 +600,40 @@ impl AdaptivePlanCache {
                 least_valuable_key = Some(key.clone());
             }
         }
-        
+
         if let Some(key) = least_valuable_key {
             self.cache.remove(&key);
             self.access_patterns.remove(&key);
             self.stats.evictions += 1;
         }
     }
-    
+
     /// Calculate cache value for eviction policy
     fn calculate_cache_value(&self, pattern: &AccessPattern) -> f64 {
         // Combine frequency, recency, and performance
         let frequency_weight = 0.4;
         let recency_weight = 0.3;
         let performance_weight = 0.3;
-        
-        frequency_weight * pattern.frequency +
-        recency_weight * pattern.recency +
-        performance_weight * pattern.performance_score
+
+        frequency_weight * pattern.frequency
+            + recency_weight * pattern.recency
+            + performance_weight * pattern.performance_score
     }
-    
+
     /// Update performance for cached plan
     pub fn update_performance(&mut self, cache_key: &str, execution_time_ms: f64, success: bool) {
         if let Some(cached_plan) = self.cache.get_mut(cache_key) {
             let prev_avg = cached_plan.average_performance_ms;
             let count = cached_plan.access_count as f64;
-            
-            cached_plan.average_performance_ms = 
+
+            cached_plan.average_performance_ms =
                 (prev_avg * (count - 1.0) + execution_time_ms) / count;
-            
+
             let prev_success_rate = cached_plan.success_rate;
-            cached_plan.success_rate = 
+            cached_plan.success_rate =
                 (prev_success_rate * (count - 1.0) + if success { 1.0 } else { 0.0 }) / count;
         }
-        
+
         // Update access pattern performance score
         if let Some(pattern) = self.access_patterns.get_mut(cache_key) {
             pattern.performance_score = if execution_time_ms > 0.0 {
@@ -624,7 +643,7 @@ impl AdaptivePlanCache {
             };
         }
     }
-    
+
     /// Get cache statistics
     pub fn get_stats(&self) -> CacheStatistics {
         self.stats.clone()
@@ -660,13 +679,13 @@ impl Default for CacheStatistics {
 pub struct MLPlanSelector {
     /// Feature extractor for queries
     feature_extractor: QueryFeatureExtractor,
-    
+
     /// Plan performance history
     plan_performance_history: Vec<PlanPerformanceRecord>,
-    
+
     /// Decision tree for plan selection
     decision_tree: PlanSelectionTree,
-    
+
     /// Configuration
     config: AdaptiveOptimizerConfig,
 }
@@ -682,18 +701,18 @@ impl QueryFeatureExtractor {
     pub fn new() -> Self {
         Self { feature_dim: 20 }
     }
-    
+
     /// Extract features from query patterns
     pub fn extract_features(&self, patterns: &[AlgebraTriplePattern]) -> Array1<f64> {
         let mut features = Array1::zeros(self.feature_dim);
-        
+
         if patterns.is_empty() {
             return features;
         }
-        
+
         // Feature 0: Number of patterns
         features[0] = patterns.len() as f64;
-        
+
         // Features 1-3: Variable counts in each position
         let mut var_counts = [0, 0, 0];
         for pattern in patterns {
@@ -707,63 +726,67 @@ impl QueryFeatureExtractor {
                 var_counts[2] += 1;
             }
         }
-        
+
         features[1] = var_counts[0] as f64;
         features[2] = var_counts[1] as f64;
         features[3] = var_counts[2] as f64;
-        
+
         // Feature 4: Estimated complexity
         features[4] = self.estimate_query_complexity(patterns);
-        
+
         // Feature 5: Join potential
         features[5] = self.estimate_join_potential(patterns);
-        
+
         // Additional features would be computed here...
-        
+
         features
     }
-    
+
     /// Estimate query complexity
     fn estimate_query_complexity(&self, patterns: &[AlgebraTriplePattern]) -> f64 {
         patterns.len() as f64 * patterns.len() as f64
     }
-    
+
     /// Estimate join potential between patterns
     fn estimate_join_potential(&self, patterns: &[AlgebraTriplePattern]) -> f64 {
         if patterns.len() < 2 {
             return 0.0;
         }
-        
+
         let mut shared_vars = 0;
         for i in 0..patterns.len() {
             for j in (i + 1)..patterns.len() {
                 shared_vars += self.count_shared_variables(&patterns[i], &patterns[j]);
             }
         }
-        
+
         shared_vars as f64
     }
-    
+
     /// Count shared variables between two patterns
-    fn count_shared_variables(&self, p1: &AlgebraTriplePattern, p2: &AlgebraTriplePattern) -> usize {
+    fn count_shared_variables(
+        &self,
+        p1: &AlgebraTriplePattern,
+        p2: &AlgebraTriplePattern,
+    ) -> usize {
         let mut count = 0;
-        
+
         let vars1 = self.extract_pattern_variables(p1);
         let vars2 = self.extract_pattern_variables(p2);
-        
+
         for var1 in &vars1 {
             if vars2.contains(var1) {
                 count += 1;
             }
         }
-        
+
         count
     }
-    
+
     /// Extract variables from a pattern
     fn extract_pattern_variables(&self, pattern: &AlgebraTriplePattern) -> Vec<Variable> {
         let mut vars = Vec::new();
-        
+
         if let AlgebraTermPattern::Variable(v) = &pattern.subject {
             vars.push(v.clone());
         }
@@ -773,7 +796,7 @@ impl QueryFeatureExtractor {
         if let AlgebraTermPattern::Variable(v) = &pattern.object {
             vars.push(v.clone());
         }
-        
+
         vars
     }
 }
@@ -793,7 +816,7 @@ pub struct PlanPerformanceRecord {
 pub struct PlanSelectionTree {
     /// Decision nodes
     nodes: Vec<DecisionNode>,
-    
+
     /// Root node index
     root: usize,
 }
@@ -803,19 +826,19 @@ pub struct PlanSelectionTree {
 pub struct DecisionNode {
     /// Feature index for split
     pub feature_idx: usize,
-    
+
     /// Split threshold
     pub threshold: f64,
-    
+
     /// Left child (if feature <= threshold)
     pub left: Option<usize>,
-    
+
     /// Right child (if feature > threshold)
     pub right: Option<usize>,
-    
+
     /// Leaf prediction (if no children)
     pub prediction: Option<OptimizationPlanType>,
-    
+
     /// Confidence score
     pub confidence: f64,
 }
@@ -829,22 +852,23 @@ impl MLPlanSelector {
             config,
         }
     }
-    
+
     /// Select optimal plan type for query
     pub fn select_plan_type(&self, patterns: &[AlgebraTriplePattern]) -> OptimizationPlanType {
         let features = self.feature_extractor.extract_features(patterns);
         self.decision_tree.predict(&features)
     }
-    
+
     /// Update selector with performance feedback
-    pub fn update_with_performance(&mut self, 
-        patterns: &[AlgebraTriplePattern], 
-        plan_type: OptimizationPlanType, 
-        execution_time_ms: f64, 
-        success: bool) {
-        
+    pub fn update_with_performance(
+        &mut self,
+        patterns: &[AlgebraTriplePattern],
+        plan_type: OptimizationPlanType,
+        execution_time_ms: f64,
+        success: bool,
+    ) {
         let features = self.feature_extractor.extract_features(patterns);
-        
+
         let record = PlanPerformanceRecord {
             query_features: features,
             plan_type,
@@ -852,15 +876,15 @@ impl MLPlanSelector {
             success,
             timestamp: SystemTime::now(),
         };
-        
+
         self.plan_performance_history.push(record);
-        
+
         // Retrain decision tree periodically
         if self.plan_performance_history.len() % 100 == 0 {
             self.retrain_decision_tree();
         }
     }
-    
+
     /// Retrain decision tree with accumulated data
     fn retrain_decision_tree(&mut self) {
         // Simplified training - in practice would use more sophisticated algorithms
@@ -879,38 +903,44 @@ impl PlanSelectionTree {
             prediction: Some(OptimizationPlanType::Classical),
             confidence: 0.5,
         };
-        
+
         Self {
             nodes: vec![default_node],
             root: 0,
         }
     }
-    
+
     /// Train decision tree from performance data
     pub fn train(data: &[PlanPerformanceRecord]) -> Self {
         // Simplified training implementation
         // In practice, would use proper decision tree learning algorithms
-        
+
         if data.is_empty() {
             return Self::new();
         }
-        
+
         // Create a simple decision based on query size
         let mut classical_performance = Vec::new();
         let mut quantum_performance = Vec::new();
         let mut neural_performance = Vec::new();
-        
+
         for record in data {
             let query_size = record.query_features[0];
-            
+
             match record.plan_type {
-                OptimizationPlanType::Classical => classical_performance.push((query_size, record.execution_time_ms)),
-                OptimizationPlanType::Quantum => quantum_performance.push((query_size, record.execution_time_ms)),
-                OptimizationPlanType::NeuralTransformer => neural_performance.push((query_size, record.execution_time_ms)),
+                OptimizationPlanType::Classical => {
+                    classical_performance.push((query_size, record.execution_time_ms))
+                }
+                OptimizationPlanType::Quantum => {
+                    quantum_performance.push((query_size, record.execution_time_ms))
+                }
+                OptimizationPlanType::NeuralTransformer => {
+                    neural_performance.push((query_size, record.execution_time_ms))
+                }
                 _ => {}
             }
         }
-        
+
         // Simple decision: use quantum for complex queries, neural for medium, classical for simple
         let root_node = DecisionNode {
             feature_idx: 0, // Query size
@@ -920,7 +950,7 @@ impl PlanSelectionTree {
             prediction: None,
             confidence: 0.8,
         };
-        
+
         let simple_node = DecisionNode {
             feature_idx: 0,
             threshold: 0.0,
@@ -929,7 +959,7 @@ impl PlanSelectionTree {
             prediction: Some(OptimizationPlanType::Classical),
             confidence: 0.9,
         };
-        
+
         let complex_node = DecisionNode {
             feature_idx: 0,
             threshold: 0.0,
@@ -938,26 +968,26 @@ impl PlanSelectionTree {
             prediction: Some(OptimizationPlanType::Quantum),
             confidence: 0.8,
         };
-        
+
         Self {
             nodes: vec![root_node, simple_node, complex_node],
             root: 0,
         }
     }
-    
+
     /// Predict plan type for query features
     pub fn predict(&self, features: &Array1<f64>) -> OptimizationPlanType {
         self.predict_recursive(features, self.root)
     }
-    
+
     /// Recursive prediction through tree
     fn predict_recursive(&self, features: &Array1<f64>, node_idx: usize) -> OptimizationPlanType {
         let node = &self.nodes[node_idx];
-        
+
         if let Some(ref prediction) = node.prediction {
             return prediction.clone();
         }
-        
+
         if features[node.feature_idx] <= node.threshold {
             if let Some(left_idx) = node.left {
                 self.predict_recursive(features, left_idx)
@@ -979,10 +1009,10 @@ impl PlanSelectionTree {
 pub struct FeedbackProcessor {
     /// Feedback queue
     feedback_queue: VecDeque<PerformanceFeedback>,
-    
+
     /// Processing statistics
     stats: FeedbackProcessingStats,
-    
+
     /// Configuration
     config: AdaptiveOptimizerConfig,
 }
@@ -1055,61 +1085,62 @@ impl FeedbackProcessor {
             config,
         }
     }
-    
+
     /// Process performance feedback
     pub fn process_feedback(&mut self, feedback: PerformanceFeedback) -> ProcessingResult {
         self.feedback_queue.push_back(feedback.clone());
-        
+
         // Maintain queue size
         while self.feedback_queue.len() > 1000 {
             self.feedback_queue.pop_front();
         }
-        
+
         self.stats.total_feedback_processed += 1;
-        
+
         // Analyze feedback for adaptation opportunities
         let analysis = self.analyze_feedback(&feedback);
-        
+
         ProcessingResult {
             should_adapt: analysis.needs_adaptation,
             recommended_changes: analysis.recommendations,
             confidence: analysis.confidence,
         }
     }
-    
+
     /// Analyze feedback for adaptation needs
     fn analyze_feedback(&self, feedback: &PerformanceFeedback) -> FeedbackAnalysis {
         let mut needs_adaptation = false;
         let mut recommendations = Vec::new();
         let mut confidence = 0.5;
-        
+
         // Check if performance is degrading
-        if feedback.execution_metrics.execution_time_ms > 5000.0 { // 5 second threshold
+        if feedback.execution_metrics.execution_time_ms > 5000.0 {
+            // 5 second threshold
             needs_adaptation = true;
             recommendations.push(AdaptationRecommendation::SwitchOptimizer);
             confidence = 0.8;
         }
-        
+
         // Check memory usage
         if feedback.execution_metrics.memory_usage_mb > 1000.0 {
             recommendations.push(AdaptationRecommendation::OptimizeMemory);
             confidence = confidence.max(0.7);
         }
-        
+
         // Check error rate
         if !feedback.execution_metrics.success {
             needs_adaptation = true;
             recommendations.push(AdaptationRecommendation::FallbackStrategy);
             confidence = 0.9;
         }
-        
+
         FeedbackAnalysis {
             needs_adaptation,
             recommendations,
             confidence,
         }
     }
-    
+
     /// Get processing statistics
     pub fn get_stats(&self) -> FeedbackProcessingStats {
         self.stats.clone()
@@ -1159,10 +1190,10 @@ pub enum AdaptationRecommendation {
 pub struct OnlineLearningEngine {
     /// Learning models
     models: HashMap<String, OnlineLearningModel>,
-    
+
     /// Configuration
     config: AdaptiveOptimizerConfig,
-    
+
     /// Learning statistics
     stats: OnlineLearningStats,
 }
@@ -1172,13 +1203,13 @@ pub struct OnlineLearningEngine {
 pub struct OnlineLearningModel {
     /// Model weights
     weights: Array1<f64>,
-    
+
     /// Learning rate
     learning_rate: f64,
-    
+
     /// Model type
     model_type: ModelType,
-    
+
     /// Performance history
     performance_history: VecDeque<f64>,
 }
@@ -1209,22 +1240,25 @@ impl OnlineLearningEngine {
             stats: OnlineLearningStats::default(),
         }
     }
-    
+
     /// Update models with new data
-    pub fn update_models(&mut self, 
-        features: &Array1<f64>, 
-        target: f64, 
-        model_name: &str) -> Result<()> {
-        
-        let model = self.models.entry(model_name.to_string())
+    pub fn update_models(
+        &mut self,
+        features: &Array1<f64>,
+        target: f64,
+        model_name: &str,
+    ) -> Result<()> {
+        let model = self
+            .models
+            .entry(model_name.to_string())
             .or_insert_with(|| OnlineLearningModel::new(features.len(), self.config.learning_rate));
-        
+
         model.update(features, target)?;
         self.stats.total_updates += 1;
-        
+
         Ok(())
     }
-    
+
     /// Predict using model
     pub fn predict(&self, features: &Array1<f64>, model_name: &str) -> Result<f64> {
         if let Some(model) = self.models.get(model_name) {
@@ -1233,7 +1267,7 @@ impl OnlineLearningEngine {
             Err(ShaclAiError::ModelTraining(format!("Model {} not found", model_name)).into())
         }
     }
-    
+
     /// Get learning statistics
     pub fn get_stats(&self) -> OnlineLearningStats {
         self.stats.clone()
@@ -1249,33 +1283,33 @@ impl OnlineLearningModel {
             performance_history: VecDeque::new(),
         }
     }
-    
+
     /// Update model with new data point
     pub fn update(&mut self, features: &Array1<f64>, target: f64) -> Result<()> {
         let prediction = self.predict(features)?;
         let error = target - prediction;
-        
+
         // Gradient descent update
         let gradient = features * error * self.learning_rate;
         self.weights = &self.weights + &gradient;
-        
+
         // Track performance
         self.performance_history.push_back(error.abs());
         if self.performance_history.len() > 100 {
             self.performance_history.pop_front();
         }
-        
+
         Ok(())
     }
-    
+
     /// Make prediction
     pub fn predict(&self, features: &Array1<f64>) -> Result<f64> {
         if features.len() != self.weights.len() {
-            return Err(ShaclAiError::ModelTraining(
-                "Feature dimension mismatch".to_string()
-            ).into());
+            return Err(
+                ShaclAiError::ModelTraining("Feature dimension mismatch".to_string()).into(),
+            );
         }
-        
+
         Ok(features.dot(&self.weights))
     }
 }
@@ -1296,10 +1330,10 @@ impl Default for OnlineLearningStats {
 pub struct QueryComplexityAnalyzer {
     /// Complexity models
     complexity_models: HashMap<String, ComplexityModel>,
-    
+
     /// Historical complexity data
     complexity_history: VecDeque<ComplexityDataPoint>,
-    
+
     /// Configuration
     config: AdaptiveOptimizerConfig,
 }
@@ -1309,10 +1343,10 @@ pub struct QueryComplexityAnalyzer {
 pub struct ComplexityModel {
     /// Model parameters
     parameters: Array1<f64>,
-    
+
     /// Model type
     model_type: ComplexityModelType,
-    
+
     /// Accuracy metrics
     accuracy: f64,
 }
@@ -1343,12 +1377,12 @@ impl QueryComplexityAnalyzer {
             config,
         }
     }
-    
+
     /// Analyze query complexity
     pub fn analyze_complexity(&mut self, patterns: &[AlgebraTriplePattern]) -> ComplexityAnalysis {
         let features = self.extract_complexity_features(patterns);
         let estimated_complexity = self.estimate_complexity(&features);
-        
+
         ComplexityAnalysis {
             estimated_complexity,
             confidence: 0.8,
@@ -1356,25 +1390,25 @@ impl QueryComplexityAnalyzer {
             optimization_recommendations: self.generate_optimization_recommendations(&features),
         }
     }
-    
+
     /// Extract features relevant to complexity
     fn extract_complexity_features(&self, patterns: &[AlgebraTriplePattern]) -> Array1<f64> {
         let mut features = Array1::zeros(10);
-        
+
         features[0] = patterns.len() as f64; // Number of patterns
         features[1] = self.count_joins(patterns) as f64; // Join count
         features[2] = self.count_variables(patterns) as f64; // Variable count
         features[3] = self.estimate_cartesian_product_size(patterns); // Cartesian product estimate
-        
+
         // Additional complexity features...
-        
+
         features
     }
-    
+
     /// Count potential joins between patterns
     fn count_joins(&self, patterns: &[AlgebraTriplePattern]) -> usize {
         let mut joins = 0;
-        
+
         for i in 0..patterns.len() {
             for j in (i + 1)..patterns.len() {
                 if self.patterns_share_variables(&patterns[i], &patterns[j]) {
@@ -1382,14 +1416,14 @@ impl QueryComplexityAnalyzer {
                 }
             }
         }
-        
+
         joins
     }
-    
+
     /// Count total variables across patterns
     fn count_variables(&self, patterns: &[AlgebraTriplePattern]) -> usize {
         let mut variables = HashSet::new();
-        
+
         for pattern in patterns {
             if let AlgebraTermPattern::Variable(v) = &pattern.subject {
                 variables.insert(v.clone());
@@ -1401,28 +1435,32 @@ impl QueryComplexityAnalyzer {
                 variables.insert(v.clone());
             }
         }
-        
+
         variables.len()
     }
-    
+
     /// Check if patterns share variables
-    fn patterns_share_variables(&self, p1: &AlgebraTriplePattern, p2: &AlgebraTriplePattern) -> bool {
+    fn patterns_share_variables(
+        &self,
+        p1: &AlgebraTriplePattern,
+        p2: &AlgebraTriplePattern,
+    ) -> bool {
         let vars1 = self.extract_pattern_variables(p1);
         let vars2 = self.extract_pattern_variables(p2);
-        
+
         for v1 in &vars1 {
             if vars2.contains(v1) {
                 return true;
             }
         }
-        
+
         false
     }
-    
+
     /// Extract variables from pattern
     fn extract_pattern_variables(&self, pattern: &AlgebraTriplePattern) -> Vec<Variable> {
         let mut vars = Vec::new();
-        
+
         if let AlgebraTermPattern::Variable(v) = &pattern.subject {
             vars.push(v.clone());
         }
@@ -1432,60 +1470,63 @@ impl QueryComplexityAnalyzer {
         if let AlgebraTermPattern::Variable(v) = &pattern.object {
             vars.push(v.clone());
         }
-        
+
         vars
     }
-    
+
     /// Estimate cartesian product size
     fn estimate_cartesian_product_size(&self, patterns: &[AlgebraTriplePattern]) -> f64 {
         // Simplified estimation
         patterns.len() as f64 * patterns.len() as f64
     }
-    
+
     /// Estimate overall complexity
     fn estimate_complexity(&self, features: &Array1<f64>) -> f64 {
         // Simple complexity model: O(n^2 * j) where n=patterns, j=joins
         let n = features[0];
         let j = features[1].max(1.0);
-        
+
         n * n * j
     }
-    
+
     /// Identify factors contributing most to complexity
     fn identify_dominant_factors(&self, features: &Array1<f64>) -> Vec<ComplexityFactor> {
         let mut factors = Vec::new();
-        
+
         if features[0] > 10.0 {
             factors.push(ComplexityFactor::PatternCount);
         }
-        
+
         if features[1] > 5.0 {
             factors.push(ComplexityFactor::JoinComplexity);
         }
-        
+
         if features[2] > 20.0 {
             factors.push(ComplexityFactor::VariableCount);
         }
-        
+
         factors
     }
-    
+
     /// Generate optimization recommendations
-    fn generate_optimization_recommendations(&self, features: &Array1<f64>) -> Vec<OptimizationRecommendation> {
+    fn generate_optimization_recommendations(
+        &self,
+        features: &Array1<f64>,
+    ) -> Vec<OptimizationRecommendation> {
         let mut recommendations = Vec::new();
-        
+
         if features[0] > 10.0 {
             recommendations.push(OptimizationRecommendation::PatternReordering);
         }
-        
+
         if features[1] > 5.0 {
             recommendations.push(OptimizationRecommendation::JoinOptimization);
         }
-        
+
         if features[3] > 1000.0 {
             recommendations.push(OptimizationRecommendation::IndexOptimization);
         }
-        
+
         recommendations
     }
 }
@@ -1555,18 +1596,22 @@ impl Default for AdaptiveOptimizerStats {
 
 impl RealTimeAdaptiveQueryOptimizer {
     /// Create new real-time adaptive query optimizer
-    pub fn new(pattern_optimizer: Arc<PatternOptimizer>, config: AdaptiveOptimizerConfig) -> Result<Self> {
+    pub fn new(
+        pattern_optimizer: Arc<PatternOptimizer>,
+        config: AdaptiveOptimizerConfig,
+    ) -> Result<Self> {
         let performance_monitor = Arc::new(Mutex::new(PerformanceMonitor::new(config.clone())));
         let plan_cache = Arc::new(RwLock::new(AdaptivePlanCache::new(config.clone())));
         let plan_selector = Arc::new(Mutex::new(MLPlanSelector::new(config.clone())));
         let feedback_processor = Arc::new(Mutex::new(FeedbackProcessor::new(config.clone())));
         let online_learner = Arc::new(Mutex::new(OnlineLearningEngine::new(config.clone())));
-        let complexity_analyzer = Arc::new(Mutex::new(QueryComplexityAnalyzer::new(config.clone())));
-        
-        let neural_transformer = Arc::new(Mutex::new(
-            NeuralTransformerPatternIntegration::new(NeuralTransformerConfig::default())?
-        ));
-        
+        let complexity_analyzer =
+            Arc::new(Mutex::new(QueryComplexityAnalyzer::new(config.clone())));
+
+        let neural_transformer = Arc::new(Mutex::new(NeuralTransformerPatternIntegration::new(
+            NeuralTransformerConfig::default(),
+        )?));
+
         Ok(Self {
             pattern_optimizer,
             quantum_optimizer: None, // Will be initialized if quantum optimization is enabled
@@ -1581,13 +1626,16 @@ impl RealTimeAdaptiveQueryOptimizer {
             stats: AdaptiveOptimizerStats::default(),
         })
     }
-    
+
     /// Optimize query patterns with real-time adaptation
-    pub fn optimize_with_adaptation(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<OptimizedPatternPlan> {
+    pub fn optimize_with_adaptation(
+        &mut self,
+        patterns: &[AlgebraTriplePattern],
+    ) -> Result<OptimizedPatternPlan> {
         let start_time = Instant::now();
         let query_id = self.generate_query_id(patterns);
         let cache_key = self.generate_cache_key(patterns);
-        
+
         // Check cache first
         if let Ok(mut cache) = self.plan_cache.write() {
             if let Some(cached_plan) = cache.get(&cache_key) {
@@ -1595,96 +1643,126 @@ impl RealTimeAdaptiveQueryOptimizer {
                 return Ok(cached_plan.plan);
             }
         }
-        
+
         // Analyze query complexity
         let complexity_analysis = if self.config.enable_adaptive_complexity {
             Some(self.analyze_query_complexity(patterns)?)
         } else {
             None
         };
-        
+
         // Select optimization strategy
-        let plan_type = self.select_optimization_strategy(patterns, complexity_analysis.as_ref())?;
-        
+        let plan_type =
+            self.select_optimization_strategy(patterns, complexity_analysis.as_ref())?;
+
         // Optimize using selected strategy
         let optimized_plan = self.optimize_with_strategy(patterns, plan_type.clone())?;
-        
+
         // Cache the plan
         if let Ok(mut cache) = self.plan_cache.write() {
             cache.put(cache_key.clone(), optimized_plan.clone(), plan_type.clone());
         }
-        
+
         // Update statistics
         self.stats.total_queries_optimized += 1;
-        self.stats.average_optimization_time_ms = 
-            (self.stats.average_optimization_time_ms * (self.stats.total_queries_optimized - 1) as f64 
-             + start_time.elapsed().as_millis() as f64) / self.stats.total_queries_optimized as f64;
-        
+        self.stats.average_optimization_time_ms = (self.stats.average_optimization_time_ms
+            * (self.stats.total_queries_optimized - 1) as f64
+            + start_time.elapsed().as_millis() as f64)
+            / self.stats.total_queries_optimized as f64;
+
         match plan_type {
             OptimizationPlanType::Quantum => self.stats.quantum_optimizations += 1,
             OptimizationPlanType::NeuralTransformer => self.stats.neural_optimizations += 1,
             OptimizationPlanType::Hybrid => self.stats.hybrid_optimizations += 1,
             _ => {}
         }
-        
+
         Ok(optimized_plan)
     }
-    
+
     /// Analyze query complexity
-    fn analyze_query_complexity(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<ComplexityAnalysis> {
+    fn analyze_query_complexity(
+        &mut self,
+        patterns: &[AlgebraTriplePattern],
+    ) -> Result<ComplexityAnalysis> {
         if let Ok(mut analyzer) = self.complexity_analyzer.lock() {
             Ok(analyzer.analyze_complexity(patterns))
         } else {
-            Err(ShaclAiError::DataProcessing("Failed to lock complexity analyzer".to_string()).into())
+            Err(
+                ShaclAiError::DataProcessing("Failed to lock complexity analyzer".to_string())
+                    .into(),
+            )
         }
     }
-    
+
     /// Select optimization strategy based on analysis
-    fn select_optimization_strategy(&mut self, 
-        patterns: &[AlgebraTriplePattern], 
-        complexity_analysis: Option<&ComplexityAnalysis>) -> Result<OptimizationPlanType> {
-        
+    fn select_optimization_strategy(
+        &mut self,
+        patterns: &[AlgebraTriplePattern],
+        complexity_analysis: Option<&ComplexityAnalysis>,
+    ) -> Result<OptimizationPlanType> {
         if let Ok(selector) = self.plan_selector.lock() {
             let mut selected_type = selector.select_plan_type(patterns);
-            
+
             // Override based on complexity analysis
             if let Some(analysis) = complexity_analysis {
-                if analysis.estimated_complexity > 1000.0 && self.config.enable_quantum_optimization {
+                if analysis.estimated_complexity > 1000.0 && self.config.enable_quantum_optimization
+                {
                     selected_type = OptimizationPlanType::Quantum;
-                } else if analysis.estimated_complexity > 100.0 && self.config.enable_neural_transformer {
+                } else if analysis.estimated_complexity > 100.0
+                    && self.config.enable_neural_transformer
+                {
                     selected_type = OptimizationPlanType::NeuralTransformer;
                 }
             }
-            
+
             Ok(selected_type)
         } else {
             Err(ShaclAiError::DataProcessing("Failed to lock plan selector".to_string()).into())
         }
     }
-    
+
     /// Optimize using specific strategy
-    fn optimize_with_strategy(&mut self, 
-        patterns: &[AlgebraTriplePattern], 
-        plan_type: OptimizationPlanType) -> Result<OptimizedPatternPlan> {
-        
+    fn optimize_with_strategy(
+        &mut self,
+        patterns: &[AlgebraTriplePattern],
+        plan_type: OptimizationPlanType,
+    ) -> Result<OptimizedPatternPlan> {
         match plan_type {
-            OptimizationPlanType::Classical => {
-                self.pattern_optimizer.optimize_patterns(patterns)
-                    .map_err(|e| ShaclAiError::Optimization(format!("Classical optimization failed: {}", e)).into())
-            }
+            OptimizationPlanType::Classical => self
+                .pattern_optimizer
+                .optimize_patterns(patterns)
+                .map_err(|e| {
+                    ShaclAiError::Optimization(format!("Classical optimization failed: {}", e))
+                        .into()
+                }),
             OptimizationPlanType::Quantum => {
                 if let Some(ref quantum_opt) = self.quantum_optimizer {
                     if let Ok(mut opt) = quantum_opt.lock() {
                         opt.optimize_quantum(patterns)
                     } else {
                         // Fallback to classical
-                        self.pattern_optimizer.optimize_patterns(patterns)
-                            .map_err(|e| ShaclAiError::Optimization(format!("Quantum fallback failed: {}", e)).into())
+                        self.pattern_optimizer
+                            .optimize_patterns(patterns)
+                            .map_err(|e| {
+                                ShaclAiError::Optimization(format!(
+                                    "Quantum fallback failed: {}",
+                                    e
+                                ))
+                                .into()
+                            })
                     }
                 } else {
                     // Fallback to classical
-                    self.pattern_optimizer.optimize_patterns(patterns)
-                        .map_err(|e| ShaclAiError::Optimization(format!("Quantum not available, fallback failed: {}", e)).into())
+                    self.pattern_optimizer
+                        .optimize_patterns(patterns)
+                        .map_err(|e| {
+                            ShaclAiError::Optimization(format!(
+                                "Quantum not available, fallback failed: {}",
+                                e
+                            ))
+                            .into()
+                        })
                 }
             }
             OptimizationPlanType::NeuralTransformer => {
@@ -1692,8 +1770,12 @@ impl RealTimeAdaptiveQueryOptimizer {
                     neural.optimize_patterns_with_attention(patterns)
                 } else {
                     // Fallback to classical
-                    self.pattern_optimizer.optimize_patterns(patterns)
-                        .map_err(|e| ShaclAiError::Optimization(format!("Neural fallback failed: {}", e)).into())
+                    self.pattern_optimizer
+                        .optimize_patterns(patterns)
+                        .map_err(|e| {
+                            ShaclAiError::Optimization(format!("Neural fallback failed: {}", e))
+                                .into()
+                        })
                 }
             }
             OptimizationPlanType::Hybrid => {
@@ -1706,16 +1788,19 @@ impl RealTimeAdaptiveQueryOptimizer {
             }
         }
     }
-    
+
     /// Optimize using ensemble of optimizers
-    fn optimize_with_ensemble(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<OptimizedPatternPlan> {
+    fn optimize_with_ensemble(
+        &mut self,
+        patterns: &[AlgebraTriplePattern],
+    ) -> Result<OptimizedPatternPlan> {
         let mut plans = Vec::new();
-        
+
         // Get classical plan
         if let Ok(classical_plan) = self.pattern_optimizer.optimize_patterns(patterns) {
             plans.push((classical_plan, OptimizationPlanType::Classical));
         }
-        
+
         // Get quantum plan if available
         if let Some(ref quantum_opt) = self.quantum_optimizer {
             if let Ok(mut opt) = quantum_opt.lock() {
@@ -1724,38 +1809,42 @@ impl RealTimeAdaptiveQueryOptimizer {
                 }
             }
         }
-        
+
         // Get neural plan if available
         if let Ok(mut neural) = self.neural_transformer.lock() {
             if let Ok(neural_plan) = neural.optimize_patterns_with_attention(patterns) {
                 plans.push((neural_plan, OptimizationPlanType::NeuralTransformer));
             }
         }
-        
+
         // Select best plan based on cost
-        let best_plan = plans.into_iter()
+        let best_plan = plans
+            .into_iter()
             .min_by(|(plan_a, _), (plan_b, _)| {
                 plan_a.total_cost.partial_cmp(&plan_b.total_cost).unwrap()
             })
             .map(|(plan, _)| plan)
             .ok_or_else(|| ShaclAiError::Optimization("No valid plans generated".to_string()))?;
-        
+
         Ok(best_plan)
     }
-    
+
     /// Optimize adaptively based on current performance
-    fn optimize_adaptively(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<OptimizedPatternPlan> {
+    fn optimize_adaptively(
+        &mut self,
+        patterns: &[AlgebraTriplePattern],
+    ) -> Result<OptimizedPatternPlan> {
         // Check current performance trends
         let needs_adaptation = if let Ok(monitor) = self.performance_monitor.lock() {
             monitor.needs_adaptation()
         } else {
             false
         };
-        
+
         if needs_adaptation {
             tracing::info!("Performance degradation detected, adapting optimization strategy");
             self.stats.adaptations_performed += 1;
-            
+
             // Try different optimization strategy
             self.optimize_with_ensemble(patterns)
         } else {
@@ -1764,17 +1853,18 @@ impl RealTimeAdaptiveQueryOptimizer {
             self.optimize_with_strategy(patterns, plan_type)
         }
     }
-    
+
     /// Record performance feedback
-    pub fn record_performance(&mut self, 
+    pub fn record_performance(
+        &mut self,
         query_id: String,
         patterns: Vec<AlgebraTriplePattern>,
         plan_type: OptimizationPlanType,
         execution_time_ms: f64,
         memory_usage_mb: f64,
         result_count: usize,
-        success: bool) -> Result<()> {
-        
+        success: bool,
+    ) -> Result<()> {
         let record = QueryPerformanceRecord {
             query_id: query_id.clone(),
             patterns: patterns.clone(),
@@ -1783,24 +1873,24 @@ impl RealTimeAdaptiveQueryOptimizer {
             memory_usage_mb,
             result_count,
             index_usage: HashMap::new(), // Would be populated with actual index usage
-            cache_hits: 0, // Would be populated with actual cache statistics
+            cache_hits: 0,               // Would be populated with actual cache statistics
             cache_misses: 0,
             timestamp: SystemTime::now(),
             success,
             error_type: None,
             plan_id: self.generate_cache_key(&patterns),
         };
-        
+
         // Record performance
         if let Ok(mut monitor) = self.performance_monitor.lock() {
             monitor.record_performance(record);
         }
-        
+
         // Update ML plan selector
         if let Ok(mut selector) = self.plan_selector.lock() {
             selector.update_with_performance(&patterns, plan_type, execution_time_ms, success);
         }
-        
+
         // Update online learning models
         if self.config.enable_online_learning {
             if let Ok(mut learner) = self.online_learner.lock() {
@@ -1810,46 +1900,50 @@ impl RealTimeAdaptiveQueryOptimizer {
                     memory_usage_mb,
                     if success { 1.0 } else { 0.0 },
                 ]);
-                
+
                 let _ = learner.update_models(&features, execution_time_ms, "execution_time");
                 self.stats.online_learning_updates += 1;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Generate unique query ID
     fn generate_query_id(&self, patterns: &[AlgebraTriplePattern]) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         for pattern in patterns {
             format!("{:?}", pattern).hash(&mut hasher);
         }
         format!("query_{:x}", hasher.finish())
     }
-    
+
     /// Generate cache key for patterns
     fn generate_cache_key(&self, patterns: &[AlgebraTriplePattern]) -> String {
-        patterns.iter()
+        patterns
+            .iter()
             .map(|p| format!("{:?}", p))
             .collect::<Vec<_>>()
             .join("|")
     }
-    
+
     /// Get performance statistics
     pub fn get_stats(&self) -> AdaptiveOptimizerStats {
         self.stats.clone()
     }
-    
+
     /// Get current performance metrics
     pub fn get_performance_metrics(&self) -> Result<PerformanceMetrics> {
         if let Ok(monitor) = self.performance_monitor.lock() {
             Ok(monitor.get_metrics())
         } else {
-            Err(ShaclAiError::DataProcessing("Failed to lock performance monitor".to_string()).into())
+            Err(
+                ShaclAiError::DataProcessing("Failed to lock performance monitor".to_string())
+                    .into(),
+            )
         }
     }
 }
@@ -1858,12 +1952,12 @@ impl RealTimeAdaptiveQueryOptimizer {
 mod tests {
     use super::*;
     use oxirs_core::model::{NamedNode, Variable};
-    
+
     #[test]
     fn test_performance_monitor() {
         let config = AdaptiveOptimizerConfig::default();
         let mut monitor = PerformanceMonitor::new(config);
-        
+
         let record = QueryPerformanceRecord {
             query_id: "test_query".to_string(),
             patterns: vec![],
@@ -1879,68 +1973,70 @@ mod tests {
             error_type: None,
             plan_id: "test_plan".to_string(),
         };
-        
+
         monitor.record_performance(record);
         let metrics = monitor.get_metrics();
-        
+
         assert_eq!(metrics.avg_execution_time_ms, 100.0);
         assert_eq!(metrics.success_rate, 1.0);
     }
-    
+
     #[test]
     fn test_adaptive_plan_cache() {
         let config = AdaptiveOptimizerConfig::default();
         let mut cache = AdaptivePlanCache::new(config);
-        
+
         let plan = OptimizedPatternPlan {
             patterns: vec![],
             total_cost: 100.0,
             binding_order: vec![],
         };
-        
-        cache.put("test_key".to_string(), plan.clone(), OptimizationPlanType::Classical);
+
+        cache.put(
+            "test_key".to_string(),
+            plan.clone(),
+            OptimizationPlanType::Classical,
+        );
         let retrieved = cache.get("test_key");
-        
+
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().plan.total_cost, 100.0);
     }
-    
+
     #[test]
     fn test_query_feature_extractor() {
         let extractor = QueryFeatureExtractor::new();
-        
-        let patterns = vec![
-            AlgebraTriplePattern::new(
-                AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-                AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/p").unwrap()),
-                AlgebraTermPattern::Variable(Variable::new("o").unwrap()),
-            )
-        ];
-        
+
+        let patterns = vec![AlgebraTriplePattern::new(
+            AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
+            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/p").unwrap()),
+            AlgebraTermPattern::Variable(Variable::new("o").unwrap()),
+        )];
+
         let features = extractor.extract_features(&patterns);
-        
+
         assert_eq!(features.len(), 20);
         assert_eq!(features[0], 1.0); // Number of patterns
     }
-    
+
     #[test]
     fn test_online_learning_model() {
         let mut model = OnlineLearningModel::new(5, 0.01);
-        
+
         let features = Array1::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         let target = 10.0;
-        
+
         assert!(model.update(&features, target).is_ok());
-        
+
         let prediction = model.predict(&features);
         assert!(prediction.is_ok());
     }
-    
+
     #[test]
     fn test_complexity_analyzer() {
         let config = AdaptiveOptimizerConfig::default();
         let mut analyzer = QueryComplexityAnalyzer::new(config);
-        
+
         let patterns = vec![
             AlgebraTriplePattern::new(
                 AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
@@ -1951,11 +2047,11 @@ mod tests {
                 AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
                 AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/p2").unwrap()),
                 AlgebraTermPattern::Variable(Variable::new("o2").unwrap()),
-            )
+            ),
         ];
-        
+
         let analysis = analyzer.analyze_complexity(&patterns);
-        
+
         assert!(analysis.estimated_complexity > 0.0);
         assert!(analysis.confidence > 0.0);
         assert!(!analysis.dominant_factors.is_empty());

@@ -3,12 +3,12 @@
 //! Comprehensive monitoring, metrics collection, and observability features
 //! for the OxiRS streaming platform.
 
+use crate::backend_optimizer::ResourceUsage;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::backend_optimizer::ResourceUsage;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
@@ -247,7 +247,7 @@ impl MetricsCollector {
         current_metrics.consumer_events_failed += metrics.events_failed;
         current_metrics.consumer_bytes_received += metrics.bytes_received;
         current_metrics.consumer_batches_received += metrics.batches_received;
-        
+
         // Enhanced health assessment based on metrics trends
         let _health = self.health_checker.get_health().await;
 
@@ -511,11 +511,11 @@ impl HealthChecker {
         let mut health_alerts = Vec::new();
         let now = Utc::now();
         let mut alert_id = 1;
-        
+
         // Producer health assessment
         if metrics.producer_events_failed > 0 {
-            let failure_rate = metrics.producer_events_failed as f64 / 
-                (metrics.producer_events_published + metrics.producer_events_failed) as f64;
+            let failure_rate = metrics.producer_events_failed as f64
+                / (metrics.producer_events_published + metrics.producer_events_failed) as f64;
             if failure_rate > 0.05 {
                 health_alerts.push(HealthAlert {
                     id: format!("producer_failure_{}", alert_id),
@@ -528,11 +528,11 @@ impl HealthChecker {
                 alert_id += 1;
             }
         }
-        
-        // Consumer health assessment  
+
+        // Consumer health assessment
         if metrics.consumer_events_failed > 0 {
-            let failure_rate = metrics.consumer_events_failed as f64 / 
-                metrics.consumer_events_consumed as f64;
+            let failure_rate =
+                metrics.consumer_events_failed as f64 / metrics.consumer_events_consumed as f64;
             if failure_rate > 0.05 {
                 health_alerts.push(HealthAlert {
                     id: format!("consumer_failure_{}", alert_id),
@@ -545,31 +545,37 @@ impl HealthChecker {
                 alert_id += 1;
             }
         }
-        
+
         // Performance health assessment
         if metrics.producer_average_latency_ms > 1000.0 {
             health_alerts.push(HealthAlert {
                 id: format!("producer_latency_{}", alert_id),
                 component: "producer".to_string(),
                 severity: AlertSeverity::Critical,
-                message: format!("High producer latency: {:.2}ms", metrics.producer_average_latency_ms),
+                message: format!(
+                    "High producer latency: {:.2}ms",
+                    metrics.producer_average_latency_ms
+                ),
                 timestamp: now,
                 resolved: false,
             });
             alert_id += 1;
         }
-        
+
         if metrics.consumer_average_processing_time_ms > 500.0 {
             health_alerts.push(HealthAlert {
                 id: format!("consumer_processing_{}", alert_id),
                 component: "consumer".to_string(),
                 severity: AlertSeverity::Critical,
-                message: format!("High consumer processing time: {:.2}ms", metrics.consumer_average_processing_time_ms),
+                message: format!(
+                    "High consumer processing time: {:.2}ms",
+                    metrics.consumer_average_processing_time_ms
+                ),
                 timestamp: now,
                 resolved: false,
             });
         }
-        
+
         // Update health status based on assessments
         let health_status = if health_alerts.is_empty() {
             HealthStatus::Healthy
@@ -578,11 +584,11 @@ impl HealthChecker {
         } else {
             HealthStatus::Critical
         };
-        
+
         if !health_alerts.is_empty() {
             warn!("System health alerts: {:?}", health_alerts);
         }
-        
+
         // Update health status
         let system_health = SystemHealth {
             overall_status: health_status,
@@ -591,7 +597,7 @@ impl HealthChecker {
             uptime: Duration::from_secs(0), // Default uptime
             alerts: health_alerts,
         };
-        
+
         *self.health_status.write().await = system_health;
     }
 }

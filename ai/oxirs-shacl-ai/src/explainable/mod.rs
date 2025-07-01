@@ -4,18 +4,18 @@
 //! for the SHACL-AI system, enabling users to understand how AI decisions are made,
 //! why certain patterns are recognized, and how validation outcomes are determined.
 
+pub mod analyzers;
+pub mod explainers;
+pub mod processors;
 pub mod traits;
 pub mod types;
-pub mod explainers;
-pub mod analyzers;
-pub mod processors;
 
 // Re-export key types and traits for easy access
-pub use traits::{ExplanationGenerator, InterpretabilityAnalyzer, DecisionTracker};
-pub use types::*;
-pub use explainers::*;
 pub use analyzers::*;
+pub use explainers::*;
 pub use processors::*;
+pub use traits::{DecisionTracker, ExplanationGenerator, InterpretabilityAnalyzer};
+pub use types::*;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -116,27 +116,44 @@ impl ExplainableAI {
     }
 
     /// Get an explanation generator by name
-    pub async fn get_explanation_generator(&self, name: &str) -> Result<Box<dyn ExplanationGenerator>> {
+    pub async fn get_explanation_generator(
+        &self,
+        name: &str,
+    ) -> Result<Box<dyn ExplanationGenerator>> {
         let generators = self.explanation_generators.read().await;
         if let Some(generator) = generators.get(name) {
             Ok(generator.clone_box())
         } else {
-            Err(ShaclAiError::Configuration(format!("Explanation generator '{}' not found", name)).into())
+            Err(
+                ShaclAiError::Configuration(format!("Explanation generator '{}' not found", name))
+                    .into(),
+            )
         }
     }
 
     /// Get an interpretability analyzer by name
-    pub async fn get_interpretability_analyzer(&self, name: &str) -> Result<Box<dyn InterpretabilityAnalyzer>> {
+    pub async fn get_interpretability_analyzer(
+        &self,
+        name: &str,
+    ) -> Result<Box<dyn InterpretabilityAnalyzer>> {
         let analyzers = self.interpretability_analyzers.read().await;
         if let Some(analyzer) = analyzers.get(name) {
             Ok(analyzer.clone_box())
         } else {
-            Err(ShaclAiError::Configuration(format!("Interpretability analyzer '{}' not found", name)).into())
+            Err(ShaclAiError::Configuration(format!(
+                "Interpretability analyzer '{}' not found",
+                name
+            ))
+            .into())
         }
     }
 
     /// Generate explanation for any input data
-    pub async fn explain(&self, generator_type: &str, data: &ExplanationData) -> Result<ProcessedExplanation> {
+    pub async fn explain(
+        &self,
+        generator_type: &str,
+        data: &ExplanationData,
+    ) -> Result<ProcessedExplanation> {
         // Check cache first if enabled
         if self.config.cache_explanations {
             let cache_key = format!("{}_{}", generator_type, data.input_type);
@@ -157,20 +174,28 @@ impl ExplainableAI {
         if self.config.cache_explanations {
             let cache_key = format!("{}_{}", generator_type, data.input_type);
             let mut cache = self.explanation_cache.write().await;
-            cache.insert(cache_key, CachedExplanation {
-                explanation: processed.clone(),
-                cache_timestamp: SystemTime::now(),
-                access_count: 1,
-                last_accessed: SystemTime::now(),
-            });
+            cache.insert(
+                cache_key,
+                CachedExplanation {
+                    explanation: processed.clone(),
+                    cache_timestamp: SystemTime::now(),
+                    access_count: 1,
+                    last_accessed: SystemTime::now(),
+                },
+            );
         }
 
         Ok(processed)
     }
 
     /// Analyze feature importance for given data
-    pub async fn analyze_feature_importance(&self, data: &ExplanationData) -> Result<FeatureImportanceAnalysis> {
-        let analyzer = self.get_interpretability_analyzer("feature_importance").await?;
+    pub async fn analyze_feature_importance(
+        &self,
+        data: &ExplanationData,
+    ) -> Result<FeatureImportanceAnalysis> {
+        let analyzer = self
+            .get_interpretability_analyzer("feature_importance")
+            .await?;
         analyzer.analyze(data).await
     }
 
@@ -230,10 +255,10 @@ impl ExplainableAI {
         let cache = self.explanation_cache.read().await;
         let mut stats = HashMap::new();
         stats.insert("total_entries".to_string(), cache.len() as u64);
-        
+
         let total_access_count: u64 = cache.values().map(|c| c.access_count).sum();
         stats.insert("total_access_count".to_string(), total_access_count);
-        
+
         stats
     }
 }

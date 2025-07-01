@@ -236,11 +236,12 @@ impl AdvancedBatchValidator {
             let compatibility_score = self.calculate_compatibility_score(&constraint, &context);
             let estimated_cost = self.estimate_constraint_cost(&constraint, &context);
 
+            let priority = self.calculate_priority(&constraint);
             let batch_item = ConstraintBatchItem {
                 constraint,
                 context,
                 estimated_cost,
-                priority: self.calculate_priority(&constraint),
+                priority,
                 compatibility_score,
             };
 
@@ -328,13 +329,15 @@ impl AdvancedBatchValidator {
             let avg_priority =
                 batch.iter().map(|item| item.priority).sum::<usize>() / batch.len().max(1);
 
+            let estimated_memory_usage = self.estimate_batch_memory_usage(&batch);
+            let dependencies = self.analyze_batch_dependencies(&batch);
             let scheduled_batch = ScheduledBatch {
                 items: batch,
                 execution_order: index,
-                estimated_memory_usage: self.estimate_batch_memory_usage(&batch),
+                estimated_memory_usage,
                 total_cost,
                 avg_priority,
-                dependencies: self.analyze_batch_dependencies(&batch),
+                dependencies,
             };
 
             scheduled.push(scheduled_batch);
@@ -421,12 +424,7 @@ impl AdvancedBatchValidator {
             // Execute constraint evaluation
             // Note: This would call the actual constraint evaluator
             // For now, we'll create a placeholder result
-            let evaluation_result = ConstraintEvaluationResult {
-                violations: Vec::new(),
-                is_valid: true,
-                execution_time: constraint_start.elapsed(),
-                cache_hit: false,
-            };
+            let evaluation_result = ConstraintEvaluationResult::Satisfied;
 
             // Cache the result
             self.cache.put(

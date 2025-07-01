@@ -49,7 +49,7 @@ impl AdvancedModelSelector {
         available_models: &[String],
     ) -> ModelSelectionResult {
         let start_time = std::time::Instant::now();
-        
+
         let models = match &self.strategy {
             ModelSelectionStrategy::PerformanceBased => {
                 self.select_performance_based(available_models, requirements)
@@ -60,15 +60,20 @@ impl AdvancedModelSelector {
             ModelSelectionStrategy::EnsembleWeighted => {
                 self.select_ensemble_weighted(data_characteristics, available_models, requirements)
             }
-            ModelSelectionStrategy::ReinforcementLearning => {
-                self.select_reinforcement_learning(data_characteristics, available_models, requirements)
-            }
+            ModelSelectionStrategy::ReinforcementLearning => self.select_reinforcement_learning(
+                data_characteristics,
+                available_models,
+                requirements,
+            ),
             ModelSelectionStrategy::MetaLearning => {
                 self.select_meta_learning(data_characteristics, available_models, requirements)
             }
-            ModelSelectionStrategy::Hybrid(strategies) => {
-                self.select_hybrid(strategies, data_characteristics, available_models, requirements)
-            }
+            ModelSelectionStrategy::Hybrid(strategies) => self.select_hybrid(
+                strategies,
+                data_characteristics,
+                available_models,
+                requirements,
+            ),
         };
 
         let selection_time = start_time.elapsed();
@@ -108,7 +113,7 @@ impl AdvancedModelSelector {
     ) -> Vec<SelectedModel> {
         // Adapt selection based on graph size and complexity
         let complexity_factor = data_characteristics.complexity_score;
-        
+
         available_models
             .iter()
             .enumerate()
@@ -118,7 +123,10 @@ impl AdvancedModelSelector {
                     model_name: model_name.clone(),
                     selection_score: score,
                     expected_performance: ModelPerformanceMetrics::default(),
-                    selection_reason: format!("Data-adaptive selection (complexity: {:.2})", complexity_factor),
+                    selection_reason: format!(
+                        "Data-adaptive selection (complexity: {:.2})",
+                        complexity_factor
+                    ),
                 }
             })
             .collect()
@@ -187,11 +195,12 @@ impl AdvancedModelSelector {
     ) -> Vec<SelectedModel> {
         // Simplified hybrid approach - average scores from multiple strategies
         let mut combined_scores: HashMap<String, f64> = HashMap::new();
-        
+
         for strategy in strategies {
             let mut temp_selector = AdvancedModelSelector::new(strategy.clone());
-            let results = temp_selector.select_models(data_characteristics, requirements, available_models);
-            
+            let results =
+                temp_selector.select_models(data_characteristics, requirements, available_models);
+
             for model in results.models {
                 *combined_scores.entry(model.model_name).or_insert(0.0) += model.selection_score;
             }
@@ -211,7 +220,11 @@ impl AdvancedModelSelector {
     }
 
     /// Update performance history for a model
-    pub fn update_performance_history(&mut self, model_name: &str, metrics: ModelPerformanceMetrics) {
+    pub fn update_performance_history(
+        &mut self,
+        model_name: &str,
+        metrics: ModelPerformanceMetrics,
+    ) {
         self.model_performance_history
             .entry(model_name.to_string())
             .or_insert_with(Vec::new)
@@ -219,19 +232,24 @@ impl AdvancedModelSelector {
     }
 
     /// Cache data characteristics for future use
-    pub fn cache_data_characteristics(&mut self, key: String, characteristics: DataCharacteristics) {
+    pub fn cache_data_characteristics(
+        &mut self,
+        key: String,
+        characteristics: DataCharacteristics,
+    ) {
         self.data_characteristics_cache.insert(key, characteristics);
     }
 
     /// Clear old cache entries to prevent memory bloat
     pub fn cleanup_cache(&mut self, max_entries: usize) {
         if self.data_characteristics_cache.len() > max_entries {
-            let keys_to_remove: Vec<String> = self.data_characteristics_cache
+            let keys_to_remove: Vec<String> = self
+                .data_characteristics_cache
                 .keys()
                 .take(self.data_characteristics_cache.len() - max_entries)
                 .cloned()
                 .collect();
-            
+
             for key in keys_to_remove {
                 self.data_characteristics_cache.remove(&key);
             }

@@ -14,8 +14,8 @@ impl HnswIndex {
         let mut distances = Vec::with_capacity(candidates.len());
 
         for &candidate_id in candidates {
-            if let Some(node) = self.nodes.get(candidate_id) {
-                let distance = self.config.metric.distance(query, &node.vector);
+            if let Some(node) = self.nodes().get(candidate_id) {
+                let distance = self.config().metric.distance(query, &node.vector);
                 distances.push(distance);
             } else {
                 distances.push(f32::INFINITY);
@@ -31,7 +31,7 @@ impl HnswIndex {
         query: &Vector,
         candidates: &[usize],
     ) -> Result<Vec<f32>> {
-        if !self.config.enable_simd {
+        if !self.config().enable_simd {
             return self.cpu_batch_distance_calculation(query, candidates);
         }
 
@@ -46,7 +46,7 @@ impl HnswIndex {
 
     /// Prefetch memory for improved cache performance
     pub fn prefetch_nodes(&self, node_ids: &[usize]) {
-        if !self.config.enable_prefetch {
+        if !self.config().enable_prefetch {
             return;
         }
 
@@ -56,8 +56,8 @@ impl HnswIndex {
         // - Strategic memory access patterns
         // - Prefetch lookahead based on search patterns
 
-        for &node_id in node_ids.iter().take(self.config.prefetch_distance) {
-            if node_id < self.nodes.len() {
+        for &node_id in node_ids.iter().take(self.config().prefetch_distance) {
+            if node_id < self.nodes().len() {
                 // Prefetch would happen here
                 // std::arch::x86_64::_mm_prefetch(...) on x86_64
             }
@@ -66,7 +66,7 @@ impl HnswIndex {
 
     /// Optimize memory layout for cache-friendly access
     pub fn optimize_memory_layout(&mut self) -> Result<()> {
-        if !self.config.cache_friendly_layout {
+        if !self.config().cache_friendly_layout {
             return Ok(());
         }
 
@@ -81,36 +81,36 @@ impl HnswIndex {
 
     /// Update cache statistics
     pub fn update_cache_stats(&self, hits: u64, misses: u64) {
-        self.stats
+        self.get_stats()
             .cache_hits
             .fetch_add(hits, std::sync::atomic::Ordering::Relaxed);
-        self.stats
+        self.get_stats()
             .cache_misses
             .fetch_add(misses, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Update SIMD operation statistics
     pub fn update_simd_stats(&self, operations: u64) {
-        self.stats
+        self.get_stats()
             .simd_operations
             .fetch_add(operations, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Update prefetch statistics
     pub fn update_prefetch_stats(&self, operations: u64) {
-        self.stats
+        self.get_stats()
             .prefetch_operations
             .fetch_add(operations, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Parallel processing utilities
     pub fn should_use_parallel(&self, work_size: usize) -> bool {
-        self.config.enable_parallel && work_size > 100
+        self.config().enable_parallel && work_size > 100
     }
 
     /// Get optimal number of threads for parallel operations
     pub fn get_optimal_thread_count(&self, work_size: usize) -> usize {
-        if !self.config.enable_parallel {
+        if !self.config().enable_parallel {
             return 1;
         }
 

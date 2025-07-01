@@ -129,7 +129,7 @@ pub enum EscalationAction {
 }
 
 /// Alert severity levels
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AlertSeverity {
     Info,
     Warning,

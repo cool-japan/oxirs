@@ -259,6 +259,36 @@ impl BackwardChainer {
                 // Built-ins are evaluated directly
                 self.evaluate_builtin(name, args, context_sub.clone())
             }
+            RuleAtom::NotEqual { left, right } => {
+                // Handle not-equal constraint
+                let left_term = self.substitute_term(left, context_sub);
+                let right_term = self.substitute_term(right, context_sub);
+                if !self.terms_equal(&left_term, &right_term) {
+                    Ok(Some(context_sub.clone()))
+                } else {
+                    Ok(None)
+                }
+            }
+            RuleAtom::GreaterThan { left, right } => {
+                // Handle greater-than constraint
+                let left_term = self.substitute_term(left, context_sub);
+                let right_term = self.substitute_term(right, context_sub);
+                if self.compare_terms(&left_term, &right_term) > 0 {
+                    Ok(Some(context_sub.clone()))
+                } else {
+                    Ok(None)
+                }
+            }
+            RuleAtom::LessThan { left, right } => {
+                // Handle less-than constraint
+                let left_term = self.substitute_term(left, context_sub);
+                let right_term = self.substitute_term(right, context_sub);
+                if self.compare_terms(&left_term, &right_term) < 0 {
+                    Ok(Some(context_sub.clone()))
+                } else {
+                    Ok(None)
+                }
+            }
         }
     }
 
@@ -488,6 +518,18 @@ impl BackwardChainer {
                     args: substituted_args,
                 })
             }
+            RuleAtom::NotEqual { left, right } => Ok(RuleAtom::NotEqual {
+                left: self.substitute_term(left, substitution),
+                right: self.substitute_term(right, substitution),
+            }),
+            RuleAtom::GreaterThan { left, right } => Ok(RuleAtom::GreaterThan {
+                left: self.substitute_term(left, substitution),
+                right: self.substitute_term(right, substitution),
+            }),
+            RuleAtom::LessThan { left, right } => Ok(RuleAtom::LessThan {
+                left: self.substitute_term(left, substitution),
+                right: self.substitute_term(right, substitution),
+            }),
         }
     }
 
@@ -498,6 +540,16 @@ impl BackwardChainer {
                 .get(var)
                 .cloned()
                 .unwrap_or_else(|| term.clone()),
+            Term::Function { name, args } => {
+                let substituted_args = args
+                    .iter()
+                    .map(|arg| self.substitute_term(arg, substitution))
+                    .collect();
+                Term::Function {
+                    name: name.clone(),
+                    args: substituted_args,
+                }
+            }
             _ => term.clone(),
         }
     }
@@ -527,7 +579,98 @@ impl BackwardChainer {
             (Term::Constant(c1), Term::Constant(c2)) => c1 == c2,
             (Term::Literal(l1), Term::Literal(l2)) => l1 == l2,
             (Term::Constant(c), Term::Literal(l)) | (Term::Literal(l), Term::Constant(c)) => c == l,
+            (Term::Function { name: n1, args: a1 }, Term::Function { name: n2, args: a2 }) => {
+                n1 == n2 && a1 == a2
+            }
             _ => false,
+        }
+    }
+
+    /// Compare two terms for ordering (-1: left < right, 0: equal, 1: left > right)
+    fn compare_terms(&self, term1: &Term, term2: &Term) -> i32 {
+        match (term1, term2) {
+            (Term::Constant(c1), Term::Constant(c2)) => {
+                // Try to parse as numbers first
+                if let (Ok(n1), Ok(n2)) = (c1.parse::<f64>(), c2.parse::<f64>()) {
+                    if n1 < n2 {
+                        -1
+                    } else if n1 > n2 {
+                        1
+                    } else {
+                        0
+                    }
+                } else {
+                    // Fallback to string comparison
+                    if c1 < c2 {
+                        -1
+                    } else if c1 > c2 {
+                        1
+                    } else {
+                        0
+                    }
+                }
+            }
+            (Term::Literal(l1), Term::Literal(l2)) => {
+                // Try to parse as numbers first
+                if let (Ok(n1), Ok(n2)) = (l1.parse::<f64>(), l2.parse::<f64>()) {
+                    if n1 < n2 {
+                        -1
+                    } else if n1 > n2 {
+                        1
+                    } else {
+                        0
+                    }
+                } else {
+                    // Fallback to string comparison
+                    if l1 < l2 {
+                        -1
+                    } else if l1 > l2 {
+                        1
+                    } else {
+                        0
+                    }
+                }
+            }
+            (Term::Constant(c), Term::Literal(l)) | (Term::Literal(l), Term::Constant(c)) => {
+                // Try to parse as numbers first
+                if let (Ok(n1), Ok(n2)) = (c.parse::<f64>(), l.parse::<f64>()) {
+                    if n1 < n2 {
+                        -1
+                    } else if n1 > n2 {
+                        1
+                    } else {
+                        0
+                    }
+                } else {
+                    // Fallback to string comparison
+                    if c < l {
+                        -1
+                    } else if c > l {
+                        1
+                    } else {
+                        0
+                    }
+                }
+            }
+            (Term::Function { name: n1, args: a1 }, Term::Function { name: n2, args: a2 }) => {
+                // Compare function names first
+                if n1 < n2 {
+                    -1
+                } else if n1 > n2 {
+                    1
+                } else {
+                    // If names are equal, compare arg counts
+                    if a1.len() < a2.len() {
+                        -1
+                    } else if a1.len() > a2.len() {
+                        1
+                    } else {
+                        0
+                    } // Equal functions
+                }
+            }
+            // Variables and mixed types can't be compared meaningfully
+            _ => 0,
         }
     }
 

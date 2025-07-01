@@ -23,69 +23,59 @@
 //! let mut rag_engine = RagEngine::new(config);
 //! ```
 
-pub mod quantum_rag;
+pub mod advanced_reasoning;
 pub mod consciousness;
 pub mod consciousness_types;
-pub mod vector_search;
-pub mod embedding_providers;
-pub mod graph_traversal;
-pub mod entity_extraction;
-pub mod query_processing;
-pub mod advanced_reasoning;
-pub mod knowledge_extraction;
-pub mod retrieval;
-pub mod embedding;
 pub mod context;
-pub mod types;
+pub mod embedding;
+pub mod embedding_providers;
+pub mod entity_extraction;
+pub mod graph_traversal;
+pub mod knowledge_extraction;
 pub mod quantum;
+pub mod quantum_rag;
+pub mod query_processing;
+pub mod retrieval;
+pub mod types;
+pub mod vector_search;
 
 // Re-export main types for convenience
-pub use quantum_rag::{
-    QuantumRetrievalState, QuantumSearchResult, RagDocument,
+pub use advanced_reasoning::{
+    AdvancedReasoningEngine, ReasoningChain, ReasoningConfig, ReasoningQuality, ReasoningResult,
+    ReasoningType, UncertaintyFactor,
 };
 pub use consciousness::{
-    ConsciousnessIntegration, ConsciousInsight, InsightType, MemoryTrace, EmotionalState,
-    ConsciousnessConfig, ConsciousnessModel, AdvancedConsciousResponse, AdvancedConsciousnessMetadata,
-    AdvancedConsciousInsight, AdvancedInsightType,
+    AdvancedConsciousInsight, AdvancedConsciousResponse, AdvancedConsciousnessMetadata,
+    AdvancedInsightType, ConsciousInsight, ConsciousnessConfig, ConsciousnessIntegration,
+    ConsciousnessModel, EmotionalState, InsightType, MemoryTrace,
 };
 pub use consciousness_types::*;
-pub use vector_search::{
-    RagIndex, SearchDocument, EnhancedVectorIndex,
-};
 pub use embedding_providers::{
-    EnhancedEmbeddingModel, EmbeddingConfig, EmbeddingProviderType, SimpleEmbeddingModel,
+    EmbeddingConfig, EmbeddingProviderType, EnhancedEmbeddingModel, SimpleEmbeddingModel,
 };
-pub use graph_traversal::{
-    GraphTraversal, ExtractedEntity, ExtractedRelationship, EntityType,
-};
-pub use entity_extraction::{
-    EntityExtractor, LLMEntityExtraction,
-};
-pub use query_processing::{
-    QueryConstraint, ConstraintType, QueryProcessor, QueryIntent,
-};
-pub use advanced_reasoning::{
-    AdvancedReasoningEngine, ReasoningConfig, ReasoningResult, ReasoningChain, ReasoningType,
-    UncertaintyFactor, ReasoningQuality,
-};
+pub use entity_extraction::{EntityExtractor, LLMEntityExtraction};
+pub use graph_traversal::{EntityType, ExtractedEntity, ExtractedRelationship, GraphTraversal};
 pub use knowledge_extraction::{
-    KnowledgeExtractionEngine, KnowledgeExtractionConfig, ExtractedKnowledge,
-    ExtractedEntity, ExtractedRelationship, EntityType, RelationshipType,
+    EntityType, ExtractedEntity, ExtractedKnowledge, ExtractedRelationship,
+    KnowledgeExtractionConfig, KnowledgeExtractionEngine, RelationshipType,
 };
+pub use quantum_rag::{QuantumRetrievalState, QuantumSearchResult, RagDocument};
+pub use query_processing::{ConstraintType, QueryConstraint, QueryIntent, QueryProcessor};
+pub use vector_search::{EnhancedVectorIndex, RagIndex, SearchDocument};
 
 // Additional imports from submodules
-pub use retrieval::*;
-pub use embedding::*;
 pub use context::*;
+pub use embedding::*;
+pub use retrieval::*;
 pub use types::*;
 
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use oxirs_core::{
     model::{quad::Quad, term::Term, triple::Triple, NamedNode, Object, Subject},
     Store,
 };
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use oxirs_embed::{
     models::{ComplEx, RotatE, TransE},
     EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple as EmbedTriple,
@@ -291,31 +281,33 @@ impl RagEngine {
     pub async fn initialize(&mut self) -> Result<()> {
         // Initialize embedding model
         self.embedding_model = Some(EnhancedEmbeddingModel::new(self.config.embedding.clone())?);
-        
+
         // Initialize vector index
         self.vector_index = Some(RagIndex::new().await?);
-        
+
         // Initialize optional components
         if self.config.quantum.enabled {
             self.quantum_state = Some(quantum_rag::QuantumRetrievalState::new(0.5));
         }
-        
+
         if self.config.consciousness.enabled {
             self.consciousness = Some(consciousness::ConsciousnessIntegration::new(
-                self.config.consciousness.clone()
+                self.config.consciousness.clone(),
             ));
         }
 
         // Initialize advanced reasoning engine
         let reasoning_config = advanced_reasoning::ReasoningConfig::default();
-        self.reasoning_engine = Some(advanced_reasoning::AdvancedReasoningEngine::new(reasoning_config));
+        self.reasoning_engine = Some(advanced_reasoning::AdvancedReasoningEngine::new(
+            reasoning_config,
+        ));
 
         // Initialize knowledge extraction engine
         let extraction_config = knowledge_extraction::KnowledgeExtractionConfig::default();
-        self.knowledge_extractor = Some(
-            knowledge_extraction::KnowledgeExtractionEngine::new(extraction_config)?
-        );
-        
+        self.knowledge_extractor = Some(knowledge_extraction::KnowledgeExtractionEngine::new(
+            extraction_config,
+        )?);
+
         info!("RAG engine initialized successfully with Version 1.2 features");
         Ok(())
     }
@@ -326,35 +318,50 @@ impl RagEngine {
         let mut context = AssembledContext::new();
 
         // Extract entities and constraints
-        let (entities, relationships) = self.entity_extractor.extract_entities_and_relationships(query).await?;
-        let constraints = self.query_processor.extract_constraints(query, &entities).await?;
-        
+        let (entities, relationships) = self
+            .entity_extractor
+            .extract_entities_and_relationships(query)
+            .await?;
+        let constraints = self
+            .query_processor
+            .extract_constraints(query, &entities)
+            .await?;
+
         context.extracted_entities = entities;
         context.extracted_relationships = relationships;
         context.query_constraints = constraints;
 
         // Semantic search
         if let Some(ref mut vector_index) = self.vector_index {
-            let semantic_docs = vector_index.search(query, self.config.retrieval.max_results).await?;
-            context.semantic_results = semantic_docs.into_iter().map(|doc| RagSearchResult {
-                triple: doc.document,
-                score: doc.score,
-                search_type: SearchType::SemanticSimilarity,
-            }).collect();
+            let semantic_docs = vector_index
+                .search(query, self.config.retrieval.max_results)
+                .await?;
+            context.semantic_results = semantic_docs
+                .into_iter()
+                .map(|doc| RagSearchResult {
+                    triple: doc.document,
+                    score: doc.score,
+                    search_type: SearchType::SemanticSimilarity,
+                })
+                .collect();
         }
 
         // Graph traversal
-        let graph_results = self.graph_traversal.perform_graph_search(
-            query,
-            &context.extracted_entities,
-            self.config.retrieval.graph_traversal_depth,
-        ).await?;
+        let graph_results = self
+            .graph_traversal
+            .perform_graph_search(
+                query,
+                &context.extracted_entities,
+                self.config.retrieval.graph_traversal_depth,
+            )
+            .await?;
         context.graph_results = graph_results;
 
         // Quantum enhancement (if enabled)
         if let Some(ref quantum_state) = self.quantum_state {
             if self.config.retrieval.enable_quantum_enhancement {
-                let quantum_docs: Vec<RagDocument> = context.semantic_results
+                let quantum_docs: Vec<RagDocument> = context
+                    .semantic_results
                     .iter()
                     .map(|result| RagDocument {
                         id: uuid::Uuid::new_v4().to_string(),
@@ -364,7 +371,7 @@ impl RagEngine {
                         embedding: None,
                     })
                     .collect();
-                
+
                 context.quantum_results = Some(quantum_state.superposition_search(&quantum_docs));
             }
         }
@@ -373,7 +380,9 @@ impl RagEngine {
         if let Some(ref mut consciousness) = self.consciousness {
             if self.config.retrieval.enable_consciousness_integration {
                 context.consciousness_insights = Some(
-                    consciousness.process_query_with_consciousness(query, &context).await?
+                    consciousness
+                        .process_query_with_consciousness(query, &context)
+                        .await?,
                 );
             }
         }
@@ -401,8 +410,11 @@ impl RagEngine {
             for result in &context.semantic_results {
                 extraction_text.push_str(&format!(" {}", result.triple.object().to_string()));
             }
-            
-            match knowledge_extractor.extract_knowledge(&extraction_text).await {
+
+            match knowledge_extractor
+                .extract_knowledge(&extraction_text)
+                .await
+            {
                 Ok(extracted_knowledge) => {
                     context.extracted_knowledge = Some(extracted_knowledge);
                     debug!("Knowledge extraction completed successfully");
@@ -428,27 +440,32 @@ impl RagEngine {
 
         // Semantic results score
         if !context.semantic_results.is_empty() {
-            let avg_semantic_score = context.semantic_results.iter()
+            let avg_semantic_score = context
+                .semantic_results
+                .iter()
                 .map(|r| r.score)
-                .sum::<f32>() / context.semantic_results.len() as f32;
+                .sum::<f32>()
+                / context.semantic_results.len() as f32;
             score += avg_semantic_score;
             components += 1;
         }
 
         // Graph results score
         if !context.graph_results.is_empty() {
-            let avg_graph_score = context.graph_results.iter()
-                .map(|r| r.score)
-                .sum::<f32>() / context.graph_results.len() as f32;
+            let avg_graph_score = context.graph_results.iter().map(|r| r.score).sum::<f32>()
+                / context.graph_results.len() as f32;
             score += avg_graph_score;
             components += 1;
         }
 
         // Entity extraction score
         if !context.extracted_entities.is_empty() {
-            let avg_entity_confidence = context.extracted_entities.iter()
+            let avg_entity_confidence = context
+                .extracted_entities
+                .iter()
                 .map(|e| e.confidence)
-                .sum::<f32>() / context.extracted_entities.len() as f32;
+                .sum::<f32>()
+                / context.extracted_entities.len() as f32;
             score += avg_entity_confidence;
             components += 1;
         }
@@ -470,9 +487,11 @@ impl RagEngine {
         // Quantum results score (if available)
         if let Some(ref quantum_results) = context.quantum_results {
             if !quantum_results.is_empty() {
-                let avg_quantum_score = quantum_results.iter()
+                let avg_quantum_score = quantum_results
+                    .iter()
                     .map(|r| r.quantum_probability as f32)
-                    .sum::<f32>() / quantum_results.len() as f32;
+                    .sum::<f32>()
+                    / quantum_results.len() as f32;
                 score += avg_quantum_score;
                 components += 1;
             }
@@ -481,9 +500,11 @@ impl RagEngine {
         // Consciousness insights score (if available)
         if let Some(ref consciousness_insights) = context.consciousness_insights {
             if !consciousness_insights.is_empty() {
-                let avg_consciousness_score = consciousness_insights.iter()
+                let avg_consciousness_score = consciousness_insights
+                    .iter()
                     .map(|insight| insight.confidence)
-                    .sum::<f32>() / consciousness_insights.len() as f32;
+                    .sum::<f32>()
+                    / consciousness_insights.len() as f32;
                 score += avg_consciousness_score;
                 components += 1;
             }

@@ -10,6 +10,7 @@ use crate::algebra::{TriplePattern, Variable};
 use crate::optimizer::IndexType;
 
 /// Index advisor for automatic index recommendation
+#[derive(Clone)]
 pub struct IndexAdvisor {
     query_patterns: HashMap<String, QueryPattern>,
     index_usage_stats: HashMap<IndexType, IndexUsageStats>,
@@ -89,9 +90,15 @@ impl IndexAdvisor {
         let stats = self.index_usage_stats.entry(index_type).or_default();
         stats.access_count += 1;
         stats.total_access_time += access_time;
-        stats.avg_selectivity = (stats.avg_selectivity * (stats.access_count - 1) as f64 + selectivity)
+        stats.avg_selectivity = (stats.avg_selectivity * (stats.access_count - 1) as f64
+            + selectivity)
             / stats.access_count as f64;
         stats.last_updated = Some(Instant::now());
+    }
+
+    /// Get the count of recommendations generated
+    pub fn recommendations_count(&self) -> usize {
+        self.recommended_indexes.len()
     }
 }
 

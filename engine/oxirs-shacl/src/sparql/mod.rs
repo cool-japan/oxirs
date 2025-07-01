@@ -69,7 +69,7 @@ impl SparqlConstraintExecutor {
         &self,
         constraint: &SparqlConstraint,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // Basic implementation - in a real system this would execute SPARQL queries
         Ok(ConstraintEvaluationResult::Valid)
@@ -162,7 +162,7 @@ impl EnhancedSparqlExecutor {
         &self,
         constraint: &SparqlConstraint,
         context: &crate::constraints::ConstraintContext,
-        store: &oxirs_core::Store,
+        store: &dyn oxirs_core::Store,
     ) -> Result<crate::constraints::ConstraintEvaluationResult> {
         // Use legacy executor for now, but could be enhanced to use function library
         self.legacy_executor

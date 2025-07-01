@@ -8,17 +8,17 @@
 //! - Automatic view recommendations
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, RwLock, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, span, warn, Level};
 
+use crate::algebra::Solution;
 use crate::algebra::{Algebra, Expression, Term, TriplePattern, Variable};
 use crate::cost_model::{CostEstimate, CostModel};
 use crate::executor::{Dataset, ExecutionStats, QueryExecutor};
-use crate::algebra::Solution;
 use crate::statistics_collector::StatisticsCollector;
 
 /// Materialized view manager for query optimization
@@ -62,7 +62,7 @@ impl Default for MaterializedViewConfig {
             max_memory_usage: 2 * 1024 * 1024 * 1024, // 2GB
             auto_view_creation: true,
             maintenance_strategy: MaintenanceStrategy::Lazy,
-            utilization_threshold: 0.1, // 10% utilization
+            utilization_threshold: 0.1,               // 10% utilization
             max_staleness: Duration::from_secs(3600), // 1 hour
             cost_based_selection: true,
             incremental_maintenance: true,
@@ -452,6 +452,27 @@ pub struct ResourceLimits {
     pub max_io_bandwidth: usize,
 }
 
+impl Default for ResourceLimits {
+    fn default() -> Self {
+        Self {
+            max_cpu_usage: 50.0,
+            max_memory_usage: 1024 * 1024 * 512, // 512MB
+            max_io_bandwidth: 1024 * 1024 * 100, // 100MB/s
+        }
+    }
+}
+
+impl Default for SchedulerConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_tasks: 4,
+            default_interval: Duration::from_secs(3600), // 1 hour
+            priority_threshold: 8,
+            resource_limits: ResourceLimits::default(),
+        }
+    }
+}
+
 /// Maintenance task for a view
 #[derive(Debug, Clone)]
 pub struct MaintenanceTask {
@@ -703,7 +724,7 @@ impl MaterializedViewManager {
     ) -> Result<Self> {
         let views = Arc::new(RwLock::new(HashMap::new()));
         let view_storage = Arc::new(RwLock::new(ViewStorage::new(config.max_memory_usage)));
-        
+
         let rewriter = QueryRewriter::new()?;
         let maintenance_scheduler = MaintenanceScheduler::new(SchedulerConfig::default())?;
         let usage_statistics = Arc::new(RwLock::new(ViewUsageStatistics::default()));
@@ -732,9 +753,9 @@ impl MaterializedViewManager {
         dataset: &dyn Dataset,
     ) -> Result<String> {
         let _span = span!(Level::INFO, "create_materialized_view").entered();
-        
+
         let view_id = format!("view_{}", uuid::Uuid::new_v4().simple());
-        
+
         info!("Creating materialized view: {} ({})", name, view_id);
 
         // Execute the view definition to materialize initial data
@@ -810,7 +831,9 @@ impl MaterializedViewManager {
         self.rewriter.update_view_index(&view_id, &definition)?;
 
         // Schedule maintenance if needed
-        if let Some(next_maintenance) = self.calculate_next_maintenance(&self.config.maintenance_strategy) {
+        if let Some(next_maintenance) =
+            self.calculate_next_maintenance(&self.config.maintenance_strategy)
+        {
             self.maintenance_scheduler.schedule_maintenance(
                 view_id.clone(),
                 MaintenanceTaskType::StatisticsUpdate,
@@ -819,29 +842,34 @@ impl MaterializedViewManager {
             )?;
         }
 
-        info!("Created materialized view {} in {:?}", view_id, materialization_time);
+        info!(
+            "Created materialized view {} in {:?}",
+            view_id, materialization_time
+        );
         Ok(view_id)
     }
 
     /// Rewrite a query to use materialized views
     pub fn rewrite_query(&self, query: &Algebra) -> Result<(Algebra, Vec<String>)> {
         let _span = span!(Level::DEBUG, "rewrite_query").entered();
-        
-        self.rewriter.rewrite_query(query, &self.views, &self.cost_model)
+
+        self.rewriter
+            .rewrite_query(query, &self.views, &self.cost_model)
     }
 
     /// Get view usage statistics
     pub fn get_usage_statistics(&self, view_id: &str) -> Result<Option<ViewUsageStats>> {
         let stats = self.usage_statistics.read().unwrap();
-        
-        Ok(stats.access_counts.get(view_id).map(|&access_count| {
-            ViewUsageStats {
+
+        Ok(stats
+            .access_counts
+            .get(view_id)
+            .map(|&access_count| ViewUsageStats {
                 access_count,
                 total_time_saved: stats.time_saved.get(view_id).copied().unwrap_or_default(),
                 hit_rate: stats.hit_rates.get(view_id).copied().unwrap_or(0.0),
                 cost_benefit: stats.cost_benefits.get(view_id).copied().unwrap_or(0.0),
-            }
-        }))
+            }))
     }
 
     /// Get view recommendations based on query patterns
@@ -853,17 +881,18 @@ impl MaterializedViewManager {
     pub fn update_view(
         &mut self,
         view_id: &str,
-        executor: &QueryExecutor,
+        executor: &mut QueryExecutor,
         dataset: &dyn Dataset,
     ) -> Result<()> {
         let _span = span!(Level::INFO, "update_view").entered();
-        
+
         let start_time = Instant::now();
-        
+
         // Get view definition
         let definition = {
             let views = self.views.read().unwrap();
-            let view = views.get(view_id)
+            let view = views
+                .get(view_id)
                 .ok_or_else(|| anyhow!("View not found: {}", view_id))?;
             view.definition.clone()
         };
@@ -872,9 +901,9 @@ impl MaterializedViewManager {
         let use_incremental = {
             let views = self.views.read().unwrap();
             let view = views.get(view_id).unwrap();
-            self.config.incremental_maintenance && 
-            view.maintenance_info.incremental_state.is_some() &&
-            self.can_update_incrementally(&view.dependencies)
+            self.config.incremental_maintenance
+                && view.maintenance_info.incremental_state.is_some()
+                && self.can_update_incrementally(&view.dependencies)
         };
 
         if use_incremental {
@@ -884,7 +913,7 @@ impl MaterializedViewManager {
         }
 
         let update_time = start_time.elapsed();
-        
+
         // Update maintenance info
         {
             let mut views = self.views.write().unwrap();
@@ -893,7 +922,7 @@ impl MaterializedViewManager {
                 view.maintenance_info.update_count += 1;
                 view.maintenance_info.total_maintenance_time += update_time;
                 view.maintenance_info.needs_update = false;
-                view.maintenance_info.next_maintenance = 
+                view.maintenance_info.next_maintenance =
                     self.calculate_next_maintenance(&view.maintenance_info.strategy);
             }
         }
@@ -911,17 +940,23 @@ impl MaterializedViewManager {
         cost_benefit: f64,
     ) -> Result<()> {
         let mut stats = self.usage_statistics.write().unwrap();
-        
+
         // Update access count
         *stats.access_counts.entry(view_id.to_string()).or_insert(0) += 1;
-        
+
         // Update time saved
-        *stats.time_saved.entry(view_id.to_string()).or_insert(Duration::ZERO) += time_saved;
-        
+        *stats
+            .time_saved
+            .entry(view_id.to_string())
+            .or_insert(Duration::ZERO) += time_saved;
+
         // Update cost benefit
-        let current_benefit = stats.cost_benefits.entry(view_id.to_string()).or_insert(0.0);
+        let current_benefit = stats
+            .cost_benefits
+            .entry(view_id.to_string())
+            .or_insert(0.0);
         *current_benefit = (*current_benefit + cost_benefit) / 2.0; // Moving average
-        
+
         // Add usage record
         let usage_record = UsageRecord {
             timestamp: SystemTime::now(),
@@ -929,24 +964,25 @@ impl MaterializedViewManager {
             time_saved,
             cost_benefit,
         };
-        
-        stats.usage_history
+
+        stats
+            .usage_history
             .entry(view_id.to_string())
             .or_insert_with(VecDeque::new)
             .push_back(usage_record);
-        
+
         // Limit history size
         if let Some(history) = stats.usage_history.get_mut(view_id) {
             while history.len() > 1000 {
                 history.pop_front();
             }
         }
-        
+
         Ok(())
     }
 
     // Private helper methods
-    
+
     fn estimate_result_size(&self, results: &Solution) -> usize {
         // Estimate size based on number of results and average binding size
         results.len() * 100 // Rough estimate: 100 bytes per result
@@ -955,7 +991,7 @@ impl MaterializedViewManager {
     fn calculate_checksum(&self, results: &Solution) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         for result in results {
             format!("{:?}", result).hash(&mut hasher);
@@ -1001,12 +1037,28 @@ impl MaterializedViewManager {
                 }
             }
             Algebra::Join { left, right } => {
-                self.analyze_algebra_dependencies(left, base_tables, dependent_patterns, dependent_variables, join_dependencies)?;
-                self.analyze_algebra_dependencies(right, base_tables, dependent_patterns, dependent_variables, join_dependencies)?;
-                
+                self.analyze_algebra_dependencies(
+                    left,
+                    base_tables,
+                    dependent_patterns,
+                    dependent_variables,
+                    join_dependencies,
+                )?;
+                self.analyze_algebra_dependencies(
+                    right,
+                    base_tables,
+                    dependent_patterns,
+                    dependent_variables,
+                    join_dependencies,
+                )?;
+
                 // Analyze join dependency
-                if let (Algebra::Bgp(left_patterns), Algebra::Bgp(right_patterns)) = (left.as_ref(), right.as_ref()) {
-                    if let (Some(left_pattern), Some(right_pattern)) = (left_patterns.first(), right_patterns.first()) {
+                if let (Algebra::Bgp(left_patterns), Algebra::Bgp(right_patterns)) =
+                    (left.as_ref(), right.as_ref())
+                {
+                    if let (Some(left_pattern), Some(right_pattern)) =
+                        (left_patterns.first(), right_patterns.first())
+                    {
                         let join_vars = self.find_common_variables(left_pattern, right_pattern);
                         if !join_vars.is_empty() {
                             join_dependencies.push(JoinDependency {
@@ -1020,11 +1072,29 @@ impl MaterializedViewManager {
                 }
             }
             Algebra::Union { left, right } => {
-                self.analyze_algebra_dependencies(left, base_tables, dependent_patterns, dependent_variables, join_dependencies)?;
-                self.analyze_algebra_dependencies(right, base_tables, dependent_patterns, dependent_variables, join_dependencies)?;
+                self.analyze_algebra_dependencies(
+                    left,
+                    base_tables,
+                    dependent_patterns,
+                    dependent_variables,
+                    join_dependencies,
+                )?;
+                self.analyze_algebra_dependencies(
+                    right,
+                    base_tables,
+                    dependent_patterns,
+                    dependent_variables,
+                    join_dependencies,
+                )?;
             }
             Algebra::Filter { pattern, condition } => {
-                self.analyze_algebra_dependencies(pattern, base_tables, dependent_patterns, dependent_variables, join_dependencies)?;
+                self.analyze_algebra_dependencies(
+                    pattern,
+                    base_tables,
+                    dependent_patterns,
+                    dependent_variables,
+                    join_dependencies,
+                )?;
                 self.extract_variables_from_expression(condition, dependent_variables);
             }
             _ => {
@@ -1034,7 +1104,11 @@ impl MaterializedViewManager {
         Ok(())
     }
 
-    fn extract_variables_from_pattern(&self, pattern: &TriplePattern, variables: &mut HashSet<Variable>) {
+    fn extract_variables_from_pattern(
+        &self,
+        pattern: &TriplePattern,
+        variables: &mut HashSet<Variable>,
+    ) {
         if let Term::Variable(var) = &pattern.subject {
             variables.insert(var.clone());
         }
@@ -1046,7 +1120,11 @@ impl MaterializedViewManager {
         }
     }
 
-    fn extract_variables_from_expression(&self, expression: &Expression, variables: &mut HashSet<Variable>) {
+    fn extract_variables_from_expression(
+        &self,
+        expression: &Expression,
+        variables: &mut HashSet<Variable>,
+    ) {
         match expression {
             Expression::Variable(var) => {
                 variables.insert(var.clone());
@@ -1070,10 +1148,10 @@ impl MaterializedViewManager {
     fn find_common_variables(&self, left: &TriplePattern, right: &TriplePattern) -> Vec<Variable> {
         let mut left_vars = HashSet::new();
         let mut right_vars = HashSet::new();
-        
+
         self.extract_variables_from_pattern(left, &mut left_vars);
         self.extract_variables_from_pattern(right, &mut right_vars);
-        
+
         left_vars.intersection(&right_vars).cloned().collect()
     }
 
@@ -1085,18 +1163,18 @@ impl MaterializedViewManager {
     ) -> Result<ViewCostEstimates> {
         // Simplified cost calculation
         let access_cost = CostEstimate::new(
-            view_data.row_count as f64 * 0.1, // CPU cost
-            0.0,                               // I/O cost (in memory)
+            view_data.row_count as f64 * 0.1,    // CPU cost
+            0.0,                                 // I/O cost (in memory)
             view_data.size_bytes as f64 * 0.001, // Memory cost
-            0.0,                               // Network cost
+            0.0,                                 // Network cost
             view_data.row_count,
         );
 
         let maintenance_cost = CostEstimate::new(
-            view_data.row_count as f64 * 0.5, // CPU cost for maintenance
-            view_data.row_count as f64 * 0.1,  // I/O cost
+            view_data.row_count as f64 * 0.5,    // CPU cost for maintenance
+            view_data.row_count as f64 * 0.1,    // I/O cost
             view_data.size_bytes as f64 * 0.002, // Memory cost
-            0.0,                               // Network cost
+            0.0,                                 // Network cost
             view_data.row_count,
         );
 
@@ -1111,9 +1189,7 @@ impl MaterializedViewManager {
 
     fn calculate_next_maintenance(&self, strategy: &MaintenanceStrategy) -> Option<SystemTime> {
         match strategy {
-            MaintenanceStrategy::Periodic(interval) => {
-                Some(SystemTime::now() + *interval)
-            }
+            MaintenanceStrategy::Periodic(interval) => Some(SystemTime::now() + *interval),
             MaintenanceStrategy::CostBased => {
                 Some(SystemTime::now() + Duration::from_secs(3600)) // 1 hour default
             }
@@ -1147,18 +1223,19 @@ impl MaterializedViewManager {
         dataset: &dyn Dataset,
     ) -> Result<()> {
         debug!("Performing full update for view {}", view_id);
-        
+
         // Get view definition
         let definition = {
             let views = self.views.read().unwrap();
-            let view = views.get(view_id)
+            let view = views
+                .get(view_id)
                 .ok_or_else(|| anyhow!("View not found: {}", view_id))?;
             view.definition.clone()
         };
 
         // Re-execute the view definition
         let (results, stats) = executor.execute(&definition, dataset)?;
-        
+
         // Calculate new data properties
         let size_bytes = self.estimate_result_size(&results);
         let checksum = self.calculate_checksum(&results);
@@ -1241,7 +1318,7 @@ impl QueryRewriter {
         // Simplified rewrite logic
         let views_guard = views.read().unwrap();
         let used_views = Vec::new();
-        
+
         // For now, return original query
         // In full implementation, would analyze query and find matching views
         Ok((query.clone(), used_views))
@@ -1265,20 +1342,20 @@ impl ViewIndex {
     fn add_view(&mut self, view_id: String, definition: &Algebra) -> Result<()> {
         // Extract patterns and characteristics for indexing
         let characteristics = self.extract_characteristics(definition);
-        
+
         for characteristic in characteristics {
             self.characteristic_index
                 .entry(characteristic)
                 .or_insert_with(Vec::new)
                 .push(view_id.clone());
         }
-        
+
         Ok(())
     }
 
     fn extract_characteristics(&self, algebra: &Algebra) -> Vec<QueryCharacteristic> {
         let mut characteristics = Vec::new();
-        
+
         match algebra {
             Algebra::Join { .. } => characteristics.push(QueryCharacteristic::HasJoin),
             Algebra::Union { .. } => characteristics.push(QueryCharacteristic::HasUnion),
@@ -1289,7 +1366,7 @@ impl ViewIndex {
             }
             _ => {}
         }
-        
+
         characteristics
     }
 }
@@ -1326,7 +1403,7 @@ impl MaintenanceScheduler {
 
         let mut scheduled = self.scheduled_tasks.write().unwrap();
         scheduled.push_back(task);
-        
+
         Ok(())
     }
 }
@@ -1344,7 +1421,7 @@ impl ViewRecommendationEngine {
     fn get_recommendations(&self) -> Result<Vec<ViewRecommendation>> {
         // Simplified recommendation logic
         let mut recommendations = Vec::new();
-        
+
         // Basic recommendation based on common patterns
         recommendations.push(ViewRecommendation {
             view_definition: Algebra::Bgp(vec![]), // Placeholder
@@ -1356,7 +1433,7 @@ impl ViewRecommendationEngine {
             supporting_patterns: vec!["common_pattern_1".to_string()],
             justification: "Frequently accessed pattern with high cost".to_string(),
         });
-        
+
         Ok(recommendations)
     }
 }
@@ -1399,7 +1476,7 @@ mod tests {
         let config = MaterializedViewConfig::default();
         let cost_model = Arc::new(Mutex::new(CostModel::new(CostModelConfig::default())));
         let stats_collector = Arc::new(StatisticsCollector::new());
-        
+
         let manager = MaterializedViewManager::new(config, cost_model, stats_collector);
         assert!(manager.is_ok());
     }
@@ -1407,7 +1484,7 @@ mod tests {
     #[test]
     fn test_view_storage() {
         let mut storage = ViewStorage::new(1024 * 1024); // 1MB
-        
+
         let data = ViewData {
             results: vec![],
             size_bytes: 1000,
@@ -1415,7 +1492,7 @@ mod tests {
             materialized_at: SystemTime::now(),
             checksum: 12345,
         };
-        
+
         let result = storage.store_view_data("test_view".to_string(), data);
         assert!(result.is_ok());
     }
@@ -1426,7 +1503,7 @@ mod tests {
         let query = Algebra::Bgp(vec![]);
         let views = Arc::new(RwLock::new(HashMap::new()));
         let cost_model = Arc::new(Mutex::new(CostModel::new(CostModelConfig::default())));
-        
+
         let result = rewriter.rewrite_query(&query, &views, &cost_model);
         assert!(result.is_ok());
     }
@@ -1443,7 +1520,7 @@ mod tests {
                 max_io_bandwidth: 100 * 1024 * 1024,
             },
         };
-        
+
         let scheduler = MaintenanceScheduler::new(config);
         assert!(scheduler.is_ok());
     }

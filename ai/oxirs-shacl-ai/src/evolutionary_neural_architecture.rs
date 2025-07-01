@@ -72,10 +72,14 @@ impl EvolutionaryNeuralArchitecture {
         let nas_engine = Arc::new(RwLock::new(NeuralArchitectureSearchEngine::new(&config)));
         let genetic_system = Arc::new(RwLock::new(GeneticProgrammingSystem::new(&config)));
         let population_manager = Arc::new(RwLock::new(ArchitecturePopulationManager::new(&config)));
-        let evolution_coordinator = Arc::new(RwLock::new(EvolutionStrategyCoordinator::new(&config)));
-        let multi_objective_optimizer = Arc::new(RwLock::new(MultiObjectiveOptimizer::new(&config)));
-        let growth_pruning_manager = Arc::new(RwLock::new(NetworkGrowthPruningManager::new(&config)));
-        let performance_evaluator = Arc::new(RwLock::new(ArchitecturePerformanceEvaluator::new(&config)));
+        let evolution_coordinator =
+            Arc::new(RwLock::new(EvolutionStrategyCoordinator::new(&config)));
+        let multi_objective_optimizer =
+            Arc::new(RwLock::new(MultiObjectiveOptimizer::new(&config)));
+        let growth_pruning_manager =
+            Arc::new(RwLock::new(NetworkGrowthPruningManager::new(&config)));
+        let performance_evaluator =
+            Arc::new(RwLock::new(ArchitecturePerformanceEvaluator::new(&config)));
         let self_modification_engine = Arc::new(RwLock::new(SelfModificationEngine::new(&config)));
         let fitness_assessor = Arc::new(RwLock::new(ArchitectureFitnessAssessor::new(&config)));
         let evolutionary_metrics = Arc::new(RwLock::new(EvolutionaryMetrics::new()));
@@ -100,22 +104,52 @@ impl EvolutionaryNeuralArchitecture {
         info!("Initializing evolutionary neural architecture system");
 
         // Initialize neural architecture search engine
-        let nas_init = self.nas_engine.write().await.initialize_nas_engine().await?;
-        
+        let nas_init = self
+            .nas_engine
+            .write()
+            .await
+            .initialize_nas_engine()
+            .await?;
+
         // Initialize genetic programming system
-        let genetic_init = self.genetic_system.write().await.initialize_genetic_system().await?;
-        
+        let genetic_init = self
+            .genetic_system
+            .write()
+            .await
+            .initialize_genetic_system()
+            .await?;
+
         // Initialize population with seed architectures
-        let population_init = self.population_manager.write().await.initialize_population().await?;
-        
+        let population_init = self
+            .population_manager
+            .write()
+            .await
+            .initialize_population()
+            .await?;
+
         // Start evolution coordinator
-        let evolution_init = self.evolution_coordinator.write().await.start_evolution_process().await?;
-        
+        let evolution_init = self
+            .evolution_coordinator
+            .write()
+            .await
+            .start_evolution_process()
+            .await?;
+
         // Initialize multi-objective optimization
-        let optimization_init = self.multi_objective_optimizer.write().await.initialize_optimizer().await?;
-        
+        let optimization_init = self
+            .multi_objective_optimizer
+            .write()
+            .await
+            .initialize_optimizer()
+            .await?;
+
         // Start performance evaluation system
-        let performance_init = self.performance_evaluator.write().await.start_evaluation_system().await?;
+        let performance_init = self
+            .performance_evaluator
+            .write()
+            .await
+            .start_evaluation_system()
+            .await?;
 
         Ok(EvolutionaryInitResult {
             nas_engine: nas_init,
@@ -136,47 +170,88 @@ impl EvolutionaryNeuralArchitecture {
         debug!("Evolving neural architecture for validation task");
 
         // Get current population of architectures
-        let current_population = self.population_manager.read().await.get_current_population().await?;
-        
+        let current_population = self
+            .population_manager
+            .read()
+            .await
+            .get_current_population()
+            .await?;
+
         // Evaluate fitness of all architectures
-        let fitness_evaluations = self.fitness_assessor.write().await
-            .evaluate_population_fitness(&current_population, context).await?;
-        
+        let fitness_evaluations = self
+            .fitness_assessor
+            .write()
+            .await
+            .evaluate_population_fitness(&current_population, context)
+            .await?;
+
         // Select parents for breeding using selection strategies
-        let parent_selection = self.evolution_coordinator.read().await
-            .select_breeding_parents(&fitness_evaluations).await?;
-        
+        let parent_selection = self
+            .evolution_coordinator
+            .read()
+            .await
+            .select_breeding_parents(&fitness_evaluations)
+            .await?;
+
         // Generate offspring through genetic operations
-        let offspring_generation = self.genetic_system.write().await
-            .generate_offspring(&parent_selection, context).await?;
-        
+        let offspring_generation = self
+            .genetic_system
+            .write()
+            .await
+            .generate_offspring(&parent_selection, context)
+            .await?;
+
         // Apply mutations and variations
-        let mutation_results = self.genetic_system.write().await
-            .apply_mutations(&offspring_generation).await?;
-        
+        let mutation_results = self
+            .genetic_system
+            .write()
+            .await
+            .apply_mutations(&offspring_generation)
+            .await?;
+
         // Evaluate new architectures
-        let new_evaluations = self.performance_evaluator.write().await
-            .evaluate_new_architectures(&mutation_results, context).await?;
-        
+        let new_evaluations = self
+            .performance_evaluator
+            .write()
+            .await
+            .evaluate_new_architectures(&mutation_results, context)
+            .await?;
+
         // Update population with best performers
-        let population_update = self.population_manager.write().await
-            .update_population_with_offspring(&new_evaluations).await?;
-        
+        let population_update = self
+            .population_manager
+            .write()
+            .await
+            .update_population_with_offspring(&new_evaluations)
+            .await?;
+
         // Perform self-modification on top architectures
-        let self_modification = self.self_modification_engine.write().await
-            .modify_top_architectures(&population_update.elite_architectures, context).await?;
-        
+        let self_modification = self
+            .self_modification_engine
+            .write()
+            .await
+            .modify_top_architectures(&population_update.elite_architectures, context)
+            .await?;
+
         // Multi-objective optimization
-        let pareto_optimization = self.multi_objective_optimizer.write().await
-            .optimize_pareto_front(&population_update.all_architectures).await?;
+        let pareto_optimization = self
+            .multi_objective_optimizer
+            .write()
+            .await
+            .optimize_pareto_front(&population_update.all_architectures)
+            .await?;
 
         // Update metrics
-        self.evolutionary_metrics.write().await.update_evolution_metrics(
-            &fitness_evaluations,
-            &offspring_generation,
-            &mutation_results,
-            &pareto_optimization,
-        ).await;
+        self.evolutionary_metrics
+            .write()
+            .await
+            .update_evolution_metrics(
+                &fitness_evaluations,
+                &offspring_generation,
+                &mutation_results,
+                &pareto_optimization,
+            )
+            .await;
 
         Ok(EvolutionaryValidationResult {
             evolved_architectures: pareto_optimization.pareto_optimal_set,
@@ -192,12 +267,13 @@ impl EvolutionaryNeuralArchitecture {
     /// Continuously evolve architectures in background
     pub async fn start_continuous_evolution(&self) -> Result<()> {
         info!("Starting continuous evolutionary optimization");
-        
-        let mut evolution_interval = interval(Duration::from_millis(self.config.evolution_interval_ms));
-        
+
+        let mut evolution_interval =
+            interval(Duration::from_millis(self.config.evolution_interval_ms));
+
         loop {
             evolution_interval.tick().await;
-            
+
             // Create evolution context for current iteration
             let evolution_context = EvolutionaryValidationContext {
                 current_validation_tasks: self.get_active_validation_tasks().await?,
@@ -206,17 +282,24 @@ impl EvolutionaryNeuralArchitecture {
                 diversity_requirements: self.config.diversity_requirements.clone(),
                 specialization_hints: self.extract_specialization_hints().await?,
             };
-            
+
             // Perform evolution step
-            match self.evolve_validation_architecture(&evolution_context).await {
+            match self
+                .evolve_validation_architecture(&evolution_context)
+                .await
+            {
                 Ok(evolution_result) => {
-                    debug!("Evolution step completed: {} architectures improved", 
-                           evolution_result.evolved_architectures.len());
-                    
+                    debug!(
+                        "Evolution step completed: {} architectures improved",
+                        evolution_result.evolved_architectures.len()
+                    );
+
                     // Deploy best architectures if they meet criteria
-                    if evolution_result.fitness_improvements.average_improvement > 
-                       self.config.deployment_improvement_threshold {
-                        self.deploy_improved_architectures(&evolution_result.evolved_architectures).await?;
+                    if evolution_result.fitness_improvements.average_improvement
+                        > self.config.deployment_improvement_threshold
+                    {
+                        self.deploy_improved_architectures(&evolution_result.evolved_architectures)
+                            .await?;
                     }
                 }
                 Err(e) => {
@@ -250,19 +333,28 @@ impl EvolutionaryNeuralArchitecture {
     }
 
     /// Deploy improved architectures to production
-    async fn deploy_improved_architectures(&self, architectures: &[EvolvedArchitecture]) -> Result<()> {
-        info!("Deploying {} improved neural architectures", architectures.len());
-        
+    async fn deploy_improved_architectures(
+        &self,
+        architectures: &[EvolvedArchitecture],
+    ) -> Result<()> {
+        info!(
+            "Deploying {} improved neural architectures",
+            architectures.len()
+        );
+
         for architecture in architectures {
             // Gradual rollout of new architectures
             self.gradual_architecture_deployment(architecture).await?;
         }
-        
+
         Ok(())
     }
 
     /// Perform gradual deployment of new architecture
-    async fn gradual_architecture_deployment(&self, architecture: &EvolvedArchitecture) -> Result<()> {
+    async fn gradual_architecture_deployment(
+        &self,
+        architecture: &EvolvedArchitecture,
+    ) -> Result<()> {
         // Implementation would gradually replace existing architectures
         Ok(())
     }
@@ -297,10 +389,10 @@ impl NeuralArchitectureSearchEngine {
     async fn initialize_nas_engine(&mut self) -> Result<NASInitResult> {
         // Initialize search space with predefined architectures
         self.search_space.initialize_search_space().await?;
-        
+
         // Train performance predictor on existing data
         self.performance_predictor.initialize_predictor().await?;
-        
+
         // Setup architecture encoding system
         self.architecture_encoder.initialize_encoding().await?;
 
@@ -316,11 +408,19 @@ impl NeuralArchitectureSearchEngine {
         search_context: &ArchitectureSearchContext,
     ) -> Result<Vec<CandidateArchitecture>> {
         match &self.search_strategy {
-            NASSearchStrategy::RandomSearch => self.random_architecture_search(search_context).await,
-            NASSearchStrategy::BayesianOptimization => self.bayesian_architecture_search(search_context).await,
-            NASSearchStrategy::EvolutionarySearch => self.evolutionary_architecture_search(search_context).await,
+            NASSearchStrategy::RandomSearch => {
+                self.random_architecture_search(search_context).await
+            }
+            NASSearchStrategy::BayesianOptimization => {
+                self.bayesian_architecture_search(search_context).await
+            }
+            NASSearchStrategy::EvolutionarySearch => {
+                self.evolutionary_architecture_search(search_context).await
+            }
             NASSearchStrategy::GradientBased => self.gradient_based_search(search_context).await,
-            NASSearchStrategy::ReinforcementLearning => self.reinforcement_learning_search(search_context).await,
+            NASSearchStrategy::ReinforcementLearning => {
+                self.reinforcement_learning_search(search_context).await
+            }
         }
     }
 
@@ -329,12 +429,18 @@ impl NeuralArchitectureSearchEngine {
         context: &ArchitectureSearchContext,
     ) -> Result<Vec<CandidateArchitecture>> {
         let mut candidates = Vec::new();
-        
+
         for _ in 0..context.num_candidates {
             let architecture = self.search_space.sample_random_architecture().await?;
-            let encoded = self.architecture_encoder.encode_architecture(&architecture).await?;
-            let predicted_performance = self.performance_predictor.predict_performance(&encoded).await?;
-            
+            let encoded = self
+                .architecture_encoder
+                .encode_architecture(&architecture)
+                .await?;
+            let predicted_performance = self
+                .performance_predictor
+                .predict_performance(&encoded)
+                .await?;
+
             candidates.push(CandidateArchitecture {
                 architecture,
                 encoded_representation: encoded,
@@ -342,7 +448,7 @@ impl NeuralArchitectureSearchEngine {
                 search_method: "random".to_string(),
             });
         }
-        
+
         Ok(candidates)
     }
 
@@ -352,25 +458,36 @@ impl NeuralArchitectureSearchEngine {
     ) -> Result<Vec<CandidateArchitecture>> {
         // Bayesian optimization for architecture search
         let mut candidates = Vec::new();
-        
+
         // Implement Gaussian Process-based architecture search
         for iteration in 0..context.num_candidates {
             let acquisition_function = self.compute_acquisition_function(iteration).await?;
-            let architecture = self.search_space.sample_by_acquisition(&acquisition_function).await?;
-            let encoded = self.architecture_encoder.encode_architecture(&architecture).await?;
-            let predicted_performance = self.performance_predictor.predict_performance(&encoded).await?;
-            
+            let architecture = self
+                .search_space
+                .sample_by_acquisition(&acquisition_function)
+                .await?;
+            let encoded = self
+                .architecture_encoder
+                .encode_architecture(&architecture)
+                .await?;
+            let predicted_performance = self
+                .performance_predictor
+                .predict_performance(&encoded)
+                .await?;
+
             candidates.push(CandidateArchitecture {
                 architecture,
                 encoded_representation: encoded,
                 predicted_performance,
                 search_method: "bayesian_optimization".to_string(),
             });
-            
+
             // Update Gaussian Process with new observation
-            self.performance_predictor.update_with_observation(&encoded, &predicted_performance).await?;
+            self.performance_predictor
+                .update_with_observation(&encoded, &predicted_performance)
+                .await?;
         }
-        
+
         Ok(candidates)
     }
 
@@ -379,21 +496,25 @@ impl NeuralArchitectureSearchEngine {
         context: &ArchitectureSearchContext,
     ) -> Result<Vec<CandidateArchitecture>> {
         // Evolutionary search for neural architectures
-        let mut population = self.initialize_architecture_population(context.num_candidates).await?;
-        
+        let mut population = self
+            .initialize_architecture_population(context.num_candidates)
+            .await?;
+
         for generation in 0..context.max_generations {
             // Evaluate population fitness
             let fitness_scores = self.evaluate_population_fitness(&population).await?;
-            
+
             // Selection, crossover, and mutation
             let selected_parents = self.select_parents(&population, &fitness_scores).await?;
             let offspring = self.generate_offspring(&selected_parents).await?;
             let mutated_offspring = self.mutate_population(&offspring).await?;
-            
+
             // Replace population with new generation
-            population = self.form_new_generation(&population, &mutated_offspring, &fitness_scores).await?;
+            population = self
+                .form_new_generation(&population, &mutated_offspring, &fitness_scores)
+                .await?;
         }
-        
+
         Ok(population)
     }
 
@@ -403,22 +524,34 @@ impl NeuralArchitectureSearchEngine {
     ) -> Result<Vec<CandidateArchitecture>> {
         // Differentiable architecture search (DARTS-style)
         let mut candidates = Vec::new();
-        
+
         // Initialize continuous relaxation of architecture space
         let mut architecture_weights = self.initialize_architecture_weights().await?;
-        
+
         for iteration in 0..context.num_candidates {
             // Compute gradients with respect to architecture weights
-            let gradients = self.compute_architecture_gradients(&architecture_weights).await?;
-            
+            let gradients = self
+                .compute_architecture_gradients(&architecture_weights)
+                .await?;
+
             // Update architecture weights using gradient descent
-            architecture_weights = self.update_architecture_weights(&architecture_weights, &gradients).await?;
-            
+            architecture_weights = self
+                .update_architecture_weights(&architecture_weights, &gradients)
+                .await?;
+
             // Discretize weights to form concrete architecture
-            let architecture = self.discretize_architecture_weights(&architecture_weights).await?;
-            let encoded = self.architecture_encoder.encode_architecture(&architecture).await?;
-            let predicted_performance = self.performance_predictor.predict_performance(&encoded).await?;
-            
+            let architecture = self
+                .discretize_architecture_weights(&architecture_weights)
+                .await?;
+            let encoded = self
+                .architecture_encoder
+                .encode_architecture(&architecture)
+                .await?;
+            let predicted_performance = self
+                .performance_predictor
+                .predict_performance(&encoded)
+                .await?;
+
             candidates.push(CandidateArchitecture {
                 architecture,
                 encoded_representation: encoded,
@@ -426,7 +559,7 @@ impl NeuralArchitectureSearchEngine {
                 search_method: "gradient_based".to_string(),
             });
         }
-        
+
         Ok(candidates)
     }
 
@@ -437,28 +570,46 @@ impl NeuralArchitectureSearchEngine {
         // Reinforcement learning-based architecture search
         let mut candidates = Vec::new();
         let mut rl_agent = self.initialize_rl_agent().await?;
-        
+
         for episode in 0..context.num_candidates {
             let mut architecture_state = self.search_space.get_initial_state().await?;
             let mut episode_reward = 0.0;
-            
+
             // Build architecture step by step using RL agent
-            while !self.search_space.is_complete_architecture(&architecture_state).await? {
+            while !self
+                .search_space
+                .is_complete_architecture(&architecture_state)
+                .await?
+            {
                 let action = rl_agent.select_action(&architecture_state).await?;
-                let new_state = self.search_space.apply_action(&architecture_state, &action).await?;
+                let new_state = self
+                    .search_space
+                    .apply_action(&architecture_state, &action)
+                    .await?;
                 let reward = self.compute_intermediate_reward(&new_state).await?;
-                
-                rl_agent.update_policy(&architecture_state, &action, reward, &new_state).await?;
-                
+
+                rl_agent
+                    .update_policy(&architecture_state, &action, reward, &new_state)
+                    .await?;
+
                 architecture_state = new_state;
                 episode_reward += reward;
             }
-            
+
             // Convert final state to architecture
-            let architecture = self.search_space.state_to_architecture(&architecture_state).await?;
-            let encoded = self.architecture_encoder.encode_architecture(&architecture).await?;
-            let predicted_performance = self.performance_predictor.predict_performance(&encoded).await?;
-            
+            let architecture = self
+                .search_space
+                .state_to_architecture(&architecture_state)
+                .await?;
+            let encoded = self
+                .architecture_encoder
+                .encode_architecture(&architecture)
+                .await?;
+            let predicted_performance = self
+                .performance_predictor
+                .predict_performance(&encoded)
+                .await?;
+
             candidates.push(CandidateArchitecture {
                 architecture,
                 encoded_representation: encoded,
@@ -466,7 +617,7 @@ impl NeuralArchitectureSearchEngine {
                 search_method: "reinforcement_learning".to_string(),
             });
         }
-        
+
         Ok(candidates)
     }
 
@@ -476,27 +627,43 @@ impl NeuralArchitectureSearchEngine {
         Ok(AcquisitionFunction::default())
     }
 
-    async fn initialize_architecture_population(&self, size: usize) -> Result<Vec<CandidateArchitecture>> {
+    async fn initialize_architecture_population(
+        &self,
+        size: usize,
+    ) -> Result<Vec<CandidateArchitecture>> {
         // Initialize population for evolutionary search
         Ok(Vec::new())
     }
 
-    async fn evaluate_population_fitness(&self, population: &[CandidateArchitecture]) -> Result<Vec<f64>> {
+    async fn evaluate_population_fitness(
+        &self,
+        population: &[CandidateArchitecture],
+    ) -> Result<Vec<f64>> {
         // Evaluate fitness of architecture population
         Ok(vec![0.0; population.len()])
     }
 
-    async fn select_parents(&self, population: &[CandidateArchitecture], fitness: &[f64]) -> Result<Vec<CandidateArchitecture>> {
+    async fn select_parents(
+        &self,
+        population: &[CandidateArchitecture],
+        fitness: &[f64],
+    ) -> Result<Vec<CandidateArchitecture>> {
         // Select parents for breeding
         Ok(Vec::new())
     }
 
-    async fn generate_offspring(&self, parents: &[CandidateArchitecture]) -> Result<Vec<CandidateArchitecture>> {
+    async fn generate_offspring(
+        &self,
+        parents: &[CandidateArchitecture],
+    ) -> Result<Vec<CandidateArchitecture>> {
         // Generate offspring through crossover
         Ok(Vec::new())
     }
 
-    async fn mutate_population(&self, population: &[CandidateArchitecture]) -> Result<Vec<CandidateArchitecture>> {
+    async fn mutate_population(
+        &self,
+        population: &[CandidateArchitecture],
+    ) -> Result<Vec<CandidateArchitecture>> {
         // Apply mutations to population
         Ok(Vec::new())
     }
@@ -530,7 +697,10 @@ impl NeuralArchitectureSearchEngine {
         Ok(weights - gradients * 0.01)
     }
 
-    async fn discretize_architecture_weights(&self, weights: &DMatrix<f64>) -> Result<NeuralArchitecture> {
+    async fn discretize_architecture_weights(
+        &self,
+        weights: &DMatrix<f64>,
+    ) -> Result<NeuralArchitecture> {
         // Convert continuous weights to discrete architecture
         Ok(NeuralArchitecture::default())
     }
@@ -569,22 +739,22 @@ impl GeneticProgrammingSystem {
 
     async fn initialize_genetic_system(&mut self) -> Result<GeneticInitResult> {
         info!("Initializing genetic programming system");
-        
+
         // Initialize genetic operators
         for operator in &mut self.genetic_operators {
             operator.initialize().await?;
         }
-        
+
         // Setup mutation strategies
         for strategy in &mut self.mutation_strategies {
             strategy.initialize().await?;
         }
-        
-        // Setup crossover strategies  
+
+        // Setup crossover strategies
         for strategy in &mut self.crossover_strategies {
             strategy.initialize().await?;
         }
-        
+
         Ok(GeneticInitResult {
             operators_initialized: self.genetic_operators.len(),
             mutation_strategies: self.mutation_strategies.len(),
@@ -599,25 +769,22 @@ impl GeneticProgrammingSystem {
         context: &EvolutionaryValidationContext,
     ) -> Result<OffspringGeneration> {
         let mut offspring = Vec::new();
-        
+
         // Generate offspring through various crossover strategies
         for crossover_strategy in &self.crossover_strategies {
-            let strategy_offspring = crossover_strategy.generate_offspring(
-                &parents.selected_parents,
-                context,
-            ).await?;
+            let strategy_offspring = crossover_strategy
+                .generate_offspring(&parents.selected_parents, context)
+                .await?;
             offspring.extend(strategy_offspring);
         }
-        
+
         // Track genetic diversity
         let diversity_metrics = self.compute_genetic_diversity(&offspring).await?;
-        
+
         // Update genetic statistics
-        self.genetic_statistics.update_offspring_generation(
-            offspring.len(),
-            &diversity_metrics,
-        );
-        
+        self.genetic_statistics
+            .update_offspring_generation(offspring.len(), &diversity_metrics);
+
         Ok(OffspringGeneration {
             offspring,
             generation_diversity: diversity_metrics,
@@ -632,72 +799,91 @@ impl GeneticProgrammingSystem {
     ) -> Result<MutationResults> {
         let mut mutated_architectures = Vec::new();
         let mut mutation_effects = Vec::new();
-        
+
         for architecture in &offspring.offspring {
             // Apply multiple mutation strategies
             for mutation_strategy in &self.mutation_strategies {
-                if self.should_apply_mutation(mutation_strategy, architecture).await? {
+                if self
+                    .should_apply_mutation(mutation_strategy, architecture)
+                    .await?
+                {
                     let mutation_result = mutation_strategy.apply_mutation(architecture).await?;
                     mutated_architectures.push(mutation_result.mutated_architecture);
                     mutation_effects.push(mutation_result.mutation_effect);
                 }
             }
         }
-        
+
         // Analyze mutation impacts
         let mutation_analysis = self.analyze_mutation_impacts(&mutation_effects).await?;
-        
+
         Ok(MutationResults {
             mutated_architectures,
             mutation_effects,
             mutation_analysis,
-            diversity_impact: self.compute_mutation_diversity_impact(&mutated_architectures).await?,
+            diversity_impact: self
+                .compute_mutation_diversity_impact(&mutated_architectures)
+                .await?,
         })
     }
 
-    async fn compute_genetic_diversity(&self, architectures: &[EvolvedArchitecture]) -> Result<DiversityMetrics> {
+    async fn compute_genetic_diversity(
+        &self,
+        architectures: &[EvolvedArchitecture],
+    ) -> Result<DiversityMetrics> {
         // Compute various diversity metrics
         let structural_diversity = self.compute_structural_diversity(architectures).await?;
         let functional_diversity = self.compute_functional_diversity(architectures).await?;
         let performance_diversity = self.compute_performance_diversity(architectures).await?;
-        
+
         Ok(DiversityMetrics {
             structural_diversity,
             functional_diversity,
             performance_diversity,
-            overall_diversity: (structural_diversity + functional_diversity + performance_diversity) / 3.0,
+            overall_diversity: (structural_diversity
+                + functional_diversity
+                + performance_diversity)
+                / 3.0,
         })
     }
 
-    async fn compute_structural_diversity(&self, architectures: &[EvolvedArchitecture]) -> Result<f64> {
+    async fn compute_structural_diversity(
+        &self,
+        architectures: &[EvolvedArchitecture],
+    ) -> Result<f64> {
         // Compute structural diversity based on architecture topology
         if architectures.len() < 2 {
             return Ok(0.0);
         }
-        
+
         let mut diversity_sum = 0.0;
         let mut comparisons = 0;
-        
+
         for i in 0..architectures.len() {
-            for j in i+1..architectures.len() {
-                let structural_distance = self.compute_structural_distance(
-                    &architectures[i],
-                    &architectures[j]
-                ).await?;
+            for j in i + 1..architectures.len() {
+                let structural_distance = self
+                    .compute_structural_distance(&architectures[i], &architectures[j])
+                    .await?;
                 diversity_sum += structural_distance;
                 comparisons += 1;
             }
         }
-        
+
         Ok(diversity_sum / comparisons as f64)
     }
 
-    async fn compute_functional_diversity(&self, architectures: &[EvolvedArchitecture]) -> Result<f64> {
+    async fn compute_functional_diversity(
+        &self,
+        architectures: &[EvolvedArchitecture],
+    ) -> Result<f64> {
         // Compute functional diversity based on behavior patterns
         Ok(0.8) // Placeholder implementation
     }
 
-    async fn compute_performance_diversity(&self, architectures: &[EvolvedArchitecture]) -> Result<f64> {
+    async fn compute_performance_diversity(
+        &self,
+        architectures: &[EvolvedArchitecture],
+    ) -> Result<f64> {
         // Compute performance diversity based on different metrics
         Ok(0.7) // Placeholder implementation
     }
@@ -716,7 +902,10 @@ impl GeneticProgrammingSystem {
         Ok(HashMap::new())
     }
 
-    async fn analyze_parent_contributions(&self, parents: &ParentSelection) -> Result<ParentContributionAnalysis> {
+    async fn analyze_parent_contributions(
+        &self,
+        parents: &ParentSelection,
+    ) -> Result<ParentContributionAnalysis> {
         // Analyze how much each parent contributed to offspring
         Ok(ParentContributionAnalysis::default())
     }
@@ -730,12 +919,18 @@ impl GeneticProgrammingSystem {
         Ok(strategy.mutation_probability > 0.1)
     }
 
-    async fn analyze_mutation_impacts(&self, effects: &[MutationEffect]) -> Result<MutationAnalysis> {
+    async fn analyze_mutation_impacts(
+        &self,
+        effects: &[MutationEffect],
+    ) -> Result<MutationAnalysis> {
         // Analyze the impacts of mutations on architectures
         Ok(MutationAnalysis::default())
     }
 
-    async fn compute_mutation_diversity_impact(&self, architectures: &[EvolvedArchitecture]) -> Result<f64> {
+    async fn compute_mutation_diversity_impact(
+        &self,
+        architectures: &[EvolvedArchitecture],
+    ) -> Result<f64> {
         // Compute how mutations affected genetic diversity
         Ok(0.6) // Placeholder implementation
     }
@@ -784,9 +979,9 @@ impl Default for EvolutionaryConfig {
         Self {
             population_size: 100,
             max_generations: 50,
-            evolution_interval_ms: 60000, // 1 minute
+            evolution_interval_ms: 60000,           // 1 minute
             deployment_improvement_threshold: 0.05, // 5% improvement
-            max_memory_mb: 8192, // 8GB
+            max_memory_mb: 8192,                    // 8GB
             max_compute_units: 16,
             max_inference_latency_ms: 100,
             energy_efficiency_target: 0.9,
@@ -1270,22 +1465,31 @@ impl EvolutionaryMetrics {
     ) {
         self.total_generations += 1;
         self.total_architectures_evaluated += fitness_evaluations.evaluations.len() as u64;
-        
+
         // Update fitness trends
-        if let Some(best_fitness) = fitness_evaluations.evaluations.iter()
-            .map(|e| e.fitness_score).max_by(|a, b| a.partial_cmp(b).unwrap()) {
+        if let Some(best_fitness) = fitness_evaluations
+            .evaluations
+            .iter()
+            .map(|e| e.fitness_score)
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+        {
             if best_fitness > self.best_fitness_achieved {
                 self.best_fitness_achieved = best_fitness;
             }
         }
-        
-        let average_fitness = fitness_evaluations.evaluations.iter()
-            .map(|e| e.fitness_score).sum::<f64>() / fitness_evaluations.evaluations.len() as f64;
+
+        let average_fitness = fitness_evaluations
+            .evaluations
+            .iter()
+            .map(|e| e.fitness_score)
+            .sum::<f64>()
+            / fitness_evaluations.evaluations.len() as f64;
         self.average_fitness_trend.push(average_fitness);
-        
+
         // Update diversity trends
-        self.diversity_trend.push(offspring_generation.generation_diversity.overall_diversity);
-        
+        self.diversity_trend
+            .push(offspring_generation.generation_diversity.overall_diversity);
+
         // Record convergence point
         self.convergence_history.push(ConvergencePoint {
             generation: self.total_generations,
@@ -1415,7 +1619,10 @@ impl NeuralArchitectureSearchSpace {
         Ok(NeuralArchitecture::default())
     }
 
-    async fn sample_by_acquisition(&self, _acquisition: &AcquisitionFunction) -> Result<NeuralArchitecture> {
+    async fn sample_by_acquisition(
+        &self,
+        _acquisition: &AcquisitionFunction,
+    ) -> Result<NeuralArchitecture> {
         Ok(NeuralArchitecture::default())
     }
 
@@ -1427,11 +1634,18 @@ impl NeuralArchitectureSearchSpace {
         Ok(true)
     }
 
-    async fn apply_action(&self, _state: &ArchitectureState, _action: &RLAction) -> Result<ArchitectureState> {
+    async fn apply_action(
+        &self,
+        _state: &ArchitectureState,
+        _action: &RLAction,
+    ) -> Result<ArchitectureState> {
         Ok(ArchitectureState::default())
     }
 
-    async fn state_to_architecture(&self, _state: &ArchitectureState) -> Result<NeuralArchitecture> {
+    async fn state_to_architecture(
+        &self,
+        _state: &ArchitectureState,
+    ) -> Result<NeuralArchitecture> {
         Ok(NeuralArchitecture::default())
     }
 }
@@ -1452,7 +1666,10 @@ impl PerformancePredictor {
         0.85
     }
 
-    async fn predict_performance(&self, _encoded: &EncodedArchitecture) -> Result<PredictedPerformance> {
+    async fn predict_performance(
+        &self,
+        _encoded: &EncodedArchitecture,
+    ) -> Result<PredictedPerformance> {
         Ok(PredictedPerformance::default())
     }
 
@@ -1481,7 +1698,10 @@ impl ArchitectureEncoder {
         256
     }
 
-    async fn encode_architecture(&self, _architecture: &NeuralArchitecture) -> Result<EncodedArchitecture> {
+    async fn encode_architecture(
+        &self,
+        _architecture: &NeuralArchitecture,
+    ) -> Result<EncodedArchitecture> {
         Ok(EncodedArchitecture::default())
     }
 }
@@ -1755,7 +1975,9 @@ pub mod architecture_validation {
     use super::*;
 
     /// Validate evolved architectures before deployment
-    pub async fn validate_architecture(architecture: &EvolvedArchitecture) -> Result<ValidationResult> {
+    pub async fn validate_architecture(
+        architecture: &EvolvedArchitecture,
+    ) -> Result<ValidationResult> {
         // Comprehensive validation of evolved architectures
         let structural_validation = validate_structural_integrity(architecture).await?;
         let performance_validation = validate_performance_requirements(architecture).await?;
@@ -1776,7 +1998,9 @@ pub mod architecture_validation {
         })
     }
 
-    async fn validate_structural_integrity(architecture: &EvolvedArchitecture) -> Result<StructuralValidation> {
+    async fn validate_structural_integrity(
+        architecture: &EvolvedArchitecture,
+    ) -> Result<StructuralValidation> {
         // Validate architecture structure
         Ok(StructuralValidation {
             is_valid: true,
@@ -1784,7 +2008,9 @@ pub mod architecture_validation {
         })
     }
 
-    async fn validate_performance_requirements(architecture: &EvolvedArchitecture) -> Result<PerformanceValidation> {
+    async fn validate_performance_requirements(
+        architecture: &EvolvedArchitecture,
+    ) -> Result<PerformanceValidation> {
         // Validate performance meets requirements
         Ok(PerformanceValidation {
             meets_requirements: true,
@@ -1792,7 +2018,9 @@ pub mod architecture_validation {
         })
     }
 
-    async fn validate_resource_constraints(architecture: &EvolvedArchitecture) -> Result<ResourceValidation> {
+    async fn validate_resource_constraints(
+        architecture: &EvolvedArchitecture,
+    ) -> Result<ResourceValidation> {
         // Validate resource usage within constraints
         Ok(ResourceValidation {
             within_constraints: true,
@@ -1800,7 +2028,9 @@ pub mod architecture_validation {
         })
     }
 
-    async fn validate_safety_properties(architecture: &EvolvedArchitecture) -> Result<SafetyValidation> {
+    async fn validate_safety_properties(
+        architecture: &EvolvedArchitecture,
+    ) -> Result<SafetyValidation> {
         // Validate safety properties
         Ok(SafetyValidation {
             is_safe: true,

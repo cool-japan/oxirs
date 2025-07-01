@@ -188,7 +188,7 @@ impl Constraint {
     /// Evaluate this constraint against the given context
     pub fn evaluate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         match self {
@@ -234,7 +234,7 @@ pub trait ConstraintEvaluator {
     /// Evaluate the constraint against the given context
     fn evaluate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult>;
 }

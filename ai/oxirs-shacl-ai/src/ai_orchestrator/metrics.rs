@@ -139,7 +139,12 @@ impl AiOrchestratorStats {
     }
 
     /// Update learning session statistics
-    pub fn update_learning_session(&mut self, session_duration: Duration, shapes_count: usize, constraints_count: usize) {
+    pub fn update_learning_session(
+        &mut self,
+        session_duration: Duration,
+        shapes_count: usize,
+        constraints_count: usize,
+    ) {
         self.total_learning_sessions += 1;
         self.total_training_time += session_duration;
         self.shapes_learned += shapes_count;
@@ -147,10 +152,17 @@ impl AiOrchestratorStats {
     }
 
     /// Update prediction statistics
-    pub fn update_prediction_stats(&mut self, predictions_count: usize, correct_predictions: usize) {
+    pub fn update_prediction_stats(
+        &mut self,
+        predictions_count: usize,
+        correct_predictions: usize,
+    ) {
         self.total_predictions += predictions_count;
         if self.total_predictions > 0 {
-            let total_correct = (self.prediction_accuracy * (self.total_predictions - predictions_count) as f64) as usize + correct_predictions;
+            let total_correct = (self.prediction_accuracy
+                * (self.total_predictions - predictions_count) as f64)
+                as usize
+                + correct_predictions;
             self.prediction_accuracy = total_correct as f64 / self.total_predictions as f64;
         }
     }
@@ -158,17 +170,18 @@ impl AiOrchestratorStats {
     /// Update memory statistics
     pub fn update_memory_stats(&mut self, current_memory_mb: f64) {
         self.memory_stats.current_memory_mb = current_memory_mb;
-        
+
         if current_memory_mb > self.memory_stats.peak_memory_mb {
             self.memory_stats.peak_memory_mb = current_memory_mb;
         }
-        
+
         // Update running average
         let total_measurements = self.memory_stats.allocations_count + 1;
-        self.memory_stats.average_memory_mb = 
-            (self.memory_stats.average_memory_mb * self.memory_stats.allocations_count as f64 + current_memory_mb) 
+        self.memory_stats.average_memory_mb = (self.memory_stats.average_memory_mb
+            * self.memory_stats.allocations_count as f64
+            + current_memory_mb)
             / total_measurements as f64;
-        
+
         self.memory_stats.allocations_count = total_measurements;
     }
 
@@ -177,10 +190,11 @@ impl AiOrchestratorStats {
         if self.total_learning_sessions == 0 {
             return 0.0;
         }
-        
+
         let shapes_per_session = self.shapes_learned as f64 / self.total_learning_sessions as f64;
-        let avg_session_time_secs = self.total_training_time.as_secs_f64() / self.total_learning_sessions as f64;
-        
+        let avg_session_time_secs =
+            self.total_training_time.as_secs_f64() / self.total_learning_sessions as f64;
+
         if avg_session_time_secs > 0.0 {
             shapes_per_session / avg_session_time_secs
         } else {

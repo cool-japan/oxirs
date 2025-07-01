@@ -1,6 +1,9 @@
 //! Advanced vector indexing with HNSW and other efficient algorithms
 
-use crate::{Vector, VectorIndex};
+use crate::Vector;
+
+// Re-export VectorIndex trait for use by other modules
+pub use crate::VectorIndex;
 use anyhow::{anyhow, Result};
 use oxirs_core::parallel::*;
 use oxirs_core::Triple;

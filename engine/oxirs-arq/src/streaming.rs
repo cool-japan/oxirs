@@ -820,8 +820,8 @@ impl StreamingExecutor {
                 variables.extend(self.extract_variables_from_expression(left));
                 variables.extend(self.extract_variables_from_expression(right));
             }
-            Expression::Unary { expr, .. } => {
-                variables.extend(self.extract_variables_from_expression(expr));
+            Expression::Unary { operand, .. } => {
+                variables.extend(self.extract_variables_from_expression(operand));
             }
             Expression::Conditional {
                 condition,
@@ -1558,10 +1558,10 @@ impl StreamingSelection {
                     }
                 }
             }
-            Expression::Unary { op, expr } => {
+            Expression::Unary { op, operand } => {
                 match op {
                     UnaryOperator::Not => {
-                        let result = self.evaluate_condition_expr(expr, binding)?;
+                        let result = self.evaluate_condition_expr(operand, binding)?;
                         Ok(!result)
                     }
                     _ => {

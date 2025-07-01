@@ -2,8 +2,8 @@
 //!
 //! Records and analyzes query execution for adaptive optimization.
 
-use std::time::Duration;
 use crate::algebra::Algebra;
+use std::time::Duration;
 
 /// Execution record for learning-based optimization
 #[derive(Debug, Clone)]
@@ -84,11 +84,7 @@ impl ExecutionRecord {
 
 impl OptimizationDecision {
     /// Create a new optimization decision
-    pub fn new(
-        optimization_type: OptimizationType,
-        before_cost: f64,
-        after_cost: f64,
-    ) -> Self {
+    pub fn new(optimization_type: OptimizationType, before_cost: f64, after_cost: f64) -> Self {
         Self {
             optimization_type,
             before_cost,

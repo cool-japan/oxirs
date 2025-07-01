@@ -21,9 +21,9 @@ pub mod plan_generation;
 pub mod types;
 
 // Re-export main types and structs for public API
+pub use advanced_pattern_analysis::*;
 pub use core::*;
 pub use types::*;
-pub use advanced_pattern_analysis::*;
 
 #[cfg(test)]
 mod tests {

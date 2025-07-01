@@ -101,7 +101,7 @@ impl ConstraintValidator for MinLengthConstraint {
 impl ConstraintEvaluator for MinLengthConstraint {
     fn evaluate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {
@@ -178,7 +178,7 @@ impl ConstraintValidator for MaxLengthConstraint {
 impl ConstraintEvaluator for MaxLengthConstraint {
     fn evaluate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {
@@ -299,7 +299,7 @@ impl ConstraintValidator for PatternConstraint {
 impl ConstraintEvaluator for PatternConstraint {
     fn evaluate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         // Build the regex with flags
@@ -432,7 +432,7 @@ impl ConstraintValidator for LanguageInConstraint {
 impl ConstraintEvaluator for LanguageInConstraint {
     fn evaluate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {
@@ -526,7 +526,7 @@ impl ConstraintValidator for UniqueLangConstraint {
 impl ConstraintEvaluator for UniqueLangConstraint {
     fn evaluate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         if !self.unique_lang {

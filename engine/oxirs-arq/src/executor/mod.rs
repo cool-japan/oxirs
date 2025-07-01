@@ -728,8 +728,8 @@ impl QueryExecutor {
                 }
 
                 if *distinct {
-                    let unique_values: HashSet<_> = values.iter().cloned().collect();
-                    values = unique_values.into_iter().collect();
+                    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                    values.dedup_by(|a, b| a == b);
                 }
 
                 let sum: f64 = values.iter().sum();
@@ -796,8 +796,8 @@ impl QueryExecutor {
                 }
 
                 if *distinct {
-                    let unique_values: HashSet<_> = values.iter().cloned().collect();
-                    values = unique_values.into_iter().collect();
+                    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                    values.dedup_by(|a, b| a == b);
                 }
 
                 if values.is_empty() {
@@ -1059,8 +1059,8 @@ impl QueryExecutor {
                 let right_val = self.evaluate_expression(right, binding)?;
                 self.evaluate_binary_operation(op, &left_val, &right_val)
             }
-            Expression::Unary { op, expr } => {
-                let val = self.evaluate_expression(expr, binding)?;
+            Expression::Unary { op, operand } => {
+                let val = self.evaluate_expression(operand, binding)?;
                 self.evaluate_unary_operation(op, &val)
             }
             Expression::Bound(var) => {
@@ -1099,7 +1099,9 @@ impl QueryExecutor {
                             let arg = self.evaluate_expression(&args[0], binding)?;
                             self.str_function(&arg)
                         } else {
-                            Err(anyhow::anyhow!("str() function requires exactly 1 argument"))
+                            Err(anyhow::anyhow!(
+                                "str() function requires exactly 1 argument"
+                            ))
                         }
                     }
                     "lang" => {
@@ -1107,7 +1109,9 @@ impl QueryExecutor {
                             let arg = self.evaluate_expression(&args[0], binding)?;
                             self.lang_function(&arg)
                         } else {
-                            Err(anyhow::anyhow!("lang() function requires exactly 1 argument"))
+                            Err(anyhow::anyhow!(
+                                "lang() function requires exactly 1 argument"
+                            ))
                         }
                     }
                     "datatype" => {
@@ -1115,7 +1119,9 @@ impl QueryExecutor {
                             let arg = self.evaluate_expression(&args[0], binding)?;
                             self.datatype_function(&arg)
                         } else {
-                            Err(anyhow::anyhow!("datatype() function requires exactly 1 argument"))
+                            Err(anyhow::anyhow!(
+                                "datatype() function requires exactly 1 argument"
+                            ))
                         }
                     }
                     _ => Err(anyhow::anyhow!("Unknown function: {}", name)),
@@ -1198,7 +1204,10 @@ impl QueryExecutor {
                     )),
                 }))
             }
-            _ => Err(anyhow::anyhow!("Binary operator {:?} not yet implemented", op)),
+            _ => Err(anyhow::anyhow!(
+                "Binary operator {:?} not yet implemented",
+                op
+            )),
         }
     }
 
@@ -1261,14 +1270,17 @@ impl QueryExecutor {
                     )),
                 }))
             }
-            _ => Err(anyhow::anyhow!("Unary operator {:?} not yet implemented", op)),
+            _ => Err(anyhow::anyhow!(
+                "Unary operator {:?} not yet implemented",
+                op
+            )),
         }
     }
 
     /// Check if two terms are equal according to SPARQL semantics
     fn terms_equal(&self, left: &crate::algebra::Term, right: &crate::algebra::Term) -> bool {
         use crate::algebra::Term;
-        
+
         match (left, right) {
             (Term::Literal(l1), Term::Literal(l2)) => {
                 // SPARQL equality for literals
@@ -1294,7 +1306,9 @@ impl QueryExecutor {
     fn is_term_truthy(&self, term: &crate::algebra::Term) -> Result<bool> {
         match term {
             crate::algebra::Term::Literal(lit) => Ok(self.is_truthy(lit)),
-            _ => Err(anyhow::anyhow!("Cannot evaluate truthiness of non-literal term")),
+            _ => Err(anyhow::anyhow!(
+                "Cannot evaluate truthiness of non-literal term"
+            )),
         }
     }
 
@@ -1308,9 +1322,11 @@ impl QueryExecutor {
                 "http://www.w3.org/2001/XMLSchema#integer"
                 | "http://www.w3.org/2001/XMLSchema#decimal"
                 | "http://www.w3.org/2001/XMLSchema#double"
-                | "http://www.w3.org/2001/XMLSchema#float" => {
-                    literal.value.parse::<f64>().map(|n| n != 0.0).unwrap_or(false)
-                }
+                | "http://www.w3.org/2001/XMLSchema#float" => literal
+                    .value
+                    .parse::<f64>()
+                    .map(|n| n != 0.0)
+                    .unwrap_or(false),
                 "http://www.w3.org/2001/XMLSchema#string" => !literal.value.is_empty(),
                 _ => !literal.value.is_empty(), // Default: non-empty strings are truthy
             }
@@ -1330,7 +1346,7 @@ impl QueryExecutor {
     ) -> Result<crate::algebra::Term> {
         let left_num = self.extract_numeric_value(left)?;
         let right_num = self.extract_numeric_value(right)?;
-        
+
         let result = op(left_num, right_num);
         Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
             value: result.to_string(),
@@ -1344,11 +1360,13 @@ impl QueryExecutor {
     /// Extract numeric value from a term
     fn extract_numeric_value(&self, term: &crate::algebra::Term) -> Result<f64> {
         match term {
-            crate::algebra::Term::Literal(lit) => {
-                lit.value.parse::<f64>()
-                    .map_err(|_| anyhow::anyhow!("Cannot convert literal to number: {}", lit.value))
-            }
-            _ => Err(anyhow::anyhow!("Cannot extract numeric value from non-literal term")),
+            crate::algebra::Term::Literal(lit) => lit
+                .value
+                .parse::<f64>()
+                .map_err(|_| anyhow::anyhow!("Cannot convert literal to number: {}", lit.value)),
+            _ => Err(anyhow::anyhow!(
+                "Cannot extract numeric value from non-literal term"
+            )),
         }
     }
 
@@ -1422,7 +1440,9 @@ impl QueryExecutor {
                     )),
                 }))
             }
-            _ => Err(anyhow::anyhow!("STR function not applicable to this term type")),
+            _ => Err(anyhow::anyhow!(
+                "STR function not applicable to this term type"
+            )),
         }
     }
 
@@ -1447,14 +1467,18 @@ impl QueryExecutor {
     fn datatype_function(&self, arg: &crate::algebra::Term) -> Result<crate::algebra::Term> {
         match arg {
             crate::algebra::Term::Literal(lit) => {
-                let datatype = lit.datatype.as_ref().unwrap_or(
-                    &oxirs_core::model::NamedNode::new_unchecked(
-                        "http://www.w3.org/2001/XMLSchema#string"
-                    )
-                ).clone();
+                let datatype = lit
+                    .datatype
+                    .as_ref()
+                    .unwrap_or(&oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#string",
+                    ))
+                    .clone();
                 Ok(crate::algebra::Term::Iri(datatype))
             }
-            _ => Err(anyhow::anyhow!("DATATYPE function only applicable to literals")),
+            _ => Err(anyhow::anyhow!(
+                "DATATYPE function only applicable to literals"
+            )),
         }
     }
 

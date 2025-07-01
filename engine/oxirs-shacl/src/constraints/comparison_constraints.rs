@@ -24,7 +24,7 @@ impl EqualsConstraint {
     pub fn evaluate(
         &self,
         _context: &ConstraintContext,
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement equals constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
@@ -50,7 +50,7 @@ impl DisjointConstraint {
     pub fn evaluate(
         &self,
         _context: &ConstraintContext,
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement disjoint constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
@@ -76,7 +76,7 @@ impl LessThanConstraint {
     pub fn evaluate(
         &self,
         _context: &ConstraintContext,
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement less than constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
@@ -102,7 +102,7 @@ impl LessThanOrEqualsConstraint {
     pub fn evaluate(
         &self,
         _context: &ConstraintContext,
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement less than or equals constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
@@ -128,7 +128,7 @@ impl InConstraint {
     pub fn evaluate(
         &self,
         _context: &ConstraintContext,
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement in constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
@@ -154,7 +154,7 @@ impl HasValueConstraint {
     pub fn evaluate(
         &self,
         _context: &ConstraintContext,
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement has value constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)

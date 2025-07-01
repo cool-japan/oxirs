@@ -922,26 +922,46 @@ impl PaginationManager {
             .clamp(self.config.min_page_size, self.config.max_page_size);
 
         let starting_offset = cursor.as_ref().map(|c| c.offset).unwrap_or(0);
-        
-        let (paginated_data, total_count) = self.extract_page(&result, starting_offset, effective_page_size).await?;
-        
+
+        let (paginated_data, total_count) = self
+            .extract_page(&result, starting_offset, effective_page_size)
+            .await?;
+
         let current_page = (starting_offset / effective_page_size) + 1;
-        let total_pages = total_count.map(|count| (count + effective_page_size - 1) / effective_page_size);
-        
-        let has_next_page = starting_offset + effective_page_size < total_count.unwrap_or(starting_offset + effective_page_size + 1);
+        let total_pages =
+            total_count.map(|count| (count + effective_page_size - 1) / effective_page_size);
+
+        let has_next_page = starting_offset + effective_page_size
+            < total_count.unwrap_or(starting_offset + effective_page_size + 1);
         let has_previous_page = starting_offset > 0;
 
         // Generate cursors
-        let current_cursor = self.create_cursor(starting_offset, effective_page_size, total_count).await?;
-        
+        let current_cursor = self
+            .create_cursor(starting_offset, effective_page_size, total_count)
+            .await?;
+
         let next_cursor = if has_next_page {
-            Some(self.create_cursor(starting_offset + effective_page_size, effective_page_size, total_count).await?)
+            Some(
+                self.create_cursor(
+                    starting_offset + effective_page_size,
+                    effective_page_size,
+                    total_count,
+                )
+                .await?,
+            )
         } else {
             None
         };
 
         let previous_cursor = if has_previous_page && starting_offset >= effective_page_size {
-            Some(self.create_cursor(starting_offset - effective_page_size, effective_page_size, total_count).await?)
+            Some(
+                self.create_cursor(
+                    starting_offset - effective_page_size,
+                    effective_page_size,
+                    total_count,
+                )
+                .await?,
+            )
         } else {
             None
         };
@@ -972,10 +992,10 @@ impl PaginationManager {
         total_count: Option<usize>,
     ) -> Result<PaginationCursor> {
         let cursor = self.create_cursor(0, page_size, total_count).await?;
-        
+
         // Store cursor for later retrieval
         self.store_cursor(cursor.clone()).await?;
-        
+
         Ok(cursor)
     }
 
@@ -986,11 +1006,12 @@ impl PaginationManager {
         result_provider: impl Fn(usize, usize) -> Result<QueryResult>,
     ) -> Result<PaginatedResult> {
         self.validate_cursor(cursor).await?;
-        
+
         let next_offset = cursor.offset + cursor.page_size;
         let result = result_provider(next_offset, cursor.page_size)?;
-        
-        self.paginate_result(result, Some(cursor.page_size), Some(cursor.clone())).await
+
+        self.paginate_result(result, Some(cursor.page_size), Some(cursor.clone()))
+            .await
     }
 
     /// Clean up expired cursors
@@ -1006,7 +1027,7 @@ impl PaginationManager {
         cursors.retain(|_, cursor| cursor.expires_at > current_time);
 
         let removed_count = initial_count - cursors.len();
-        
+
         // Also cleanup cached results for removed cursors
         if removed_count > 0 {
             let mut cache = self.cached_results.write().await;
@@ -1020,13 +1041,14 @@ impl PaginationManager {
     pub async fn get_cursor_statistics(&self) -> CursorStatistics {
         let cursors = self.active_cursors.read().await;
         let cache = self.cached_results.read().await;
-        
+
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        let expired_count = cursors.values()
+        let expired_count = cursors
+            .values()
             .filter(|cursor| cursor.expires_at <= current_time)
             .count();
 
@@ -1050,7 +1072,7 @@ impl PaginationManager {
             QueryResult::Sparql(sparql_results) => {
                 let total_count = sparql_results.results.bindings.len();
                 let end_idx = (offset + page_size).min(total_count);
-                
+
                 if offset >= total_count {
                     // Return empty result
                     let empty_result = QueryResult::Sparql(SparqlResults {
@@ -1061,10 +1083,12 @@ impl PaginationManager {
                 }
 
                 let page_bindings = sparql_results.results.bindings[offset..end_idx].to_vec();
-                
+
                 let paginated_result = QueryResult::Sparql(SparqlResults {
                     head: sparql_results.head.clone(),
-                    results: crate::executor::SparqlResultsData { bindings: page_bindings },
+                    results: crate::executor::SparqlResultsData {
+                        bindings: page_bindings,
+                    },
                 });
 
                 Ok((paginated_result, Some(total_count)))
@@ -1107,7 +1131,7 @@ impl PaginationManager {
 
     async fn store_cursor(&self, cursor: PaginationCursor) -> Result<()> {
         let mut cursors = self.active_cursors.write().await;
-        
+
         // Clean up old cursors if we're at capacity
         if cursors.len() >= self.config.max_cached_cursors {
             let current_time = std::time::SystemTime::now()
@@ -1123,7 +1147,7 @@ impl PaginationManager {
                 let mut cursor_vec: Vec<_> = cursors.drain().collect();
                 cursor_vec.sort_by_key(|(_, c)| c.created_at);
                 cursor_vec.truncate(self.config.max_cached_cursors - 1);
-                
+
                 for (id, c) in cursor_vec {
                     cursors.insert(id, c);
                 }
@@ -1147,7 +1171,7 @@ impl PaginationManager {
         // Validate position state
         let decoded_state = base64::decode(&cursor.position_state)
             .map_err(|_| anyhow!("Invalid cursor position state"))?;
-        
+
         let state_str = String::from_utf8(decoded_state)
             .map_err(|_| anyhow!("Invalid cursor position state encoding"))?;
 
@@ -1156,9 +1180,11 @@ impl PaginationManager {
             return Err(anyhow!("Invalid cursor position state format"));
         }
 
-        let offset: usize = parts[0].parse()
+        let offset: usize = parts[0]
+            .parse()
             .map_err(|_| anyhow!("Invalid cursor offset"))?;
-        let page_size: usize = parts[1].parse()
+        let page_size: usize = parts[1]
+            .parse()
             .map_err(|_| anyhow!("Invalid cursor page size"))?;
 
         if offset != cursor.offset || page_size != cursor.page_size {

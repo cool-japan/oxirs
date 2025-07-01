@@ -788,7 +788,8 @@ impl EnhancedFederationManager {
         // Record execution statistics
         if let Ok(ref plan_result) = result {
             // Record analytics for each service used
-            for service_id in &query_plan.services {
+            for step in &query_plan.steps {
+                let service_id = &step.endpoint_id;
                 let stats = QueryExecutionStats {
                     query_hash: query_hash.clone(),
                     service_id: service_id.clone(),
@@ -850,6 +851,21 @@ impl EnhancedFederationManager {
                 }
                 crate::ast::Definition::Fragment(_) => {
                     complexity += 0.5; // Fragments add some complexity
+                }
+                crate::ast::Definition::Schema(_) => {
+                    complexity += 0.1; // Schema definitions add minimal complexity
+                }
+                crate::ast::Definition::Type(_) => {
+                    complexity += 0.1; // Type definitions add minimal complexity
+                }
+                crate::ast::Definition::Directive(_) => {
+                    complexity += 0.1; // Directive definitions add minimal complexity
+                }
+                crate::ast::Definition::SchemaExtension(_) => {
+                    complexity += 0.1; // Schema extensions add minimal complexity
+                }
+                crate::ast::Definition::TypeExtension(_) => {
+                    complexity += 0.1; // Type extensions add minimal complexity
                 }
             }
         }

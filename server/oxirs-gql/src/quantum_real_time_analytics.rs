@@ -14,7 +14,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::ai_query_predictor::{AIQueryPredictor, QueryPrediction};
 use crate::predictive_analytics::{PredictiveAnalyticsEngine, TrendAnalysis};
-use crate::quantum_optimizer::{QuantumQueryOptimizer, QuantumState};
+use crate::quantum_optimizer::{Complex64, QuantumQueryOptimizer, QuantumState};
 
 /// Configuration for quantum-enhanced real-time analytics
 #[derive(Debug, Clone)]
@@ -65,27 +65,6 @@ pub struct QuantumMeasurement {
     pub quantum_fidelity: f64,
 }
 
-/// Complex number representation for quantum calculations
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct Complex64 {
-    pub real: f64,
-    pub imag: f64,
-}
-
-impl Complex64 {
-    pub fn new(real: f64, imag: f64) -> Self {
-        Self { real, imag }
-    }
-
-    pub fn magnitude(&self) -> f64 {
-        (self.real * self.real + self.imag * self.imag).sqrt()
-    }
-
-    pub fn phase(&self) -> f64 {
-        self.imag.atan2(self.real)
-    }
-}
-
 /// Quantum analytics metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantumAnalyticsMetrics {
@@ -118,7 +97,7 @@ pub struct QuantumRealTimeAnalyticsEngine {
     measurement_history: Arc<AsyncMutex<VecDeque<QuantumMeasurement>>>,
     analytics_metrics: Arc<AsyncRwLock<QuantumAnalyticsMetrics>>,
     ai_predictor: Arc<AIQueryPredictor>,
-    quantum_optimizer: Arc<QuantumOptimizer>,
+    quantum_optimizer: Arc<QuantumQueryOptimizer>,
     monitoring_task: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -127,14 +106,12 @@ impl QuantumRealTimeAnalyticsEngine {
     pub async fn new(
         config: QuantumRealTimeAnalyticsConfig,
         ai_predictor: Arc<AIQueryPredictor>,
-        quantum_optimizer: Arc<QuantumOptimizer>,
+        quantum_optimizer: Arc<QuantumQueryOptimizer>,
     ) -> Result<Self> {
         let quantum_state = Arc::new(AsyncRwLock::new(QuantumState {
             amplitudes: vec![Complex64::new(1.0, 0.0); config.superposition_depth],
             entanglement_map: HashMap::new(),
             measurement_history: vec![],
-            coherence_time: config.quantum_coherence_time,
-            fidelity: 1.0,
         }));
 
         let measurement_history = Arc::new(AsyncMutex::new(VecDeque::new()));
@@ -567,8 +544,8 @@ mod tests {
         let ai_config = AIQueryPredictorConfig::default();
         let quantum_config = QuantumOptimizerConfig::default();
 
-        let ai_predictor = Arc::new(AIQueryPredictor::new(ai_config).await.unwrap());
-        let quantum_optimizer = Arc::new(QuantumOptimizer::new(quantum_config).await.unwrap());
+        let ai_predictor = Arc::new(AIQueryPredictor::new(ai_config));
+        let quantum_optimizer = Arc::new(QuantumQueryOptimizer::new(quantum_config));
 
         let analytics =
             QuantumRealTimeAnalyticsEngine::new(config, ai_predictor, quantum_optimizer).await;
@@ -582,8 +559,8 @@ mod tests {
         let ai_config = AIQueryPredictorConfig::default();
         let quantum_config = QuantumOptimizerConfig::default();
 
-        let ai_predictor = Arc::new(AIQueryPredictor::new(ai_config).await.unwrap());
-        let quantum_optimizer = Arc::new(QuantumOptimizer::new(quantum_config).await.unwrap());
+        let ai_predictor = Arc::new(AIQueryPredictor::new(ai_config));
+        let quantum_optimizer = Arc::new(QuantumQueryOptimizer::new(quantum_config));
 
         let analytics =
             QuantumRealTimeAnalyticsEngine::new(config, ai_predictor, quantum_optimizer)
@@ -606,8 +583,8 @@ mod tests {
         let ai_config = AIQueryPredictorConfig::default();
         let quantum_config = QuantumOptimizerConfig::default();
 
-        let ai_predictor = Arc::new(AIQueryPredictor::new(ai_config).await.unwrap());
-        let quantum_optimizer = Arc::new(QuantumOptimizer::new(quantum_config).await.unwrap());
+        let ai_predictor = Arc::new(AIQueryPredictor::new(ai_config));
+        let quantum_optimizer = Arc::new(QuantumQueryOptimizer::new(quantum_config));
 
         let analytics =
             QuantumRealTimeAnalyticsEngine::new(config, ai_predictor, quantum_optimizer)

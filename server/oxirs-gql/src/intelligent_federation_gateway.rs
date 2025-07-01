@@ -410,6 +410,7 @@ impl IntelligentFederationGateway {
             OptimizationStrategy::Pipelined => {
                 self.execute_pipelined_query(&execution_plan).await?
             }
+            OptimizationStrategy::Batch => self.execute_batch_query(&execution_plan).await?,
         };
 
         // Cache result if enabled
@@ -570,6 +571,35 @@ impl IntelligentFederationGateway {
         self.execute_parallel_query(plan).await
     }
 
+    /// Execute query with batch strategy
+    async fn execute_batch_query(&self, plan: &QueryExecutionPlan) -> Result<serde_json::Value> {
+        debug!(
+            "Executing batch query with {} fragments",
+            plan.service_assignments.len()
+        );
+
+        // Group fragments by service to minimize round trips
+        let mut service_groups: HashMap<String, Vec<(String, &ServiceQueryFragment)>> =
+            HashMap::new();
+
+        for (fragment_id, fragment) in &plan.service_assignments {
+            service_groups
+                .entry(fragment.service_id.clone())
+                .or_default()
+                .push((fragment_id.clone(), fragment));
+        }
+
+        let mut all_results = HashMap::new();
+
+        // Execute each service group as a batch
+        for (service_id, fragments) in service_groups {
+            let batch_results = self.execute_service_batch(&service_id, fragments).await?;
+            all_results.extend(batch_results);
+        }
+
+        self.merge_fragment_results(all_results).await
+    }
+
     /// Execute a single service fragment
     async fn execute_service_fragment(
         &self,
@@ -643,6 +673,58 @@ impl IntelligentFederationGateway {
                 response.status()
             ))
         }
+    }
+
+    /// Execute multiple queries as a batch to a single service
+    async fn execute_service_batch(
+        &self,
+        service_id: &str,
+        fragments: Vec<(String, &ServiceQueryFragment)>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        let service = {
+            let services = self.services.read().await;
+            services
+                .get(service_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("Service not found: {}", service_id))?
+        };
+
+        // Create HTTP client with timeout
+        let client = reqwest::Client::builder()
+            .timeout(self.config.service_timeout)
+            .build()?;
+
+        let mut batch_results = HashMap::new();
+
+        // For simplicity, execute fragments sequentially in this batch
+        // In a real implementation, you might batch them into a single GraphQL request
+        for (fragment_id, fragment) in fragments {
+            let request_body = serde_json::json!({
+                "query": fragment.fragment_query
+            });
+
+            let response = client
+                .post(&service.url)
+                .headers(self.build_request_headers(&service.headers)?)
+                .json(&request_body)
+                .send()
+                .await?;
+
+            if response.status().is_success() {
+                let result: serde_json::Value = response.json().await?;
+                batch_results.insert(fragment_id, result);
+                self.record_service_success(service_id).await?;
+            } else {
+                self.record_service_failure(service_id).await?;
+                return Err(anyhow!(
+                    "Batch service request failed for fragment {} with status: {}",
+                    fragment_id,
+                    response.status()
+                ));
+            }
+        }
+
+        Ok(batch_results)
     }
 
     /// Additional helper methods would continue here...
@@ -720,14 +802,14 @@ impl IntelligentFederationGateway {
         // Count nesting levels
         let max_nesting = query
             .chars()
-            .fold((0, 0), |(max_depth, current_depth), c| match c {
+            .fold((0u32, 0u32), |(max_depth, current_depth), c| match c {
                 '{' => (max_depth.max(current_depth + 1), current_depth + 1),
                 '}' => (max_depth, current_depth.saturating_sub(1)),
                 _ => (max_depth, current_depth),
             })
             .0;
 
-        complexity += max_nesting * max_nesting; // Exponential cost for nesting
+        complexity += (max_nesting as usize) * (max_nesting as usize); // Exponential cost for nesting
 
         // Count arguments and variables
         complexity += query.matches('(').count();

@@ -1402,18 +1402,7 @@ pub struct ShapeStatistics {
     pub violations_over_time: Vec<(DateTime<Utc>, usize)>,
 }
 
-// Implement required traits for error handling
-impl From<serde_json::Error> for ShaclError {
-    fn from(err: serde_json::Error) -> Self {
-        ShaclError::ValidationReport(format!("JSON serialization error: {}", err))
-    }
-}
-
-impl From<serde_yaml::Error> for ShaclError {
-    fn from(err: serde_yaml::Error) -> Self {
-        ShaclError::ValidationReport(format!("YAML serialization error: {}", err))
-    }
-}
+// Error trait implementations are handled by thiserror derive macro
 
 #[cfg(test)]
 mod tests {

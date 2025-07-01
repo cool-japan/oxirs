@@ -164,7 +164,7 @@ impl<'a> UpdateExecutor<'a> {
     }
 
     /// Create a new update executor with transaction support
-    pub fn with_transaction(store: &'a mut Store) -> Self {
+    pub fn with_transaction(store: &'a mut dyn Store) -> Self {
         UpdateExecutor {
             store,
             context: ExecutionContext::default(),

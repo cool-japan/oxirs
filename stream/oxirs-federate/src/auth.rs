@@ -52,11 +52,15 @@ impl Default for AuthConfig {
             jwt_secret: "oxirs-federation-secret".to_string(),
             token_expiry: Duration::from_secs(3600), // 1 hour
             enable_identity_propagation: true,
-            supported_auth_methods: [AuthMethod::Bearer, AuthMethod::ApiKey, AuthMethod::Basic].into_iter().collect(),
+            supported_auth_methods: [AuthMethod::Bearer, AuthMethod::ApiKey, AuthMethod::Basic]
+                .into_iter()
+                .collect(),
             enable_service_auth: true,
             service_auth_key: "oxirs-service-key".to_string(),
             enable_rbac: true,
-            default_permissions: [Permission::QueryRead, Permission::SchemaRead].into_iter().collect(),
+            default_permissions: [Permission::QueryRead, Permission::SchemaRead]
+                .into_iter()
+                .collect(),
             refresh_threshold: 0.8, // Refresh when 80% of token life is used
         }
     }
@@ -137,9 +141,9 @@ pub struct AuthToken {
     /// Associated identity
     pub identity: Identity,
     /// Token creation time
-    pub created_at: Instant,
+    pub created_at: SystemTime,
     /// Token expiration time
-    pub expires_at: Instant,
+    pub expires_at: SystemTime,
     /// Whether token is active
     pub is_active: bool,
 }
@@ -367,7 +371,10 @@ impl AuthManager {
                 success: false,
                 identity: None,
                 token: None,
-                error: Some(format!("Authentication method {:?} not supported", auth_method)),
+                error: Some(format!(
+                    "Authentication method {:?} not supported",
+                    auth_method
+                )),
                 required_actions: vec![],
             });
         }
@@ -404,7 +411,7 @@ impl AuthManager {
 
         // Validate JWT token
         let claims = self.decode_jwt(token)?;
-        
+
         // Check expiration
         let current_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         if claims.exp < current_time {
@@ -498,14 +505,16 @@ impl AuthManager {
             token: jwt_token,
             token_type: TokenType::Access,
             identity: identity.clone(),
-            created_at: Instant::now(),
-            expires_at: Instant::now() + self.config.token_expiry,
+            created_at: SystemTime::now(),
+            expires_at: SystemTime::now() + self.config.token_expiry,
             is_active: true,
         };
 
         // Store token
         let mut token_store = self.token_store.write().await;
-        token_store.active_tokens.insert(token_id.clone(), auth_token.clone());
+        token_store
+            .active_tokens
+            .insert(token_id.clone(), auth_token.clone());
         token_store
             .user_tokens
             .entry(identity.user_id.clone())
@@ -518,10 +527,10 @@ impl AuthManager {
     /// Revoke a token
     pub async fn revoke_token(&self, token_id: &str) -> Result<()> {
         let mut token_store = self.token_store.write().await;
-        
+
         if let Some(token) = token_store.active_tokens.remove(token_id) {
             token_store.revoked_tokens.insert(token.token);
-            
+
             // Remove from user tokens
             if let Some(user_tokens) = token_store.user_tokens.get_mut(&token.identity.user_id) {
                 user_tokens.remove(token_id);
@@ -579,7 +588,8 @@ impl AuthManager {
                     permissions: self.config.default_permissions.clone(),
                     auth_method: AuthMethod::ApiKey,
                     authenticated_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
-                    expires_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() + self.config.token_expiry.as_secs(),
+                    expires_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()
+                        + self.config.token_expiry.as_secs(),
                     claims: HashMap::new(),
                 };
 
@@ -627,10 +637,13 @@ impl AuthManager {
                         Permission::SchemaRead,
                         Permission::SchemaWrite,
                         Permission::Admin,
-                    ].into_iter().collect(),
+                    ]
+                    .into_iter()
+                    .collect(),
                     auth_method: AuthMethod::Basic,
                     authenticated_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
-                    expires_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() + self.config.token_expiry.as_secs(),
+                    expires_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()
+                        + self.config.token_expiry.as_secs(),
                     claims: HashMap::new(),
                 };
 
@@ -675,12 +688,19 @@ impl AuthManager {
                         Permission::QueryRead,
                         Permission::QueryExecute,
                         Permission::SchemaRead,
-                    ].into_iter().collect(),
+                    ]
+                    .into_iter()
+                    .collect(),
                     auth_method: AuthMethod::ServiceToService,
                     authenticated_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
-                    expires_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() + self.config.token_expiry.as_secs(),
-                    claims: [("service_id".to_string(), serde_json::Value::String(service_id.clone()))]
-                        .into_iter().collect(),
+                    expires_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()
+                        + self.config.token_expiry.as_secs(),
+                    claims: [(
+                        "service_id".to_string(),
+                        serde_json::Value::String(service_id.clone()),
+                    )]
+                    .into_iter()
+                    .collect(),
                 };
 
                 let token = self.create_access_token(&identity).await?;
@@ -715,15 +735,14 @@ impl AuthManager {
     fn encode_jwt(&self, claims: &JwtClaims) -> Result<String> {
         let header = Header::new(Algorithm::HS256);
         let encoding_key = EncodingKey::from_secret(self.config.jwt_secret.as_bytes());
-        
-        encode(&header, claims, &encoding_key)
-            .map_err(|e| anyhow!("Failed to encode JWT: {}", e))
+
+        encode(&header, claims, &encoding_key).map_err(|e| anyhow!("Failed to encode JWT: {}", e))
     }
 
     fn decode_jwt(&self, token: &str) -> Result<JwtClaims> {
         let decoding_key = DecodingKey::from_secret(self.config.jwt_secret.as_bytes());
         let validation = Validation::new(Algorithm::HS256);
-        
+
         decode::<JwtClaims>(token, &decoding_key, &validation)
             .map(|data| data.claims)
             .map_err(|e| anyhow!("Failed to decode JWT: {}", e))
@@ -760,9 +779,12 @@ impl IdentityPropagator {
             auth_method: AuthMethod::ServiceToService,
             authenticated_at: identity.authenticated_at,
             expires_at: identity.expires_at,
-            claims: [("original_auth_method".to_string(), 
-                     serde_json::Value::String(format!("{:?}", identity.auth_method)))]
-                .into_iter().collect(),
+            claims: [(
+                "original_auth_method".to_string(),
+                serde_json::Value::String(format!("{:?}", identity.auth_method)),
+            )]
+            .into_iter()
+            .collect(),
         };
 
         // Encode as JWT
@@ -784,7 +806,7 @@ impl IdentityPropagator {
 
         let header = Header::new(Algorithm::HS256);
         let encoding_key = EncodingKey::from_secret(config.jwt_secret.as_bytes());
-        
+
         encode(&header, &claims, &encoding_key)
             .map_err(|e| anyhow!("Failed to create propagated token: {}", e))
     }
@@ -833,11 +855,24 @@ impl SessionManager {
 /// Authentication credentials
 #[derive(Debug, Clone)]
 pub enum AuthCredentials {
-    Bearer { token: String },
-    ApiKey { key: String },
-    Basic { username: String, password: String },
-    Service { service_id: String, secret: String },
-    OAuth2 { access_token: String, refresh_token: Option<String> },
+    Bearer {
+        token: String,
+    },
+    ApiKey {
+        key: String,
+    },
+    Basic {
+        username: String,
+        password: String,
+    },
+    Service {
+        service_id: String,
+        secret: String,
+    },
+    OAuth2 {
+        access_token: String,
+        refresh_token: Option<String>,
+    },
 }
 
 /// Authentication statistics
@@ -863,13 +898,16 @@ mod tests {
     #[tokio::test]
     async fn test_basic_authentication() {
         let auth_manager = AuthManager::new();
-        
+
         let credentials = AuthCredentials::Basic {
             username: "admin".to_string(),
             password: "password".to_string(),
         };
 
-        let result = auth_manager.authenticate(AuthMethod::Basic, credentials).await.unwrap();
+        let result = auth_manager
+            .authenticate(AuthMethod::Basic, credentials)
+            .await
+            .unwrap();
         assert!(result.success);
         assert!(result.identity.is_some());
         assert!(result.token.is_some());
@@ -878,12 +916,15 @@ mod tests {
     #[tokio::test]
     async fn test_api_key_authentication() {
         let auth_manager = AuthManager::new();
-        
+
         let credentials = AuthCredentials::ApiKey {
             key: "valid-api-key".to_string(),
         };
 
-        let result = auth_manager.authenticate(AuthMethod::ApiKey, credentials).await.unwrap();
+        let result = auth_manager
+            .authenticate(AuthMethod::ApiKey, credentials)
+            .await
+            .unwrap();
         assert!(result.success);
         assert!(result.identity.is_some());
     }
@@ -891,13 +932,16 @@ mod tests {
     #[tokio::test]
     async fn test_service_authentication() {
         let auth_manager = AuthManager::new();
-        
+
         let credentials = AuthCredentials::Service {
             service_id: "test-service".to_string(),
             secret: "oxirs-service-key".to_string(),
         };
 
-        let result = auth_manager.authenticate(AuthMethod::ServiceToService, credentials).await.unwrap();
+        let result = auth_manager
+            .authenticate(AuthMethod::ServiceToService, credentials)
+            .await
+            .unwrap();
         assert!(result.success);
         assert!(result.identity.is_some());
     }
@@ -905,18 +949,21 @@ mod tests {
     #[tokio::test]
     async fn test_token_validation() {
         let auth_manager = AuthManager::new();
-        
+
         // First authenticate to get a token
         let credentials = AuthCredentials::Basic {
             username: "admin".to_string(),
             password: "password".to_string(),
         };
 
-        let auth_result = auth_manager.authenticate(AuthMethod::Basic, credentials).await.unwrap();
+        let auth_result = auth_manager
+            .authenticate(AuthMethod::Basic, credentials)
+            .await
+            .unwrap();
         assert!(auth_result.success);
-        
+
         let token = auth_result.token.unwrap();
-        
+
         // Now validate the token
         let validation_result = auth_manager.validate_token(&token.token).await.unwrap();
         assert!(validation_result.success);
@@ -925,7 +972,7 @@ mod tests {
     #[tokio::test]
     async fn test_identity_propagation() {
         let auth_manager = AuthManager::new();
-        
+
         let identity = Identity {
             user_id: "test-user".to_string(),
             username: "Test User".to_string(),
@@ -933,56 +980,81 @@ mod tests {
             roles: ["user"].into_iter().map(String::from).collect(),
             permissions: [Permission::QueryRead].into_iter().collect(),
             auth_method: AuthMethod::Basic,
-            authenticated_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-            expires_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 3600,
+            authenticated_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            expires_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                + 3600,
             claims: HashMap::new(),
         };
 
         let propagated_token = auth_manager
             .create_propagated_identity(&identity, "target-service")
             .await;
-        
+
         assert!(propagated_token.is_ok());
     }
 
     #[tokio::test]
     async fn test_authorization() {
         let auth_manager = AuthManager::new();
-        
+
         let identity = Identity {
             user_id: "test-user".to_string(),
             username: "Test User".to_string(),
             email: None,
             roles: ["user"].into_iter().map(String::from).collect(),
-            permissions: [Permission::QueryExecute, Permission::SchemaRead].into_iter().collect(),
+            permissions: [Permission::QueryExecute, Permission::SchemaRead]
+                .into_iter()
+                .collect(),
             auth_method: AuthMethod::Basic,
-            authenticated_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-            expires_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 3600,
+            authenticated_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            expires_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                + 3600,
             claims: HashMap::new(),
         };
 
-        let can_query = auth_manager.authorize(&identity, "query", "sparql").await.unwrap();
+        let can_query = auth_manager
+            .authorize(&identity, "query", "sparql")
+            .await
+            .unwrap();
         assert!(can_query);
 
-        let can_admin = auth_manager.authorize(&identity, "admin", "system").await.unwrap();
+        let can_admin = auth_manager
+            .authorize(&identity, "admin", "system")
+            .await
+            .unwrap();
         assert!(!can_admin); // User doesn't have admin permission
     }
 
     #[tokio::test]
     async fn test_token_revocation() {
         let auth_manager = AuthManager::new();
-        
+
         let credentials = AuthCredentials::Basic {
             username: "admin".to_string(),
             password: "password".to_string(),
         };
 
-        let auth_result = auth_manager.authenticate(AuthMethod::Basic, credentials).await.unwrap();
+        let auth_result = auth_manager
+            .authenticate(AuthMethod::Basic, credentials)
+            .await
+            .unwrap();
         let token = auth_result.token.unwrap();
-        
+
         // Revoke the token
         auth_manager.revoke_token(&token.token_id).await.unwrap();
-        
+
         // Token validation should fail
         let validation_result = auth_manager.validate_token(&token.token).await.unwrap();
         assert!(!validation_result.success);

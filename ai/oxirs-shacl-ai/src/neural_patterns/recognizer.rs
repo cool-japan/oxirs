@@ -8,20 +8,20 @@ use oxirs_core::Store;
 use tokio::sync::RwLock;
 
 use crate::{
-    patterns::{Pattern, PatternAnalyzer, PatternConfig},
     ml::ModelMetrics,
+    patterns::{Pattern, PatternAnalyzer, PatternConfig},
     Result, ShaclAiError,
 };
 
 use super::{
-    correlation::AdvancedPatternCorrelationAnalyzer,
     attention::CrossPatternAttention,
+    correlation::AdvancedPatternCorrelationAnalyzer,
     hierarchies::PatternHierarchyAnalyzer,
     learning::NeuralPatternLearner,
     types::{
-        CorrelationAnalysisConfig, NeuralPatternConfig, AttentionConfig,
-        CorrelationAnalysisResult, AttentionAnalysisResult, PatternHierarchy,
-        CorrelationType, PatternCorrelation,
+        AttentionAnalysisResult, AttentionConfig, CorrelationAnalysisConfig,
+        CorrelationAnalysisResult, CorrelationType, NeuralPatternConfig, PatternCorrelation,
+        PatternHierarchy,
     },
 };
 
@@ -101,26 +101,35 @@ impl NeuralPatternRecognizer {
     }
 
     /// Perform comprehensive pattern analysis
-    pub async fn analyze_patterns(&mut self, patterns: Vec<Pattern>) -> Result<PatternAnalysisResult> {
+    pub async fn analyze_patterns(
+        &mut self,
+        patterns: Vec<Pattern>,
+    ) -> Result<PatternAnalysisResult> {
         let analysis_start = Instant::now();
-        
-        tracing::info!("Starting comprehensive pattern analysis for {} patterns", patterns.len());
+
+        tracing::info!(
+            "Starting comprehensive pattern analysis for {} patterns",
+            patterns.len()
+        );
 
         // Step 1: Correlation analysis
         tracing::debug!("Starting correlation analysis");
-        let correlation_analysis = self.correlation_analyzer
+        let correlation_analysis = self
+            .correlation_analyzer
             .analyze_correlations(&patterns)
             .await?;
 
         // Step 2: Attention analysis
         tracing::debug!("Starting attention analysis");
-        let attention_analysis = self.attention_mechanism
+        let attention_analysis = self
+            .attention_mechanism
             .compute_attention(&patterns)
             .await?;
 
         // Step 3: Hierarchy discovery
         tracing::debug!("Starting hierarchy discovery");
-        let hierarchies = self.hierarchy_analyzer
+        let hierarchies = self
+            .hierarchy_analyzer
             .discover_hierarchies(
                 &patterns,
                 &correlation_analysis.discovered_correlations,
@@ -134,13 +143,20 @@ impl NeuralPatternRecognizer {
 
         // Step 5: Compute quality scores
         tracing::debug!("Computing pattern quality scores");
-        let quality_scores = self.compute_pattern_quality_scores(&patterns, &correlation_analysis).await?;
+        let quality_scores = self
+            .compute_pattern_quality_scores(&patterns, &correlation_analysis)
+            .await?;
 
         // Update statistics
-        self.update_statistics(&patterns, &correlation_analysis, &attention_analysis, &hierarchies);
+        self.update_statistics(
+            &patterns,
+            &correlation_analysis,
+            &attention_analysis,
+            &hierarchies,
+        );
 
         let analysis_duration = analysis_start.elapsed();
-        
+
         let result = PatternAnalysisResult {
             patterns,
             correlation_analysis,
@@ -176,11 +192,13 @@ impl NeuralPatternRecognizer {
         tracing::info!("Starting neural pattern model training");
 
         let mut learner = self.pattern_learner.write().await;
-        let metrics = learner.train(
-            &training_patterns,
-            &validation_patterns,
-            &ground_truth_correlations,
-        ).await?;
+        let metrics = learner
+            .train(
+                &training_patterns,
+                &validation_patterns,
+                &ground_truth_correlations,
+            )
+            .await?;
 
         tracing::info!("Training completed with accuracy: {:.3}", metrics.accuracy);
         Ok(metrics)
@@ -199,10 +217,15 @@ impl NeuralPatternRecognizer {
         let discovered_patterns = analyzer.discover_patterns(store).await?;
 
         // Apply neural enhancement to refine patterns
-        let enhanced_patterns = self.enhance_patterns_with_neural_analysis(&discovered_patterns).await?;
+        let enhanced_patterns = self
+            .enhance_patterns_with_neural_analysis(&discovered_patterns)
+            .await?;
 
-        tracing::info!("Discovered {} patterns, enhanced to {} patterns", 
-                      discovered_patterns.len(), enhanced_patterns.len());
+        tracing::info!(
+            "Discovered {} patterns, enhanced to {} patterns",
+            discovered_patterns.len(),
+            enhanced_patterns.len()
+        );
 
         Ok(enhanced_patterns)
     }
@@ -223,7 +246,8 @@ impl NeuralPatternRecognizer {
             for level in &hierarchy.hierarchy_levels {
                 if level.level_coherence > 0.8 {
                     // High coherence suggests we could create composite patterns
-                    let composite_pattern = self.create_composite_pattern(&level.patterns, patterns)?;
+                    let composite_pattern =
+                        self.create_composite_pattern(&level.patterns, patterns)?;
                     enhanced_patterns.push(composite_pattern);
                 }
             }
@@ -231,8 +255,9 @@ impl NeuralPatternRecognizer {
 
         // Add patterns based on strong correlations
         for correlation in &analysis_result.correlation_analysis.discovered_correlations {
-            if correlation.correlation_coefficient > 0.9 && 
-               correlation.correlation_type == CorrelationType::Structural {
+            if correlation.correlation_coefficient > 0.9
+                && correlation.correlation_type == CorrelationType::Structural
+            {
                 // Strong structural correlation suggests merged pattern opportunity
                 let merged_pattern = self.create_merged_pattern(
                     &correlation.pattern1_id,
@@ -254,13 +279,16 @@ impl NeuralPatternRecognizer {
     ) -> Result<Pattern> {
         // TODO: Implement sophisticated pattern composition
         // For now, create a simple placeholder
-        
+
         if let Some(first_pattern) = patterns.first() {
             let mut composite = first_pattern.clone();
             composite.id = format!("composite_{}", uuid::Uuid::new_v4());
             Ok(composite)
         } else {
-            Err(ShaclAiError::ProcessingError("No patterns available for composition".to_string()).into())
+            Err(
+                ShaclAiError::ProcessingError("No patterns available for composition".to_string())
+                    .into(),
+            )
         }
     }
 
@@ -273,13 +301,16 @@ impl NeuralPatternRecognizer {
     ) -> Result<Pattern> {
         // TODO: Implement sophisticated pattern merging
         // For now, create a simple placeholder
-        
+
         if let Some(first_pattern) = patterns.first() {
             let mut merged = first_pattern.clone();
             merged.id = format!("merged_{}_{}", pattern1_id, pattern2_id);
             Ok(merged)
         } else {
-            Err(ShaclAiError::ProcessingError("No patterns available for merging".to_string()).into())
+            Err(
+                ShaclAiError::ProcessingError("No patterns available for merging".to_string())
+                    .into(),
+            )
         }
     }
 
@@ -289,16 +320,16 @@ impl NeuralPatternRecognizer {
         patterns: &[Pattern],
     ) -> Result<HashMap<String, Vec<f64>>> {
         let mut embeddings = HashMap::new();
-        
+
         for (i, pattern) in patterns.iter().enumerate() {
             // TODO: Generate actual embeddings using the trained model
             let embedding: Vec<f64> = (0..self.config.embedding_dim)
                 .map(|_| rand::random::<f64>())
                 .collect();
-            
+
             embeddings.insert(pattern.id.clone(), embedding);
         }
-        
+
         Ok(embeddings)
     }
 
@@ -309,31 +340,34 @@ impl NeuralPatternRecognizer {
         correlation_analysis: &CorrelationAnalysisResult,
     ) -> Result<HashMap<String, f64>> {
         let mut quality_scores = HashMap::new();
-        
+
         for pattern in patterns {
             // Base quality score
             let mut score = 0.5;
-            
+
             // Boost score for patterns involved in many correlations
-            let correlation_count = correlation_analysis.discovered_correlations
+            let correlation_count = correlation_analysis
+                .discovered_correlations
                 .iter()
                 .filter(|c| c.pattern1_id == pattern.id || c.pattern2_id == pattern.id)
                 .count();
-            
+
             score += (correlation_count as f64 * 0.1).min(0.3);
-            
+
             // Boost score for patterns in hierarchies
-            let in_hierarchy = correlation_analysis.pattern_hierarchies
-                .iter()
-                .any(|h| h.hierarchy_levels.iter().any(|l| l.patterns.contains(&pattern.id)));
-            
+            let in_hierarchy = correlation_analysis.pattern_hierarchies.iter().any(|h| {
+                h.hierarchy_levels
+                    .iter()
+                    .any(|l| l.patterns.contains(&pattern.id))
+            });
+
             if in_hierarchy {
                 score += 0.2;
             }
-            
+
             quality_scores.insert(pattern.id.clone(), score.min(1.0));
         }
-        
+
         Ok(quality_scores)
     }
 
@@ -346,13 +380,14 @@ impl NeuralPatternRecognizer {
         hierarchies: &[PatternHierarchy],
     ) {
         self.statistics.patterns_analyzed += patterns.len();
-        self.statistics.correlations_discovered += correlation_analysis.discovered_correlations.len();
+        self.statistics.correlations_discovered +=
+            correlation_analysis.discovered_correlations.len();
         self.statistics.hierarchies_built += hierarchies.len();
         self.statistics.attention_patterns_found += attention_analysis.attention_patterns.len();
-        
+
         // Compute average pattern complexity (placeholder)
         self.statistics.average_pattern_complexity = 0.7;
-        
+
         // Compute recognition accuracy (placeholder)
         self.statistics.recognition_accuracy = 0.85;
     }

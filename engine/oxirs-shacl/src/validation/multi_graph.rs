@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "async")]
 use anyhow::Result;
 #[cfg(feature = "async")]
-use futures_util::{stream, StreamExt, TryStreamExt};
+use futures::{stream, StreamExt, TryStreamExt};
 #[cfg(feature = "async")]
 use indexmap::IndexMap;
 #[cfg(feature = "async")]
@@ -452,7 +452,7 @@ impl MultiGraphValidationEngine {
     /// Validate multiple graphs with the configured strategy
     pub async fn validate_multi_graph(
         &self,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
     ) -> Result<MultiGraphValidationResult> {
         let start_time = Instant::now();
 
@@ -502,7 +502,7 @@ impl MultiGraphValidationEngine {
     /// Select graphs for validation based on the configured strategy
     async fn select_graphs_for_validation(
         &self,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
     ) -> Result<HashSet<GraphName>> {
         match &self.config.graph_strategy {
             GraphSelectionStrategy::All => Ok(stores.keys().cloned().collect()),
@@ -539,7 +539,7 @@ impl MultiGraphValidationEngine {
     /// Select graphs based on shape targets
     async fn select_target_based_graphs(
         &self,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
     ) -> Result<HashSet<GraphName>> {
         let shapes = self.shapes.read().unwrap();
         let mut selected_graphs = HashSet::new();
@@ -547,10 +547,18 @@ impl MultiGraphValidationEngine {
         for (graph_name, store) in stores {
             for shape in shapes.values() {
                 // Check if any targets in this shape have focus nodes in this graph
-                let target_selector = TargetSelector::new();
-                let focus_nodes = target_selector.find_focus_nodes(&shape.targets, store)?;
+                let mut target_selector = TargetSelector::new();
+                let mut has_focus_nodes = false;
+                
+                for target in &shape.targets {
+                    let focus_nodes = target_selector.select_targets(store.as_ref(), target, Some(graph_name.as_ref()))?;
+                    if !focus_nodes.is_empty() {
+                        has_focus_nodes = true;
+                        break;
+                    }
+                }
 
-                if !focus_nodes.is_empty() {
+                if has_focus_nodes {
                     selected_graphs.insert(graph_name.clone());
                     break;
                 }
@@ -564,7 +572,7 @@ impl MultiGraphValidationEngine {
     async fn validate_graphs_concurrent(
         &self,
         selected_graphs: &HashSet<GraphName>,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
     ) -> Result<HashMap<GraphName, GraphValidationResult>> {
         let semaphore = Arc::new(Semaphore::new(self.config.max_concurrent_graphs));
         let mut tasks = Vec::new();
@@ -628,25 +636,25 @@ impl MultiGraphValidationEngine {
     /// Validate a single graph
     async fn validate_single_graph(
         graph_name: GraphName,
-        store: Arc<Store>,
+        store: Arc<dyn Store>,
         shapes: Arc<RwLock<IndexMap<ShapeId, Shape>>>,
         config: ValidationConfig,
     ) -> Result<GraphValidationResult> {
         let start_time = Instant::now();
 
         let shapes_guard = shapes.read().unwrap();
-        let engine = ValidationEngine::new(&shapes_guard, config);
-        let report = engine.validate_store(&store)?;
+        let mut engine = ValidationEngine::new(&shapes_guard, config);
+        let report = engine.validate_store(store.as_ref())?;
 
         let validation_duration = start_time.elapsed();
 
         let stats = GraphValidationStats {
             graph_name: graph_name.clone(),
-            triples_validated: store.len(),
+            triples_validated: store.len().unwrap_or(0),
             shapes_applied: shapes_guard.len(),
-            constraints_evaluated: engine.get_stats().total_constraint_evaluations,
+            constraints_evaluated: engine.get_statistics().total_constraint_evaluations,
             validation_duration,
-            memory_used_bytes: Self::estimate_memory_usage(&store, &report),
+            memory_used_bytes: Self::estimate_memory_usage(store.as_ref(), &report),
             violations_found: report.violations().len(),
             validation_successful: true,
             remote_stats: None,
@@ -662,7 +670,7 @@ impl MultiGraphValidationEngine {
     /// Evaluate cross-graph constraints
     async fn evaluate_cross_graph_constraints(
         &self,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
         graph_results: &HashMap<GraphName, GraphValidationResult>,
     ) -> Result<Vec<CrossGraphViolation>> {
         let mut violations = Vec::new();
@@ -783,8 +791,8 @@ impl MultiGraphValidationEngine {
             .values()
             .any(|constraint| match constraint {
                 crate::constraints::Constraint::Sparql(sparql_constraint) => {
-                    sparql_constraint.sparql.contains("GRAPH")
-                        || sparql_constraint.sparql.contains("SERVICE")
+                    sparql_constraint.query.contains("GRAPH")
+                        || sparql_constraint.query.contains("SERVICE")
                 }
                 _ => false,
             })
@@ -794,23 +802,31 @@ impl MultiGraphValidationEngine {
     async fn evaluate_shape_cross_graph_constraints(
         &self,
         shape: &Shape,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
         graph_results: &HashMap<GraphName, GraphValidationResult>,
     ) -> Result<Vec<CrossGraphViolation>> {
         let mut violations = Vec::new();
 
         // Find all focus nodes for this shape across all graphs
-        let target_selector = TargetSelector::new();
-
+        let mut target_selector = TargetSelector::new();
+        
         for (graph_name, store) in stores {
-            let focus_nodes = target_selector.find_focus_nodes(&shape.targets, store)?;
+            let mut all_focus_nodes = Vec::new();
+            
+            // Iterate over each target and collect focus nodes
+            for target in &shape.targets {
+                let focus_nodes = target_selector.select_targets(store.as_ref(), target, Some(graph_name.as_ref()))?;
+                all_focus_nodes.extend(focus_nodes);
+            }
+            
+            let focus_nodes = all_focus_nodes;
 
             for focus_node in focus_nodes {
                 // Evaluate cross-graph SPARQL constraints
                 for (constraint_id, constraint) in &shape.constraints {
                     if let crate::constraints::Constraint::Sparql(sparql_constraint) = constraint {
-                        if sparql_constraint.sparql.contains("GRAPH")
-                            || sparql_constraint.sparql.contains("SERVICE")
+                        if sparql_constraint.query.contains("GRAPH")
+                            || sparql_constraint.query.contains("SERVICE")
                         {
                             let violation_result = self
                                 .evaluate_cross_graph_sparql_constraint(
@@ -839,13 +855,13 @@ impl MultiGraphValidationEngine {
         &self,
         focus_node: &Term,
         constraint_id: &crate::ConstraintComponentId,
-        sparql_constraint: &crate::constraints::SparqlConstraint,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        sparql_constraint: &crate::sparql::SparqlConstraint,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
         current_graph: &GraphName,
     ) -> Result<Option<CrossGraphViolation>> {
         // Construct federated SPARQL query
         let query = self.build_federated_sparql_query(
-            &sparql_constraint.sparql,
+            &sparql_constraint.query,
             focus_node,
             stores.keys().collect(),
         )?;
@@ -883,17 +899,17 @@ impl MultiGraphValidationEngine {
     /// Evaluate federated equality constraints
     async fn evaluate_federated_equality_constraints(
         &self,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
     ) -> Result<Vec<CrossGraphViolation>> {
         let mut violations = Vec::new();
 
         // Check for entities that should have equal properties across graphs
         for (graph_name, store) in stores {
             // Simple equality check - can be expanded based on specific requirements
-            for quad in store.iter() {
-                let subject = &quad.subject;
-                let predicate = &quad.predicate;
-                let object = &quad.object;
+            for quad in store.as_ref().find_quads(None, None, None, None)? {
+                let subject = quad.subject();
+                let predicate = quad.predicate();
+                let object = quad.object();
 
                 // Check if the same subject-predicate exists in other graphs with different values
                 for (other_graph_name, other_store) in stores {
@@ -902,14 +918,14 @@ impl MultiGraphValidationEngine {
                             subject.clone(),
                             predicate.clone(),
                             object.clone(),
-                            Some(other_graph_name.clone()),
+                            other_graph_name.clone(),
                         );
 
                         // Check for conflicting values
-                        let has_different_value = other_store.iter().any(|q| {
-                            q.subject == *subject
-                                && q.predicate == *predicate
-                                && q.object != *object
+                        let has_different_value = other_store.as_ref().find_quads(None, None, None, None)?.iter().any(|q| {
+                            q.subject() == subject
+                                && q.predicate() == predicate
+                                && q.object() != object
                         });
 
                         if has_different_value {
@@ -924,7 +940,7 @@ impl MultiGraphValidationEngine {
                             );
 
                             violations.push(CrossGraphViolation {
-                                focus_node: subject.clone(),
+                                focus_node: subject.clone().into(),
                                 constraint_component_id: crate::ConstraintComponentId::new("sh:equals"),
                                 involved_graphs: [graph_name.clone(), other_graph_name.clone()].into(),
                                 evidence: CrossGraphEvidence {
@@ -949,19 +965,19 @@ impl MultiGraphValidationEngine {
     /// Evaluate cross-graph disjointness constraints
     async fn evaluate_cross_graph_disjointness(
         &self,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
     ) -> Result<Vec<CrossGraphViolation>> {
         let mut violations = Vec::new();
 
         // Check for entities that should be disjoint across graphs
         for (graph_name, store) in stores {
-            for quad in store.iter() {
-                let subject = &quad.subject;
+            for quad in store.as_ref().find_quads(None, None, None, None)? {
+                let subject = quad.subject();
 
                 // Check if the same subject exists in other graphs (violating disjointness)
                 for (other_graph_name, other_store) in stores {
                     if graph_name != other_graph_name {
-                        let exists_in_other = other_store.iter().any(|q| q.subject == *subject);
+                        let exists_in_other = other_store.as_ref().find_quads(None, None, None, None)?.iter().any(|q| q.subject() == subject);
 
                         if exists_in_other {
                             let mut contributing_triples = HashMap::new();
@@ -969,13 +985,13 @@ impl MultiGraphValidationEngine {
                                 graph_name.clone(),
                                 vec![oxirs_core::model::Triple::new(
                                     subject.clone(),
-                                    quad.predicate.clone(),
-                                    quad.object.clone(),
+                                    quad.predicate().clone(),
+                                    quad.object().clone(),
                                 )],
                             );
 
                             violations.push(CrossGraphViolation {
-                                focus_node: subject.clone(),
+                                focus_node: subject.clone().into(),
                                 constraint_component_id: crate::ConstraintComponentId::new("sh:disjoint"),
                                 involved_graphs: [graph_name.clone(), other_graph_name.clone()].into(),
                                 evidence: CrossGraphEvidence {
@@ -1034,7 +1050,7 @@ impl MultiGraphValidationEngine {
     async fn execute_federated_query(
         &self,
         query: &str,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
     ) -> Result<Vec<QueryResult>> {
         let mut results = Vec::new();
 
@@ -1057,7 +1073,7 @@ impl MultiGraphValidationEngine {
     async fn find_contributing_triples(
         &self,
         focus_node: &Term,
-        stores: &HashMap<GraphName, Arc<Store>>,
+        stores: &HashMap<GraphName, Arc<dyn Store>>,
     ) -> Result<HashMap<GraphName, Vec<Triple>>> {
         let mut contributing_triples = HashMap::new();
 
@@ -1065,12 +1081,12 @@ impl MultiGraphValidationEngine {
             let mut triples = Vec::new();
 
             // Find all triples where the focus node is the subject
-            for quad in store.iter() {
-                if quad.subject == *focus_node {
+            for quad in store.find_quads(None, None, None, None)? {
+                if &Term::from(quad.subject().clone()) == focus_node {
                     triples.push(Triple::new(
-                        quad.subject.clone(),
-                        quad.predicate.clone(),
-                        quad.object.clone(),
+                        quad.subject().clone(),
+                        quad.predicate().clone(),
+                        quad.object().clone(),
                     ));
                 }
             }
@@ -1153,9 +1169,9 @@ impl MultiGraphValidationEngine {
     }
 
     /// Estimate memory usage for a store and report
-    fn estimate_memory_usage(store: &Store, report: &ValidationReport) -> usize {
+    fn estimate_memory_usage(store: &dyn Store, report: &ValidationReport) -> usize {
         // Rough estimation
-        let store_size = store.len() * 100; // ~100 bytes per quad estimate
+        let store_size = store.len().unwrap_or(0) * 100; // ~100 bytes per quad estimate
         let report_size = report.violations().len() * 200; // ~200 bytes per violation
         store_size + report_size
     }

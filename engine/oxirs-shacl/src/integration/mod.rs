@@ -92,7 +92,7 @@ impl IntegrationManager {
     /// Validate data for a specific integration context
     pub fn validate_for_context(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: IntegrationContext,
     ) -> Result<IntegratedValidationReport> {
         let validation_report = self.validator.validate_store(store, None)?;

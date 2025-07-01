@@ -32,7 +32,7 @@ pub struct Rule {
 }
 
 /// Rule atom (triple pattern or builtin)
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum RuleAtom {
     Triple {
         subject: Term,
@@ -43,14 +43,27 @@ pub enum RuleAtom {
         name: String,
         args: Vec<Term>,
     },
+    NotEqual {
+        left: Term,
+        right: Term,
+    },
+    GreaterThan {
+        left: Term,
+        right: Term,
+    },
+    LessThan {
+        left: Term,
+        right: Term,
+    },
 }
 
 /// Rule term
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Term {
     Variable(String),
     Constant(String),
     Literal(String),
+    Function { name: String, args: Vec<Term> },
 }
 
 /// Integrated rule engine combining all reasoning modes
@@ -127,12 +140,12 @@ impl RuleEngine {
     }
 
     /// Set cache (placeholder implementation)
-    pub fn set_cache(&mut self, _cache: Option<crate::cache::Cache>) {
+    pub fn set_cache(&mut self, _cache: Option<crate::cache::RuleCache>) {
         // TODO: Implement cache setting
     }
 
     /// Get cache (placeholder implementation)
-    pub fn get_cache(&self) -> Option<crate::cache::Cache> {
+    pub fn get_cache(&self) -> Option<crate::cache::RuleCache> {
         // TODO: Implement cache getting
         None
     }
@@ -183,9 +196,9 @@ mod comprehensive_tests {
 
         // Should derive ancestor relationship from parent relationship
         assert!(forward_results.iter().any(|fact| {
-            matches!(fact, RuleAtom::Triple { 
-                subject: Term::Constant(s), 
-                predicate: Term::Constant(p), 
+            matches!(fact, RuleAtom::Triple {
+                subject: Term::Constant(s),
+                predicate: Term::Constant(p),
                 object: Term::Constant(o) 
             } if s == "john" && p == "ancestor" && o == "mary")
         }));
@@ -228,9 +241,9 @@ mod comprehensive_tests {
 
         // Should infer that john is a LivingThing
         assert!(inferred.iter().any(|fact| {
-            matches!(fact, RuleAtom::Triple { 
-                subject: Term::Constant(s), 
-                predicate: Term::Constant(p), 
+            matches!(fact, RuleAtom::Triple {
+                subject: Term::Constant(s),
+                predicate: Term::Constant(p),
                 object: Term::Constant(o) 
             } if s == "john" && p == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" && o == "LivingThing")
         }));
@@ -263,9 +276,9 @@ mod comprehensive_tests {
 
         // Should infer that john is a Person due to equivalence
         assert!(inferred.iter().any(|fact| {
-            matches!(fact, RuleAtom::Triple { 
-                subject: Term::Constant(s), 
-                predicate: Term::Constant(p), 
+            matches!(fact, RuleAtom::Triple {
+                subject: Term::Constant(s),
+                predicate: Term::Constant(p),
                 object: Term::Constant(o) 
             } if s == "john" && p == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" && o == "Person")
         }));
@@ -326,9 +339,9 @@ mod comprehensive_tests {
 
         // Should infer that john is an Adult
         assert!(results.iter().any(|fact| {
-            matches!(fact, RuleAtom::Triple { 
-                subject: Term::Constant(s), 
-                predicate: Term::Constant(p), 
+            matches!(fact, RuleAtom::Triple {
+                subject: Term::Constant(s),
+                predicate: Term::Constant(p),
                 object: Term::Constant(o) 
             } if s == "john" && p == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" && o == "Adult")
         }));
@@ -372,9 +385,9 @@ mod comprehensive_tests {
         // Should derive Human types for both alice and bob
         assert!(rete_results.len() >= 4); // Original facts + derived facts
         assert!(rete_results.iter().any(|fact| {
-            matches!(fact, RuleAtom::Triple { 
-                subject: Term::Constant(s), 
-                predicate: Term::Constant(p), 
+            matches!(fact, RuleAtom::Triple {
+                subject: Term::Constant(s),
+                predicate: Term::Constant(p),
                 object: Term::Constant(o) 
             } if s == "alice" && p == "type" && o == "Human")
         }));
@@ -531,9 +544,9 @@ mod comprehensive_tests {
         // Should derive that john is conscious through the chain:
         // john:Student -> john:Person (RDFS) -> john:conscious (rules)
         assert!(final_results.iter().any(|fact| {
-            matches!(fact, RuleAtom::Triple { 
-                subject: Term::Constant(s), 
-                predicate: Term::Constant(p), 
+            matches!(fact, RuleAtom::Triple {
+                subject: Term::Constant(s),
+                predicate: Term::Constant(p),
                 object: Term::Constant(o) 
             } if s == "john" && p == "hasProperty" && o == "conscious")
         }));
@@ -612,9 +625,9 @@ mod comprehensive_tests {
         // Should derive through chain of rules:
         // mary hasParent john -> john hasChild mary -> john isParent true -> john category adult_parent
         assert!(results.iter().any(|fact| {
-            matches!(fact, RuleAtom::Triple { 
-                subject: Term::Constant(s), 
-                predicate: Term::Constant(p), 
+            matches!(fact, RuleAtom::Triple {
+                subject: Term::Constant(s),
+                predicate: Term::Constant(p),
                 object: Term::Constant(o) 
             } if s == "john" && p == "category" && o == "adult_parent")
         }));

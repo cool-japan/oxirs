@@ -574,7 +574,7 @@ impl AIQueryPredictor {
         let adjusted_score = policy_score * reward_multiplier;
 
         // Experience replay simulation
-        let experience_weight = (self.training_data.len() as f64).ln().max(1.0) / 10.0;
+        let experience_weight = (self.training_data.lock().await.len() as f64).ln().max(1.0) / 10.0;
         let final_score = adjusted_score + experience_weight;
 
         // Convert RL metrics to query predictions
@@ -753,9 +753,13 @@ impl AIQueryPredictor {
             predicted_cpu_usage: cpu_usage,
             cache_hit_probability: cache_probability,
             performance_score: (transformer_confidence * 100.0).min(100.0),
+            optimization_actions: vec![OptimizationAction::CacheStrategy {
+                ttl: Duration::from_secs(300),
+                compression: true,
+            }],
             confidence_interval: (
-                transformer_confidence * 85.0,
-                transformer_confidence * 115.0,
+                Duration::from_millis((transformer_confidence * 85.0) as u64),
+                Duration::from_millis((transformer_confidence * 115.0) as u64),
             ),
             recommendations: vec![
                 format!("Transformer attention focuses on position optimization"),
@@ -766,7 +770,12 @@ impl AIQueryPredictor {
                 "Sequence-aware query optimization recommended".to_string(),
             ],
             risk_factors: if transformer_confidence < 0.4 {
-                vec!["Low transformer attention confidence".to_string()]
+                vec![RiskFactor {
+                    factor_type: RiskType::HighComplexity,
+                    severity: 1.0 - transformer_confidence,
+                    mitigation: "Increase model attention mechanisms".to_string(),
+                    impact: "Low transformer attention confidence".to_string(),
+                }]
             } else {
                 vec![]
             },
@@ -909,7 +918,14 @@ impl AIQueryPredictor {
             predicted_cpu_usage: cpu_usage,
             cache_hit_probability: cache_probability,
             performance_score: (gnn_confidence * 100.0).min(100.0),
-            confidence_interval: (gnn_confidence * 88.0, gnn_confidence * 112.0),
+            optimization_actions: vec![OptimizationAction::ExecutionPlan {
+                parallelism: if graph_density > 0.5 { 4 } else { 2 },
+                batching: true,
+            }],
+            confidence_interval: (
+                Duration::from_millis((gnn_confidence * 88.0) as u64),
+                Duration::from_millis((gnn_confidence * 112.0) as u64),
+            ),
             recommendations: vec![
                 format!("GNN detects graph density: {:.2}", graph_density),
                 format!(
@@ -919,9 +935,19 @@ impl AIQueryPredictor {
                 "Graph-aware query optimization recommended".to_string(),
             ],
             risk_factors: if graph_density > 0.8 {
-                vec!["High graph connectivity may cause performance issues".to_string()]
+                vec![RiskFactor {
+                    factor_type: RiskType::HighComplexity,
+                    severity: graph_density,
+                    mitigation: "Optimize graph connectivity".to_string(),
+                    impact: "High graph connectivity may cause performance issues".to_string(),
+                }]
             } else if gnn_confidence < 0.3 {
-                vec!["Low GNN structure confidence".to_string()]
+                vec![RiskFactor {
+                    factor_type: RiskType::HighComplexity,
+                    severity: 1.0 - gnn_confidence,
+                    mitigation: "Improve GNN model confidence".to_string(),
+                    impact: "Low GNN structure confidence".to_string(),
+                }]
             } else {
                 vec![]
             },
@@ -1095,7 +1121,14 @@ impl AIQueryPredictor {
             predicted_cpu_usage: cpu_usage,
             cache_hit_probability: cache_probability,
             performance_score: (ts_confidence * 100.0).min(100.0),
-            confidence_interval: (ts_confidence * 82.0, ts_confidence * 118.0),
+            optimization_actions: vec![OptimizationAction::ResourceAllocation {
+                cpu_weight: ts_confidence,
+                memory_weight: 1.0 - ts_confidence,
+            }],
+            confidence_interval: (
+                Duration::from_millis((ts_confidence * 82.0) as u64),
+                Duration::from_millis((ts_confidence * 118.0) as u64),
+            ),
             recommendations: vec![
                 format!("Time series trend strength: {:.2}", trend_component),
                 format!("Seasonal pattern detected: {:.2}", seasonal_component),
@@ -1103,9 +1136,19 @@ impl AIQueryPredictor {
                 "LSTM-based temporal optimization recommended".to_string(),
             ],
             risk_factors: if noise_component > 0.5 {
-                vec!["High temporal noise detected - unstable patterns".to_string()]
+                vec![RiskFactor {
+                    factor_type: RiskType::HighComplexity,
+                    severity: noise_component,
+                    mitigation: "Reduce temporal noise".to_string(),
+                    impact: "High temporal noise detected - unstable patterns".to_string(),
+                }]
             } else if autocorrelation.abs() < 0.2 {
-                vec!["Low autocorrelation - weak temporal patterns".to_string()]
+                vec![RiskFactor {
+                    factor_type: RiskType::HighComplexity,
+                    severity: 1.0 - autocorrelation.abs(),
+                    mitigation: "Strengthen temporal patterns".to_string(),
+                    impact: "Low autocorrelation - weak temporal patterns".to_string(),
+                }]
             } else {
                 vec![]
             },
@@ -1162,7 +1205,9 @@ impl AIQueryPredictor {
             predicted_memory_usage: ensemble_memory,
             predicted_cpu_usage: ensemble_cpu,
             cache_hit_probability: ensemble_cache_prob,
+            optimization_actions: Vec::new(),
             optimization_suggestions: Vec::new(),
+            recommendations: Vec::new(),
             risk_factors: Vec::new(),
             performance_score: ensemble_score,
         })
@@ -1176,7 +1221,9 @@ impl AIQueryPredictor {
             predicted_memory_usage: 1024 * 1024, // 1MB
             predicted_cpu_usage: 0.1,
             cache_hit_probability: 0.5,
+            optimization_actions: Vec::new(),
             optimization_suggestions: Vec::new(),
+            recommendations: Vec::new(),
             risk_factors: Vec::new(),
             performance_score: 0.8,
         }

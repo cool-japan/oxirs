@@ -4,20 +4,20 @@
 //! rule-based and cost-based optimization passes.
 
 pub mod config;
-pub mod index_types;
 pub mod execution_tracking;
+pub mod index_types;
 pub mod statistics;
 
 pub use config::*;
-pub use index_types::*;
 pub use execution_tracking::*;
+pub use index_types::*;
 pub use statistics::*;
 
 use crate::algebra::{Algebra, Expression, TriplePattern, Variable};
 use anyhow::Result;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
 
 /// Main query optimizer
 pub struct Optimizer {
@@ -94,18 +94,14 @@ impl Optimizer {
                 let optimized_pattern = self.push_filter_down(*pattern, &condition)?;
                 Ok(optimized_pattern)
             }
-            Algebra::Join { left, right } => {
-                Ok(Algebra::Join {
-                    left: Box::new(self.apply_filter_pushdown(*left)?),
-                    right: Box::new(self.apply_filter_pushdown(*right)?),
-                })
-            }
-            Algebra::Union { left, right } => {
-                Ok(Algebra::Union {
-                    left: Box::new(self.apply_filter_pushdown(*left)?),
-                    right: Box::new(self.apply_filter_pushdown(*right)?),
-                })
-            }
+            Algebra::Join { left, right } => Ok(Algebra::Join {
+                left: Box::new(self.apply_filter_pushdown(*left)?),
+                right: Box::new(self.apply_filter_pushdown(*right)?),
+            }),
+            Algebra::Union { left, right } => Ok(Algebra::Union {
+                left: Box::new(self.apply_filter_pushdown(*left)?),
+                right: Box::new(self.apply_filter_pushdown(*right)?),
+            }),
             other => Ok(other),
         }
     }
@@ -128,7 +124,7 @@ impl Optimizer {
                         right,
                     })
                 } else if filter_vars.iter().all(|v| right_vars.contains(v)) {
-                    // Filter only uses right variables - push to right  
+                    // Filter only uses right variables - push to right
                     Ok(Algebra::Join {
                         left,
                         right: Box::new(Algebra::Filter {
@@ -157,7 +153,7 @@ impl Optimizer {
             Algebra::Join { left, right } => {
                 let left_cost = self.estimate_cost(&left);
                 let right_cost = self.estimate_cost(&right);
-                
+
                 // Always put lower cost operation first for left-deep join trees
                 if left_cost > right_cost {
                     Ok(Algebra::Join {
@@ -171,12 +167,10 @@ impl Optimizer {
                     })
                 }
             }
-            Algebra::Union { left, right } => {
-                Ok(Algebra::Union {
-                    left: Box::new(self.apply_join_reordering(*left)?),
-                    right: Box::new(self.apply_join_reordering(*right)?),
-                })
-            }
+            Algebra::Union { left, right } => Ok(Algebra::Union {
+                left: Box::new(self.apply_join_reordering(*left)?),
+                right: Box::new(self.apply_join_reordering(*right)?),
+            }),
             other => Ok(other),
         }
     }
@@ -191,12 +185,10 @@ impl Optimizer {
                     variables,
                 })
             }
-            Algebra::Join { left, right } => {
-                Ok(Algebra::Join {
-                    left: Box::new(self.apply_projection_pushdown(*left)?),
-                    right: Box::new(self.apply_projection_pushdown(*right)?),
-                })
-            }
+            Algebra::Join { left, right } => Ok(Algebra::Join {
+                left: Box::new(self.apply_projection_pushdown(*left)?),
+                right: Box::new(self.apply_projection_pushdown(*right)?),
+            }),
             other => Ok(other),
         }
     }
@@ -207,34 +199,38 @@ impl Optimizer {
             Algebra::Join { left, right } => {
                 let left_vars = self.extract_variables(&left);
                 let right_vars = self.extract_variables(&right);
-                
-                let left_needed: Vec<Variable> = needed_vars.iter()
+
+                let left_needed: Vec<Variable> = needed_vars
+                    .iter()
                     .filter(|v| left_vars.contains(v))
                     .cloned()
                     .collect();
-                    
-                let right_needed: Vec<Variable> = needed_vars.iter()
+
+                let right_needed: Vec<Variable> = needed_vars
+                    .iter()
                     .filter(|v| right_vars.contains(v))
                     .cloned()
                     .collect();
 
-                let left_projected = if !left_needed.is_empty() && left_needed.len() < left_vars.len() {
-                    Algebra::Project {
-                        pattern: left,
-                        variables: left_needed,
-                    }
-                } else {
-                    *left
-                };
+                let left_projected =
+                    if !left_needed.is_empty() && left_needed.len() < left_vars.len() {
+                        Algebra::Project {
+                            pattern: left,
+                            variables: left_needed,
+                        }
+                    } else {
+                        *left
+                    };
 
-                let right_projected = if !right_needed.is_empty() && right_needed.len() < right_vars.len() {
-                    Algebra::Project {
-                        pattern: right,
-                        variables: right_needed,
-                    }
-                } else {
-                    *right
-                };
+                let right_projected =
+                    if !right_needed.is_empty() && right_needed.len() < right_vars.len() {
+                        Algebra::Project {
+                            pattern: right,
+                            variables: right_needed,
+                        }
+                    } else {
+                        *right
+                    };
 
                 Ok(Algebra::Join {
                     left: Box::new(left_projected),
@@ -250,7 +246,7 @@ impl Optimizer {
         match algebra {
             Algebra::Filter { pattern, condition } => {
                 let folded_condition = self.fold_expression_constants(condition)?;
-                
+
                 // Check if condition is constant true/false
                 if let Some(constant_value) = self.evaluate_constant_expression(&folded_condition) {
                     if constant_value {
@@ -258,7 +254,7 @@ impl Optimizer {
                         Ok(self.apply_constant_folding(*pattern)?)
                     } else {
                         // Filter is always false - return empty result
-                        Ok(Algebra::Empty)
+                        Ok(Algebra::Bgp(vec![]))
                     }
                 } else {
                     Ok(Algebra::Filter {
@@ -267,12 +263,10 @@ impl Optimizer {
                     })
                 }
             }
-            Algebra::Join { left, right } => {
-                Ok(Algebra::Join {
-                    left: Box::new(self.apply_constant_folding(*left)?),
-                    right: Box::new(self.apply_constant_folding(*right)?),
-                })
-            }
+            Algebra::Join { left, right } => Ok(Algebra::Join {
+                left: Box::new(self.apply_constant_folding(*left)?),
+                right: Box::new(self.apply_constant_folding(*right)?),
+            }),
             other => Ok(other),
         }
     }
@@ -282,12 +276,13 @@ impl Optimizer {
         match algebra {
             Algebra::Project { pattern, variables } => {
                 let used_vars = self.extract_variables(&pattern);
-                let needed_vars: Vec<Variable> = variables.into_iter()
+                let needed_vars: Vec<Variable> = variables
+                    .into_iter()
                     .filter(|v| used_vars.contains(v))
                     .collect();
-                    
+
                 if needed_vars.is_empty() {
-                    Ok(Algebra::Empty)
+                    Ok(Algebra::Bgp(vec![]))
                 } else {
                     Ok(Algebra::Project {
                         pattern: Box::new(self.apply_dead_code_elimination(*pattern)?),
@@ -298,9 +293,12 @@ impl Optimizer {
             Algebra::Join { left, right } => {
                 let optimized_left = self.apply_dead_code_elimination(*left)?;
                 let optimized_right = self.apply_dead_code_elimination(*right)?;
-                
+
                 match (&optimized_left, &optimized_right) {
-                    (Algebra::Empty, _) | (_, Algebra::Empty) => Ok(Algebra::Empty),
+                    (Algebra::Bgp(ref left_patterns), Algebra::Bgp(ref right_patterns)) 
+                        if left_patterns.is_empty() || right_patterns.is_empty() => Ok(Algebra::Bgp(vec![])),
+                    (Algebra::Bgp(ref patterns), _) if patterns.is_empty() => Ok(Algebra::Bgp(vec![])),
+                    (_, Algebra::Bgp(ref patterns)) if patterns.is_empty() => Ok(Algebra::Bgp(vec![])),
                     _ => Ok(Algebra::Join {
                         left: Box::new(optimized_left),
                         right: Box::new(optimized_right),
@@ -317,14 +315,19 @@ impl Optimizer {
         match algebra {
             Algebra::Bgp(patterns) => {
                 for pattern in patterns {
-                    if let TriplePattern { subject, predicate, object } = pattern {
-                        if let crate::term::Term::Variable(v) = subject {
+                    if let TriplePattern {
+                        subject,
+                        predicate,
+                        object,
+                    } = pattern
+                    {
+                        if let crate::algebra::Term::Variable(v) = subject {
                             vars.insert(v.clone());
                         }
-                        if let crate::term::Term::Variable(v) = predicate {
+                        if let crate::algebra::Term::Variable(v) = predicate {
                             vars.insert(v.clone());
                         }
-                        if let crate::term::Term::Variable(v) = object {
+                        if let crate::algebra::Term::Variable(v) = object {
                             vars.insert(v.clone());
                         }
                     }
@@ -357,15 +360,15 @@ impl Optimizer {
             Expression::Variable(v) => {
                 vars.insert(v.clone());
             }
-            Expression::And(left, right) | Expression::Or(left, right) => {
+            Expression::Binary { left, right, .. } => {
                 vars.extend(self.extract_expression_variables(left));
                 vars.extend(self.extract_expression_variables(right));
             }
-            Expression::Not(inner) => {
-                vars.extend(self.extract_expression_variables(inner));
+            Expression::Unary { operand, .. } => {
+                vars.extend(self.extract_expression_variables(operand));
             }
-            Expression::FunctionCall { arguments, .. } => {
-                for arg in arguments {
+            Expression::Function { args, .. } => {
+                for arg in args {
                     vars.extend(self.extract_expression_variables(arg));
                 }
             }
@@ -386,9 +389,7 @@ impl Optimizer {
                 let right_cost = self.estimate_cost(right);
                 left_cost * right_cost * 0.1 // Join selectivity factor
             }
-            Algebra::Union { left, right } => {
-                self.estimate_cost(left) + self.estimate_cost(right)
-            }
+            Algebra::Union { left, right } => self.estimate_cost(left) + self.estimate_cost(right),
             Algebra::Filter { pattern, .. } => {
                 self.estimate_cost(pattern) * 0.5 // Filter selectivity
             }
@@ -399,15 +400,21 @@ impl Optimizer {
     /// Fold constants in expressions
     fn fold_expression_constants(&self, expr: Expression) -> Result<Expression> {
         match expr {
-            Expression::And(left, right) => {
+            Expression::Binary { op, left, right } => {
                 let folded_left = self.fold_expression_constants(*left)?;
                 let folded_right = self.fold_expression_constants(*right)?;
-                Ok(Expression::And(Box::new(folded_left), Box::new(folded_right)))
+                Ok(Expression::Binary {
+                    op,
+                    left: Box::new(folded_left),
+                    right: Box::new(folded_right),
+                })
             }
-            Expression::Or(left, right) => {
-                let folded_left = self.fold_expression_constants(*left)?;
-                let folded_right = self.fold_expression_constants(*right)?;
-                Ok(Expression::Or(Box::new(folded_left), Box::new(folded_right)))
+            Expression::Unary { op, operand } => {
+                let folded_operand = self.fold_expression_constants(*operand)?;
+                Ok(Expression::Unary {
+                    op,
+                    operand: Box::new(folded_operand),
+                })
             }
             other => Ok(other),
         }

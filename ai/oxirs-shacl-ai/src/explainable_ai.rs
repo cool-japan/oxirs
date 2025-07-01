@@ -18,42 +18,22 @@ pub use explainable::*;
 
 // Additional convenience re-exports for commonly used items
 pub use explainable::{
-    ExplainableAI,
-    ExplainableAIConfig,
-    ExplanationData, 
-    RawExplanation,
-    ProcessedExplanation,
-    ValidationExplanation,
-    PatternExplanation,
-    QuantumExplanation,
-    AdaptationExplanation,
-    InterpretabilityReport,
-    ValidationContext,
-    PatternRecognitionContext,
-    QuantumPatternContext,
-    SimpleDecisionTracker,
+    AdaptationExplanation, ExplainableAI, ExplainableAIConfig, ExplanationData,
+    InterpretabilityReport, PatternExplanation, PatternRecognitionContext, ProcessedExplanation,
+    QuantumExplanation, QuantumPatternContext, RawExplanation, SimpleDecisionTracker,
+    ValidationContext, ValidationExplanation,
+};
+
+pub use explainable::{DecisionTracker, ExplanationGenerator, InterpretabilityAnalyzer};
+
+pub use explainable::{
+    AdaptationLogicExplainer, NeuralDecisionExplainer, PatternRecognitionExplainer,
+    QuantumPatternExplainer, ValidationReasoningExplainer,
 };
 
 pub use explainable::{
-    ExplanationGenerator,
-    InterpretabilityAnalyzer,
-    DecisionTracker,
-};
-
-pub use explainable::{
-    NeuralDecisionExplainer,
-    PatternRecognitionExplainer,
-    ValidationReasoningExplainer,
-    QuantumPatternExplainer,
-    AdaptationLogicExplainer,
-};
-
-pub use explainable::{
-    FeatureImportanceAnalyzer,
-    AttentionAnalyzer,
-    DecisionPathAnalyzer,
+    AttentionAnalyzer, CounterfactualAnalyzer, DecisionPathAnalyzer, FeatureImportanceAnalyzer,
     ModelBehaviorAnalyzer,
-    CounterfactualAnalyzer,
 };
 
 pub use explainable::NaturalLanguageProcessor;

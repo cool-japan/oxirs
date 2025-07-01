@@ -207,7 +207,7 @@ impl CustomConstraintRegistry {
         &mut self,
         component_id: &ConstraintComponentId,
         parameters: HashMap<String, Term>,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ComponentExecutionResult> {
         let start_time = Instant::now();
@@ -642,7 +642,7 @@ impl CustomConstraintRegistry {
         &self,
         component: &dyn CustomConstraintComponent,
         parameters: HashMap<String, Term>,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
         _exec_context: &ComponentExecutionContext,
     ) -> Result<ConstraintEvaluationResult> {

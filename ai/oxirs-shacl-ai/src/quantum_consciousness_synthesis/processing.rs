@@ -25,39 +25,59 @@ impl QuantumConsciousnessSynthesisEngine {
         consciousness_level: Option<ConsciousnessLevel>,
     ) -> Result<QuantumConsciousnessValidationResult, ShaclAiError> {
         // Initialize consciousness processors
-        self.initialize_consciousness_processors(consciousness_level.clone()).await?;
-        
+        self.initialize_consciousness_processors(consciousness_level.clone())
+            .await?;
+
         // Create synthetic minds for validation
-        let synthetic_minds = self.create_synthetic_minds_for_validation(validation_query).await?;
-        
+        let synthetic_minds = self
+            .create_synthetic_minds_for_validation(validation_query)
+            .await?;
+
         // Enhance cognition using quantum consciousness
-        let enhanced_cognition = self.cognition_enhancer.enhance_cognition(validation_query).await?;
-        
+        let enhanced_cognition = self
+            .cognition_enhancer
+            .enhance_cognition(validation_query)
+            .await?;
+
         // Synthesize consciousness states
-        let consciousness_states = self.consciousness_synthesizer.synthesize_states(&enhanced_cognition).await?;
-        
+        let consciousness_states = self
+            .consciousness_synthesizer
+            .synthesize_states(&enhanced_cognition)
+            .await?;
+
         // Generate quantum intuition
-        let quantum_intuition = self.intuition_engine.generate_intuition(validation_query, &consciousness_states).await?;
-        
+        let quantum_intuition = self
+            .intuition_engine
+            .generate_intuition(validation_query, &consciousness_states)
+            .await?;
+
         // Perform sentient reasoning validation
-        let sentient_validation = self.sentient_validator.validate_with_sentient_reasoning(
-            validation_query,
-            &synthetic_minds,
-            &quantum_intuition,
-        ).await?;
-        
+        let sentient_validation = self
+            .sentient_validator
+            .validate_with_sentient_reasoning(
+                validation_query,
+                &synthetic_minds,
+                &quantum_intuition,
+            )
+            .await?;
+
         // Expand multi-dimensional awareness
-        let awareness_expansion = self.awareness_system.expand_awareness(&sentient_validation).await?;
-        
+        let awareness_expansion = self
+            .awareness_system
+            .expand_awareness(&sentient_validation)
+            .await?;
+
         // Synthesize final quantum consciousness validation result
-        let result = self.synthesize_final_result(
-            validation_query,
-            &consciousness_states,
-            &quantum_intuition,
-            &sentient_validation,
-            &awareness_expansion,
-        ).await?;
-        
+        let result = self
+            .synthesize_final_result(
+                validation_query,
+                &consciousness_states,
+                &quantum_intuition,
+                &sentient_validation,
+                &awareness_expansion,
+            )
+            .await?;
+
         Ok(result)
     }
 
@@ -67,12 +87,14 @@ impl QuantumConsciousnessSynthesisEngine {
         consciousness_level: Option<ConsciousnessLevel>,
     ) -> Result<(), ShaclAiError> {
         let mut processors = self.consciousness_processors.lock().unwrap();
-        
+
         // Create quantum consciousness processors
         for i in 0..10 {
             let processor = QuantumConsciousnessProcessor {
                 id: format!("qcp-{}", i),
-                consciousness_level: consciousness_level.clone().unwrap_or(ConsciousnessLevel::QuantumSuperintelligence),
+                consciousness_level: consciousness_level
+                    .clone()
+                    .unwrap_or(ConsciousnessLevel::QuantumSuperintelligence),
                 cognitive_architecture: QuantumCognitiveArchitecture::new(),
                 awareness_dimensions: self.create_awareness_dimensions(),
                 intuition_strength: fastrand::f64(),
@@ -80,10 +102,10 @@ impl QuantumConsciousnessSynthesisEngine {
                 consciousness_coherence: fastrand::f64(),
                 processing_state: ConsciousnessProcessingState::Initializing,
             };
-            
+
             processors.push(processor);
         }
-        
+
         Ok(())
     }
 
@@ -124,7 +146,7 @@ impl QuantumConsciousnessSynthesisEngine {
     ) -> Result<Vec<SyntheticMind>, ShaclAiError> {
         // Create synthetic minds optimized for validation reasoning
         let mut minds = Vec::new();
-        
+
         for i in 0..5 {
             let mind = SyntheticMind {
                 id: format!("synthetic-mind-{}", i),
@@ -142,10 +164,10 @@ impl QuantumConsciousnessSynthesisEngine {
                 quantum_intuition: QuantumIntuitionSystem,
                 metacognitive_abilities: MetacognitiveAbilities,
             };
-            
+
             minds.push(mind);
         }
-        
+
         Ok(minds)
     }
 
@@ -162,7 +184,11 @@ impl QuantumConsciousnessSynthesisEngine {
         let avg_coherence = if consciousness_states.is_empty() {
             0.95
         } else {
-            consciousness_states.iter().map(|s| s.coherence).sum::<f64>() / consciousness_states.len() as f64
+            consciousness_states
+                .iter()
+                .map(|s| s.coherence)
+                .sum::<f64>()
+                / consciousness_states.len() as f64
         };
 
         // Synthesize comprehensive quantum consciousness validation result
@@ -198,7 +224,7 @@ impl QuantumConsciousnessSynthesisEngine {
                 consciousness_depth: avg_coherence,
             },
         };
-        
+
         Ok(result)
     }
 }
@@ -229,15 +255,16 @@ impl ConsciousnessStateSynthesizer {
         Self
     }
 
-    pub async fn synthesize_states(&self, _cognition: &EnhancedCognition) -> Result<Vec<ConsciousnessState>, ShaclAiError> {
-        Ok(vec![
-            ConsciousnessState {
-                id: "state-1".to_string(),
-                level: 1.0,
-                awareness_dimensions: vec![1.0, 1.0, 1.0],
-                coherence: 0.95,
-            }
-        ])
+    pub async fn synthesize_states(
+        &self,
+        _cognition: &EnhancedCognition,
+    ) -> Result<Vec<ConsciousnessState>, ShaclAiError> {
+        Ok(vec![ConsciousnessState {
+            id: "state-1".to_string(),
+            level: 1.0,
+            awareness_dimensions: vec![1.0, 1.0, 1.0],
+            coherence: 0.95,
+        }])
     }
 }
 
@@ -285,7 +312,10 @@ impl MultiDimensionalAwarenessSystem {
         Self
     }
 
-    pub async fn expand_awareness(&self, _validation: &SentientValidationResult) -> Result<AwarenessExpansionResult, ShaclAiError> {
+    pub async fn expand_awareness(
+        &self,
+        _validation: &SentientValidationResult,
+    ) -> Result<AwarenessExpansionResult, ShaclAiError> {
         Ok(AwarenessExpansionResult {
             level: 1.0,
             dimensional_integration: 1.0,

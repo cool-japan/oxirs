@@ -10,9 +10,9 @@ use crate::{
 };
 
 use super::types::{
-    CorrelationAnalysisConfig, CorrelationAnalysisResult, CorrelationAnalysisStats,
-    CorrelationType, PatternCorrelation, CorrelationCluster, PatternRelationshipGraph,
-    CausalRelationship, TemporalDynamics,
+    CausalRelationship, CorrelationAnalysisConfig, CorrelationAnalysisResult,
+    CorrelationAnalysisStats, CorrelationCluster, CorrelationType, PatternCorrelation,
+    PatternRelationshipGraph, TemporalDynamics,
 };
 
 /// Advanced pattern correlation analyzer for discovering complex relationships
@@ -49,29 +49,32 @@ impl AdvancedPatternCorrelationAnalyzer {
         patterns: &[Pattern],
     ) -> Result<CorrelationAnalysisResult> {
         let start_time = Instant::now();
-        
+
         // Build correlation matrices for different types
         self.build_correlation_matrices(patterns).await?;
-        
+
         // Discover pattern correlations
         let correlations = self.discover_correlations(patterns).await?;
-        
+
         // Form correlation clusters
         let clusters = self.form_correlation_clusters(&correlations).await?;
-        
+
         // Identify causal relationships if enabled
         let causal_relationships = if self.config.enable_causal_inference {
-            self.identify_causal_relationships(patterns, &correlations).await?
+            self.identify_causal_relationships(patterns, &correlations)
+                .await?
         } else {
             Vec::new()
         };
-        
+
         // Update statistics
         self.correlation_stats.analysis_execution_time = start_time.elapsed();
         self.correlation_stats.correlations_analyzed = correlations.len();
-        self.correlation_stats.significant_correlations_found = 
-            correlations.iter().filter(|c| c.statistical_significance > self.config.correlation_confidence_threshold).count();
-        
+        self.correlation_stats.significant_correlations_found = correlations
+            .iter()
+            .filter(|c| c.statistical_significance > self.config.correlation_confidence_threshold)
+            .count();
+
         Ok(CorrelationAnalysisResult {
             discovered_correlations: correlations,
             correlation_clusters: clusters,
@@ -90,7 +93,9 @@ impl AdvancedPatternCorrelationAnalyzer {
             CorrelationType::Temporal,
             CorrelationType::Functional,
         ] {
-            let matrix = self.compute_correlation_matrix(patterns, &correlation_type).await?;
+            let matrix = self
+                .compute_correlation_matrix(patterns, &correlation_type)
+                .await?;
             self.correlation_matrices.insert(correlation_type, matrix);
         }
         Ok(())
@@ -107,11 +112,9 @@ impl AdvancedPatternCorrelationAnalyzer {
 
         for i in 0..n {
             for j in i..n {
-                let correlation = self.compute_pairwise_correlation(
-                    &patterns[i],
-                    &patterns[j],
-                    correlation_type,
-                ).await?;
+                let correlation = self
+                    .compute_pairwise_correlation(&patterns[i], &patterns[j], correlation_type)
+                    .await?;
                 matrix[[i, j]] = correlation;
                 matrix[[j, i]] = correlation; // Symmetric matrix
             }
@@ -137,7 +140,11 @@ impl AdvancedPatternCorrelationAnalyzer {
     }
 
     /// Compute structural correlation between patterns
-    fn compute_structural_correlation(&self, pattern1: &Pattern, pattern2: &Pattern) -> Result<f64> {
+    fn compute_structural_correlation(
+        &self,
+        pattern1: &Pattern,
+        pattern2: &Pattern,
+    ) -> Result<f64> {
         // TODO: Implement structural similarity computation
         // This would analyze the shape structure, constraints, property paths, etc.
         Ok(0.5)
@@ -158,7 +165,11 @@ impl AdvancedPatternCorrelationAnalyzer {
     }
 
     /// Compute functional correlation between patterns
-    fn compute_functional_correlation(&self, pattern1: &Pattern, pattern2: &Pattern) -> Result<f64> {
+    fn compute_functional_correlation(
+        &self,
+        pattern1: &Pattern,
+        pattern2: &Pattern,
+    ) -> Result<f64> {
         // TODO: Implement functional similarity computation
         // This would analyze what the patterns validate/constrain
         Ok(0.4)
@@ -172,15 +183,19 @@ impl AdvancedPatternCorrelationAnalyzer {
             for i in 0..patterns.len() {
                 for j in (i + 1)..patterns.len() {
                     let correlation_coefficient = matrix[[i, j]];
-                    
+
                     if correlation_coefficient.abs() >= self.config.min_correlation_threshold {
                         correlations.push(PatternCorrelation {
                             pattern1_id: format!("pattern_{}", i),
                             pattern2_id: format!("pattern_{}", j),
                             correlation_type: correlation_type.clone(),
                             correlation_coefficient,
-                            statistical_significance: self.compute_significance(correlation_coefficient),
-                            confidence_interval: (correlation_coefficient - 0.1, correlation_coefficient + 0.1),
+                            statistical_significance: self
+                                .compute_significance(correlation_coefficient),
+                            confidence_interval: (
+                                correlation_coefficient - 0.1,
+                                correlation_coefficient + 0.1,
+                            ),
                             supporting_features: Vec::new(),
                             temporal_context: None,
                         });
@@ -223,7 +238,10 @@ impl AdvancedPatternCorrelationAnalyzer {
     }
 
     /// Get correlation matrix for a specific type
-    pub fn get_correlation_matrix(&self, correlation_type: &CorrelationType) -> Option<&Array2<f64>> {
+    pub fn get_correlation_matrix(
+        &self,
+        correlation_type: &CorrelationType,
+    ) -> Option<&Array2<f64>> {
         self.correlation_matrices.get(correlation_type)
     }
 }

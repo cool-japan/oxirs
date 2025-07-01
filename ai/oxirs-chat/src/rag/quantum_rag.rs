@@ -11,8 +11,8 @@
 
 use super::*;
 use anyhow::{Context, Result};
-use std::f64::consts::PI;
 use rand::Rng;
+use std::f64::consts::PI;
 use tracing::{debug, warn};
 
 /// Quantum-inspired state for retrieval optimization
@@ -34,25 +34,30 @@ impl QuantumRetrievalState {
             coherence_time: Duration::from_secs((normalized_complexity * 30.0 + 5.0) as u64),
         }
     }
-    
+
     /// Enhanced quantum superposition for multiple retrieval paths with error handling
-    pub fn superposition_search(&self, candidates: &[RagDocument]) -> Result<Vec<QuantumSearchResult>> {
+    pub fn superposition_search(
+        &self,
+        candidates: &[RagDocument],
+    ) -> Result<Vec<QuantumSearchResult>> {
         if candidates.is_empty() {
             debug!("No candidates provided for quantum superposition search");
             return Ok(Vec::new());
         }
 
-        let results = candidates.iter()
+        let results = candidates
+            .iter()
             .filter_map(|doc| {
                 // Enhanced probability calculation with content analysis
                 let content_factor = self.analyze_content_quantum_properties(&doc.content);
-                let base_probability = self.amplitude.powi(2) * 
-                    (self.phase + content_factor).cos().abs();
-                
+                let base_probability =
+                    self.amplitude.powi(2) * (self.phase + content_factor).cos().abs();
+
                 // Apply quantum error correction
                 let corrected_probability = self.quantum_error_correction(base_probability);
-                
-                if corrected_probability > 0.01 { // Quantum threshold
+
+                if corrected_probability > 0.01 {
+                    // Quantum threshold
                     Some(QuantumSearchResult {
                         document: doc.clone(),
                         quantum_probability: corrected_probability,
@@ -65,10 +70,13 @@ impl QuantumRetrievalState {
             })
             .collect();
 
-        debug!("Quantum superposition search generated {} results", results.len());
+        debug!(
+            "Quantum superposition search generated {} results",
+            results.len()
+        );
         Ok(results)
     }
-    
+
     /// Advanced quantum interference for result optimization
     pub fn interference_optimization(&self, results: &mut Vec<QuantumSearchResult>) -> Result<()> {
         if results.is_empty() {
@@ -80,22 +88,26 @@ impl QuantumRetrievalState {
             // Multi-path interference calculation
             let path_interference = self.calculate_path_interference(i, results.len());
             let phase_interference = (self.phase - result.quantum_probability * PI).sin();
-            
+
             // Combined interference effect
             let total_interference = (path_interference + phase_interference) / 2.0;
             result.quantum_probability *= (1.0 + total_interference * 0.15).max(0.05);
-            
+
             // Update entanglement score based on interference
             result.entanglement_score = self.entanglement_factor * result.quantum_probability;
         }
-        
+
         // Sort by quantum probability with stability
         results.sort_by(|a, b| {
-            b.quantum_probability.partial_cmp(&a.quantum_probability)
+            b.quantum_probability
+                .partial_cmp(&a.quantum_probability)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        debug!("Applied quantum interference optimization to {} results", results.len());
+        debug!(
+            "Applied quantum interference optimization to {} results",
+            results.len()
+        );
         Ok(())
     }
 
@@ -104,20 +116,23 @@ impl QuantumRetrievalState {
         let length_factor = (content.len() as f64 * 0.001).min(1.0);
         let complexity_factor = self.calculate_content_complexity(content);
         let entropy_factor = self.calculate_shannon_entropy(content);
-        
+
         (length_factor + complexity_factor + entropy_factor) / 3.0
     }
 
     /// Calculate content complexity using various metrics
     fn calculate_content_complexity(&self, content: &str) -> f64 {
         let word_count = content.split_whitespace().count() as f64;
-        let unique_chars = content.chars().collect::<std::collections::HashSet<_>>().len() as f64;
+        let unique_chars = content
+            .chars()
+            .collect::<std::collections::HashSet<_>>()
+            .len() as f64;
         let avg_word_length = if word_count > 0.0 {
             content.len() as f64 / word_count
         } else {
             1.0
         };
-        
+
         ((unique_chars / 26.0).min(1.0) + (avg_word_length / 10.0).min(1.0)) / 2.0
     }
 
@@ -133,7 +148,8 @@ impl QuantumRetrievalState {
         }
 
         let length = content.len() as f64;
-        let entropy = char_counts.values()
+        let entropy = char_counts
+            .values()
             .map(|&count| {
                 let p = count as f64 / length;
                 -p * p.log2()
@@ -152,7 +168,7 @@ impl QuantumRetrievalState {
         let normalized_position = path_index as f64 / (total_paths - 1) as f64;
         let wave_function = (normalized_position * PI * 2.0).sin();
         let phase_shift = (self.phase + normalized_position * PI).cos();
-        
+
         (wave_function * phase_shift) * 0.2 // Limit interference strength
     }
 
@@ -189,7 +205,7 @@ impl QuantumRetrievalState {
         let amplitude_benefit = self.amplitude.powi(2);
         let entanglement_benefit = self.entanglement_factor;
         let coherence_benefit = (self.coherence_time.as_secs_f64() / 30.0).min(1.0);
-        
+
         (amplitude_benefit + entanglement_benefit + coherence_benefit) / 3.0
     }
 }
@@ -208,18 +224,17 @@ impl QuantumSearchResult {
         let probability_weight = 0.5;
         let entanglement_weight = 0.3;
         let coherence_weight = 0.2;
-        
+
         let coherence_factor = (self.coherence_remaining.as_secs_f64() / 60.0).min(1.0);
-        
-        self.quantum_probability * probability_weight +
-        self.entanglement_score * entanglement_weight +
-        coherence_factor * coherence_weight
+
+        self.quantum_probability * probability_weight
+            + self.entanglement_score * entanglement_weight
+            + coherence_factor * coherence_weight
     }
 
     /// Check if quantum state is still coherent
     pub fn is_coherent(&self) -> bool {
-        self.coherence_remaining > Duration::from_secs(1) && 
-        self.quantum_probability > 0.01
+        self.coherence_remaining > Duration::from_secs(1) && self.quantum_probability > 0.01
     }
 }
 
@@ -240,7 +255,7 @@ impl QuantumStateMetrics {
         let entanglement_health = self.entanglement_factor;
         let coherence_health = (self.coherence_seconds / 60.0).min(1.0);
         let advantage_health = self.quantum_advantage;
-        
+
         (amplitude_health + entanglement_health + coherence_health + advantage_health) / 4.0
     }
 
@@ -275,11 +290,13 @@ impl RagDocument {
     /// Create from triple
     pub fn from_triple(triple: Triple) -> Self {
         let id = uuid::Uuid::new_v4().to_string();
-        let content = format!("{} {} {}", 
-                            triple.subject(),
-                            triple.predicate(),
-                            triple.object());
-        
+        let content = format!(
+            "{} {} {}",
+            triple.subject(),
+            triple.predicate(),
+            triple.object()
+        );
+
         Self {
             id,
             content,
@@ -328,19 +345,29 @@ impl QuantumEntanglementManager {
     }
 
     /// Create quantum entanglement between two documents
-    pub fn entangle_documents(&mut self, doc1_id: &str, doc2_id: &str, strength: f64) -> Result<()> {
+    pub fn entangle_documents(
+        &mut self,
+        doc1_id: &str,
+        doc2_id: &str,
+        strength: f64,
+    ) -> Result<()> {
         if strength < 0.0 || strength > 1.0 {
             return Err(anyhow!("Entanglement strength must be between 0.0 and 1.0"));
         }
 
         let pair = (doc1_id.to_string(), doc2_id.to_string());
         self.entangled_pairs.push(pair.clone());
-        
+
         // Store bidirectional correlation
-        self.correlation_strength.insert(format!("{}:{}", doc1_id, doc2_id), strength);
-        self.correlation_strength.insert(format!("{}:{}", doc2_id, doc1_id), strength);
-        
-        debug!("Entangled documents {} and {} with strength {}", doc1_id, doc2_id, strength);
+        self.correlation_strength
+            .insert(format!("{}:{}", doc1_id, doc2_id), strength);
+        self.correlation_strength
+            .insert(format!("{}:{}", doc2_id, doc1_id), strength);
+
+        debug!(
+            "Entangled documents {} and {} with strength {}",
+            doc1_id, doc2_id, strength
+        );
         Ok(())
     }
 
@@ -361,10 +388,8 @@ impl QuantumEntanglementManager {
             // Check for entangled documents in the result set
             for other_result in results.iter() {
                 if result.document.id != other_result.document.id {
-                    let strength = self.get_entanglement_strength(
-                        &result.document.id, 
-                        &other_result.document.id
-                    );
+                    let strength = self
+                        .get_entanglement_strength(&result.document.id, &other_result.document.id);
                     if strength > 0.0 {
                         correlation_boost += strength * other_result.quantum_probability;
                         correlation_count += 1;
@@ -412,37 +437,48 @@ impl QuantumDecoherenceSimulator {
     }
 
     /// Simulate quantum decoherence over time
-    pub fn simulate_decoherence(&self, state: &mut QuantumRetrievalState, elapsed: Duration) -> Result<()> {
+    pub fn simulate_decoherence(
+        &self,
+        state: &mut QuantumRetrievalState,
+        elapsed: Duration,
+    ) -> Result<()> {
         let time_factor = elapsed.as_secs_f64() / self.time_step.as_secs_f64();
-        
+
         // Apply decoherence to amplitude
         let decoherence_factor = (-self.decoherence_rate * time_factor).exp();
         state.amplitude *= decoherence_factor;
-        
+
         // Add environmental noise to phase
         let mut rng = rand::thread_rng();
         let phase_noise = rng.gen_range(-self.noise_level..self.noise_level) * time_factor;
         state.phase += phase_noise;
-        
+
         // Reduce entanglement factor due to environmental interaction
         state.entanglement_factor *= decoherence_factor.sqrt();
-        
+
         // Update coherence time
         let remaining_coherence = state.coherence_time.as_secs_f64() - elapsed.as_secs_f64();
         state.coherence_time = Duration::from_secs_f64(remaining_coherence.max(0.0));
-        
-        debug!("Applied decoherence: amplitude={:.3}, phase={:.3}, entanglement={:.3}", 
-               state.amplitude, state.phase, state.entanglement_factor);
-        
+
+        debug!(
+            "Applied decoherence: amplitude={:.3}, phase={:.3}, entanglement={:.3}",
+            state.amplitude, state.phase, state.entanglement_factor
+        );
+
         Ok(())
     }
-    
+
     /// Calculate quantum fidelity after decoherence
-    pub fn calculate_quantum_fidelity(&self, original: &QuantumRetrievalState, current: &QuantumRetrievalState) -> f64 {
+    pub fn calculate_quantum_fidelity(
+        &self,
+        original: &QuantumRetrievalState,
+        current: &QuantumRetrievalState,
+    ) -> f64 {
         let amplitude_fidelity = (original.amplitude * current.amplitude).abs();
         let phase_fidelity = ((original.phase - current.phase).cos() + 1.0) / 2.0;
-        let entanglement_fidelity = (original.entanglement_factor * current.entanglement_factor).sqrt();
-        
+        let entanglement_fidelity =
+            (original.entanglement_factor * current.entanglement_factor).sqrt();
+
         (amplitude_fidelity * phase_fidelity * entanglement_fidelity).cbrt()
     }
 }
@@ -473,21 +509,28 @@ impl QuantumAnnealingOptimizer {
             annealing_steps: steps,
         }
     }
-    
+
     /// Optimize quantum retrieval parameters using annealing
-    pub fn optimize_retrieval_parameters(&self, query_complexity: f64, context_size: usize) -> Result<OptimizedQuantumParams> {
+    pub fn optimize_retrieval_parameters(
+        &self,
+        query_complexity: f64,
+        context_size: usize,
+    ) -> Result<OptimizedQuantumParams> {
         let mut current_params = QuantumRetrievalParams::default();
         let mut best_params = current_params.clone();
-        let mut best_energy = self.calculate_energy(&current_params, query_complexity, context_size);
-        
+        let mut best_energy =
+            self.calculate_energy(&current_params, query_complexity, context_size);
+
         let mut temperature = self.initial_temperature;
-        let temp_step = (self.initial_temperature - self.final_temperature) / self.annealing_steps as f64;
-        
+        let temp_step =
+            (self.initial_temperature - self.final_temperature) / self.annealing_steps as f64;
+
         for step in 0..self.annealing_steps {
             // Generate neighboring state
             let neighbor_params = self.generate_neighbor(&current_params)?;
-            let neighbor_energy = self.calculate_energy(&neighbor_params, query_complexity, context_size);
-            
+            let neighbor_energy =
+                self.calculate_energy(&neighbor_params, query_complexity, context_size);
+
             // Accept or reject based on Boltzmann probability
             let energy_diff = neighbor_energy - best_energy;
             let acceptance_probability = if energy_diff < 0.0 {
@@ -495,7 +538,7 @@ impl QuantumAnnealingOptimizer {
             } else {
                 (-energy_diff / temperature).exp()
             };
-            
+
             let mut rng = rand::thread_rng();
             if rng.gen::<f64>() < acceptance_probability {
                 current_params = neighbor_params;
@@ -504,44 +547,62 @@ impl QuantumAnnealingOptimizer {
                     best_energy = neighbor_energy;
                 }
             }
-            
+
             // Update temperature according to cooling schedule
             temperature = self.update_temperature(temperature, step, temp_step);
         }
-        
-        debug!("Quantum annealing optimization completed: energy={:.3}", best_energy);
-        
+
+        debug!(
+            "Quantum annealing optimization completed: energy={:.3}",
+            best_energy
+        );
+
         Ok(OptimizedQuantumParams {
             params: best_params,
             final_energy: best_energy,
             convergence_steps: self.annealing_steps,
         })
     }
-    
+
     /// Calculate energy function for quantum parameters
-    fn calculate_energy(&self, params: &QuantumRetrievalParams, query_complexity: f64, context_size: usize) -> f64 {
+    fn calculate_energy(
+        &self,
+        params: &QuantumRetrievalParams,
+        query_complexity: f64,
+        context_size: usize,
+    ) -> f64 {
         // Multi-objective energy function combining efficiency and accuracy
         let efficiency_term = params.amplitude_factor * params.phase_factor;
         let accuracy_term = params.entanglement_strength * query_complexity;
         let context_term = (context_size as f64).ln() * params.coherence_factor;
-        
+
         // Minimize negative efficiency while maximizing accuracy
         -(efficiency_term * accuracy_term * context_term).ln()
     }
-    
+
     /// Generate neighboring parameter configuration
-    fn generate_neighbor(&self, current: &QuantumRetrievalParams) -> Result<QuantumRetrievalParams> {
+    fn generate_neighbor(
+        &self,
+        current: &QuantumRetrievalParams,
+    ) -> Result<QuantumRetrievalParams> {
         let mut rng = rand::thread_rng();
         let perturbation = 0.1;
-        
+
         Ok(QuantumRetrievalParams {
-            amplitude_factor: (current.amplitude_factor + rng.gen_range(-perturbation..perturbation)).clamp(0.1, 2.0),
-            phase_factor: (current.phase_factor + rng.gen_range(-perturbation..perturbation)).clamp(0.1, 2.0),
-            entanglement_strength: (current.entanglement_strength + rng.gen_range(-perturbation..perturbation)).clamp(0.0, 1.0),
-            coherence_factor: (current.coherence_factor + rng.gen_range(-perturbation..perturbation)).clamp(0.1, 2.0),
+            amplitude_factor: (current.amplitude_factor
+                + rng.gen_range(-perturbation..perturbation))
+            .clamp(0.1, 2.0),
+            phase_factor: (current.phase_factor + rng.gen_range(-perturbation..perturbation))
+                .clamp(0.1, 2.0),
+            entanglement_strength: (current.entanglement_strength
+                + rng.gen_range(-perturbation..perturbation))
+            .clamp(0.0, 1.0),
+            coherence_factor: (current.coherence_factor
+                + rng.gen_range(-perturbation..perturbation))
+            .clamp(0.1, 2.0),
         })
     }
-    
+
     /// Update temperature according to cooling schedule
     fn update_temperature(&self, current_temp: f64, step: usize, temp_step: f64) -> f64 {
         match self.cooling_schedule {
@@ -580,35 +641,36 @@ pub enum MeasurementBasis {
 impl MultiDimensionalQuantumState {
     pub fn new(dimension_names: Vec<String>) -> Self {
         let num_dims = dimension_names.len();
-        let dimensions = dimension_names.into_iter().map(|name| {
-            QuantumDimension {
+        let dimensions = dimension_names
+            .into_iter()
+            .map(|name| QuantumDimension {
                 name,
                 state_vector: vec![1.0 / (num_dims as f64).sqrt(); num_dims],
                 measurement_basis: MeasurementBasis::Computational,
                 uncertainty: 0.1,
-            }
-        }).collect();
-        
+            })
+            .collect();
+
         // Initialize correlation matrix
         let correlation_matrix = vec![vec![0.0; num_dims]; num_dims];
-        
+
         Self {
             dimensions,
             correlation_matrix,
             total_entropy: 0.0,
         }
     }
-    
+
     /// Apply quantum Fourier transform for pattern analysis
     pub fn quantum_fourier_transform(&mut self, dimension_idx: usize) -> Result<()> {
         if dimension_idx >= self.dimensions.len() {
             return Err(anyhow::anyhow!("Dimension index out of bounds"));
         }
-        
+
         let dimension = &mut self.dimensions[dimension_idx];
         let n = dimension.state_vector.len();
         let mut transformed = vec![0.0; n];
-        
+
         for k in 0..n {
             let mut sum = 0.0;
             for j in 0..n {
@@ -617,61 +679,78 @@ impl MultiDimensionalQuantumState {
             }
             transformed[k] = sum / (n as f64).sqrt();
         }
-        
+
         dimension.state_vector = transformed;
         debug!("Applied QFT to dimension: {}", dimension.name);
-        
+
         Ok(())
     }
-    
+
     /// Calculate quantum coherence across all dimensions
     pub fn calculate_total_coherence(&self) -> f64 {
-        self.dimensions.iter().map(|dim| {
-            let norm_squared: f64 = dim.state_vector.iter().map(|x| x * x).sum();
-            let max_element = dim.state_vector.iter().fold(0.0, |acc, &x| acc.max(x.abs()));
-            (norm_squared - max_element * max_element) / (1.0 - 1.0 / dim.state_vector.len() as f64)
-        }).sum::<f64>() / self.dimensions.len() as f64
+        self.dimensions
+            .iter()
+            .map(|dim| {
+                let norm_squared: f64 = dim.state_vector.iter().map(|x| x * x).sum();
+                let max_element = dim
+                    .state_vector
+                    .iter()
+                    .fold(0.0, |acc, &x| acc.max(x.abs()));
+                (norm_squared - max_element * max_element)
+                    / (1.0 - 1.0 / dim.state_vector.len() as f64)
+            })
+            .sum::<f64>()
+            / self.dimensions.len() as f64
     }
-    
+
     /// Measure quantum state in specified basis
     pub fn measure_state(&self, dimension_idx: usize, basis: &MeasurementBasis) -> Result<f64> {
         if dimension_idx >= self.dimensions.len() {
             return Err(anyhow::anyhow!("Dimension index out of bounds"));
         }
-        
+
         let dimension = &self.dimensions[dimension_idx];
         let measurement_result = match basis {
-            MeasurementBasis::Computational => {
-                dimension.state_vector.iter().enumerate()
-                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                    .map(|(i, _)| i as f64)
-                    .unwrap_or(0.0)
-            },
+            MeasurementBasis::Computational => dimension
+                .state_vector
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(i, _)| i as f64)
+                .unwrap_or(0.0),
             MeasurementBasis::Diagonal => {
                 // Transform to diagonal basis and measure
-                let diagonal_projection: f64 = dimension.state_vector.iter()
+                let diagonal_projection: f64 = dimension
+                    .state_vector
+                    .iter()
                     .enumerate()
                     .map(|(i, &val)| val * (i as f64 + 1.0).ln())
                     .sum();
                 diagonal_projection / dimension.state_vector.len() as f64
-            },
+            }
             MeasurementBasis::Circular => {
                 // Circular basis measurement
-                let phase: f64 = dimension.state_vector.iter()
+                let phase: f64 = dimension
+                    .state_vector
+                    .iter()
                     .enumerate()
-                    .map(|(i, &val)| val * (2.0 * PI * i as f64 / dimension.state_vector.len() as f64).cos())
+                    .map(|(i, &val)| {
+                        val * (2.0 * PI * i as f64 / dimension.state_vector.len() as f64).cos()
+                    })
                     .sum();
                 phase.atan2(dimension.state_vector.iter().sum::<f64>())
-            },
+            }
             MeasurementBasis::Custom(basis_vector) => {
                 // Custom basis measurement
-                dimension.state_vector.iter()
+                dimension
+                    .state_vector
+                    .iter()
                     .zip(basis_vector.iter())
                     .map(|(state, basis)| state * basis)
                     .sum()
-            },
+            }
         };
-        
+
         Ok(measurement_result)
     }
 }
@@ -748,7 +827,7 @@ mod tests {
             entanglement_score: 0.6,
             coherence_remaining: Duration::from_secs(30),
         };
-        
+
         assert!(result.relevance_score() > 0.0);
         assert!(result.is_coherent());
     }

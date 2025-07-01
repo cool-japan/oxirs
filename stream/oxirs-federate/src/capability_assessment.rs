@@ -15,8 +15,10 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     metadata::{CapabilityDetail, QueryPattern},
-    AuthConfig, FederatedService, ServiceCapability, ServiceType,
+    FederatedService, ServiceCapability,
 };
+use crate::auth::AuthConfig as AuthenticationConfig;
+use crate::service::ServiceType;
 
 /// Capability assessor for detailed service analysis
 #[derive(Debug)]
@@ -491,8 +493,8 @@ impl CapabilityAssessor {
     }
 
     /// Add authentication headers
-    fn add_auth_headers(&self, headers: &mut HeaderMap, auth: &AuthConfig) -> Result<()> {
-        use crate::AuthType;
+    fn add_auth_headers(&self, headers: &mut HeaderMap, auth: &AuthenticationConfig) -> Result<()> {
+        use crate::service::AuthType;
         use base64::encode;
 
         match &auth.auth_type {

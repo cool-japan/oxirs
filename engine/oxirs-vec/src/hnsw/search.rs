@@ -8,7 +8,7 @@ use std::collections::BinaryHeap;
 impl HnswIndex {
     /// Search for k nearest neighbors
     pub fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
-        if self.nodes.is_empty() || self.entry_point.is_none() {
+        if self.nodes().is_empty() || self.entry_point().is_none() {
             return Ok(Vec::new());
         }
 
@@ -58,9 +58,9 @@ impl HnswIndex {
 
     /// Calculate distance between query and node
     fn calculate_distance(&self, query: &Vector, node_id: usize) -> Result<f32> {
-        if let Some(node) = self.nodes.get(node_id) {
+        if let Some(node) = self.nodes().get(node_id) {
             // Use the configured similarity metric
-            Ok(self.config.metric.distance(query, &node.vector))
+            Ok(self.config().metric.distance(query, &node.vector))
         } else {
             Err(anyhow::anyhow!("Node {} not found", node_id))
         }

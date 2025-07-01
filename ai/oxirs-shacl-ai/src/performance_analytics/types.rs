@@ -12,16 +12,16 @@ use std::time::{Duration, Instant, SystemTime};
 pub struct PerformanceMetric {
     /// Metric name
     pub name: String,
-    
+
     /// Metric value
     pub value: f64,
-    
+
     /// Timestamp of measurement
     pub timestamp: SystemTime,
-    
+
     /// Metric unit
     pub unit: String,
-    
+
     /// Additional metadata
     pub metadata: HashMap<String, String>,
 }
@@ -31,40 +31,40 @@ pub struct PerformanceMetric {
 pub struct PerformanceStatistics {
     /// Average response time in milliseconds
     pub avg_response_time_ms: f64,
-    
+
     /// Median response time in milliseconds
     pub median_response_time_ms: f64,
-    
+
     /// 95th percentile response time
     pub p95_response_time_ms: f64,
-    
+
     /// 99th percentile response time
     pub p99_response_time_ms: f64,
-    
+
     /// Maximum response time
     pub max_response_time_ms: f64,
-    
+
     /// Minimum response time
     pub min_response_time_ms: f64,
-    
+
     /// Throughput (requests per second)
     pub throughput_rps: f64,
-    
+
     /// Error rate percentage
     pub error_rate_percent: f64,
-    
+
     /// Memory usage in MB
     pub memory_usage_mb: f64,
-    
+
     /// CPU usage percentage
     pub cpu_usage_percent: f64,
-    
+
     /// Number of total requests
     pub total_requests: u64,
-    
+
     /// Number of successful requests
     pub successful_requests: u64,
-    
+
     /// Number of failed requests
     pub failed_requests: u64,
 }
@@ -94,25 +94,25 @@ impl Default for PerformanceStatistics {
 pub struct ResourceUtilization {
     /// CPU usage percentage
     pub cpu_percent: f64,
-    
+
     /// Memory usage in MB
     pub memory_mb: f64,
-    
+
     /// Memory usage percentage
     pub memory_percent: f64,
-    
+
     /// Disk usage in MB
     pub disk_mb: f64,
-    
+
     /// Disk I/O rate in MB/s
     pub disk_io_mbs: f64,
-    
+
     /// Network bandwidth usage in KB/s
     pub network_kbs: f64,
-    
+
     /// Number of open file descriptors
     pub open_files: u32,
-    
+
     /// Number of active threads
     pub active_threads: u32,
 }
@@ -159,31 +159,31 @@ pub enum AlertType {
 pub struct PerformanceAlert {
     /// Alert ID
     pub id: String,
-    
+
     /// Alert type
     pub alert_type: AlertType,
-    
+
     /// Severity level
     pub severity: AlertSeverity,
-    
+
     /// Alert message
     pub message: String,
-    
+
     /// Timestamp when alert was triggered
     pub timestamp: SystemTime,
-    
+
     /// Metric value that triggered the alert
     pub trigger_value: f64,
-    
+
     /// Threshold that was violated
     pub threshold: f64,
-    
+
     /// Additional context
     pub context: HashMap<String, String>,
-    
+
     /// Whether the alert has been acknowledged
     pub acknowledged: bool,
-    
+
     /// Resolution timestamp (if resolved)
     pub resolved_at: Option<SystemTime>,
 }
@@ -193,28 +193,28 @@ pub struct PerformanceAlert {
 pub struct OptimizationRecommendation {
     /// Recommendation ID
     pub id: String,
-    
+
     /// Recommendation type
     pub recommendation_type: String,
-    
+
     /// Description of the recommendation
     pub description: String,
-    
+
     /// Expected performance improvement percentage
     pub expected_improvement_percent: f64,
-    
+
     /// Implementation complexity (1-10 scale)
     pub implementation_complexity: u8,
-    
+
     /// Priority level (1-10 scale)
     pub priority: u8,
-    
+
     /// Estimated implementation time in hours
     pub estimated_hours: f64,
-    
+
     /// Tags for categorization
     pub tags: Vec<String>,
-    
+
     /// Creation timestamp
     pub created_at: SystemTime,
 }
@@ -233,22 +233,22 @@ pub enum TrendDirection {
 pub struct PerformanceTrend {
     /// Metric name
     pub metric_name: String,
-    
+
     /// Trend direction
     pub direction: TrendDirection,
-    
+
     /// Trend strength (0.0 - 1.0)
     pub strength: f64,
-    
+
     /// Rate of change per time unit
     pub rate_of_change: f64,
-    
+
     /// Confidence level (0.0 - 1.0)
     pub confidence: f64,
-    
+
     /// Time period analyzed
     pub time_period: Duration,
-    
+
     /// Analysis timestamp
     pub analyzed_at: SystemTime,
 }
@@ -258,25 +258,25 @@ pub struct PerformanceTrend {
 pub struct AnomalyDetection {
     /// Metric name
     pub metric_name: String,
-    
+
     /// Whether an anomaly was detected
     pub is_anomaly: bool,
-    
+
     /// Anomaly score (0.0 - 1.0)
     pub anomaly_score: f64,
-    
+
     /// Expected value
     pub expected_value: f64,
-    
+
     /// Actual observed value
     pub observed_value: f64,
-    
+
     /// Deviation from expected
     pub deviation: f64,
-    
+
     /// Detection timestamp
     pub detected_at: SystemTime,
-    
+
     /// Additional context
     pub context: String,
 }

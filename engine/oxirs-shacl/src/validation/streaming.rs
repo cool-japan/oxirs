@@ -17,18 +17,20 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "async")]
 use anyhow::Result;
 #[cfg(feature = "async")]
-use futures_util::{Stream, StreamExt};
+use futures::{Stream, StreamExt};
 #[cfg(feature = "async")]
 use indexmap::IndexMap;
 #[cfg(feature = "async")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "async")]
 use tokio::sync::{broadcast, mpsc};
+#[cfg(feature = "async")]
+use tokio_stream;
 
 #[cfg(feature = "async")]
 use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
+    model::{NamedNode, Term, Triple, Quad, Subject, Predicate, Object, GraphName},
+    Store, Result as OxirsResult,
 };
 
 #[cfg(feature = "async")]
@@ -37,7 +39,9 @@ use crate::{
     paths::*,
     report::*,
     targets::*,
-    validation::{ConstraintEvaluationResult, ValidationEngine, ValidationStats},
+    validation::{
+        ConstraintEvaluationResult, ValidationEngine, ValidationStats, ValidationViolation,
+    },
     Result as ShaclResult, Shape, ShapeId, ValidationConfig, ValidationReport,
 };
 
@@ -156,7 +160,7 @@ pub struct StreamingValidationEngine {
     shapes: Arc<RwLock<IndexMap<ShapeId, Shape>>>,
 
     /// Internal data store for buffering
-    buffer_store: Arc<Mutex<Store>>,
+    buffer_store: Arc<Mutex<dyn Store>>,
 
     /// Previous validation state for incremental validation
     previous_state: Arc<RwLock<ValidationState>>,
@@ -219,7 +223,7 @@ pub struct StreamingStats {
 }
 
 /// Real-time validation alert
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ValidationAlert {
     /// Alert ID
     pub alert_id: String,
@@ -244,10 +248,12 @@ impl StreamingValidationEngine {
         config: StreamingValidationConfig,
     ) -> Result<Self> {
         let shapes = Arc::new(RwLock::new(shapes));
-        let buffer_store = Arc::new(Mutex::new(Store::new()?));
+        // Create a simple in-memory store for buffering
+        // For now, we'll use a placeholder - this would need a proper implementation
+        let buffer_store: Arc<Mutex<dyn Store>> = Arc::new(Mutex::new(Box::new(PlaceholderStore::new())));
 
         let initial_state = ValidationState {
-            current_report: ValidationReport::new(true),
+            current_report: ValidationReport::new(),
             violations_by_node: HashMap::new(),
             last_validation: Instant::now(),
             processed_triples: 0,
@@ -312,9 +318,16 @@ impl StreamingValidationEngine {
             .await;
         });
 
-        Ok(tokio_stream::wrappers::UnboundedReceiverStream::new(
-            result_receiver,
-        ))
+        #[cfg(feature = "async")]
+        {
+            Ok(tokio_stream::wrappers::UnboundedReceiverStream::new(
+                result_receiver,
+            ))
+        }
+        #[cfg(not(feature = "async"))]
+        {
+            unimplemented!("Streaming validation requires async feature")
+        }
     }
 
     /// Internal stream processing logic
@@ -323,7 +336,7 @@ impl StreamingValidationEngine {
         event_sender: mpsc::Sender<StreamEvent>,
         config: StreamingValidationConfig,
         shapes: Arc<RwLock<IndexMap<ShapeId, Shape>>>,
-        buffer_store: Arc<Mutex<Store>>,
+        buffer_store: Arc<Mutex<dyn Store>>,
         previous_state: Arc<RwLock<ValidationState>>,
         stats: Arc<Mutex<StreamingStats>>,
         batch_counter: Arc<Mutex<u64>>,
@@ -418,7 +431,7 @@ impl StreamingValidationEngine {
         batch: &[StreamEvent],
         config: &StreamingValidationConfig,
         shapes: &Arc<RwLock<IndexMap<ShapeId, Shape>>>,
-        buffer_store: &Arc<Mutex<Store>>,
+        buffer_store: &Arc<Mutex<dyn Store>>,
         previous_state: &Arc<RwLock<ValidationState>>,
         stats: &Arc<Mutex<StreamingStats>>,
         batch_counter: &Arc<Mutex<u64>>,
@@ -456,9 +469,7 @@ impl StreamingValidationEngine {
                             alert_id: format!("alert-{}-{}", batch_id, violation.focus_node),
                             timestamp: Instant::now(),
                             violation: violation.clone(),
-                            severity: violation
-                                .result_severity
-                                .unwrap_or(crate::Severity::Violation),
+                            severity: violation.result_severity,
                             context: HashMap::new(),
                         };
 
@@ -480,18 +491,33 @@ impl StreamingValidationEngine {
     }
 
     /// Apply stream events to the buffer store
-    async fn apply_batch_changes(batch: &[StreamEvent], buffer_store: &Arc<Mutex<Store>>) -> usize {
+    async fn apply_batch_changes(
+        batch: &[StreamEvent],
+        buffer_store: &Arc<Mutex<dyn Store>>,
+    ) -> usize {
         let mut store = buffer_store.lock().unwrap();
         let mut count = 0;
 
         for event in batch {
             match event {
                 StreamEvent::Addition(triple) => {
-                    let _ = store.insert(triple);
+                    let quad = oxirs_core::model::Quad::new(
+                        triple.subject().clone(),
+                        triple.predicate().clone(),
+                        triple.object().clone(),
+                        oxirs_core::model::GraphName::DefaultGraph,
+                    );
+                    let _ = store.insert_quad(quad);
                     count += 1;
                 }
                 StreamEvent::Removal(triple) => {
-                    let _ = store.remove(triple);
+                    let quad = oxirs_core::model::Quad::new(
+                        triple.subject().clone(),
+                        triple.predicate().clone(),
+                        triple.object().clone(),
+                        oxirs_core::model::GraphName::DefaultGraph,
+                    );
+                    let _ = store.remove_quad(&quad);
                     count += 1;
                 }
                 _ => {}
@@ -505,7 +531,7 @@ impl StreamingValidationEngine {
     async fn validate_batch(
         config: &StreamingValidationConfig,
         shapes: &Arc<RwLock<IndexMap<ShapeId, Shape>>>,
-        buffer_store: &Arc<Mutex<Store>>,
+        buffer_store: &Arc<Mutex<dyn Store>>,
         previous_state: &Arc<RwLock<ValidationState>>,
         batch_id: u64,
         triples_processed: usize,
@@ -515,14 +541,15 @@ impl StreamingValidationEngine {
         let store = buffer_store.lock().unwrap();
 
         // Create validation configuration
-        let validation_config = ValidationConfig::default()
-            .with_strategy(crate::ValidationStrategy::Optimized)
-            .with_incremental_enabled(config.incremental)
-            .with_memory_limit_mb(config.max_memory_bytes / (1024 * 1024));
+        let validation_config = ValidationConfig {
+            timeout_ms: Some(config.batch_timeout.as_millis() as u64),
+            parallel: config.worker_count > 1,
+            ..ValidationConfig::default()
+        };
 
         // Perform validation
         let engine = ValidationEngine::new(&shapes_guard, validation_config);
-        let current_report = engine.validate_store(&store)?;
+        let current_report = engine.validate_store(&**store)?;
 
         // Calculate differences if incremental validation is enabled
         let (new_violations, resolved_violations) = if config.incremental {
@@ -650,9 +677,56 @@ impl Default for StreamingStats {
     }
 }
 
+/// Placeholder Store implementation for buffering
+/// TODO: Replace with a proper in-memory store implementation
+struct PlaceholderStore {
+    quads: Arc<RwLock<std::collections::HashSet<oxirs_core::model::Quad>>>,
+}
+
+impl PlaceholderStore {
+    fn new() -> Self {
+        Self {
+            quads: Arc::new(RwLock::new(std::collections::HashSet::new())),
+        }
+    }
+}
+
+impl Store for PlaceholderStore {
+    fn insert_quad(&self, quad: oxirs_core::model::Quad) -> OxirsResult<bool> {
+        let mut quads = self.quads.write().unwrap();
+        Ok(quads.insert(quad))
+    }
+
+    fn remove_quad(&self, quad: &oxirs_core::model::Quad) -> OxirsResult<bool> {
+        let mut quads = self.quads.write().unwrap();
+        Ok(quads.remove(quad))
+    }
+
+    fn find_quads(
+        &self,
+        _subject: Option<&oxirs_core::model::Subject>,
+        _predicate: Option<&oxirs_core::model::Predicate>,
+        _object: Option<&oxirs_core::model::Object>,
+        _graph_name: Option<&oxirs_core::model::GraphName>,
+    ) -> OxirsResult<Vec<oxirs_core::model::Quad>> {
+        let quads = self.quads.read().unwrap();
+        Ok(quads.iter().cloned().collect())
+    }
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    fn len(&self) -> OxirsResult<usize> {
+        let quads = self.quads.read().unwrap();
+        Ok(quads.len())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "async")]
     use tokio_stream::{self as stream, StreamExt};
 
     #[tokio::test]

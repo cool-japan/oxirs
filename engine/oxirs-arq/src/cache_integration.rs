@@ -4,7 +4,7 @@
 //! to provide high-performance caching for query plans, results, and intermediate computations.
 
 use crate::{
-    algebra::{Algebra, Variable, Term, Solution},
+    algebra::{Algebra, Solution, Term, Variable},
     query::Query,
     Result,
 };
@@ -20,6 +20,12 @@ use std::time::Duration;
 pub trait CacheKey: Clone + std::hash::Hash + Eq + Send + Sync {}
 pub trait CacheValue: Clone + Send + Sync {}
 
+// Implement CacheKey for String
+impl CacheKey for String {}
+
+// Implement CacheValue for StatisticsSnapshot
+impl CacheValue for StatisticsSnapshot {}
+
 // Placeholder for AdvancedCache until shared_cache is properly imported
 #[derive(Debug)]
 pub struct AdvancedCache<K, V> {
@@ -32,19 +38,19 @@ impl<K: CacheKey, V: CacheValue> AdvancedCache<K, V> {
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     pub fn get(&self, _key: &K) -> Option<V> {
         None
     }
-    
+
     pub fn put(&self, _key: K, _value: V) -> Result<()> {
         Ok(())
     }
-    
+
     pub fn warm_cache(&self) -> Result<()> {
         Ok(())
     }
-    
+
     pub fn clear(&self) {
         // No-op for placeholder
     }
@@ -57,6 +63,17 @@ pub struct AdvancedCacheConfig {
     pub l2_cache_size: usize,
     pub l3_cache_size: usize,
     pub enable_compression: bool,
+}
+
+impl Default for AdvancedCacheConfig {
+    fn default() -> Self {
+        Self {
+            l1_cache_size: 1024,
+            l2_cache_size: 4096,
+            l3_cache_size: 16384,
+            enable_compression: false,
+        }
+    }
 }
 
 /// ARQ-specific cache configuration
@@ -81,16 +98,16 @@ pub struct ArqCacheConfig {
 impl Default for ArqCacheConfig {
     fn default() -> Self {
         let mut base_config = AdvancedCacheConfig::default();
-        base_config.l1_cache_size = 5000;  // Smaller for query plans
+        base_config.l1_cache_size = 5000; // Smaller for query plans
         base_config.l2_cache_size = 20000;
         base_config.l3_cache_size = 100000;
-        
+
         let mut result_config = AdvancedCacheConfig::default();
-        result_config.l1_cache_size = 1000;  // Results can be large
+        result_config.l1_cache_size = 1000; // Results can be large
         result_config.l2_cache_size = 5000;
         result_config.l3_cache_size = 20000;
         result_config.enable_compression = true;
-        
+
         Self {
             query_plan_cache: base_config.clone(),
             query_result_cache: result_config,
@@ -182,7 +199,7 @@ pub struct QueryPlanCacheKey {
 }
 
 /// Cache key for query results
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryResultCacheKey {
     /// Query signature
     pub query_signature: QuerySignature,
@@ -190,6 +207,20 @@ pub struct QueryResultCacheKey {
     pub dataset_version: String,
     /// Parameter bindings (for parameterized queries)
     pub parameter_bindings: HashMap<String, String>,
+}
+
+impl std::hash::Hash for QueryResultCacheKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.query_signature.hash(state);
+        self.dataset_version.hash(state);
+        // Hash the parameter bindings in a deterministic way
+        let mut sorted_params: Vec<_> = self.parameter_bindings.iter().collect();
+        sorted_params.sort_by_key(|(k, _)| *k);
+        for (k, v) in sorted_params {
+            k.hash(state);
+            v.hash(state);
+        }
+    }
 }
 
 /// Query signature for result caching
@@ -313,7 +344,7 @@ impl ArqCacheManager {
     pub fn get_query_plan(&self, key: &QueryPlanCacheKey) -> Option<CachedQueryPlan> {
         let start_time = std::time::Instant::now();
         let result = self.query_plan_cache.get(key);
-        
+
         {
             let mut stats = self.cache_stats.write().unwrap();
             if result.is_some() {
@@ -323,7 +354,7 @@ impl ArqCacheManager {
             }
             self.update_avg_lookup_time(&mut stats, start_time.elapsed());
         }
-        
+
         result
     }
 
@@ -336,35 +367,40 @@ impl ArqCacheManager {
     /// Get cached query result
     pub fn get_query_result(&self, key: &QueryResultCacheKey) -> Option<CachedQueryResult> {
         let start_time = std::time::Instant::now();
-        
+
         // Validate cache key freshness
         if !self.is_result_cache_valid(key) {
             return None;
         }
-        
+
         let result = self.query_result_cache.get(key);
-        
+
         {
             let mut stats = self.cache_stats.write().unwrap();
             if result.is_some() {
                 stats.result_cache_hits += 1;
-                stats.time_saved_ms += result.as_ref().unwrap().metadata.execution_time.as_millis() as u64;
+                stats.time_saved_ms +=
+                    result.as_ref().unwrap().metadata.execution_time.as_millis() as u64;
             } else {
                 stats.result_cache_misses += 1;
             }
             self.update_avg_lookup_time(&mut stats, start_time.elapsed());
         }
-        
+
         result
     }
 
     /// Cache query result
-    pub fn cache_query_result(&self, key: QueryResultCacheKey, result: CachedQueryResult) -> Result<()> {
+    pub fn cache_query_result(
+        &self,
+        key: QueryResultCacheKey,
+        result: CachedQueryResult,
+    ) -> Result<()> {
         // Check size limits
         if result.size_bytes > self.config.max_result_size {
             return Ok(()); // Don't cache oversized results
         }
-        
+
         self.query_result_cache.put(key, result)?;
         Ok(())
     }
@@ -373,7 +409,7 @@ impl ArqCacheManager {
     pub fn get_bgp_result(&self, key: &BgpCacheKey) -> Option<CachedBgpResult> {
         let start_time = std::time::Instant::now();
         let result = self.bgp_cache.get(key);
-        
+
         {
             let mut stats = self.cache_stats.write().unwrap();
             if result.is_some() {
@@ -383,7 +419,7 @@ impl ArqCacheManager {
             }
             self.update_avg_lookup_time(&mut stats, start_time.elapsed());
         }
-        
+
         result
     }
 
@@ -402,7 +438,7 @@ impl ArqCacheManager {
     ) -> QueryPlanCacheKey {
         let query_hash = self.hash_query(query);
         let config_hash = self.hash_config();
-        
+
         QueryPlanCacheKey {
             query_hash,
             schema_hash,
@@ -419,7 +455,7 @@ impl ArqCacheManager {
         parameter_bindings: HashMap<String, String>,
     ) -> QueryResultCacheKey {
         let query_signature = self.create_query_signature(query);
-        
+
         QueryResultCacheKey {
             query_signature,
             dataset_version,
@@ -435,7 +471,7 @@ impl ArqCacheManager {
         graph_context: Option<&str>,
     ) -> BgpCacheKey {
         let bindings_hash = self.hash_bindings(bindings);
-        
+
         BgpCacheKey {
             pattern_hash,
             bindings_hash,
@@ -453,13 +489,13 @@ impl ArqCacheManager {
     pub fn warm_caches(&self) -> Result<()> {
         // Warm query plan cache
         self.query_plan_cache.warm_cache()?;
-        
+
         // Warm result cache
         self.query_result_cache.warm_cache()?;
-        
+
         // Warm BGP cache
         self.bgp_cache.warm_cache()?;
-        
+
         Ok(())
     }
 
@@ -469,7 +505,7 @@ impl ArqCacheManager {
         self.query_result_cache.clear();
         self.bgp_cache.clear();
         self.statistics_cache.clear();
-        
+
         // Reset statistics
         {
             let mut stats = self.cache_stats.write().unwrap();
@@ -497,7 +533,10 @@ impl ArqCacheManager {
     fn hash_config(&self) -> u64 {
         // Hash relevant configuration parameters
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        self.config.query_similarity_threshold.to_bits().hash(&mut hasher);
+        self.config
+            .query_similarity_threshold
+            .to_bits()
+            .hash(&mut hasher);
         self.config.enable_cross_query_caching.hash(&mut hasher);
         hasher.finish()
     }
@@ -507,12 +546,12 @@ impl ArqCacheManager {
         // Sort bindings for consistent hashing
         let mut sorted_bindings: Vec<_> = bindings.iter().collect();
         sorted_bindings.sort_by_key(|(var, _)| var.as_str());
-        
+
         for (var, term) in sorted_bindings {
             var.hash(&mut hasher);
             format!("{:?}", term).hash(&mut hasher);
         }
-        
+
         hasher.finish()
     }
 
@@ -520,7 +559,11 @@ impl ArqCacheManager {
         // Extract canonical form and metadata
         QuerySignature {
             canonical_form: format!("{:?}", query), // Simplified
-            variables: query.select_variables.iter().map(|v| v.as_str().to_string()).collect(),
+            variables: query
+                .select_variables
+                .iter()
+                .map(|v| v.as_str().to_string())
+                .collect(),
             operation_type: self.determine_operation_type(query),
             complexity_score: self.calculate_complexity_score(query),
         }
@@ -543,24 +586,29 @@ impl ArqCacheManager {
     }
 
     fn update_avg_lookup_time(&self, stats: &mut ArqCacheStatistics, lookup_time: Duration) {
-        let total_lookups = stats.plan_cache_hits + stats.plan_cache_misses + 
-                           stats.result_cache_hits + stats.result_cache_misses +
-                           stats.bgp_cache_hits + stats.bgp_cache_misses;
-        
+        let total_lookups = stats.plan_cache_hits
+            + stats.plan_cache_misses
+            + stats.result_cache_hits
+            + stats.result_cache_misses
+            + stats.bgp_cache_hits
+            + stats.bgp_cache_misses;
+
         let lookup_time_us = lookup_time.as_micros() as f64;
-        
+
         if total_lookups == 1 {
             stats.avg_lookup_time_us = lookup_time_us;
         } else {
-            stats.avg_lookup_time_us = 
-                (stats.avg_lookup_time_us * (total_lookups - 1) as f64 + lookup_time_us) 
+            stats.avg_lookup_time_us = (stats.avg_lookup_time_us * (total_lookups - 1) as f64
+                + lookup_time_us)
                 / total_lookups as f64;
         }
-        
+
         // Update efficiency score
-        let hit_rate = (stats.plan_cache_hits + stats.result_cache_hits + stats.bgp_cache_hits) as f64 
-                      / total_lookups.max(1) as f64;
-        stats.efficiency_score = hit_rate * 0.7 + (1.0 - stats.avg_lookup_time_us / 1000.0).max(0.0) * 0.3;
+        let hit_rate = (stats.plan_cache_hits + stats.result_cache_hits + stats.bgp_cache_hits)
+            as f64
+            / total_lookups.max(1) as f64;
+        stats.efficiency_score =
+            hit_rate * 0.7 + (1.0 - stats.avg_lookup_time_us / 1000.0).max(0.0) * 0.3;
     }
 }
 
@@ -580,7 +628,7 @@ mod tests {
     fn test_arq_cache_manager_creation() {
         let config = ArqCacheConfig::default();
         let cache_manager = ArqCacheManager::new(config);
-        
+
         let stats = cache_manager.get_statistics();
         assert_eq!(stats.plan_cache_hits, 0);
         assert_eq!(stats.result_cache_hits, 0);
@@ -590,7 +638,7 @@ mod tests {
     fn test_cache_key_creation() {
         let config = ArqCacheConfig::default();
         let cache_manager = ArqCacheManager::new(config);
-        
+
         // Test would create actual query and test key creation
         // This is a placeholder test structure
         assert!(true);

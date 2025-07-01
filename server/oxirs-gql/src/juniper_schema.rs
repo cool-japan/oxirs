@@ -17,139 +17,11 @@ use oxirs_core::query::QueryResults;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-/// Custom scalar type for RDF IRIs
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct IRI(pub String);
+/// Custom scalar type for RDF IRIs - for now just use String
+pub type IRI = String;
 
-impl IRI {
-    pub fn new(s: String) -> Result<Self, String> {
-        // Basic IRI validation
-        if s.starts_with("http://") || s.starts_with("https://") || s.starts_with("urn:") {
-            Ok(IRI(s))
-        } else {
-            Err(format!("Invalid IRI format: {}", s))
-        }
-    }
-}
-
-impl<S> GraphQLScalar<S> for IRI
-where
-    S: ScalarValue,
-{
-    fn resolve(&self) -> Value<S> {
-        Value::scalar(self.0.clone())
-    }
-
-    fn from_input_value(v: &InputValue<S>) -> Result<IRI, String> {
-        v.as_string_value()
-            .ok_or_else(|| format!("Expected `String`, found: {}", v))
-            .and_then(|s| Self::new(s.to_string()))
-    }
-
-    fn from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a, S> {
-        <String as ParseScalarValue<S>>::from_str(value)
-    }
-}
-
-// For now, use a simple string representation - proper IRI scalar can be added later
-impl From<String> for IRI {
-    fn from(s: String) -> Self {
-        IRI(s)
-    }
-}
-
-impl From<IRI> for String {
-    fn from(iri: IRI) -> Self {
-        iri.0
-    }
-}
-
-/// Custom scalar type for RDF Literals with optional language tags and datatypes
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct RdfLiteral {
-    pub value: String,
-    pub language: Option<String>,
-    pub datatype: Option<String>,
-}
-
-impl RdfLiteral {
-    pub fn new(value: String) -> Self {
-        Self {
-            value,
-            language: None,
-            datatype: None,
-        }
-    }
-
-    pub fn with_language(value: String, language: String) -> Self {
-        Self {
-            value,
-            language: Some(language),
-            datatype: None,
-        }
-    }
-
-    pub fn with_datatype(value: String, datatype: String) -> Self {
-        Self {
-            value,
-            language: None,
-            datatype: Some(datatype),
-        }
-    }
-}
-
-impl<S> GraphQLScalar<S> for RdfLiteral
-where
-    S: ScalarValue,
-{
-    fn resolve(&self) -> Value<S> {
-        Value::scalar(format!(
-            "{}{}{}",
-            self.value,
-            self.language
-                .as_ref()
-                .map(|l| format!("@{}", l))
-                .unwrap_or_default(),
-            self.datatype
-                .as_ref()
-                .map(|d| format!("^^{}", d))
-                .unwrap_or_default()
-        ))
-    }
-
-    fn from_input_value(v: &InputValue<S>) -> Result<RdfLiteral, String> {
-        v.as_string_value()
-            .ok_or_else(|| format!("Expected `String`, found: {}", v))
-            .and_then(|s| {
-                // Simple parsing for now - in production, use proper RDF literal parsing
-                if let Some(lang_pos) = s.rfind('@') {
-                    let (value, lang) = s.split_at(lang_pos);
-                    Ok(RdfLiteral {
-                        value: value.to_string(),
-                        language: Some(lang[1..].to_string()),
-                        datatype: None,
-                    })
-                } else if let Some(type_pos) = s.rfind("^^") {
-                    let (value, datatype) = s.split_at(type_pos);
-                    Ok(RdfLiteral {
-                        value: value.to_string(),
-                        language: None,
-                        datatype: Some(datatype[2..].to_string()),
-                    })
-                } else {
-                    Ok(RdfLiteral {
-                        value: s.to_string(),
-                        language: None,
-                        datatype: None,
-                    })
-                }
-            })
-    }
-
-    fn from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a, S> {
-        <String as ParseScalarValue<S>>::from_str(value)
-    }
-}
+/// Custom scalar type for RDF Literals - for now just use String
+pub type RdfLiteral = String;
 
 /// RDF Term union type representing any RDF term (IRI, Literal, or Blank Node)
 #[derive(Debug, Clone, GraphQLUnion)]
@@ -389,7 +261,7 @@ impl Query {
         Ok(subjects
             .into_iter()
             .map(|s| RdfNamedNode {
-                iri: IRI(s.clone()),
+                iri: s.clone(),
                 label: None,
                 description: None,
             })
@@ -404,7 +276,7 @@ impl Query {
         Ok(predicates
             .into_iter()
             .map(|p| RdfNamedNode {
-                iri: IRI(p.clone()),
+                iri: p.clone(),
                 label: None,
                 description: None,
             })
@@ -443,7 +315,7 @@ impl Query {
                     if let Some(resource) = solution.get(&resource_var) {
                         if let Term::NamedNode(node) = resource {
                             resources.push(RdfNamedNode {
-                                iri: IRI(node.to_string()),
+                                iri: node.to_string(),
                                 label: None,
                                 description: None,
                             });
@@ -535,13 +407,16 @@ fn convert_sparql_results(results: QueryResults) -> Result<SparqlResult> {
 fn convert_term_to_rdf_term(term: Term) -> RdfTerm {
     match term {
         Term::NamedNode(node) => RdfTerm::NamedNode(RdfNamedNode {
-            iri: IRI(node.to_string()),
+            iri: node.to_string(),
             label: None,
             description: None,
         }),
         Term::Literal(literal) => {
-            let rdf_literal = RdfLiteral {
-                value: literal.value().to_string(),
+            let rdf_literal = literal.value().to_string();
+
+            RdfTerm::Literal(RdfLiteralNode {
+                literal: rdf_literal.clone(),
+                value: rdf_literal,
                 language: literal.language().map(|l| l.to_string()),
                 datatype: if literal.datatype().as_str()
                     != "http://www.w3.org/2001/XMLSchema#string"
@@ -550,13 +425,6 @@ fn convert_term_to_rdf_term(term: Term) -> RdfTerm {
                 } else {
                     None
                 },
-            };
-
-            RdfTerm::Literal(RdfLiteralNode {
-                literal: rdf_literal.clone(),
-                value: rdf_literal.value,
-                language: rdf_literal.language,
-                datatype: rdf_literal.datatype.map(IRI),
             })
         }
         Term::BlankNode(node) => RdfTerm::BlankNode(RdfBlankNode {
@@ -566,7 +434,7 @@ fn convert_term_to_rdf_term(term: Term) -> RdfTerm {
         Term::QuotedTriple(_) => {
             // RDF-star support - for now, represent as a special named node
             RdfTerm::NamedNode(RdfNamedNode {
-                iri: IRI("rdf-star:triple".to_string()),
+                iri: "rdf-star:triple".to_string(),
                 label: Some("RDF-star Triple".to_string()),
                 description: Some("An RDF-star quoted triple".to_string()),
             })
@@ -574,7 +442,7 @@ fn convert_term_to_rdf_term(term: Term) -> RdfTerm {
         Term::Variable(var) => {
             // Variable support - represent as a special named node with variable syntax
             RdfTerm::NamedNode(RdfNamedNode {
-                iri: IRI(format!("var:{}", var.as_str())),
+                iri: format!("var:{}", var.as_str()),
                 label: Some(format!("Variable: {}", var.as_str())),
                 description: Some("A SPARQL variable".to_string()),
             })
@@ -585,7 +453,7 @@ fn convert_term_to_rdf_term(term: Term) -> RdfTerm {
 fn convert_named_node(term: Term) -> Result<RdfNamedNode> {
     match term {
         Term::NamedNode(node) => Ok(RdfNamedNode {
-            iri: IRI(node.to_string()),
+            iri: node.to_string(),
             label: None,
             description: None,
         }),

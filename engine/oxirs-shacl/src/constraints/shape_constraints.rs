@@ -28,7 +28,7 @@ impl NodeConstraint {
     pub fn evaluate(
         &self,
         _context: &ConstraintContext,
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement node constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
@@ -54,7 +54,7 @@ impl PropertyConstraint {
     pub fn evaluate(
         &self,
         _context: &ConstraintContext,
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement property constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
@@ -119,7 +119,7 @@ impl QualifiedValueShapeConstraint {
     pub fn evaluate(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // Get values from context
         let values = &context.values;
@@ -176,7 +176,7 @@ impl QualifiedValueShapeConstraint {
     fn count_conforming_values(
         &self,
         values: &[Term],
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<u32> {
         let mut conforming_count = 0;
@@ -195,7 +195,7 @@ impl QualifiedValueShapeConstraint {
     fn value_conforms_to_shape(
         &self,
         value: &Term,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<bool> {
         // Get the shape definition from the validation context
@@ -235,7 +235,7 @@ impl QualifiedValueShapeConstraint {
     }
 
     /// Basic type conformance check as fallback when full shape context unavailable
-    fn basic_type_conformance_check(&self, value: &Term, store: &Store) -> Result<bool> {
+    fn basic_type_conformance_check(&self, value: &Term, store: &dyn Store) -> Result<bool> {
         // For the test cases, we're checking if the value conforms to a "FriendShape"
         // which requires the value to have rdf:type Friend
         if self.shape.as_str().contains("FriendShape") {
@@ -277,7 +277,7 @@ impl QualifiedValueShapeConstraint {
     pub fn evaluate_with_disjoint_check(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
         other_qualified_shapes: &[&QualifiedValueShapeConstraint],
     ) -> Result<ConstraintEvaluationResult> {
         if !self.qualified_value_shapes_disjoint {
@@ -397,7 +397,7 @@ impl QualifiedValueShapeConstraint {
     pub fn evaluate_optimized(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
 
@@ -480,7 +480,7 @@ impl QualifiedValueShapeConstraint {
     pub fn evaluate_with_cache(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
         cache: &mut std::collections::HashMap<(Term, ShapeId), bool>,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
@@ -550,7 +550,7 @@ impl QualifiedValueShapeConstraint {
     pub fn evaluate_parallel(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // For now, fall back to regular evaluation
         // In a full implementation, this would use rayon or similar for parallel processing
@@ -561,7 +561,7 @@ impl QualifiedValueShapeConstraint {
     pub fn analyze_qualification_patterns(
         &self,
         values: &[Term],
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<QualificationAnalysis> {
         let mut analysis = QualificationAnalysis {
@@ -650,7 +650,7 @@ impl ClosedConstraint {
     pub fn evaluate(
         &self,
         _context: &ConstraintContext,
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement closed constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)

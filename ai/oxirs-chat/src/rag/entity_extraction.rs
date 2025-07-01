@@ -170,7 +170,11 @@ JSON Response:"#,
             }
         }
 
-        debug!("Extracted {} entities and {} relationships", entities.len(), relationships.len());
+        debug!(
+            "Extracted {} entities and {} relationships",
+            entities.len(),
+            relationships.len()
+        );
         Ok((entities, relationships))
     }
 
@@ -184,7 +188,7 @@ JSON Response:"#,
 
         // Simple pattern-based entity extraction
         let words: Vec<&str> = query.split_whitespace().collect();
-        
+
         for (i, word) in words.iter().enumerate() {
             // Look for capitalized words (potential proper nouns)
             if word.chars().next().map_or(false, |c| c.is_uppercase()) && word.len() > 2 {
@@ -217,8 +221,11 @@ JSON Response:"#,
             }
         }
 
-        debug!("Rule-based extraction found {} entities and {} relationships", 
-               entities.len(), relationships.len());
+        debug!(
+            "Rule-based extraction found {} entities and {} relationships",
+            entities.len(),
+            relationships.len()
+        );
         Ok((entities, relationships))
     }
 
@@ -226,14 +233,81 @@ JSON Response:"#,
     fn is_stop_word(&self, word: &str) -> bool {
         matches!(
             word,
-            "the" | "and" | "or" | "but" | "in" | "on" | "at" | "to" | "for" | "of" | "with" |
-            "by" | "from" | "up" | "about" | "into" | "through" | "during" | "before" | "after" |
-            "above" | "below" | "between" | "among" | "this" | "that" | "these" | "those" |
-            "i" | "you" | "he" | "she" | "it" | "we" | "they" | "me" | "him" | "her" | "us" | "them" |
-            "my" | "your" | "his" | "its" | "our" | "their" | "am" | "is" | "are" | "was" | "were" |
-            "be" | "been" | "being" | "have" | "has" | "had" | "do" | "does" | "did" | "will" |
-            "would" | "could" | "should" | "may" | "might" | "must" | "can" | "what" | "when" |
-            "where" | "who" | "why" | "how" | "which"
+            "the"
+                | "and"
+                | "or"
+                | "but"
+                | "in"
+                | "on"
+                | "at"
+                | "to"
+                | "for"
+                | "of"
+                | "with"
+                | "by"
+                | "from"
+                | "up"
+                | "about"
+                | "into"
+                | "through"
+                | "during"
+                | "before"
+                | "after"
+                | "above"
+                | "below"
+                | "between"
+                | "among"
+                | "this"
+                | "that"
+                | "these"
+                | "those"
+                | "i"
+                | "you"
+                | "he"
+                | "she"
+                | "it"
+                | "we"
+                | "they"
+                | "me"
+                | "him"
+                | "her"
+                | "us"
+                | "them"
+                | "my"
+                | "your"
+                | "his"
+                | "its"
+                | "our"
+                | "their"
+                | "am"
+                | "is"
+                | "are"
+                | "was"
+                | "were"
+                | "be"
+                | "been"
+                | "being"
+                | "have"
+                | "has"
+                | "had"
+                | "do"
+                | "does"
+                | "did"
+                | "will"
+                | "would"
+                | "could"
+                | "should"
+                | "may"
+                | "might"
+                | "must"
+                | "can"
+                | "what"
+                | "when"
+                | "where"
+                | "who"
+                | "why"
+                | "how"
+                | "which"
         )
     }
 }
@@ -244,4 +318,4 @@ pub struct LLMEntityExtraction {
     pub relationships: Vec<ExtractedRelationship>,
 }
 
-use super::graph_traversal::{ExtractedEntity, ExtractedRelationship, EntityType, RelationType};
+use super::graph_traversal::{EntityType, ExtractedEntity, ExtractedRelationship, RelationType};

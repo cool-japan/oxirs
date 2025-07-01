@@ -286,7 +286,7 @@ impl SimpleRdfProcessor {
         let mut atoms = Vec::new();
 
         // Iterate through store quads using query_quads
-        let quads = self.store.query_quads(None, None, None, None)?;
+        let quads = self.store.find_quads(None, None, None, None)?;
 
         for quad in quads {
             // Convert to RuleAtom

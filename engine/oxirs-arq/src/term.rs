@@ -581,7 +581,11 @@ impl fmt::Display for Term {
             Term::Literal(lit) => write!(f, "{}", lit),
             Term::Variable(var) => write!(f, "?{}", var),
             Term::QuotedTriple(triple) => {
-                write!(f, "<<{} {} {}>>", triple.subject, triple.predicate, triple.object)
+                write!(
+                    f,
+                    "<<{} {} {}>>",
+                    triple.subject, triple.predicate, triple.object
+                )
             }
             Term::PropertyPath(path) => write!(f, "{}", path),
         }
@@ -643,13 +647,11 @@ impl Term {
                 },
             }),
             Term::Variable(var) => AlgebraTerm::Variable(Variable::new(var).unwrap()),
-            Term::QuotedTriple(triple) => {
-                AlgebraTerm::QuotedTriple(Box::new(TriplePattern {
-                    subject: triple.subject.to_algebra_term(),
-                    predicate: triple.predicate.to_algebra_term(),
-                    object: triple.object.to_algebra_term(),
-                }))
-            }
+            Term::QuotedTriple(triple) => AlgebraTerm::QuotedTriple(Box::new(TriplePattern {
+                subject: triple.subject.to_algebra_term(),
+                predicate: triple.predicate.to_algebra_term(),
+                object: triple.object.to_algebra_term(),
+            })),
             Term::PropertyPath(path) => AlgebraTerm::PropertyPath(path.clone()),
         }
     }
@@ -671,7 +673,9 @@ impl Term {
                 }
                 _ => Ok(!lit_val.lexical_form.is_empty()),
             },
-            Term::Iri(_) | Term::BlankNode(_) | Term::QuotedTriple(_) | Term::PropertyPath(_) => Ok(true),
+            Term::Iri(_) | Term::BlankNode(_) | Term::QuotedTriple(_) | Term::PropertyPath(_) => {
+                Ok(true)
+            }
             Term::Variable(_) => bail!("Cannot evaluate variable as boolean"),
         }
     }
@@ -813,9 +817,9 @@ mod tests {
             Term::iri("http://example.org/p"),
             Term::iri("http://example.org/o"),
         );
-        let path = Term::property_path(crate::path::PropertyPath::Direct(
-            Term::iri("http://example.org/prop"),
-        ));
+        let path = Term::property_path(crate::path::PropertyPath::Direct(Term::iri(
+            "http://example.org/prop",
+        )));
 
         // Test ordering: Variable < BlankNode < Iri < Literal < QuotedTriple < PropertyPath
         assert!(var < blank);

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use url::Url;
 
 /// Error types for IRI resolution
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum IriResolutionError {
     #[error("Invalid IRI: {0}")]
     InvalidIri(String),
@@ -20,7 +20,7 @@ pub enum IriResolutionError {
     InvalidRelativeIri(String),
 
     #[error("URL parsing error: {0}")]
-    UrlParsing(#[from] url::ParseError),
+    UrlParsing(String),
 }
 
 /// IRI resolver with namespace and base IRI support
@@ -93,7 +93,7 @@ impl IriResolver {
     /// Set the base IRI for resolving relative IRIs
     pub fn set_base_iri(&mut self, base_iri: &str) -> Result<(), IriResolutionError> {
         // Validate the base IRI
-        Url::parse(base_iri)?;
+        Url::parse(base_iri).map_err(|e| IriResolutionError::UrlParsing(e.to_string()))?;
         self.base_iri = Some(base_iri.to_string());
         Ok(())
     }
@@ -101,7 +101,7 @@ impl IriResolver {
     /// Add a namespace prefix mapping
     pub fn add_prefix(&mut self, prefix: &str, namespace: &str) -> Result<(), IriResolutionError> {
         // Validate the namespace IRI
-        Url::parse(namespace)?;
+        Url::parse(namespace).map_err(|e| IriResolutionError::UrlParsing(e.to_string()))?;
         self.prefixes
             .insert(prefix.to_string(), namespace.to_string());
         Ok(())
@@ -150,8 +150,8 @@ impl IriResolver {
         relative_iri: &str,
         base_iri: &str,
     ) -> Result<String, IriResolutionError> {
-        let base_url = Url::parse(base_iri)?;
-        let resolved_url = base_url.join(relative_iri)?;
+        let base_url = Url::parse(base_iri).map_err(|e| IriResolutionError::UrlParsing(e.to_string()))?;
+        let resolved_url = base_url.join(relative_iri).map_err(|e| IriResolutionError::UrlParsing(e.to_string()))?;
         Ok(resolved_url.to_string())
     }
 
@@ -160,7 +160,7 @@ impl IriResolver {
         // Check if it's already a full IRI
         if iri.starts_with("http://") || iri.starts_with("https://") || iri.starts_with("urn:") {
             // Validate the IRI
-            Url::parse(iri)?;
+            Url::parse(iri).map_err(|e| IriResolutionError::UrlParsing(e.to_string()))?;
             Ok(iri.to_string())
         }
         // Check if it's a prefixed name

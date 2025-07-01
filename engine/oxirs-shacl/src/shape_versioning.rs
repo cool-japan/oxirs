@@ -557,7 +557,7 @@ impl ShapeVersionRegistry {
         &self,
         from_version: &ShapeVersionId,
         to_version: &ShapeVersionId,
-        data_store: &Store,
+        data_store: &dyn Store,
     ) -> Result<MigrationResult> {
         let migration_path = self
             .get_migration_path(&from_version.version, &to_version.version)
@@ -675,7 +675,7 @@ impl ShapeVersionRegistry {
     fn execute_migration_step(
         &self,
         step: &MigrationStep,
-        data_store: &Store,
+        data_store: &dyn Store,
     ) -> Result<MigrationStepResult> {
         // Implement migration step execution
         Ok(MigrationStepResult {

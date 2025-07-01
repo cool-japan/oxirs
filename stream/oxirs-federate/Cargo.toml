@@ -31,7 +31,7 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 url.workspace = true
 backoff = { version = "0.4", features = ["tokio"] }
 governor = "0.6"
-tower.workspace = true
+tower = { workspace = true, features = ["limit", "load-shed", "buffer", "timeout"] }
 tower-http = { workspace = true, features = ["cors", "trace", "timeout", "compression-gzip"] }
 http = "1.1"
 bytes = "1.8"
@@ -68,6 +68,8 @@ serde_cbor = "0.11"
 tokio-stream = { version = "0.1", features = ["sync"] }
 futures-util = "0.3"
 rand = "0.8.5"
+rand_distr = "0.4"
+ndarray = "0.16"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

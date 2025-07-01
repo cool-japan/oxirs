@@ -204,7 +204,7 @@ pub enum Expression {
     /// Unary operation
     Unary {
         op: UnaryOperator,
-        expr: Box<Expression>,
+        operand: Box<Expression>,
     },
     /// Conditional expression (IF)
     Conditional {
@@ -469,6 +469,9 @@ pub enum Algebra {
 
     /// Zero matches
     Zero,
+    
+    /// Empty result set
+    Empty,
 }
 
 /// Join algorithm hints
@@ -920,7 +923,7 @@ impl Algebra {
             Algebra::Values { variables, .. } => {
                 vars.extend(variables.clone());
             }
-            Algebra::Table | Algebra::Zero => {}
+            Algebra::Table | Algebra::Zero | Algebra::Empty => {}
         }
     }
 }
@@ -970,8 +973,8 @@ impl Expression {
                 left.collect_variables(vars);
                 right.collect_variables(vars);
             }
-            Expression::Unary { expr, .. } => {
-                expr.collect_variables(vars);
+            Expression::Unary { operand, .. } => {
+                operand.collect_variables(vars);
             }
             Expression::Conditional {
                 condition,

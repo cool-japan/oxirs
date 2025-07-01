@@ -359,7 +359,7 @@ pub struct ValidationConflict {
     /// Focus node of conflict
     pub focus_node: String,
     /// Conflicting results
-    pub conflicting_results: Vec<ValidationResult>,
+    pub conflicting_results: Vec<ValidationReport>,
     /// Conflict type
     pub conflict_type: ConflictType,
 }

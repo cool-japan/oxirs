@@ -26,7 +26,7 @@ pub struct CompressionContext {
 }
 
 /// Vector domain types for domain-specific optimization
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VectorDomain {
     TextEmbeddings,
     ImageFeatures,
@@ -133,7 +133,7 @@ impl VectorStats {
         let sum: f32 = values.iter().sum();
         let mean = sum / n as f32;
 
-        let variance: f32 = values.iter().map(|x| (x - mean).powi(2)).sum() / n as f32;
+        let variance: f32 = values.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / n as f32;
         let std_dev = variance.sqrt();
 
         let min_val = values.iter().fold(f32::INFINITY, |a, &b| a.min(b));
@@ -150,7 +150,7 @@ impl VectorStats {
         let mut histogram = vec![0u32; bin_count];
         let range = max_val - min_val;
         if range > 0.0 {
-            for &val in values {
+            for val in values {
                 let bucket = ((val - min_val) / range * (bin_count - 1) as f32)
                     .clamp(0.0, (bin_count - 1) as f32) as usize;
                 histogram[bucket] += 1;

@@ -3,7 +3,9 @@
 use super::{GpuAccelerator, GpuConfig, GpuMemoryPool, GpuPerformanceStats};
 use crate::{similarity::SimilarityMetric, Vector, VectorData, VectorPrecision};
 use anyhow::{anyhow, Result};
-use std::sync::{Arc, RwLock};
+use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// GPU-accelerated vector index
 #[derive(Debug)]
@@ -13,6 +15,7 @@ pub struct GpuVectorIndex {
     vector_data: Vec<f32>,
     dimension: usize,
     memory_pool: Arc<RwLock<GpuMemoryPool>>,
+    uri_map: HashMap<String, usize>,
 }
 
 impl GpuVectorIndex {
@@ -27,6 +30,7 @@ impl GpuVectorIndex {
             vector_data: Vec::new(),
             dimension: 0,
             memory_pool,
+            uri_map: HashMap::new(),
         })
     }
 
@@ -38,26 +42,30 @@ impl GpuVectorIndex {
 
         // Set dimension from first vector if not set
         if self.dimension == 0 {
-            self.dimension = vectors[0].data.len();
+            self.dimension = vectors[0].dimensions;
         }
 
         // Validate all vectors have the same dimension
         for vector in &vectors {
-            if vector.data.len() != self.dimension {
+            if vector.dimensions != self.dimension {
                 return Err(anyhow!(
                     "Vector dimension mismatch: expected {}, got {}",
                     self.dimension,
-                    vector.data.len()
+                    vector.dimensions
                 ));
             }
         }
 
         // Flatten vector data for GPU processing
         for vector in &vectors {
-            match &vector.data {
-                VectorData::Dense(data) => self.vector_data.extend(data),
-                VectorData::Sparse(_) => {
-                    return Err(anyhow!("Sparse vectors not yet supported on GPU"))
+            match &vector.values {
+                VectorData::F32(data) => self.vector_data.extend(data),
+                VectorData::F64(data) => {
+                    // Convert f64 to f32 for GPU processing
+                    self.vector_data.extend(data.iter().map(|&x| x as f32));
+                },
+                _ => {
+                    return Err(anyhow!("Unsupported vector precision for GPU processing"))
                 }
             }
         }
@@ -77,18 +85,19 @@ impl GpuVectorIndex {
             return Ok(Vec::new());
         }
 
-        let query_data = match &query.data {
-            VectorData::Dense(data) => data.clone(),
-            VectorData::Sparse(_) => {
-                return Err(anyhow!("Sparse queries not yet supported on GPU"))
+        let query_data = match &query.values {
+            VectorData::F32(data) => data.clone(),
+            VectorData::F64(data) => data.iter().map(|&x| x as f32).collect(),
+            _ => {
+                return Err(anyhow!("Unsupported query vector precision for GPU processing"))
             }
         };
 
-        if query_data.len() != self.dimension {
+        if query.dimensions != self.dimension {
             return Err(anyhow!(
                 "Query dimension mismatch: expected {}, got {}",
                 self.dimension,
-                query_data.len()
+                query.dimensions
             ));
         }
 
@@ -156,7 +165,7 @@ impl GpuVectorIndex {
     }
 
     /// Get performance statistics
-    pub fn performance_stats(&self) -> Arc<RwLock<GpuPerformanceStats>> {
+    pub fn performance_stats(&self) -> Arc<parking_lot::RwLock<GpuPerformanceStats>> {
         self.accelerator.performance_stats()
     }
 
@@ -170,28 +179,53 @@ impl GpuVectorIndex {
 }
 
 impl crate::VectorIndex for GpuVectorIndex {
-    fn add(&mut self, vector: Vector) -> Result<usize> {
+    fn insert(&mut self, uri: String, vector: crate::Vector) -> Result<()> {
+        // Store the URI mapping
         let index = self.vectors.len();
+        self.uri_map.insert(uri, index);
         self.add_vectors(vec![vector])?;
-        Ok(index)
+        Ok(())
     }
 
-    fn search(&self, query: &Vector, k: usize) -> Result<Vec<(usize, f32)>> {
-        self.search(query, k, SimilarityMetric::Cosine)
+    fn search_knn(&self, query: &crate::Vector, k: usize) -> Result<Vec<(String, f32)>> {
+        let results = self.search(query, k, SimilarityMetric::Cosine)?;
+        Ok(results
+            .into_iter()
+            .filter_map(|(index, score)| {
+                // Find URI by index (reverse lookup)
+                self.uri_map
+                    .iter()
+                    .find(|(_, &idx)| idx == index)
+                    .map(|(uri, _)| (uri.clone(), score))
+            })
+            .collect())
     }
 
-    fn remove(&mut self, _id: usize) -> Result<bool> {
-        // GPU index removal is complex due to data layout
-        // For now, return not implemented
-        Err(anyhow!("Removal not yet implemented for GPU index"))
+    fn search_threshold(
+        &self,
+        query: &crate::Vector,
+        threshold: f32,
+    ) -> Result<Vec<(String, f32)>> {
+        // Use large k to get many candidates, then filter by threshold
+        let results = self.search(query, 1000, SimilarityMetric::Cosine)?;
+        Ok(results
+            .into_iter()
+            .filter(|(_, score)| *score >= threshold)
+            .filter_map(|(index, score)| {
+                self.uri_map
+                    .iter()
+                    .find(|(_, &idx)| idx == index)
+                    .map(|(uri, _)| (uri.clone(), score))
+            })
+            .collect())
     }
 
-    fn len(&self) -> usize {
-        self.vectors.len()
-    }
-
-    fn clear(&mut self) {
-        self.clear();
+    fn get_vector(&self, uri: &str) -> Option<&crate::Vector> {
+        if let Some(&index) = self.uri_map.get(uri) {
+            self.vectors.get(index)
+        } else {
+            None
+        }
     }
 }
 
@@ -247,7 +281,7 @@ impl AdvancedGpuVectorIndex {
     /// Get memory usage statistics
     pub fn memory_stats(&self) -> Result<MemoryUsageStats> {
         let device = self.base_index.accelerator.device();
-        let pool_stats = self.base_index.memory_pool.read().unwrap().stats();
+        let pool_stats = self.base_index.memory_pool.read().stats();
 
         Ok(MemoryUsageStats {
             total_gpu_memory: device.total_memory,

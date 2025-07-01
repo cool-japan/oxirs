@@ -65,8 +65,8 @@ impl ExpressionEvaluator {
                 self.evaluate_binary_op(op, &left_val, &right_val)
             }
 
-            AlgebraExpression::Unary { op, expr } => {
-                let val = self.evaluate(expr)?;
+            AlgebraExpression::Unary { op, operand } => {
+                let val = self.evaluate(operand)?;
                 self.evaluate_unary_op(op, &val)
             }
 
@@ -309,7 +309,10 @@ impl ExpressionEvaluator {
             Term::BlankNode(id) => format!("_:{}", id),
             Term::Variable(var) => format!("?{}", var),
             Term::QuotedTriple(triple) => {
-                format!("<<{} {} {}>>", triple.subject, triple.predicate, triple.object)
+                format!(
+                    "<<{} {} {}>>",
+                    triple.subject, triple.predicate, triple.object
+                )
             }
             Term::PropertyPath(path) => format!("{}", path),
         };

@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::{executor::GraphQLResponse, planner::ExecutionPlan, QueryResultData, StepResult};
 

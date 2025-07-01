@@ -27,7 +27,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     executor::{GraphQLResponse, SparqlResults},
-    AuthConfig, AuthCredentials, AuthType, FederatedService,
+    auth::{AuthConfig, AuthCredentials}, FederatedService,
+    service::AuthType,
 };
 
 /// Trait for service clients
@@ -147,7 +148,7 @@ impl SparqlClient {
 
         // Build request with OAuth2 token refresh if needed
         let mut headers = if let Some(auth) = &self.service.auth {
-            if auth.auth_type == crate::AuthType::OAuth2 {
+            if auth.auth_type == AuthType::OAuth2 {
                 // Refresh OAuth2 token if needed before building headers
                 if let Ok(Some(fresh_token)) = self.ensure_fresh_oauth2_token(auth).await {
                     let mut headers = self.build_headers(false)?;

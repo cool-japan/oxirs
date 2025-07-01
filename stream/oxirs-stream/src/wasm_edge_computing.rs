@@ -297,7 +297,7 @@ impl WasmEdgeProcessor {
         self.security_manager.validate_plugin(&plugin).await?;
 
         let plugin_id = plugin.id.clone();
-        
+
         #[cfg(feature = "wasm")]
         {
             // Compile and validate WASM module
@@ -320,21 +320,27 @@ impl WasmEdgeProcessor {
                 resource_usage: ResourceMetrics::default(),
             };
 
-            self.execution_contexts.write().await.insert(
-                plugin_id.clone(),
-                Arc::new(RwLock::new(context)),
-            );
+            self.execution_contexts
+                .write()
+                .await
+                .insert(plugin_id.clone(), Arc::new(RwLock::new(context)));
         }
 
         // Register plugin
-        self.plugins.write().await.insert(plugin_id.clone(), plugin.clone());
-        self.plugin_registry.write().await.insert(plugin_id.clone(), plugin);
+        self.plugins
+            .write()
+            .await
+            .insert(plugin_id.clone(), plugin.clone());
+        self.plugin_registry
+            .write()
+            .await
+            .insert(plugin_id.clone(), plugin);
 
         // Initialize performance metrics
-        self.performance_metrics.write().await.insert(
-            plugin_id.clone(),
-            PerformanceMetrics::new(),
-        );
+        self.performance_metrics
+            .write()
+            .await
+            .insert(plugin_id.clone(), PerformanceMetrics::new());
 
         info!("Registered WASM plugin: {}", plugin_id);
         Ok(())
@@ -347,7 +353,10 @@ impl WasmEdgeProcessor {
         events: Vec<StreamEvent>,
         edge_location: Option<String>,
     ) -> Result<EdgeExecutionResult> {
-        let _permit = self.execution_semaphore.acquire().await
+        let _permit = self
+            .execution_semaphore
+            .acquire()
+            .await
             .map_err(|_| anyhow!("Failed to acquire execution permit"))?;
 
         let start_time = std::time::Instant::now();
@@ -357,23 +366,28 @@ impl WasmEdgeProcessor {
         let edge_id = if let Some(location) = edge_location {
             location
         } else {
-            self.select_optimal_edge_location(plugin_id, &events).await?
+            self.select_optimal_edge_location(plugin_id, &events)
+                .await?
         };
 
         // Get plugin and execution context
         let plugin = {
             let plugins = self.plugins.read().await;
-            plugins.get(plugin_id)
+            plugins
+                .get(plugin_id)
                 .ok_or_else(|| anyhow!("Plugin not found: {}", plugin_id))?
                 .clone()
         };
 
-        let result = self.execute_plugin_internal(&plugin, events.clone(), &edge_id, &execution_id).await;
+        let result = self
+            .execute_plugin_internal(&plugin, events.clone(), &edge_id, &execution_id)
+            .await;
 
         let execution_time = start_time.elapsed();
-        
+
         // Update performance metrics
-        self.update_performance_metrics(plugin_id, &result, execution_time.as_micros() as u64).await;
+        self.update_performance_metrics(plugin_id, &result, execution_time.as_micros() as u64)
+            .await;
 
         // Create execution result
         let execution_result = EdgeExecutionResult {
@@ -391,8 +405,11 @@ impl WasmEdgeProcessor {
 
         match result {
             Ok(output_events) => {
-                debug!("Plugin execution successful: {} events processed in {:?}", 
-                      output_events.len(), execution_time);
+                debug!(
+                    "Plugin execution successful: {} events processed in {:?}",
+                    output_events.len(),
+                    execution_time
+                );
                 Ok(EdgeExecutionResult {
                     output_events,
                     ..execution_result
@@ -417,19 +434,23 @@ impl WasmEdgeProcessor {
         {
             let context_arc = {
                 let contexts = self.execution_contexts.read().await;
-                contexts.get(&plugin.id)
-                    .ok_or_else(|| anyhow!("Execution context not found for plugin: {}", plugin.id))?
+                contexts
+                    .get(&plugin.id)
+                    .ok_or_else(|| {
+                        anyhow!("Execution context not found for plugin: {}", plugin.id)
+                    })?
                     .clone()
             };
 
             let mut context = context_arc.write().await;
-            
+
             // Reset execution state
             context.store.data_mut().start_time = Some(Utc::now());
             context.store.data_mut().event_count = 0;
 
             // Get the processing function from WASM
-            let process_events: TypedFunc<(i32, i32), i32> = context.instance
+            let process_events: TypedFunc<(i32, i32), i32> = context
+                .instance
                 .get_typed_func(&mut context.store, "process_events")
                 .map_err(|e| anyhow!("Failed to get process_events function: {}", e))?;
 
@@ -438,7 +459,8 @@ impl WasmEdgeProcessor {
             let input_ptr = self.allocate_memory(&mut context, input_json.as_bytes())?;
 
             // Execute WASM function
-            let output_ptr = process_events.call(&mut context.store, (input_ptr, input_json.len() as i32))
+            let output_ptr = process_events
+                .call(&mut context.store, (input_ptr, input_json.len() as i32))
                 .map_err(|e| anyhow!("WASM execution failed: {}", e))?;
 
             // Read output
@@ -462,9 +484,13 @@ impl WasmEdgeProcessor {
     }
 
     /// Select optimal edge location for execution
-    async fn select_optimal_edge_location(&self, plugin_id: &str, events: &[StreamEvent]) -> Result<String> {
+    async fn select_optimal_edge_location(
+        &self,
+        plugin_id: &str,
+        events: &[StreamEvent],
+    ) -> Result<String> {
         let edge_registry = self.edge_registry.read().await;
-        
+
         if edge_registry.is_empty() {
             return Ok("default".to_string());
         }
@@ -474,7 +500,9 @@ impl WasmEdgeProcessor {
         let mut best_score = f64::NEG_INFINITY;
 
         for (edge_id, edge_location) in edge_registry.iter() {
-            let score = self.calculate_edge_score(plugin_id, events, edge_location).await;
+            let score = self
+                .calculate_edge_score(plugin_id, events, edge_location)
+                .await;
             if score > best_score {
                 best_score = score;
                 best_edge = Some(edge_id.clone());
@@ -485,12 +513,17 @@ impl WasmEdgeProcessor {
     }
 
     /// Calculate edge location suitability score
-    async fn calculate_edge_score(&self, _plugin_id: &str, _events: &[StreamEvent], edge: &EdgeLocation) -> f64 {
+    async fn calculate_edge_score(
+        &self,
+        _plugin_id: &str,
+        _events: &[StreamEvent],
+        edge: &EdgeLocation,
+    ) -> f64 {
         // Multi-factor scoring algorithm
         let latency_score = 1.0 / (1.0 + edge.latency_ms / 100.0);
         let capacity_score = edge.capacity_factor;
         let resource_score = (edge.available_resources.cpu_cores as f64 / 32.0).min(1.0);
-        
+
         // Weighted combination
         latency_score * 0.4 + capacity_score * 0.3 + resource_score * 0.3
     }
@@ -499,19 +532,23 @@ impl WasmEdgeProcessor {
     #[cfg(feature = "wasm")]
     fn allocate_memory(&self, context: &mut WasmExecutionContext, data: &[u8]) -> Result<i32> {
         // Get memory allocation function
-        let allocate: TypedFunc<i32, i32> = context.instance
+        let allocate: TypedFunc<i32, i32> = context
+            .instance
             .get_typed_func(&mut context.store, "allocate")
             .map_err(|e| anyhow!("Failed to get allocate function: {}", e))?;
 
-        let ptr = allocate.call(&mut context.store, data.len() as i32)
+        let ptr = allocate
+            .call(&mut context.store, data.len() as i32)
             .map_err(|e| anyhow!("Memory allocation failed: {}", e))?;
 
         // Write data to allocated memory
-        let memory = context.instance
+        let memory = context
+            .instance
             .get_memory(&mut context.store, "memory")
             .ok_or_else(|| anyhow!("Failed to get WASM memory"))?;
 
-        memory.write(&mut context.store, ptr as usize, data)
+        memory
+            .write(&mut context.store, ptr as usize, data)
             .map_err(|e| anyhow!("Failed to write to WASM memory: {}", e))?;
 
         Ok(ptr)
@@ -520,20 +557,23 @@ impl WasmEdgeProcessor {
     /// Read memory from WASM instance
     #[cfg(feature = "wasm")]
     fn read_memory(&self, context: &mut WasmExecutionContext, ptr: i32) -> Result<Vec<u8>> {
-        let memory = context.instance
+        let memory = context
+            .instance
             .get_memory(&mut context.store, "memory")
             .ok_or_else(|| anyhow!("Failed to get WASM memory"))?;
 
         // Read length first (assuming it's stored at ptr)
         let mut len_bytes = [0u8; 4];
-        memory.read(&context.store, ptr as usize, &mut len_bytes)
+        memory
+            .read(&context.store, ptr as usize, &mut len_bytes)
             .map_err(|e| anyhow!("Failed to read length from WASM memory: {}", e))?;
-        
+
         let len = u32::from_le_bytes(len_bytes) as usize;
-        
+
         // Read actual data
         let mut data = vec![0u8; len];
-        memory.read(&context.store, (ptr + 4) as usize, &mut data)
+        memory
+            .read(&context.store, (ptr + 4) as usize, &mut data)
             .map_err(|e| anyhow!("Failed to read data from WASM memory: {}", e))?;
 
         Ok(data)
@@ -544,7 +584,7 @@ impl WasmEdgeProcessor {
         // Simple estimation based on plugin size and complexity
         let base_memory = plugin.wasm_bytes.len() as f64 / (1024.0 * 1024.0);
         let complexity_factor = plugin.capabilities.len() as f64 * 0.1;
-        
+
         base_memory + complexity_factor
     }
 
@@ -556,17 +596,19 @@ impl WasmEdgeProcessor {
         execution_time_us: u64,
     ) {
         let mut metrics_guard = self.performance_metrics.write().await;
-        let metrics = metrics_guard.entry(plugin_id.to_string())
+        let metrics = metrics_guard
+            .entry(plugin_id.to_string())
             .or_insert_with(PerformanceMetrics::new);
 
         metrics.total_executions += 1;
         metrics.total_execution_time_us += execution_time_us;
-        metrics.average_execution_time_us = metrics.total_execution_time_us as f64 / metrics.total_executions as f64;
-        
+        metrics.average_execution_time_us =
+            metrics.total_execution_time_us as f64 / metrics.total_executions as f64;
+
         if execution_time_us > metrics.max_execution_time_us {
             metrics.max_execution_time_us = execution_time_us;
         }
-        
+
         if metrics.min_execution_time_us == 0 || execution_time_us < metrics.min_execution_time_us {
             metrics.min_execution_time_us = execution_time_us;
         }
@@ -574,15 +616,20 @@ impl WasmEdgeProcessor {
         // Update success rate
         let success = result.is_ok();
         let success_count = if success { 1.0 } else { 0.0 };
-        metrics.success_rate = (metrics.success_rate * (metrics.total_executions - 1) as f64 + success_count) 
-                              / metrics.total_executions as f64;
+        metrics.success_rate = (metrics.success_rate * (metrics.total_executions - 1) as f64
+            + success_count)
+            / metrics.total_executions as f64;
 
         metrics.last_updated = Utc::now();
     }
 
     /// Get plugin performance metrics
     pub async fn get_plugin_metrics(&self, plugin_id: &str) -> Option<PerformanceMetrics> {
-        self.performance_metrics.read().await.get(plugin_id).cloned()
+        self.performance_metrics
+            .read()
+            .await
+            .get(plugin_id)
+            .cloned()
     }
 
     /// List all registered plugins
@@ -619,10 +666,10 @@ impl WasmEdgeProcessor {
                     resource_usage: ResourceMetrics::default(),
                 };
 
-                self.execution_contexts.write().await.insert(
-                    plugin_id.to_string(),
-                    Arc::new(RwLock::new(context)),
-                );
+                self.execution_contexts
+                    .write()
+                    .await
+                    .insert(plugin_id.to_string(), Arc::new(RwLock::new(context)));
             }
 
             info!("Hot reloaded plugin: {}", plugin_id);
@@ -646,26 +693,32 @@ impl WasmEdgeProcessor {
 impl SecurityManager {
     pub fn new() -> Self {
         let mut execution_policies = HashMap::new();
-        
-        execution_policies.insert(SecurityLevel::Untrusted, ExecutionPolicy {
-            max_memory_pages: 1,
-            max_execution_time_ms: 100,
-            allowed_imports: vec![],
-            network_access: false,
-            file_system_access: false,
-            crypto_operations: false,
-            inter_plugin_communication: false,
-        });
 
-        execution_policies.insert(SecurityLevel::TrustedVerified, ExecutionPolicy {
-            max_memory_pages: 64,
-            max_execution_time_ms: 5000,
-            allowed_imports: vec!["env".to_string()],
-            network_access: true,
-            file_system_access: false,
-            crypto_operations: true,
-            inter_plugin_communication: true,
-        });
+        execution_policies.insert(
+            SecurityLevel::Untrusted,
+            ExecutionPolicy {
+                max_memory_pages: 1,
+                max_execution_time_ms: 100,
+                allowed_imports: vec![],
+                network_access: false,
+                file_system_access: false,
+                crypto_operations: false,
+                inter_plugin_communication: false,
+            },
+        );
+
+        execution_policies.insert(
+            SecurityLevel::TrustedVerified,
+            ExecutionPolicy {
+                max_memory_pages: 64,
+                max_execution_time_ms: 5000,
+                allowed_imports: vec!["env".to_string()],
+                network_access: true,
+                file_system_access: false,
+                crypto_operations: true,
+                inter_plugin_communication: true,
+            },
+        );
 
         Self {
             trusted_plugins: RwLock::new(HashMap::new()),
@@ -673,7 +726,6 @@ impl SecurityManager {
             audit_log: RwLock::new(Vec::new()),
         }
     }
-
 }
 
 impl PerformanceMetrics {
@@ -761,13 +813,18 @@ impl EdgeResourceOptimizer {
         available_nodes: &[EdgeLocation],
     ) -> Result<AllocationPlan> {
         let features = self.extract_workload_features(workload).await?;
-        let predictions = self.prediction_engine.predict_resource_needs(&features).await?;
-        
-        let optimal_allocation = self.solve_allocation_problem(
-            &predictions,
-            available_nodes,
-            &self.get_current_constraints().await?,
-        ).await?;
+        let predictions = self
+            .prediction_engine
+            .predict_resource_needs(&features)
+            .await?;
+
+        let optimal_allocation = self
+            .solve_allocation_problem(
+                &predictions,
+                available_nodes,
+                &self.get_current_constraints().await?,
+            )
+            .await?;
 
         // Update allocation history for learning
         {
@@ -783,7 +840,10 @@ impl EdgeResourceOptimizer {
         Ok(optimal_allocation)
     }
 
-    async fn extract_workload_features(&self, workload: &WorkloadDescription) -> Result<WorkloadFeatures> {
+    async fn extract_workload_features(
+        &self,
+        workload: &WorkloadDescription,
+    ) -> Result<WorkloadFeatures> {
         Ok(WorkloadFeatures {
             computational_complexity: workload.estimated_complexity,
             memory_requirements: workload.estimated_memory_mb,
@@ -794,7 +854,10 @@ impl EdgeResourceOptimizer {
         })
     }
 
-    async fn analyze_temporal_patterns(&self, _workload: &WorkloadDescription) -> Result<TemporalPattern> {
+    async fn analyze_temporal_patterns(
+        &self,
+        _workload: &WorkloadDescription,
+    ) -> Result<TemporalPattern> {
         // AI-based temporal pattern analysis
         Ok(TemporalPattern {
             peak_hours: vec![9, 10, 11, 14, 15, 16],
@@ -804,7 +867,10 @@ impl EdgeResourceOptimizer {
         })
     }
 
-    async fn analyze_dependencies(&self, workload: &WorkloadDescription) -> Result<DependencyGraph> {
+    async fn analyze_dependencies(
+        &self,
+        workload: &WorkloadDescription,
+    ) -> Result<DependencyGraph> {
         Ok(DependencyGraph {
             nodes: workload.plugins.iter().map(|p| p.id.clone()).collect(),
             edges: Vec::new(), // Would analyze plugin interdependencies
@@ -824,9 +890,13 @@ impl EdgeResourceOptimizer {
         let mut best_score = f64::MIN;
 
         for _ in 0..constraints.max_optimization_iterations {
-            let candidate = self.generate_allocation_candidate(available_nodes, predictions).await?;
-            let score = self.evaluate_allocation(&candidate, predictions, constraints).await?;
-            
+            let candidate = self
+                .generate_allocation_candidate(available_nodes, predictions)
+                .await?;
+            let score = self
+                .evaluate_allocation(&candidate, predictions, constraints)
+                .await?;
+
             if score > best_score {
                 best_score = score;
                 best_allocation = candidate;
@@ -843,17 +913,21 @@ impl EdgeResourceOptimizer {
     ) -> Result<AllocationPlan> {
         // Generate allocation using weighted random selection
         Ok(AllocationPlan {
-            node_assignments: available_nodes.iter().take(3).map(|node| NodeAssignment {
-                node_id: node.id.clone(),
-                assigned_plugins: Vec::new(),
-                resource_allocation: ResourceAllocation {
-                    cpu_cores: 2,
-                    memory_mb: 1024,
-                    storage_gb: 10,
-                    network_mbps: 100.0,
-                },
-                priority_level: PriorityLevel::Medium,
-            }).collect(),
+            node_assignments: available_nodes
+                .iter()
+                .take(3)
+                .map(|node| NodeAssignment {
+                    node_id: node.id.clone(),
+                    assigned_plugins: Vec::new(),
+                    resource_allocation: ResourceAllocation {
+                        cpu_cores: 2,
+                        memory_mb: 1024,
+                        storage_gb: 10,
+                        network_mbps: 100.0,
+                    },
+                    priority_level: PriorityLevel::Medium,
+                })
+                .collect(),
             estimated_latency_ms: 45.0,
             estimated_throughput: 1000.0,
             cost_estimate: 0.05,
@@ -868,16 +942,16 @@ impl EdgeResourceOptimizer {
         constraints: &AllocationConstraints,
     ) -> Result<f64> {
         let mut score = 0.0;
-        
+
         // Latency score (lower is better)
         score += (constraints.max_latency_ms - allocation.estimated_latency_ms) * 0.3;
-        
+
         // Throughput score (higher is better)
         score += allocation.estimated_throughput * 0.0001;
-        
+
         // Cost score (lower is better)
         score += (constraints.max_cost_per_hour - allocation.cost_estimate) * 10.0;
-        
+
         // Confidence score
         score += allocation.confidence_score * 100.0;
 
@@ -916,7 +990,12 @@ impl WasmIntelligentCache {
 
     /// Get cached WASM module with intelligent prefetching
     #[cfg(feature = "wasm")]
-    pub async fn get_module(&self, plugin_id: &str, wasm_bytes: &[u8], engine: &Engine) -> Result<Module> {
+    pub async fn get_module(
+        &self,
+        plugin_id: &str,
+        wasm_bytes: &[u8],
+        engine: &Engine,
+    ) -> Result<Module> {
         // Check cache first
         {
             let cache = self.compiled_modules.read().await;
@@ -930,17 +1009,20 @@ impl WasmIntelligentCache {
 
         // Compile module
         let module = Module::new(engine, wasm_bytes)?;
-        
+
         // Cache the compiled module
         {
             let mut cache = self.compiled_modules.write().await;
-            cache.insert(plugin_id.to_string(), CachedModule {
-                module: module.clone(),
-                compiled_at: Utc::now(),
-                access_count: 1,
-                last_accessed: Utc::now(),
-                compilation_time_ms: 50, // Would measure actual time
-            });
+            cache.insert(
+                plugin_id.to_string(),
+                CachedModule {
+                    module: module.clone(),
+                    compiled_at: Utc::now(),
+                    access_count: 1,
+                    last_accessed: Utc::now(),
+                    compilation_time_ms: 50, // Would measure actual time
+                },
+            );
         }
 
         // Trigger predictive prefetching
@@ -959,8 +1041,11 @@ impl WasmIntelligentCache {
     }
 
     async fn trigger_prefetch_prediction(&self, accessed_plugin: &str) -> Result<()> {
-        let candidates = self.prefetch_predictor.predict_next_plugins(accessed_plugin).await?;
-        
+        let candidates = self
+            .prefetch_predictor
+            .predict_next_plugins(accessed_plugin)
+            .await?;
+
         for candidate in candidates {
             tokio::spawn(async move {
                 // Prefetch in background
@@ -1018,18 +1103,22 @@ impl AdaptiveSecuritySandbox {
         execution_context: &WasmExecutionContext,
     ) -> Result<SecurityAssessment> {
         // Behavioral analysis
-        let behavior = self.behavioral_analyzer.analyze_execution(execution_context).await?;
-        
+        let behavior = self
+            .behavioral_analyzer
+            .analyze_execution(execution_context)
+            .await?;
+
         // Threat detection
         let threats = self.threat_detector.scan_for_threats(&behavior).await?;
-        
+
         // Update adaptive policies
-        self.update_adaptive_policies(plugin_id, &behavior, &threats).await?;
-        
+        self.update_adaptive_policies(plugin_id, &behavior, &threats)
+            .await?;
+
         // Generate security assessment
         Ok(SecurityAssessment {
             risk_level: self.calculate_risk_level(&threats).await?,
-            detected_threats: threats,
+            detected_threats: threats.clone(),
             behavioral_anomalies: behavior.anomalies,
             recommended_actions: self.generate_recommendations(&threats).await?,
             confidence_score: 0.92,
@@ -1038,7 +1127,7 @@ impl AdaptiveSecuritySandbox {
 
     async fn calculate_risk_level(&self, threats: &[ThreatIndicator]) -> Result<RiskLevel> {
         let total_risk_score: f64 = threats.iter().map(|t| t.severity_score).sum();
-        
+
         Ok(match total_risk_score {
             score if score < 0.3 => RiskLevel::Low,
             score if score < 0.6 => RiskLevel::Medium,
@@ -1047,9 +1136,12 @@ impl AdaptiveSecuritySandbox {
         })
     }
 
-    async fn generate_recommendations(&self, threats: &[ThreatIndicator]) -> Result<Vec<SecurityRecommendation>> {
+    async fn generate_recommendations(
+        &self,
+        threats: &[ThreatIndicator],
+    ) -> Result<Vec<SecurityRecommendation>> {
         let mut recommendations = Vec::new();
-        
+
         for threat in threats {
             match threat.threat_type {
                 ThreatType::ExcessiveMemoryUsage => {
@@ -1058,18 +1150,18 @@ impl AdaptiveSecuritySandbox {
                         priority: Priority::High,
                         estimated_impact: ImpactLevel::Medium,
                     });
-                },
+                }
                 ThreatType::SuspiciousNetworkActivity => {
                     recommendations.push(SecurityRecommendation {
                         action: "Block network access for this plugin".to_string(),
                         priority: Priority::Critical,
                         estimated_impact: ImpactLevel::Low,
                     });
-                },
+                }
                 _ => {}
             }
         }
-        
+
         Ok(recommendations)
     }
 
@@ -1077,12 +1169,12 @@ impl AdaptiveSecuritySandbox {
     async fn update_adaptive_policies(
         &self,
         plugin_id: &str,
-        _behavior: &ExecutionBehavior,
+        _behavior: &BehaviorProfile,
         threats: &[ThreatIndicator],
     ) -> Result<()> {
         let mut policies = self.adaptive_policies.write().await;
         let now = Utc::now();
-        
+
         // Update policies based on threat analysis
         for threat in threats {
             match threat.threat_type {
@@ -1099,7 +1191,7 @@ impl AdaptiveSecuritySandbox {
                             severity_level: "high".to_string(),
                         },
                     );
-                },
+                }
                 ThreatType::SuspiciousNetworkActivity => {
                     let mut restrictions = HashMap::new();
                     restrictions.insert("action".to_string(), "block_network".to_string());
@@ -1113,11 +1205,11 @@ impl AdaptiveSecuritySandbox {
                             severity_level: "critical".to_string(),
                         },
                     );
-                },
+                }
                 _ => {}
             }
         }
-        
+
         Ok(())
     }
 }
@@ -1263,7 +1355,10 @@ impl PredictionEngine {
         }
     }
 
-    pub async fn predict_resource_needs(&self, _features: &WorkloadFeatures) -> Result<ResourcePrediction> {
+    pub async fn predict_resource_needs(
+        &self,
+        _features: &WorkloadFeatures,
+    ) -> Result<ResourcePrediction> {
         // ML-based resource prediction (simplified)
         Ok(ResourcePrediction {
             predicted_cpu_usage: 2.5,
@@ -1289,7 +1384,10 @@ pub struct CachedModule {
 impl CachedModule {
     pub fn is_valid(&self) -> bool {
         // Simple validity check - could be more sophisticated
-        Utc::now().signed_duration_since(self.compiled_at).num_hours() < 24
+        Utc::now()
+            .signed_duration_since(self.compiled_at)
+            .num_hours()
+            < 24
     }
 }
 
@@ -1337,7 +1435,10 @@ impl PrefetchPredictor {
 
     pub async fn predict_next_plugins(&self, _accessed_plugin: &str) -> Result<Vec<String>> {
         // Predictive prefetching logic
-        Ok(vec!["related_plugin_1".to_string(), "related_plugin_2".to_string()])
+        Ok(vec![
+            "related_plugin_1".to_string(),
+            "related_plugin_2".to_string(),
+        ])
     }
 }
 
@@ -1353,7 +1454,10 @@ impl ThreatDetector {
         }
     }
 
-    pub async fn scan_for_threats(&self, _behavior: &BehaviorProfile) -> Result<Vec<ThreatIndicator>> {
+    pub async fn scan_for_threats(
+        &self,
+        _behavior: &BehaviorProfile,
+    ) -> Result<Vec<ThreatIndicator>> {
         // Threat detection logic
         Ok(Vec::new())
     }
@@ -1371,7 +1475,10 @@ impl BehavioralAnalyzer {
         }
     }
 
-    pub async fn analyze_execution(&self, _context: &WasmExecutionContext) -> Result<BehaviorProfile> {
+    pub async fn analyze_execution(
+        &self,
+        _context: &WasmExecutionContext,
+    ) -> Result<BehaviorProfile> {
         Ok(BehaviorProfile {
             memory_access_pattern: MemoryAccessPattern::Sequential,
             system_call_frequency: 10,
@@ -1468,7 +1575,6 @@ pub struct ThreatSignature {
     pub severity: f64,
 }
 
-
 #[derive(Debug, Default)]
 pub struct SecurityMetrics {
     pub threats_detected: u64,
@@ -1483,7 +1589,7 @@ impl SecurityManager {
         self.validate_plugin_metadata(plugin).await?;
         self.scan_wasm_bytecode(&plugin.wasm_bytes).await?;
         self.check_plugin_reputation(&plugin.id).await?;
-        
+
         Ok(())
     }
 
@@ -1511,7 +1617,7 @@ mod tests {
     async fn test_wasm_edge_processor_creation() {
         let config = WasmEdgeConfig::default();
         let processor = WasmEdgeProcessor::new(config).unwrap();
-        
+
         let plugins = processor.list_plugins().await;
         assert_eq!(plugins.len(), 0);
     }
@@ -1520,7 +1626,7 @@ mod tests {
     async fn test_edge_location_scoring() {
         let config = WasmEdgeConfig::default();
         let processor = WasmEdgeProcessor::new(config).unwrap();
-        
+
         let edge = EdgeLocation {
             id: "test-edge".to_string(),
             region: "us-west".to_string(),
@@ -1529,8 +1635,10 @@ mod tests {
             available_resources: ResourceMetrics::default(),
             specializations: vec![ProcessingSpecialization::RdfProcessing],
         };
-        
-        let score = processor.calculate_edge_score("test-plugin", &[], &edge).await;
+
+        let score = processor
+            .calculate_edge_score("test-plugin", &[], &edge)
+            .await;
         assert!(score > 0.0 && score <= 1.0);
     }
 

@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use crate::compression::{
     AdaptiveCompressor, AdvancedCompressionType, ColumnStoreCompressor, CompressedData,
-    CompressionMetadata, RunLengthEncoder,
+    CompressionAlgorithm, CompressionMetadata, RunLengthEncoder,
 };
 
 /// Node identifier type - unique ID for each term
@@ -1323,7 +1323,7 @@ impl NodeTable {
             };
 
             // In a real implementation, we would accumulate data and analyze in batches
-            let values = vec![term.as_str().to_string()];
+            let values = vec![term.as_str().as_bytes().to_vec()];
             compressor.analyze_column(column_name, &values);
         }
         Ok(())

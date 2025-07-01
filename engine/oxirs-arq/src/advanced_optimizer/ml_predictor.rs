@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 /// Machine learning predictor for optimization decisions
+#[derive(Clone)]
 pub struct MLPredictor {
     model: MLModel,
     training_data: Vec<TrainingExample>,
@@ -133,10 +134,13 @@ impl MLPredictor {
     }
 
     /// Make cost prediction
-    pub fn predict_cost(&mut self, query: &crate::algebra::Algebra) -> anyhow::Result<MLPrediction> {
+    pub fn predict_cost(
+        &mut self,
+        query: &crate::algebra::Algebra,
+    ) -> anyhow::Result<MLPrediction> {
         let features = self.extract_features(query);
         let query_hash = self.hash_query(query);
-        
+
         if let Some(cached) = self.prediction_cache.get(&query_hash) {
             return Ok(cached.clone());
         }
@@ -167,6 +171,11 @@ impl MLPredictor {
     /// Get model accuracy metrics
     pub fn accuracy_metrics(&self) -> &AccuracyMetrics {
         &self.model.accuracy_metrics
+    }
+
+    /// Get the number of predictions made
+    pub fn predictions_count(&self) -> usize {
+        self.prediction_cache.len()
     }
 
     fn hash_query(&self, _query: &crate::algebra::Algebra) -> u64 {

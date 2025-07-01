@@ -217,7 +217,7 @@ impl VectorAnalyticsEngine {
             query_history: VecDeque::new(),
             performance_metrics: BTreeMap::new(),
             max_history_size: 10000,
-            analysis_window: Duration::from_hours(24),
+            analysis_window: Duration::from_secs(24 * 60 * 60), // 24 hours
             anomaly_detector: AnomalyDetector::new(),
         }
     }

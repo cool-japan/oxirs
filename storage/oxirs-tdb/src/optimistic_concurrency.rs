@@ -25,7 +25,7 @@ pub enum TransactionPhase {
 }
 
 /// Conflict type classification
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ConflictType {
     /// Read-Write conflict (phantom read)
     ReadWrite,

@@ -281,13 +281,13 @@ impl NeuralNetworkModel {
             }
             weights_input_hidden.push(layer_weights);
         }
-        
+
         let mut weights_hidden_output = Vec::new();
         for _ in 0..hidden_size {
             let limit = (6.0 / (hidden_size + 1) as f64).sqrt();
             weights_hidden_output.push(rand::random::<f64>() * 2.0 * limit - limit);
         }
-        
+
         Self {
             weights_input_hidden,
             bias_hidden: vec![0.0; hidden_size],
@@ -299,7 +299,7 @@ impl NeuralNetworkModel {
             last_trained: SystemTime::now(),
         }
     }
-    
+
     /// Forward pass through the network
     pub fn forward(&self, features: &[f64]) -> f64 {
         // Input to hidden layer
@@ -314,7 +314,7 @@ impl NeuralNetworkModel {
             // ReLU activation
             hidden_activations.push(activation.max(0.0));
         }
-        
+
         // Hidden to output layer
         let mut output = self.bias_output;
         for (i, &hidden_val) in hidden_activations.iter().enumerate() {
@@ -322,47 +322,47 @@ impl NeuralNetworkModel {
                 output += self.weights_hidden_output[i] * hidden_val;
             }
         }
-        
+
         output.max(0.0) // Ensure non-negative prediction
     }
-    
+
     /// Train the neural network using backpropagation
     pub fn train(&mut self, samples: &[TrainingSample]) {
         if samples.is_empty() {
             return;
         }
-        
+
         let epochs = 200;
-        
+
         for epoch in 0..epochs {
             let mut total_loss = 0.0;
-            
+
             for sample in samples {
                 let features = self.extract_features(&sample.features);
                 let target = sample.outcome.execution_time_ms;
-                
+
                 // Forward pass
                 let prediction = self.forward(&features);
                 let error = prediction - target;
-                
+
                 // Backward pass
                 self.backpropagate(&features, error, target);
-                
+
                 total_loss += error * error;
             }
-            
+
             total_loss /= samples.len() as f64;
-            
+
             if epoch % 20 == 0 {
                 debug!("NN training epoch {}: loss = {:.2}", epoch, total_loss);
             }
         }
-        
+
         self.iterations += epochs;
         self.last_trained = SystemTime::now();
         self.accuracy = self.calculate_accuracy(samples);
     }
-    
+
     /// Backpropagation algorithm
     fn backpropagate(&mut self, features: &[f64], output_error: f64, _target: f64) {
         // Forward pass to get hidden activations
@@ -376,10 +376,10 @@ impl NeuralNetworkModel {
             }
             hidden_activations.push(activation.max(0.0));
         }
-        
+
         // Output layer gradients
         let output_gradient = output_error;
-        
+
         // Update output layer weights
         for (i, &hidden_val) in hidden_activations.iter().enumerate() {
             if i < self.weights_hidden_output.len() {
@@ -387,7 +387,7 @@ impl NeuralNetworkModel {
             }
         }
         self.bias_output -= self.learning_rate * output_gradient;
-        
+
         // Hidden layer gradients
         for (i, neuron_weights) in self.weights_input_hidden.iter_mut().enumerate() {
             if i < self.weights_hidden_output.len() {
@@ -396,7 +396,7 @@ impl NeuralNetworkModel {
                 } else {
                     0.0 // ReLU derivative
                 };
-                
+
                 // Update hidden layer weights
                 for (j, &feature) in features.iter().enumerate() {
                     if j < neuron_weights.len() {
@@ -407,7 +407,7 @@ impl NeuralNetworkModel {
             }
         }
     }
-    
+
     /// Extract features as vector (same as LinearRegressionModel)
     fn extract_features(&self, features: &QueryFeatures) -> Vec<f64> {
         vec![
@@ -426,32 +426,32 @@ impl NeuralNetworkModel {
             features.variable_count as f64,
         ]
     }
-    
+
     /// Calculate model accuracy
     fn calculate_accuracy(&self, samples: &[TrainingSample]) -> f64 {
         if samples.is_empty() {
             return 0.0;
         }
-        
+
         let mut total_error = 0.0;
         let mut total_actual = 0.0;
-        
+
         for sample in samples {
             let features = self.extract_features(&sample.features);
             let prediction = self.forward(&features);
             let actual = sample.outcome.execution_time_ms;
-            
+
             total_error += (prediction - actual).abs();
             total_actual += actual;
         }
-        
+
         let mean_absolute_error = total_error / samples.len() as f64;
         let mean_actual = total_actual / samples.len() as f64;
-        
+
         // Accuracy as 1 - normalized MAE
         1.0 - (mean_absolute_error / mean_actual).min(1.0)
     }
-    
+
     /// Predict performance for features
     pub fn predict(&self, features: &QueryFeatures) -> f64 {
         let feature_vec = self.extract_features(features);
@@ -478,18 +478,18 @@ impl LinearRegressionModel {
         }
 
         let epochs = 100;
-        
+
         for epoch in 0..epochs {
             let mut total_loss = 0.0;
-            
+
             for sample in samples {
                 let features = self.extract_features(&sample.features);
                 let target = sample.outcome.execution_time_ms;
-                
+
                 // Forward pass
                 let prediction = self.predict_value(&features);
                 let error = prediction - target;
-                
+
                 // Backward pass
                 for i in 0..self.weights.len() {
                     if i < features.len() {
@@ -497,21 +497,21 @@ impl LinearRegressionModel {
                         self.weights[i] -= learning_rate * gradient;
                     }
                 }
-                
+
                 self.bias -= learning_rate * error;
                 total_loss += error * error;
             }
-            
+
             total_loss /= samples.len() as f64;
-            
+
             if epoch % 10 == 0 {
                 debug!("Training epoch {}: loss = {:.2}", epoch, total_loss);
             }
         }
-        
+
         self.iterations += epochs;
         self.last_trained = SystemTime::now();
-        
+
         // Calculate accuracy
         self.accuracy = self.calculate_accuracy(samples);
     }
@@ -525,13 +525,13 @@ impl LinearRegressionModel {
     /// Predict value from feature vector
     fn predict_value(&self, features: &[f64]) -> f64 {
         let mut prediction = self.bias;
-        
+
         for (i, &weight) in self.weights.iter().enumerate() {
             if i < features.len() {
                 prediction += weight * features[i];
             }
         }
-        
+
         prediction.max(0.0) // Ensure non-negative prediction
     }
 
@@ -566,14 +566,14 @@ impl LinearRegressionModel {
         for sample in samples {
             let prediction = self.predict(&sample.features);
             let actual = sample.outcome.execution_time_ms;
-            
+
             total_error += (prediction - actual).abs();
             total_actual += actual;
         }
 
         let mean_absolute_error = total_error / samples.len() as f64;
         let mean_actual = total_actual / samples.len() as f64;
-        
+
         // Accuracy as 1 - normalized MAE
         1.0 - (mean_absolute_error / mean_actual).min(1.0)
     }
@@ -631,11 +631,15 @@ impl MLOptimizer {
     pub fn with_config(config: MLConfig) -> Self {
         let feature_count = 13; // Number of features in QueryFeatures
         let hidden_size = 16; // Neural network hidden layer size
-        
+
         Self {
             config: config.clone(),
             linear_model: Arc::new(RwLock::new(LinearRegressionModel::new(feature_count))),
-            neural_model: Arc::new(RwLock::new(NeuralNetworkModel::new(feature_count, hidden_size, config.learning_rate))),
+            neural_model: Arc::new(RwLock::new(NeuralNetworkModel::new(
+                feature_count,
+                hidden_size,
+                config.learning_rate,
+            ))),
             source_selection_model: Arc::new(RwLock::new(HashMap::new())),
             join_order_model: Arc::new(RwLock::new(HashMap::new())),
             caching_model: Arc::new(RwLock::new(HashMap::new())),
@@ -656,23 +660,23 @@ impl MLOptimizer {
             let model = self.linear_model.read().await;
             model.predict(features)
         };
-        
+
         let neural_prediction = {
             let model = self.neural_model.read().await;
             model.predict(features)
         };
-        
+
         // Ensemble prediction: weighted average based on model accuracies
         let linear_accuracy = {
             let model = self.linear_model.read().await;
             model.accuracy
         };
-        
+
         let neural_accuracy = {
             let model = self.neural_model.read().await;
             model.accuracy
         };
-        
+
         let ensemble_prediction = if linear_accuracy + neural_accuracy > 0.0 {
             let linear_weight = linear_accuracy / (linear_accuracy + neural_accuracy);
             let neural_weight = neural_accuracy / (linear_accuracy + neural_accuracy);
@@ -681,7 +685,7 @@ impl MLOptimizer {
             // If no accuracy data, use simple average
             (linear_prediction + neural_prediction) / 2.0
         };
-        
+
         // Update statistics
         {
             let mut stats = self.statistics.write().await;
@@ -691,7 +695,7 @@ impl MLOptimizer {
 
         debug!("Performance prediction: {:.2}ms (linear: {:.2}, neural: {:.2}) for query with {} patterns", 
                ensemble_prediction, linear_prediction, neural_prediction, features.pattern_count);
-        
+
         Ok(ensemble_prediction)
     }
 
@@ -713,11 +717,11 @@ impl MLOptimizer {
 
         let model = self.source_selection_model.read().await;
         let mut service_scores = HashMap::new();
-        
+
         // Score each service based on learned patterns
         for service in available_services {
             let score = model.get(service).copied().unwrap_or(0.5);
-            
+
             // Adjust score based on query features
             let adjusted_score = self.adjust_service_score(service, features, score).await;
             service_scores.insert(service.clone(), adjusted_score);
@@ -729,19 +733,24 @@ impl MLOptimizer {
             .filter(|(_, &score)| score > self.config.confidence_threshold)
             .map(|(service, &score)| (service.clone(), score))
             .collect();
-        
+
         recommended.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        
-        let recommended_services: Vec<String> = recommended.iter()
+
+        let recommended_services: Vec<String> = recommended
+            .iter()
             .take(3) // Top 3 services
             .map(|(service, _)| service.clone())
             .collect();
 
         // Generate alternatives
-        let alternatives = self.generate_source_alternatives(available_services, &service_scores).await;
+        let alternatives = self
+            .generate_source_alternatives(available_services, &service_scores)
+            .await;
 
         // Predict expected performance
-        let expected_performance = self.predict_service_performance(&recommended_services, features).await;
+        let expected_performance = self
+            .predict_service_performance(&recommended_services, features)
+            .await;
 
         Ok(SourceSelectionPrediction {
             recommended_services,
@@ -767,7 +776,7 @@ impl MLOptimizer {
         }
 
         let model = self.join_order_model.read().await;
-        
+
         // Generate permutations and score them
         let mut order_scores = Vec::new();
         let permutations = if join_patterns.len() <= 6 {
@@ -785,7 +794,8 @@ impl MLOptimizer {
         // Sort by cost (lower is better)
         order_scores.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-        let best_order = order_scores.first()
+        let best_order = order_scores
+            .first()
             .map(|(order, cost)| (order.clone(), *cost))
             .unwrap_or_else(|| (join_patterns.to_vec(), 1.0));
 
@@ -830,21 +840,26 @@ impl MLOptimizer {
 
         for pattern in query_patterns {
             let cache_score = model.get(pattern).copied().unwrap_or(0.3);
-            
+
             // Adjust score based on query characteristics
-            let adjusted_score = self.adjust_cache_score(pattern, features, cache_score).await;
-            
+            let adjusted_score = self
+                .adjust_cache_score(pattern, features, cache_score)
+                .await;
+
             if adjusted_score > 0.5 {
                 let estimated_size = self.estimate_cache_size(pattern, features);
                 let ttl = self.calculate_optimal_ttl(pattern, adjusted_score);
-                
-                cache_items.insert(pattern.clone(), CacheRecommendation {
-                    should_cache: true,
-                    priority: adjusted_score,
-                    expected_benefit: adjusted_score * 100.0, // Percentage improvement
-                    ttl_seconds: ttl,
-                });
-                
+
+                cache_items.insert(
+                    pattern.clone(),
+                    CacheRecommendation {
+                        should_cache: true,
+                        priority: adjusted_score,
+                        expected_benefit: adjusted_score * 100.0, // Percentage improvement
+                        ttl_seconds: ttl,
+                    },
+                );
+
                 total_memory += estimated_size;
             }
         }
@@ -885,15 +900,15 @@ impl MLOptimizer {
         }
 
         let baseline = self.anomaly_baseline.read().await;
-        
+
         // Calculate anomaly scores for different aspects
         let performance_score = self.calculate_performance_anomaly_score(outcome, &baseline);
         let resource_score = self.calculate_resource_anomaly_score(outcome, &baseline);
         let pattern_score = self.calculate_pattern_anomaly_score(features, &baseline);
-        
+
         let max_score = performance_score.max(resource_score).max(pattern_score);
         let is_anomalous = max_score > 0.7;
-        
+
         let anomaly_type = if performance_score == max_score {
             AnomalyType::PerformanceDegradation
         } else if resource_score == max_score {
@@ -922,7 +937,7 @@ impl MLOptimizer {
     pub async fn add_training_sample(&self, sample: TrainingSample) {
         let mut samples = self.training_samples.write().await;
         samples.push_back(sample);
-        
+
         // Limit history size
         while samples.len() > self.config.feature_history_size {
             samples.pop_front();
@@ -942,7 +957,7 @@ impl MLOptimizer {
     /// Retrain all models
     pub async fn retrain_models(&self) -> Result<()> {
         info!("Starting ML model retraining");
-        
+
         let samples: Vec<TrainingSample> = {
             let samples_guard = self.training_samples.read().await;
             samples_guard.iter().cloned().collect()
@@ -956,9 +971,13 @@ impl MLOptimizer {
         // Retrain both performance models
         {
             let mut linear_model = self.linear_model.write().await;
-            linear_model.train(&samples, self.config.learning_rate, self.config.regularization);
+            linear_model.train(
+                &samples,
+                self.config.learning_rate,
+                self.config.regularization,
+            );
         }
-        
+
         {
             let mut neural_model = self.neural_model.write().await;
             neural_model.train(&samples);
@@ -985,7 +1004,10 @@ impl MLOptimizer {
             stats.model_accuracy = (linear_model.accuracy + neural_model.accuracy) / 2.0;
         }
 
-        info!("ML model retraining completed with {} samples", samples.len());
+        info!(
+            "ML model retraining completed with {} samples",
+            samples.len()
+        );
         Ok(())
     }
 
@@ -996,11 +1018,16 @@ impl MLOptimizer {
 
     // Private helper methods
 
-    async fn adjust_service_score(&self, _service: &str, features: &QueryFeatures, base_score: f64) -> f64 {
+    async fn adjust_service_score(
+        &self,
+        _service: &str,
+        features: &QueryFeatures,
+        base_score: f64,
+    ) -> f64 {
         // Adjust score based on query complexity
         let complexity_factor = 1.0 - (features.complexity_score / 10.0).min(0.5);
         let service_factor = 1.0 - (features.service_count as f64 / 10.0).min(0.3);
-        
+
         base_score * complexity_factor * service_factor
     }
 
@@ -1011,9 +1038,11 @@ impl MLOptimizer {
     ) -> Vec<SourceAlternative> {
         // Generate alternative service combinations
         let mut alternatives = Vec::new();
-        
+
         for combination_size in 1..=3.min(available_services.len()) {
-            if let Some(combination) = self.select_service_combination(available_services, scores, combination_size) {
+            if let Some(combination) =
+                self.select_service_combination(available_services, scores, combination_size)
+            {
                 alternatives.push(SourceAlternative {
                     services: combination,
                     expected_performance: PerformanceOutcome::default(),
@@ -1022,7 +1051,7 @@ impl MLOptimizer {
                 });
             }
         }
-        
+
         alternatives
     }
 
@@ -1035,14 +1064,21 @@ impl MLOptimizer {
         if size > services.len() {
             return None;
         }
-        
-        let mut scored_services: Vec<_> = services.iter()
+
+        let mut scored_services: Vec<_> = services
+            .iter()
             .map(|s| (s.clone(), scores.get(s).copied().unwrap_or(0.0)))
             .collect();
-        
+
         scored_services.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        
-        Some(scored_services.into_iter().take(size).map(|(s, _)| s).collect())
+
+        Some(
+            scored_services
+                .into_iter()
+                .take(size)
+                .map(|(s, _)| s)
+                .collect(),
+        )
     }
 
     async fn predict_service_performance(
@@ -1058,19 +1094,19 @@ impl MLOptimizer {
         if items.is_empty() {
             return vec![vec![]];
         }
-        
+
         let mut permutations = Vec::new();
-        
+
         for (i, item) in items.iter().enumerate() {
             let mut remaining = items.to_vec();
             remaining.remove(i);
-            
+
             for mut perm in self.generate_permutations(&remaining) {
                 perm.insert(0, item.clone());
                 permutations.push(perm);
             }
         }
-        
+
         permutations
     }
 
@@ -1086,8 +1122,9 @@ impl MLOptimizer {
             {
                 let mut random = items.to_vec();
                 // Simple shuffle approximation
-                if random.len() > 1 {
-                    random.swap(0, random.len() - 1);
+                let len = random.len();
+                if len > 1 {
+                    random.swap(0, len - 1);
                 }
                 random
             }, // "Random" order
@@ -1102,12 +1139,12 @@ impl MLOptimizer {
     ) -> f64 {
         // Calculate estimated cost for join order
         let mut cost = 1.0;
-        
+
         for (i, _pattern) in order.iter().enumerate() {
             // Cost increases with position (later joins are more expensive)
             cost += (i + 1) as f64 * 0.1;
         }
-        
+
         cost
     }
 
@@ -1122,22 +1159,31 @@ impl MLOptimizer {
         if scores.len() < 2 {
             return 0.5;
         }
-        
+
         let best_cost = scores[0].1;
         let second_cost = scores[1].1;
-        
+
         if second_cost == 0.0 {
             return 1.0;
         }
-        
+
         1.0 - (best_cost / second_cost).min(1.0)
     }
 
-    async fn adjust_cache_score(&self, _pattern: &str, features: &QueryFeatures, base_score: f64) -> f64 {
+    async fn adjust_cache_score(
+        &self,
+        _pattern: &str,
+        features: &QueryFeatures,
+        base_score: f64,
+    ) -> f64 {
         // Adjust based on query characteristics
         let frequency_factor = if features.pattern_count > 5 { 1.2 } else { 1.0 };
-        let complexity_factor = if features.complexity_score > 5.0 { 1.1 } else { 1.0 };
-        
+        let complexity_factor = if features.complexity_score > 5.0 {
+            1.1
+        } else {
+            1.0
+        };
+
         base_score * frequency_factor * complexity_factor
     }
 
@@ -1159,41 +1205,65 @@ impl MLOptimizer {
         if cache_items.is_empty() {
             return 0.0;
         }
-        
-        let avg_priority: f64 = cache_items.values().map(|r| r.priority).sum::<f64>() / cache_items.len() as f64;
+
+        let avg_priority: f64 =
+            cache_items.values().map(|r| r.priority).sum::<f64>() / cache_items.len() as f64;
         avg_priority.min(0.9) // Cap at 90%
     }
 
-    fn calculate_performance_anomaly_score(&self, outcome: &PerformanceOutcome, baseline: &HashMap<String, f64>) -> f64 {
+    fn calculate_performance_anomaly_score(
+        &self,
+        outcome: &PerformanceOutcome,
+        baseline: &HashMap<String, f64>,
+    ) -> f64 {
         let baseline_time = baseline.get("execution_time").copied().unwrap_or(1000.0);
         let current_time = outcome.execution_time_ms;
-        
+
         if baseline_time == 0.0 {
             return 0.0;
         }
-        
-        ((current_time - baseline_time) / baseline_time).max(0.0).min(1.0)
+
+        ((current_time - baseline_time) / baseline_time)
+            .max(0.0)
+            .min(1.0)
     }
 
-    fn calculate_resource_anomaly_score(&self, outcome: &PerformanceOutcome, baseline: &HashMap<String, f64>) -> f64 {
-        let baseline_memory = baseline.get("memory_usage").copied().unwrap_or(1024.0 * 1024.0);
+    fn calculate_resource_anomaly_score(
+        &self,
+        outcome: &PerformanceOutcome,
+        baseline: &HashMap<String, f64>,
+    ) -> f64 {
+        let baseline_memory = baseline
+            .get("memory_usage")
+            .copied()
+            .unwrap_or(1024.0 * 1024.0);
         let current_memory = outcome.memory_usage_bytes as f64;
-        
+
         if baseline_memory == 0.0 {
             return 0.0;
         }
-        
-        ((current_memory - baseline_memory) / baseline_memory).max(0.0).min(1.0)
+
+        ((current_memory - baseline_memory) / baseline_memory)
+            .max(0.0)
+            .min(1.0)
     }
 
-    fn calculate_pattern_anomaly_score(&self, _features: &QueryFeatures, _baseline: &HashMap<String, f64>) -> f64 {
+    fn calculate_pattern_anomaly_score(
+        &self,
+        _features: &QueryFeatures,
+        _baseline: &HashMap<String, f64>,
+    ) -> f64 {
         // Simplified pattern anomaly detection
         0.1
     }
 
-    fn generate_anomaly_recommendations(&self, anomaly_type: &AnomalyType, score: f64) -> Vec<String> {
+    fn generate_anomaly_recommendations(
+        &self,
+        anomaly_type: &AnomalyType,
+        score: f64,
+    ) -> Vec<String> {
         let mut recommendations = Vec::new();
-        
+
         match anomaly_type {
             AnomalyType::PerformanceDegradation => {
                 recommendations.push("Consider optimizing query patterns".to_string());
@@ -1212,13 +1282,13 @@ impl MLOptimizer {
                 recommendations.push("Monitor system behavior".to_string());
             }
         }
-        
+
         recommendations
     }
 
     async fn update_source_selection_model(&self, samples: &[TrainingSample]) {
         let mut model = self.source_selection_model.write().await;
-        
+
         for sample in samples {
             for service in &sample.service_selections {
                 let success_rate = sample.outcome.success_rate;
@@ -1231,13 +1301,13 @@ impl MLOptimizer {
 
     async fn update_join_order_model(&self, samples: &[TrainingSample]) {
         let mut model = self.join_order_model.write().await;
-        
+
         for sample in samples {
             for (i, pattern) in sample.join_order.iter().enumerate() {
                 let position_score = 1.0 - (i as f64 / sample.join_order.len() as f64);
                 let performance_factor = 1.0 / sample.outcome.execution_time_ms.max(1.0);
                 let score = position_score * performance_factor * 1000.0;
-                
+
                 let current_score = model.get(pattern).copied().unwrap_or(0.5);
                 let new_score = current_score * 0.9 + score * 0.1;
                 model.insert(pattern.clone(), new_score);
@@ -1247,7 +1317,7 @@ impl MLOptimizer {
 
     async fn update_caching_model(&self, samples: &[TrainingSample]) {
         let mut model = self.caching_model.write().await;
-        
+
         for sample in samples {
             for (item, &should_cache) in &sample.caching_decisions {
                 let cache_benefit = if should_cache {
@@ -1255,7 +1325,7 @@ impl MLOptimizer {
                 } else {
                     1.0 - sample.outcome.cache_hit_rate
                 };
-                
+
                 let current_score = model.get(item).copied().unwrap_or(0.5);
                 let new_score = current_score * 0.9 + cache_benefit * 0.1;
                 model.insert(item.clone(), new_score);
@@ -1265,19 +1335,23 @@ impl MLOptimizer {
 
     async fn update_anomaly_baseline(&self, samples: &[TrainingSample]) {
         let mut baseline = self.anomaly_baseline.write().await;
-        
+
         if samples.is_empty() {
             return;
         }
-        
-        let avg_execution_time = samples.iter()
+
+        let avg_execution_time = samples
+            .iter()
             .map(|s| s.outcome.execution_time_ms)
-            .sum::<f64>() / samples.len() as f64;
-            
-        let avg_memory_usage = samples.iter()
+            .sum::<f64>()
+            / samples.len() as f64;
+
+        let avg_memory_usage = samples
+            .iter()
             .map(|s| s.outcome.memory_usage_bytes as f64)
-            .sum::<f64>() / samples.len() as f64;
-        
+            .sum::<f64>()
+            / samples.len() as f64;
+
         baseline.insert("execution_time".to_string(), avg_execution_time);
         baseline.insert("memory_usage".to_string(), avg_memory_usage);
     }
@@ -1351,9 +1425,16 @@ mod tests {
             variable_count: 2,
         };
 
-        let services = vec!["service1".to_string(), "service2".to_string(), "service3".to_string()];
-        let recommendation = optimizer.recommend_source_selection(&features, &services).await.unwrap();
-        
+        let services = vec![
+            "service1".to_string(),
+            "service2".to_string(),
+            "service3".to_string(),
+        ];
+        let recommendation = optimizer
+            .recommend_source_selection(&features, &services)
+            .await
+            .unwrap();
+
         assert!(!recommendation.recommended_services.is_empty());
     }
 
@@ -1387,7 +1468,10 @@ mod tests {
             timestamp: SystemTime::now(),
         };
 
-        let detection = optimizer.detect_anomalies(&features, &outcome).await.unwrap();
+        let detection = optimizer
+            .detect_anomalies(&features, &outcome)
+            .await
+            .unwrap();
         assert!(detection.anomaly_score >= 0.0);
     }
 
@@ -1398,7 +1482,7 @@ mod tests {
         assert_eq!(model.bias, 0.0);
         assert_eq!(model.iterations, 0);
     }
-    
+
     #[test]
     fn test_neural_network_model() {
         let model = NeuralNetworkModel::new(5, 3, 0.01);
@@ -1409,7 +1493,7 @@ mod tests {
         assert_eq!(model.iterations, 0);
         assert_eq!(model.learning_rate, 0.01);
     }
-    
+
     #[tokio::test]
     async fn test_ensemble_prediction() {
         let optimizer = MLOptimizer::new();
@@ -1431,7 +1515,7 @@ mod tests {
 
         let prediction = optimizer.predict_performance(&features).await.unwrap();
         assert!(prediction >= 0.0);
-        
+
         // Test that we get consistent predictions
         let prediction2 = optimizer.predict_performance(&features).await.unwrap();
         assert_eq!(prediction, prediction2);

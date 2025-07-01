@@ -188,7 +188,7 @@ impl PropertyPathEvaluator {
     /// Evaluate a property path from a starting node
     pub fn evaluate_path(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         path: &PropertyPath,
         graph_name: Option<&str>,
@@ -225,7 +225,7 @@ impl PropertyPathEvaluator {
     /// Evaluate multiple paths from the same starting node
     pub fn evaluate_multiple_paths(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         paths: &[PropertyPath],
         graph_name: Option<&str>,
@@ -243,7 +243,7 @@ impl PropertyPathEvaluator {
     /// Evaluate a property path using optimized SPARQL property path query
     fn evaluate_path_with_sparql(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         path: &PropertyPath,
         graph_name: Option<&str>,
@@ -313,7 +313,7 @@ impl PropertyPathEvaluator {
     /// Internal implementation of path evaluation
     fn evaluate_path_impl(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         path: &PropertyPath,
         graph_name: Option<&str>,
@@ -355,7 +355,7 @@ impl PropertyPathEvaluator {
     /// Evaluate a simple predicate path
     fn evaluate_predicate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         predicate: &NamedNode,
         graph_name: Option<&str>,
@@ -422,7 +422,7 @@ impl PropertyPathEvaluator {
     /// Evaluate an inverse path
     fn evaluate_inverse(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         inner_path: &PropertyPath,
         graph_name: Option<&str>,
@@ -443,7 +443,7 @@ impl PropertyPathEvaluator {
     /// Evaluate inverse of a simple predicate
     fn evaluate_inverse_predicate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         predicate: &NamedNode,
         graph_name: Option<&str>,
@@ -510,7 +510,7 @@ impl PropertyPathEvaluator {
     /// Evaluate inverse of a complex path
     fn evaluate_complex_inverse(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         inner_path: &PropertyPath,
         graph_name: Option<&str>,
@@ -603,7 +603,7 @@ impl PropertyPathEvaluator {
     /// Evaluate a sequence path (path1 / path2 / ...)
     fn evaluate_sequence(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         paths: &[PropertyPath],
         graph_name: Option<&str>,
@@ -647,7 +647,7 @@ impl PropertyPathEvaluator {
     /// Evaluate an alternative path (path1 | path2 | ...)
     fn evaluate_alternative(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         paths: &[PropertyPath],
         graph_name: Option<&str>,
@@ -667,7 +667,7 @@ impl PropertyPathEvaluator {
     /// Evaluate a zero-or-more path (path*)
     fn evaluate_zero_or_more(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         inner_path: &PropertyPath,
         graph_name: Option<&str>,
@@ -710,7 +710,7 @@ impl PropertyPathEvaluator {
     /// Evaluate a one-or-more path (path+)
     fn evaluate_one_or_more(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         inner_path: &PropertyPath,
         graph_name: Option<&str>,
@@ -758,7 +758,7 @@ impl PropertyPathEvaluator {
     /// Evaluate a zero-or-one path (path?)
     fn evaluate_zero_or_one(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         inner_path: &PropertyPath,
         graph_name: Option<&str>,
@@ -778,7 +778,7 @@ impl PropertyPathEvaluator {
     /// Execute a path query using oxirs-core query engine
     fn execute_path_query(
         &self,
-        store: &Store,
+        store: &dyn Store,
         query: &str,
     ) -> Result<oxirs_core::query::QueryResult> {
         use oxirs_core::query::QueryEngine;
@@ -803,7 +803,7 @@ impl PropertyPathEvaluator {
     /// Fallback method to evaluate predicate using direct store queries
     fn evaluate_predicate_direct(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         predicate: &NamedNode,
         graph_name: Option<&str>,
@@ -855,7 +855,7 @@ impl PropertyPathEvaluator {
     /// Fallback method to evaluate inverse predicate using direct store queries
     fn evaluate_inverse_predicate_direct(
         &self,
-        store: &Store,
+        store: &dyn Store,
         start_node: &Term,
         predicate: &NamedNode,
         graph_name: Option<&str>,
@@ -908,7 +908,7 @@ impl PropertyPathEvaluator {
     /// Fallback method to get candidate nodes using direct store queries
     fn get_candidates_direct(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<HashSet<Term>> {
         use oxirs_core::model::GraphName;

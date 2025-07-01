@@ -86,6 +86,7 @@ pub mod neural_cost_estimation_engine;
 pub mod neural_patterns;
 pub mod neural_transformer_pattern_integration;
 pub mod neuromorphic_validation;
+pub mod omniscient_validation;
 pub mod optimization;
 pub mod optimization_engine;
 pub mod patterns;
@@ -95,23 +96,22 @@ pub mod predictive_analytics;
 pub mod production_deployment;
 pub mod quality;
 pub mod quantum_consciousness_entanglement;
+pub mod quantum_consciousness_synthesis;
 pub mod quantum_enhanced_pattern_optimizer;
 pub mod quantum_neural_patterns;
 pub mod quantum_neuromorphic_fusion;
-pub mod quantum_consciousness_synthesis;
+pub mod reality_synthesis;
 pub mod realtime_adaptive_query_optimizer;
 pub mod recommendation_systems;
 pub mod self_adaptive_ai;
 pub mod shape;
 pub mod shape_management;
-pub mod swarm_neuromorphic_networks;
 pub mod streaming_adaptation;
+pub mod swarm_neuromorphic_networks;
 pub mod system_monitoring;
 pub mod temporal_paradox_resolution;
 pub mod time_space_validation;
 pub mod universal_knowledge_integration;
-pub mod omniscient_validation;
-pub mod reality_synthesis;
 pub mod validation_performance;
 pub mod version_control;
 
@@ -132,12 +132,11 @@ pub use advanced_visualization::{
     VisualizationData, VisualizationOutput,
 };
 pub use ai_orchestrator::{
-    AdaptiveLearningInsights, AiOrchestrator, AiOrchestratorConfig, AiOrchestratorStats,
-    ComprehensiveLearningResult, ConfidentShape, ConfidenceDistribution, DataCharacteristics, 
-    LearningMetadata, ModelPerformanceMetrics, ModelSelectionResult, ModelSelectionStats,
-    ModelSelectionStrategy, OptimizationRecommendation, OrchestrationMetrics, 
+    AdaptiveLearningInsights, AdvancedModelSelector, AiOrchestrator, AiOrchestratorConfig,
+    AiOrchestratorStats, ComprehensiveLearningResult, ConfidenceDistribution, ConfidentShape,
+    DataCharacteristics, LearningMetadata, ModelPerformanceMetrics, ModelSelectionResult,
+    ModelSelectionStats, ModelSelectionStrategy, OptimizationRecommendation, OrchestrationMetrics,
     PerformanceRequirements, PredictiveInsights, QualityAnalysis, SelectedModel,
-    AdvancedModelSelector,
 };
 pub use analytics::*;
 pub use collaborative_development::*;
@@ -161,6 +160,13 @@ pub use ml::{
     LearnedConstraint, LearnedShape, ModelError, ModelMetrics, ModelParams, ShapeLearningModel,
     ShapeTrainingData as MlTrainingData,
 };
+pub use neural_cost_estimation_engine::{
+    ContextAwareCostAdjuster, DeepCostPredictor, EnsembleCostPredictor, FeatureExtractionConfig,
+    HistoricalDataConfig, HistoricalDataManager, MultiDimensionalFeatureExtractor,
+    NetworkArchitecture, NeuralCostEstimationConfig, NeuralCostEstimationEngine,
+    NeuralCostEstimationStats, PerformanceProfiler, RealTimeFeedbackProcessor,
+    UncertaintyQuantifier,
+};
 pub use neural_patterns::{
     AdvancedPatternCorrelationAnalyzer, AnalysisMetadata, AnalysisQualityMetrics,
     AttentionFlowDynamics, AttentionHead, AttentionHotspot, AttentionInsights, AttentionPathway,
@@ -181,13 +187,12 @@ pub use neural_transformer_pattern_integration::{
 };
 pub use optimization::*;
 pub use optimization_engine::{
-    AdvancedOptimizationEngine, CacheConfiguration,
+    AdaptiveOptimizer, AdvancedOptimizationEngine, AntColonyOptimizer, BayesianOptimizer,
+    CacheConfiguration, DifferentialEvolutionOptimizer, GeneticOptimizer, MultiObjectiveOptimizer,
     OptimizationConfig as AdvancedOptimizationConfig, OptimizationResult, OptimizedShape,
-    ParallelValidationConfig, PerformanceMetrics as OptimizationPerformanceMetrics,
-    AntColonyOptimizer, DifferentialEvolutionOptimizer, TabuSearchOptimizer, 
-    ReinforcementLearningOptimizer, AdaptiveOptimizer, BayesianOptimizer,
-    MultiObjectiveOptimizer, GeneticOptimizer, SimulatedAnnealingOptimizer,
-    ParticleSwarmOptimizer,
+    ParallelValidationConfig, ParticleSwarmOptimizer,
+    PerformanceMetrics as OptimizationPerformanceMetrics, ReinforcementLearningOptimizer,
+    SimulatedAnnealingOptimizer, TabuSearchOptimizer,
 };
 pub use patterns::*;
 pub use performance_analytics::*;
@@ -201,10 +206,10 @@ pub use quantum_consciousness_entanglement::{
     QuantumEntanglementValidationResult, QuantumInformation,
 };
 pub use quantum_consciousness_synthesis::{
-    QuantumConsciousnessSynthesisEngine, QuantumConsciousnessProcessor, SyntheticMind,
-    QuantumConsciousnessValidationResult, ConsciousnessLevel, ValidationOutcome,
-    QuantumCognitionEnhancer, ConsciousnessStateSynthesizer, QuantumIntuitionEngine,
-    SentientReasoningValidator, MultiDimensionalAwarenessSystem,
+    ConsciousnessLevel, ConsciousnessStateSynthesizer, MultiDimensionalAwarenessSystem,
+    QuantumCognitionEnhancer, QuantumConsciousnessProcessor, QuantumConsciousnessSynthesisEngine,
+    QuantumConsciousnessValidationResult, QuantumIntuitionEngine, SentientReasoningValidator,
+    SyntheticMind, ValidationOutcome,
 };
 pub use quantum_enhanced_pattern_optimizer::{
     AnnealingSchedule, NeuralPredictor, PerformanceRecord, QuantumAnnealer,
@@ -212,12 +217,6 @@ pub use quantum_enhanced_pattern_optimizer::{
     QuantumSuperpositionStates, RealTimeLearningAdapter,
 };
 pub use quantum_neural_patterns::*;
-pub use neural_cost_estimation_engine::{
-    ContextAwareCostAdjuster, DeepCostPredictor, EnsembleCostPredictor, FeatureExtractionConfig,
-    HistoricalDataConfig, HistoricalDataManager, MultiDimensionalFeatureExtractor,
-    NeuralCostEstimationConfig, NeuralCostEstimationEngine, NeuralCostEstimationStats,
-    NetworkArchitecture, PerformanceProfiler, RealTimeFeedbackProcessor, UncertaintyQuantifier,
-};
 pub use realtime_adaptive_query_optimizer::{
     AdaptationRecommendation, AdaptiveOptimizerConfig, AdaptiveOptimizerStats, AdaptivePlanCache,
     CacheStatistics, ComplexityAnalysis, ComplexityFactor, ExecutionMetrics, FeedbackProcessor,
@@ -279,16 +278,16 @@ pub use streaming_adaptation::{
     AdaptationEvent, AdaptationEventType, RealTimeAdaptationStats, RealTimeMetrics, StreamType,
     StreamingAdaptationEngine, StreamingConfig,
 };
+pub use temporal_paradox_resolution::{
+    CausalRelationship, CausalityAnalysisResult, MultiTimelineValidator, ParadoxDetectionResult,
+    ParadoxResolutionResult, QuantumTemporalEngine, TemporalConsistencyEnforcer,
+    TemporalConstraint, TemporalParadoxResolutionEngine, TemporalValidationProcessor,
+    TemporalValidationResult, Timeline as TemporalTimeline, TimelineContext,
+};
 pub use time_space_validation::{
     CoordinateSystem, InterferencePattern, MultiTimelineValidationResult, ReferenceFrame,
     SpacetimeContext, SpacetimeInitResult, SpacetimeStatistics, SpacetimeValidationResult,
     SpatialCoordinates, TemporalCoordinate, TimeSpaceConfig, TimeSpaceValidator, Timeline,
-};
-pub use temporal_paradox_resolution::{
-    TemporalParadoxResolutionEngine, TemporalValidationProcessor, Timeline as TemporalTimeline,
-    TemporalValidationResult, CausalityAnalysisResult, ParadoxDetectionResult,
-    ParadoxResolutionResult, TimelineContext, TemporalConstraint, CausalRelationship,
-    QuantumTemporalEngine, MultiTimelineValidator, TemporalConsistencyEnforcer,
 };
 
 // Version 2.1 Features - Neuromorphic Evolution
@@ -299,46 +298,48 @@ pub use biological_neural_integration::{
     EnergyEfficiencyRequirements, NeuralStimulationParameters, NeurotransmitterConfig,
     OrganoidConfig, OrganoidId, PlasticityConfig, SignalProcessingConfig, StimulationPattern,
 };
-pub use swarm_neuromorphic_networks::{
-    EmergentBehaviorInsight, SwarmInitResult, SwarmIntelligenceType, SwarmNetworkConfig,
-    SwarmNeuromorphicNetwork, SwarmNodeCapabilities, SwarmNodeId, SwarmStatistics,
-    SwarmValidationContext, SwarmValidationResult, TopologyType,
+pub use consciousness_guided_neuroplasticity::{
+    ConsciousnessGoal, ConsciousnessGuidedNeuroplasticity, ConsciousnessPlasticityConfig,
+    ConsciousnessPlasticityContext, ConsciousnessPlasticityInitResult,
+    ConsciousnessPlasticityMetrics, ConsciousnessPlasticityResult, EffectivenessThresholds,
+    LearningObjective,
 };
 pub use evolutionary_neural_architecture::{
-    ArchitecturePerformanceMetrics, ConvergenceMetrics, DiversityRequirements, EvolvedArchitecture,
-    EvolutionaryConfig, EvolutionaryInitResult, EvolutionaryMetrics, EvolutionaryNeuralArchitecture,
-    EvolutionaryValidationContext, EvolutionaryValidationResult, LayerType, NASSearchStrategy,
-    NeuralArchitecture, PerformanceTargets, ResourceConstraints, TopologyType as ArchTopologyType,
+    ArchitecturePerformanceMetrics, ConvergenceMetrics, DiversityRequirements, EvolutionaryConfig,
+    EvolutionaryInitResult, EvolutionaryMetrics, EvolutionaryNeuralArchitecture,
+    EvolutionaryValidationContext, EvolutionaryValidationResult, EvolvedArchitecture, LayerType,
+    NASSearchStrategy, NeuralArchitecture, PerformanceTargets, ResourceConstraints,
+    TopologyType as ArchTopologyType,
 };
 pub use quantum_neuromorphic_fusion::{
     CoherenceRequirements, EntanglementRequirements, QuantumBiologicalValidationContext,
     QuantumBiologicalValidationResult, QuantumFusionConfig, QuantumFusionInitResult,
     QuantumFusionMetrics, QuantumNeuromorphicFusion, QuantumResourceInventory,
 };
-pub use consciousness_guided_neuroplasticity::{
-    ConsciousnessGoal, ConsciousnessGuidedNeuroplasticity, ConsciousnessPlasticityConfig,
-    ConsciousnessPlasticityContext, ConsciousnessPlasticityInitResult, ConsciousnessPlasticityMetrics,
-    ConsciousnessPlasticityResult, EffectivenessThresholds, LearningObjective,
+pub use swarm_neuromorphic_networks::{
+    EmergentBehaviorInsight, SwarmInitResult, SwarmIntelligenceType, SwarmNetworkConfig,
+    SwarmNeuromorphicNetwork, SwarmNodeCapabilities, SwarmNodeId, SwarmStatistics,
+    SwarmValidationContext, SwarmValidationResult, TopologyType,
 };
 
 // Version 2.2 Features - Transcendent AI Capabilities
-pub use universal_knowledge_integration::{
-    ArtisticKnowledgeIntegrator, CulturalKnowledgeIntegrator, HistoricalKnowledgeIntegrator,
-    KnowledgeQualityAssurance, KnowledgeSynthesisEngine, LinguisticKnowledgeIntegrator,
-    MathematicalKnowledgeIntegrator, PhilosophicalKnowledgeIntegrator, RealTimeKnowledgeUpdater,
-    ScientificKnowledgeIntegrator, TechnicalKnowledgeIntegrator, UniversalKnowledgeConfig,
-    UniversalKnowledgeIntegration, UniversalKnowledgeMetrics, UniversalOntologyMapper,
-};
 pub use omniscient_validation::{
     AbsoluteTruthValidator, InfiniteKnowledgeProcessor, OmniscientConfig, OmniscientMetrics,
     OmniscientValidation, OmniscientValidationResult, PerfectReasoningEngine,
     TranscendentConsciousnessValidator, UniversalKnowledgeOmniscience,
 };
 pub use reality_synthesis::{
-    DimensionalConstructor, MultiDimensionalCoordinator, PossibilityMaterializer,
-    RealityCoherenceManager, RealityGenerationEngine, RealityQualityPerfector,
-    RealitySynthesis, RealitySynthesisConfig, RealitySynthesisMetrics, RealitySynthesisResult,
-    TemporalRealityOrchestrator, UniversalRealityHarmonizer, CrossRealityValidator,
+    CrossRealityValidator, DimensionalConstructor, MultiDimensionalCoordinator,
+    PossibilityMaterializer, RealityCoherenceManager, RealityGenerationEngine,
+    RealityQualityPerfector, RealitySynthesis, RealitySynthesisConfig, RealitySynthesisMetrics,
+    RealitySynthesisResult, TemporalRealityOrchestrator, UniversalRealityHarmonizer,
+};
+pub use universal_knowledge_integration::{
+    ArtisticKnowledgeIntegrator, CulturalKnowledgeIntegrator, HistoricalKnowledgeIntegrator,
+    KnowledgeQualityAssurance, KnowledgeSynthesisEngine, LinguisticKnowledgeIntegrator,
+    MathematicalKnowledgeIntegrator, PhilosophicalKnowledgeIntegrator, RealTimeKnowledgeUpdater,
+    ScientificKnowledgeIntegrator, TechnicalKnowledgeIntegrator, UniversalKnowledgeConfig,
+    UniversalKnowledgeIntegration, UniversalKnowledgeMetrics, UniversalOntologyMapper,
 };
 
 /// Core error type for SHACL-AI operations

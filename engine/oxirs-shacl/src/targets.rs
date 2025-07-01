@@ -493,7 +493,7 @@ impl TargetSelector {
     /// Select all target nodes for a given target definition
     pub fn select_targets(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         target: &Target,
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
@@ -505,11 +505,14 @@ impl TargetSelector {
             if let Some(cached_result) = self.cache.get(&cache_key) {
                 let cache_age = cached_result.cached_at.elapsed();
                 if cache_age.as_secs() <= self.optimization_config.cache_ttl {
+                    // Clone the nodes before updating statistics to avoid borrow conflict
+                    let nodes: Vec<_> = cached_result.nodes.iter().cloned().collect();
+
                     // Update statistics
                     self.stats.total_evaluations += 1;
                     self.record_cache_hit();
 
-                    return Ok(cached_result.nodes.iter().cloned().collect());
+                    return Ok(nodes);
                 }
             }
         }
@@ -554,7 +557,7 @@ impl TargetSelector {
     /// Execute SPARQL target with advanced optimizations
     fn execute_sparql_target_optimized(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         target: &Target,
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
@@ -689,7 +692,7 @@ impl TargetSelector {
     /// Execute SPARQL query with sequential strategy
     fn execute_sparql_sequential(
         &self,
-        store: &Store,
+        store: &dyn Store,
         query: &str,
         _graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
@@ -702,7 +705,7 @@ impl TargetSelector {
     /// Execute SPARQL query with parallel strategy
     fn execute_sparql_parallel(
         &self,
-        store: &Store,
+        store: &dyn Store,
         query: &str,
         _graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
@@ -715,7 +718,7 @@ impl TargetSelector {
     /// Execute SPARQL query with index-driven strategy
     fn execute_sparql_index_driven(
         &self,
-        store: &Store,
+        store: &dyn Store,
         query: &str,
         _graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
@@ -731,7 +734,7 @@ impl TargetSelector {
     /// Execute SPARQL query with hybrid strategy
     fn execute_sparql_hybrid(
         &self,
-        store: &Store,
+        store: &dyn Store,
         query: &str,
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
@@ -857,7 +860,7 @@ impl TargetSelector {
     /// Execute target selection using direct store access instead of SPARQL due to oxirs-core limitations
     fn execute_target_query(
         &self,
-        store: &Store,
+        store: &dyn Store,
         _query: &str,
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
@@ -869,7 +872,7 @@ impl TargetSelector {
     /// Execute target selection using direct store operations
     fn execute_target_selection_direct(
         &self,
-        store: &Store,
+        store: &dyn Store,
         target: &Target,
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
@@ -1026,7 +1029,7 @@ impl TargetSelector {
     }
 
     /// Execute SPARQL target query (may fail due to oxirs-core limitations)
-    fn execute_sparql_target_query(&self, store: &Store, query: &str) -> Result<Vec<Term>> {
+    fn execute_sparql_target_query(&self, store: &dyn Store, query: &str) -> Result<Vec<Term>> {
         use oxirs_core::query::{QueryEngine, QueryResult};
 
         tracing::info!("Executing SPARQL target query: '{}'", query);

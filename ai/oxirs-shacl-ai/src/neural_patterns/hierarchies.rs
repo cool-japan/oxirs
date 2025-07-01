@@ -1,16 +1,13 @@
 //! Pattern hierarchy discovery and analysis for SHACL shape relationships
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use ndarray::{Array1, Array2};
+use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::{
-    patterns::Pattern,
-    Result, ShaclAiError,
-};
+use crate::{patterns::Pattern, Result, ShaclAiError};
 
 use super::types::{
-    PatternHierarchy, HierarchyLevel, HierarchyMetrics, PatternCorrelation,
-    CorrelationType, PatternRelationshipGraph,
+    CorrelationType, HierarchyLevel, HierarchyMetrics, PatternCorrelation, PatternHierarchy,
+    PatternRelationshipGraph,
 };
 
 /// Pattern hierarchy analyzer for discovering structural relationships
@@ -80,17 +77,21 @@ impl PatternHierarchyAnalyzer {
         relationship_graph: &PatternRelationshipGraph,
     ) -> Result<Vec<PatternHierarchy>> {
         // Build hierarchy structure from correlations
-        let hierarchy_candidates = self.build_hierarchy_candidates(patterns, correlations).await?;
-        
+        let hierarchy_candidates = self
+            .build_hierarchy_candidates(patterns, correlations)
+            .await?;
+
         // Validate and refine hierarchies
         let validated_hierarchies = self.validate_hierarchies(hierarchy_candidates).await?;
-        
+
         // Compute hierarchy metrics
-        let hierarchies_with_metrics = self.compute_hierarchy_metrics(validated_hierarchies).await?;
-        
+        let hierarchies_with_metrics = self
+            .compute_hierarchy_metrics(validated_hierarchies)
+            .await?;
+
         // Update statistics
         self.update_statistics(&hierarchies_with_metrics);
-        
+
         self.hierarchies = hierarchies_with_metrics.clone();
         Ok(hierarchies_with_metrics)
     }
@@ -102,25 +103,27 @@ impl PatternHierarchyAnalyzer {
         correlations: &[PatternCorrelation],
     ) -> Result<Vec<PatternHierarchy>> {
         let mut candidates = Vec::new();
-        
+
         // Group correlations by hierarchical relationships
         let hierarchical_correlations: Vec<&PatternCorrelation> = correlations
             .iter()
             .filter(|c| c.correlation_type == CorrelationType::Hierarchical)
             .collect();
-        
+
         // Build parent-child relationship map
         let parent_child_map = self.build_parent_child_map(&hierarchical_correlations)?;
-        
+
         // Find root patterns (those with no parents)
         let root_patterns = self.find_root_patterns(&parent_child_map)?;
-        
+
         // Build hierarchies starting from each root
         for root_pattern in root_patterns {
-            let hierarchy = self.build_hierarchy_from_root(&root_pattern, &parent_child_map).await?;
+            let hierarchy = self
+                .build_hierarchy_from_root(&root_pattern, &parent_child_map)
+                .await?;
             candidates.push(hierarchy);
         }
-        
+
         Ok(candidates)
     }
 
@@ -130,19 +133,19 @@ impl PatternHierarchyAnalyzer {
         correlations: &[&PatternCorrelation],
     ) -> Result<HashMap<String, Vec<String>>> {
         let mut parent_child_map: HashMap<String, Vec<String>> = HashMap::new();
-        
+
         for correlation in correlations {
             if correlation.correlation_coefficient >= self.config.min_relationship_confidence {
                 // Determine parent-child direction based on correlation properties
                 let (parent, child) = self.determine_parent_child_relationship(correlation)?;
-                
+
                 parent_child_map
                     .entry(parent)
                     .or_insert_with(Vec::new)
                     .push(child);
             }
         }
-        
+
         Ok(parent_child_map)
     }
 
@@ -153,12 +156,18 @@ impl PatternHierarchyAnalyzer {
     ) -> Result<(String, String)> {
         // TODO: Implement sophisticated parent-child determination logic
         // This could be based on pattern complexity, specificity, etc.
-        
+
         // For now, use lexicographic ordering as a placeholder
         if correlation.pattern1_id < correlation.pattern2_id {
-            Ok((correlation.pattern1_id.clone(), correlation.pattern2_id.clone()))
+            Ok((
+                correlation.pattern1_id.clone(),
+                correlation.pattern2_id.clone(),
+            ))
         } else {
-            Ok((correlation.pattern2_id.clone(), correlation.pattern1_id.clone()))
+            Ok((
+                correlation.pattern2_id.clone(),
+                correlation.pattern1_id.clone(),
+            ))
         }
     }
 
@@ -169,20 +178,17 @@ impl PatternHierarchyAnalyzer {
     ) -> Result<Vec<String>> {
         let mut all_children: HashSet<String> = HashSet::new();
         let mut all_parents: HashSet<String> = HashSet::new();
-        
+
         for (parent, children) in parent_child_map {
             all_parents.insert(parent.clone());
             for child in children {
                 all_children.insert(child.clone());
             }
         }
-        
+
         // Root patterns are those that are parents but not children
-        let roots: Vec<String> = all_parents
-            .difference(&all_children)
-            .cloned()
-            .collect();
-        
+        let roots: Vec<String> = all_parents.difference(&all_children).cloned().collect();
+
         Ok(roots)
     }
 
@@ -194,40 +200,42 @@ impl PatternHierarchyAnalyzer {
     ) -> Result<PatternHierarchy> {
         let hierarchy_id = format!("hierarchy_{}", root_pattern);
         let mut hierarchy_levels = Vec::new();
-        
+
         // Build levels using breadth-first traversal
         let mut current_level_patterns = vec![root_pattern.to_string()];
         let mut level = 0;
-        
+
         while !current_level_patterns.is_empty() && level < self.config.max_hierarchy_depth {
             let mut next_level_patterns = Vec::new();
-            
+
             // Find children of current level patterns
             for pattern in &current_level_patterns {
                 if let Some(children) = parent_child_map.get(pattern) {
                     next_level_patterns.extend_from_slice(children);
                 }
             }
-            
+
             // Create hierarchy level
-            let level_coherence = self.compute_level_coherence(&current_level_patterns).await?;
+            let level_coherence = self
+                .compute_level_coherence(&current_level_patterns)
+                .await?;
             let inter_level_connections = self.compute_inter_level_connections(
                 &current_level_patterns,
                 &next_level_patterns,
                 parent_child_map,
             )?;
-            
+
             hierarchy_levels.push(HierarchyLevel {
                 level,
                 patterns: current_level_patterns.clone(),
                 level_coherence,
                 inter_level_connections,
             });
-            
+
             current_level_patterns = next_level_patterns;
             level += 1;
         }
-        
+
         Ok(PatternHierarchy {
             hierarchy_id,
             root_patterns: vec![root_pattern.to_string()],
@@ -257,7 +265,7 @@ impl PatternHierarchyAnalyzer {
         parent_child_map: &HashMap<String, Vec<String>>,
     ) -> Result<Vec<(String, String, f64)>> {
         let mut connections = Vec::new();
-        
+
         for parent in current_level {
             if let Some(children) = parent_child_map.get(parent) {
                 for child in children {
@@ -269,7 +277,7 @@ impl PatternHierarchyAnalyzer {
                 }
             }
         }
-        
+
         Ok(connections)
     }
 
@@ -279,13 +287,13 @@ impl PatternHierarchyAnalyzer {
         candidates: Vec<PatternHierarchy>,
     ) -> Result<Vec<PatternHierarchy>> {
         let mut validated = Vec::new();
-        
+
         for hierarchy in candidates {
             if self.is_valid_hierarchy(&hierarchy).await? {
                 validated.push(hierarchy);
             }
         }
-        
+
         Ok(validated)
     }
 
@@ -295,25 +303,26 @@ impl PatternHierarchyAnalyzer {
         if hierarchy.hierarchy_levels.len() < 2 {
             return Ok(false);
         }
-        
+
         // Check coherence threshold
         let average_coherence = hierarchy
             .hierarchy_levels
             .iter()
             .map(|level| level.level_coherence)
-            .sum::<f64>() / hierarchy.hierarchy_levels.len() as f64;
-        
+            .sum::<f64>()
+            / hierarchy.hierarchy_levels.len() as f64;
+
         if average_coherence < self.config.coherence_threshold {
             return Ok(false);
         }
-        
+
         // Check branching factor constraint
         for level in &hierarchy.hierarchy_levels {
             if level.patterns.len() > self.config.max_branching_factor {
                 return Ok(false);
             }
         }
-        
+
         Ok(true)
     }
 
@@ -325,7 +334,7 @@ impl PatternHierarchyAnalyzer {
         for hierarchy in &mut hierarchies {
             hierarchy.hierarchy_metrics = self.compute_metrics_for_hierarchy(hierarchy).await?;
         }
-        
+
         Ok(hierarchies)
     }
 
@@ -335,28 +344,30 @@ impl PatternHierarchyAnalyzer {
         hierarchy: &PatternHierarchy,
     ) -> Result<HierarchyMetrics> {
         let depth = hierarchy.hierarchy_levels.len();
-        
+
         let branching_factor = if depth > 1 {
             hierarchy
                 .hierarchy_levels
                 .iter()
                 .take(depth - 1) // Don't count leaf level
                 .map(|level| level.patterns.len())
-                .sum::<usize>() as f64 / (depth - 1) as f64
+                .sum::<usize>() as f64
+                / (depth - 1) as f64
         } else {
             0.0
         };
-        
+
         let coherence_score = hierarchy
             .hierarchy_levels
             .iter()
             .map(|level| level.level_coherence)
-            .sum::<f64>() / depth as f64;
-        
+            .sum::<f64>()
+            / depth as f64;
+
         // TODO: Implement proper coverage and stability measures
         let coverage_percentage = 0.85;
         let stability_measure = 0.9;
-        
+
         Ok(HierarchyMetrics {
             hierarchy_depth: depth,
             branching_factor,
@@ -369,22 +380,22 @@ impl PatternHierarchyAnalyzer {
     /// Update analysis statistics
     fn update_statistics(&mut self, hierarchies: &[PatternHierarchy]) {
         self.statistics.hierarchies_discovered = hierarchies.len();
-        self.statistics.total_levels_analyzed = hierarchies
-            .iter()
-            .map(|h| h.hierarchy_levels.len())
-            .sum();
-        
+        self.statistics.total_levels_analyzed =
+            hierarchies.iter().map(|h| h.hierarchy_levels.len()).sum();
+
         if !hierarchies.is_empty() {
             self.statistics.average_hierarchy_depth = hierarchies
                 .iter()
                 .map(|h| h.hierarchy_levels.len() as f64)
-                .sum::<f64>() / hierarchies.len() as f64;
-            
+                .sum::<f64>()
+                / hierarchies.len() as f64;
+
             self.statistics.average_branching_factor = hierarchies
                 .iter()
                 .map(|h| h.hierarchy_metrics.branching_factor)
-                .sum::<f64>() / hierarchies.len() as f64;
-            
+                .sum::<f64>()
+                / hierarchies.len() as f64;
+
             self.statistics.coherence_scores = hierarchies
                 .iter()
                 .map(|h| h.hierarchy_metrics.coherence_score)
@@ -403,11 +414,7 @@ impl PatternHierarchyAnalyzer {
     }
 
     /// Find patterns at a specific hierarchy level
-    pub fn find_patterns_at_level(
-        &self,
-        hierarchy_id: &str,
-        level: usize,
-    ) -> Option<Vec<String>> {
+    pub fn find_patterns_at_level(&self, hierarchy_id: &str, level: usize) -> Option<Vec<String>> {
         for hierarchy in &self.hierarchies {
             if hierarchy.hierarchy_id == hierarchy_id {
                 if level < hierarchy.hierarchy_levels.len() {
@@ -421,7 +428,7 @@ impl PatternHierarchyAnalyzer {
     /// Get parent patterns for a given pattern
     pub fn get_parent_patterns(&self, pattern_id: &str) -> Vec<String> {
         let mut parents = Vec::new();
-        
+
         for hierarchy in &self.hierarchies {
             for (level_idx, level) in hierarchy.hierarchy_levels.iter().enumerate() {
                 if level.patterns.contains(&pattern_id.to_string()) && level_idx > 0 {
@@ -435,18 +442,19 @@ impl PatternHierarchyAnalyzer {
                 }
             }
         }
-        
+
         parents
     }
 
     /// Get child patterns for a given pattern
     pub fn get_child_patterns(&self, pattern_id: &str) -> Vec<String> {
         let mut children = Vec::new();
-        
+
         for hierarchy in &self.hierarchies {
             for (level_idx, level) in hierarchy.hierarchy_levels.iter().enumerate() {
-                if level.patterns.contains(&pattern_id.to_string()) 
-                    && level_idx < hierarchy.hierarchy_levels.len() - 1 {
+                if level.patterns.contains(&pattern_id.to_string())
+                    && level_idx < hierarchy.hierarchy_levels.len() - 1
+                {
                     // Pattern found, look for children in next level
                     let child_level = &hierarchy.hierarchy_levels[level_idx + 1];
                     for connection in &child_level.inter_level_connections {
@@ -457,7 +465,7 @@ impl PatternHierarchyAnalyzer {
                 }
             }
         }
-        
+
         children
     }
 }

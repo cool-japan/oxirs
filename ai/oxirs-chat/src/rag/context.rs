@@ -47,7 +47,10 @@ impl ContextAssembler {
         let optimized_results = self.optimizer.optimize(results, query_context).await?;
 
         // Stage 2: Format context text
-        let context_text = self.formatter.format(&optimized_results, query_context).await?;
+        let context_text = self
+            .formatter
+            .format(&optimized_results, query_context)
+            .await?;
 
         // Stage 3: Generate metadata
         let metadata = self.generate_metadata(&optimized_results, query_context);
@@ -68,9 +71,11 @@ impl ContextAssembler {
             stats,
         };
 
-        info!("Context assembled: {} documents, {} tokens", 
-              assembled_context.document_count(), 
-              assembled_context.stats.total_tokens);
+        info!(
+            "Context assembled: {} documents, {} tokens",
+            assembled_context.document_count(),
+            assembled_context.stats.total_tokens
+        );
 
         Ok(assembled_context)
     }
@@ -84,12 +89,15 @@ impl ContextAssembler {
     }
 
     /// Generate context metadata
-    fn generate_metadata(&self, results: &[SearchResult], _context: &QueryContext) -> ContextMetadata {
-        let sources: HashSet<String> = results.iter()
-            .map(|r| r.document.source.clone())
-            .collect();
+    fn generate_metadata(
+        &self,
+        results: &[SearchResult],
+        _context: &QueryContext,
+    ) -> ContextMetadata {
+        let sources: HashSet<String> = results.iter().map(|r| r.document.source.clone()).collect();
 
-        let topics: Vec<String> = results.iter()
+        let topics: Vec<String> = results
+            .iter()
             .flat_map(|r| self.extract_topics(&r.document.content))
             .collect::<HashSet<_>>()
             .into_iter()
@@ -150,7 +158,11 @@ impl ContextOptimizer {
         let mut optimized = results.to_vec();
 
         // Sort by score initially
-        optimized.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        optimized.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Apply diversity optimization if enabled
         if self.config.enable_diversity {
@@ -168,7 +180,11 @@ impl ContextOptimizer {
         // Ensure we don't exceed token limits (rough estimation)
         optimized = self.apply_length_constraints(optimized);
 
-        debug!("Optimized {} results to {} results", results.len(), optimized.len());
+        debug!(
+            "Optimized {} results to {} results",
+            results.len(),
+            optimized.len()
+        );
 
         Ok(optimized)
     }
@@ -179,14 +195,19 @@ impl ContextOptimizer {
     }
 
     /// Apply diversity optimization to avoid redundant content
-    async fn apply_diversity_optimization(&self, mut results: Vec<SearchResult>) -> Result<Vec<SearchResult>> {
+    async fn apply_diversity_optimization(
+        &self,
+        mut results: Vec<SearchResult>,
+    ) -> Result<Vec<SearchResult>> {
         let mut diverse_results = Vec::new();
         let mut selected_content = Vec::new();
 
         for result in results {
-            let is_diverse = selected_content.is_empty() || 
-                self.diversity_calculator.calculate_diversity(&result.document.content, &selected_content) 
-                >= self.config.diversity_threshold;
+            let is_diverse = selected_content.is_empty()
+                || self
+                    .diversity_calculator
+                    .calculate_diversity(&result.document.content, &selected_content)
+                    >= self.config.diversity_threshold;
 
             if is_diverse {
                 selected_content.push(result.document.content.clone());
@@ -215,29 +236,35 @@ impl ContextOptimizer {
             let a_combined = relevance_weight * a.score + recency_weight * a_recency_score;
             let b_combined = relevance_weight * b.score + recency_weight * b_recency_score;
 
-            b_combined.partial_cmp(&a_combined).unwrap_or(std::cmp::Ordering::Equal)
+            b_combined
+                .partial_cmp(&a_combined)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         results
     }
 
     /// Apply context-specific filtering
-    fn apply_context_filtering(&self, mut results: Vec<SearchResult>, context: &QueryContext) -> Vec<SearchResult> {
+    fn apply_context_filtering(
+        &self,
+        mut results: Vec<SearchResult>,
+        context: &QueryContext,
+    ) -> Vec<SearchResult> {
         // Filter based on response format preferences
         match context.response_format {
             ResponseFormat::Code => {
                 results.retain(|r| {
-                    r.document.content.contains("```") || 
-                    r.document.content.contains("function") ||
-                    r.document.content.contains("class")
+                    r.document.content.contains("```")
+                        || r.document.content.contains("function")
+                        || r.document.content.contains("class")
                 });
             }
             ResponseFormat::Table => {
                 results.retain(|r| {
-                    r.document.content.contains("|") || 
-                    r.document.content.contains("table") ||
-                    r.document.metadata.contains_key("format") && 
-                    r.document.metadata["format"] == "table"
+                    r.document.content.contains("|")
+                        || r.document.content.contains("table")
+                        || r.document.metadata.contains_key("format")
+                            && r.document.metadata["format"] == "table"
                 });
             }
             _ => {
@@ -255,7 +282,7 @@ impl ContextOptimizer {
 
         for result in results {
             let estimated_tokens = result.document.content.len() / 4; // Rough estimation
-            
+
             if total_tokens + estimated_tokens <= self.config.max_context_tokens {
                 total_tokens += estimated_tokens;
                 constrained_results.push(result);
@@ -275,10 +302,12 @@ pub struct DiversityCalculator {
 
 impl DiversityCalculator {
     pub fn new() -> Self {
-        let stopwords = ["the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let stopwords = [
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
         Self { stopwords }
     }
@@ -308,7 +337,11 @@ impl DiversityCalculator {
     fn extract_significant_words(&self, content: &str) -> HashSet<String> {
         content
             .split_whitespace()
-            .map(|word| word.to_lowercase().trim_matches(|c: char| !c.is_alphabetic()).to_string())
+            .map(|word| {
+                word.to_lowercase()
+                    .trim_matches(|c: char| !c.is_alphabetic())
+                    .to_string()
+            })
             .filter(|word| !self.stopwords.contains(word) && word.len() > 2)
             .collect()
     }
@@ -339,11 +372,7 @@ impl ContextFormatter {
     }
 
     /// Format search results into context text
-    pub async fn format(
-        &self,
-        results: &[SearchResult],
-        context: &QueryContext,
-    ) -> Result<String> {
+    pub async fn format(&self, results: &[SearchResult], context: &QueryContext) -> Result<String> {
         match context.response_format {
             ResponseFormat::Structured => self.format_structured(results),
             ResponseFormat::Code => self.format_code_focused(results),
@@ -361,16 +390,15 @@ impl ContextFormatter {
     /// Format as natural flowing text
     fn format_natural_text(&self, results: &[SearchResult]) -> Result<String> {
         let mut context = String::new();
-        
+
         for (i, result) in results.iter().enumerate() {
             if i > 0 {
                 context.push_str("\n\n");
             }
-            
+
             context.push_str(&format!(
                 "From {}: {}",
-                result.document.source,
-                result.document.content
+                result.document.source, result.document.content
             ));
         }
 
@@ -380,7 +408,7 @@ impl ContextFormatter {
     /// Format as structured sections
     fn format_structured(&self, results: &[SearchResult]) -> Result<String> {
         let mut context = String::new();
-        
+
         for (i, result) in results.iter().enumerate() {
             context.push_str(&format!(
                 "## Section {} (Source: {}, Relevance: {:.2})\n{}\n\n",
@@ -397,15 +425,15 @@ impl ContextFormatter {
     /// Format with focus on code content
     fn format_code_focused(&self, results: &[SearchResult]) -> Result<String> {
         let mut context = String::new();
-        
+
         for result in results {
-            if result.document.content.contains("```") || 
-               result.document.content.contains("function") ||
-               result.document.content.contains("class") {
+            if result.document.content.contains("```")
+                || result.document.content.contains("function")
+                || result.document.content.contains("class")
+            {
                 context.push_str(&format!(
                     "Code example from {}:\n{}\n\n",
-                    result.document.source,
-                    result.document.content
+                    result.document.source, result.document.content
                 ));
             }
         }
@@ -419,15 +447,16 @@ impl ContextFormatter {
 
     /// Format as a table
     fn format_table(&self, results: &[SearchResult]) -> Result<String> {
-        let mut context = String::from("| Source | Relevance | Content |\n|--------|-----------|----------|\n");
-        
+        let mut context =
+            String::from("| Source | Relevance | Content |\n|--------|-----------|----------|\n");
+
         for result in results {
             let truncated_content = if result.document.content.len() > 100 {
                 format!("{}...", &result.document.content[..100])
             } else {
                 result.document.content.clone()
             };
-            
+
             context.push_str(&format!(
                 "| {} | {:.2} | {} |\n",
                 result.document.source,
@@ -442,7 +471,7 @@ impl ContextFormatter {
     /// Format as a list
     fn format_list(&self, results: &[SearchResult]) -> Result<String> {
         let mut context = String::new();
-        
+
         for (i, result) in results.iter().enumerate() {
             context.push_str(&format!(
                 "{}. **{}** (Relevance: {:.2})\n   {}\n\n",
@@ -478,16 +507,16 @@ mod tests {
     #[test]
     fn test_diversity_calculator() {
         let calculator = DiversityCalculator::new();
-        
+
         let content1 = "machine learning algorithms";
         let content2 = "deep learning neural networks";
         let content3 = "machine learning algorithms"; // identical
-        
+
         let existing = vec![content1.to_string()];
-        
+
         let diversity1 = calculator.calculate_diversity(content2, &existing);
         let diversity2 = calculator.calculate_diversity(content3, &existing);
-        
+
         assert!(diversity1 > diversity2);
     }
 
@@ -498,7 +527,7 @@ mod tests {
             create_test_result("doc1", "Content 1", 0.9),
             create_test_result("doc2", "Content 2", 0.8),
         ];
-        
+
         let formatted = formatter.format_natural_text(&results).unwrap();
         assert!(formatted.contains("Content 1"));
         assert!(formatted.contains("Content 2"));
@@ -507,10 +536,8 @@ mod tests {
     #[test]
     fn test_context_formatter_structured() {
         let formatter = ContextFormatter::new(&AssemblyConfig::default());
-        let results = vec![
-            create_test_result("doc1", "Content 1", 0.9),
-        ];
-        
+        let results = vec![create_test_result("doc1", "Content 1", 0.9)];
+
         let formatted = formatter.format_structured(&results).unwrap();
         assert!(formatted.contains("## Section 1"));
         assert!(formatted.contains("Relevance: 0.90"));
@@ -520,6 +547,9 @@ mod tests {
     fn test_context_assembler_creation() {
         let rag_config = super::super::RAGConfig::default();
         let assembler = ContextAssembler::new(&rag_config);
-        assert_eq!(assembler.config.max_context_tokens, rag_config.max_context_length);
+        assert_eq!(
+            assembler.config.max_context_tokens,
+            rag_config.max_context_length
+        );
     }
 }

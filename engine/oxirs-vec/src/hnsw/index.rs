@@ -94,6 +94,42 @@ impl HnswIndex {
         }
     }
 
+    /// Get the URI to ID mapping
+    pub fn uri_to_id(&self) -> &HashMap<String, usize> {
+        &self.uri_to_id
+    }
+
+    /// Get mutable URI to ID mapping
+    pub fn uri_to_id_mut(&mut self) -> &mut HashMap<String, usize> {
+        &mut self.uri_to_id
+    }
+
+    /// Get the nodes
+    pub fn nodes(&self) -> &Vec<Node> {
+        &self.nodes
+    }
+
+    /// Get mutable nodes
+    pub fn nodes_mut(&mut self) -> &mut Vec<Node> {
+        &mut self.nodes
+    }
+
+    /// Get the entry point
+    pub fn entry_point(&self) -> Option<usize> {
+        self.entry_point
+    }
+
+    /// Set the entry point
+    pub fn set_entry_point(&mut self, entry_point: Option<usize>) {
+        self.entry_point = entry_point;
+    }
+
+    /// Get the configuration
+    pub fn config(&self) -> &HnswConfig {
+        &self.config
+    }
+
+
     /// Get performance statistics
     pub fn get_stats(&self) -> &HnswPerformanceStats {
         &self.stats
@@ -132,47 +168,43 @@ impl HnswIndex {
         self.nodes.is_empty()
     }
 
-    /// Get the entry point of the index
-    pub fn entry_point(&self) -> Option<usize> {
-        self.entry_point
+    // Duplicate methods removed - already defined above
+
+    /// Get mutable reference to stats
+    pub fn stats_mut(&mut self) -> &mut HnswPerformanceStats {
+        &mut self.stats
     }
 
-    /// Get configuration
-    pub fn config(&self) -> &HnswConfig {
-        &self.config
+    /// Get level multiplier
+    pub fn level_multiplier(&self) -> f64 {
+        self.level_multiplier
+    }
+
+    /// Get mutable reference to RNG state
+    pub fn rng_state_mut(&mut self) -> &mut u64 {
+        &mut self.rng_state
+    }
+
+    /// Get RNG state
+    pub fn rng_state(&self) -> u64 {
+        self.rng_state
     }
 }
 
 impl VectorIndex for HnswIndex {
-    fn add(&mut self, uri: String, vector: Vector) -> Result<()> {
+    fn insert(&mut self, uri: String, vector: Vector) -> Result<()> {
         // Placeholder implementation - will be moved to construction module
         todo!("Implementation moved to construction module")
     }
 
-    fn search(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
+    fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
         // Placeholder implementation - will be moved to search module
         todo!("Implementation moved to search module")
     }
 
-    fn remove(&mut self, uri: &str) -> Result<()> {
-        // Placeholder implementation
-        todo!("Remove functionality not yet implemented")
-    }
-
-    fn update(&mut self, uri: String, vector: Vector) -> Result<()> {
-        // Placeholder implementation
-        todo!("Update functionality not yet implemented")
-    }
-
-    fn clear(&mut self) -> Result<()> {
-        self.nodes.clear();
-        self.uri_to_id.clear();
-        self.entry_point = None;
-        Ok(())
-    }
-
-    fn size(&self) -> usize {
-        self.nodes.len()
+    fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
+        // Placeholder implementation - will be moved to search module
+        todo!("Implementation moved to search module")
     }
 
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
@@ -180,5 +212,32 @@ impl VectorIndex for HnswIndex {
             .get(uri)
             .and_then(|&id| self.nodes.get(id))
             .map(|node| &node.vector)
+    }
+}
+
+impl HnswIndex {
+    /// Remove a vector by its URI (not part of VectorIndex trait)
+    pub fn remove(&mut self, uri: &str) -> Result<()> {
+        // Placeholder implementation
+        todo!("Remove functionality not yet implemented")
+    }
+
+    /// Update a vector by its URI (not part of VectorIndex trait)
+    pub fn update(&mut self, uri: String, vector: Vector) -> Result<()> {
+        // Placeholder implementation
+        todo!("Update functionality not yet implemented")
+    }
+
+    /// Clear all vectors from the index (not part of VectorIndex trait)
+    pub fn clear(&mut self) -> Result<()> {
+        self.nodes.clear();
+        self.uri_to_id.clear();
+        self.entry_point = None;
+        Ok(())
+    }
+
+    /// Get the number of vectors in the index (not part of VectorIndex trait)
+    pub fn size(&self) -> usize {
+        self.nodes.len()
     }
 }

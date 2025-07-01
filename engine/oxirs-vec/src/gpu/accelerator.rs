@@ -29,6 +29,7 @@ unsafe impl Send for CudaKernel {}
 unsafe impl Sync for CudaKernel {}
 
 /// GPU acceleration engine for vector operations
+#[derive(Debug)]
 pub struct GpuAccelerator {
     config: GpuConfig,
     device: GpuDevice,
@@ -433,11 +434,12 @@ pub fn create_default_accelerator() -> Result<GpuAccelerator> {
 pub fn create_performance_accelerator() -> Result<GpuAccelerator> {
     let config = GpuConfig {
         optimization_level: crate::gpu::OptimizationLevel::Performance,
-        precision_mode: crate::gpu::PrecisionMode::Float32,
+        precision_mode: crate::gpu::PrecisionMode::FP32,
         memory_pool_size: 1024 * 1024 * 1024, // 1GB
-        max_batch_size: 10000,
+        batch_size: 10000,
         enable_tensor_cores: true,
         enable_mixed_precision: false,
+        ..Default::default()
     };
     GpuAccelerator::new(config)
 }
@@ -445,12 +447,13 @@ pub fn create_performance_accelerator() -> Result<GpuAccelerator> {
 /// Create a memory-optimized GPU accelerator
 pub fn create_memory_optimized_accelerator() -> Result<GpuAccelerator> {
     let config = GpuConfig {
-        optimization_level: crate::gpu::OptimizationLevel::Memory,
-        precision_mode: crate::gpu::PrecisionMode::Float16,
+        optimization_level: crate::gpu::OptimizationLevel::Balanced,
+        precision_mode: crate::gpu::PrecisionMode::FP16,
         memory_pool_size: 256 * 1024 * 1024, // 256MB
-        max_batch_size: 1000,
+        batch_size: 1000,
         enable_tensor_cores: true,
         enable_mixed_precision: true,
+        ..Default::default()
     };
     GpuAccelerator::new(config)
 }

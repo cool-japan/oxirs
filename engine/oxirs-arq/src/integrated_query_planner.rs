@@ -771,6 +771,8 @@ impl IntegratedQueryPlanner {
                     subject_selectivity: 1.0,
                     predicate_selectivity: 1.0,
                     object_selectivity: 1.0,
+                    type_selectivity: 1.0,
+                    literal_selectivity: 1.0,
                     index_factor: 1.0,
                     distribution_factor: 1.0,
                 },
@@ -823,6 +825,9 @@ impl IntegratedQueryPlanner {
                 join_indexes: vec![], // Would be computed based on join analysis
                 index_intersections: vec![], // Would be computed for complex patterns
                 bloom_filter_candidates: vec![], // Would be suggested for large joins
+                recommended_indices: vec![], // Would be suggested based on patterns
+                access_patterns: vec![], // Would be analyzed from query structure
+                estimated_cost_reduction: 0.0, // Would be computed based on index usage
             },
         })
     }

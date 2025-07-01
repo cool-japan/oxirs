@@ -55,6 +55,10 @@ pub struct SelectivityFactors {
     pub predicate_selectivity: f64,
     /// Object selectivity
     pub object_selectivity: f64,
+    /// Type selectivity
+    pub type_selectivity: f64,
+    /// Literal selectivity
+    pub literal_selectivity: f64,
     /// Index availability factor
     pub index_factor: f64,
     /// Data distribution factor
@@ -72,6 +76,12 @@ pub struct IndexUsagePlan {
     pub index_intersections: Vec<IndexIntersection>,
     /// Bloom filter recommendations
     pub bloom_filter_candidates: Vec<BloomFilterCandidate>,
+    /// Recommended indices
+    pub recommended_indices: Vec<IndexType>,
+    /// Access patterns
+    pub access_patterns: Vec<String>,
+    /// Estimated cost reduction
+    pub estimated_cost_reduction: f64,
 }
 
 /// Index assignment for a pattern
@@ -282,7 +292,7 @@ impl<'a> BGPOptimizer<'a> {
         // Estimate cardinality
         let total_triples = self
             .statistics
-            .pattern_cardinality
+            .cardinalities
             .values()
             .sum::<usize>()
             .max(1_000_000);
@@ -296,6 +306,8 @@ impl<'a> BGPOptimizer<'a> {
                 subject_selectivity: subject_sel,
                 predicate_selectivity: predicate_sel,
                 object_selectivity: object_sel,
+                type_selectivity: 0.5,
+                literal_selectivity: 0.5,
                 index_factor,
                 distribution_factor,
             },
@@ -315,13 +327,8 @@ impl<'a> BGPOptimizer<'a> {
             }
             Term::Iri(iri) => {
                 // IRIs have selectivity based on statistics
-                let cardinality = match position {
-                    TermPosition::Subject => self.statistics.subject_cardinality.get(iri.as_str()),
-                    TermPosition::Predicate => {
-                        self.statistics.predicate_frequency.get(iri.as_str())
-                    }
-                    TermPosition::Object => self.statistics.object_cardinality.get(iri.as_str()),
-                };
+                let pattern_key = format!("{}_{}", position.to_string(), iri.as_str());
+                let cardinality = self.statistics.cardinalities.get(&pattern_key);
 
                 if let Some(&card) = cardinality {
                     let total = self.get_total_count_for_position(position);
@@ -679,6 +686,9 @@ impl<'a> BGPOptimizer<'a> {
             join_indexes,
             index_intersections,
             bloom_filter_candidates,
+            recommended_indices: Vec::new(),
+            access_patterns: Vec::new(),
+            estimated_cost_reduction: 0.0,
         })
     }
 
@@ -871,14 +881,10 @@ impl<'a> BGPOptimizer<'a> {
     /// Check if pattern involves low cardinality predicate suitable for bitmap index
     fn is_low_cardinality_predicate(&self, pattern: &TriplePattern) -> bool {
         if let Term::Iri(iri) = &pattern.predicate {
-            if let Some(&frequency) = self.statistics.predicate_frequency.get(iri.as_str()) {
+            let predicate_key = format!("predicate_{}", iri.as_str());
+            if let Some(&frequency) = self.statistics.cardinalities.get(&predicate_key) {
                 // Use bitmap index if predicate appears in less than 1% of triples
-                let total_triples = self
-                    .statistics
-                    .pattern_cardinality
-                    .values()
-                    .sum::<usize>()
-                    .max(1);
+                let total_triples = self.statistics.cardinalities.values().sum::<usize>().max(1);
                 return frequency < total_triples / 100;
             }
         }
@@ -1048,25 +1054,27 @@ impl<'a> BGPOptimizer<'a> {
     }
 
     fn get_total_count_for_position(&self, position: TermPosition) -> usize {
-        match position {
-            TermPosition::Subject => self
-                .statistics
-                .subject_cardinality
-                .values()
-                .sum::<usize>()
-                .max(100_000),
-            TermPosition::Predicate => self
-                .statistics
-                .predicate_frequency
-                .values()
-                .sum::<usize>()
-                .max(1_000),
-            TermPosition::Object => self
-                .statistics
-                .object_cardinality
-                .values()
-                .sum::<usize>()
-                .max(100_000),
+        // Get total count from index statistics
+        let total_from_stats = self
+            .statistics
+            .index_stats
+            .values()
+            .map(|stats| match position {
+                TermPosition::Subject => stats.subject_count,
+                TermPosition::Predicate => stats.predicate_count,
+                TermPosition::Object => stats.object_count,
+            })
+            .sum::<usize>();
+
+        // Use fallback if no statistics available
+        if total_from_stats > 0 {
+            total_from_stats
+        } else {
+            match position {
+                TermPosition::Subject => 100_000,
+                TermPosition::Predicate => 1_000,
+                TermPosition::Object => 100_000,
+            }
         }
     }
 
@@ -1277,6 +1285,18 @@ impl<'a> BGPOptimizer<'a> {
             IndexType::BloomFilter(pos) => {
                 // Bloom filters are useful for membership testing
                 self.pattern_benefits_from_index(pattern, pos)
+            }
+            IndexType::SPOC => {
+                // SPOC index is optimal when subject is bound
+                self.is_bound(&pattern.subject)
+            }
+            IndexType::POSC => {
+                // POSC index is optimal when predicate is bound  
+                self.is_bound(&pattern.predicate)
+            }
+            IndexType::OSPC => {
+                // OSPC index is optimal when object is bound
+                self.is_bound(&pattern.object)
             }
         }
     }
@@ -1785,7 +1805,7 @@ impl<'a> BGPOptimizer<'a> {
     /// Get index selectivity for cost estimation
     fn get_index_selectivity(&self, index_type: &IndexType) -> f64 {
         self.index_stats
-            .index_selectivity
+            .index_access_cost
             .get(index_type)
             .copied()
             .unwrap_or_else(|| {
@@ -2247,6 +2267,16 @@ enum TermPosition {
     Subject,
     Predicate,
     Object,
+}
+
+impl TermPosition {
+    pub fn to_string(&self) -> &'static str {
+        match self {
+            TermPosition::Subject => "subject",
+            TermPosition::Predicate => "predicate",
+            TermPosition::Object => "object",
+        }
+    }
 }
 
 impl AdaptiveIndexSelector {

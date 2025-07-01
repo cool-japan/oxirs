@@ -15,7 +15,7 @@ use tracing::{debug, error, info, warn};
 #[cfg(feature = "service-discovery")]
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 
-use crate::{FederatedService, ServiceDiscovery, ServiceRegistry, ServiceType};
+use crate::{FederatedService, ServiceDiscovery, service_registry::ServiceRegistry, service::ServiceType};
 
 /// Service discovery daemon for automatic discovery
 #[derive(Debug)]

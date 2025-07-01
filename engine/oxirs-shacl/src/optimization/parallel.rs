@@ -163,7 +163,7 @@ impl ParallelValidationEngine {
     /// Validate constraints in parallel
     pub fn validate_parallel(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &IndexMap<ShapeId, Shape>,
         focus_nodes: &[Term],
     ) -> Result<ParallelValidationResult> {
@@ -226,7 +226,7 @@ impl ParallelValidationEngine {
     /// Prepare work items from shapes and focus nodes
     fn prepare_work_items(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &IndexMap<ShapeId, Shape>,
         focus_nodes: &[Term],
     ) -> Result<Vec<ValidationWorkItem>> {
@@ -322,7 +322,7 @@ impl ParallelValidationEngine {
     /// Execute parallel validation with worker threads
     fn execute_parallel_validation(
         &self,
-        store: &Store,
+        store: &dyn Store,
         work_chunks: Vec<Vec<ValidationWorkItem>>,
         num_threads: usize,
     ) -> Result<Vec<ValidationWorkResult>> {

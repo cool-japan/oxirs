@@ -9,7 +9,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 
-use oxirs_core::model::Term;
+use oxirs_core::{model::Term, RdfTerm};
 
 use crate::{
     constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult},
@@ -923,7 +923,7 @@ impl GlobalPerformanceMetrics {
 }
 
 /// Performance statistics for individual constraints
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ConstraintPerformanceStats {
     pub total_executions: usize,
     pub total_execution_time: Duration,
@@ -936,6 +936,24 @@ pub struct ConstraintPerformanceStats {
     pub violation_count: usize,
     pub error_count: usize,
     pub last_updated: SystemTime,
+}
+
+impl Default for ConstraintPerformanceStats {
+    fn default() -> Self {
+        Self {
+            total_executions: 0,
+            total_execution_time: Duration::from_secs(0),
+            average_execution_time: Duration::from_secs(0),
+            min_execution_time: Duration::from_secs(0),
+            max_execution_time: Duration::from_secs(0),
+            total_memory_usage: 0,
+            average_memory_usage: 0,
+            success_count: 0,
+            violation_count: 0,
+            error_count: 0,
+            last_updated: SystemTime::now(),
+        }
+    }
 }
 
 impl ConstraintPerformanceStats {

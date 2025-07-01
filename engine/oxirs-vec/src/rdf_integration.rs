@@ -393,7 +393,7 @@ impl RdfVectorIntegration {
         let term_mappings = self.term_mappings.read().unwrap();
         Ok(term_mappings
             .get(&term_hash)
-            .map(|mapping| mapping.vector_id))
+            .map(|mapping| mapping.vector_id.clone()))
     }
 
     /// Get RDF term for a vector ID

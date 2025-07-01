@@ -440,37 +440,37 @@ pub enum EncryptionAlgorithm {
     AES256GCM,
     AES256CBC,
     ChaCha20Poly1305,
-    
+
     // Post-quantum key encapsulation mechanisms (KEMs)
     Kyber512,
     Kyber768,
     Kyber1024,
-    
+
     // Lattice-based encryption
     NewHope1024,
     FrodoKEM640,
     FrodoKEM976,
     FrodoKEM1344,
-    
+
     // Multivariate-based encryption
     Rainbow1,
     Rainbow3,
     Rainbow5,
-    
+
     // Hash-based signatures with encryption
     SPHINCS_Plus128s,
     SPHINCS_Plus256s,
-    
+
     // Isogeny-based encryption
     SIKE_P434,
     SIKE_P503,
     SIKE_P751,
-    
+
     // Code-based encryption
     McEliece348864,
     McEliece460896,
     McEliece6688128,
-    
+
     // Hybrid classical-quantum
     HybridAES_Kyber768,
     HybridChaCha20_NewHope,
@@ -518,12 +518,12 @@ pub enum KeyDerivation {
     PBKDF2,
     Scrypt,
     Argon2,
-    
+
     // Post-quantum key derivation
     LatticeBasedKDF,
     HashBasedKDF,
     CodeBasedKDF,
-    
+
     // Quantum-resistant hybrid approaches
     HybridArgon2_Lattice,
     HybridScrypt_Hash,
@@ -536,7 +536,7 @@ pub enum PostQuantumSignature {
     Dilithium2,
     Dilithium3,
     Dilithium5,
-    
+
     // Hash-based signatures
     SPHINCS_Plus_SHA2_128s,
     SPHINCS_Plus_SHA2_128f,
@@ -550,7 +550,7 @@ pub enum PostQuantumSignature {
     SPHINCS_Plus_SHAKE_192f,
     SPHINCS_Plus_SHAKE_256s,
     SPHINCS_Plus_SHAKE_256f,
-    
+
     // Multivariate signatures
     Rainbow_I_Classic,
     Rainbow_I_Circumzenithal,
@@ -561,11 +561,11 @@ pub enum PostQuantumSignature {
     Rainbow_V_Classic,
     Rainbow_V_Circumzenithal,
     Rainbow_V_Compressed,
-    
+
     // Falcon signatures
     Falcon_512,
     Falcon_1024,
-    
+
     // PICNIC signatures
     Picnic_L1_FS,
     Picnic_L1_UR,
@@ -604,11 +604,11 @@ impl Default for PostQuantumConfig {
 /// Quantum security levels (NIST standardization levels)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum QuantumSecurityLevel {
-    Level1,  // Equivalent to AES-128
-    Level2,  // Equivalent to SHA-256
-    Level3,  // Equivalent to AES-192
-    Level4,  // Equivalent to SHA-384
-    Level5,  // Equivalent to AES-256
+    Level1, // Equivalent to AES-128
+    Level2, // Equivalent to SHA-256
+    Level3, // Equivalent to AES-192
+    Level4, // Equivalent to SHA-384
+    Level5, // Equivalent to AES-256
 }
 
 /// Key size preferences for post-quantum algorithms
@@ -1302,23 +1302,25 @@ impl PostQuantumCryptoEngine {
     }
 
     /// Generate a new post-quantum key pair
-    pub async fn generate_keypair(&self, algorithm: &PostQuantumSignature) -> Result<PostQuantumKeyPair> {
+    pub async fn generate_keypair(
+        &self,
+        algorithm: &PostQuantumSignature,
+    ) -> Result<PostQuantumKeyPair> {
         let start_time = Instant::now();
-        
+
         let keypair = match algorithm {
-            PostQuantumSignature::Dilithium2 | 
-            PostQuantumSignature::Dilithium3 | 
-            PostQuantumSignature::Dilithium5 => {
+            PostQuantumSignature::Dilithium2
+            | PostQuantumSignature::Dilithium3
+            | PostQuantumSignature::Dilithium5 => {
                 self.generate_dilithium_keypair(algorithm).await?
-            },
-            PostQuantumSignature::SPHINCS_Plus_SHA2_128s |
-            PostQuantumSignature::SPHINCS_Plus_SHA2_256s => {
+            }
+            PostQuantumSignature::SPHINCS_Plus_SHA2_128s
+            | PostQuantumSignature::SPHINCS_Plus_SHA2_256s => {
                 self.generate_sphincs_keypair(algorithm).await?
-            },
-            PostQuantumSignature::Falcon_512 |
-            PostQuantumSignature::Falcon_1024 => {
+            }
+            PostQuantumSignature::Falcon_512 | PostQuantumSignature::Falcon_1024 => {
                 self.generate_falcon_keypair(algorithm).await?
-            },
+            }
             _ => {
                 return Err(anyhow!("Algorithm {:?} not yet implemented", algorithm));
             }
@@ -1328,8 +1330,9 @@ impl PostQuantumCryptoEngine {
         {
             let mut metrics = self.metrics.write().await;
             metrics.key_generation_count += 1;
-            metrics.avg_key_generation_time_ms = 
-                (metrics.avg_key_generation_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
+            metrics.avg_key_generation_time_ms = (metrics.avg_key_generation_time_ms
+                + start_time.elapsed().as_millis() as f64)
+                / 2.0;
         }
 
         // Store the key pair
@@ -1344,23 +1347,27 @@ impl PostQuantumCryptoEngine {
     /// Sign data using post-quantum signature
     pub async fn sign(&self, key_id: &str, data: &[u8]) -> Result<PostQuantumSignature> {
         let start_time = Instant::now();
-        
+
         let key_store = self.key_store.read().await;
-        let keypair = key_store.get(key_id)
+        let keypair = key_store
+            .get(key_id)
             .ok_or_else(|| anyhow!("Key not found: {}", key_id))?;
 
         let signature = match keypair.algorithm {
             PostQuantumSignature::Dilithium3 => {
                 self.dilithium_sign(&keypair.private_key, data).await?
-            },
+            }
             PostQuantumSignature::SPHINCS_Plus_SHA2_256s => {
                 self.sphincs_sign(&keypair.private_key, data).await?
-            },
+            }
             PostQuantumSignature::Falcon_1024 => {
                 self.falcon_sign(&keypair.private_key, data).await?
-            },
+            }
             _ => {
-                return Err(anyhow!("Signing with {:?} not implemented", keypair.algorithm));
+                return Err(anyhow!(
+                    "Signing with {:?} not implemented",
+                    keypair.algorithm
+                ));
             }
         };
 
@@ -1368,7 +1375,7 @@ impl PostQuantumCryptoEngine {
         {
             let mut metrics = self.metrics.write().await;
             metrics.signature_count += 1;
-            metrics.avg_signing_time_ms = 
+            metrics.avg_signing_time_ms =
                 (metrics.avg_signing_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
         }
 
@@ -1376,20 +1383,25 @@ impl PostQuantumCryptoEngine {
     }
 
     /// Verify post-quantum signature
-    pub async fn verify(&self, public_key: &[u8], data: &[u8], signature: &[u8], 
-                       algorithm: &PostQuantumSignature) -> Result<bool> {
+    pub async fn verify(
+        &self,
+        public_key: &[u8],
+        data: &[u8],
+        signature: &[u8],
+        algorithm: &PostQuantumSignature,
+    ) -> Result<bool> {
         let start_time = Instant::now();
-        
+
         let is_valid = match algorithm {
             PostQuantumSignature::Dilithium3 => {
                 self.dilithium_verify(public_key, data, signature).await?
-            },
+            }
             PostQuantumSignature::SPHINCS_Plus_SHA2_256s => {
                 self.sphincs_verify(public_key, data, signature).await?
-            },
+            }
             PostQuantumSignature::Falcon_1024 => {
                 self.falcon_verify(public_key, data, signature).await?
-            },
+            }
             _ => {
                 return Err(anyhow!("Verification for {:?} not implemented", algorithm));
             }
@@ -1399,7 +1411,7 @@ impl PostQuantumCryptoEngine {
         {
             let mut metrics = self.metrics.write().await;
             metrics.verification_count += 1;
-            metrics.avg_verification_time_ms = 
+            metrics.avg_verification_time_ms =
                 (metrics.avg_verification_time_ms + start_time.elapsed().as_millis() as f64) / 2.0;
             if is_valid {
                 metrics.successful_verifications += 1;
@@ -1410,83 +1422,96 @@ impl PostQuantumCryptoEngine {
     }
 
     /// Perform key encapsulation using post-quantum KEM
-    pub async fn encapsulate(&self, public_key: &[u8], algorithm: &EncryptionAlgorithm) -> Result<(Vec<u8>, Vec<u8>)> {
+    pub async fn encapsulate(
+        &self,
+        public_key: &[u8],
+        algorithm: &EncryptionAlgorithm,
+    ) -> Result<(Vec<u8>, Vec<u8>)> {
         match algorithm {
-            EncryptionAlgorithm::Kyber768 => {
-                self.kyber_encapsulate(public_key).await
-            },
-            EncryptionAlgorithm::NewHope1024 => {
-                self.newhope_encapsulate(public_key).await
-            },
-            EncryptionAlgorithm::FrodoKEM976 => {
-                self.frodokem_encapsulate(public_key).await
-            },
-            _ => {
-                Err(anyhow!("KEM algorithm {:?} not implemented", algorithm))
-            }
+            EncryptionAlgorithm::Kyber768 => self.kyber_encapsulate(public_key).await,
+            EncryptionAlgorithm::NewHope1024 => self.newhope_encapsulate(public_key).await,
+            EncryptionAlgorithm::FrodoKEM976 => self.frodokem_encapsulate(public_key).await,
+            _ => Err(anyhow!("KEM algorithm {:?} not implemented", algorithm)),
         }
     }
 
     /// Perform key decapsulation using post-quantum KEM
-    pub async fn decapsulate(&self, private_key: &[u8], ciphertext: &[u8], 
-                            algorithm: &EncryptionAlgorithm) -> Result<Vec<u8>> {
+    pub async fn decapsulate(
+        &self,
+        private_key: &[u8],
+        ciphertext: &[u8],
+        algorithm: &EncryptionAlgorithm,
+    ) -> Result<Vec<u8>> {
         match algorithm {
-            EncryptionAlgorithm::Kyber768 => {
-                self.kyber_decapsulate(private_key, ciphertext).await
-            },
+            EncryptionAlgorithm::Kyber768 => self.kyber_decapsulate(private_key, ciphertext).await,
             EncryptionAlgorithm::NewHope1024 => {
                 self.newhope_decapsulate(private_key, ciphertext).await
-            },
+            }
             EncryptionAlgorithm::FrodoKEM976 => {
                 self.frodokem_decapsulate(private_key, ciphertext).await
-            },
-            _ => {
-                Err(anyhow!("KEM algorithm {:?} not implemented", algorithm))
             }
+            _ => Err(anyhow!("KEM algorithm {:?} not implemented", algorithm)),
         }
     }
 
     // Private implementation methods (stubs for now - would integrate with actual PQ crypto libraries)
-    
-    async fn generate_dilithium_keypair(&self, _variant: &PostQuantumSignature) -> Result<PostQuantumKeyPair> {
+
+    async fn generate_dilithium_keypair(
+        &self,
+        _variant: &PostQuantumSignature,
+    ) -> Result<PostQuantumKeyPair> {
         // Placeholder implementation - would use actual Dilithium library
         Ok(PostQuantumKeyPair {
             id: Uuid::new_v4().to_string(),
             algorithm: _variant.clone(),
-            public_key: vec![0u8; 1312], // Dilithium3 public key size
+            public_key: vec![0u8; 1312],  // Dilithium3 public key size
             private_key: vec![0u8; 4000], // Dilithium3 private key size
             created_at: Utc::now(),
         })
     }
 
-    async fn generate_sphincs_keypair(&self, _variant: &PostQuantumSignature) -> Result<PostQuantumKeyPair> {
+    async fn generate_sphincs_keypair(
+        &self,
+        _variant: &PostQuantumSignature,
+    ) -> Result<PostQuantumKeyPair> {
         // Placeholder implementation - would use actual SPHINCS+ library
         Ok(PostQuantumKeyPair {
             id: Uuid::new_v4().to_string(),
             algorithm: _variant.clone(),
-            public_key: vec![0u8; 32], // SPHINCS+ public key size
+            public_key: vec![0u8; 32],  // SPHINCS+ public key size
             private_key: vec![0u8; 64], // SPHINCS+ private key size
             created_at: Utc::now(),
         })
     }
 
-    async fn generate_falcon_keypair(&self, _variant: &PostQuantumSignature) -> Result<PostQuantumKeyPair> {
+    async fn generate_falcon_keypair(
+        &self,
+        _variant: &PostQuantumSignature,
+    ) -> Result<PostQuantumKeyPair> {
         // Placeholder implementation - would use actual Falcon library
         Ok(PostQuantumKeyPair {
             id: Uuid::new_v4().to_string(),
             algorithm: _variant.clone(),
-            public_key: vec![0u8; 1793], // Falcon-1024 public key size
+            public_key: vec![0u8; 1793],  // Falcon-1024 public key size
             private_key: vec![0u8; 2305], // Falcon-1024 private key size
             created_at: Utc::now(),
         })
     }
 
-    async fn dilithium_sign(&self, _private_key: &[u8], _data: &[u8]) -> Result<PostQuantumSignature> {
+    async fn dilithium_sign(
+        &self,
+        _private_key: &[u8],
+        _data: &[u8],
+    ) -> Result<PostQuantumSignature> {
         // Placeholder - would implement actual Dilithium signing
         Ok(PostQuantumSignature::Dilithium3)
     }
 
-    async fn sphincs_sign(&self, _private_key: &[u8], _data: &[u8]) -> Result<PostQuantumSignature> {
+    async fn sphincs_sign(
+        &self,
+        _private_key: &[u8],
+        _data: &[u8],
+    ) -> Result<PostQuantumSignature> {
         // Placeholder - would implement actual SPHINCS+ signing
         Ok(PostQuantumSignature::SPHINCS_Plus_SHA2_256s)
     }
@@ -1496,17 +1521,32 @@ impl PostQuantumCryptoEngine {
         Ok(PostQuantumSignature::Falcon_1024)
     }
 
-    async fn dilithium_verify(&self, _public_key: &[u8], _data: &[u8], _signature: &[u8]) -> Result<bool> {
+    async fn dilithium_verify(
+        &self,
+        _public_key: &[u8],
+        _data: &[u8],
+        _signature: &[u8],
+    ) -> Result<bool> {
         // Placeholder - would implement actual Dilithium verification
         Ok(true)
     }
 
-    async fn sphincs_verify(&self, _public_key: &[u8], _data: &[u8], _signature: &[u8]) -> Result<bool> {
+    async fn sphincs_verify(
+        &self,
+        _public_key: &[u8],
+        _data: &[u8],
+        _signature: &[u8],
+    ) -> Result<bool> {
         // Placeholder - would implement actual SPHINCS+ verification
         Ok(true)
     }
 
-    async fn falcon_verify(&self, _public_key: &[u8], _data: &[u8], _signature: &[u8]) -> Result<bool> {
+    async fn falcon_verify(
+        &self,
+        _public_key: &[u8],
+        _data: &[u8],
+        _signature: &[u8],
+    ) -> Result<bool> {
         // Placeholder - would implement actual Falcon verification
         Ok(true)
     }
@@ -1531,12 +1571,20 @@ impl PostQuantumCryptoEngine {
         Ok(vec![0u8; 32]) // shared_secret
     }
 
-    async fn newhope_decapsulate(&self, _private_key: &[u8], _ciphertext: &[u8]) -> Result<Vec<u8>> {
+    async fn newhope_decapsulate(
+        &self,
+        _private_key: &[u8],
+        _ciphertext: &[u8],
+    ) -> Result<Vec<u8>> {
         // Placeholder - would implement actual NewHope decapsulation
         Ok(vec![0u8; 32]) // shared_secret
     }
 
-    async fn frodokem_decapsulate(&self, _private_key: &[u8], _ciphertext: &[u8]) -> Result<Vec<u8>> {
+    async fn frodokem_decapsulate(
+        &self,
+        _private_key: &[u8],
+        _ciphertext: &[u8],
+    ) -> Result<Vec<u8>> {
         // Placeholder - would implement actual FrodoKEM decapsulation
         Ok(vec![0u8; 24]) // shared_secret
     }

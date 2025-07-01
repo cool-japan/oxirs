@@ -18,7 +18,7 @@ use super::{utils::format_term_for_message, ConstraintEvaluationResult};
 pub trait ConstraintValidator {
     fn validate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
         graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult>;
@@ -30,7 +30,7 @@ pub struct NodeKindConstraintValidator;
 impl ConstraintValidator for NodeKindConstraintValidator {
     fn validate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
         _graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
@@ -72,7 +72,7 @@ pub struct CardinalityConstraintValidator;
 impl ConstraintValidator for CardinalityConstraintValidator {
     fn validate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
         _graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
@@ -99,7 +99,7 @@ pub struct DatatypeConstraintValidator;
 impl ConstraintValidator for DatatypeConstraintValidator {
     fn validate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
         _graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
@@ -137,7 +137,7 @@ pub struct ClassConstraintValidator;
 impl ConstraintValidator for ClassConstraintValidator {
     fn validate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
         graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
@@ -172,7 +172,7 @@ pub struct StringLengthConstraintValidator;
 impl ConstraintValidator for StringLengthConstraintValidator {
     fn validate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
         _graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
@@ -216,7 +216,7 @@ pub struct PatternConstraintValidator;
 impl ConstraintValidator for PatternConstraintValidator {
     fn validate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
         _graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
@@ -258,7 +258,7 @@ pub struct InConstraintValidator;
 impl ConstraintValidator for InConstraintValidator {
     fn validate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
         _graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
@@ -315,7 +315,7 @@ pub struct DefaultConstraintValidator;
 impl ConstraintValidator for DefaultConstraintValidator {
     fn validate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _context: &ConstraintContext,
         _graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {

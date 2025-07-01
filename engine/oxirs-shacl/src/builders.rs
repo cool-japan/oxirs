@@ -28,12 +28,13 @@ use oxirs_core::{model::NamedNode, Store};
 
 use crate::{
     constraints::*,
+    optimization::ValidationStrategy,
     paths::PropertyPath,
     report::{ReportFormat, ValidationReport},
     shapes::{ShapeParser, ShapeParsingConfig},
     targets::Target,
-    validation::{ValidationConfig, ValidationStrategy},
-    Constraint, ConstraintComponentId, Result, ShaclError, Shape, ShapeId, ShapeType, Validator,
+    Constraint, ConstraintComponentId, Result, ShaclError, Shape, ShapeId, ShapeType,
+    ValidationConfig, Validator,
 };
 
 /// Fluent builder for validation configuration
@@ -116,14 +117,14 @@ impl Default for ValidationConfigBuilder {
 }
 
 /// Fluent builder for shape loading
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ShapeLoaderBuilder {
     shapes: Vec<Shape>,
     parsing_config: ShapeParsingConfig,
     sources: Vec<ShapeSource>,
 }
 
-#[derive(Debug)]
+#[derive(Clone)]
 enum ShapeSource {
     RdfData {
         data: String,
@@ -131,13 +132,39 @@ enum ShapeSource {
         base_iri: Option<String>,
     },
     Store {
-        store: Arc<Store>,
+        store: Arc<dyn Store>,
         graph_name: Option<String>,
     },
     File {
         path: String,
         format: Option<String>,
     },
+}
+
+impl std::fmt::Debug for ShapeSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShapeSource::RdfData { data, format, base_iri } => {
+                f.debug_struct("RdfData")
+                    .field("data", &format!("<{} bytes>", data.len()))
+                    .field("format", format)
+                    .field("base_iri", base_iri)
+                    .finish()
+            }
+            ShapeSource::Store { store: _, graph_name } => {
+                f.debug_struct("Store")
+                    .field("store", &"<Store>")
+                    .field("graph_name", graph_name)
+                    .finish()
+            }
+            ShapeSource::File { path, format } => {
+                f.debug_struct("File")
+                    .field("path", path)
+                    .field("format", format)
+                    .finish()
+            }
+        }
+    }
 }
 
 impl ShapeLoaderBuilder {
@@ -160,7 +187,7 @@ impl ShapeLoaderBuilder {
     }
 
     /// Add store to load shapes from
-    pub fn from_store(mut self, store: Arc<Store>, graph_name: Option<String>) -> Self {
+    pub fn from_store(mut self, store: Arc<dyn Store>, graph_name: Option<String>) -> Self {
         self.sources.push(ShapeSource::Store { store, graph_name });
         self
     }
@@ -236,13 +263,14 @@ impl ShapeLoaderBuilder {
                     all_shapes.extend(shapes);
                 }
                 ShapeSource::Store { store, graph_name } => {
-                    let shapes = parser.parse_shapes_from_store(&store, graph_name.as_deref())?;
+                    let shapes =
+                        parser.parse_shapes_from_store(store.as_ref(), graph_name.as_deref())?;
                     all_shapes.extend(shapes);
                 }
                 ShapeSource::File { path, format } => {
                     let content = tokio::fs::read_to_string(&path)
                         .await
-                        .map_err(|e| ShaclError::Io(e))?;
+                        .map_err(ShaclError::from)?;
 
                     let format = format.unwrap_or_else(|| {
                         Path::new(&path)
@@ -284,11 +312,12 @@ impl ShapeLoaderBuilder {
                     all_shapes.extend(shapes);
                 }
                 ShapeSource::Store { store, graph_name } => {
-                    let shapes = parser.parse_shapes_from_store(&store, graph_name.as_deref())?;
+                    let shapes =
+                        parser.parse_shapes_from_store(store.as_ref(), graph_name.as_deref())?;
                     all_shapes.extend(shapes);
                 }
                 ShapeSource::File { path, format } => {
-                    let content = std::fs::read_to_string(&path).map_err(|e| ShaclError::Io(e))?;
+                    let content = std::fs::read_to_string(&path).map_err(ShaclError::from)?;
 
                     let format = format.unwrap_or_else(|| {
                         Path::new(&path)
@@ -531,21 +560,21 @@ impl ValidationBuilder {
     }
 
     /// Validate a store
-    pub async fn validate_store_async(self, store: &Store) -> Result<ValidationReport> {
+    pub async fn validate_store_async(self, store: &dyn Store) -> Result<ValidationReport> {
         // For now, delegate to sync implementation
         // In a full async implementation, this would use async operations
         self.validator.validate_store(store, Some(self.config))
     }
 
     /// Validate a store (synchronous)
-    pub fn validate_store(self, store: &Store) -> Result<ValidationReport> {
+    pub fn validate_store(self, store: &dyn Store) -> Result<ValidationReport> {
         self.validator.validate_store(store, Some(self.config))
     }
 
     /// Validate specific nodes against a shape
     pub async fn validate_nodes_async(
         self,
-        store: &Store,
+        store: &dyn Store,
         shape_id: &ShapeId,
         nodes: &[oxirs_core::model::Term],
     ) -> Result<ValidationReport> {
@@ -557,7 +586,7 @@ impl ValidationBuilder {
     /// Validate specific nodes against a shape (synchronous)
     pub fn validate_nodes(
         self,
-        store: &Store,
+        store: &dyn Store,
         shape_id: &ShapeId,
         nodes: &[oxirs_core::model::Term],
     ) -> Result<ValidationReport> {
@@ -867,11 +896,11 @@ impl EnhancedValidatorBuilder {
     /// Internal async build implementation
     async fn build_async_internal(mut self) -> Result<Validator> {
         // Load shapes from loader if configured
-        if let Some(loader) = self.shape_loader {
+        if let Some(ref loader) = self.shape_loader {
             let loaded_shapes = if self.async_config.enable_streaming {
-                self.load_shapes_streaming(loader).await?
+                self.load_shapes_streaming(loader.clone()).await?
             } else {
-                loader.build_async().await?
+                loader.clone().build_async().await?
             };
             self.shapes.extend(loaded_shapes);
         }
@@ -880,7 +909,7 @@ impl EnhancedValidatorBuilder {
         let mut enhanced_config = self.config.clone();
         enhanced_config.parallel = matches!(
             self.strategy,
-            ValidationStrategy::Parallel | ValidationStrategy::Optimized
+            ValidationStrategy::Parallel { .. } | ValidationStrategy::Optimized
         );
 
         let mut validator = Validator::with_config(enhanced_config);
@@ -898,7 +927,7 @@ impl EnhancedValidatorBuilder {
     }
 
     /// Load shapes with streaming for memory efficiency
-    async fn load_shapes_streaming(self, loader: ShapeLoaderBuilder) -> Result<Vec<Shape>> {
+    async fn load_shapes_streaming(&self, loader: ShapeLoaderBuilder) -> Result<Vec<Shape>> {
         // For large datasets, process shapes in streaming batches
         let batch_size = self.async_config.batch_size;
         let mut all_shapes = Vec::new();
@@ -938,7 +967,7 @@ impl EnhancedValidatorBuilder {
     }
 
     /// Check memory pressure and take corrective action if needed
-    async fn check_memory_pressure(self) -> Result<()> {
+    async fn check_memory_pressure(&self) -> Result<()> {
         // This would integrate with system memory monitoring
         // For now, just yield control to allow GC
         tokio::task::yield_now().await;
@@ -948,7 +977,7 @@ impl EnhancedValidatorBuilder {
     /// Build the validator synchronously
     pub fn build(mut self) -> Result<Validator> {
         // Load shapes from loader if configured
-        if let Some(loader) = self.shape_loader {
+        if let Some(ref loader) = self.shape_loader {
             let loaded_shapes = loader.build()?;
             self.shapes.extend(loaded_shapes);
         }

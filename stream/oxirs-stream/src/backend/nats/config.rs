@@ -213,7 +213,7 @@ impl Default for NatsConfig {
             cluster_urls: None,
             stream_name: "RDF_STREAM".to_string(),
             subject_prefix: "rdf".to_string(),
-            max_age_seconds: 86400, // 24 hours
+            max_age_seconds: 86400,        // 24 hours
             max_bytes: 1024 * 1024 * 1024, // 1GB
             replicas: 1,
             storage_type: NatsStorageType::File,

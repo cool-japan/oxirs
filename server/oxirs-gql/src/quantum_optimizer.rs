@@ -4,7 +4,7 @@
 //! query planning and execution, leveraging quantum computing principles
 //! for exponential speedup in complex optimization problems.
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -51,7 +51,7 @@ pub struct QuantumState {
 }
 
 /// Complex number representation
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Complex64 {
     pub real: f64,
     pub imag: f64,

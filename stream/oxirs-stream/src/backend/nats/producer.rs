@@ -8,12 +8,12 @@ use crate::error::{StreamError, StreamResult};
 use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::Utc;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, Semaphore};
-use rand::Rng;
 use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "nats")]
@@ -409,26 +409,20 @@ impl NatsProducer {
                         metadata,
                     }
                 }
-                PatchOperation::TransactionCommit => {
-                    StreamEvent::TransactionCommit {
-                        transaction_id: "unknown".to_string(),
-                        metadata,
-                    }
-                }
-                PatchOperation::TransactionAbort => {
-                    StreamEvent::TransactionAbort {
-                        transaction_id: "unknown".to_string(),
-                        metadata,
-                    }
-                }
-                PatchOperation::Header { key, value } => {
-                    StreamEvent::SchemaDefinitionAdded {
-                        schema_type: "header".to_string(),
-                        schema_uri: key.clone(),
-                        definition: format!("HEADER {} {}", key, value),
-                        metadata,
-                    }
-                }
+                PatchOperation::TransactionCommit => StreamEvent::TransactionCommit {
+                    transaction_id: "unknown".to_string(),
+                    metadata,
+                },
+                PatchOperation::TransactionAbort => StreamEvent::TransactionAbort {
+                    transaction_id: "unknown".to_string(),
+                    metadata,
+                },
+                PatchOperation::Header { key, value } => StreamEvent::SchemaDefinitionAdded {
+                    schema_type: "header".to_string(),
+                    schema_uri: key.clone(),
+                    definition: format!("HEADER {} {}", key, value),
+                    metadata,
+                },
             };
             self.publish(event).await?;
         }
@@ -458,13 +452,17 @@ impl NatsProducer {
     }
 
     /// Determine if message should be processed based on load balancing strategy
-    fn should_process_message(strategy: &LoadBalancingStrategy, message_count: u64, _subject: &str) -> bool {
+    fn should_process_message(
+        strategy: &LoadBalancingStrategy,
+        message_count: u64,
+        _subject: &str,
+    ) -> bool {
         match strategy {
             LoadBalancingStrategy::RoundRobin => message_count % 2 == 0, // Simple implementation
             LoadBalancingStrategy::Random => rand::thread_rng().gen::<bool>(),
             LoadBalancingStrategy::LeastConnections => true, // Simplified
             LoadBalancingStrategy::WeightedRoundRobin(_weights) => true, // Simplified
-            LoadBalancingStrategy::Consistent => true, // Simplified
+            LoadBalancingStrategy::Consistent => true,       // Simplified
         }
     }
 

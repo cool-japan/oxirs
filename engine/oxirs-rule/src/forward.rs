@@ -230,6 +230,30 @@ impl ForwardChainer {
                     substitutions.push(substitution);
                 }
             }
+            RuleAtom::NotEqual { left, right } => {
+                // Handle not-equal constraint
+                let left_term = self.substitute_term(left, partial_sub);
+                let right_term = self.substitute_term(right, partial_sub);
+                if !self.terms_equal(&left_term, &right_term) {
+                    substitutions.push(partial_sub.clone());
+                }
+            }
+            RuleAtom::GreaterThan { left, right } => {
+                // Handle greater-than constraint
+                let left_term = self.substitute_term(left, partial_sub);
+                let right_term = self.substitute_term(right, partial_sub);
+                if self.compare_terms(&left_term, &right_term) > 0 {
+                    substitutions.push(partial_sub.clone());
+                }
+            }
+            RuleAtom::LessThan { left, right } => {
+                // Handle less-than constraint
+                let left_term = self.substitute_term(left, partial_sub);
+                let right_term = self.substitute_term(right, partial_sub);
+                if self.compare_terms(&left_term, &right_term) < 0 {
+                    substitutions.push(partial_sub.clone());
+                }
+            }
         }
 
         Ok(substitutions)
@@ -294,6 +318,20 @@ impl ForwardChainer {
             (Term::Constant(c), Term::Literal(l)) | (Term::Literal(l), Term::Constant(c)) => {
                 Ok(c == l) // Allow constants and literals to unify if equal
             }
+            // Function terms unify if name and args match
+            (Term::Function { name: n1, args: a1 }, Term::Function { name: n2, args: a2 }) => {
+                if n1 != n2 || a1.len() != a2.len() {
+                    Ok(false)
+                } else {
+                    // Recursively unify all arguments
+                    for (arg1, arg2) in a1.iter().zip(a2.iter()) {
+                        if !self.unify_terms(arg1, arg2, substitution)? {
+                            return Ok(false);
+                        }
+                    }
+                    Ok(true)
+                }
+            }
             // Other combinations don't unify
             _ => Ok(false),
         }
@@ -306,7 +344,98 @@ impl ForwardChainer {
             (Term::Constant(c1), Term::Constant(c2)) => c1 == c2,
             (Term::Literal(l1), Term::Literal(l2)) => l1 == l2,
             (Term::Constant(c), Term::Literal(l)) | (Term::Literal(l), Term::Constant(c)) => c == l,
+            (Term::Function { name: n1, args: a1 }, Term::Function { name: n2, args: a2 }) => {
+                n1 == n2 && a1 == a2
+            }
             _ => false,
+        }
+    }
+
+    /// Compare two terms for ordering (-1: left < right, 0: equal, 1: left > right)
+    fn compare_terms(&self, term1: &Term, term2: &Term) -> i32 {
+        match (term1, term2) {
+            (Term::Constant(c1), Term::Constant(c2)) => {
+                // Try to parse as numbers first
+                if let (Ok(n1), Ok(n2)) = (c1.parse::<f64>(), c2.parse::<f64>()) {
+                    if n1 < n2 {
+                        -1
+                    } else if n1 > n2 {
+                        1
+                    } else {
+                        0
+                    }
+                } else {
+                    // Fallback to string comparison
+                    if c1 < c2 {
+                        -1
+                    } else if c1 > c2 {
+                        1
+                    } else {
+                        0
+                    }
+                }
+            }
+            (Term::Literal(l1), Term::Literal(l2)) => {
+                // Try to parse as numbers first
+                if let (Ok(n1), Ok(n2)) = (l1.parse::<f64>(), l2.parse::<f64>()) {
+                    if n1 < n2 {
+                        -1
+                    } else if n1 > n2 {
+                        1
+                    } else {
+                        0
+                    }
+                } else {
+                    // Fallback to string comparison
+                    if l1 < l2 {
+                        -1
+                    } else if l1 > l2 {
+                        1
+                    } else {
+                        0
+                    }
+                }
+            }
+            (Term::Constant(c), Term::Literal(l)) | (Term::Literal(l), Term::Constant(c)) => {
+                // Try to parse as numbers first
+                if let (Ok(n1), Ok(n2)) = (c.parse::<f64>(), l.parse::<f64>()) {
+                    if n1 < n2 {
+                        -1
+                    } else if n1 > n2 {
+                        1
+                    } else {
+                        0
+                    }
+                } else {
+                    // Fallback to string comparison
+                    if c < l {
+                        -1
+                    } else if c > l {
+                        1
+                    } else {
+                        0
+                    }
+                }
+            }
+            (Term::Function { name: n1, args: a1 }, Term::Function { name: n2, args: a2 }) => {
+                // Compare function names first
+                if n1 < n2 {
+                    -1
+                } else if n1 > n2 {
+                    1
+                } else {
+                    // If names are equal, compare arg counts
+                    if a1.len() < a2.len() {
+                        -1
+                    } else if a1.len() > a2.len() {
+                        1
+                    } else {
+                        0
+                    } // Equal functions
+                }
+            }
+            // Variables and mixed types can't be compared meaningfully
+            _ => 0,
         }
     }
 
@@ -332,6 +461,18 @@ impl ForwardChainer {
                     args: substituted_args,
                 })
             }
+            RuleAtom::NotEqual { left, right } => Ok(RuleAtom::NotEqual {
+                left: self.substitute_term(left, substitution),
+                right: self.substitute_term(right, substitution),
+            }),
+            RuleAtom::GreaterThan { left, right } => Ok(RuleAtom::GreaterThan {
+                left: self.substitute_term(left, substitution),
+                right: self.substitute_term(right, substitution),
+            }),
+            RuleAtom::LessThan { left, right } => Ok(RuleAtom::LessThan {
+                left: self.substitute_term(left, substitution),
+                right: self.substitute_term(right, substitution),
+            }),
         }
     }
 
@@ -342,6 +483,16 @@ impl ForwardChainer {
                 .get(var)
                 .cloned()
                 .unwrap_or_else(|| term.clone()),
+            Term::Function { name, args } => {
+                let substituted_args = args
+                    .iter()
+                    .map(|arg| self.substitute_term(arg, substitution))
+                    .collect();
+                Term::Function {
+                    name: name.clone(),
+                    args: substituted_args,
+                }
+            }
             _ => term.clone(),
         }
     }
@@ -485,6 +636,36 @@ impl PartialEq for RuleAtom {
                 RuleAtom::Builtin { name: n1, args: a1 },
                 RuleAtom::Builtin { name: n2, args: a2 },
             ) => n1 == n2 && a1 == a2,
+            (
+                RuleAtom::NotEqual {
+                    left: l1,
+                    right: r1,
+                },
+                RuleAtom::NotEqual {
+                    left: l2,
+                    right: r2,
+                },
+            ) => l1 == l2 && r1 == r2,
+            (
+                RuleAtom::GreaterThan {
+                    left: l1,
+                    right: r1,
+                },
+                RuleAtom::GreaterThan {
+                    left: l2,
+                    right: r2,
+                },
+            ) => l1 == l2 && r1 == r2,
+            (
+                RuleAtom::LessThan {
+                    left: l1,
+                    right: r1,
+                },
+                RuleAtom::LessThan {
+                    left: l2,
+                    right: r2,
+                },
+            ) => l1 == l2 && r1 == r2,
             _ => false,
         }
     }
@@ -510,6 +691,21 @@ impl std::hash::Hash for RuleAtom {
                 name.hash(state);
                 args.hash(state);
             }
+            RuleAtom::NotEqual { left, right } => {
+                2.hash(state);
+                left.hash(state);
+                right.hash(state);
+            }
+            RuleAtom::GreaterThan { left, right } => {
+                3.hash(state);
+                left.hash(state);
+                right.hash(state);
+            }
+            RuleAtom::LessThan { left, right } => {
+                4.hash(state);
+                left.hash(state);
+                right.hash(state);
+            }
         }
     }
 }
@@ -520,6 +716,9 @@ impl PartialEq for Term {
             (Term::Variable(v1), Term::Variable(v2)) => v1 == v2,
             (Term::Constant(c1), Term::Constant(c2)) => c1 == c2,
             (Term::Literal(l1), Term::Literal(l2)) => l1 == l2,
+            (Term::Function { name: n1, args: a1 }, Term::Function { name: n2, args: a2 }) => {
+                n1 == n2 && a1 == a2
+            }
             _ => false,
         }
     }
@@ -541,6 +740,11 @@ impl std::hash::Hash for Term {
             Term::Literal(l) => {
                 2.hash(state);
                 l.hash(state);
+            }
+            Term::Function { name, args } => {
+                3.hash(state);
+                name.hash(state);
+                args.hash(state);
             }
         }
     }

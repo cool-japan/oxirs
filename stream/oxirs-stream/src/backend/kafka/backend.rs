@@ -15,8 +15,8 @@
 //! - `consumer`: Consumer group management
 //! - `admin`: Topic and cluster administration
 
-// Import modular components from kafka submodule
-use crate::backend::kafka::{KafkaEvent, KafkaProducerConfig};
+// Import modular components from local modules
+use super::{KafkaEvent, KafkaProducerConfig, KafkaProducerStats};
 
 use crate::backend::{StreamBackend as StreamBackendTrait, StreamBackendConfig};
 use crate::error::{StreamError, StreamResult};
@@ -52,18 +52,6 @@ pub struct KafkaBackend {
     #[cfg(not(feature = "kafka"))]
     _phantom: std::marker::PhantomData<()>,
     stats: Arc<RwLock<KafkaProducerStats>>,
-}
-
-/// Producer statistics for monitoring
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct KafkaProducerStats {
-    pub events_published: u64,
-    pub events_failed: u64,
-    pub bytes_sent: u64,
-    pub delivery_errors: u64,
-    pub last_publish: Option<chrono::DateTime<chrono::Utc>>,
-    pub max_latency_ms: u64,
-    pub avg_latency_ms: f64,
 }
 
 impl KafkaBackend {
@@ -103,27 +91,33 @@ impl KafkaBackend {
     #[cfg(feature = "kafka")]
     pub async fn connect(&mut self) -> Result<()> {
         let mut client_config = ClientConfig::new();
-        
+
         // Apply configuration from KafkaProducerConfig
         self.apply_client_config(&mut client_config);
 
         // Create producer
-        let producer: FutureProducer = client_config.create()
+        let producer: FutureProducer = client_config
+            .create()
             .map_err(|e| anyhow::anyhow!("Failed to create Kafka producer: {}", e))?;
 
         // Create consumer for receiving events if needed
-        let consumer: StreamConsumer = client_config.create()
+        let consumer: StreamConsumer = client_config
+            .create()
             .map_err(|e| anyhow::anyhow!("Failed to create Kafka consumer: {}", e))?;
 
         // Create admin client for topic management
-        let admin_client: AdminClient<rdkafka::client::DefaultClientContext> = client_config.create()
+        let admin_client: AdminClient<rdkafka::client::DefaultClientContext> = client_config
+            .create()
             .map_err(|e| anyhow::anyhow!("Failed to create Kafka admin client: {}", e))?;
 
         self.producer = Some(producer);
         self.consumer = Some(consumer);
         self.admin_client = Some(admin_client);
 
-        info!("Connected to Kafka cluster at {}", self.kafka_config.brokers.join(","));
+        info!(
+            "Connected to Kafka cluster at {}",
+            self.kafka_config.brokers.join(",")
+        );
         Ok(())
     }
 
@@ -137,11 +131,26 @@ impl KafkaBackend {
             .set("retries", &self.kafka_config.retries.to_string())
             .set("batch.size", &self.kafka_config.batch_size.to_string())
             .set("linger.ms", &self.kafka_config.linger_ms.to_string())
-            .set("buffer.memory", &self.kafka_config.buffer_memory.to_string())
-            .set("compression.type", &self.kafka_config.compression_type.to_string())
-            .set("max.in.flight.requests.per.connection", &self.kafka_config.max_in_flight_requests.to_string())
-            .set("request.timeout.ms", &self.kafka_config.request_timeout_ms.to_string())
-            .set("delivery.timeout.ms", &self.kafka_config.delivery_timeout_ms.to_string());
+            .set(
+                "buffer.memory",
+                &self.kafka_config.buffer_memory.to_string(),
+            )
+            .set(
+                "compression.type",
+                &self.kafka_config.compression_type.to_string(),
+            )
+            .set(
+                "max.in.flight.requests.per.connection",
+                &self.kafka_config.max_in_flight_requests.to_string(),
+            )
+            .set(
+                "request.timeout.ms",
+                &self.kafka_config.request_timeout_ms.to_string(),
+            )
+            .set(
+                "delivery.timeout.ms",
+                &self.kafka_config.delivery_timeout_ms.to_string(),
+            );
 
         // Enable idempotence for exactly-once semantics
         if self.kafka_config.enable_idempotence {
@@ -155,8 +164,11 @@ impl KafkaBackend {
 
         // Apply security configuration
         if let Some(ref security_config) = self.kafka_config.security_config {
-            client_config.set("security.protocol", &security_config.security_protocol.to_string());
-            
+            client_config.set(
+                "security.protocol",
+                &security_config.security_protocol.to_string(),
+            );
+
             if let Some(ref sasl_config) = security_config.sasl_config {
                 client_config
                     .set("sasl.mechanism", &sasl_config.mechanism.to_string())
@@ -174,9 +186,18 @@ impl KafkaBackend {
 
     /// Create a topic with specified configuration
     #[cfg(feature = "kafka")]
-    pub async fn create_topic(&self, topic_name: &str, partitions: i32, replication_factor: i16) -> Result<()> {
+    pub async fn create_topic(
+        &self,
+        topic_name: &str,
+        partitions: i32,
+        replication_factor: i16,
+    ) -> Result<()> {
         if let Some(ref admin_client) = self.admin_client {
-            let new_topic = NewTopic::new(topic_name, partitions, TopicReplication::Fixed(replication_factor));
+            let new_topic = NewTopic::new(
+                topic_name,
+                partitions,
+                TopicReplication::Fixed(replication_factor),
+            );
             let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(30)));
 
             match admin_client.create_topics(&[new_topic], &opts).await {
@@ -189,7 +210,10 @@ impl KafkaBackend {
                                     debug!("Topic {} already exists", topic);
                                 } else {
                                     error!("Failed to create topic {}: {}", topic, error);
-                                    return Err(anyhow::anyhow!("Failed to create topic: {}", error));
+                                    return Err(anyhow::anyhow!(
+                                        "Failed to create topic: {}",
+                                        error
+                                    ));
                                 }
                             }
                         }
@@ -216,7 +240,8 @@ impl KafkaBackend {
             }
 
             if let Some(ref producer) = self.producer {
-                let payload = kafka_event.to_bytes()
+                let payload = kafka_event
+                    .to_bytes()
                     .map_err(|e| anyhow::anyhow!("Failed to serialize event: {}", e))?;
 
                 let mut record = FutureRecord::to(&topic_name)
@@ -232,7 +257,10 @@ impl KafkaBackend {
                     Ok(_delivery) => {
                         let latency_ms = start_time.elapsed().as_millis() as u64;
                         self.update_stats(payload.len(), latency_ms, false).await;
-                        debug!("Published event to Kafka: {} to topic {}", kafka_event.event_id, topic_name);
+                        debug!(
+                            "Published event to Kafka: {} to topic {}",
+                            kafka_event.event_id, topic_name
+                        );
                     }
                     Err((kafka_error, _)) => {
                         self.update_stats(0, 0, true).await;
@@ -246,7 +274,10 @@ impl KafkaBackend {
         }
         #[cfg(not(feature = "kafka"))]
         {
-            debug!("Mock Kafka publish: {} to topic {}", kafka_event.event_id, topic_name);
+            debug!(
+                "Mock Kafka publish: {} to topic {}",
+                kafka_event.event_id, topic_name
+            );
         }
 
         Ok(())
@@ -262,15 +293,16 @@ impl KafkaBackend {
             stats.events_published += 1;
             stats.bytes_sent += bytes_sent as u64;
             stats.last_publish = Some(chrono::Utc::now());
-            
+
             // Update latency metrics
             if latency_ms > stats.max_latency_ms {
                 stats.max_latency_ms = latency_ms;
             }
-            
+
             // Simple running average
             let total_events = stats.events_published as f64;
-            stats.avg_latency_ms = (stats.avg_latency_ms * (total_events - 1.0) + latency_ms as f64) / total_events;
+            stats.avg_latency_ms =
+                (stats.avg_latency_ms * (total_events - 1.0) + latency_ms as f64) / total_events;
         }
     }
 
@@ -292,7 +324,8 @@ impl KafkaBackend {
         #[cfg(feature = "kafka")]
         {
             if let Some(ref producer) = self.producer {
-                producer.flush(Duration::from_secs(30))
+                producer
+                    .flush(Duration::from_secs(30))
                     .map_err(|e| anyhow::anyhow!("Failed to flush Kafka producer: {}", e))?;
                 debug!("Flushed Kafka producer");
             }
@@ -318,27 +351,36 @@ impl StreamBackendTrait for KafkaBackend {
             let mut kafka_config = ClientConfig::new();
             kafka_config
                 .set("bootstrap.servers", &self.kafka_config.brokers.join(","))
-                .set("message.timeout.ms", &self.kafka_config.request_timeout_ms.to_string())
-                .set("compression.type", &self.kafka_config.compression_type.to_string())
+                .set(
+                    "message.timeout.ms",
+                    &self.kafka_config.request_timeout_ms.to_string(),
+                )
+                .set(
+                    "compression.type",
+                    &self.kafka_config.compression_type.to_string(),
+                )
                 .set("acks", &self.kafka_config.acks.to_string())
                 .set("client.id", &self.kafka_config.client_id);
 
-            let producer: FutureProducer = kafka_config
-                .create()
-                .map_err(|e| StreamError::Connection(format!("Failed to create Kafka producer: {}", e)))?;
+            let producer: FutureProducer = kafka_config.create().map_err(|e| {
+                StreamError::Connection(format!("Failed to create Kafka producer: {}", e))
+            })?;
 
             self.producer = Some(producer);
 
             // Initialize admin client for topic management
-            let admin_client: AdminClient<_> = kafka_config
-                .create()
-                .map_err(|e| StreamError::Connection(format!("Failed to create Kafka admin client: {}", e)))?;
+            let admin_client: AdminClient<_> = kafka_config.create().map_err(|e| {
+                StreamError::Connection(format!("Failed to create Kafka admin client: {}", e))
+            })?;
 
             self.admin_client = Some(admin_client);
 
-            info!("Connected to Kafka cluster: {}", self.kafka_config.brokers.join(","));
+            info!(
+                "Connected to Kafka cluster: {}",
+                self.kafka_config.brokers.join(",")
+            );
         }
-        
+
         #[cfg(not(feature = "kafka"))]
         {
             info!("Mock Kafka connection (kafka feature not enabled)");
@@ -352,8 +394,9 @@ impl StreamBackendTrait for KafkaBackend {
         {
             if let Some(producer) = self.producer.take() {
                 // Flush any pending messages
-                producer.flush(Duration::from_secs(5))
-                    .map_err(|e| StreamError::Connection(format!("Failed to flush Kafka producer: {}", e)))?;
+                producer.flush(Duration::from_secs(5)).map_err(|e| {
+                    StreamError::Connection(format!("Failed to flush Kafka producer: {}", e))
+                })?;
             }
             self.admin_client = None;
             self.consumer = None;
@@ -373,17 +416,30 @@ impl StreamBackendTrait for KafkaBackend {
                 admin_client
                     .create_topics([new_topic], &opts)
                     .await
-                    .map_err(|e| StreamError::TopicCreation(format!("Failed to create topic {}: {}", topic, e)))?;
+                    .map_err(|e| {
+                        StreamError::TopicCreation(format!(
+                            "Failed to create topic {}: {}",
+                            topic, e
+                        ))
+                    })?;
 
-                info!("Created Kafka topic: {} with {} partitions", topic, partitions);
+                info!(
+                    "Created Kafka topic: {} with {} partitions",
+                    topic, partitions
+                );
             } else {
-                return Err(StreamError::Connection("Admin client not initialized".to_string()));
+                return Err(StreamError::Connection(
+                    "Admin client not initialized".to_string(),
+                ));
             }
         }
 
         #[cfg(not(feature = "kafka"))]
         {
-            info!("Mock create topic: {} with {} partitions", topic, partitions);
+            info!(
+                "Mock create topic: {} with {} partitions",
+                topic, partitions
+            );
         }
 
         Ok(())
@@ -398,11 +454,18 @@ impl StreamBackendTrait for KafkaBackend {
                 admin_client
                     .delete_topics([topic.as_str()], &opts)
                     .await
-                    .map_err(|e| StreamError::TopicDeletion(format!("Failed to delete topic {}: {}", topic, e)))?;
+                    .map_err(|e| {
+                        StreamError::TopicDeletion(format!(
+                            "Failed to delete topic {}: {}",
+                            topic, e
+                        ))
+                    })?;
 
                 info!("Deleted Kafka topic: {}", topic);
             } else {
-                return Err(StreamError::Connection("Admin client not initialized".to_string()));
+                return Err(StreamError::Connection(
+                    "Admin client not initialized".to_string(),
+                ));
             }
         }
 
@@ -421,7 +484,9 @@ impl StreamBackendTrait for KafkaBackend {
                 let metadata = admin_client
                     .inner()
                     .fetch_metadata(None, Duration::from_secs(10))
-                    .map_err(|e| StreamError::TopicListing(format!("Failed to fetch metadata: {}", e)))?;
+                    .map_err(|e| {
+                        StreamError::TopicListing(format!("Failed to fetch metadata: {}", e))
+                    })?;
 
                 let topics: Vec<TopicName> = metadata
                     .topics()
@@ -431,7 +496,9 @@ impl StreamBackendTrait for KafkaBackend {
 
                 Ok(topics)
             } else {
-                Err(StreamError::Connection("Admin client not initialized".to_string()))
+                Err(StreamError::Connection(
+                    "Admin client not initialized".to_string(),
+                ))
             }
         }
 
@@ -456,11 +523,15 @@ impl StreamBackendTrait for KafkaBackend {
                 let result = producer
                     .send(record, Duration::from_secs(5))
                     .await
-                    .map_err(|(e, _)| StreamError::SendError(format!("Failed to send to Kafka: {}", e)))?;
+                    .map_err(|(e, _)| {
+                        StreamError::SendError(format!("Failed to send to Kafka: {}", e))
+                    })?;
 
                 Ok(Offset::new(result.1 as u64))
             } else {
-                Err(StreamError::Connection("Producer not initialized".to_string()))
+                Err(StreamError::Connection(
+                    "Producer not initialized".to_string(),
+                ))
             }
         }
 
@@ -471,7 +542,11 @@ impl StreamBackendTrait for KafkaBackend {
         }
     }
 
-    async fn send_batch(&self, topic: &TopicName, events: Vec<StreamEvent>) -> StreamResult<Vec<Offset>> {
+    async fn send_batch(
+        &self,
+        topic: &TopicName,
+        events: Vec<StreamEvent>,
+    ) -> StreamResult<Vec<Offset>> {
         let mut offsets = Vec::new();
         for event in events {
             let offset = self.send_event(topic, event).await?;
@@ -489,9 +564,9 @@ impl StreamBackendTrait for KafkaBackend {
     ) -> StreamResult<Vec<(StreamEvent, Offset)>> {
         #[cfg(feature = "kafka")]
         {
-            use rdkafka::consumer::{Consumer, StreamConsumer, BaseConsumer, CommitMode};
             use rdkafka::config::ClientConfig;
-            use rdkafka::message::{Message, BorrowedMessage};
+            use rdkafka::consumer::{BaseConsumer, CommitMode, Consumer, StreamConsumer};
+            use rdkafka::message::{BorrowedMessage, Message};
             use rdkafka::TopicPartitionList;
             use tokio::time::{timeout, Duration};
 
@@ -505,18 +580,24 @@ impl StreamBackendTrait for KafkaBackend {
                 .set("bootstrap.servers", self.kafka_config.brokers.join(","))
                 .set("group.id", group_id)
                 .set("enable.auto.commit", "false") // Manual commit for better control
-                .set("auto.offset.reset", match position {
-                    StreamPosition::Beginning => "earliest",
-                    StreamPosition::End => "latest", 
-                    StreamPosition::Offset(_) => "none", // Will seek manually
-                })
+                .set(
+                    "auto.offset.reset",
+                    match position {
+                        StreamPosition::Beginning => "earliest",
+                        StreamPosition::End => "latest",
+                        StreamPosition::Offset(_) => "none", // Will seek manually
+                    },
+                )
                 .set("session.timeout.ms", "30000")
                 .set("heartbeat.interval.ms", "3000");
 
             // Apply security configuration if available
             if let Some(ref security_config) = self.kafka_config.security_config {
-                consumer_config.set("security.protocol", &security_config.security_protocol.to_string());
-                
+                consumer_config.set(
+                    "security.protocol",
+                    &security_config.security_protocol.to_string(),
+                );
+
                 if let Some(ref sasl_config) = security_config.sasl_config {
                     consumer_config
                         .set("sasl.mechanism", &sasl_config.mechanism.to_string())
@@ -525,24 +606,32 @@ impl StreamBackendTrait for KafkaBackend {
                 }
             }
 
-            let consumer: StreamConsumer = consumer_config
-                .create()
-                .map_err(|e| StreamError::Connection(format!("Failed to create Kafka consumer: {}", e)))?;
+            let consumer: StreamConsumer = consumer_config.create().map_err(|e| {
+                StreamError::Connection(format!("Failed to create Kafka consumer: {}", e))
+            })?;
 
             // Subscribe to topic
-            consumer
-                .subscribe(&[topic.as_str()])
-                .map_err(|e| StreamError::Connection(format!("Failed to subscribe to topic: {}", e)))?;
+            consumer.subscribe(&[topic.as_str()]).map_err(|e| {
+                StreamError::Connection(format!("Failed to subscribe to topic: {}", e))
+            })?;
 
             // Handle specific offset positioning
             if let StreamPosition::Offset(offset_value) = position {
                 let mut tpl = TopicPartitionList::new();
-                tpl.add_partition_offset(topic.as_str(), 0, rdkafka::Offset::Offset(offset_value as i64))
-                    .map_err(|e| StreamError::SeekError(format!("Failed to add partition offset: {}", e)))?;
-                
+                tpl.add_partition_offset(
+                    topic.as_str(),
+                    0,
+                    rdkafka::Offset::Offset(offset_value as i64),
+                )
+                .map_err(|e| {
+                    StreamError::SeekError(format!("Failed to add partition offset: {}", e))
+                })?;
+
                 consumer
                     .seek_partitions(tpl, Duration::from_secs(10))
-                    .map_err(|e| StreamError::SeekError(format!("Failed to seek to offset: {}", e)))?;
+                    .map_err(|e| {
+                        StreamError::SeekError(format!("Failed to seek to offset: {}", e))
+                    })?;
             }
 
             let mut events = Vec::with_capacity(max_events);
@@ -559,8 +648,12 @@ impl StreamBackendTrait for KafkaBackend {
                                     let stream_event = kafka_event.to_stream_event();
                                     let offset = Offset::new(message.offset() as u64);
                                     events.push((stream_event, offset));
-                                    
-                                    debug!("Received event from Kafka: {} at offset {}", kafka_event.event_id, message.offset());
+
+                                    debug!(
+                                        "Received event from Kafka: {} at offset {}",
+                                        kafka_event.event_id,
+                                        message.offset()
+                                    );
                                 }
                                 Err(e) => {
                                     warn!("Failed to deserialize Kafka message: {}", e);
@@ -581,13 +674,20 @@ impl StreamBackendTrait for KafkaBackend {
                 }
             }
 
-            info!("Received {} events from Kafka topic: {}", events.len(), topic);
+            info!(
+                "Received {} events from Kafka topic: {}",
+                events.len(),
+                topic
+            );
             Ok(events)
         }
 
         #[cfg(not(feature = "kafka"))]
         {
-            debug!("Mock receive events from topic: {}, max: {}", topic, max_events);
+            debug!(
+                "Mock receive events from topic: {}, max: {}",
+                topic, max_events
+            );
             Ok(vec![])
         }
     }
@@ -601,8 +701,8 @@ impl StreamBackendTrait for KafkaBackend {
     ) -> StreamResult<()> {
         #[cfg(feature = "kafka")]
         {
-            use rdkafka::consumer::{Consumer, BaseConsumer, CommitMode};
             use rdkafka::config::ClientConfig;
+            use rdkafka::consumer::{BaseConsumer, CommitMode, Consumer};
             use rdkafka::TopicPartitionList;
 
             // Create consumer configuration for the specific group
@@ -616,8 +716,11 @@ impl StreamBackendTrait for KafkaBackend {
 
             // Apply security configuration if available
             if let Some(ref security_config) = self.kafka_config.security_config {
-                consumer_config.set("security.protocol", &security_config.security_protocol.to_string());
-                
+                consumer_config.set(
+                    "security.protocol",
+                    &security_config.security_protocol.to_string(),
+                );
+
                 if let Some(ref sasl_config) = security_config.sasl_config {
                     consumer_config
                         .set("sasl.mechanism", &sasl_config.mechanism.to_string())
@@ -626,31 +729,50 @@ impl StreamBackendTrait for KafkaBackend {
                 }
             }
 
-            let consumer: BaseConsumer = consumer_config
-                .create()
-                .map_err(|e| StreamError::Connection(format!("Failed to create Kafka consumer for commit: {}", e)))?;
+            let consumer: BaseConsumer = consumer_config.create().map_err(|e| {
+                StreamError::Connection(format!(
+                    "Failed to create Kafka consumer for commit: {}",
+                    e
+                ))
+            })?;
 
             // Create TopicPartitionList with the specific offset to commit
             let mut tpl = TopicPartitionList::new();
             tpl.add_partition_offset(
-                topic.as_str(), 
-                partition.value() as i32, 
-                rdkafka::Offset::Offset(offset.value() as i64 + 1) // Kafka commits the next offset
-            ).map_err(|e| StreamError::CommitError(format!("Failed to add partition offset for commit: {}", e)))?;
+                topic.as_str(),
+                partition.value() as i32,
+                rdkafka::Offset::Offset(offset.value() as i64 + 1), // Kafka commits the next offset
+            )
+            .map_err(|e| {
+                StreamError::CommitError(format!(
+                    "Failed to add partition offset for commit: {}",
+                    e
+                ))
+            })?;
 
             // Commit the offset
             consumer
                 .commit(&tpl, CommitMode::Sync)
                 .map_err(|e| StreamError::CommitError(format!("Failed to commit offset: {}", e)))?;
 
-            debug!("Committed offset {} for topic: {}, partition: {}, group: {}", 
-                   offset.value(), topic, partition.value(), consumer_group.name());
+            debug!(
+                "Committed offset {} for topic: {}, partition: {}, group: {}",
+                offset.value(),
+                topic,
+                partition.value(),
+                consumer_group.name()
+            );
             Ok(())
         }
 
         #[cfg(not(feature = "kafka"))]
         {
-            debug!("Mock commit offset for topic: {}, partition: {}, offset: {}", topic, partition.value(), offset.value());
+            debug!(
+                "Mock commit offset for topic: {}, partition: {}, offset: {}",
+                topic,
+                partition.value(),
+                offset.value()
+            );
             Ok(())
         }
     }
@@ -664,8 +786,8 @@ impl StreamBackendTrait for KafkaBackend {
     ) -> StreamResult<()> {
         #[cfg(feature = "kafka")]
         {
-            use rdkafka::consumer::{Consumer, BaseConsumer};
             use rdkafka::config::ClientConfig;
+            use rdkafka::consumer::{BaseConsumer, Consumer};
             use rdkafka::TopicPartitionList;
             use tokio::time::Duration;
 
@@ -680,8 +802,11 @@ impl StreamBackendTrait for KafkaBackend {
 
             // Apply security configuration if available
             if let Some(ref security_config) = self.kafka_config.security_config {
-                consumer_config.set("security.protocol", &security_config.security_protocol.to_string());
-                
+                consumer_config.set(
+                    "security.protocol",
+                    &security_config.security_protocol.to_string(),
+                );
+
                 if let Some(ref sasl_config) = security_config.sasl_config {
                     consumer_config
                         .set("sasl.mechanism", &sasl_config.mechanism.to_string())
@@ -690,35 +815,49 @@ impl StreamBackendTrait for KafkaBackend {
                 }
             }
 
-            let consumer: BaseConsumer = consumer_config
-                .create()
-                .map_err(|e| StreamError::Connection(format!("Failed to create Kafka consumer for seek: {}", e)))?;
+            let consumer: BaseConsumer = consumer_config.create().map_err(|e| {
+                StreamError::Connection(format!("Failed to create Kafka consumer for seek: {}", e))
+            })?;
 
             // Create TopicPartitionList with the position to seek to
             let mut tpl = TopicPartitionList::new();
-            
+
             let kafka_offset = match position {
                 StreamPosition::Beginning => rdkafka::Offset::Beginning,
                 StreamPosition::End => rdkafka::Offset::End,
-                StreamPosition::Offset(offset_value) => rdkafka::Offset::Offset(offset_value as i64),
+                StreamPosition::Offset(offset_value) => {
+                    rdkafka::Offset::Offset(offset_value as i64)
+                }
             };
 
             tpl.add_partition_offset(topic.as_str(), partition.value() as i32, kafka_offset)
-                .map_err(|e| StreamError::SeekError(format!("Failed to add partition for seek: {}", e)))?;
+                .map_err(|e| {
+                    StreamError::SeekError(format!("Failed to add partition for seek: {}", e))
+                })?;
 
             // Perform the seek operation
             consumer
                 .seek_partitions(tpl, Duration::from_secs(10))
                 .map_err(|e| StreamError::SeekError(format!("Failed to seek: {}", e)))?;
 
-            info!("Seeked to position {:?} for topic: {}, partition: {}, group: {}", 
-                  position, topic, partition.value(), consumer_group.name());
+            info!(
+                "Seeked to position {:?} for topic: {}, partition: {}, group: {}",
+                position,
+                topic,
+                partition.value(),
+                consumer_group.name()
+            );
             Ok(())
         }
 
         #[cfg(not(feature = "kafka"))]
         {
-            debug!("Mock seek for topic: {}, partition: {} to position: {:?}", topic, partition.value(), position);
+            debug!(
+                "Mock seek for topic: {}, partition: {} to position: {:?}",
+                topic,
+                partition.value(),
+                position
+            );
             Ok(())
         }
     }
@@ -730,8 +869,8 @@ impl StreamBackendTrait for KafkaBackend {
     ) -> StreamResult<HashMap<PartitionId, u64>> {
         #[cfg(feature = "kafka")]
         {
-            use rdkafka::consumer::{Consumer, BaseConsumer};
             use rdkafka::config::ClientConfig;
+            use rdkafka::consumer::{BaseConsumer, Consumer};
             use rdkafka::TopicPartitionList;
             use std::collections::HashMap;
 
@@ -746,8 +885,11 @@ impl StreamBackendTrait for KafkaBackend {
 
             // Apply security configuration if available
             if let Some(ref security_config) = self.kafka_config.security_config {
-                consumer_config.set("security.protocol", &security_config.security_protocol.to_string());
-                
+                consumer_config.set(
+                    "security.protocol",
+                    &security_config.security_protocol.to_string(),
+                );
+
                 if let Some(ref sasl_config) = security_config.sasl_config {
                     consumer_config
                         .set("sasl.mechanism", &sasl_config.mechanism.to_string())
@@ -756,38 +898,68 @@ impl StreamBackendTrait for KafkaBackend {
                 }
             }
 
-            let consumer: BaseConsumer = consumer_config
-                .create()
-                .map_err(|e| StreamError::Connection(format!("Failed to create Kafka consumer for lag check: {}", e)))?;
+            let consumer: BaseConsumer = consumer_config.create().map_err(|e| {
+                StreamError::Connection(format!(
+                    "Failed to create Kafka consumer for lag check: {}",
+                    e
+                ))
+            })?;
 
             // Get topic metadata to find all partitions
             let metadata = consumer
                 .fetch_metadata(Some(topic.as_str()), Duration::from_secs(10))
-                .map_err(|e| StreamError::TopicMetadata(format!("Failed to fetch topic metadata: {}", e)))?;
+                .map_err(|e| {
+                    StreamError::TopicMetadata(format!("Failed to fetch topic metadata: {}", e))
+                })?;
 
             let mut lag_map = HashMap::new();
 
             if let Some(topic_metadata) = metadata.topics().first() {
                 for partition_metadata in topic_metadata.partitions() {
                     let partition_id = PartitionId::new(partition_metadata.id() as u32);
-                    
+
                     // Get high water mark (latest offset)
                     let mut tpl = TopicPartitionList::new();
-                    tpl.add_partition_offset(topic.as_str(), partition_metadata.id(), rdkafka::Offset::End)
-                        .map_err(|e| StreamError::TopicMetadata(format!("Failed to add partition for high water mark: {}", e)))?;
-                    
+                    tpl.add_partition_offset(
+                        topic.as_str(),
+                        partition_metadata.id(),
+                        rdkafka::Offset::End,
+                    )
+                    .map_err(|e| {
+                        StreamError::TopicMetadata(format!(
+                            "Failed to add partition for high water mark: {}",
+                            e
+                        ))
+                    })?;
+
                     let high_water_marks = consumer
                         .committed_offsets(tpl, Duration::from_secs(10))
-                        .map_err(|e| StreamError::TopicMetadata(format!("Failed to get high water marks: {}", e)))?;
+                        .map_err(|e| {
+                            StreamError::TopicMetadata(format!(
+                                "Failed to get high water marks: {}",
+                                e
+                            ))
+                        })?;
 
                     // Get consumer group's committed offset
                     let mut committed_tpl = TopicPartitionList::new();
-                    committed_tpl.add_partition(topic.as_str(), partition_metadata.id())
-                        .map_err(|e| StreamError::TopicMetadata(format!("Failed to add partition for committed offset: {}", e)))?;
-                    
+                    committed_tpl
+                        .add_partition(topic.as_str(), partition_metadata.id())
+                        .map_err(|e| {
+                            StreamError::TopicMetadata(format!(
+                                "Failed to add partition for committed offset: {}",
+                                e
+                            ))
+                        })?;
+
                     let committed_offsets = consumer
                         .committed_offsets(committed_tpl, Duration::from_secs(10))
-                        .map_err(|e| StreamError::TopicMetadata(format!("Failed to get committed offsets: {}", e)))?;
+                        .map_err(|e| {
+                            StreamError::TopicMetadata(format!(
+                                "Failed to get committed offsets: {}",
+                                e
+                            ))
+                        })?;
 
                     // Calculate lag
                     if let Some(high_water_element) = high_water_marks.elements().first() {
@@ -811,14 +983,23 @@ impl StreamBackendTrait for KafkaBackend {
                             };
 
                             lag_map.insert(partition_id, lag);
-                            debug!("Partition {}: lag = {} (high water: {}, committed: {})", 
-                                   partition_metadata.id(), lag, high_water_offset, committed_offset);
+                            debug!(
+                                "Partition {}: lag = {} (high water: {}, committed: {})",
+                                partition_metadata.id(),
+                                lag,
+                                high_water_offset,
+                                committed_offset
+                            );
                         }
                     }
                 }
             }
 
-            info!("Retrieved consumer lag for topic: {} with {} partitions", topic, lag_map.len());
+            info!(
+                "Retrieved consumer lag for topic: {} with {} partitions",
+                topic,
+                lag_map.len()
+            );
             Ok(lag_map)
         }
 
@@ -917,11 +1098,11 @@ mod tests {
         };
 
         let backend = KafkaBackend::new(config).unwrap();
-        
+
         // Test stats update
         backend.update_stats(1024, 50, false).await;
         let stats = backend.get_stats().await;
-        
+
         assert_eq!(stats.events_published, 1);
         assert_eq!(stats.bytes_sent, 1024);
         assert_eq!(stats.max_latency_ms, 50);

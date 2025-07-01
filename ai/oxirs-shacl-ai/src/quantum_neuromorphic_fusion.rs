@@ -74,13 +74,19 @@ pub struct QuantumNeuromorphicFusion {
 impl QuantumNeuromorphicFusion {
     /// Create a new quantum neuromorphic fusion system
     pub fn new(config: QuantumFusionConfig) -> Self {
-        let hybrid_processor = Arc::new(RwLock::new(QuantumBiologicalHybridProcessor::new(&config)));
+        let hybrid_processor =
+            Arc::new(RwLock::new(QuantumBiologicalHybridProcessor::new(&config)));
         let coherence_manager = Arc::new(RwLock::new(QuantumCoherenceManager::new(&config)));
-        let entanglement_coordinator = Arc::new(RwLock::new(BiologicalQuantumEntanglementCoordinator::new(&config)));
+        let entanglement_coordinator = Arc::new(RwLock::new(
+            BiologicalQuantumEntanglementCoordinator::new(&config),
+        ));
         let tunneling_processor = Arc::new(RwLock::new(QuantumTunnelingProcessor::new(&config)));
-        let superposition_engine = Arc::new(RwLock::new(SuperpositionValidationEngine::new(&config)));
-        let quantum_error_corrector = Arc::new(RwLock::new(QuantumBiologicalErrorCorrector::new(&config)));
-        let quantum_plasticity_manager = Arc::new(RwLock::new(QuantumSynapticPlasticityManager::new(&config)));
+        let superposition_engine =
+            Arc::new(RwLock::new(SuperpositionValidationEngine::new(&config)));
+        let quantum_error_corrector =
+            Arc::new(RwLock::new(QuantumBiologicalErrorCorrector::new(&config)));
+        let quantum_plasticity_manager =
+            Arc::new(RwLock::new(QuantumSynapticPlasticityManager::new(&config)));
         let hybrid_optimizer = Arc::new(RwLock::new(HybridQuantumClassicalOptimizer::new(&config)));
         let decoherence_manager = Arc::new(RwLock::new(QuantumDecoherenceManager::new(&config)));
         let fusion_metrics = Arc::new(RwLock::new(QuantumFusionMetrics::new()));
@@ -105,32 +111,60 @@ impl QuantumNeuromorphicFusion {
         info!("Initializing quantum neuromorphic fusion system");
 
         // Initialize quantum-biological hybrid processor
-        let hybrid_init = self.hybrid_processor.write().await
-            .initialize_hybrid_processor().await?;
-        
+        let hybrid_init = self
+            .hybrid_processor
+            .write()
+            .await
+            .initialize_hybrid_processor()
+            .await?;
+
         // Initialize quantum coherence management
-        let coherence_init = self.coherence_manager.write().await
-            .initialize_coherence_system().await?;
-        
+        let coherence_init = self
+            .coherence_manager
+            .write()
+            .await
+            .initialize_coherence_system()
+            .await?;
+
         // Initialize biological-quantum entanglement
-        let entanglement_init = self.entanglement_coordinator.write().await
-            .initialize_entanglement_system().await?;
-        
+        let entanglement_init = self
+            .entanglement_coordinator
+            .write()
+            .await
+            .initialize_entanglement_system()
+            .await?;
+
         // Initialize quantum tunneling effects
-        let tunneling_init = self.tunneling_processor.write().await
-            .initialize_tunneling_system().await?;
-        
+        let tunneling_init = self
+            .tunneling_processor
+            .write()
+            .await
+            .initialize_tunneling_system()
+            .await?;
+
         // Initialize superposition validation
-        let superposition_init = self.superposition_engine.write().await
-            .initialize_superposition_engine().await?;
-        
+        let superposition_init = self
+            .superposition_engine
+            .write()
+            .await
+            .initialize_superposition_engine()
+            .await?;
+
         // Initialize quantum error correction
-        let error_correction_init = self.quantum_error_corrector.write().await
-            .initialize_error_correction().await?;
-        
+        let error_correction_init = self
+            .quantum_error_corrector
+            .write()
+            .await
+            .initialize_error_correction()
+            .await?;
+
         // Start quantum decoherence monitoring
-        let decoherence_init = self.decoherence_manager.write().await
-            .start_decoherence_monitoring().await?;
+        let decoherence_init = self
+            .decoherence_manager
+            .write()
+            .await
+            .start_decoherence_monitoring()
+            .await?;
 
         Ok(QuantumFusionInitResult {
             hybrid_processor: hybrid_init,
@@ -152,45 +186,81 @@ impl QuantumNeuromorphicFusion {
         debug!("Performing quantum-biological hybrid validation");
 
         // Prepare quantum state superposition for parallel validation
-        let quantum_preparation = self.superposition_engine.write().await
-            .prepare_validation_superposition(context).await?;
-        
+        let quantum_preparation = self
+            .superposition_engine
+            .write()
+            .await
+            .prepare_validation_superposition(context)
+            .await?;
+
         // Establish biological-quantum entanglement
-        let entanglement_setup = self.entanglement_coordinator.write().await
-            .establish_biological_quantum_entanglement(&quantum_preparation).await?;
-        
+        let entanglement_setup = self
+            .entanglement_coordinator
+            .write()
+            .await
+            .establish_biological_quantum_entanglement(&quantum_preparation)
+            .await?;
+
         // Process validation through quantum tunneling effects
-        let tunneling_processing = self.tunneling_processor.write().await
-            .process_validation_through_tunneling(&entanglement_setup, context).await?;
-        
+        let tunneling_processing = self
+            .tunneling_processor
+            .write()
+            .await
+            .process_validation_through_tunneling(&entanglement_setup, context)
+            .await?;
+
         // Apply quantum-enhanced synaptic plasticity
-        let plasticity_enhancement = self.quantum_plasticity_manager.write().await
-            .apply_quantum_synaptic_plasticity(&tunneling_processing).await?;
-        
+        let plasticity_enhancement = self
+            .quantum_plasticity_manager
+            .write()
+            .await
+            .apply_quantum_synaptic_plasticity(&tunneling_processing)
+            .await?;
+
         // Execute hybrid quantum-classical optimization
-        let optimization_results = self.hybrid_optimizer.write().await
-            .optimize_quantum_biological_system(&plasticity_enhancement, context).await?;
-        
+        let optimization_results = self
+            .hybrid_optimizer
+            .write()
+            .await
+            .optimize_quantum_biological_system(&plasticity_enhancement, context)
+            .await?;
+
         // Perform quantum error correction on biological components
-        let error_correction = self.quantum_error_corrector.write().await
-            .correct_biological_quantum_errors(&optimization_results).await?;
-        
+        let error_correction = self
+            .quantum_error_corrector
+            .write()
+            .await
+            .correct_biological_quantum_errors(&optimization_results)
+            .await?;
+
         // Monitor and mitigate decoherence effects
-        let decoherence_mitigation = self.decoherence_manager.write().await
-            .mitigate_decoherence_effects(&error_correction).await?;
-        
+        let decoherence_mitigation = self
+            .decoherence_manager
+            .write()
+            .await
+            .mitigate_decoherence_effects(&error_correction)
+            .await?;
+
         // Measure final quantum-biological state
-        let final_measurement = self.hybrid_processor.write().await
-            .measure_quantum_biological_state(&decoherence_mitigation).await?;
+        let final_measurement = self
+            .hybrid_processor
+            .write()
+            .await
+            .measure_quantum_biological_state(&decoherence_mitigation)
+            .await?;
 
         // Update performance metrics
-        self.fusion_metrics.write().await.update_fusion_metrics(
-            &quantum_preparation,
-            &entanglement_setup,
-            &tunneling_processing,
-            &optimization_results,
-            &final_measurement,
-        ).await;
+        self.fusion_metrics
+            .write()
+            .await
+            .update_fusion_metrics(
+                &quantum_preparation,
+                &entanglement_setup,
+                &tunneling_processing,
+                &optimization_results,
+                &final_measurement,
+            )
+            .await;
 
         Ok(QuantumBiologicalValidationResult {
             quantum_validation_results: final_measurement.quantum_results,
@@ -208,32 +278,43 @@ impl QuantumNeuromorphicFusion {
     /// Start continuous quantum-biological optimization
     pub async fn start_continuous_quantum_optimization(&self) -> Result<()> {
         info!("Starting continuous quantum-biological optimization");
-        
-        let mut optimization_interval = interval(Duration::from_millis(self.config.optimization_interval_ms));
-        
+
+        let mut optimization_interval =
+            interval(Duration::from_millis(self.config.optimization_interval_ms));
+
         loop {
             optimization_interval.tick().await;
-            
+
             // Monitor quantum coherence across biological systems
-            let coherence_status = self.coherence_manager.read().await
-                .get_current_coherence_status().await?;
-            
+            let coherence_status = self
+                .coherence_manager
+                .read()
+                .await
+                .get_current_coherence_status()
+                .await?;
+
             // If coherence is degrading, apply correction measures
             if coherence_status.average_coherence < self.config.min_coherence_threshold {
-                self.apply_coherence_recovery_protocol(&coherence_status).await?;
+                self.apply_coherence_recovery_protocol(&coherence_status)
+                    .await?;
             }
-            
+
             // Check for entanglement degradation
-            let entanglement_status = self.entanglement_coordinator.read().await
-                .get_entanglement_status().await?;
-            
+            let entanglement_status = self
+                .entanglement_coordinator
+                .read()
+                .await
+                .get_entanglement_status()
+                .await?;
+
             if entanglement_status.average_fidelity < self.config.min_entanglement_fidelity {
-                self.restore_entanglement_fidelity(&entanglement_status).await?;
+                self.restore_entanglement_fidelity(&entanglement_status)
+                    .await?;
             }
-            
+
             // Optimize quantum tunneling parameters
             self.optimize_tunneling_parameters().await?;
-            
+
             // Update quantum-enhanced plasticity
             self.update_quantum_plasticity_parameters().await?;
         }
@@ -245,15 +326,21 @@ impl QuantumNeuromorphicFusion {
         coherence_status: &CoherenceStatus,
     ) -> Result<()> {
         info!("Applying quantum coherence recovery protocol");
-        
+
         // Apply targeted coherence recovery based on degradation patterns
-        self.coherence_manager.write().await
-            .apply_recovery_protocol(coherence_status).await?;
-        
+        self.coherence_manager
+            .write()
+            .await
+            .apply_recovery_protocol(coherence_status)
+            .await?;
+
         // Adjust biological system parameters to support coherence
-        self.hybrid_processor.write().await
-            .adjust_biological_parameters_for_coherence().await?;
-        
+        self.hybrid_processor
+            .write()
+            .await
+            .adjust_biological_parameters_for_coherence()
+            .await?;
+
         Ok(())
     }
 
@@ -263,29 +350,38 @@ impl QuantumNeuromorphicFusion {
         entanglement_status: &EntanglementStatus,
     ) -> Result<()> {
         info!("Restoring biological-quantum entanglement fidelity");
-        
+
         // Re-establish high-fidelity entanglement pairs
-        self.entanglement_coordinator.write().await
-            .restore_entanglement_fidelity(entanglement_status).await?;
-        
+        self.entanglement_coordinator
+            .write()
+            .await
+            .restore_entanglement_fidelity(entanglement_status)
+            .await?;
+
         Ok(())
     }
 
     /// Optimize quantum tunneling parameters
     async fn optimize_tunneling_parameters(&self) -> Result<()> {
         // Continuously optimize tunneling effects for better performance
-        self.tunneling_processor.write().await
-            .optimize_tunneling_parameters().await?;
-        
+        self.tunneling_processor
+            .write()
+            .await
+            .optimize_tunneling_parameters()
+            .await?;
+
         Ok(())
     }
 
     /// Update quantum plasticity parameters
     async fn update_quantum_plasticity_parameters(&self) -> Result<()> {
         // Update quantum-enhanced synaptic plasticity based on learning
-        self.quantum_plasticity_manager.write().await
-            .update_plasticity_parameters().await?;
-        
+        self.quantum_plasticity_manager
+            .write()
+            .await
+            .update_plasticity_parameters()
+            .await?;
+
         Ok(())
     }
 
@@ -319,18 +415,19 @@ impl QuantumBiologicalHybridProcessor {
     async fn initialize_hybrid_processor(&mut self) -> Result<HybridProcessorInitResult> {
         // Initialize quantum processing subsystem
         let quantum_init = self.quantum_subsystem.initialize().await?;
-        
+
         // Initialize biological processing subsystem
         let biological_init = self.biological_subsystem.initialize().await?;
-        
+
         // Establish quantum-biological interface
-        let interface_init = self.hybrid_interface.establish_interface(
-            &quantum_init, &biological_init
-        ).await?;
-        
+        let interface_init = self
+            .hybrid_interface
+            .establish_interface(&quantum_init, &biological_init)
+            .await?;
+
         // Start state synchronization
         let sync_init = self.state_synchronizer.start_synchronization().await?;
-        
+
         // Initialize performance optimization
         let optimization_init = self.performance_optimizer.initialize().await?;
 
@@ -348,19 +445,21 @@ impl QuantumBiologicalHybridProcessor {
         decoherence_mitigation: &DecoherenceMitigation,
     ) -> Result<QuantumBiologicalMeasurement> {
         // Perform simultaneous quantum and biological state measurement
-        let quantum_measurement = self.quantum_subsystem
-            .measure_quantum_state().await?;
-        
-        let biological_measurement = self.biological_subsystem
-            .measure_biological_state().await?;
-        
+        let quantum_measurement = self.quantum_subsystem.measure_quantum_state().await?;
+
+        let biological_measurement = self.biological_subsystem.measure_biological_state().await?;
+
         // Compute hybrid coherence and correlation metrics
-        let coherence_analysis = self.hybrid_interface
-            .analyze_quantum_biological_coherence(&quantum_measurement, &biological_measurement).await?;
-        
+        let coherence_analysis = self
+            .hybrid_interface
+            .analyze_quantum_biological_coherence(&quantum_measurement, &biological_measurement)
+            .await?;
+
         // Calculate quantum advantage score
-        let quantum_advantage_score = self.performance_optimizer
-            .calculate_quantum_advantage(&quantum_measurement, &biological_measurement).await?;
+        let quantum_advantage_score = self
+            .performance_optimizer
+            .calculate_quantum_advantage(&quantum_measurement, &biological_measurement)
+            .await?;
 
         Ok(QuantumBiologicalMeasurement {
             quantum_results: quantum_measurement,
@@ -373,7 +472,9 @@ impl QuantumBiologicalHybridProcessor {
 
     async fn adjust_biological_parameters_for_coherence(&mut self) -> Result<()> {
         // Adjust biological system parameters to maintain quantum coherence
-        self.biological_subsystem.adjust_for_quantum_coherence().await?;
+        self.biological_subsystem
+            .adjust_for_quantum_coherence()
+            .await?;
         Ok(())
     }
 }
@@ -394,29 +495,31 @@ impl QuantumCoherenceManager {
             coherence_monitors: config.coherence_config.create_monitors(),
             coherence_controllers: config.coherence_config.create_controllers(),
             decoherence_predictors: config.coherence_config.create_predictors(),
-            coherence_optimization_engine: CoherenceOptimizationEngine::new(&config.coherence_optimization_config),
+            coherence_optimization_engine: CoherenceOptimizationEngine::new(
+                &config.coherence_optimization_config,
+            ),
             coherence_statistics: CoherenceStatistics::new(),
         }
     }
 
     async fn initialize_coherence_system(&mut self) -> Result<CoherenceSystemInitResult> {
         info!("Initializing quantum coherence management system");
-        
+
         // Initialize coherence monitors
         for monitor in &mut self.coherence_monitors {
             monitor.initialize().await?;
         }
-        
+
         // Initialize coherence controllers
         for controller in &mut self.coherence_controllers {
             controller.initialize().await?;
         }
-        
+
         // Initialize decoherence predictors
         for predictor in &mut self.decoherence_predictors {
             predictor.initialize().await?;
         }
-        
+
         // Start optimization engine
         self.coherence_optimization_engine.start().await?;
 
@@ -431,22 +534,31 @@ impl QuantumCoherenceManager {
     async fn get_current_coherence_status(&self) -> Result<CoherenceStatus> {
         // Aggregate coherence measurements from all monitors
         let mut coherence_measurements = Vec::new();
-        
+
         for monitor in &self.coherence_monitors {
             let measurement = monitor.measure_coherence().await?;
             coherence_measurements.push(measurement);
         }
-        
+
         // Calculate aggregate coherence metrics
-        let average_coherence = coherence_measurements.iter()
-            .map(|m| m.coherence_level).sum::<f64>() / coherence_measurements.len() as f64;
-        
-        let min_coherence = coherence_measurements.iter()
-            .map(|m| m.coherence_level).min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
-        
-        let max_coherence = coherence_measurements.iter()
-            .map(|m| m.coherence_level).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
-        
+        let average_coherence = coherence_measurements
+            .iter()
+            .map(|m| m.coherence_level)
+            .sum::<f64>()
+            / coherence_measurements.len() as f64;
+
+        let min_coherence = coherence_measurements
+            .iter()
+            .map(|m| m.coherence_level)
+            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap_or(0.0);
+
+        let max_coherence = coherence_measurements
+            .iter()
+            .map(|m| m.coherence_level)
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap_or(0.0);
+
         // Predict future decoherence
         let decoherence_predictions = self.predict_decoherence(&coherence_measurements).await?;
 
@@ -456,13 +568,15 @@ impl QuantumCoherenceManager {
             max_coherence,
             coherence_variance: self.calculate_coherence_variance(&coherence_measurements),
             decoherence_predictions,
-            critical_systems: self.identify_critical_coherence_systems(&coherence_measurements).await?,
+            critical_systems: self
+                .identify_critical_coherence_systems(&coherence_measurements)
+                .await?,
         })
     }
 
     async fn apply_recovery_protocol(&mut self, coherence_status: &CoherenceStatus) -> Result<()> {
         info!("Applying quantum coherence recovery protocol");
-        
+
         // Apply targeted coherence recovery for critical systems
         for critical_system in &coherence_status.critical_systems {
             // Find appropriate controller for this system
@@ -470,10 +584,12 @@ impl QuantumCoherenceManager {
                 controller.apply_coherence_recovery(critical_system).await?;
             }
         }
-        
+
         // Apply global coherence optimization
-        self.coherence_optimization_engine.optimize_global_coherence(coherence_status).await?;
-        
+        self.coherence_optimization_engine
+            .optimize_global_coherence(coherence_status)
+            .await?;
+
         Ok(())
     }
 
@@ -482,12 +598,12 @@ impl QuantumCoherenceManager {
         measurements: &[CoherenceMeasurement],
     ) -> Result<Vec<DecoherencePrediction>> {
         let mut predictions = Vec::new();
-        
+
         for predictor in &self.decoherence_predictors {
             let prediction = predictor.predict_decoherence(measurements).await?;
             predictions.push(prediction);
         }
-        
+
         Ok(predictions)
     }
 
@@ -495,12 +611,15 @@ impl QuantumCoherenceManager {
         if measurements.len() < 2 {
             return 0.0;
         }
-        
-        let mean = measurements.iter().map(|m| m.coherence_level).sum::<f64>() / measurements.len() as f64;
-        let variance = measurements.iter()
+
+        let mean =
+            measurements.iter().map(|m| m.coherence_level).sum::<f64>() / measurements.len() as f64;
+        let variance = measurements
+            .iter()
             .map(|m| (m.coherence_level - mean).powi(2))
-            .sum::<f64>() / (measurements.len() - 1) as f64;
-        
+            .sum::<f64>()
+            / (measurements.len() - 1) as f64;
+
         variance
     }
 
@@ -509,24 +628,34 @@ impl QuantumCoherenceManager {
         measurements: &[CoherenceMeasurement],
     ) -> Result<Vec<CriticalCoherenceSystem>> {
         let mut critical_systems = Vec::new();
-        
+
         for measurement in measurements {
-            if measurement.coherence_level < 0.5 { // Critical threshold
+            if measurement.coherence_level < 0.5 {
+                // Critical threshold
                 critical_systems.push(CriticalCoherenceSystem {
                     system_id: measurement.system_id.clone(),
                     coherence_level: measurement.coherence_level,
                     criticality_score: (0.5 - measurement.coherence_level) * 2.0,
-                    recovery_priority: if measurement.coherence_level < 0.2 { "urgent" } else { "high" }.to_string(),
+                    recovery_priority: if measurement.coherence_level < 0.2 {
+                        "urgent"
+                    } else {
+                        "high"
+                    }
+                    .to_string(),
                 });
             }
         }
-        
+
         Ok(critical_systems)
     }
 
-    fn find_controller_for_system(&mut self, critical_system: &CriticalCoherenceSystem) -> Option<&mut CoherenceController> {
+    fn find_controller_for_system(
+        &mut self,
+        critical_system: &CriticalCoherenceSystem,
+    ) -> Option<&mut CoherenceController> {
         // Find the most appropriate controller for the critical system
-        self.coherence_controllers.iter_mut()
+        self.coherence_controllers
+            .iter_mut()
             .find(|controller| controller.can_handle_system(&critical_system.system_id))
     }
 }
@@ -554,22 +683,22 @@ impl BiologicalQuantumEntanglementCoordinator {
 
     async fn initialize_entanglement_system(&mut self) -> Result<EntanglementSystemInitResult> {
         info!("Initializing biological-quantum entanglement system");
-        
+
         // Initialize entanglement generators
         for generator in &mut self.entanglement_generators {
             generator.initialize().await?;
         }
-        
+
         // Initialize entanglement managers
         for manager in &mut self.entanglement_managers {
             manager.initialize().await?;
         }
-        
+
         // Start fidelity monitoring
         for monitor in &mut self.fidelity_monitors {
             monitor.start_monitoring().await?;
         }
-        
+
         // Initialize Bell state controllers
         for controller in &mut self.bell_state_controllers {
             controller.initialize().await?;
@@ -588,25 +717,27 @@ impl BiologicalQuantumEntanglementCoordinator {
         quantum_preparation: &QuantumPreparation,
     ) -> Result<EntanglementSetup> {
         debug!("Establishing biological-quantum entanglement");
-        
+
         let mut entanglement_pairs = Vec::new();
         let mut total_fidelity = 0.0;
-        
+
         // Generate entanglement pairs between biological and quantum systems
         for generator in &mut self.entanglement_generators {
-            let entanglement_pair = generator.generate_biological_quantum_entanglement(
-                quantum_preparation
-            ).await?;
-            
+            let entanglement_pair = generator
+                .generate_biological_quantum_entanglement(quantum_preparation)
+                .await?;
+
             total_fidelity += entanglement_pair.fidelity;
             entanglement_pairs.push(entanglement_pair);
         }
-        
+
         let average_fidelity = total_fidelity / entanglement_pairs.len() as f64;
-        
+
         // Optimize entanglement configuration
-        let optimization_result = self.optimize_entanglement_configuration(&entanglement_pairs).await?;
-        
+        let optimization_result = self
+            .optimize_entanglement_configuration(&entanglement_pairs)
+            .await?;
+
         Ok(EntanglementSetup {
             entanglement_pairs: optimization_result.optimized_pairs,
             entanglement_fidelity: average_fidelity,
@@ -618,20 +749,27 @@ impl BiologicalQuantumEntanglementCoordinator {
     async fn get_entanglement_status(&self) -> Result<EntanglementStatus> {
         // Collect fidelity measurements from all monitors
         let mut fidelity_measurements = Vec::new();
-        
+
         for monitor in &self.fidelity_monitors {
             let measurement = monitor.measure_entanglement_fidelity().await?;
             fidelity_measurements.push(measurement);
         }
-        
-        let average_fidelity = fidelity_measurements.iter()
-            .map(|m| m.fidelity).sum::<f64>() / fidelity_measurements.len() as f64;
-        
+
+        let average_fidelity = fidelity_measurements
+            .iter()
+            .map(|m| m.fidelity)
+            .sum::<f64>()
+            / fidelity_measurements.len() as f64;
+
         Ok(EntanglementStatus {
             average_fidelity,
             entanglement_pairs_active: fidelity_measurements.len(),
-            degradation_rate: self.calculate_fidelity_degradation_rate(&fidelity_measurements).await?,
-            critical_entanglements: self.identify_critical_entanglements(&fidelity_measurements).await?,
+            degradation_rate: self
+                .calculate_fidelity_degradation_rate(&fidelity_measurements)
+                .await?,
+            critical_entanglements: self
+                .identify_critical_entanglements(&fidelity_measurements)
+                .await?,
         })
     }
 
@@ -640,17 +778,18 @@ impl BiologicalQuantumEntanglementCoordinator {
         entanglement_status: &EntanglementStatus,
     ) -> Result<()> {
         info!("Restoring biological-quantum entanglement fidelity");
-        
+
         // Restore critical entanglements first
         for critical_entanglement in &entanglement_status.critical_entanglements {
-            self.restore_critical_entanglement(critical_entanglement).await?;
+            self.restore_critical_entanglement(critical_entanglement)
+                .await?;
         }
-        
+
         // Apply global fidelity enhancement
         for manager in &mut self.entanglement_managers {
             manager.enhance_entanglement_fidelity().await?;
         }
-        
+
         Ok(())
     }
 
@@ -660,9 +799,13 @@ impl BiologicalQuantumEntanglementCoordinator {
     ) -> Result<EntanglementOptimizationResult> {
         // Optimize the configuration of entanglement pairs for maximum performance
         let optimized_pairs = self.apply_entanglement_optimization(pairs).await?;
-        let coherence_time = self.calculate_optimal_coherence_time(&optimized_pairs).await?;
-        let bell_state_distribution = self.analyze_bell_state_distribution(&optimized_pairs).await?;
-        
+        let coherence_time = self
+            .calculate_optimal_coherence_time(&optimized_pairs)
+            .await?;
+        let bell_state_distribution = self
+            .analyze_bell_state_distribution(&optimized_pairs)
+            .await?;
+
         Ok(EntanglementOptimizationResult {
             optimized_pairs,
             coherence_time,
@@ -835,19 +978,23 @@ impl QuantumFusionMetrics {
         final_measurement: &QuantumBiologicalMeasurement,
     ) {
         self.total_quantum_biological_validations += 1;
-        
+
         // Update quantum advantage tracking
         if final_measurement.quantum_advantage_score > self.average_quantum_advantage {
-            self.average_quantum_advantage = 
-                (self.average_quantum_advantage * (self.total_quantum_biological_validations - 1) as f64 + 
-                 final_measurement.quantum_advantage_score) / self.total_quantum_biological_validations as f64;
+            self.average_quantum_advantage = (self.average_quantum_advantage
+                * (self.total_quantum_biological_validations - 1) as f64
+                + final_measurement.quantum_advantage_score)
+                / self.total_quantum_biological_validations as f64;
         }
-        
+
         // Update trend data
-        self.coherence_stability_trend.push(final_measurement.coherence_analysis.stability_score);
-        self.entanglement_fidelity_trend.push(entanglement_setup.entanglement_fidelity);
-        self.tunneling_efficiency_trend.push(tunneling_processing.tunneling_efficiency);
-        
+        self.coherence_stability_trend
+            .push(final_measurement.coherence_analysis.stability_score);
+        self.entanglement_fidelity_trend
+            .push(entanglement_setup.entanglement_fidelity);
+        self.tunneling_efficiency_trend
+            .push(tunneling_processing.tunneling_efficiency);
+
         // Keep only recent trend data (last 1000 points)
         if self.coherence_stability_trend.len() > 1000 {
             self.coherence_stability_trend.drain(0..100);
@@ -903,11 +1050,11 @@ impl CoherenceConfig {
     fn create_monitors(&self) -> Vec<CoherenceMonitor> {
         vec![CoherenceMonitor::default(); 3]
     }
-    
+
     fn create_controllers(&self) -> Vec<CoherenceController> {
         vec![CoherenceController::default(); 2]
     }
-    
+
     fn create_predictors(&self) -> Vec<DecoherencePredictor> {
         vec![DecoherencePredictor::default(); 2]
     }
@@ -923,15 +1070,15 @@ impl EntanglementConfig {
     fn create_generators(&self) -> Vec<BiologicalQuantumEntanglementGenerator> {
         vec![BiologicalQuantumEntanglementGenerator::default(); 2]
     }
-    
+
     fn create_managers(&self) -> Vec<EntanglementManager> {
         vec![EntanglementManager::default(); 2]
     }
-    
+
     fn create_fidelity_monitors(&self) -> Vec<EntanglementFidelityMonitor> {
         vec![EntanglementFidelityMonitor::default(); 3]
     }
-    
+
     fn create_bell_controllers(&self) -> Vec<BellStateController> {
         vec![BellStateController::default(); 2]
     }
@@ -950,11 +1097,11 @@ impl QuantumProcessingSubsystem {
     pub fn new(_config: &QuantumProcessingConfig) -> Self {
         Self
     }
-    
+
     async fn initialize(&mut self) -> Result<QuantumSubsystemInit> {
         Ok(QuantumSubsystemInit::default())
     }
-    
+
     async fn measure_quantum_state(&mut self) -> Result<QuantumMeasurement> {
         Ok(QuantumMeasurement::default())
     }
@@ -967,15 +1114,15 @@ impl BiologicalProcessingSubsystem {
     pub fn new(_config: &BiologicalProcessingConfig) -> Self {
         Self
     }
-    
+
     async fn initialize(&mut self) -> Result<BiologicalSubsystemInit> {
         Ok(BiologicalSubsystemInit::default())
     }
-    
+
     async fn measure_biological_state(&mut self) -> Result<BiologicalMeasurement> {
         Ok(BiologicalMeasurement::default())
     }
-    
+
     async fn adjust_for_quantum_coherence(&mut self) -> Result<()> {
         Ok(())
     }
@@ -988,7 +1135,7 @@ impl QuantumBiologicalInterface {
     pub fn new(_config: &InterfaceConfig) -> Self {
         Self
     }
-    
+
     async fn establish_interface(
         &mut self,
         _quantum_init: &QuantumSubsystemInit,
@@ -996,7 +1143,7 @@ impl QuantumBiologicalInterface {
     ) -> Result<InterfaceInit> {
         Ok(InterfaceInit::default())
     }
-    
+
     async fn analyze_quantum_biological_coherence(
         &self,
         _quantum: &QuantumMeasurement,
@@ -1013,7 +1160,7 @@ impl QuantumBiologicalStateSynchronizer {
     pub fn new(_config: &SynchronizationConfig) -> Self {
         Self
     }
-    
+
     async fn start_synchronization(&mut self) -> Result<SynchronizationInit> {
         Ok(SynchronizationInit::default())
     }
@@ -1026,11 +1173,11 @@ impl HybridPerformanceOptimizer {
     pub fn new(_config: &OptimizationConfig) -> Self {
         Self
     }
-    
+
     async fn initialize(&mut self) -> Result<OptimizerInit> {
         Ok(OptimizerInit::default())
     }
-    
+
     async fn calculate_quantum_advantage(
         &self,
         _quantum: &QuantumMeasurement,
@@ -1048,7 +1195,7 @@ impl CoherenceMonitor {
     async fn initialize(&mut self) -> Result<()> {
         Ok(())
     }
-    
+
     async fn measure_coherence(&self) -> Result<CoherenceMeasurement> {
         Ok(CoherenceMeasurement::default())
     }
@@ -1061,11 +1208,11 @@ impl CoherenceController {
     async fn initialize(&mut self) -> Result<()> {
         Ok(())
     }
-    
+
     fn can_handle_system(&self, _system_id: &str) -> bool {
         true
     }
-    
+
     async fn apply_coherence_recovery(&mut self, _system: &CriticalCoherenceSystem) -> Result<()> {
         Ok(())
     }
@@ -1078,8 +1225,11 @@ impl DecoherencePredictor {
     async fn initialize(&mut self) -> Result<()> {
         Ok(())
     }
-    
-    async fn predict_decoherence(&self, _measurements: &[CoherenceMeasurement]) -> Result<DecoherencePrediction> {
+
+    async fn predict_decoherence(
+        &self,
+        _measurements: &[CoherenceMeasurement],
+    ) -> Result<DecoherencePrediction> {
         Ok(DecoherencePrediction::default())
     }
 }
@@ -1091,11 +1241,11 @@ impl CoherenceOptimizationEngine {
     pub fn new(_config: &CoherenceOptimizationConfig) -> Self {
         Self
     }
-    
+
     async fn start(&mut self) -> Result<()> {
         Ok(())
     }
-    
+
     async fn optimize_global_coherence(&mut self, _status: &CoherenceStatus) -> Result<()> {
         Ok(())
     }
@@ -1117,7 +1267,7 @@ impl BiologicalQuantumEntanglementGenerator {
     async fn initialize(&mut self) -> Result<()> {
         Ok(())
     }
-    
+
     async fn generate_biological_quantum_entanglement(
         &mut self,
         _preparation: &QuantumPreparation,
@@ -1133,7 +1283,7 @@ impl EntanglementManager {
     async fn initialize(&mut self) -> Result<()> {
         Ok(())
     }
-    
+
     async fn enhance_entanglement_fidelity(&mut self) -> Result<()> {
         Ok(())
     }
@@ -1146,7 +1296,7 @@ impl EntanglementFidelityMonitor {
     async fn start_monitoring(&mut self) -> Result<()> {
         Ok(())
     }
-    
+
     async fn measure_entanglement_fidelity(&self) -> Result<FidelityMeasurement> {
         Ok(FidelityMeasurement::default())
     }
@@ -1334,19 +1484,21 @@ impl QuantumTunnelingProcessor {
     pub fn new(_config: &QuantumFusionConfig) -> Self {
         Self
     }
-    
+
     async fn initialize_tunneling_system(&mut self) -> Result<TunnelingSystemInitResult> {
         Ok(TunnelingSystemInitResult::default())
     }
-    
+
     async fn process_validation_through_tunneling(
         &mut self,
         _entanglement: &EntanglementSetup,
         _context: &QuantumBiologicalValidationContext,
     ) -> Result<TunnelingProcessing> {
-        Ok(TunnelingProcessing { tunneling_efficiency: 0.85 })
+        Ok(TunnelingProcessing {
+            tunneling_efficiency: 0.85,
+        })
     }
-    
+
     async fn optimize_tunneling_parameters(&mut self) -> Result<()> {
         Ok(())
     }
@@ -1359,11 +1511,11 @@ impl SuperpositionValidationEngine {
     pub fn new(_config: &QuantumFusionConfig) -> Self {
         Self
     }
-    
+
     async fn initialize_superposition_engine(&mut self) -> Result<SuperpositionEngineInitResult> {
         Ok(SuperpositionEngineInitResult::default())
     }
-    
+
     async fn prepare_validation_superposition(
         &mut self,
         _context: &QuantumBiologicalValidationContext,
@@ -1379,11 +1531,11 @@ impl QuantumBiologicalErrorCorrector {
     pub fn new(_config: &QuantumFusionConfig) -> Self {
         Self
     }
-    
+
     async fn initialize_error_correction(&mut self) -> Result<ErrorCorrectionInitResult> {
         Ok(ErrorCorrectionInitResult::default())
     }
-    
+
     async fn correct_biological_quantum_errors(
         &mut self,
         _optimization: &OptimizationResults,
@@ -1399,14 +1551,16 @@ impl QuantumSynapticPlasticityManager {
     pub fn new(_config: &QuantumFusionConfig) -> Self {
         Self
     }
-    
+
     async fn apply_quantum_synaptic_plasticity(
         &mut self,
         _tunneling: &TunnelingProcessing,
     ) -> Result<PlasticityEnhancement> {
-        Ok(PlasticityEnhancement { enhancement_factor: 1.3 })
+        Ok(PlasticityEnhancement {
+            enhancement_factor: 1.3,
+        })
     }
-    
+
     async fn update_plasticity_parameters(&mut self) -> Result<()> {
         Ok(())
     }
@@ -1419,7 +1573,7 @@ impl HybridQuantumClassicalOptimizer {
     pub fn new(_config: &QuantumFusionConfig) -> Self {
         Self
     }
-    
+
     async fn optimize_quantum_biological_system(
         &mut self,
         _plasticity: &PlasticityEnhancement,
@@ -1436,11 +1590,11 @@ impl QuantumDecoherenceManager {
     pub fn new(_config: &QuantumFusionConfig) -> Self {
         Self
     }
-    
+
     async fn start_decoherence_monitoring(&mut self) -> Result<DecoherenceMonitoringInitResult> {
         Ok(DecoherenceMonitoringInitResult::default())
     }
-    
+
     async fn mitigate_decoherence_effects(
         &mut self,
         _error_correction: &ErrorCorrectionResult,
@@ -1494,7 +1648,9 @@ pub mod quantum_biological_protocols {
         validation_context: &QuantumBiologicalValidationContext,
     ) -> Result<QuantumBiologicalValidationResult> {
         // Execute standard quantum-biological validation protocol
-        fusion_system.quantum_biological_validation(validation_context).await
+        fusion_system
+            .quantum_biological_validation(validation_context)
+            .await
     }
 
     /// High-fidelity quantum-biological validation protocol
@@ -1503,7 +1659,9 @@ pub mod quantum_biological_protocols {
         validation_context: &QuantumBiologicalValidationContext,
     ) -> Result<QuantumBiologicalValidationResult> {
         // Execute high-fidelity validation with enhanced error correction
-        fusion_system.quantum_biological_validation(validation_context).await
+        fusion_system
+            .quantum_biological_validation(validation_context)
+            .await
     }
 
     /// Ultra-fast quantum-biological validation protocol
@@ -1512,7 +1670,9 @@ pub mod quantum_biological_protocols {
         validation_context: &QuantumBiologicalValidationContext,
     ) -> Result<QuantumBiologicalValidationResult> {
         // Execute ultra-fast validation optimized for speed
-        fusion_system.quantum_biological_validation(validation_context).await
+        fusion_system
+            .quantum_biological_validation(validation_context)
+            .await
     }
 
     /// Energy-efficient quantum-biological validation protocol
@@ -1521,6 +1681,8 @@ pub mod quantum_biological_protocols {
         validation_context: &QuantumBiologicalValidationContext,
     ) -> Result<QuantumBiologicalValidationResult> {
         // Execute energy-efficient validation optimized for low power consumption
-        fusion_system.quantum_biological_validation(validation_context).await
+        fusion_system
+            .quantum_biological_validation(validation_context)
+            .await
     }
 }

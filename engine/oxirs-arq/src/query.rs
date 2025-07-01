@@ -1431,7 +1431,7 @@ impl QueryParser {
             let expr = self.parse_unary_expression()?;
             Ok(Expression::Unary {
                 op,
-                expr: Box::new(expr),
+                operand: Box::new(expr),
             })
         } else {
             self.parse_primary_expression()

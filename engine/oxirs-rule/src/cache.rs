@@ -31,7 +31,7 @@ pub struct DerivationCacheKey {
 }
 
 /// Cached result entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CacheEntry<T> {
     pub value: T,
     pub timestamp: Instant,
@@ -51,7 +51,7 @@ pub enum EvictionPolicy {
 }
 
 /// Cache statistics and monitoring
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CacheStatistics {
     pub hits: usize,
     pub misses: usize,
@@ -589,7 +589,7 @@ impl RuleCache {
 }
 
 /// Combined caching statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CachingStatistics {
     pub rule_cache: CacheStatistics,
     pub derivation_cache: CacheStatistics,

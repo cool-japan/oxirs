@@ -9,10 +9,10 @@
 //! problems with quantum-enhanced intuition and multi-dimensional awareness.
 
 pub mod core;
-pub mod synthetic_minds;
 pub mod processing;
+pub mod synthetic_minds;
 
 // Re-export main types
 pub use core::*;
-pub use synthetic_minds::*;
 pub use processing::*;
+pub use synthetic_minds::*;

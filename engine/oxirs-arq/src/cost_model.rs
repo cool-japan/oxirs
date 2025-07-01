@@ -315,6 +315,10 @@ impl CostModel {
                 // Zero results - minimal cost
                 Ok(CostEstimate::new(0.1, 0.0, 0.0, 0.0, 0))
             }
+            Algebra::Empty => {
+                // Empty result set - minimal cost
+                Ok(CostEstimate::new(0.1, 0.0, 0.0, 0.0, 0))
+            }
         }
     }
 

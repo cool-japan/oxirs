@@ -122,7 +122,7 @@ pub struct DistributedVectorSearch {
     /// Health monitor
     health_monitor: Arc<Mutex<HealthMonitor>>,
     /// Performance analytics
-    analytics: Arc<VectorAnalyticsEngine>,
+    analytics: Arc<Mutex<VectorAnalyticsEngine>>,
 }
 
 /// Load balancer for distributed queries
@@ -216,7 +216,7 @@ impl DistributedVectorSearch {
                 Duration::from_secs(30),
                 Duration::from_secs(5),
             ))),
-            analytics: Arc::new(VectorAnalyticsEngine::new()),
+            analytics: Arc::new(Mutex::new(VectorAnalyticsEngine::new())),
         })
     }
 
@@ -295,20 +295,43 @@ impl DistributedVectorSearch {
         let merged_results = self.merge_node_results(&node_results, query.k);
 
         // Update analytics
-        self.analytics.record_distributed_query(
-            &query.id,
-            target_nodes.len(),
-            node_results.len(),
-            start_time.elapsed(),
-        );
+        let analytics = crate::advanced_analytics::QueryAnalytics {
+            query_id: query.id.clone(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            query_vector: query.query_vector.as_f32(),
+            similarity_metric: "distributed".to_string(),
+            top_k: query.k,
+            response_time: start_time.elapsed(),
+            results_count: merged_results.len(),
+            avg_similarity_score: merged_results.iter().map(|r| r.similarity).sum::<f32>()
+                / merged_results.len().max(1) as f32,
+            min_similarity_score: merged_results
+                .iter()
+                .map(|r| r.similarity)
+                .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .unwrap_or(0.0),
+            max_similarity_score: merged_results
+                .iter()
+                .map(|r| r.similarity)
+                .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .unwrap_or(0.0),
+            cache_hit: false,
+            index_type: "distributed".to_string(),
+        };
+        let mut analytics_guard = self.analytics.lock().await;
+        analytics_guard.record_query(analytics);
 
+        let nodes_responded = node_results.len();
         Ok(DistributedSearchResponse {
             query_id: query.id,
             merged_results,
             node_results,
             total_latency_ms: start_time.elapsed().as_millis() as u64,
             nodes_queried: target_nodes.len(),
-            nodes_responded: node_results.len(),
+            nodes_responded,
         })
     }
 
@@ -433,10 +456,12 @@ impl DistributedVectorSearch {
         // In a real implementation, this would make HTTP requests to the node
         // For now, simulate the query execution
 
-        let nodes_guard = nodes.read().unwrap();
-        let _node_config = nodes_guard
-            .get(&node_id)
-            .ok_or_else(|| anyhow::anyhow!("Node {} not found", node_id))?;
+        {
+            let nodes_guard = nodes.read().unwrap();
+            let _node_config = nodes_guard
+                .get(&node_id)
+                .ok_or_else(|| anyhow::anyhow!("Node {} not found", node_id))?;
+        } // Drop the guard here
 
         // Simulate network latency and processing
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -445,9 +470,10 @@ impl DistributedVectorSearch {
         let mut results = Vec::new();
         for i in 0..query.k.min(10) {
             results.push(SimilarityResult {
-                id: format!("{}:vector_{}", node_id, i),
-                score: 0.9 - (i as f32 * 0.1),
-                metadata: HashMap::new(),
+                uri: format!("{}:vector_{}", node_id, i),
+                similarity: 0.9 - (i as f32 * 0.1),
+                metadata: Some(HashMap::new()),
+                metrics: HashMap::new(),
             });
         }
 
@@ -473,7 +499,7 @@ impl DistributedVectorSearch {
         }
 
         // Sort by similarity score (descending)
-        all_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        all_results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
 
         // Take top k results
         all_results.truncate(k);

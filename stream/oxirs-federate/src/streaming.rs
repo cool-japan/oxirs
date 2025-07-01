@@ -46,12 +46,12 @@ impl Default for StreamingConfig {
     fn default() -> Self {
         Self {
             max_concurrent_streams: 100,
-            default_window_size: Duration::from_minutes(5),
+            default_window_size: Duration::from_secs(5 * 60),
             max_buffer_size: 10000,
-            late_data_tolerance: Duration::from_minutes(1),
+            late_data_tolerance: Duration::from_secs(60),
             ordering_strategy: OrderingStrategy::EventTime,
-            checkpoint_interval: Duration::from_minutes(1),
-            stream_timeout: Duration::from_minutes(30),
+            checkpoint_interval: Duration::from_secs(60),
+            stream_timeout: Duration::from_secs(30 * 60),
             exactly_once_processing: true,
             enable_debugging: false,
             watermark_strategy: WatermarkStrategy::Periodic,
@@ -381,7 +381,7 @@ impl StreamingProcessor {
     /// Create streaming processor with configuration
     pub fn with_config(config: StreamingConfig) -> Self {
         let processing_semaphore = Arc::new(Semaphore::new(config.max_concurrent_streams));
-        
+
         Self {
             config,
             continuous_queries: Arc::new(RwLock::new(HashMap::new())),
@@ -398,25 +398,25 @@ impl StreamingProcessor {
     pub async fn register_continuous_query(&self, mut query: ContinuousQuery) -> Result<()> {
         // Validate query
         self.validate_continuous_query(&query).await?;
-        
+
         // Initialize query statistics
         query.statistics = QueryStatistics::default();
-        
+
         // Create output stream if it doesn't exist
         self.ensure_stream_exists(&query.output_stream).await?;
-        
+
         // Subscribe to input streams
         for input_stream in &query.input_streams {
             self.ensure_stream_exists(input_stream).await?;
         }
-        
+
         // Store query
         let query_id = query.query_id.clone();
         {
             let mut queries = self.continuous_queries.write().await;
             queries.insert(query_id.clone(), query);
         }
-        
+
         // Initialize stream state
         let state = StreamState {
             query_id: query_id.clone(),
@@ -426,21 +426,21 @@ impl StreamingProcessor {
             last_checkpoint: SystemTime::now(),
             sequence_number: 0,
         };
-        
+
         {
             let mut states = self.stream_states.write().await;
             states.insert(query_id.clone(), state);
         }
-        
+
         // Start query processing task
         self.start_query_processing_task(query_id).await?;
-        
+
         // Update statistics
         {
             let mut stats = self.statistics.write().await;
             stats.total_continuous_queries += 1;
         }
-        
+
         info!("Registered continuous query: {}", query_id);
         Ok(())
     }
@@ -452,13 +452,13 @@ impl StreamingProcessor {
             let mut queries = self.continuous_queries.write().await;
             queries.remove(query_id);
         }
-        
+
         // Remove stream state
         {
             let mut states = self.stream_states.write().await;
             states.remove(query_id);
         }
-        
+
         // Update statistics
         {
             let mut stats = self.statistics.write().await;
@@ -466,7 +466,7 @@ impl StreamingProcessor {
                 stats.total_continuous_queries -= 1;
             }
         }
-        
+
         info!("Unregistered continuous query: {}", query_id);
         Ok(())
     }
@@ -477,10 +477,10 @@ impl StreamingProcessor {
         event.processing_time = SystemTime::now();
         event.ingestion_time = SystemTime::now();
         event.source_stream = stream_id.to_string();
-        
+
         // Ensure stream exists
         self.ensure_stream_exists(stream_id).await?;
-        
+
         // Publish to stream
         {
             let publishers = self.event_publishers.read().await;
@@ -490,16 +490,16 @@ impl StreamingProcessor {
                 }
             }
         }
-        
+
         // Update watermarks
         self.update_watermarks(stream_id, &event).await;
-        
+
         // Update statistics
         {
             let mut stats = self.statistics.write().await;
             stats.total_events_processed += 1;
         }
-        
+
         debug!("Published event {} to stream {}", event.event_id, stream_id);
         Ok(())
     }
@@ -510,19 +510,21 @@ impl StreamingProcessor {
         stream_id: &str,
     ) -> Result<impl Stream<Item = StreamEvent>> {
         self.ensure_stream_exists(stream_id).await?;
-        
+
         let publishers = self.event_publishers.read().await;
         if let Some(publisher) = publishers.get(stream_id) {
             let receiver = publisher.subscribe();
-            Ok(BroadcastStream::new(receiver).filter_map(|result| async move {
-                match result {
-                    Ok(event) => Some(event),
-                    Err(e) => {
-                        warn!("Stream subscription error: {}", e);
-                        None
+            Ok(
+                BroadcastStream::new(receiver).filter_map(|result| async move {
+                    match result {
+                        Ok(event) => Some(event),
+                        Err(e) => {
+                            warn!("Stream subscription error: {}", e);
+                            None
+                        }
                     }
-                }
-            }))
+                }),
+            )
         } else {
             Err(anyhow!("Stream not found: {}", stream_id))
         }
@@ -532,22 +534,22 @@ impl StreamingProcessor {
     pub async fn register_stream_join(&self, join: StreamJoin) -> Result<()> {
         // Validate join
         self.validate_stream_join(&join).await?;
-        
+
         // Ensure all streams exist
         self.ensure_stream_exists(&join.left_stream).await?;
         self.ensure_stream_exists(&join.right_stream).await?;
         self.ensure_stream_exists(&join.output_stream).await?;
-        
+
         // Store join
         let join_id = join.join_id.clone();
         {
             let mut joins = self.active_joins.write().await;
             joins.insert(join_id.clone(), join);
         }
-        
+
         // Start join processing task
         self.start_join_processing_task(join_id).await?;
-        
+
         info!("Registered stream join: {}", join_id);
         Ok(())
     }
@@ -556,7 +558,7 @@ impl StreamingProcessor {
     pub async fn unregister_stream_join(&self, join_id: &str) -> Result<()> {
         let mut joins = self.active_joins.write().await;
         joins.remove(join_id);
-        
+
         info!("Unregistered stream join: {}", join_id);
         Ok(())
     }
@@ -572,11 +574,11 @@ impl StreamingProcessor {
         let mut states = self.stream_states.write().await;
         if let Some(state) = states.get_mut(query_id) {
             state.last_checkpoint = SystemTime::now();
-            
+
             // In a real implementation, this would persist state to durable storage
             debug!("Checkpointed state for query: {}", query_id);
         }
-        
+
         Ok(())
     }
 
@@ -593,15 +595,15 @@ impl StreamingProcessor {
         if query.query_id.is_empty() {
             return Err(anyhow!("Query ID cannot be empty"));
         }
-        
+
         if query.query.is_empty() {
             return Err(anyhow!("Query cannot be empty"));
         }
-        
+
         if query.input_streams.is_empty() {
             return Err(anyhow!("At least one input stream must be specified"));
         }
-        
+
         // Additional validation would go here (SPARQL syntax, etc.)
         Ok(())
     }
@@ -610,88 +612,92 @@ impl StreamingProcessor {
         if join.join_id.is_empty() {
             return Err(anyhow!("Join ID cannot be empty"));
         }
-        
+
         if join.left_stream == join.right_stream {
             return Err(anyhow!("Left and right streams cannot be the same"));
         }
-        
+
         if join.join_condition.is_empty() {
             return Err(anyhow!("Join condition cannot be empty"));
         }
-        
+
         Ok(())
     }
 
     async fn ensure_stream_exists(&self, stream_id: &str) -> Result<()> {
         let mut publishers = self.event_publishers.write().await;
-        
+
         if !publishers.contains_key(stream_id) {
             let (sender, _) = broadcast::channel(self.config.max_buffer_size);
             publishers.insert(stream_id.to_string(), sender);
-            
+
             let mut stats = self.statistics.write().await;
             stats.active_streams += 1;
-            
+
             debug!("Created new stream: {}", stream_id);
         }
-        
+
         Ok(())
     }
 
     async fn start_query_processing_task(&self, query_id: String) -> Result<()> {
         let processor = self.clone();
         let query_id_clone = query_id.clone();
-        
+
         tokio::spawn(async move {
             if let Err(e) = processor.process_continuous_query(&query_id_clone).await {
-                error!("Error processing continuous query {}: {}", query_id_clone, e);
+                error!(
+                    "Error processing continuous query {}: {}",
+                    query_id_clone, e
+                );
             }
         });
-        
+
         Ok(())
     }
 
     async fn start_join_processing_task(&self, join_id: String) -> Result<()> {
         let processor = self.clone();
         let join_id_clone = join_id.clone();
-        
+
         tokio::spawn(async move {
             if let Err(e) = processor.process_stream_join(&join_id_clone).await {
                 error!("Error processing stream join {}: {}", join_id_clone, e);
             }
         });
-        
+
         Ok(())
     }
 
     async fn process_continuous_query(&self, query_id: &str) -> Result<()> {
         let _permit = self.processing_semaphore.acquire().await?;
-        
+
         // Get query details
         let query = {
             let queries = self.continuous_queries.read().await;
             queries.get(query_id).cloned()
         };
-        
+
         let query = match query {
             Some(q) => q,
             None => return Err(anyhow!("Query not found: {}", query_id)),
         };
-        
+
         // Subscribe to input streams
         let mut input_streams = Vec::new();
         for stream_id in &query.input_streams {
             let stream = self.subscribe_to_stream(stream_id).await?;
             input_streams.push(stream);
         }
-        
+
         // Process events based on window specification
         if let Some(window_spec) = &query.window_spec {
-            self.process_windowed_query(&query, window_spec, input_streams).await?;
+            self.process_windowed_query(&query, window_spec, input_streams)
+                .await?;
         } else {
             self.process_streaming_query(&query, input_streams).await?;
         }
-        
+
         Ok(())
     }
 
@@ -703,7 +709,7 @@ impl StreamingProcessor {
     ) -> Result<()> {
         let mut event_buffer = VecDeque::new();
         let mut last_trigger = Instant::now();
-        
+
         loop {
             // Collect events from all input streams
             for stream in &mut input_streams {
@@ -713,32 +719,36 @@ impl StreamingProcessor {
                         self.handle_late_event(&event, query).await?;
                         continue;
                     }
-                    
+
                     event_buffer.push_back(event);
-                    
+
                     // Limit buffer size
                     while event_buffer.len() > self.config.max_buffer_size {
                         event_buffer.pop_front();
                     }
                 }
             }
-            
+
             // Check trigger conditions
-            if self.should_trigger_window(&query.trigger_spec, &last_trigger).await {
-                self.process_window_events(&event_buffer, query, window_spec).await?;
+            if self
+                .should_trigger_window(&query.trigger_spec, &last_trigger)
+                .await
+            {
+                self.process_window_events(&event_buffer, query, window_spec)
+                    .await?;
                 last_trigger = Instant::now();
-                
+
                 // Clear processed events based on window type
                 if matches!(window_spec.window_type, WindowType::Tumbling) {
                     event_buffer.clear();
                 }
             }
-            
+
             // Periodic checkpoint
             if last_trigger.elapsed() >= self.config.checkpoint_interval {
                 self.checkpoint_state(&query.query_id).await?;
             }
-            
+
             // Small delay to prevent busy waiting
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -756,7 +766,7 @@ impl StreamingProcessor {
                     self.process_single_event(&event, query).await?;
                 }
             }
-            
+
             // Small delay to prevent busy waiting
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -764,32 +774,32 @@ impl StreamingProcessor {
 
     async fn process_stream_join(&self, join_id: &str) -> Result<()> {
         let _permit = self.processing_semaphore.acquire().await?;
-        
+
         // Get join details
         let join = {
             let joins = self.active_joins.read().await;
             joins.get(join_id).cloned()
         };
-        
+
         let join = match join {
             Some(j) => j,
             None => return Err(anyhow!("Join not found: {}", join_id)),
         };
-        
+
         // Subscribe to both streams
         let mut left_stream = self.subscribe_to_stream(&join.left_stream).await?;
         let mut right_stream = self.subscribe_to_stream(&join.right_stream).await?;
-        
+
         // Maintain join windows
         let mut left_window: VecDeque<StreamEvent> = VecDeque::new();
         let mut right_window: VecDeque<StreamEvent> = VecDeque::new();
-        
+
         loop {
             tokio::select! {
                 Some(left_event) = left_stream.next() => {
                     // Add to left window
                     left_window.push_back(left_event.clone());
-                    
+
                     // Join with right window
                     for right_event in &right_window {
                         if self.events_match(&left_event, right_event, &join.join_condition).await {
@@ -797,15 +807,15 @@ impl StreamingProcessor {
                             self.publish_event(&join.output_stream, joined_event).await?;
                         }
                     }
-                    
+
                     // Clean old events from left window
                     self.clean_window(&mut left_window, &join.join_window).await;
                 }
-                
+
                 Some(right_event) = right_stream.next() => {
                     // Add to right window
                     right_window.push_back(right_event.clone());
-                    
+
                     // Join with left window
                     for left_event in &left_window {
                         if self.events_match(left_event, &right_event, &join.join_condition).await {
@@ -813,7 +823,7 @@ impl StreamingProcessor {
                             self.publish_event(&join.output_stream, joined_event).await?;
                         }
                     }
-                    
+
                     // Clean old events from right window
                     self.clean_window(&mut right_window, &join.join_window).await;
                 }
@@ -828,7 +838,7 @@ impl StreamingProcessor {
             watermark_type: WatermarkType::Regular,
             confidence: 1.0,
         };
-        
+
         let mut trackers = self.watermark_trackers.write().await;
         trackers.insert(stream_id.to_string(), watermark);
     }
@@ -851,12 +861,19 @@ impl StreamingProcessor {
                 q.statistics.late_events_count += 1;
             }
         }
-        
-        warn!("Late event detected for query {}: {}", query.query_id, event.event_id);
+
+        warn!(
+            "Late event detected for query {}: {}",
+            query.query_id, event.event_id
+        );
         Ok(())
     }
 
-    async fn should_trigger_window(&self, trigger_spec: &TriggerSpec, last_trigger: &Instant) -> bool {
+    async fn should_trigger_window(
+        &self,
+        trigger_spec: &TriggerSpec,
+        last_trigger: &Instant,
+    ) -> bool {
         match trigger_spec.trigger_type {
             TriggerType::ProcessingTime => {
                 if let Some(interval) = trigger_spec.interval {
@@ -886,10 +903,10 @@ impl StreamingProcessor {
         if events.is_empty() {
             return Ok(());
         }
-        
+
         // Execute query on windowed events
         let result_data = self.execute_sparql_on_events(events, &query.query).await?;
-        
+
         // Create result event
         let result_event = StreamEvent {
             event_id: Uuid::new_v4().to_string(),
@@ -902,10 +919,11 @@ impl StreamingProcessor {
             watermark: None,
             metadata: HashMap::new(),
         };
-        
+
         // Publish result
-        self.publish_event(&query.output_stream, result_event).await?;
-        
+        self.publish_event(&query.output_stream, result_event)
+            .await?;
+
         // Update query statistics
         {
             let mut queries = self.continuous_queries.write().await;
@@ -917,15 +935,19 @@ impl StreamingProcessor {
                 q.last_executed = Some(SystemTime::now());
             }
         }
-        
+
         Ok(())
     }
 
-    async fn process_single_event(&self, event: &StreamEvent, query: &ContinuousQuery) -> Result<()> {
+    async fn process_single_event(
+        &self,
+        event: &StreamEvent,
+        query: &ContinuousQuery,
+    ) -> Result<()> {
         // Execute query on single event
         let events = vec![event.clone()].into();
         let result_data = self.execute_sparql_on_events(&events, &query.query).await?;
-        
+
         // Create result event
         let result_event = StreamEvent {
             event_id: Uuid::new_v4().to_string(),
@@ -938,10 +960,11 @@ impl StreamingProcessor {
             watermark: event.watermark,
             metadata: event.metadata.clone(),
         };
-        
+
         // Publish result
-        self.publish_event(&query.output_stream, result_event).await?;
-        
+        self.publish_event(&query.output_stream, result_event)
+            .await?;
+
         Ok(())
     }
 
@@ -957,7 +980,12 @@ impl StreamingProcessor {
         }))
     }
 
-    async fn events_match(&self, _left: &StreamEvent, _right: &StreamEvent, _condition: &str) -> bool {
+    async fn events_match(
+        &self,
+        _left: &StreamEvent,
+        _right: &StreamEvent,
+        _condition: &str,
+    ) -> bool {
         // Mock implementation - would evaluate join condition
         true
     }
@@ -975,7 +1003,7 @@ impl StreamingProcessor {
             "join_id": join.join_id,
             "join_type": join.join_type
         });
-        
+
         Ok(StreamEvent {
             event_id: Uuid::new_v4().to_string(),
             event_time: left.event_time.max(right.event_time),
@@ -991,7 +1019,7 @@ impl StreamingProcessor {
 
     async fn clean_window(&self, window: &mut VecDeque<StreamEvent>, window_size: &Duration) {
         let cutoff_time = SystemTime::now() - *window_size;
-        
+
         while let Some(front_event) = window.front() {
             if front_event.event_time < cutoff_time {
                 window.pop_front();
@@ -1022,7 +1050,7 @@ mod tests {
     #[tokio::test]
     async fn test_stream_creation() {
         let processor = StreamingProcessor::new();
-        
+
         let event = StreamEvent {
             event_id: "test-1".to_string(),
             event_time: SystemTime::now(),
@@ -1034,9 +1062,9 @@ mod tests {
             watermark: None,
             metadata: HashMap::new(),
         };
-        
+
         processor.publish_event("test-stream", event).await.unwrap();
-        
+
         let stats = processor.get_statistics().await;
         assert_eq!(stats.active_streams, 1);
         assert_eq!(stats.total_events_processed, 1);
@@ -1045,7 +1073,7 @@ mod tests {
     #[tokio::test]
     async fn test_continuous_query_registration() {
         let processor = StreamingProcessor::new();
-        
+
         let query = ContinuousQuery {
             query_id: "test-query".to_string(),
             name: "Test Query".to_string(),
@@ -1065,9 +1093,9 @@ mod tests {
             last_executed: None,
             statistics: QueryStatistics::default(),
         };
-        
+
         processor.register_continuous_query(query).await.unwrap();
-        
+
         let stats = processor.get_statistics().await;
         assert_eq!(stats.total_continuous_queries, 1);
     }
@@ -1075,7 +1103,7 @@ mod tests {
     #[tokio::test]
     async fn test_stream_join_registration() {
         let processor = StreamingProcessor::new();
-        
+
         let join = StreamJoin {
             join_id: "test-join".to_string(),
             left_stream: "left-stream".to_string(),
@@ -1085,9 +1113,9 @@ mod tests {
             join_window: Duration::from_secs(60),
             output_stream: "joined-stream".to_string(),
         };
-        
+
         processor.register_stream_join(join).await.unwrap();
-        
+
         // Join should be registered
         let joins = processor.active_joins.read().await;
         assert!(joins.contains_key("test-join"));
@@ -1096,7 +1124,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_subscription() {
         let processor = StreamingProcessor::new();
-        
+
         // Create stream by publishing an event
         let event = StreamEvent {
             event_id: "test-1".to_string(),
@@ -1109,9 +1137,9 @@ mod tests {
             watermark: None,
             metadata: HashMap::new(),
         };
-        
+
         processor.publish_event("test-stream", event).await.unwrap();
-        
+
         // Should be able to subscribe
         let _stream = processor.subscribe_to_stream("test-stream").await.unwrap();
     }

@@ -8,13 +8,13 @@
 //! - Attention mechanism with weighted focus distribution
 //! - Comprehensive error handling and robustness features
 
-use super::*;
 pub use super::consciousness_types::*;
+use super::*;
 use anyhow::{Context, Result};
-use std::collections::{VecDeque, HashMap};
-use std::f64::consts::PI;
-use tracing::{debug, warn, error, info};
 use rand::Rng;
+use std::collections::{HashMap, VecDeque};
+use std::f64::consts::PI;
+use tracing::{debug, error, info, warn};
 
 /// Advanced consciousness model with neural-inspired architecture
 #[derive(Debug, Clone)]
@@ -25,15 +25,15 @@ pub struct ConsciousnessModel {
     pub multi_layer_memory: MultiLayerMemorySystem,
     pub emotional_state: AdvancedEmotionalState,
     pub metacognitive_layer: EnhancedMetacognitiveLayer,
-    
+
     // Neural consciousness simulation
     pub neural_correlates: NeuralCorrelates,
     pub consciousness_stream: ConsciousnessStream,
-    
+
     // Performance monitoring
     pub consciousness_metrics: ConsciousnessMetrics,
     pub state_history: VecDeque<ConsciousnessSnapshot>,
-    
+
     // Configuration
     pub config: ConsciousnessModelConfig,
 }
@@ -59,62 +59,85 @@ impl ConsciousnessModel {
         model.config = config;
         Ok(model)
     }
-    
+
     /// Advanced consciousness processing with comprehensive error handling
-    pub fn conscious_query_processing(&mut self, query: &str, context: &AssembledContext) -> Result<AdvancedConsciousResponse> {
+    pub fn conscious_query_processing(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<AdvancedConsciousResponse> {
         let processing_start = std::time::Instant::now();
-        
+
         // Input validation
         if query.is_empty() {
-            return Err(anyhow::anyhow!("Empty query provided to consciousness processing"));
+            return Err(anyhow::anyhow!(
+                "Empty query provided to consciousness processing"
+            ));
         }
-        
+
         // Create consciousness snapshot before processing
         self.capture_consciousness_snapshot()?;
-        
+
         // 1. Neural consciousness simulation
-        debug!("Starting neural consciousness simulation for query: {}", query.chars().take(50).collect::<String>());
-        let neural_activation = self.neural_correlates.process_input(query, context)
+        debug!(
+            "Starting neural consciousness simulation for query: {}",
+            query.chars().take(50).collect::<String>()
+        );
+        let neural_activation = self
+            .neural_correlates
+            .process_input(query, context)
             .context("Failed to process neural consciousness simulation")?;
-        
+
         // 2. Update consciousness stream
-        self.consciousness_stream.add_experience(query, context, &neural_activation)
+        self.consciousness_stream
+            .add_experience(query, context, &neural_activation)
             .context("Failed to update consciousness stream")?;
-        
+
         // 3. Advanced awareness computation
-        let awareness_update = self.compute_advanced_awareness(query, context)
+        let awareness_update = self
+            .compute_advanced_awareness(query, context)
             .context("Failed to compute advanced awareness")?;
-        self.awareness_level = (self.awareness_level * 0.7 + awareness_update * 0.3).clamp(0.0, 1.0);
-        
+        self.awareness_level =
+            (self.awareness_level * 0.7 + awareness_update * 0.3).clamp(0.0, 1.0);
+
         // 4. Sophisticated attention mechanism
-        let attention_allocation = self.attention_mechanism.allocate_attention(query, context, &neural_activation)
+        let attention_allocation = self
+            .attention_mechanism
+            .allocate_attention(query, context, &neural_activation)
             .context("Failed to allocate attention")?;
-        
+
         // 5. Multi-layer memory processing
-        let memory_integration = self.multi_layer_memory.process_and_integrate(query, context, &attention_allocation)
+        let memory_integration = self
+            .multi_layer_memory
+            .process_and_integrate(query, context, &attention_allocation)
             .context("Failed to process multi-layer memory")?;
-        
+
         // 6. Advanced emotional processing
-        let emotional_response = self.emotional_state.process_emotional_content(query, context)
+        let emotional_response = self
+            .emotional_state
+            .process_emotional_content(query, context)
             .context("Failed to process emotional content")?;
-        
+
         // 7. Enhanced metacognitive assessment
-        let metacognitive_result = self.metacognitive_layer.comprehensive_assessment(query, context, &neural_activation)
+        let metacognitive_result = self
+            .metacognitive_layer
+            .comprehensive_assessment(query, context, &neural_activation)
             .context("Failed to perform metacognitive assessment")?;
-        
+
         // 8. Generate sophisticated insights
-        let enhanced_insights = self.generate_advanced_insights(query, context, &neural_activation, &memory_integration)
+        let enhanced_insights = self
+            .generate_advanced_insights(query, context, &neural_activation, &memory_integration)
             .context("Failed to generate advanced insights")?;
-        
+
         // 9. Update consciousness metrics
         self.consciousness_metrics.update(
             self.awareness_level,
             &attention_allocation,
             &memory_integration,
             &emotional_response,
-            processing_start.elapsed()
+            processing_start.elapsed(),
         )?;
-        
+
         // 10. Construct advanced response
         let response = AdvancedConsciousResponse {
             base_response: context.clone(),
@@ -131,33 +154,38 @@ impl ConsciousnessModel {
             enhanced_insights,
             consciousness_stream_context: self.consciousness_stream.get_recent_context(5),
         };
-        
-        info!("Consciousness processing completed successfully in {:?}", processing_start.elapsed());
+
+        info!(
+            "Consciousness processing completed successfully in {:?}",
+            processing_start.elapsed()
+        );
         Ok(response)
     }
-    
+
     /// Advanced awareness computation with multiple cognitive factors
     fn compute_advanced_awareness(&self, query: &str, context: &AssembledContext) -> Result<f64> {
         let query_complexity = self.calculate_enhanced_query_complexity(query)?;
         let context_richness = self.calculate_context_richness(context)?;
         let information_density = self.calculate_information_density(query, context)?;
         let cognitive_load = self.calculate_cognitive_load(query, context)?;
-        
+
         // Sophisticated awareness calculation using multiple factors
         let raw_awareness = (
-            query_complexity * 0.25 +
-            context_richness * 0.25 +
-            information_density * 0.25 +
-            (1.0 - cognitive_load) * 0.25  // Inverse cognitive load
-        ).clamp(0.0, 1.0);
-        
+            query_complexity * 0.25
+                + context_richness * 0.25
+                + information_density * 0.25
+                + (1.0 - cognitive_load) * 0.25
+            // Inverse cognitive load
+        )
+        .clamp(0.0, 1.0);
+
         // Apply consciousness stream influence
         let stream_influence = self.consciousness_stream.get_awareness_influence()?;
         let final_awareness = (raw_awareness * 0.8 + stream_influence * 0.2).clamp(0.0, 1.0);
-        
+
         debug!("Advanced awareness computed: complexity={:.3}, richness={:.3}, density={:.3}, load={:.3}, final={:.3}", 
                query_complexity, context_richness, information_density, cognitive_load, final_awareness);
-        
+
         Ok(final_awareness)
     }
 
@@ -170,65 +198,103 @@ impl ConsciousnessModel {
         let words: Vec<&str> = query.split_whitespace().collect();
         let word_count = words.len();
         let unique_words = words.iter().collect::<HashSet<_>>().len();
-        let avg_word_length = words.iter().map(|w| w.len()).sum::<usize>() as f64 / word_count.max(1) as f64;
-        
+        let avg_word_length =
+            words.iter().map(|w| w.len()).sum::<usize>() as f64 / word_count.max(1) as f64;
+
         // Linguistic complexity factors
         let syntactic_complexity = self.calculate_syntactic_complexity(query)?;
         let semantic_depth = self.calculate_semantic_depth(query)?;
         let question_complexity = self.analyze_question_complexity(query)?;
-        
-        let complexity = (
-            (word_count as f64 * 0.02).min(1.0) * 0.2 +
-            (unique_words as f64 / word_count.max(1) as f64) * 0.2 +
-            (avg_word_length / 10.0).min(1.0) * 0.15 +
-            syntactic_complexity * 0.2 +
-            semantic_depth * 0.15 +
-            question_complexity * 0.1
-        ).clamp(0.0, 1.0);
-        
+
+        let complexity = ((word_count as f64 * 0.02).min(1.0) * 0.2
+            + (unique_words as f64 / word_count.max(1) as f64) * 0.2
+            + (avg_word_length / 10.0).min(1.0) * 0.15
+            + syntactic_complexity * 0.2
+            + semantic_depth * 0.15
+            + question_complexity * 0.1)
+            .clamp(0.0, 1.0);
+
         Ok(complexity)
     }
 
     fn calculate_syntactic_complexity(&self, query: &str) -> Result<f64> {
-        let clause_markers = ["because", "although", "while", "since", "unless", "if", "when"];
-        let subordination_score = clause_markers.iter()
+        let clause_markers = [
+            "because", "although", "while", "since", "unless", "if", "when",
+        ];
+        let subordination_score = clause_markers
+            .iter()
             .filter(|marker| query.to_lowercase().contains(*marker))
-            .count() as f64 * 0.2;
-        
-        let punctuation_complexity = query.chars()
+            .count() as f64
+            * 0.2;
+
+        let punctuation_complexity = query
+            .chars()
             .filter(|c| ['?', '!', ';', ':', ','].contains(c))
-            .count() as f64 * 0.1;
-            
+            .count() as f64
+            * 0.1;
+
         Ok((subordination_score + punctuation_complexity).min(1.0))
     }
 
     fn calculate_semantic_depth(&self, query: &str) -> Result<f64> {
-        let abstract_concepts = ["concept", "idea", "theory", "principle", "philosophy", "meaning", "essence"];
-        let depth_indicators = ["analyze", "compare", "evaluate", "synthesize", "critique", "explain"];
-        
-        let abstract_score = abstract_concepts.iter()
+        let abstract_concepts = [
+            "concept",
+            "idea",
+            "theory",
+            "principle",
+            "philosophy",
+            "meaning",
+            "essence",
+        ];
+        let depth_indicators = [
+            "analyze",
+            "compare",
+            "evaluate",
+            "synthesize",
+            "critique",
+            "explain",
+        ];
+
+        let abstract_score = abstract_concepts
+            .iter()
             .filter(|concept| query.to_lowercase().contains(*concept))
-            .count() as f64 * 0.15;
-            
-        let depth_score = depth_indicators.iter()
+            .count() as f64
+            * 0.15;
+
+        let depth_score = depth_indicators
+            .iter()
             .filter(|indicator| query.to_lowercase().contains(*indicator))
-            .count() as f64 * 0.2;
-            
+            .count() as f64
+            * 0.2;
+
         Ok((abstract_score + depth_score).min(1.0))
     }
 
     fn analyze_question_complexity(&self, query: &str) -> Result<f64> {
         let simple_patterns = ["what is", "who is", "when did", "where is"];
         let complex_patterns = ["how does", "why might", "what if", "compare"];
-        let very_complex_patterns = ["analyze the relationship", "evaluate the impact", "synthesize"];
-        
+        let very_complex_patterns = [
+            "analyze the relationship",
+            "evaluate the impact",
+            "synthesize",
+        ];
+
         let query_lower = query.to_lowercase();
-        
-        if very_complex_patterns.iter().any(|pattern| query_lower.contains(pattern)) {
+
+        if very_complex_patterns
+            .iter()
+            .any(|pattern| query_lower.contains(pattern))
+        {
             Ok(1.0)
-        } else if complex_patterns.iter().any(|pattern| query_lower.contains(pattern)) {
+        } else if complex_patterns
+            .iter()
+            .any(|pattern| query_lower.contains(pattern))
+        {
             Ok(0.7)
-        } else if simple_patterns.iter().any(|pattern| query_lower.contains(pattern)) {
+        } else if simple_patterns
+            .iter()
+            .any(|pattern| query_lower.contains(pattern))
+        {
             Ok(0.3)
         } else {
             Ok(0.5) // Default moderate complexity
@@ -241,9 +307,12 @@ impl ConsciousnessModel {
 
         // Semantic results richness
         if !context.semantic_results.is_empty() {
-            let avg_score = context.semantic_results.iter()
+            let avg_score = context
+                .semantic_results
+                .iter()
                 .map(|r| r.score as f64)
-                .sum::<f64>() / context.semantic_results.len() as f64;
+                .sum::<f64>()
+                / context.semantic_results.len() as f64;
             richness += avg_score * 0.3;
             components += 1;
         }
@@ -257,9 +326,12 @@ impl ConsciousnessModel {
 
         // Entity extraction richness
         if !context.extracted_entities.is_empty() {
-            let entity_confidence = context.extracted_entities.iter()
+            let entity_confidence = context
+                .extracted_entities
+                .iter()
                 .map(|e| e.confidence as f64)
-                .sum::<f64>() / context.extracted_entities.len() as f64;
+                .sum::<f64>()
+                / context.extracted_entities.len() as f64;
             richness += entity_confidence * 0.3;
             components += 1;
         }
@@ -279,11 +351,15 @@ impl ConsciousnessModel {
         }
     }
 
-    fn calculate_information_density(&self, query: &str, context: &AssembledContext) -> Result<f64> {
+    fn calculate_information_density(
+        &self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<f64> {
         let query_entropy = self.calculate_entropy(query)?;
         let context_information = context.semantic_results.len() + context.graph_results.len();
         let information_ratio = (context_information as f64 / query.len().max(1) as f64).min(1.0);
-        
+
         Ok((query_entropy + information_ratio) / 2.0)
     }
 
@@ -299,7 +375,8 @@ impl ConsciousnessModel {
             *char_counts.entry(ch).or_insert(0) += 1;
         }
 
-        let entropy = char_counts.values()
+        let entropy = char_counts
+            .values()
             .map(|&count| {
                 let probability = count as f64 / total_chars;
                 -probability * probability.log2()
@@ -311,9 +388,11 @@ impl ConsciousnessModel {
 
     fn calculate_cognitive_load(&self, query: &str, context: &AssembledContext) -> Result<f64> {
         let query_load = (query.len() as f64 / 1000.0).min(1.0);
-        let context_load = ((context.semantic_results.len() + context.graph_results.len()) as f64 / 100.0).min(1.0);
+        let context_load = ((context.semantic_results.len() + context.graph_results.len()) as f64
+            / 100.0)
+            .min(1.0);
         let entity_load = (context.extracted_entities.len() as f64 / 50.0).min(1.0);
-        
+
         Ok((query_load + context_load + entity_load) / 3.0)
     }
 
@@ -328,7 +407,7 @@ impl ConsciousnessModel {
         };
 
         self.state_history.push_back(snapshot);
-        
+
         // Maintain history limit
         if self.state_history.len() > 100 {
             self.state_history.pop_front();
@@ -338,11 +417,15 @@ impl ConsciousnessModel {
     }
 
     fn calculate_consciousness_health(&self) -> Result<f64> {
-        let awareness_health = if self.awareness_level >= 0.7 { 1.0 } else { self.awareness_level / 0.7 };
+        let awareness_health = if self.awareness_level >= 0.7 {
+            1.0
+        } else {
+            self.awareness_level / 0.7
+        };
         let attention_health = self.attention_mechanism.get_health_score()?;
         let memory_health = self.multi_layer_memory.get_health_score()?;
         let emotional_health = self.emotional_state.get_stability_score()?;
-        
+
         Ok((awareness_health + attention_health + memory_health + emotional_health) / 4.0)
     }
 
@@ -359,7 +442,10 @@ impl ConsciousnessModel {
         if neural_activation.overall_activation > 0.7 {
             insights.push(AdvancedConsciousInsight {
                 insight_type: AdvancedInsightType::NeuralPattern,
-                content: format!("High neural activation detected: {:.3}", neural_activation.overall_activation),
+                content: format!(
+                    "High neural activation detected: {:.3}",
+                    neural_activation.overall_activation
+                ),
                 confidence: neural_activation.confidence,
                 implications: vec![
                     "Query activates multiple cognitive networks".to_string(),
@@ -374,7 +460,10 @@ impl ConsciousnessModel {
         if memory_integration.integration_strength > 0.6 {
             insights.push(AdvancedConsciousInsight {
                 insight_type: AdvancedInsightType::MemoryIntegration,
-                content: format!("Strong memory integration: {:.3}", memory_integration.integration_strength),
+                content: format!(
+                    "Strong memory integration: {:.3}",
+                    memory_integration.integration_strength
+                ),
                 confidence: memory_integration.confidence,
                 implications: vec![
                     "Leveraging rich episodic memory traces".to_string(),
@@ -406,7 +495,10 @@ impl ConsciousnessModel {
         if stream_coherence > 0.8 {
             insights.push(AdvancedConsciousInsight {
                 insight_type: AdvancedInsightType::StreamCoherence,
-                content: format!("High consciousness stream coherence: {:.3}", stream_coherence),
+                content: format!(
+                    "High consciousness stream coherence: {:.3}",
+                    stream_coherence
+                ),
                 confidence: stream_coherence,
                 implications: vec![
                     "Stable consciousness state maintained".to_string(),
@@ -417,64 +509,77 @@ impl ConsciousnessModel {
             });
         }
 
-        debug!("Generated {} advanced consciousness insights", insights.len());
+        debug!(
+            "Generated {} advanced consciousness insights",
+            insights.len()
+        );
         Ok(insights)
     }
-    
+
     fn update_attention_focus(&mut self, query: &str, context: &AssembledContext) {
         self.attention_focus.clear();
-        
+
         // Extract key concepts from query
         let words: Vec<&str> = query.split_whitespace().collect();
-        let important_words: Vec<String> = words.iter()
+        let important_words: Vec<String> = words
+            .iter()
             .filter(|word| word.len() > 3)
             .map(|word| word.to_lowercase())
             .collect();
-        
+
         self.attention_focus.extend(important_words);
-        
+
         // Add context-related concepts
         if let Some(ref retrieved_triples) = context.retrieved_triples {
             for triple in retrieved_triples.iter().take(5) {
-                self.attention_focus.push(format!("{}:{}", triple.subject, triple.predicate));
+                self.attention_focus
+                    .push(format!("{}:{}", triple.subject, triple.predicate));
             }
         }
     }
-    
+
     fn create_memory_trace(&mut self, query: &str, context: &AssembledContext) {
         let trace = MemoryTrace {
             id: Uuid::new_v4().to_string(),
             query: query.to_string(),
-            context_summary: format!("Context with {} triples", 
-                context.retrieved_triples.as_ref().map_or(0, |t| t.len())),
+            context_summary: format!(
+                "Context with {} triples",
+                context.retrieved_triples.as_ref().map_or(0, |t| t.len())
+            ),
             timestamp: Utc::now(),
             importance_score: self.calculate_importance(query, context),
             emotional_valence: self.emotional_state.valence,
         };
-        
+
         self.memory_traces.push_back(trace);
-        
+
         // Maintain memory limit
         if self.memory_traces.len() > 1000 {
             self.memory_traces.pop_front();
         }
     }
-    
+
     fn calculate_memory_integration(&self) -> f64 {
         if self.memory_traces.is_empty() {
             return 0.0;
         }
-        
-        let total_importance: f64 = self.memory_traces.iter()
+
+        let total_importance: f64 = self
+            .memory_traces
+            .iter()
             .map(|trace| trace.importance_score)
             .sum();
-        
+
         total_importance / self.memory_traces.len() as f64
     }
-    
-    fn generate_conscious_insights(&self, query: &str, context: &AssembledContext) -> Vec<ConsciousInsight> {
+
+    fn generate_conscious_insights(
+        &self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Vec<ConsciousInsight> {
         let mut insights = Vec::new();
-        
+
         // Pattern recognition insight
         if let Some(pattern) = self.detect_query_pattern(query) {
             insights.push(ConsciousInsight {
@@ -484,18 +589,21 @@ impl ConsciousnessModel {
                 implications: vec!["This suggests a systematic approach to analysis".to_string()],
             });
         }
-        
+
         // Emotional resonance insight
         let emotional_resonance = self.emotional_state.calculate_resonance(query);
         if emotional_resonance > 0.5 {
             insights.push(ConsciousInsight {
                 insight_type: InsightType::EmotionalResonance,
-                content: format!("High emotional resonance detected: {:.2}", emotional_resonance),
+                content: format!(
+                    "High emotional resonance detected: {:.2}",
+                    emotional_resonance
+                ),
                 confidence: emotional_resonance,
                 implications: vec!["Consider emotional context in response".to_string()],
             });
         }
-        
+
         // Memory integration insight
         let memory_integration = self.calculate_memory_integration();
         if memory_integration > 0.7 {
@@ -506,30 +614,32 @@ impl ConsciousnessModel {
                 implications: vec!["Can leverage previous interaction patterns".to_string()],
             });
         }
-        
+
         insights
     }
-    
+
     fn calculate_query_complexity(&self, query: &str) -> f64 {
         let word_count = query.split_whitespace().count();
         let unique_words = query.split_whitespace().collect::<HashSet<_>>().len();
-        let avg_word_length = query.split_whitespace()
-            .map(|w| w.len())
-            .sum::<usize>() as f64 / word_count.max(1) as f64;
-        
+        let avg_word_length = query.split_whitespace().map(|w| w.len()).sum::<usize>() as f64
+            / word_count.max(1) as f64;
+
         (word_count as f64 * 0.1 + unique_words as f64 * 0.2 + avg_word_length * 0.1).min(1.0)
     }
-    
+
     fn calculate_importance(&self, query: &str, context: &AssembledContext) -> f64 {
         let query_complexity = self.calculate_query_complexity(query);
-        let context_richness = context.retrieved_triples.as_ref().map_or(0.0, |t| t.len() as f64 * 0.1);
-        
+        let context_richness = context
+            .retrieved_triples
+            .as_ref()
+            .map_or(0.0, |t| t.len() as f64 * 0.1);
+
         (query_complexity + context_richness).min(1.0)
     }
-    
+
     fn detect_query_pattern(&self, query: &str) -> Option<String> {
         let query_lower = query.to_lowercase();
-        
+
         if query_lower.contains("how") && query_lower.contains("many") {
             Some("Quantitative Analysis".to_string())
         } else if query_lower.contains("what") && query_lower.contains("is") {
@@ -556,9 +666,9 @@ pub struct MemoryTrace {
 
 #[derive(Debug, Clone)]
 pub struct EmotionalState {
-    pub valence: f64,    // -1.0 (negative) to 1.0 (positive)
-    pub arousal: f64,    // 0.0 (calm) to 1.0 (excited)
-    pub dominance: f64,  // 0.0 (submissive) to 1.0 (dominant)
+    pub valence: f64,   // -1.0 (negative) to 1.0 (positive)
+    pub arousal: f64,   // 0.0 (calm) to 1.0 (excited)
+    pub dominance: f64, // 0.0 (submissive) to 1.0 (dominant)
 }
 
 impl EmotionalState {
@@ -569,17 +679,26 @@ impl EmotionalState {
             dominance: 0.5,
         }
     }
-    
+
     pub fn calculate_resonance(&self, query: &str) -> f64 {
         let emotional_words = [
-            "excited", "happy", "sad", "angry", "frustrated", "pleased", "worried", "confident"
+            "excited",
+            "happy",
+            "sad",
+            "angry",
+            "frustrated",
+            "pleased",
+            "worried",
+            "confident",
         ];
-        
+
         let query_lower = query.to_lowercase();
-        let emotional_content = emotional_words.iter()
+        let emotional_content = emotional_words
+            .iter()
             .filter(|word| query_lower.contains(*word))
-            .count() as f64 / emotional_words.len() as f64;
-        
+            .count() as f64
+            / emotional_words.len() as f64;
+
         (self.valence.abs() + self.arousal + emotional_content) / 3.0
     }
 }
@@ -599,12 +718,12 @@ impl MetacognitiveLayer {
             comprehension_monitoring: 0.8,
         }
     }
-    
+
     pub fn assess_query(&self, query: &str, context: &AssembledContext) -> MetacognitiveAssessment {
         let complexity = self.assess_complexity(query, context);
         let confidence = self.calculate_confidence(query, context);
         let strategy_recommendation = self.recommend_strategy(query, context);
-        
+
         MetacognitiveAssessment {
             complexity,
             confidence,
@@ -612,43 +731,43 @@ impl MetacognitiveLayer {
             monitoring_alerts: self.generate_monitoring_alerts(query, context),
         }
     }
-    
+
     fn assess_complexity(&self, query: &str, context: &AssembledContext) -> f64 {
         let word_count = query.split_whitespace().count();
         let context_size = context.retrieved_triples.as_ref().map_or(0, |t| t.len());
-        
+
         ((word_count as f64 * 0.05) + (context_size as f64 * 0.01)).min(1.0)
     }
-    
+
     fn calculate_confidence(&self, query: &str, context: &AssembledContext) -> f64 {
         let has_context = context.retrieved_triples.is_some();
         let query_clarity = self.assess_query_clarity(query);
-        
+
         if has_context {
             (self.comprehension_monitoring * 0.6 + query_clarity * 0.4).min(1.0)
         } else {
             query_clarity * 0.5
         }
     }
-    
+
     fn assess_query_clarity(&self, query: &str) -> f64 {
         let question_words = ["what", "how", "why", "when", "where", "who"];
         let query_lower = query.to_lowercase();
-        
+
         let has_question_word = question_words.iter().any(|word| query_lower.contains(word));
         let has_punctuation = query.contains('?');
         let word_count = query.split_whitespace().count();
-        
-        let clarity_score = if has_question_word { 0.4 } else { 0.0 } +
-                          if has_punctuation { 0.2 } else { 0.0 } +
-                          if word_count >= 3 { 0.4 } else { 0.2 };
-        
+
+        let clarity_score = if has_question_word { 0.4 } else { 0.0 }
+            + if has_punctuation { 0.2 } else { 0.0 }
+            + if word_count >= 3 { 0.4 } else { 0.2 };
+
         clarity_score.min(1.0)
     }
-    
+
     fn recommend_strategy(&self, query: &str, context: &AssembledContext) -> String {
         let complexity = self.assess_complexity(query, context);
-        
+
         if complexity > 0.8 {
             "Deep Analysis Strategy: Break down into sub-questions".to_string()
         } else if complexity > 0.5 {
@@ -657,22 +776,22 @@ impl MetacognitiveLayer {
             "Direct Strategy: Provide straightforward answer".to_string()
         }
     }
-    
+
     fn generate_monitoring_alerts(&self, query: &str, context: &AssembledContext) -> Vec<String> {
         let mut alerts = Vec::new();
-        
+
         if context.retrieved_triples.is_none() {
             alerts.push("No context retrieved - consider expanding search".to_string());
         }
-        
+
         if query.len() < 10 {
             alerts.push("Query may be too brief for comprehensive analysis".to_string());
         }
-        
+
         if query.contains("?") && query.matches("?").count() > 1 {
             alerts.push("Multiple questions detected - consider addressing separately".to_string());
         }
-        
+
         alerts
     }
 }
@@ -726,13 +845,15 @@ pub struct ConsciousnessIntegration {
 
 impl ConsciousnessIntegration {
     pub fn new(config: ConsciousnessConfig) -> Self {
-        let consciousness_model = ConsciousnessModel::new()
-            .unwrap_or_else(|e| {
-                warn!("Failed to create advanced consciousness model: {}, using fallback", e);
-                // Create a fallback simple model if the advanced one fails
-                ConsciousnessModel::new().expect("Failed to create even basic consciousness model")
-            });
-            
+        let consciousness_model = ConsciousnessModel::new().unwrap_or_else(|e| {
+            warn!(
+                "Failed to create advanced consciousness model: {}, using fallback",
+                e
+            );
+            // Create a fallback simple model if the advanced one fails
+            ConsciousnessModel::new().expect("Failed to create even basic consciousness model")
+        });
+
         Self {
             consciousness_model,
             config,
@@ -749,27 +870,42 @@ impl ConsciousnessIntegration {
         }
 
         // Try the advanced consciousness processing first
-        match self.consciousness_model.conscious_query_processing(query, context) {
+        match self
+            .consciousness_model
+            .conscious_query_processing(query, context)
+        {
             Ok(advanced_response) => {
                 // Convert advanced insights to basic insights for compatibility
-                let basic_insights = advanced_response.enhanced_insights.into_iter()
+                let basic_insights = advanced_response
+                    .enhanced_insights
+                    .into_iter()
                     .map(|advanced_insight| ConsciousInsight {
                         insight_type: match advanced_insight.insight_type {
                             AdvancedInsightType::NeuralPattern => InsightType::PatternRecognition,
-                            AdvancedInsightType::MemoryIntegration => InsightType::MemoryIntegration,
-                            AdvancedInsightType::AttentionFocus => InsightType::ContextualUnderstanding,
-                            AdvancedInsightType::StreamCoherence => InsightType::ContextualUnderstanding,
-                            AdvancedInsightType::EmotionalResonance => InsightType::EmotionalResonance,
-                            AdvancedInsightType::MetacognitiveAssessment => InsightType::StrategicPlanning,
+                            AdvancedInsightType::MemoryIntegration => {
+                                InsightType::MemoryIntegration
+                            }
+                            AdvancedInsightType::AttentionFocus => {
+                                InsightType::ContextualUnderstanding
+                            }
+                            AdvancedInsightType::StreamCoherence => {
+                                InsightType::ContextualUnderstanding
+                            }
+                            AdvancedInsightType::EmotionalResonance => {
+                                InsightType::EmotionalResonance
+                            }
+                            AdvancedInsightType::MetacognitiveAssessment => {
+                                InsightType::StrategicPlanning
+                            }
                         },
                         content: advanced_insight.content,
                         confidence: advanced_insight.confidence,
                         implications: advanced_insight.implications,
                     })
                     .collect();
-                    
+
                 Ok(basic_insights)
-            },
+            }
             Err(e) => {
                 warn!("Advanced consciousness processing failed: {}, falling back to basic processing", e);
                 // Fallback to basic consciousness insights
@@ -824,17 +960,22 @@ impl AttentionMechanism {
         })
     }
 
-    pub fn allocate_attention(&mut self, query: &str, context: &AssembledContext, neural_activation: &NeuralActivation) -> Result<AttentionAllocation> {
+    pub fn allocate_attention(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+        neural_activation: &NeuralActivation,
+    ) -> Result<AttentionAllocation> {
         // Extract attention targets from query and context
         let mut targets = self.extract_attention_targets(query, context)?;
-        
+
         // Apply neural activation influence
         for target in &mut targets {
             if let Some(neural_weight) = neural_activation.get_concept_activation(&target.concept) {
                 target.base_weight *= 1.0 + neural_weight;
             }
         }
-        
+
         // Normalize weights
         let total_weight: f64 = targets.iter().map(|t| t.base_weight).sum();
         if total_weight > 0.0 {
@@ -842,10 +983,10 @@ impl AttentionMechanism {
                 target.normalized_weight = target.base_weight / total_weight;
             }
         }
-        
+
         // Update internal attention state
         self.update_attention_state(&targets)?;
-        
+
         Ok(AttentionAllocation {
             targets,
             total_attention_units: self.max_attention_points,
@@ -868,9 +1009,13 @@ impl AttentionMechanism {
         self.calculate_entropy_internal()
     }
 
-    fn extract_attention_targets(&self, query: &str, context: &AssembledContext) -> Result<Vec<AttentionTarget>> {
+    fn extract_attention_targets(
+        &self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<Vec<AttentionTarget>> {
         let mut targets = Vec::new();
-        
+
         // Extract from query
         let words: Vec<&str> = query.split_whitespace().collect();
         for word in words {
@@ -883,7 +1028,7 @@ impl AttentionMechanism {
                 });
             }
         }
-        
+
         // Extract from context entities
         for entity in &context.extracted_entities {
             targets.push(AttentionTarget {
@@ -893,11 +1038,11 @@ impl AttentionMechanism {
                 attention_type: AttentionType::Entity,
             });
         }
-        
+
         // Limit and sort by weight
         targets.sort_by(|a, b| b.base_weight.partial_cmp(&a.base_weight).unwrap());
         targets.truncate(self.max_attention_points);
-        
+
         Ok(targets)
     }
 
@@ -906,16 +1051,20 @@ impl AttentionMechanism {
         for weight in self.attention_weights.values_mut() {
             *weight *= self.attention_decay_rate;
         }
-        
+
         // Add new attention
         for target in targets {
-            let entry = self.attention_weights.entry(target.concept.clone()).or_insert(0.0);
+            let entry = self
+                .attention_weights
+                .entry(target.concept.clone())
+                .or_insert(0.0);
             *entry += target.normalized_weight;
         }
-        
+
         // Remove very low weights
-        self.attention_weights.retain(|_, &mut weight| weight > 0.01);
-        
+        self.attention_weights
+            .retain(|_, &mut weight| weight > 0.01);
+
         Ok(())
     }
 
@@ -923,19 +1072,25 @@ impl AttentionMechanism {
         if self.attention_weights.is_empty() {
             return Ok(0.0);
         }
-        
+
         let total: f64 = self.attention_weights.values().sum();
         if total <= 0.0 {
             return Ok(0.0);
         }
-        
-        let entropy = self.attention_weights.values()
+
+        let entropy = self
+            .attention_weights
+            .values()
             .map(|&weight| {
                 let p = weight / total;
-                if p > 0.0 { -p * p.log2() } else { 0.0 }
+                if p > 0.0 {
+                    -p * p.log2()
+                } else {
+                    0.0
+                }
             })
             .sum::<f64>();
-            
+
         Ok(entropy / (self.attention_weights.len() as f64).log2())
     }
 
@@ -943,27 +1098,32 @@ impl AttentionMechanism {
         if self.focus_history.len() < 2 {
             return Ok(1.0);
         }
-        
+
         // Calculate stability as inverse of variance in attention patterns
         let recent_snapshots: Vec<_> = self.focus_history.iter().rev().take(5).collect();
         if recent_snapshots.len() < 2 {
             return Ok(1.0);
         }
-        
+
         // Simple stability metric: how much attention patterns change over time
         let mut changes = 0.0;
         for i in 1..recent_snapshots.len() {
-            changes += self.calculate_snapshot_difference(recent_snapshots[i-1], recent_snapshots[i])?;
+            changes +=
+                self.calculate_snapshot_difference(recent_snapshots[i - 1], recent_snapshots[i])?;
         }
-        
+
         let avg_change = changes / (recent_snapshots.len() - 1) as f64;
         Ok((1.0 - avg_change).max(0.0))
     }
 
-    fn calculate_snapshot_difference(&self, snap1: &AttentionSnapshot, snap2: &AttentionSnapshot) -> Result<f64> {
+    fn calculate_snapshot_difference(
+        &self,
+        snap1: &AttentionSnapshot,
+        snap2: &AttentionSnapshot,
+    ) -> Result<f64> {
         // Simple difference calculation
-        let diff = (snap1.primary_focus_strength - snap2.primary_focus_strength).abs() +
-                   (snap1.attention_dispersion - snap2.attention_dispersion).abs();
+        let diff = (snap1.primary_focus_strength - snap2.primary_focus_strength).abs()
+            + (snap1.attention_dispersion - snap2.attention_dispersion).abs();
         Ok(diff / 2.0)
     }
 }
@@ -987,21 +1147,30 @@ impl MultiLayerMemorySystem {
         })
     }
 
-    pub fn process_and_integrate(&mut self, query: &str, context: &AssembledContext, attention: &AttentionAllocation) -> Result<MemoryIntegrationResult> {
+    pub fn process_and_integrate(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+        attention: &AttentionAllocation,
+    ) -> Result<MemoryIntegrationResult> {
         // Store in working memory
         let working_trace = self.working_memory.store_immediate(query, context)?;
-        
+
         // Create episodic memory entry
-        let episodic_entry = self.episodic_memory.create_episode(query, context, attention)?;
-        
+        let episodic_entry = self
+            .episodic_memory
+            .create_episode(query, context, attention)?;
+
         // Update semantic associations
         let semantic_updates = self.semantic_memory.update_associations(query, context)?;
-        
+
         // Perform memory consolidation
         let consolidation_result = self.memory_consolidation.consolidate(
-            &working_trace, &episodic_entry, &semantic_updates
+            &working_trace,
+            &episodic_entry,
+            &semantic_updates,
         )?;
-        
+
         Ok(MemoryIntegrationResult {
             integration_strength: consolidation_result.strength,
             confidence: consolidation_result.confidence,
@@ -1016,7 +1185,7 @@ impl MultiLayerMemorySystem {
         let working_pressure = self.working_memory.get_pressure()?;
         let episodic_pressure = self.episodic_memory.get_pressure()?;
         let semantic_pressure = self.semantic_memory.get_pressure()?;
-        
+
         Ok((working_pressure + episodic_pressure + semantic_pressure) / 3.0)
     }
 
@@ -1024,7 +1193,7 @@ impl MultiLayerMemorySystem {
         let working_health = self.working_memory.get_health()?;
         let episodic_health = self.episodic_memory.get_health()?;
         let semantic_health = self.semantic_memory.get_health()?;
-        
+
         Ok((working_health + episodic_health + semantic_health) / 3.0)
     }
 }
@@ -1033,16 +1202,16 @@ impl MultiLayerMemorySystem {
 #[derive(Debug, Clone)]
 pub struct AdvancedEmotionalState {
     // Core emotional dimensions
-    valence: f64,           // -1.0 (negative) to 1.0 (positive)
-    arousal: f64,           // 0.0 (calm) to 1.0 (excited)
-    dominance: f64,         // 0.0 (submissive) to 1.0 (dominant)
-    
+    valence: f64,   // -1.0 (negative) to 1.0 (positive)
+    arousal: f64,   // 0.0 (calm) to 1.0 (excited)
+    dominance: f64, // 0.0 (submissive) to 1.0 (dominant)
+
     // Advanced emotional features
     emotional_momentum: f64,
     emotional_complexity: f64,
     emotional_stability: f64,
     emotional_history: VecDeque<EmotionalSnapshot>,
-    
+
     // Emotional regulation
     regulation_strategies: Vec<RegulationStrategy>,
     current_regulation: Option<RegulationStrategy>,
@@ -1067,22 +1236,26 @@ impl AdvancedEmotionalState {
         }
     }
 
-    pub fn process_emotional_content(&mut self, query: &str, context: &AssembledContext) -> Result<EmotionalResponse> {
+    pub fn process_emotional_content(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<EmotionalResponse> {
         // Analyze emotional content in query
         let query_emotion = self.analyze_query_emotion(query)?;
-        
+
         // Analyze context emotional valence
         let context_emotion = self.analyze_context_emotion(context)?;
-        
+
         // Update emotional state
         self.update_emotional_state(&query_emotion, &context_emotion)?;
-        
+
         // Apply emotional regulation if needed
         self.apply_emotional_regulation()?;
-        
+
         // Record emotional snapshot
         self.record_emotional_snapshot()?;
-        
+
         Ok(EmotionalResponse {
             current_valence: self.valence,
             current_arousal: self.arousal,
@@ -1110,35 +1283,68 @@ impl AdvancedEmotionalState {
 
     fn analyze_query_emotion(&self, query: &str) -> Result<EmotionalAnalysis> {
         // Emotional word analysis
-        let positive_words = ["happy", "excited", "pleased", "satisfied", "confident", "optimistic"];
-        let negative_words = ["sad", "angry", "frustrated", "worried", "anxious", "disappointed"];
+        let positive_words = [
+            "happy",
+            "excited",
+            "pleased",
+            "satisfied",
+            "confident",
+            "optimistic",
+        ];
+        let negative_words = [
+            "sad",
+            "angry",
+            "frustrated",
+            "worried",
+            "anxious",
+            "disappointed",
+        ];
         let high_arousal_words = ["excited", "thrilled", "panicked", "furious", "ecstatic"];
         let low_arousal_words = ["calm", "peaceful", "relaxed", "serene", "tranquil"];
-        
+
         let query_lower = query.to_lowercase();
-        
-        let positive_count = positive_words.iter().filter(|w| query_lower.contains(*w)).count();
-        let negative_count = negative_words.iter().filter(|w| query_lower.contains(*w)).count();
-        let high_arousal_count = high_arousal_words.iter().filter(|w| query_lower.contains(*w)).count();
-        let low_arousal_count = low_arousal_words.iter().filter(|w| query_lower.contains(*w)).count();
-        
+
+        let positive_count = positive_words
+            .iter()
+            .filter(|w| query_lower.contains(*w))
+            .count();
+        let negative_count = negative_words
+            .iter()
+            .filter(|w| query_lower.contains(*w))
+            .count();
+        let high_arousal_count = high_arousal_words
+            .iter()
+            .filter(|w| query_lower.contains(*w))
+            .count();
+        let low_arousal_count = low_arousal_words
+            .iter()
+            .filter(|w| query_lower.contains(*w))
+            .count();
+
         let valence_score = if positive_count + negative_count > 0 {
-            (positive_count as f64 - negative_count as f64) / (positive_count + negative_count) as f64
+            (positive_count as f64 - negative_count as f64)
+                / (positive_count + negative_count) as f64
         } else {
             0.0
         };
-        
+
         let arousal_score = if high_arousal_count + low_arousal_count > 0 {
-            (high_arousal_count as f64 - low_arousal_count as f64) / (high_arousal_count + low_arousal_count) as f64 * 0.5 + 0.5
+            (high_arousal_count as f64 - low_arousal_count as f64)
+                / (high_arousal_count + low_arousal_count) as f64
+                * 0.5
+                + 0.5
         } else {
             0.5
         };
-        
+
         Ok(EmotionalAnalysis {
             valence: valence_score,
             arousal: arousal_score,
             dominance: 0.5, // Default neutral dominance
-            confidence: ((positive_count + negative_count + high_arousal_count + low_arousal_count) as f64 / 4.0).min(1.0),
+            confidence: ((positive_count + negative_count + high_arousal_count + low_arousal_count)
+                as f64
+                / 4.0)
+                .min(1.0),
         })
     }
 
@@ -1147,7 +1353,7 @@ impl AdvancedEmotionalState {
         let mut total_valence = 0.0;
         let mut total_arousal = 0.5;
         let mut confidence = 0.0;
-        
+
         // Analyze semantic results for emotional content
         if !context.semantic_results.is_empty() {
             for result in &context.semantic_results {
@@ -1157,13 +1363,13 @@ impl AdvancedEmotionalState {
                 total_arousal += emotion.arousal * result.score as f64;
                 confidence += emotion.confidence * result.score as f64;
             }
-            
+
             let result_count = context.semantic_results.len() as f64;
             total_valence /= result_count;
             total_arousal /= result_count;
             confidence /= result_count;
         }
-        
+
         Ok(EmotionalAnalysis {
             valence: total_valence,
             arousal: total_arousal,
@@ -1172,33 +1378,39 @@ impl AdvancedEmotionalState {
         })
     }
 
-    fn update_emotional_state(&mut self, query_emotion: &EmotionalAnalysis, context_emotion: &EmotionalAnalysis) -> Result<()> {
+    fn update_emotional_state(
+        &mut self,
+        query_emotion: &EmotionalAnalysis,
+        context_emotion: &EmotionalAnalysis,
+    ) -> Result<()> {
         // Calculate momentum
-        let valence_change = (query_emotion.valence * 0.6 + context_emotion.valence * 0.4) - self.valence;
-        let arousal_change = (query_emotion.arousal * 0.6 + context_emotion.arousal * 0.4) - self.arousal;
-        
+        let valence_change =
+            (query_emotion.valence * 0.6 + context_emotion.valence * 0.4) - self.valence;
+        let arousal_change =
+            (query_emotion.arousal * 0.6 + context_emotion.arousal * 0.4) - self.arousal;
+
         self.emotional_momentum = (valence_change.abs() + arousal_change.abs()) / 2.0;
-        
+
         // Update emotional state with dampening
         let dampening_factor = 0.3;
         self.valence += valence_change * dampening_factor;
         self.arousal += arousal_change * dampening_factor;
-        
+
         // Clamp values
         self.valence = self.valence.clamp(-1.0, 1.0);
         self.arousal = self.arousal.clamp(0.0, 1.0);
-        
+
         // Update emotional complexity and stability
         self.emotional_complexity = self.calculate_emotional_complexity()?;
         self.update_emotional_stability()?;
-        
+
         Ok(())
     }
 
     fn apply_emotional_regulation(&mut self) -> Result<()> {
         // Apply regulation if emotional intensity is too high
         let intensity = self.calculate_emotional_intensity()?;
-        
+
         if intensity > 0.8 {
             // Choose regulation strategy
             let strategy = if self.valence < -0.5 {
@@ -1208,27 +1420,27 @@ impl AdvancedEmotionalState {
             } else {
                 RegulationStrategy::Distraction
             };
-            
+
             // Apply regulation
             match strategy {
                 RegulationStrategy::Reappraisal => {
                     self.valence *= 0.8; // Reduce negative valence
                     self.arousal *= 0.9; // Slightly reduce arousal
-                },
+                }
                 RegulationStrategy::Suppression => {
                     self.arousal *= 0.7; // Significantly reduce arousal
-                },
+                }
                 RegulationStrategy::Distraction => {
                     self.valence *= 0.9; // Slightly reduce valence
                     self.arousal *= 0.85; // Moderately reduce arousal
-                },
+                }
             }
-            
+
             self.current_regulation = Some(strategy);
         } else {
             self.current_regulation = None;
         }
-        
+
         Ok(())
     }
 
@@ -1240,20 +1452,21 @@ impl AdvancedEmotionalState {
         if self.emotional_history.len() < 2 {
             return Ok(1.0);
         }
-        
+
         // Calculate coherence as inverse of emotional volatility
         let recent_snapshots: Vec<_> = self.emotional_history.iter().rev().take(5).collect();
         if recent_snapshots.len() < 2 {
             return Ok(1.0);
         }
-        
+
         let mut volatility = 0.0;
         for i in 1..recent_snapshots.len() {
-            let diff = ((recent_snapshots[i-1].valence - recent_snapshots[i].valence).abs() +
-                       (recent_snapshots[i-1].arousal - recent_snapshots[i].arousal).abs()) / 2.0;
+            let diff = ((recent_snapshots[i - 1].valence - recent_snapshots[i].valence).abs()
+                + (recent_snapshots[i - 1].arousal - recent_snapshots[i].arousal).abs())
+                / 2.0;
             volatility += diff;
         }
-        
+
         let avg_volatility = volatility / (recent_snapshots.len() - 1) as f64;
         Ok((1.0 - avg_volatility).max(0.0))
     }
@@ -1263,7 +1476,7 @@ impl AdvancedEmotionalState {
         let valence_complexity = self.valence.abs();
         let arousal_complexity = (self.arousal - 0.5).abs() * 2.0;
         let dominance_complexity = (self.dominance - 0.5).abs() * 2.0;
-        
+
         Ok((valence_complexity + arousal_complexity + dominance_complexity) / 3.0)
     }
 
@@ -1271,7 +1484,7 @@ impl AdvancedEmotionalState {
         // Stability decreases with high momentum and complexity
         let momentum_impact = (1.0 - self.emotional_momentum).max(0.0);
         let complexity_impact = (1.0 - self.emotional_complexity).max(0.0);
-        
+
         self.emotional_stability = (momentum_impact + complexity_impact) / 2.0;
         Ok(())
     }
@@ -1285,13 +1498,13 @@ impl AdvancedEmotionalState {
             intensity: self.calculate_emotional_intensity()?,
             complexity: self.emotional_complexity,
         };
-        
+
         self.emotional_history.push_back(snapshot);
-        
+
         if self.emotional_history.len() > 20 {
             self.emotional_history.pop_front();
         }
-        
+
         Ok(())
     }
 }
@@ -1335,19 +1548,26 @@ impl NeuralCorrelates {
         })
     }
 
-    pub fn process_input(&mut self, query: &str, context: &AssembledContext) -> Result<NeuralActivation> {
+    pub fn process_input(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<NeuralActivation> {
         // Simulate neural processing
         let words: Vec<&str> = query.split_whitespace().collect();
         let mut activation_map = HashMap::new();
-        
+
         for word in words {
             let activation = self.calculate_word_activation(word)?;
             activation_map.insert(word.to_string(), activation);
         }
-        
-        let overall_activation = activation_map.values().sum::<f64>() / activation_map.len().max(1) as f64;
-        let consciousness_relevance = self.consciousness_indicators.assess_relevance(&activation_map)?;
-        
+
+        let overall_activation =
+            activation_map.values().sum::<f64>() / activation_map.len().max(1) as f64;
+        let consciousness_relevance = self
+            .consciousness_indicators
+            .assess_relevance(&activation_map)?;
+
         Ok(NeuralActivation {
             activation_map,
             overall_activation,
@@ -1359,8 +1579,12 @@ impl NeuralCorrelates {
     pub fn get_activity_summary(&self) -> Result<NeuralActivitySummary> {
         Ok(NeuralActivitySummary {
             total_activations: self.activation_patterns.len(),
-            average_activation: self.activation_patterns.values().sum::<f64>() / self.activation_patterns.len().max(1) as f64,
-            peak_activation: self.activation_patterns.values().fold(0.0, |a, b| a.max(*b)),
+            average_activation: self.activation_patterns.values().sum::<f64>()
+                / self.activation_patterns.len().max(1) as f64,
+            peak_activation: self
+                .activation_patterns
+                .values()
+                .fold(0.0, |a, b| a.max(*b)),
             network_connectivity: self.network_connections.len() as f64,
         })
     }
@@ -1369,7 +1593,7 @@ impl NeuralCorrelates {
         // Simple activation calculation based on word properties
         let base_activation = (word.len() as f64 / 10.0).min(1.0);
         let frequency_bonus = if word.len() > 5 { 0.2 } else { 0.0 };
-        
+
         Ok((base_activation + frequency_bonus).min(1.0))
     }
 }
@@ -1394,7 +1618,12 @@ impl ConsciousnessStream {
         }
     }
 
-    pub fn add_experience(&mut self, query: &str, context: &AssembledContext, neural_activation: &NeuralActivation) -> Result<()> {
+    pub fn add_experience(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+        neural_activation: &NeuralActivation,
+    ) -> Result<()> {
         let experience = ConsciousnessExperience {
             timestamp: Utc::now(),
             query_content: query.to_string(),
@@ -1404,7 +1633,7 @@ impl ConsciousnessStream {
         };
 
         self.experiences.push_back(experience);
-        
+
         if self.experiences.len() > 100 {
             self.experiences.pop_front();
         }
@@ -1419,9 +1648,11 @@ impl ConsciousnessStream {
         }
 
         let recent_experiences: Vec<_> = self.experiences.iter().rev().take(5).collect();
-        let avg_consciousness = recent_experiences.iter()
+        let avg_consciousness = recent_experiences
+            .iter()
             .map(|e| e.consciousness_level)
-            .sum::<f64>() / recent_experiences.len() as f64;
+            .sum::<f64>()
+            / recent_experiences.len() as f64;
 
         Ok(avg_consciousness)
     }
@@ -1448,7 +1679,7 @@ impl ConsciousnessStream {
 
         let mut coherence_sum = 0.0;
         for i in 1..recent.len() {
-            let coherence = self.calculate_experience_coherence(recent[i-1], recent[i])?;
+            let coherence = self.calculate_experience_coherence(recent[i - 1], recent[i])?;
             coherence_sum += coherence;
         }
 
@@ -1456,7 +1687,11 @@ impl ConsciousnessStream {
         Ok(())
     }
 
-    fn calculate_experience_coherence(&self, exp1: &ConsciousnessExperience, exp2: &ConsciousnessExperience) -> Result<f64> {
+    fn calculate_experience_coherence(
+        &self,
+        exp1: &ConsciousnessExperience,
+        exp2: &ConsciousnessExperience,
+    ) -> Result<f64> {
         let time_diff = (exp1.timestamp - exp2.timestamp).num_seconds().abs() as f64;
         let time_coherence = (1.0 / (1.0 + time_diff / 60.0)).max(0.1); // Decay over minutes
 
@@ -1487,17 +1722,25 @@ impl ConsciousnessMetrics {
         }
     }
 
-    pub fn update(&mut self, awareness: f64, attention: &AttentionAllocation, memory: &MemoryIntegrationResult, emotion: &EmotionalResponse, processing_time: Duration) -> Result<()> {
+    pub fn update(
+        &mut self,
+        awareness: f64,
+        attention: &AttentionAllocation,
+        memory: &MemoryIntegrationResult,
+        emotion: &EmotionalResponse,
+        processing_time: Duration,
+    ) -> Result<()> {
         self.processing_times.push_back(processing_time);
-        self.health_scores.push_back((awareness + memory.confidence + emotion.emotional_coherence) / 3.0);
-        
+        self.health_scores
+            .push_back((awareness + memory.confidence + emotion.emotional_coherence) / 3.0);
+
         if self.processing_times.len() > 100 {
             self.processing_times.pop_front();
         }
         if self.health_scores.len() > 100 {
             self.health_scores.pop_front();
         }
-        
+
         Ok(())
     }
 }
@@ -1605,26 +1848,50 @@ pub enum TransitionTrigger {
 impl ConsciousnessStateMachine {
     pub fn new() -> Result<Self> {
         let mut transition_rules = HashMap::new();
-        
+
         // Define state transition rules
-        transition_rules.insert(ConsciousnessState::Baseline, vec![
-            TransitionRule::new(ConsciousnessState::Focused, 
-                TransitionCondition::QueryComplexity(0.7), 0.8),
-            TransitionRule::new(ConsciousnessState::Creative, 
-                TransitionCondition::KeywordPresence(vec!["creative", "innovative", "design"]), 0.7),
-            TransitionRule::new(ConsciousnessState::Empathetic, 
-                TransitionCondition::EmotionalContent(0.6), 0.75),
-        ]);
-        
-        transition_rules.insert(ConsciousnessState::Focused, vec![
-            TransitionRule::new(ConsciousnessState::Analytical, 
-                TransitionCondition::LogicalPattern, 0.8),
-            TransitionRule::new(ConsciousnessState::Contemplative, 
-                TransitionCondition::PhilosophicalContent, 0.7),
-            TransitionRule::new(ConsciousnessState::Baseline, 
-                TransitionCondition::TimeElapsed(Duration::from_mins(10)), 0.6),
-        ]);
-        
+        transition_rules.insert(
+            ConsciousnessState::Baseline,
+            vec![
+                TransitionRule::new(
+                    ConsciousnessState::Focused,
+                    TransitionCondition::QueryComplexity(0.7),
+                    0.8,
+                ),
+                TransitionRule::new(
+                    ConsciousnessState::Creative,
+                    TransitionCondition::KeywordPresence(vec!["creative", "innovative", "design"]),
+                    0.7,
+                ),
+                TransitionRule::new(
+                    ConsciousnessState::Empathetic,
+                    TransitionCondition::EmotionalContent(0.6),
+                    0.75,
+                ),
+            ],
+        );
+
+        transition_rules.insert(
+            ConsciousnessState::Focused,
+            vec![
+                TransitionRule::new(
+                    ConsciousnessState::Analytical,
+                    TransitionCondition::LogicalPattern,
+                    0.8,
+                ),
+                TransitionRule::new(
+                    ConsciousnessState::Contemplative,
+                    TransitionCondition::PhilosophicalContent,
+                    0.7,
+                ),
+                TransitionRule::new(
+                    ConsciousnessState::Baseline,
+                    TransitionCondition::TimeElapsed(Duration::from_mins(10)),
+                    0.6,
+                ),
+            ],
+        );
+
         Ok(Self {
             current_state: ConsciousnessState::Baseline,
             state_history: VecDeque::new(),
@@ -1632,12 +1899,18 @@ impl ConsciousnessStateMachine {
             state_metrics: StateMetrics::new(),
         })
     }
-    
+
     /// Evaluate and potentially transition consciousness state
-    pub fn evaluate_transition(&mut self, query: &str, context: &AssembledContext) -> Result<Option<StateTransition>> {
-        let current_rules = self.transition_rules.get(&self.current_state)
+    pub fn evaluate_transition(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<Option<StateTransition>> {
+        let current_rules = self
+            .transition_rules
+            .get(&self.current_state)
             .ok_or_else(|| anyhow::anyhow!("No transition rules for current state"))?;
-        
+
         for rule in current_rules {
             if self.evaluate_condition(&rule.condition, query, context)? {
                 let transition = StateTransition {
@@ -1647,26 +1920,28 @@ impl ConsciousnessStateMachine {
                     timestamp: std::time::Instant::now(),
                     success_probability: rule.probability,
                 };
-                
+
                 // Apply state transition
                 self.current_state = rule.target_state.clone();
                 self.state_history.push_back(transition.clone());
-                
+
                 // Keep history bounded
                 if self.state_history.len() > 50 {
                     self.state_history.pop_front();
                 }
-                
-                debug!("Consciousness state transition: {:?} -> {:?}", 
-                       transition.from_state, transition.to_state);
-                
+
+                debug!(
+                    "Consciousness state transition: {:?} -> {:?}",
+                    transition.from_state, transition.to_state
+                );
+
                 return Ok(Some(transition));
             }
         }
-        
+
         Ok(None)
     }
-    
+
     /// Get state-specific processing parameters
     pub fn get_state_parameters(&self) -> StateProcessingParameters {
         match self.current_state {
@@ -1745,66 +2020,71 @@ impl DreamStateProcessor {
             creative_insights: Vec::new(),
         }
     }
-    
+
     /// Enter dream state for memory consolidation
     pub fn enter_dream_state(&mut self, idle_duration: Duration) -> Result<()> {
         if idle_duration < Duration::from_secs(30) {
             return Ok(()); // Not enough idle time for dreaming
         }
-        
+
         self.is_dreaming = true;
         self.dream_intensity = (idle_duration.as_secs() as f64 / 300.0).min(1.0); // Max intensity after 5 minutes
-        
-        debug!("Entering dream state with intensity: {:.2}", self.dream_intensity);
-        
+
+        debug!(
+            "Entering dream state with intensity: {:.2}",
+            self.dream_intensity
+        );
+
         // Initiate memory consolidation
         self.consolidate_memories()?;
-        
+
         // Generate dream scenarios
         self.generate_dream_scenarios()?;
-        
+
         // Extract creative insights
         self.extract_creative_insights()?;
-        
+
         Ok(())
     }
-    
+
     /// Consolidate memories during dream state
     fn consolidate_memories(&mut self) -> Result<()> {
         // Sort memory fragments by consolidation priority
-        self.memory_fragments.sort_by(|a, b| 
-            b.consolidation_priority.partial_cmp(&a.consolidation_priority)
+        self.memory_fragments.sort_by(|a, b| {
+            b.consolidation_priority
+                .partial_cmp(&a.consolidation_priority)
                 .unwrap_or(std::cmp::Ordering::Equal)
-        );
-        
-        let consolidation_count = (self.memory_fragments.len() as f64 * self.dream_intensity * 0.3) as usize;
-        
+        });
+
+        let consolidation_count =
+            (self.memory_fragments.len() as f64 * self.dream_intensity * 0.3) as usize;
+
         for fragment in self.memory_fragments.iter_mut().take(consolidation_count) {
             // Strengthen important memories
             fragment.consolidation_priority *= 1.1;
-            
+
             // Create new associations
             if let Some(similar_fragment) = self.find_similar_memory(&fragment.content) {
                 fragment.associations.push(similar_fragment.content.clone());
             }
         }
-        
-        self.consolidation_metrics.update(consolidation_count, self.dream_intensity);
+
+        self.consolidation_metrics
+            .update(consolidation_count, self.dream_intensity);
         debug!("Consolidated {} memory fragments", consolidation_count);
-        
+
         Ok(())
     }
-    
+
     /// Generate creative dream scenarios
     fn generate_dream_scenarios(&mut self) -> Result<()> {
         let scenario_count = (self.dream_intensity * 5.0) as usize;
-        
+
         for _ in 0..scenario_count {
             let participating_memories: Vec<usize> = (0..self.memory_fragments.len())
-                .choose_multiple(&mut rand::thread_rng(), 
-                                rand::thread_rng().gen_range(2..=5))
+                .choose_multiple(&mut rand::thread_rng(), rand::thread_rng().gen_range(2..=5))
                 .collect();
-            
+
             let scenario = DreamScenario {
                 narrative: self.weave_narrative(&participating_memories)?,
                 participating_memories: participating_memories.clone(),
@@ -1812,19 +2092,19 @@ impl DreamStateProcessor {
                 insight_potential: rand::thread_rng().gen_range(0.0..1.0),
                 symbolic_elements: self.extract_symbolic_elements(&participating_memories)?,
             };
-            
+
             self.dream_scenarios.push_back(scenario);
         }
-        
+
         // Keep scenarios bounded
         while self.dream_scenarios.len() > 20 {
             self.dream_scenarios.pop_front();
         }
-        
+
         debug!("Generated {} dream scenarios", scenario_count);
         Ok(())
     }
-    
+
     /// Extract creative insights from dream processing
     fn extract_creative_insights(&mut self) -> Result<()> {
         for scenario in &self.dream_scenarios {
@@ -1834,14 +2114,18 @@ impl DreamStateProcessor {
                     source_memories: scenario.participating_memories.clone(),
                     creativity_score: scenario.insight_potential,
                     symbolic_meaning: scenario.symbolic_elements.join(", "),
-                    emotional_resonance: self.calculate_emotional_resonance(&scenario.emotional_tone),
+                    emotional_resonance: self
+                        .calculate_emotional_resonance(&scenario.emotional_tone),
                 };
-                
+
                 self.creative_insights.push(insight);
             }
         }
-        
-        debug!("Extracted {} creative insights", self.creative_insights.len());
+
+        debug!(
+            "Extracted {} creative insights",
+            self.creative_insights.len()
+        );
         Ok(())
     }
 }
@@ -1882,13 +2166,21 @@ impl TemporalConsciousness {
             temporal_metrics: TemporalMetrics::new(),
         }
     }
-    
+
     /// Analyze temporal context for consciousness processing
-    pub fn analyze_temporal_context(&self, query: &str, current_time: std::time::Instant) -> Result<TemporalContext> {
-        let recent_events = self.temporal_memory.get_recent_events(Duration::from_hours(1));
+    pub fn analyze_temporal_context(
+        &self,
+        query: &str,
+        current_time: std::time::Instant,
+    ) -> Result<TemporalContext> {
+        let recent_events = self
+            .temporal_memory
+            .get_recent_events(Duration::from_hours(1));
         let relevant_patterns = self.pattern_recognition.find_relevant_patterns(query)?;
-        let future_implications = self.future_projection.project_implications(query, &recent_events)?;
-        
+        let future_implications = self
+            .future_projection
+            .project_implications(query, &recent_events)?;
+
         Ok(TemporalContext {
             recent_events,
             relevant_patterns,
@@ -1897,9 +2189,14 @@ impl TemporalConsciousness {
             time_awareness: self.calculate_time_awareness(current_time),
         })
     }
-    
+
     /// Record new temporal event
-    pub fn record_event(&mut self, content: String, significance: f64, tags: Vec<String>) -> Result<()> {
+    pub fn record_event(
+        &mut self,
+        content: String,
+        significance: f64,
+        tags: Vec<String>,
+    ) -> Result<()> {
         let event = TemporalEvent {
             content,
             timestamp: std::time::Instant::now(),
@@ -1907,17 +2204,18 @@ impl TemporalConsciousness {
             context_tags: tags,
             emotional_valence: 0.0, // Could be calculated from content
         };
-        
+
         self.temporal_memory.short_term.push_back(event);
-        
+
         // Keep short-term memory bounded
         if self.temporal_memory.short_term.len() > 100 {
             self.temporal_memory.short_term.pop_front();
         }
-        
+
         // Update patterns
-        self.pattern_recognition.update_patterns(&self.temporal_memory.short_term)?;
-        
+        self.pattern_recognition
+            .update_patterns(&self.temporal_memory.short_term)?;
+
         Ok(())
     }
 }

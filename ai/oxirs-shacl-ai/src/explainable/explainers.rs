@@ -9,9 +9,9 @@ use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
-use crate::Result;
 use super::traits::ExplanationGenerator;
 use super::types::*;
+use crate::Result;
 
 /// Explainer for neural network decisions
 #[derive(Debug, Clone)]
@@ -42,20 +42,30 @@ impl NeuralDecisionExplainer {
 impl ExplanationGenerator for NeuralDecisionExplainer {
     async fn generate_explanation(&self, data: &ExplanationData) -> Result<RawExplanation> {
         let start_time = SystemTime::now();
-        
+
         // Analyze neural activations and generate explanation
         let mut technical_details = serde_json::Map::new();
-        technical_details.insert("explainer_type".to_string(), 
-                               serde_json::Value::String("neural_decision".to_string()));
-        technical_details.insert("activation_analysis".to_string(),
-                               serde_json::Value::String("Layer activation patterns analyzed".to_string()));
-        
+        technical_details.insert(
+            "explainer_type".to_string(),
+            serde_json::Value::String("neural_decision".to_string()),
+        );
+        technical_details.insert(
+            "activation_analysis".to_string(),
+            serde_json::Value::String("Layer activation patterns analyzed".to_string()),
+        );
+
         let mut metadata = HashMap::new();
-        metadata.insert("layer_count".to_string(), 
-                       serde_json::Value::Number(serde_json::Number::from(5)));
-        metadata.insert("activation_threshold".to_string(),
-                       serde_json::Value::Number(serde_json::Number::from_f64(self.config.activation_threshold).unwrap()));
-        
+        metadata.insert(
+            "layer_count".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(5)),
+        );
+        metadata.insert(
+            "activation_threshold".to_string(),
+            serde_json::Value::Number(
+                serde_json::Number::from_f64(self.config.activation_threshold).unwrap(),
+            ),
+        );
+
         Ok(RawExplanation {
             explanation_id: Uuid::new_v4(),
             explanation_type: "neural_decision".to_string(),
@@ -65,7 +75,7 @@ impl ExplanationGenerator for NeuralDecisionExplainer {
             metadata,
         })
     }
-    
+
     fn clone_box(&self) -> Box<dyn ExplanationGenerator> {
         Box::new(self.clone())
     }
@@ -93,15 +103,22 @@ impl PatternRecognitionExplainer {
 impl ExplanationGenerator for PatternRecognitionExplainer {
     async fn generate_explanation(&self, data: &ExplanationData) -> Result<RawExplanation> {
         let start_time = SystemTime::now();
-        
+
         let mut technical_details = serde_json::Map::new();
-        technical_details.insert("explainer_type".to_string(),
-                               serde_json::Value::String("pattern_recognition".to_string()));
-        technical_details.insert("patterns_analyzed".to_string(),
-                               serde_json::Value::Array(self.pattern_library.iter()
-                                                       .map(|s| serde_json::Value::String(s.clone()))
-                                                       .collect()));
-        
+        technical_details.insert(
+            "explainer_type".to_string(),
+            serde_json::Value::String("pattern_recognition".to_string()),
+        );
+        technical_details.insert(
+            "patterns_analyzed".to_string(),
+            serde_json::Value::Array(
+                self.pattern_library
+                    .iter()
+                    .map(|s| serde_json::Value::String(s.clone()))
+                    .collect(),
+            ),
+        );
+
         Ok(RawExplanation {
             explanation_id: Uuid::new_v4(),
             explanation_type: "pattern_recognition".to_string(),
@@ -111,7 +128,7 @@ impl ExplanationGenerator for PatternRecognitionExplainer {
             metadata: HashMap::new(),
         })
     }
-    
+
     fn clone_box(&self) -> Box<dyn ExplanationGenerator> {
         Box::new(self.clone())
     }
@@ -135,13 +152,17 @@ impl ValidationReasoningExplainer {
 impl ExplanationGenerator for ValidationReasoningExplainer {
     async fn generate_explanation(&self, data: &ExplanationData) -> Result<RawExplanation> {
         let start_time = SystemTime::now();
-        
+
         let mut technical_details = serde_json::Map::new();
-        technical_details.insert("explainer_type".to_string(),
-                               serde_json::Value::String("validation_reasoning".to_string()));
-        technical_details.insert("rule_engine".to_string(),
-                               serde_json::Value::String(self.rule_engine.clone()));
-        
+        technical_details.insert(
+            "explainer_type".to_string(),
+            serde_json::Value::String("validation_reasoning".to_string()),
+        );
+        technical_details.insert(
+            "rule_engine".to_string(),
+            serde_json::Value::String(self.rule_engine.clone()),
+        );
+
         Ok(RawExplanation {
             explanation_id: Uuid::new_v4(),
             explanation_type: "validation_reasoning".to_string(),
@@ -151,7 +172,7 @@ impl ExplanationGenerator for ValidationReasoningExplainer {
             metadata: HashMap::new(),
         })
     }
-    
+
     fn clone_box(&self) -> Box<dyn ExplanationGenerator> {
         Box::new(self.clone())
     }
@@ -165,9 +186,7 @@ pub struct QuantumPatternExplainer {
 
 impl QuantumPatternExplainer {
     pub fn new() -> Self {
-        Self {
-            quantum_states: 8,
-        }
+        Self { quantum_states: 8 }
     }
 }
 
@@ -175,13 +194,17 @@ impl QuantumPatternExplainer {
 impl ExplanationGenerator for QuantumPatternExplainer {
     async fn generate_explanation(&self, data: &ExplanationData) -> Result<RawExplanation> {
         let start_time = SystemTime::now();
-        
+
         let mut technical_details = serde_json::Map::new();
-        technical_details.insert("explainer_type".to_string(),
-                               serde_json::Value::String("quantum_pattern".to_string()));
-        technical_details.insert("quantum_states".to_string(),
-                               serde_json::Value::Number(serde_json::Number::from(self.quantum_states)));
-        
+        technical_details.insert(
+            "explainer_type".to_string(),
+            serde_json::Value::String("quantum_pattern".to_string()),
+        );
+        technical_details.insert(
+            "quantum_states".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(self.quantum_states)),
+        );
+
         Ok(RawExplanation {
             explanation_id: Uuid::new_v4(),
             explanation_type: "quantum_pattern".to_string(),
@@ -191,7 +214,7 @@ impl ExplanationGenerator for QuantumPatternExplainer {
             metadata: HashMap::new(),
         })
     }
-    
+
     fn clone_box(&self) -> Box<dyn ExplanationGenerator> {
         Box::new(self.clone())
     }
@@ -215,13 +238,17 @@ impl AdaptationLogicExplainer {
 impl ExplanationGenerator for AdaptationLogicExplainer {
     async fn generate_explanation(&self, data: &ExplanationData) -> Result<RawExplanation> {
         let start_time = SystemTime::now();
-        
+
         let mut technical_details = serde_json::Map::new();
-        technical_details.insert("explainer_type".to_string(),
-                               serde_json::Value::String("adaptation_logic".to_string()));
-        technical_details.insert("adaptation_steps".to_string(),
-                               serde_json::Value::Number(serde_json::Number::from(self.adaptation_history.len())));
-        
+        technical_details.insert(
+            "explainer_type".to_string(),
+            serde_json::Value::String("adaptation_logic".to_string()),
+        );
+        technical_details.insert(
+            "adaptation_steps".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(self.adaptation_history.len())),
+        );
+
         Ok(RawExplanation {
             explanation_id: Uuid::new_v4(),
             explanation_type: "adaptation_logic".to_string(),
@@ -231,7 +258,7 @@ impl ExplanationGenerator for AdaptationLogicExplainer {
             metadata: HashMap::new(),
         })
     }
-    
+
     fn clone_box(&self) -> Box<dyn ExplanationGenerator> {
         Box::new(self.clone())
     }

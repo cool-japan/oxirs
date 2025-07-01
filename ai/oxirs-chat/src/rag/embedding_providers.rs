@@ -66,9 +66,9 @@ impl EnhancedEmbeddingModel {
             EmbeddingProviderType::HuggingFace => {
                 EmbeddingProvider::HuggingFace(HuggingFaceEmbeddingProvider::new(config.clone())?)
             }
-            EmbeddingProviderType::SentenceTransformers => {
-                EmbeddingProvider::SentenceTransformers(SentenceEmbeddingProvider::new(config.clone())?)
-            }
+            EmbeddingProviderType::SentenceTransformers => EmbeddingProvider::SentenceTransformers(
+                SentenceEmbeddingProvider::new(config.clone())?,
+            ),
             EmbeddingProviderType::Local => {
                 EmbeddingProvider::Local(LocalEmbeddingProvider::new(config.clone())?)
             }
@@ -103,10 +103,18 @@ impl EnhancedEmbeddingModel {
         // Process uncached texts
         if !uncached_texts.is_empty() {
             let new_embeddings = match &self.provider {
-                EmbeddingProvider::OpenAI(provider) => provider.encode_batch(&uncached_texts).await?,
-                EmbeddingProvider::HuggingFace(provider) => provider.encode_batch(&uncached_texts).await?,
-                EmbeddingProvider::SentenceTransformers(provider) => provider.encode_batch(&uncached_texts).await?,
-                EmbeddingProvider::Local(provider) => provider.encode_batch(&uncached_texts).await?,
+                EmbeddingProvider::OpenAI(provider) => {
+                    provider.encode_batch(&uncached_texts).await?
+                }
+                EmbeddingProvider::HuggingFace(provider) => {
+                    provider.encode_batch(&uncached_texts).await?
+                }
+                EmbeddingProvider::SentenceTransformers(provider) => {
+                    provider.encode_batch(&uncached_texts).await?
+                }
+                EmbeddingProvider::Local(provider) => {
+                    provider.encode_batch(&uncached_texts).await?
+                }
             };
 
             // Update cache
@@ -125,7 +133,10 @@ impl EnhancedEmbeddingModel {
 
         // Sort by original order and extract embeddings
         results.sort_by_key(|(i, _)| *i);
-        Ok(results.into_iter().map(|(_, embedding)| embedding).collect())
+        Ok(results
+            .into_iter()
+            .map(|(_, embedding)| embedding)
+            .collect())
     }
 
     fn get_model_dimension(model_name: &str) -> usize {
@@ -148,8 +159,10 @@ struct OpenAIEmbeddingProvider {
 
 impl OpenAIEmbeddingProvider {
     fn new(config: EmbeddingConfig) -> Result<Self> {
-        let api_key = config.api_key.ok_or_else(|| anyhow!("OpenAI API key required"))?;
-        
+        let api_key = config
+            .api_key
+            .ok_or_else(|| anyhow!("OpenAI API key required"))?;
+
         Ok(Self {
             client: Client::new(),
             api_key,
@@ -218,12 +231,16 @@ impl HuggingFaceEmbeddingProvider {
 
             let mut request_builder = self
                 .client
-                .post(&format!("https://api-inference.huggingface.co/pipeline/feature-extraction/{}", self.model))
+                .post(&format!(
+                    "https://api-inference.huggingface.co/pipeline/feature-extraction/{}",
+                    self.model
+                ))
                 .header("Content-Type", "application/json")
                 .json(&request_body);
 
             if let Some(ref api_key) = self.api_key {
-                request_builder = request_builder.header("Authorization", format!("Bearer {}", api_key));
+                request_builder =
+                    request_builder.header("Authorization", format!("Bearer {}", api_key));
             }
 
             let response = request_builder.send().await?;
@@ -431,25 +448,41 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         let object_emb = self.text_to_embedding(object);
 
         // Simple scoring: average similarity
-        let score = (similarity::cosine_similarity(&subject_emb, &object_emb) +
-                    similarity::cosine_similarity(&predicate_emb, &object_emb)) / 2.0;
-        
+        let score = (similarity::cosine_similarity(&subject_emb, &object_emb)
+            + similarity::cosine_similarity(&predicate_emb, &object_emb))
+            / 2.0;
+
         Ok(score as f64)
     }
 
-    fn predict_objects(&self, subject: &str, predicate: &str, _k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        _k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         // Simple implementation: return dummy predictions
         let score = self.score_triple(subject, predicate, "dummy_object")?;
         Ok(vec![("dummy_object".to_string(), score)])
     }
 
-    fn predict_subjects(&self, predicate: &str, object: &str, _k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        _k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         // Simple implementation: return dummy predictions
         let score = self.score_triple("dummy_subject", predicate, object)?;
         Ok(vec![("dummy_subject".to_string(), score)])
     }
 
-    fn predict_relations(&self, subject: &str, object: &str, _k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        _k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         // Simple implementation: return dummy predictions
         let score = self.score_triple(subject, "dummy_predicate", object)?;
         Ok(vec![("dummy_predicate".to_string(), score)])
@@ -497,7 +530,8 @@ impl EmbeddingModel for SimpleEmbeddingModel {
     }
 
     async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        let embeddings: Vec<Vec<f32>> = texts.iter()
+        let embeddings: Vec<Vec<f32>> = texts
+            .iter()
             .map(|text| self.text_to_embedding(text))
             .collect();
         Ok(embeddings)

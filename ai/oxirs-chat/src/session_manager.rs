@@ -86,7 +86,9 @@ impl ContextWindow {
                     let removed_id = self.active_messages.pop_front().unwrap();
                     if let Some(removed_tokens) = self.importance_scores.remove(&removed_id) {
                         // Estimate tokens from importance score (simplified)
-                        self.token_count = self.token_count.saturating_sub((removed_tokens * 100.0) as usize);
+                        self.token_count = self
+                            .token_count
+                            .saturating_sub((removed_tokens * 100.0) as usize);
                     }
                 } else {
                     break;
@@ -116,7 +118,7 @@ impl ContextWindow {
     pub fn compress_context(&mut self, summary: String) {
         self.context_summary = Some(summary);
         self.last_compression = Some(SystemTime::now());
-        
+
         // Remove oldest unpinned messages after compression
         let mut to_remove = Vec::new();
         for message_id in self.active_messages.iter() {
@@ -124,7 +126,7 @@ impl ContextWindow {
                 to_remove.push(message_id.clone());
             }
         }
-        
+
         // Keep only half after compression
         let keep_count = to_remove.len() / 2;
         for (i, message_id) in to_remove.iter().enumerate() {
@@ -133,7 +135,7 @@ impl ContextWindow {
                 self.importance_scores.remove(message_id);
             }
         }
-        
+
         // Recalculate token count
         self.token_count = self.importance_scores.len() * 50; // Simplified estimation
     }
@@ -165,10 +167,10 @@ impl TopicTracker {
     pub fn analyze_message(&mut self, message: &Message) -> Option<TopicTransition> {
         // Simplified topic analysis - in real implementation, this would use NLP
         let content = message.content.to_text().to_lowercase();
-        
+
         // Basic keyword-based topic detection
         let detected_topics = self.extract_topics(&content);
-        
+
         if !detected_topics.is_empty() {
             let transition = self.update_topics(detected_topics, &message.id);
             if let Some(ref t) = transition {
@@ -182,7 +184,7 @@ impl TopicTracker {
 
     fn extract_topics(&self, content: &str) -> Vec<String> {
         let mut topics = Vec::new();
-        
+
         // Simple keyword matching - in practice, use proper NLP
         if content.contains("sparql") || content.contains("query") {
             topics.push("SPARQL Queries".to_string());
@@ -193,20 +195,24 @@ impl TopicTracker {
         if content.contains("data") || content.contains("dataset") {
             topics.push("Data Management".to_string());
         }
-        
+
         topics
     }
 
-    fn update_topics(&mut self, new_topics: Vec<String>, trigger_message_id: &str) -> Option<TopicTransition> {
+    fn update_topics(
+        &mut self,
+        new_topics: Vec<String>,
+        trigger_message_id: &str,
+    ) -> Option<TopicTransition> {
         // Determine transition type
         let transition_type = if self.current_topics.is_empty() {
             TransitionType::NewTopic
         } else {
             // Check for topic overlap
-            let current_topic_names: HashSet<String> = self.current_topics.iter()
-                .map(|t| t.name.clone()).collect();
+            let current_topic_names: HashSet<String> =
+                self.current_topics.iter().map(|t| t.name.clone()).collect();
             let new_topic_names: HashSet<String> = new_topics.iter().cloned().collect();
-            
+
             if current_topic_names.intersection(&new_topic_names).count() > 0 {
                 TransitionType::TopicReturn
             } else {
@@ -241,8 +247,8 @@ impl TopicTracker {
         if self.current_topics.is_empty() {
             "No specific topic detected".to_string()
         } else {
-            let topic_names: Vec<String> = self.current_topics.iter()
-                .map(|t| t.name.clone()).collect();
+            let topic_names: Vec<String> =
+                self.current_topics.iter().map(|t| t.name.clone()).collect();
             format!("Current topics: {}", topic_names.join(", "))
         }
     }
@@ -277,9 +283,9 @@ impl Topic {
             let hours_since = now.signed_duration_since(self.last_mentioned).num_hours() as f32;
             (-hours_since / 24.0).exp() // Exponential decay over days
         };
-        
+
         let frequency_boost = (self.message_count as f32).ln().max(1.0);
-        
+
         self.confidence * time_decay * frequency_boost
     }
 }
@@ -331,8 +337,9 @@ impl SessionMetrics {
         if self.assistant_messages == 0 {
             self.average_response_time = response_time_s;
         } else {
-            self.average_response_time = (self.average_response_time * self.assistant_messages as f64 + response_time_s) 
-                / (self.assistant_messages as f64 + 1.0);
+            self.average_response_time =
+                (self.average_response_time * self.assistant_messages as f64 + response_time_s)
+                    / (self.assistant_messages as f64 + 1.0);
         }
         self.assistant_messages += 1;
         self.total_messages += 1;
@@ -376,7 +383,8 @@ impl SessionMetrics {
         if self.user_satisfaction_scores.is_empty() {
             0.0
         } else {
-            self.user_satisfaction_scores.iter().sum::<f32>() / self.user_satisfaction_scores.len() as f32
+            self.user_satisfaction_scores.iter().sum::<f32>()
+                / self.user_satisfaction_scores.len() as f32
         }
     }
 

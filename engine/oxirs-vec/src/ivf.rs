@@ -626,6 +626,11 @@ impl IvfIndex {
         Self::new_with_product_quantization(n_clusters, n_probes, pq_config)
     }
 
+    /// Get the configuration of this index
+    pub fn config(&self) -> &IvfConfig {
+        &self.config
+    }
+
     /// Train the index with a sample of vectors
     pub fn train(&mut self, training_vectors: &[Vector]) -> Result<()> {
         if training_vectors.is_empty() {

@@ -523,8 +523,8 @@ impl QueryAnalyzer {
                 self.collect_variables_from_expression(left, variables)?;
                 self.collect_variables_from_expression(right, variables)?;
             }
-            Expression::Unary { expr, .. } => {
-                self.collect_variables_from_expression(expr, variables)?;
+            Expression::Unary { operand, .. } => {
+                self.collect_variables_from_expression(operand, variables)?;
             }
             Expression::Function { args, .. } => {
                 for arg in args {
@@ -819,7 +819,7 @@ impl QueryAnalyzer {
             Expression::Binary { left, right, .. } => {
                 self.contains_aggregate_function(left) || self.contains_aggregate_function(right)
             }
-            Expression::Unary { expr, .. } => self.contains_aggregate_function(expr),
+            Expression::Unary { operand, .. } => self.contains_aggregate_function(operand),
             _ => false,
         }
     }

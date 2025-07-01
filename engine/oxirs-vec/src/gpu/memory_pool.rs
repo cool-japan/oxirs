@@ -43,13 +43,8 @@ impl GpuMemoryPool {
                 .map_err(|e| anyhow!("Failed to lock available buffers: {}", e))?;
 
             if let Some(buffer) = available.pop_front() {
-                // Move to allocated buffers
-                self.allocated_buffers
-                    .lock()
-                    .map_err(|e| anyhow!("Failed to lock allocated buffers: {}", e))?
-                    .push(buffer);
-
-                return Ok(self.allocated_buffers.lock().unwrap().last().unwrap());
+                // Return the buffer directly
+                return Ok(buffer);
             }
         }
 
@@ -62,12 +57,8 @@ impl GpuMemoryPool {
         let buffer = GpuBuffer::new(self.buffer_size, self.device_id)?;
         self.used_memory += self.buffer_size * std::mem::size_of::<f32>();
 
-        self.allocated_buffers
-            .lock()
-            .map_err(|e| anyhow!("Failed to lock allocated buffers: {}", e))?
-            .push(buffer);
-
-        Ok(self.allocated_buffers.lock().unwrap().last().unwrap())
+        // Return the newly allocated buffer directly
+        Ok(buffer)
     }
 
     /// Return a buffer to the pool

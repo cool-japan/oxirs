@@ -272,7 +272,7 @@ pub enum RiskFactorType {
     NetworkAnomaly,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum RiskSeverity {
     Low,
     Medium,
@@ -669,8 +669,8 @@ impl ZeroTrustSecurityManager {
         for threat in threats {
             if threat.score > self.config.threat_detection_config.threat_score_threshold {
                 context.risk_factors.push(RiskFactor {
-                    factor_type: threat.threat_type,
-                    severity: threat.severity,
+                    factor_type: threat.threat_type.clone(),
+                    severity: threat.severity.clone(),
                     description: threat.description.clone(),
                     detected_at: SystemTime::now(),
                     auto_mitigated: false,

@@ -77,7 +77,7 @@ impl ConstraintValidator for CustomConstraint {
 impl ConstraintEvaluator for CustomConstraint {
     fn evaluate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         // If this is a SPARQL-based constraint, use SPARQL evaluation
@@ -285,7 +285,7 @@ impl CompositeConstraint {
     /// Evaluate the composite constraint based on composition type
     pub fn evaluate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         let mut results = Vec::new();

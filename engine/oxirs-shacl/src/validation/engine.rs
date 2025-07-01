@@ -171,8 +171,14 @@ impl<'a> ValidationEngine<'a> {
         self.constraint_cache.hit_rate()
     }
 
+    /// Clear all validation caches
+    pub fn clear_caches(&mut self) {
+        self.constraint_cache.clear();
+        self.inheritance_cache.clear();
+    }
+
     /// Validate all data in a store against all loaded shapes
-    pub fn validate_store(&mut self, store: &Store) -> Result<ValidationReport> {
+    pub fn validate_store(&mut self, store: &dyn Store) -> Result<ValidationReport> {
         let start_time = Instant::now();
         let mut report = ValidationReport::new();
 
@@ -207,7 +213,7 @@ impl<'a> ValidationEngine<'a> {
     /// Validate specific nodes against a specific shape
     pub fn validate_nodes(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shape: &Shape,
         nodes: &[Term],
     ) -> Result<ValidationReport> {
@@ -275,7 +281,7 @@ impl<'a> ValidationEngine<'a> {
     /// Validate a shape against its targets
     fn validate_shape(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shape: &Shape,
         graph_name: Option<&str>,
     ) -> Result<ValidationReport> {
@@ -330,7 +336,7 @@ impl<'a> ValidationEngine<'a> {
     /// Validate a specific node against a shape
     pub fn validate_node_against_shape(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shape: &Shape,
         focus_node: &Term,
         graph_name: Option<&str>,
@@ -397,7 +403,7 @@ impl<'a> ValidationEngine<'a> {
     /// Validate all constraints for a shape
     fn validate_constraints(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shape: &Shape,
         focus_node: &Term,
         path: Option<&PropertyPath>,
@@ -420,6 +426,10 @@ impl<'a> ValidationEngine<'a> {
 
             match constraint_result {
                 ConstraintEvaluationResult::Satisfied => {
+                    results.push(None);
+                }
+                ConstraintEvaluationResult::SatisfiedWithNote { note: _ } => {
+                    // Constraint is satisfied but has a note - treat as satisfied
                     results.push(None);
                 }
                 ConstraintEvaluationResult::Violated {
@@ -477,7 +487,7 @@ impl<'a> ValidationEngine<'a> {
     /// Validate a single constraint (placeholder - will be moved to constraint_validators.rs)
     fn validate_constraint(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         constraint: &Constraint,
         context: &ConstraintContext,
         path: Option<&PropertyPath>,

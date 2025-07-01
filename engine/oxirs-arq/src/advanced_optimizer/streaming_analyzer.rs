@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 /// Streaming query analyzer
+#[derive(Clone)]
 pub struct StreamingAnalyzer {
     memory_threshold: usize,
     streaming_strategies: HashMap<String, StreamingStrategy>,
@@ -62,7 +63,10 @@ impl StreamingAnalyzer {
     }
 
     /// Analyze query for streaming optimization opportunities
-    pub fn analyze_streaming_potential(&self, _query: &crate::algebra::Algebra) -> anyhow::Result<Option<StreamingStrategy>> {
+    pub fn analyze_streaming_potential(
+        &self,
+        _query: &crate::algebra::Algebra,
+    ) -> anyhow::Result<Option<StreamingStrategy>> {
         // Implementation will be extracted from the original file
         Ok(None)
     }
@@ -85,5 +89,10 @@ impl StreamingAnalyzer {
     /// Get active spill policies
     pub fn spill_policies(&self) -> &[SpillPolicy] {
         &self.spill_policies
+    }
+
+    /// Get the count of optimizations applied
+    pub fn optimizations_count(&self) -> usize {
+        self.streaming_strategies.len() + self.spill_policies.len()
     }
 }

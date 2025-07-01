@@ -37,7 +37,7 @@ impl NotConstraint {
     pub fn evaluate(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // Check if there's a shape validator available in the context
         // For now, we'll implement a simplified version
@@ -74,7 +74,7 @@ impl NotConstraint {
     pub fn evaluate_optimized(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
 
@@ -103,7 +103,7 @@ impl NotConstraint {
     pub fn evaluate_with_cache(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
         cache: &mut HashMap<(Term, ShapeId), bool>,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
@@ -141,7 +141,7 @@ impl NotConstraint {
     pub fn evaluate_with_depth_control(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
         current_depth: usize,
         max_depth: usize,
         visited_shapes: &mut HashSet<ShapeId>,
@@ -180,7 +180,7 @@ impl NotConstraint {
     fn value_conforms_to_negated_shape(
         &self,
         value: &Term,
-        store: &Store,
+        store: &dyn Store,
         _context: &ConstraintContext,
     ) -> Result<bool> {
         // This is a simplified implementation
@@ -274,7 +274,7 @@ impl AndConstraint {
     pub fn evaluate(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
 
@@ -305,7 +305,7 @@ impl AndConstraint {
     pub fn evaluate_optimized(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
 
@@ -335,7 +335,7 @@ impl AndConstraint {
     pub fn evaluate_with_cache(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
         cache: &mut HashMap<(Term, ShapeId), bool>,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
@@ -375,7 +375,7 @@ impl AndConstraint {
     pub fn evaluate_with_depth_control(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
         current_depth: usize,
         max_depth: usize,
         visited_shapes: &mut HashSet<ShapeId>,
@@ -439,7 +439,7 @@ impl AndConstraint {
         &self,
         value: &Term,
         shape_id: &ShapeId,
-        store: &Store,
+        store: &dyn Store,
         _context: &ConstraintContext,
     ) -> Result<bool> {
         // Simplified implementation for test cases
@@ -499,7 +499,7 @@ impl AndConstraint {
     pub fn evaluate_parallel(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // For now, fall back to optimized sequential evaluation
         // In a full implementation, this would use rayon or similar for parallel processing
@@ -542,7 +542,7 @@ impl OrConstraint {
     pub fn evaluate(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
 
@@ -580,7 +580,7 @@ impl OrConstraint {
     pub fn evaluate_optimized(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
 
@@ -617,7 +617,7 @@ impl OrConstraint {
     pub fn evaluate_with_cache(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
         cache: &mut HashMap<(Term, ShapeId), bool>,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
@@ -664,7 +664,7 @@ impl OrConstraint {
     pub fn evaluate_with_depth_control(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
         current_depth: usize,
         max_depth: usize,
         visited_shapes: &mut HashSet<ShapeId>,
@@ -734,7 +734,7 @@ impl OrConstraint {
         &self,
         value: &Term,
         shape_id: &ShapeId,
-        store: &Store,
+        store: &dyn Store,
         _context: &ConstraintContext,
     ) -> Result<bool> {
         // Simplified implementation for test cases
@@ -794,7 +794,7 @@ impl OrConstraint {
     pub fn evaluate_parallel(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // For now, fall back to optimized sequential evaluation
         // In a full implementation, this would use rayon or similar for parallel processing
@@ -838,7 +838,7 @@ impl XoneConstraint {
     pub fn evaluate(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
 
@@ -890,7 +890,7 @@ impl XoneConstraint {
     pub fn evaluate_optimized(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
 
@@ -942,7 +942,7 @@ impl XoneConstraint {
     pub fn evaluate_with_cache(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
         cache: &mut HashMap<(Term, ShapeId), bool>,
     ) -> Result<ConstraintEvaluationResult> {
         let values = &context.values;
@@ -999,7 +999,7 @@ impl XoneConstraint {
     pub fn evaluate_with_depth_control(
         &self,
         context: &ConstraintContext,
-        store: &Store,
+        store: &dyn Store,
         current_depth: usize,
         max_depth: usize,
         visited_shapes: &mut HashSet<ShapeId>,
@@ -1079,7 +1079,7 @@ impl XoneConstraint {
         &self,
         value: &Term,
         shape_id: &ShapeId,
-        store: &Store,
+        store: &dyn Store,
         _context: &ConstraintContext,
     ) -> Result<bool> {
         // Simplified implementation for test cases
@@ -1140,7 +1140,7 @@ impl XoneConstraint {
     pub fn analyze_xone_patterns(
         &self,
         values: &[Term],
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<XoneAnalysis> {
         let mut analysis = XoneAnalysis {

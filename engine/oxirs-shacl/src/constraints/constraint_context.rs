@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use oxirs_core::model::{NamedNode, Term};
 
-use crate::{PropertyPath, Severity, ShapeId, ValidationViolation};
+use crate::{ConstraintComponentId, PropertyPath, Severity, ShapeId, ValidationViolation};
 
 /// Constraint evaluation context
 #[derive(Debug, Clone)]
@@ -162,16 +162,14 @@ impl ConstraintEvaluationResult {
                 message,
                 details,
             } => Some(ValidationViolation {
-                value_node: violating_value.unwrap_or_else(|| {
-                    Term::NamedNode(NamedNode::new("http://example.org/unknown").unwrap())
-                }),
-                source_constraint: NamedNode::new("http://example.org/constraint").unwrap(),
-                source_shape: NamedNode::new("http://example.org/shape").unwrap(),
+                value: violating_value,
+                source_constraint_component: ConstraintComponentId::new("http://example.org/constraint"),
+                source_shape: ShapeId::new("http://example.org/shape"),
                 focus_node: Term::NamedNode(NamedNode::new("http://example.org/focus").unwrap()),
                 result_path: None,
-                severity: Severity::Violation,
-                message: message.unwrap_or_else(|| "Constraint violation".to_string()),
-                detail: details.get("detail").cloned(),
+                result_severity: Severity::Violation,
+                result_message: message,
+                details: details,
             }),
             _ => None,
         }

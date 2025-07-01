@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 
 /// CUDA kernel manager
+#[derive(Debug)]
 pub struct KernelManager {
     kernels: HashMap<String, String>,
 }

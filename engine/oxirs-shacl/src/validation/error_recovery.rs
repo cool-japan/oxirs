@@ -5,7 +5,8 @@
 //! even when encountering malformed data or expensive constraints.
 
 use crate::{
-    constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult},
+    constraints::{Constraint, ConstraintContext},
+    validation::ConstraintEvaluationResult,
     Result, ShaclError, ValidationConfig,
 };
 use oxirs_core::{model::Term, Store};
@@ -311,7 +312,7 @@ impl ErrorRecoveryManager {
     /// Validate constraint with error recovery
     pub fn validate_constraint_with_recovery(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraint: &Constraint,
         context: &ConstraintContext,
         timeout: Option<Duration>,
@@ -463,8 +464,8 @@ impl ErrorRecoveryManager {
             return Err(ShaclError::RecursionLimit(format!(
                 "Maximum recursion depth {} exceeded while validating shape {} for node {}",
                 self.config.max_recursion_depth,
-                context.shape_id.as_str(),
-                context.focus_node.as_str()
+                context.shape_id.to_string(),
+                context.focus_node.to_string()
             )));
         }
         Ok(())
@@ -486,7 +487,7 @@ impl ErrorRecoveryManager {
         let mut stack = self.validation_stack.lock().unwrap();
         let frame = ValidationStackFrame {
             focus_node: context.focus_node.clone(),
-            shape_id: context.shape_id.as_str().to_string(),
+            shape_id: context.shape_id.to_string(),
             depth: stack.len(),
             started_at: Instant::now(),
         };
@@ -502,7 +503,7 @@ impl ErrorRecoveryManager {
     /// Validate constraint with default timeout
     fn validate_with_default_timeout(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraint: &Constraint,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
@@ -513,7 +514,7 @@ impl ErrorRecoveryManager {
     /// Validate constraint with specified timeout
     fn validate_with_timeout(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraint: &Constraint,
         context: &ConstraintContext,
         timeout: Duration,
@@ -581,8 +582,8 @@ impl ErrorRecoveryManager {
             // Return a satisfied result with a note about recursion limit
             Ok(ConstraintEvaluationResult::satisfied_with_note(format!(
                 "Recursion limit reached for shape {} on node {}",
-                context.shape_id.as_str(),
-                context.focus_node.as_str()
+                context.shape_id.to_string(),
+                context.focus_node.to_string()
             )))
         } else {
             Err(error)
@@ -602,8 +603,8 @@ impl ErrorRecoveryManager {
             // Return a satisfied result with a note about memory pressure
             Ok(ConstraintEvaluationResult::satisfied_with_note(format!(
                 "Memory limit reached during validation of shape {} on node {}",
-                context.shape_id.as_str(),
-                context.focus_node.as_str()
+                context.shape_id.to_string(),
+                context.focus_node.to_string()
             )))
         } else {
             Err(error)
@@ -668,7 +669,7 @@ impl ErrorRecoveryManager {
     }
 
     fn extract_constraint_info(&self, context: &ConstraintContext) -> Option<String> {
-        Some(context.shape_id.as_str().to_string())
+        Some(context.shape_id.to_string().to_string())
     }
 
     fn update_error_stats(&self, error_type: &ErrorType) {

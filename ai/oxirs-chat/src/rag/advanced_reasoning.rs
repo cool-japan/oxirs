@@ -225,41 +225,52 @@ impl AdvancedReasoningEngine {
     /// Initialize standard reasoning patterns
     fn initialize_reasoning_patterns() -> HashMap<String, ReasoningPattern> {
         let mut patterns = HashMap::new();
-        
+
         // Deductive reasoning patterns
-        patterns.insert("modus_ponens".to_string(), ReasoningPattern {
-            pattern_id: "modus_ponens".to_string(),
-            pattern_type: ReasoningType::Deductive,
-            premise_template: "If {P} then {Q}; {P} is true".to_string(),
-            conclusion_template: "Therefore {Q} is true".to_string(),
-            confidence_modifier: 0.95,
-        });
+        patterns.insert(
+            "modus_ponens".to_string(),
+            ReasoningPattern {
+                pattern_id: "modus_ponens".to_string(),
+                pattern_type: ReasoningType::Deductive,
+                premise_template: "If {P} then {Q}; {P} is true".to_string(),
+                conclusion_template: "Therefore {Q} is true".to_string(),
+                confidence_modifier: 0.95,
+            },
+        );
 
         // Causal reasoning patterns
-        patterns.insert("causal_chain".to_string(), ReasoningPattern {
-            pattern_id: "causal_chain".to_string(),
-            pattern_type: ReasoningType::Causal,
-            premise_template: "{A} causes {B}; {B} causes {C}".to_string(),
-            conclusion_template: "{A} causes {C}".to_string(),
-            confidence_modifier: 0.8,
-        });
+        patterns.insert(
+            "causal_chain".to_string(),
+            ReasoningPattern {
+                pattern_id: "causal_chain".to_string(),
+                pattern_type: ReasoningType::Causal,
+                premise_template: "{A} causes {B}; {B} causes {C}".to_string(),
+                conclusion_template: "{A} causes {C}".to_string(),
+                confidence_modifier: 0.8,
+            },
+        );
 
         // Temporal reasoning patterns
-        patterns.insert("temporal_sequence".to_string(), ReasoningPattern {
-            pattern_id: "temporal_sequence".to_string(),
-            pattern_type: ReasoningType::Temporal,
-            premise_template: "{A} happens before {B}; {B} happens before {C}".to_string(),
-            conclusion_template: "{A} happens before {C}".to_string(),
-            confidence_modifier: 0.9,
-        });
+        patterns.insert(
+            "temporal_sequence".to_string(),
+            ReasoningPattern {
+                pattern_id: "temporal_sequence".to_string(),
+                pattern_type: ReasoningType::Temporal,
+                premise_template: "{A} happens before {B}; {B} happens before {C}".to_string(),
+                conclusion_template: "{A} happens before {C}".to_string(),
+                confidence_modifier: 0.9,
+            },
+        );
 
         patterns
     }
 
     /// Perform advanced reasoning on assembled context
-    pub async fn reason(&mut self, 
-                       query: &str, 
-                       context: &AssembledContext) -> Result<ReasoningResult> {
+    pub async fn reason(
+        &mut self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<ReasoningResult> {
         let start_time = std::time::Instant::now();
         info!("Starting advanced reasoning for query: {}", query);
 
@@ -296,7 +307,7 @@ impl AdvancedReasoningEngine {
         let primary_chain = self.select_best_chain(reasoning_chains)?;
 
         // Gather supporting and contradicting evidence
-        let (supporting_evidence, contradicting_evidence) = 
+        let (supporting_evidence, contradicting_evidence) =
             self.gather_evidence(&primary_chain, context).await?;
 
         // Quantify uncertainty if enabled
@@ -307,7 +318,9 @@ impl AdvancedReasoningEngine {
         };
 
         // Assess reasoning quality
-        let reasoning_quality = self.assess_reasoning_quality(&primary_chain, context).await?;
+        let reasoning_quality = self
+            .assess_reasoning_quality(&primary_chain, context)
+            .await?;
 
         let reasoning_time = start_time.elapsed().as_millis() as u64;
         info!("Advanced reasoning completed in {}ms", reasoning_time);
@@ -322,13 +335,17 @@ impl AdvancedReasoningEngine {
     }
 
     /// Build deductive reasoning chain
-    async fn build_deductive_chain(&self, 
-                                  query: &str, 
-                                  context: &AssembledContext) -> Result<Option<ReasoningChain>> {
+    async fn build_deductive_chain(
+        &self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<Option<ReasoningChain>> {
         debug!("Building deductive reasoning chain");
-        
+
         let mut steps = Vec::new();
-        let mut current_premises = context.semantic_results.iter()
+        let mut current_premises = context
+            .semantic_results
+            .iter()
             .map(|r| r.triple.clone())
             .collect::<Vec<_>>();
 
@@ -355,7 +372,8 @@ impl AdvancedReasoningEngine {
             return Ok(None);
         }
 
-        let overall_confidence = steps.iter()
+        let overall_confidence = steps
+            .iter()
             .map(|s| s.confidence)
             .fold(1.0, |acc, conf| acc * conf);
 
@@ -371,13 +389,17 @@ impl AdvancedReasoningEngine {
     }
 
     /// Build causal reasoning chain
-    async fn build_causal_chain(&self, 
-                               query: &str, 
-                               context: &AssembledContext) -> Result<Option<ReasoningChain>> {
+    async fn build_causal_chain(
+        &self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<Option<ReasoningChain>> {
         debug!("Building causal reasoning chain");
-        
+
         // Look for causal relationships in the context
-        let causal_triples = context.semantic_results.iter()
+        let causal_triples = context
+            .semantic_results
+            .iter()
             .filter(|r| self.is_causal_relation(&r.triple))
             .map(|r| r.triple.clone())
             .collect::<Vec<_>>();
@@ -418,13 +440,17 @@ impl AdvancedReasoningEngine {
     }
 
     /// Build temporal reasoning chain
-    async fn build_temporal_chain(&self, 
-                                 query: &str, 
-                                 context: &AssembledContext) -> Result<Option<ReasoningChain>> {
+    async fn build_temporal_chain(
+        &self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<Option<ReasoningChain>> {
         debug!("Building temporal reasoning chain");
-        
+
         // Look for temporal relationships
-        let temporal_triples = context.semantic_results.iter()
+        let temporal_triples = context
+            .semantic_results
+            .iter()
             .filter(|r| self.is_temporal_relation(&r.triple))
             .map(|r| r.triple.clone())
             .collect::<Vec<_>>();
@@ -435,14 +461,16 @@ impl AdvancedReasoningEngine {
 
         // Sort by temporal order if possible
         let mut sorted_triples = temporal_triples;
-        
+
         // Implement temporal sorting based on timestamps and sequential relationships
         sorted_triples.sort_by(|a, b| {
             // Try to extract temporal information from the triple objects
             let a_temporal_score = self.extract_temporal_score(a);
             let b_temporal_score = self.extract_temporal_score(b);
-            
-            a_temporal_score.partial_cmp(&b_temporal_score).unwrap_or(std::cmp::Ordering::Equal)
+
+            a_temporal_score
+                .partial_cmp(&b_temporal_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         let mut steps = Vec::new();
@@ -473,13 +501,17 @@ impl AdvancedReasoningEngine {
     }
 
     /// Build analogical reasoning chain
-    async fn build_analogical_chain(&self, 
-                                   query: &str, 
-                                   context: &AssembledContext) -> Result<Option<ReasoningChain>> {
+    async fn build_analogical_chain(
+        &self,
+        query: &str,
+        context: &AssembledContext,
+    ) -> Result<Option<ReasoningChain>> {
         debug!("Building analogical reasoning chain");
-        
+
         // Find analogical patterns in the data
-        let analogical_candidates = context.semantic_results.iter()
+        let analogical_candidates = context
+            .semantic_results
+            .iter()
             .filter(|r| self.has_analogical_potential(&r.triple))
             .map(|r| r.triple.clone())
             .collect::<Vec<_>>();
@@ -519,7 +551,7 @@ impl AdvancedReasoningEngine {
     fn apply_modus_ponens(&self, premises: &[Triple]) -> Result<Option<Triple>> {
         // Simplified modus ponens: look for implication patterns
         // In a real implementation, this would involve sophisticated logical inference
-        
+
         for premise in premises {
             // Look for "implies" or similar predicates
             let predicate_str = premise.predicate().to_string();
@@ -529,36 +561,36 @@ impl AdvancedReasoningEngine {
                 return Ok(Some(premise.clone()));
             }
         }
-        
+
         Ok(None)
     }
 
     /// Check if a triple represents a causal relation
     fn is_causal_relation(&self, triple: &Triple) -> bool {
         let predicate = triple.predicate().to_string().to_lowercase();
-        predicate.contains("cause") || 
-        predicate.contains("result") || 
-        predicate.contains("lead") ||
-        predicate.contains("effect")
+        predicate.contains("cause")
+            || predicate.contains("result")
+            || predicate.contains("lead")
+            || predicate.contains("effect")
     }
 
     /// Check if a triple represents a temporal relation
     fn is_temporal_relation(&self, triple: &Triple) -> bool {
         let predicate = triple.predicate().to_string().to_lowercase();
-        predicate.contains("before") || 
-        predicate.contains("after") || 
-        predicate.contains("during") ||
-        predicate.contains("when") ||
-        predicate.contains("time")
+        predicate.contains("before")
+            || predicate.contains("after")
+            || predicate.contains("during")
+            || predicate.contains("when")
+            || predicate.contains("time")
     }
 
     /// Check if a triple has analogical potential
     fn has_analogical_potential(&self, triple: &Triple) -> bool {
         let predicate = triple.predicate().to_string().to_lowercase();
-        predicate.contains("similar") || 
-        predicate.contains("like") || 
-        predicate.contains("analogy") ||
-        predicate.contains("resemble")
+        predicate.contains("similar")
+            || predicate.contains("like")
+            || predicate.contains("analogy")
+            || predicate.contains("resemble")
     }
 
     /// Select the best reasoning chain from candidates
@@ -568,17 +600,24 @@ impl AdvancedReasoningEngine {
         }
 
         // Select chain with highest confidence above threshold
-        let best_chain = chains.into_iter()
+        let best_chain = chains
+            .into_iter()
             .filter(|chain| chain.overall_confidence >= self.config.confidence_threshold)
-            .max_by(|a, b| a.overall_confidence.partial_cmp(&b.overall_confidence).unwrap());
+            .max_by(|a, b| {
+                a.overall_confidence
+                    .partial_cmp(&b.overall_confidence)
+                    .unwrap()
+            });
 
         best_chain.ok_or_else(|| anyhow!("No reasoning chain meets confidence threshold"))
     }
 
     /// Gather supporting and contradicting evidence
-    async fn gather_evidence(&self, 
-                            chain: &ReasoningChain, 
-                            context: &AssembledContext) -> Result<(Vec<Triple>, Vec<Triple>)> {
+    async fn gather_evidence(
+        &self,
+        chain: &ReasoningChain,
+        context: &AssembledContext,
+    ) -> Result<(Vec<Triple>, Vec<Triple>)> {
         let mut supporting = Vec::new();
         let mut contradicting = Vec::new();
 
@@ -595,9 +634,11 @@ impl AdvancedReasoningEngine {
     }
 
     /// Quantify uncertainty in reasoning
-    async fn quantify_uncertainty(&self, 
-                                 chain: &ReasoningChain, 
-                                 context: &AssembledContext) -> Result<Vec<UncertaintyFactor>> {
+    async fn quantify_uncertainty(
+        &self,
+        chain: &ReasoningChain,
+        context: &AssembledContext,
+    ) -> Result<Vec<UncertaintyFactor>> {
         let mut factors = Vec::new();
 
         // Check for insufficient evidence
@@ -611,13 +652,16 @@ impl AdvancedReasoningEngine {
         }
 
         // Check for conflicting evidence
-        let confidence_variance = chain.steps.iter()
+        let confidence_variance = chain
+            .steps
+            .iter()
             .map(|s| s.confidence)
             .fold((0.0, 0.0), |acc, conf| (acc.0 + conf, acc.1 + conf * conf));
-        
+
         let mean_confidence = confidence_variance.0 / chain.steps.len() as f64;
-        let variance = (confidence_variance.1 / chain.steps.len() as f64) - mean_confidence * mean_confidence;
-        
+        let variance =
+            (confidence_variance.1 / chain.steps.len() as f64) - mean_confidence * mean_confidence;
+
         if variance > 0.1 {
             factors.push(UncertaintyFactor {
                 factor_type: UncertaintyType::ConflictingEvidence,
@@ -631,27 +675,40 @@ impl AdvancedReasoningEngine {
     }
 
     /// Assess overall reasoning quality
-    async fn assess_reasoning_quality(&self, 
-                                     chain: &ReasoningChain, 
-                                     context: &AssembledContext) -> Result<ReasoningQuality> {
+    async fn assess_reasoning_quality(
+        &self,
+        chain: &ReasoningChain,
+        context: &AssembledContext,
+    ) -> Result<ReasoningQuality> {
         // Logical consistency
-        let logical_consistency = chain.steps.iter()
+        let logical_consistency = chain
+            .steps
+            .iter()
             .map(|s| s.confidence)
-            .fold(0.0, |acc, conf| acc + conf) / chain.steps.len() as f64;
+            .fold(0.0, |acc, conf| acc + conf)
+            / chain.steps.len() as f64;
 
         // Evidence strength
-        let evidence_strength = context.semantic_results.iter()
+        let evidence_strength = context
+            .semantic_results
+            .iter()
             .map(|r| r.score as f64)
-            .fold(0.0, |acc, score| acc + score) / context.semantic_results.len().max(1) as f64;
+            .fold(0.0, |acc, score| acc + score)
+            / context.semantic_results.len().max(1) as f64;
 
         // Chain completeness
-        let chain_completeness = if chain.final_conclusion.is_some() { 1.0 } else { 0.5 };
+        let chain_completeness = if chain.final_conclusion.is_some() {
+            1.0
+        } else {
+            0.5
+        };
 
         // Temporal coherence (enhanced analysis)
         let temporal_coherence = self.analyze_temporal_coherence(chain);
 
-        let overall_quality = (logical_consistency + evidence_strength + 
-                             chain_completeness + temporal_coherence) / 4.0;
+        let overall_quality =
+            (logical_consistency + evidence_strength + chain_completeness + temporal_coherence)
+                / 4.0;
 
         Ok(ReasoningQuality {
             logical_consistency,
@@ -665,15 +722,27 @@ impl AdvancedReasoningEngine {
     /// Extract temporal score from a triple for sorting purposes
     fn extract_temporal_score(&self, triple: &Triple) -> f64 {
         let object_str = triple.object().to_string().to_lowercase();
-        
+
         // Look for temporal keywords and assign scores
-        if object_str.contains("before") || object_str.contains("first") || object_str.contains("initial") {
+        if object_str.contains("before")
+            || object_str.contains("first")
+            || object_str.contains("initial")
+        {
             0.0
-        } else if object_str.contains("during") || object_str.contains("while") || object_str.contains("concurrent") {
+        } else if object_str.contains("during")
+            || object_str.contains("while")
+            || object_str.contains("concurrent")
+        {
             0.5
-        } else if object_str.contains("after") || object_str.contains("then") || object_str.contains("following") {
+        } else if object_str.contains("after")
+            || object_str.contains("then")
+            || object_str.contains("following")
+        {
             1.0
-        } else if object_str.contains("finally") || object_str.contains("last") || object_str.contains("end") {
+        } else if object_str.contains("finally")
+            || object_str.contains("last")
+            || object_str.contains("end")
+        {
             2.0
         } else {
             // Try to extract year or date information
@@ -703,24 +772,24 @@ impl AdvancedReasoningEngine {
         }
 
         let mut coherence_scores = Vec::new();
-        
+
         for i in 1..chain.steps.len() {
             let prev_step = &chain.steps[i - 1];
             let curr_step = &chain.steps[i];
-            
+
             // Check if temporal order makes sense
             let prev_temporal = self.extract_temporal_info_from_step(prev_step);
             let curr_temporal = self.extract_temporal_info_from_step(curr_step);
-            
+
             let coherence = if prev_temporal <= curr_temporal {
                 1.0 // Correct temporal order
             } else {
                 0.3 // Potential temporal inconsistency
             };
-            
+
             coherence_scores.push(coherence);
         }
-        
+
         coherence_scores.iter().sum::<f64>() / coherence_scores.len() as f64
     }
 
@@ -744,7 +813,7 @@ mod tests {
     async fn test_reasoning_engine_creation() {
         let config = ReasoningConfig::default();
         let engine = AdvancedReasoningEngine::new(config);
-        
+
         assert_eq!(engine.config.max_inference_depth, 5);
         assert_eq!(engine.config.confidence_threshold, 0.7);
     }
@@ -752,7 +821,7 @@ mod tests {
     #[test]
     fn test_reasoning_patterns_initialization() {
         let patterns = AdvancedReasoningEngine::initialize_reasoning_patterns();
-        
+
         assert!(patterns.contains_key("modus_ponens"));
         assert!(patterns.contains_key("causal_chain"));
         assert!(patterns.contains_key("temporal_sequence"));
@@ -761,7 +830,7 @@ mod tests {
     #[test]
     fn test_causal_relation_detection() {
         let engine = AdvancedReasoningEngine::new(ReasoningConfig::default());
-        
+
         // This test would require actual Triple instances
         // In a real implementation, you'd create test triples with causal predicates
     }

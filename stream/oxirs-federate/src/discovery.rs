@@ -14,9 +14,12 @@ use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    graphql::FederatedSchema, AuthConfig, AuthCredentials, AuthType, FederatedService,
-    ServiceCapability, ServiceMetadata, ServicePerformance, ServiceRegistry, ServiceType,
+    graphql::FederatedSchema, auth::AuthCredentials, FederatedService,
+    ServiceCapability, service::ServiceMetadata, ServicePerformance,
 };
+use crate::service_registry::ServiceRegistry;
+use crate::auth::AuthConfig as AuthenticationConfig;
+use crate::service::{ServiceType, AuthType};
 
 /// Service discovery manager
 #[derive(Debug)]

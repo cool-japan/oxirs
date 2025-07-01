@@ -684,6 +684,10 @@ fn term_to_string(term: &Term) -> String {
         Term::Variable(v) => format!("?{}", v),
         Term::Constant(c) => c.clone(),
         Term::Literal(l) => l.clone(),
+        Term::Function { name, args } => {
+            let arg_strings: Vec<String> = args.iter().map(term_to_string).collect();
+            format!("{}({})", name, arg_strings.join(","))
+        }
     }
 }
 

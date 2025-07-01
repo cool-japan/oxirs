@@ -411,6 +411,8 @@ impl FaissCompatibility {
             SimilarityMetric::Euclidean => FaissMetricType::L2,
             SimilarityMetric::DotProduct => FaissMetricType::InnerProduct,
             SimilarityMetric::Manhattan => FaissMetricType::L2, // Approximate with L2
+            // All other metrics approximate with L2 for FAISS compatibility
+            _ => FaissMetricType::L2,
         }
     }
 
@@ -467,7 +469,7 @@ impl FaissCompatibility {
         _config: &FaissExportConfig,
     ) -> Result<()> {
         // Write HNSW parameters
-        let config = index.get_config();
+        let config = index.config();
         writer.write_all(&(config.m as u32).to_le_bytes())?;
         writer.write_all(&(config.m_l0 as u32).to_le_bytes())?;
         writer.write_all(&(config.ef as u32).to_le_bytes())?;
@@ -484,7 +486,7 @@ impl FaissCompatibility {
         _config: &FaissExportConfig,
     ) -> Result<()> {
         // Write IVF parameters
-        let config = index.get_config();
+        let config = index.config();
         writer.write_all(&(config.n_clusters as u32).to_le_bytes())?;
         writer.write_all(&(config.n_probes as u32).to_le_bytes())?;
 
@@ -802,6 +804,8 @@ pub mod utils {
             SimilarityMetric::Euclidean => FaissMetricType::L2,
             SimilarityMetric::DotProduct => FaissMetricType::InnerProduct,
             SimilarityMetric::Manhattan => FaissMetricType::L2,
+            // All other metrics approximate with L2 for FAISS compatibility
+            _ => FaissMetricType::L2,
         }
     }
 

@@ -34,7 +34,9 @@ use oxirs_core::{
 };
 use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
 
-use crate::biological_neural_integration::{BiologicalNeuralIntegrator, BiologicalValidationContext};
+use crate::biological_neural_integration::{
+    BiologicalNeuralIntegrator, BiologicalValidationContext,
+};
 use crate::neuromorphic_validation::{NeuromorphicValidationNetwork, SpikeEvent};
 use crate::{Result, ShaclAiError};
 
@@ -73,9 +75,11 @@ impl SwarmNeuromorphicNetwork {
         let decision_engine = Arc::new(RwLock::new(CollectiveDecisionEngine::new(&config)));
         let emergent_analyzer = Arc::new(RwLock::new(EmergentBehaviorAnalyzer::new(&config)));
         let communication_manager = Arc::new(RwLock::new(SwarmCommunicationManager::new(&config)));
-        let learning_coordinator = Arc::new(RwLock::new(DistributedLearningCoordinator::new(&config)));
+        let learning_coordinator =
+            Arc::new(RwLock::new(DistributedLearningCoordinator::new(&config)));
         let resilience_manager = Arc::new(RwLock::new(SwarmResilienceManager::new(&config)));
-        let bio_optimization_engine = Arc::new(RwLock::new(BioInspiredOptimizationEngine::new(&config)));
+        let bio_optimization_engine =
+            Arc::new(RwLock::new(BioInspiredOptimizationEngine::new(&config)));
         let swarm_metrics = Arc::new(RwLock::new(SwarmMetrics::new()));
 
         Self {
@@ -256,7 +260,8 @@ impl SwarmNeuromorphicNetwork {
         Ok(SwarmNodeDeployment {
             nodes_deployed,
             total_processing_capacity,
-            network_coverage: (nodes_deployed as f64 / self.config.target_swarm_size as f64) * 100.0,
+            network_coverage: (nodes_deployed as f64 / self.config.target_swarm_size as f64)
+                * 100.0,
         })
     }
 
@@ -1922,7 +1927,10 @@ impl BioInspiredOptimizationEngine {
         })
     }
 
-    async fn apply_evolutionary_programming(&self, _input: &f64) -> Result<EvolutionaryProgramming> {
+    async fn apply_evolutionary_programming(
+        &self,
+        _input: &f64,
+    ) -> Result<EvolutionaryProgramming> {
         Ok(EvolutionaryProgramming {
             programming_efficiency: 0.91,
         })

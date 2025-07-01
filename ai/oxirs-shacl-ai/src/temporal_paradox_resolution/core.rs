@@ -10,10 +10,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
-use super::{
-    timeline::*,
-    types::*,
-};
+use super::{timeline::*, types::*};
 
 /// Temporal paradox resolution engine for handling time-travel validation scenarios
 #[derive(Debug, Clone)]
@@ -106,49 +103,46 @@ impl TemporalParadoxResolutionEngine {
     ) -> Result<TemporalValidationResult, ShaclAiError> {
         // Initialize temporal processors for validation
         self.initialize_temporal_processors().await?;
-        
+
         // Detect potential paradoxes
-        let paradox_detection = self.detect_temporal_paradoxes(
-            validation_query,
-            timeline_context.as_ref(),
-        ).await?;
-        
+        let paradox_detection = self
+            .detect_temporal_paradoxes(validation_query, timeline_context.as_ref())
+            .await?;
+
         // Apply resolution strategies if paradoxes detected
         let resolution_results = if !paradox_detection.is_empty() {
-            self.apply_paradox_resolution_strategies(
-                &paradox_detection,
-                validation_query,
-            ).await?
+            self.apply_paradox_resolution_strategies(&paradox_detection, validation_query)
+                .await?
         } else {
             Vec::new()
         };
-        
+
         // Perform multi-timeline validation
-        let timeline_analysis = self.multi_timeline_validator
-            .validate_across_timelines(
-                validation_query,
-                timeline_context.as_ref(),
-            ).await?;
-        
+        let timeline_analysis = self
+            .multi_timeline_validator
+            .validate_across_timelines(validation_query, timeline_context.as_ref())
+            .await?;
+
         // Analyze causal dependencies
-        let causality_analysis = self.causal_analyzer
-            .analyze_causal_relationships(
-                validation_query,
-                &timeline_analysis,
-            ).await?;
-        
+        let causality_analysis = self
+            .causal_analyzer
+            .analyze_causal_relationships(validation_query, &timeline_analysis)
+            .await?;
+
         // Enforce temporal consistency
-        let consistency_metrics = self.consistency_enforcer
+        let consistency_metrics = self
+            .consistency_enforcer
             .enforce_temporal_consistency(
                 &timeline_analysis,
                 &causality_analysis,
                 &resolution_results,
-            ).await?;
-        
+            )
+            .await?;
+
         // Generate final temporal validation result
         let result = TemporalValidationResult {
-            temporal_conformance: paradox_detection.is_empty() && 
-                                  consistency_metrics.consistency_score > 0.8,
+            temporal_conformance: paradox_detection.is_empty()
+                && consistency_metrics.consistency_score > 0.8,
             detected_paradoxes: paradox_detection,
             applied_resolutions: resolution_results,
             timeline_analysis,
@@ -162,7 +156,7 @@ impl TemporalParadoxResolutionEngine {
                 processor_efficiency: 0.95,
             },
         };
-        
+
         Ok(result)
     }
 
@@ -374,7 +368,10 @@ impl ParadoxResolutionStrategies {
     /// Create new paradox resolution strategies
     pub fn new() -> Self {
         Self {
-            strategies: vec!["TimelineBranching".to_string(), "CausalIntervention".to_string()],
+            strategies: vec![
+                "TimelineBranching".to_string(),
+                "CausalIntervention".to_string(),
+            ],
             default_strategy: "TimelineBranching".to_string(),
             selection_algorithm: "effectiveness_based".to_string(),
         }

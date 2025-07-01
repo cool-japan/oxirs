@@ -3,12 +3,12 @@
 //! Implements semantic search, graph traversal, hybrid retrieval,
 //! and intelligent document ranking and filtering.
 
-use super::types::*;
 use super::quantum::{QuantumRanker, QuantumSearchResult};
+use super::types::*;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use oxirs_core::Store;
-use oxirs_vec::{VectorIndex, SearchResult as VectorSearchResult};
+use oxirs_vec::{SearchResult as VectorSearchResult, VectorIndex};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -54,7 +54,7 @@ impl MultiStageRetrieval {
         store: &Arc<dyn Store>,
     ) -> Result<Vec<SearchResult>> {
         let start_time = std::time::Instant::now();
-        
+
         // Check cache first
         let cache_key = format!("{}:{}", query, context.session_id);
         if let Ok(cache) = self.result_cache.read().await {
@@ -77,10 +77,7 @@ impl MultiStageRetrieval {
         // Stage 2: Graph traversal (if enabled)
         if context.query_intent != QueryIntent::Information {
             info!("Starting graph traversal");
-            let graph_results = self
-                .graph_retriever
-                .retrieve(query, context, store)
-                .await?;
+            let graph_results = self.graph_retriever.retrieve(query, context, store).await?;
             all_results.extend(graph_results);
         }
 
@@ -108,8 +105,11 @@ impl MultiStageRetrieval {
         }
 
         let retrieval_time = start_time.elapsed();
-        info!("Multi-stage retrieval completed in {:?}, found {} documents", 
-              retrieval_time, filtered_results.len());
+        info!(
+            "Multi-stage retrieval completed in {:?}, found {} documents",
+            retrieval_time,
+            filtered_results.len()
+        );
 
         Ok(filtered_results)
     }
@@ -133,20 +133,23 @@ impl MultiStageRetrieval {
         // Apply quantum-inspired ranking if available
         let query_complexity = query.split_whitespace().count() as f64 / 10.0;
         if query_complexity > 0.5 {
-            let documents: Vec<RagDocument> = results.iter()
-                .map(|r| r.document.clone())
-                .collect();
-            
+            let documents: Vec<RagDocument> = results.iter().map(|r| r.document.clone()).collect();
+
             let mut quantum_ranker = QuantumRanker::new(query_complexity);
             let quantum_results = quantum_ranker.rank_documents(&documents);
-            
+
             // Convert quantum results back to search results
-            results = quantum_results.into_iter()
+            results = quantum_results
+                .into_iter()
                 .map(|qr| qr.to_classical())
                 .collect();
         } else {
             // Standard ranking by score
-            results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+            results.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
         }
 
         // Limit to max documents
@@ -176,8 +179,12 @@ impl MultiStageRetrieval {
         if !context.domain_constraints.is_empty() {
             results.retain(|result| {
                 context.domain_constraints.iter().any(|constraint| {
-                    result.document.content.contains(constraint) ||
-                    result.document.metadata.values().any(|v| v.contains(constraint))
+                    result.document.content.contains(constraint)
+                        || result
+                            .document
+                            .metadata
+                            .values()
+                            .any(|v| v.contains(constraint))
                 })
             });
         }
@@ -221,7 +228,8 @@ impl SemanticRetriever {
                         "vector_index".to_string(),
                     ),
                     vr.score,
-                ).add_relevance_factor("semantic_similarity".to_string())
+                )
+                .add_relevance_factor("semantic_similarity".to_string())
             })
             .collect();
 
@@ -242,7 +250,7 @@ impl SemanticRetriever {
             .map(|c| (c as u8 as f32) / 255.0)
             .take(128)
             .collect::<Vec<f32>>();
-        
+
         // Pad to fixed size
         let mut padded = embedding;
         padded.resize(128, 0.0);
@@ -284,7 +292,7 @@ impl GraphRetriever {
 
         // Generate SPARQL query based on natural language query
         let sparql_query = self.generate_sparql_query(query, context)?;
-        
+
         // Execute query (simplified implementation)
         let results = self.execute_sparql_query(&sparql_query).await?;
 
@@ -299,7 +307,7 @@ impl GraphRetriever {
     fn generate_sparql_query(&self, query: &str, _context: &QueryContext) -> Result<String> {
         // Simplified SPARQL generation
         let query_terms: Vec<&str> = query.split_whitespace().collect();
-        
+
         let sparql = format!(
             r#"
             SELECT ?subject ?predicate ?object WHERE {{
@@ -316,16 +324,15 @@ impl GraphRetriever {
 
     async fn execute_sparql_query(&self, _query: &str) -> Result<Vec<SearchResult>> {
         // Placeholder implementation - would execute actual SPARQL query
-        Ok(vec![
-            SearchResult::new(
-                RagDocument::new(
-                    "graph_result_1".to_string(),
-                    "Graph-based result content".to_string(),
-                    "knowledge_graph".to_string(),
-                ),
-                0.8,
-            ).add_relevance_factor("graph_connectivity".to_string())
-        ])
+        Ok(vec![SearchResult::new(
+            RagDocument::new(
+                "graph_result_1".to_string(),
+                "Graph-based result content".to_string(),
+                "knowledge_graph".to_string(),
+            ),
+            0.8,
+        )
+        .add_relevance_factor("graph_connectivity".to_string())])
     }
 }
 
@@ -369,20 +376,29 @@ impl HybridRetriever {
         Ok(combined_results)
     }
 
-    async fn keyword_search(&self, query: &str, _context: &QueryContext) -> Result<Vec<SearchResult>> {
+    async fn keyword_search(
+        &self,
+        query: &str,
+        _context: &QueryContext,
+    ) -> Result<Vec<SearchResult>> {
         // Simplified keyword search implementation
         let keywords: Vec<&str> = query.split_whitespace().collect();
-        
-        let results = keywords.iter().enumerate().map(|(i, &keyword)| {
-            SearchResult::new(
-                RagDocument::new(
-                    format!("keyword_result_{}", i),
-                    format!("Document containing keyword: {}", keyword),
-                    "keyword_search".to_string(),
-                ),
-                0.7 - (i as f64 * 0.1),
-            ).add_relevance_factor(format!("keyword_match: {}", keyword))
-        }).collect();
+
+        let results = keywords
+            .iter()
+            .enumerate()
+            .map(|(i, &keyword)| {
+                SearchResult::new(
+                    RagDocument::new(
+                        format!("keyword_result_{}", i),
+                        format!("Document containing keyword: {}", keyword),
+                        "keyword_search".to_string(),
+                    ),
+                    0.7 - (i as f64 * 0.1),
+                )
+                .add_relevance_factor(format!("keyword_match: {}", keyword))
+            })
+            .collect();
 
         Ok(results)
     }
@@ -394,12 +410,14 @@ impl HybridRetriever {
     ) -> Result<Vec<SearchResult>> {
         // Enhanced semantic search with query expansion
         let expanded_query = format!("{} related context information", query);
-        
+
         // Use semantic retriever logic (simplified)
         let semantic_retriever = SemanticRetriever::new();
         let dummy_context = QueryContext::new("hybrid_search".to_string());
-        
-        semantic_retriever.retrieve(&expanded_query, &dummy_context, vector_index).await
+
+        semantic_retriever
+            .retrieve(&expanded_query, &dummy_context, vector_index)
+            .await
     }
 
     fn apply_fusion_scoring(&self, results: &mut Vec<SearchResult>) {
@@ -410,10 +428,12 @@ impl HybridRetriever {
             // Apply weights based on retrieval method
             for factor in &result.relevance_factors {
                 if factor.contains("semantic") {
-                    fused_score += result.score * self.fusion_weights.get("semantic").unwrap_or(&0.0);
+                    fused_score +=
+                        result.score * self.fusion_weights.get("semantic").unwrap_or(&0.0);
                     total_weight += self.fusion_weights.get("semantic").unwrap_or(&0.0);
                 } else if factor.contains("keyword") {
-                    fused_score += result.score * self.fusion_weights.get("keyword").unwrap_or(&0.0);
+                    fused_score +=
+                        result.score * self.fusion_weights.get("keyword").unwrap_or(&0.0);
                     total_weight += self.fusion_weights.get("keyword").unwrap_or(&0.0);
                 } else if factor.contains("graph") {
                     fused_score += result.score * self.fusion_weights.get("graph").unwrap_or(&0.0);
@@ -427,7 +447,11 @@ impl HybridRetriever {
         }
 
         // Sort by fused score
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 }
 

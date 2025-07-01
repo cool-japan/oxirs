@@ -59,6 +59,8 @@ pub use streaming::{
 };
 pub use utils::*;
 
+// Re-export core validation types - defined in this module
+
 /// Cache key for constraint results
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ConstraintCacheKey {
@@ -145,7 +147,7 @@ impl ConstraintEvaluationResult {
 }
 
 /// Validation violation details
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidationViolation {
     /// The focus node that failed validation
     pub focus_node: Term,
@@ -251,5 +253,23 @@ impl ValidationViolation {
     pub fn to_rdf(&self) -> Vec<Triple> {
         // TODO: Implement RDF serialization
         vec![]
+    }
+}
+
+// Custom Hash implementation for ValidationViolation
+// We exclude the HashMap field from hashing to make this hashable
+impl std::hash::Hash for ValidationViolation {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        use std::hash::Hash;
+        
+        self.focus_node.hash(state);
+        self.result_path.hash(state);
+        self.value.hash(state);
+        self.source_shape.hash(state);
+        self.source_constraint_component.hash(state);
+        self.result_severity.hash(state);
+        self.result_message.hash(state);
+        // Skip details HashMap as it doesn't implement Hash
+        self.nested_results.hash(state);
     }
 }

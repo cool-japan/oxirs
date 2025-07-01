@@ -11,8 +11,11 @@ use oxirs_core::{model::NamedNode, Store};
 use oxirs_shacl::{Shape, ValidationReport};
 
 use crate::{
+    ai_orchestrator::{
+        config::AiOrchestratorConfig, metrics::AiOrchestratorStats,
+        model_selection::AdvancedModelSelector,
+    },
     analytics::AnalyticsEngine,
-    ai_orchestrator::{config::AiOrchestratorConfig, metrics::AiOrchestratorStats, model_selection::AdvancedModelSelector},
     learning::ShapeLearner,
     ml::{ModelEnsemble, ShapeLearningModel},
     neural_patterns::NeuralPatternRecognizer,
@@ -28,31 +31,31 @@ use crate::{
 pub struct AiOrchestrator {
     /// Shape learner
     shape_learner: Arc<Mutex<ShapeLearner>>,
-    
+
     /// Quality assessor
     quality_assessor: Arc<Mutex<QualityAssessor>>,
-    
+
     /// Validation predictor
     validation_predictor: Arc<Mutex<ValidationPredictor>>,
-    
+
     /// Optimization engine
     optimization_engine: Arc<Mutex<OptimizationEngine>>,
-    
+
     /// Analytics engine
     analytics_engine: Arc<Mutex<AnalyticsEngine>>,
-    
+
     /// Neural pattern recognizer
     neural_pattern_recognizer: Arc<Mutex<NeuralPatternRecognizer>>,
-    
+
     /// Pattern analyzer
     pattern_analyzer: Arc<Mutex<PatternAnalyzer>>,
-    
+
     /// Advanced model selector for dynamic orchestration
     model_selector: Arc<Mutex<AdvancedModelSelector>>,
-    
+
     /// Configuration
     config: AiOrchestratorConfig,
-    
+
     /// Learning statistics
     stats: AiOrchestratorStats,
 }
@@ -62,22 +65,22 @@ pub struct AiOrchestrator {
 pub struct ComprehensiveLearningResult {
     /// Learned shapes
     pub shapes: Vec<Shape>,
-    
+
     /// Quality assessment results
     pub quality_analysis: QualityAnalysisResult,
-    
+
     /// Predictive insights
     pub predictive_insights: PredictiveInsights,
-    
+
     /// Optimization recommendations
     pub optimization_recommendations: Vec<OptimizationRecommendation>,
-    
+
     /// Performance statistics
     pub performance_stats: LearningPerformanceStats,
-    
+
     /// Overall confidence score
     pub confidence_score: f64,
-    
+
     /// Learning session metadata
     pub session_metadata: LearningSessionMetadata,
 }
@@ -87,13 +90,13 @@ pub struct ComprehensiveLearningResult {
 pub struct QualityAnalysisResult {
     /// Overall quality score
     pub overall_quality_score: f64,
-    
+
     /// Individual shape quality scores
     pub shape_quality_scores: HashMap<String, f64>,
-    
+
     /// Quality issues identified
     pub quality_issues: Vec<QualityIssue>,
-    
+
     /// Quality improvement suggestions
     pub improvement_suggestions: Vec<String>,
 }
@@ -103,13 +106,13 @@ pub struct QualityAnalysisResult {
 pub struct PredictiveInsights {
     /// Predicted validation performance
     pub validation_performance_prediction: f64,
-    
+
     /// Potential issues that might arise
     pub potential_issues: Vec<PotentialIssue>,
-    
+
     /// Recommended validation strategy
     pub recommended_validation_strategy: String,
-    
+
     /// Confidence intervals for predictions
     pub confidence_intervals: HashMap<String, (f64, f64)>,
 }
@@ -119,13 +122,13 @@ pub struct PredictiveInsights {
 pub struct PotentialIssue {
     /// Issue description
     pub description: String,
-    
+
     /// Probability of occurrence
     pub probability: f64,
-    
+
     /// Severity level
     pub severity: IssueSeverity,
-    
+
     /// Recommended mitigation
     pub mitigation: String,
 }
@@ -144,13 +147,13 @@ pub enum IssueSeverity {
 pub struct QualityIssue {
     /// Issue description
     pub description: String,
-    
+
     /// Affected shape ID
     pub shape_id: Option<String>,
-    
+
     /// Severity
     pub severity: IssueSeverity,
-    
+
     /// Suggested fix
     pub suggested_fix: String,
 }
@@ -160,13 +163,13 @@ pub struct QualityIssue {
 pub struct OptimizationRecommendation {
     /// Recommendation type
     pub recommendation_type: String,
-    
+
     /// Description
     pub description: String,
-    
+
     /// Expected benefit
     pub expected_benefit: f64,
-    
+
     /// Implementation effort
     pub implementation_effort: EffortLevel,
 }
@@ -184,22 +187,22 @@ pub enum EffortLevel {
 pub struct LearningPerformanceStats {
     /// Total learning time
     pub total_learning_time: std::time::Duration,
-    
+
     /// Pattern discovery time
     pub pattern_discovery_time: std::time::Duration,
-    
+
     /// Shape generation time
     pub shape_generation_time: std::time::Duration,
-    
+
     /// Quality assessment time
     pub quality_assessment_time: std::time::Duration,
-    
+
     /// Number of patterns discovered
     pub patterns_discovered: usize,
-    
+
     /// Number of shapes generated
     pub shapes_generated: usize,
-    
+
     /// Memory usage statistics
     pub memory_usage_mb: f64,
 }
@@ -209,13 +212,13 @@ pub struct LearningPerformanceStats {
 pub struct LearningSessionMetadata {
     /// Session ID
     pub session_id: String,
-    
+
     /// Timestamp
     pub timestamp: chrono::DateTime<chrono::Utc>,
-    
+
     /// Configuration used
     pub config_summary: String,
-    
+
     /// Data characteristics
     pub data_characteristics: crate::ai_orchestrator::types::DataCharacteristics,
 }
@@ -277,12 +280,14 @@ impl AiOrchestrator {
 
         // Stage 5: Optimization Recommendations
         tracing::info!("Stage 5: Generating optimization recommendations");
-        let optimization_recommendations = self.generate_optimization_recommendations(store, &shapes, &quality_analysis)?;
+        let optimization_recommendations =
+            self.generate_optimization_recommendations(store, &shapes, &quality_analysis)?;
 
         let total_learning_time = start_time.elapsed();
 
         // Update statistics
-        self.stats.update_learning_session(total_learning_time, shapes.len(), patterns.len());
+        self.stats
+            .update_learning_session(total_learning_time, shapes.len(), patterns.len());
 
         Ok(ComprehensiveLearningResult {
             shapes,
@@ -308,7 +313,11 @@ impl AiOrchestrator {
         })
     }
 
-    fn discover_patterns(&self, store: &Store, graph_name: Option<&str>) -> Result<Vec<crate::patterns::Pattern>> {
+    fn discover_patterns(
+        &self,
+        store: &Store,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<crate::patterns::Pattern>> {
         let mut pattern_analyzer = self.pattern_analyzer.lock().unwrap();
         pattern_analyzer.discover_patterns(store, graph_name)
     }
@@ -336,7 +345,11 @@ impl AiOrchestrator {
         })
     }
 
-    fn generate_predictive_insights(&self, _store: &Store, _shapes: &[Shape]) -> Result<PredictiveInsights> {
+    fn generate_predictive_insights(
+        &self,
+        _store: &Store,
+        _shapes: &[Shape],
+    ) -> Result<PredictiveInsights> {
         Ok(PredictiveInsights {
             validation_performance_prediction: 0.85,
             potential_issues: Vec::new(),

@@ -22,9 +22,7 @@ use crate::{
     planner::planning::{
         ExecutionStep, FilterExpression as PlanningFilterExpression, TriplePattern,
     },
-    service_optimizer::{
-        JoinPlan, JoinOperation, JoinOperationType, JoinAlgorithm,
-    },
+    service_optimizer::{JoinAlgorithm, JoinOperation, JoinOperationType, JoinPlan},
     ServiceRegistry,
 };
 
@@ -78,13 +76,15 @@ impl DistributedJoinOptimizer {
                 self.optimize_bushy_tree(&join_graph, registry).await?
             }
             JoinOptimizationStrategy::Dynamic => {
-                self.dynamic_join_optimization(&join_graph, registry).await?
+                self.dynamic_join_optimization(&join_graph, registry)
+                    .await?
             }
         };
 
         // Step 5: Apply adaptive execution optimizations
         let adaptive_plan = if self.config.adaptive_execution_enabled {
-            self.apply_adaptive_optimizations(optimized_plan, registry).await?
+            self.apply_adaptive_optimizations(optimized_plan, registry)
+                .await?
         } else {
             optimized_plan
         };
@@ -151,7 +151,7 @@ impl DistributedJoinOptimizer {
     /// Extract variables from a triple pattern
     fn extract_variables(&self, pattern: &TriplePattern) -> HashSet<String> {
         let mut variables = HashSet::new();
-        
+
         // Extract variables from subject, predicate, object
         if pattern.subject.starts_with('?') {
             variables.insert(pattern.subject.clone());
@@ -162,7 +162,7 @@ impl DistributedJoinOptimizer {
         if pattern.object.starts_with('?') {
             variables.insert(pattern.object.clone());
         }
-        
+
         variables
     }
 
@@ -170,17 +170,17 @@ impl DistributedJoinOptimizer {
     async fn estimate_selectivity(&self, pattern: &TriplePattern) -> Result<f64> {
         // Simplified selectivity estimation
         let mut selectivity = 1.0;
-        
+
         // Less selective if more variables
         let var_count = self.extract_variables(pattern).len();
         selectivity = match var_count {
-            0 => 0.001,  // Ground triple
-            1 => 0.01,   // One variable
-            2 => 0.1,    // Two variables  
-            3 => 0.5,    // Three variables
-            _ => 0.8,    // More variables
+            0 => 0.001, // Ground triple
+            1 => 0.01,  // One variable
+            2 => 0.1,   // Two variables
+            3 => 0.5,   // Three variables
+            _ => 0.8,   // More variables
         };
-        
+
         Ok(selectivity)
     }
 
@@ -189,7 +189,7 @@ impl DistributedJoinOptimizer {
         // Simplified cardinality estimation based on pattern type
         let selectivity = self.estimate_selectivity(pattern).await?;
         let estimated_total_triples = 1_000_000u64; // Base estimate
-        
+
         Ok((estimated_total_triples as f64 * selectivity) as u64)
     }
 
@@ -207,7 +207,7 @@ impl DistributedJoinOptimizer {
             &JoinAlgorithm::HashJoin,
             Duration::from_millis(10),
         );
-        
+
         Ok(join_cost)
     }
 
@@ -219,52 +219,55 @@ impl DistributedJoinOptimizer {
             .intersection(&node2.variables)
             .cloned()
             .collect();
-            
+
         // More shared variables typically means higher selectivity
         let selectivity = match shared_vars.len() {
-            0 => 1.0,      // Cartesian product
-            1 => 0.1,      // One join variable
-            2 => 0.01,     // Two join variables
-            _ => 0.001,    // Multiple join variables
+            0 => 1.0,   // Cartesian product
+            1 => 0.1,   // One join variable
+            2 => 0.01,  // Two join variables
+            _ => 0.001, // Multiple join variables
         };
-        
+
         Ok(selectivity)
     }
 
     /// Detect special join patterns in the graph
     async fn detect_special_patterns(&self, graph: &JoinGraph) -> Result<Vec<JoinPatternAnalysis>> {
         let mut patterns = Vec::new();
-        
+
         // Detect star patterns
         for node in &graph.nodes {
-            let connected_count = graph.edges.iter()
+            let connected_count = graph
+                .edges
+                .iter()
                 .filter(|edge| edge.from == node.id || edge.to == node.id)
                 .count();
-                
+
             if connected_count >= 3 {
                 patterns.push(JoinPatternAnalysis {
                     pattern_type: JoinPatternType::Star {
                         center_variable: node.id.clone(),
                     },
                     complexity_score: connected_count as f64,
-                    optimization_opportunities: vec![
-                        OptimizationOpportunity {
-                            opportunity_type: OptimizationType::JoinReordering,
-                            description: "Star join optimization".to_string(),
-                            estimated_improvement: 0.3,
-                            implementation_complexity: ComplexityLevel::Medium,
-                        }
-                    ],
+                    optimization_opportunities: vec![OptimizationOpportunity {
+                        opportunity_type: OptimizationType::JoinReordering,
+                        description: "Star join optimization".to_string(),
+                        estimated_improvement: 0.3,
+                        implementation_complexity: ComplexityLevel::Medium,
+                    }],
                     estimated_benefit: 0.3,
                 });
             }
         }
-        
+
         Ok(patterns)
     }
 
     /// Select optimization strategy based on detected patterns
-    async fn select_optimization_strategy(&self, patterns: &[JoinPatternAnalysis]) -> Result<JoinOptimizationStrategy> {
+    async fn select_optimization_strategy(
+        &self,
+        patterns: &[JoinPatternAnalysis],
+    ) -> Result<JoinOptimizationStrategy> {
         // Simple strategy selection
         for pattern in patterns {
             match pattern.pattern_type {
@@ -277,7 +280,7 @@ impl DistributedJoinOptimizer {
                 _ => {}
             }
         }
-        
+
         if self.config.enable_bushy_trees {
             Ok(JoinOptimizationStrategy::BushyTree)
         } else {
@@ -286,11 +289,15 @@ impl DistributedJoinOptimizer {
     }
 
     /// Optimize star join pattern
-    async fn optimize_star_join(&self, graph: &JoinGraph, registry: &ServiceRegistry) -> Result<JoinPlan> {
+    async fn optimize_star_join(
+        &self,
+        graph: &JoinGraph,
+        registry: &ServiceRegistry,
+    ) -> Result<JoinPlan> {
         info!("Applying star join optimization");
-        
+
         let mut operations = Vec::new();
-        
+
         // Create join operations for star pattern
         for edge in &graph.edges {
             operations.push(JoinOperation {
@@ -303,7 +310,7 @@ impl DistributedJoinOptimizer {
                 estimated_cardinality: (edge.selectivity * 1000.0) as u64,
             });
         }
-        
+
         Ok(JoinPlan {
             operations,
             estimated_total_cost: graph.edges.iter().map(|e| e.estimated_cost).sum(),
@@ -312,31 +319,47 @@ impl DistributedJoinOptimizer {
     }
 
     /// Optimize chain join pattern  
-    async fn optimize_chain_join(&self, graph: &JoinGraph, registry: &ServiceRegistry) -> Result<JoinPlan> {
+    async fn optimize_chain_join(
+        &self,
+        graph: &JoinGraph,
+        registry: &ServiceRegistry,
+    ) -> Result<JoinPlan> {
         info!("Applying chain join optimization");
         self.optimize_star_join(graph, registry).await // Simplified implementation
     }
 
     /// Optimize bushy tree pattern
-    async fn optimize_bushy_tree(&self, graph: &JoinGraph, registry: &ServiceRegistry) -> Result<JoinPlan> {
+    async fn optimize_bushy_tree(
+        &self,
+        graph: &JoinGraph,
+        registry: &ServiceRegistry,
+    ) -> Result<JoinPlan> {
         info!("Applying bushy tree optimization");
         self.optimize_star_join(graph, registry).await // Simplified implementation
     }
 
     /// Dynamic join optimization
-    async fn dynamic_join_optimization(&self, graph: &JoinGraph, registry: &ServiceRegistry) -> Result<JoinPlan> {
+    async fn dynamic_join_optimization(
+        &self,
+        graph: &JoinGraph,
+        registry: &ServiceRegistry,
+    ) -> Result<JoinPlan> {
         info!("Applying dynamic join optimization");
         self.optimize_star_join(graph, registry).await // Simplified implementation
     }
 
     /// Apply adaptive optimizations to the plan
-    async fn apply_adaptive_optimizations(&self, plan: JoinPlan, registry: &ServiceRegistry) -> Result<JoinPlan> {
+    async fn apply_adaptive_optimizations(
+        &self,
+        plan: JoinPlan,
+        registry: &ServiceRegistry,
+    ) -> Result<JoinPlan> {
         info!("Applying adaptive optimizations");
-        
+
         // Record statistics
         let mut stats = self.statistics.write().await;
         stats.total_joins += plan.operations.len() as u64;
-        
+
         Ok(plan)
     }
 

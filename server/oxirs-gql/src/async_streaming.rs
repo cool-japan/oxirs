@@ -8,6 +8,7 @@ use anyhow::{anyhow, Result};
 use futures_util::{pin_mut, stream::StreamExt, Stream};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};

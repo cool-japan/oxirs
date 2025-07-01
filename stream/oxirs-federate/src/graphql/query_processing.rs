@@ -7,6 +7,7 @@ use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tracing::debug;
 
+use crate::planner::planning::types::{ExecutionPlan, ExecutionStep, StepType};
 use super::types::*;
 
 impl GraphQLFederation {
@@ -88,7 +89,7 @@ impl GraphQLFederation {
                 let return_type = self.extract_base_type(&field_def.field_type);
                 if self.is_entity_type(&return_type, schema) {
                     entity_requirements.push(EntityReference {
-                        entity_type: return_type,
+                        entity_type: return_type.clone(),
                         key_fields: vec!["id".to_string()], // Default key field
                         required_fields: self.extract_required_fields(&selection.selection_set),
                         service_id: self.determine_service_for_entity(&return_type, schema)?,

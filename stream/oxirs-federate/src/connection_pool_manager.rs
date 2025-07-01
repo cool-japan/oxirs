@@ -10,7 +10,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Semaphore, SemaphorePermit};
 use tracing::{debug, info, warn};
 
-use crate::{FederatedService, ServiceType};
+use crate::FederatedService;
+use crate::service::ServiceType;
 
 /// Advanced connection pool manager with per-service optimization
 #[derive(Debug)]

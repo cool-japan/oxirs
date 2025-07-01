@@ -29,5 +29,5 @@ pub use index::{AdvancedGpuVectorIndex, BatchVectorProcessor, GpuVectorIndex};
 pub use kernels::*;
 pub use memory_pool::GpuMemoryPool;
 pub use performance::GpuPerformanceStats;
-pub use runtime::GpuExecutionConfig;
+pub use types::GpuExecutionConfig;
 pub use types::*;

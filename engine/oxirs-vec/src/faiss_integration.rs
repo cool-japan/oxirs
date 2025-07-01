@@ -6,7 +6,7 @@
 
 use crate::gpu::GpuConfig;
 use crate::index::{IndexConfig, VectorIndex};
-use crate::similarity::{DistanceFunction, SimilarityMetric};
+use crate::similarity::SimilarityMetric;
 use anyhow::{Context, Error as AnyhowError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -497,7 +497,7 @@ impl FaissIndex {
 
         if !self.requires_training() {
             debug!("Index type does not require training");
-            return Ok();
+            return Ok(());
         }
 
         // Update training state
@@ -838,27 +838,39 @@ impl FaissIndex {
 }
 
 impl VectorIndex for FaissIndex {
-    type Config = FaissConfig;
-    type SearchParams = FaissSearchParams;
-
-    fn add(&mut self, vector: Vec<f32>, id: String) -> Result<()> {
-        self.add_vectors(vec![vector], vec![id])
+    fn insert(&mut self, uri: String, vector: crate::Vector) -> Result<()> {
+        self.add_vectors(vec![vector.as_f32()], vec![uri])
     }
 
-    fn search(&self, query: &[f32], k: usize) -> Result<Vec<(String, f32)>> {
+    fn search_knn(&self, query: &crate::Vector, k: usize) -> Result<Vec<(String, f32)>> {
         let params = FaissSearchParams {
             k,
             ..Default::default()
         };
-        self.search(query, &params)
+        self.search(&query.as_f32(), &params)
     }
 
-    fn size(&self) -> usize {
-        self.vectors.read().map(|v| v.len()).unwrap_or(0)
+    fn search_threshold(
+        &self,
+        query: &crate::Vector,
+        threshold: f32,
+    ) -> Result<Vec<(String, f32)>> {
+        let params = FaissSearchParams {
+            k: 1000, // Large number to get all candidates
+            // threshold: Some(threshold),  // Remove this field as it doesn't exist
+            ..Default::default()
+        };
+        let results = self.search(&query.as_f32(), &params)?;
+        Ok(results
+            .into_iter()
+            .filter(|(_, score)| *score >= threshold)
+            .collect())
     }
 
-    fn dimension(&self) -> usize {
-        self.config.dimension
+    fn get_vector(&self, uri: &str) -> Option<&crate::Vector> {
+        // This would require storing vectors by URI, which is complex in FAISS
+        // For now, return None - this can be implemented with an additional URI->vector map
+        None
     }
 }
 

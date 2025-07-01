@@ -1,11 +1,8 @@
 //! Main error handling engine
 
 use crate::error_handling::{
-    classification::ErrorClassifier,
-    config::ErrorHandlingConfig,
-    impact::ErrorImpactAssessor,
-    prevention::PreventionStrategyGenerator,
-    repair::RepairSuggestionEngine,
+    classification::ErrorClassifier, config::ErrorHandlingConfig, impact::ErrorImpactAssessor,
+    prevention::PreventionStrategyGenerator, repair::RepairSuggestionEngine,
 };
 
 /// Intelligent error handling system for SHACL validation

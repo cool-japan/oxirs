@@ -685,7 +685,7 @@ impl AlgebraGenerator {
                 self.collect_filter_variables(left, variables);
                 self.collect_filter_variables(right, variables);
             }
-            Expression::Unary { expr: operand, .. } => {
+            Expression::Unary { operand, .. } => {
                 self.collect_filter_variables(operand, variables);
             }
             Expression::Function { args, .. } => {

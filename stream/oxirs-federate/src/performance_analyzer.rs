@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
@@ -55,7 +55,7 @@ impl Default for AnalyzerConfig {
 /// System-wide performance metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemPerformanceMetrics {
-    pub timestamp: Instant,
+    pub timestamp: SystemTime,
     pub overall_latency_p50: Duration,
     pub overall_latency_p95: Duration,
     pub overall_latency_p99: Duration,
@@ -74,7 +74,7 @@ pub struct SystemPerformanceMetrics {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServicePerformanceMetrics {
     pub service_id: String,
-    pub timestamp: Instant,
+    pub timestamp: SystemTime,
     pub response_time_p50: Duration,
     pub response_time_p95: Duration,
     pub response_time_p99: Duration,
@@ -90,7 +90,7 @@ pub struct ServicePerformanceMetrics {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryExecutionMetrics {
     pub query_id: String,
-    pub timestamp: Instant,
+    pub timestamp: SystemTime,
     pub total_execution_time: Duration,
     pub planning_time: Duration,
     pub execution_time: Duration,
@@ -108,8 +108,8 @@ pub struct QueryExecutionMetrics {
 pub struct BottleneckAnalysis {
     pub primary_bottleneck: BottleneckType,
     pub contributing_factors: Vec<BottleneckFactor>,
-    pub severity_score: f64, // 0.0 - 1.0
-    pub confidence_level: f64, // 0.0 - 1.0
+    pub severity_score: f64,       // 0.0 - 1.0
+    pub confidence_level: f64,     // 0.0 - 1.0
     pub impact_on_throughput: f64, // percentage
     pub recommended_actions: Vec<String>,
 }
@@ -194,8 +194,8 @@ pub enum ImplementationEffort {
 pub struct PerformanceTrend {
     pub metric_name: String,
     pub trend_direction: TrendDirection,
-    pub rate_of_change: f64, // percentage per hour
-    pub confidence: f64,     // 0.0 - 1.0
+    pub rate_of_change: f64,      // percentage per hour
+    pub confidence: f64,          // 0.0 - 1.0
     pub prediction_accuracy: f64, // 0.0 - 1.0
 }
 
@@ -227,12 +227,12 @@ pub struct BottleneckDetector {
 /// Detection thresholds for bottlenecks
 #[derive(Debug, Clone)]
 pub struct DetectionThresholds {
-    pub latency_degradation_threshold: f64,   // percentage increase
+    pub latency_degradation_threshold: f64, // percentage increase
     pub throughput_degradation_threshold: f64, // percentage decrease
-    pub error_rate_threshold: f64,             // error rate threshold
-    pub memory_usage_threshold: f64,           // percentage of total memory
-    pub cpu_usage_threshold: f64,              // percentage
-    pub cache_hit_rate_threshold: f64,         // minimum cache hit rate
+    pub error_rate_threshold: f64,          // error rate threshold
+    pub memory_usage_threshold: f64,        // percentage of total memory
+    pub cpu_usage_threshold: f64,           // percentage
+    pub cache_hit_rate_threshold: f64,      // minimum cache hit rate
 }
 
 /// Recommendation engine
@@ -293,12 +293,12 @@ impl PerformanceAnalyzer {
         let bottleneck_detector = BottleneckDetector {
             baseline_metrics: None,
             detection_thresholds: DetectionThresholds {
-                latency_degradation_threshold: 50.0, // 50% increase
+                latency_degradation_threshold: 50.0,    // 50% increase
                 throughput_degradation_threshold: 20.0, // 20% decrease
-                error_rate_threshold: 0.05,           // 5%
-                memory_usage_threshold: 0.85,         // 85%
-                cpu_usage_threshold: 0.90,            // 90%
-                cache_hit_rate_threshold: 0.80,       // 80%
+                error_rate_threshold: 0.05,             // 5%
+                memory_usage_threshold: 0.85,           // 85%
+                cpu_usage_threshold: 0.90,              // 90%
+                cache_hit_rate_threshold: 0.80,         // 80%
             },
         };
 
@@ -325,10 +325,10 @@ impl PerformanceAnalyzer {
     /// Record system performance metrics
     pub async fn record_system_metrics(&self, metrics: SystemPerformanceMetrics) -> Result<()> {
         let mut history = self.metrics_history.write().await;
-        
+
         // Add new metrics
         history.system_metrics.push_back(metrics.clone());
-        
+
         // Maintain size limit
         while history.system_metrics.len() > history.max_entries {
             history.system_metrics.pop_front();
@@ -347,13 +347,14 @@ impl PerformanceAnalyzer {
     /// Record service performance metrics
     pub async fn record_service_metrics(&self, metrics: ServicePerformanceMetrics) -> Result<()> {
         let mut history = self.metrics_history.write().await;
-        
-        let service_history = history.service_metrics
+
+        let service_history = history
+            .service_metrics
             .entry(metrics.service_id.clone())
             .or_insert_with(VecDeque::new);
-        
+
         service_history.push_back(metrics.clone());
-        
+
         // Maintain size limit
         while service_history.len() > history.max_entries {
             service_history.pop_front();
@@ -372,9 +373,9 @@ impl PerformanceAnalyzer {
     /// Record query execution metrics
     pub async fn record_query_metrics(&self, metrics: QueryExecutionMetrics) -> Result<()> {
         let mut history = self.metrics_history.write().await;
-        
+
         history.query_metrics.push_back(metrics.clone());
-        
+
         // Maintain size limit
         while history.query_metrics.len() > history.max_entries {
             history.query_metrics.pop_front();
@@ -393,7 +394,7 @@ impl PerformanceAnalyzer {
     /// Analyze performance and identify bottlenecks
     pub async fn analyze_performance(&self) -> Result<BottleneckAnalysis> {
         let history = self.metrics_history.read().await;
-        
+
         if history.system_metrics.len() < self.config.min_data_points {
             return Err(anyhow!(
                 "Insufficient data points for analysis: {} < {}",
@@ -403,7 +404,10 @@ impl PerformanceAnalyzer {
         }
 
         let recent_metrics = history.system_metrics.back().unwrap();
-        let baseline = self.bottleneck_detector.baseline_metrics.as_ref()
+        let baseline = self
+            .bottleneck_detector
+            .baseline_metrics
+            .as_ref()
             .unwrap_or(history.system_metrics.front().unwrap());
 
         let mut analysis = BottleneckAnalysis {
@@ -423,7 +427,8 @@ impl PerformanceAnalyzer {
 
         // Determine primary bottleneck
         if !analysis.contributing_factors.is_empty() {
-            let primary_factor = analysis.contributing_factors
+            let primary_factor = analysis
+                .contributing_factors
                 .iter()
                 .max_by(|a, b| a.weight.partial_cmp(&b.weight).unwrap())
                 .unwrap();
@@ -454,7 +459,7 @@ impl PerformanceAnalyzer {
     pub async fn generate_recommendations(&self) -> Result<OptimizationRecommendations> {
         let analysis = self.analyze_performance().await?;
         let history = self.metrics_history.read().await;
-        
+
         let mut recommendations = OptimizationRecommendations {
             high_priority: Vec::new(),
             medium_priority: Vec::new(),
@@ -466,17 +471,26 @@ impl PerformanceAnalyzer {
         for rule in &self.recommendation_engine.rule_base {
             if self.evaluate_rule_condition(&rule.condition, &history) {
                 match rule.priority {
-                    p if p >= 0.8 => recommendations.high_priority.push(rule.recommendation.clone()),
-                    p if p >= 0.6 => recommendations.medium_priority.push(rule.recommendation.clone()),
-                    p if p >= 0.4 => recommendations.low_priority.push(rule.recommendation.clone()),
+                    p if p >= 0.8 => recommendations
+                        .high_priority
+                        .push(rule.recommendation.clone()),
+                    p if p >= 0.6 => recommendations
+                        .medium_priority
+                        .push(rule.recommendation.clone()),
+                    p if p >= 0.4 => recommendations
+                        .low_priority
+                        .push(rule.recommendation.clone()),
                     _ => recommendations.long_term.push(rule.recommendation.clone()),
                 }
             }
         }
 
         // Add bottleneck-specific recommendations
-        let bottleneck_recommendations = self.generate_bottleneck_specific_recommendations(&analysis);
-        recommendations.high_priority.extend(bottleneck_recommendations);
+        let bottleneck_recommendations =
+            self.generate_bottleneck_specific_recommendations(&analysis);
+        recommendations
+            .high_priority
+            .extend(bottleneck_recommendations);
 
         info!(
             "Generated {} high-priority, {} medium-priority, {} low-priority, and {} long-term recommendations",
@@ -499,27 +513,30 @@ impl PerformanceAnalyzer {
         }
 
         // Analyze latency trend
-        let latency_values: Vec<f64> = history.system_metrics
+        let latency_values: Vec<f64> = history
+            .system_metrics
             .iter()
             .map(|m| m.overall_latency_p95.as_millis() as f64)
             .collect();
-        
+
         trends.push(self.calculate_trend("latency_p95", &latency_values));
 
         // Analyze throughput trend
-        let throughput_values: Vec<f64> = history.system_metrics
+        let throughput_values: Vec<f64> = history
+            .system_metrics
             .iter()
             .map(|m| m.throughput_qps)
             .collect();
-        
+
         trends.push(self.calculate_trend("throughput_qps", &throughput_values));
 
         // Analyze error rate trend
-        let error_rate_values: Vec<f64> = history.system_metrics
+        let error_rate_values: Vec<f64> = history
+            .system_metrics
             .iter()
             .map(|m| m.error_rate)
             .collect();
-        
+
         trends.push(self.calculate_trend("error_rate", &error_rate_values));
 
         Ok(trends)
@@ -532,7 +549,9 @@ impl PerformanceAnalyzer {
 
         if let Some(recent_metrics) = history.system_metrics.back() {
             // Check critical latency
-            if recent_metrics.overall_latency_p95.as_millis() > self.alert_thresholds.critical_latency_ms {
+            if recent_metrics.overall_latency_p95.as_millis()
+                > self.alert_thresholds.critical_latency_ms
+            {
                 alerts.push(PerformanceAlert {
                     severity: AlertSeverity::Critical,
                     title: "High Latency Detected".to_string(),
@@ -588,11 +607,17 @@ impl PerformanceAnalyzer {
         current: &SystemPerformanceMetrics,
         baseline: &SystemPerformanceMetrics,
     ) {
-        let latency_increase = (current.overall_latency_p95.as_millis() as f64 
-            - baseline.overall_latency_p95.as_millis() as f64) 
+        let latency_increase = (current.overall_latency_p95.as_millis() as f64
+            - baseline.overall_latency_p95.as_millis() as f64)
             / baseline.overall_latency_p95.as_millis() as f64;
 
-        if latency_increase > self.bottleneck_detector.detection_thresholds.latency_degradation_threshold / 100.0 {
+        if latency_increase
+            > self
+                .bottleneck_detector
+                .detection_thresholds
+                .latency_degradation_threshold
+                / 100.0
+        {
             analysis.contributing_factors.push(BottleneckFactor {
                 factor_type: FactorType::Latency,
                 description: "Network latency has increased significantly".to_string(),
@@ -610,24 +635,40 @@ impl PerformanceAnalyzer {
         _baseline: &SystemPerformanceMetrics,
     ) {
         // Check CPU utilization
-        if current.cpu_usage_percent > self.bottleneck_detector.detection_thresholds.cpu_usage_threshold {
+        if current.cpu_usage_percent
+            > self
+                .bottleneck_detector
+                .detection_thresholds
+                .cpu_usage_threshold
+        {
             analysis.contributing_factors.push(BottleneckFactor {
                 factor_type: FactorType::ResourceUtilization,
                 description: "High CPU utilization detected".to_string(),
                 weight: current.cpu_usage_percent,
                 metric_value: current.cpu_usage_percent,
-                threshold: self.bottleneck_detector.detection_thresholds.cpu_usage_threshold,
+                threshold: self
+                    .bottleneck_detector
+                    .detection_thresholds
+                    .cpu_usage_threshold,
             });
         }
 
         // Check memory usage
-        if current.memory_usage_mb > self.bottleneck_detector.detection_thresholds.memory_usage_threshold {
+        if current.memory_usage_mb
+            > self
+                .bottleneck_detector
+                .detection_thresholds
+                .memory_usage_threshold
+        {
             analysis.contributing_factors.push(BottleneckFactor {
                 factor_type: FactorType::ResourceUtilization,
                 description: "High memory utilization detected".to_string(),
                 weight: (current.memory_usage_mb / 1024.0) * 100.0, // Convert to percentage
                 metric_value: current.memory_usage_mb,
-                threshold: self.bottleneck_detector.detection_thresholds.memory_usage_threshold,
+                threshold: self
+                    .bottleneck_detector
+                    .detection_thresholds
+                    .memory_usage_threshold,
             });
         }
     }
@@ -660,20 +701,29 @@ impl PerformanceAnalyzer {
         current: &SystemPerformanceMetrics,
         _baseline: &SystemPerformanceMetrics,
     ) {
-        if current.cache_hit_rate < self.bottleneck_detector.detection_thresholds.cache_hit_rate_threshold {
+        if current.cache_hit_rate
+            < self
+                .bottleneck_detector
+                .detection_thresholds
+                .cache_hit_rate_threshold
+        {
             analysis.contributing_factors.push(BottleneckFactor {
                 factor_type: FactorType::CachePerformance,
                 description: "Low cache hit rate affecting performance".to_string(),
                 weight: (1.0 - current.cache_hit_rate) * 100.0,
                 metric_value: current.cache_hit_rate,
-                threshold: self.bottleneck_detector.detection_thresholds.cache_hit_rate_threshold,
+                threshold: self
+                    .bottleneck_detector
+                    .detection_thresholds
+                    .cache_hit_rate_threshold,
             });
         }
     }
 
     fn calculate_confidence_level(&self, analysis: &BottleneckAnalysis) -> f64 {
         let factor_count = analysis.contributing_factors.len() as f64;
-        let max_weight = analysis.contributing_factors
+        let max_weight = analysis
+            .contributing_factors
             .iter()
             .map(|f| f.weight)
             .max_by(|a, b| a.partial_cmp(b).unwrap())
@@ -683,24 +733,31 @@ impl PerformanceAnalyzer {
         ((factor_count * 0.2) + (max_weight / 200.0)).min(1.0)
     }
 
-    async fn generate_bottleneck_recommendations(&self, analysis: &BottleneckAnalysis) -> Vec<String> {
+    async fn generate_bottleneck_recommendations(
+        &self,
+        analysis: &BottleneckAnalysis,
+    ) -> Vec<String> {
         let mut recommendations = Vec::new();
 
         match analysis.primary_bottleneck {
             BottleneckType::NetworkLatency => {
-                recommendations.push("Enable request batching to reduce network round trips".to_string());
+                recommendations
+                    .push("Enable request batching to reduce network round trips".to_string());
                 recommendations.push("Implement more aggressive caching strategies".to_string());
-                recommendations.push("Consider query optimization to reduce data transfer".to_string());
+                recommendations
+                    .push("Consider query optimization to reduce data transfer".to_string());
             }
             BottleneckType::ServiceResponseTime => {
-                recommendations.push("Analyze slow services and optimize their queries".to_string());
+                recommendations
+                    .push("Analyze slow services and optimize their queries".to_string());
                 recommendations.push("Implement service-level caching".to_string());
                 recommendations.push("Consider load balancing across service replicas".to_string());
             }
             BottleneckType::MemoryPressure => {
                 recommendations.push("Implement result streaming for large queries".to_string());
                 recommendations.push("Reduce batch sizes to decrease memory usage".to_string());
-                recommendations.push("Enable memory-efficient query execution strategies".to_string());
+                recommendations
+                    .push("Enable memory-efficient query execution strategies".to_string());
             }
             BottleneckType::CPUUtilization => {
                 recommendations.push("Scale CPU resources horizontally or vertically".to_string());
@@ -708,14 +765,19 @@ impl PerformanceAnalyzer {
                 recommendations.push("Implement query complexity limits".to_string());
             }
             _ => {
-                recommendations.push("Monitor system metrics more closely to identify bottlenecks".to_string());
+                recommendations.push(
+                    "Monitor system metrics more closely to identify bottlenecks".to_string(),
+                );
             }
         }
 
         recommendations
     }
 
-    fn generate_bottleneck_specific_recommendations(&self, analysis: &BottleneckAnalysis) -> Vec<Recommendation> {
+    fn generate_bottleneck_specific_recommendations(
+        &self,
+        analysis: &BottleneckAnalysis,
+    ) -> Vec<Recommendation> {
         let mut recommendations = Vec::new();
 
         for factor in &analysis.contributing_factors {
@@ -723,7 +785,9 @@ impl PerformanceAnalyzer {
                 FactorType::Latency => {
                     recommendations.push(Recommendation {
                         title: "Optimize Network Performance".to_string(),
-                        description: "Implement compression and request batching to reduce network overhead".to_string(),
+                        description:
+                            "Implement compression and request batching to reduce network overhead"
+                                .to_string(),
                         category: RecommendationCategory::NetworkOptimization,
                         expected_improvement: "20-40% reduction in response times".to_string(),
                         implementation_effort: ImplementationEffort::Medium,
@@ -733,7 +797,8 @@ impl PerformanceAnalyzer {
                 FactorType::ResourceUtilization => {
                     recommendations.push(Recommendation {
                         title: "Scale System Resources".to_string(),
-                        description: "Increase CPU and memory allocation to handle current load".to_string(),
+                        description: "Increase CPU and memory allocation to handle current load"
+                            .to_string(),
                         category: RecommendationCategory::ResourceScaling,
                         expected_improvement: "Improved response times and throughput".to_string(),
                         implementation_effort: ImplementationEffort::Low,
@@ -745,7 +810,8 @@ impl PerformanceAnalyzer {
                         title: "Improve Caching Strategy".to_string(),
                         description: "Optimize cache size, TTL, and eviction policies".to_string(),
                         category: RecommendationCategory::CachingStrategy,
-                        expected_improvement: "30-50% reduction in backend service load".to_string(),
+                        expected_improvement: "30-50% reduction in backend service load"
+                            .to_string(),
                         implementation_effort: ImplementationEffort::Medium,
                         estimated_impact_score: 0.6,
                     });
@@ -776,7 +842,7 @@ impl PerformanceAnalyzer {
         let x_sq_sum: f64 = (0..values.len()).map(|i| (i as f64).powi(2)).sum();
 
         let slope = (n * xy_sum - x_sum * y_sum) / (n * x_sq_sum - x_sum.powi(2));
-        
+
         let direction = if slope > 0.05 {
             TrendDirection::Improving
         } else if slope < -0.05 {
@@ -788,9 +854,9 @@ impl PerformanceAnalyzer {
         PerformanceTrend {
             metric_name: metric_name.to_string(),
             trend_direction: direction,
-            rate_of_change: slope * 100.0, // Convert to percentage
+            rate_of_change: slope * 100.0,   // Convert to percentage
             confidence: (n / 20.0).min(1.0), // Higher confidence with more data points
-            prediction_accuracy: 0.8, // Simplified prediction accuracy
+            prediction_accuracy: 0.8,        // Simplified prediction accuracy
         }
     }
 
@@ -861,7 +927,7 @@ pub struct PerformanceAlert {
     pub severity: AlertSeverity,
     pub title: String,
     pub description: String,
-    pub timestamp: Instant,
+    pub timestamp: SystemTime,
 }
 
 /// Alert severity levels
@@ -891,9 +957,9 @@ mod tests {
     #[tokio::test]
     async fn test_metrics_recording() {
         let analyzer = PerformanceAnalyzer::new();
-        
+
         let system_metrics = SystemPerformanceMetrics {
-            timestamp: Instant::now(),
+            timestamp: SystemTime::now(),
             overall_latency_p50: Duration::from_millis(100),
             overall_latency_p95: Duration::from_millis(200),
             overall_latency_p99: Duration::from_millis(500),
@@ -915,11 +981,11 @@ mod tests {
     #[tokio::test]
     async fn test_trend_analysis() {
         let analyzer = PerformanceAnalyzer::new();
-        
+
         // Record multiple metrics to enable trend analysis
         for i in 0..15 {
             let metrics = SystemPerformanceMetrics {
-                timestamp: Instant::now(),
+                timestamp: SystemTime::now(),
                 overall_latency_p50: Duration::from_millis(100 + i * 10),
                 overall_latency_p95: Duration::from_millis(200 + i * 20),
                 overall_latency_p99: Duration::from_millis(500 + i * 50),
@@ -933,7 +999,7 @@ mod tests {
                 active_connections: 50,
                 queue_depth: 10,
             };
-            
+
             analyzer.record_system_metrics(metrics).await.unwrap();
         }
 

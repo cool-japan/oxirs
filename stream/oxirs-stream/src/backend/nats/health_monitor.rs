@@ -95,37 +95,40 @@ impl HealthMonitor {
     /// Perform comprehensive health check
     pub async fn perform_health_check(&self, connection_url: &str) -> Result<HealthMetrics> {
         let start_time = Utc::now();
-        
+
         // Collect system metrics
         let metrics = self.collect_system_metrics(connection_url).await?;
-        
+
         // Update metrics history
         let mut history = self.metrics_history.write().await;
         history.push(metrics.clone());
-        
+
         // Maintain history size (keep last 1000 entries)
         if history.len() > 1000 {
             history.remove(0);
         }
-        
+
         // Analyze health status
         let status = self.analyze_health_status(&metrics, &history).await;
         *self.current_status.write().await = status.clone();
         *self.last_check.write().await = start_time;
-        
+
         // Update consecutive failures
         let mut failures = self.consecutive_failures.write().await;
         match status {
             HealthStatus::Healthy => *failures = 0,
             _ => *failures += 1,
         }
-        
+
         // Run predictive analytics if enabled
         if self.config.enable_predictive_analytics {
             self.run_predictive_analytics(&history).await;
         }
-        
-        debug!("Health check completed for {}: {:?}", connection_url, status);
+
+        debug!(
+            "Health check completed for {}: {:?}",
+            connection_url, status
+        );
         Ok(metrics)
     }
 
@@ -133,12 +136,12 @@ impl HealthMonitor {
     async fn collect_system_metrics(&self, _connection_url: &str) -> Result<HealthMetrics> {
         // In a real implementation, this would collect actual metrics
         // For now, we'll generate realistic mock data
-        
+
         let now = Utc::now();
-        
+
         // Simulate varying metrics based on time
         let time_factor = (now.timestamp() % 60) as f64 / 60.0;
-        
+
         Ok(HealthMetrics {
             timestamp: now,
             cpu_usage: 20.0 + time_factor * 30.0, // 20-50% CPU
@@ -155,7 +158,7 @@ impl HealthMonitor {
                 messages: 500000,
                 bytes: 1024 * 1024 * 100, // 100MB
                 cluster_size: 3,
-                memory_usage: 1024 * 1024 * 50, // 50MB
+                memory_usage: 1024 * 1024 * 50,    // 50MB
                 storage_usage: 1024 * 1024 * 1024, // 1GB
             },
         })
@@ -168,7 +171,7 @@ impl HealthMonitor {
         history: &[HealthMetrics],
     ) -> HealthStatus {
         let thresholds = &self.config.alert_thresholds;
-        
+
         // Check critical thresholds
         if current.cpu_usage > thresholds.cpu_usage_percent * 1.5
             || current.memory_usage > thresholds.memory_usage_percent * 1.5
@@ -176,7 +179,7 @@ impl HealthMonitor {
         {
             return HealthStatus::Critical;
         }
-        
+
         // Check degraded thresholds
         if current.cpu_usage > thresholds.cpu_usage_percent
             || current.memory_usage > thresholds.memory_usage_percent
@@ -184,14 +187,14 @@ impl HealthMonitor {
         {
             return HealthStatus::Degraded;
         }
-        
+
         // Check if recovering from previous issues
         if history.len() >= 3 {
             let recent_metrics = &history[history.len() - 3..];
             let improving_trend = recent_metrics.windows(2).all(|w| {
                 w[1].cpu_usage < w[0].cpu_usage && w[1].average_latency_ms < w[0].average_latency_ms
             });
-            
+
             if improving_trend {
                 let failures = *self.consecutive_failures.read().await;
                 if failures > 0 {
@@ -199,7 +202,7 @@ impl HealthMonitor {
                 }
             }
         }
-        
+
         HealthStatus::Healthy
     }
 
@@ -208,33 +211,36 @@ impl HealthMonitor {
         if history.len() < 10 {
             return; // Need more data for predictions
         }
-        
+
         let mut predictions = self.predictions.write().await;
-        
+
         // Simple linear trend prediction for key metrics
         predictions.insert(
             "cpu_trend".to_string(),
             self.predict_linear_trend(history, |m| m.cpu_usage),
         );
-        
+
         predictions.insert(
             "memory_trend".to_string(),
             self.predict_linear_trend(history, |m| m.memory_usage),
         );
-        
+
         predictions.insert(
             "latency_trend".to_string(),
             self.predict_linear_trend(history, |m| m.average_latency_ms),
         );
-        
+
         // Predict potential issues
         if let Some(cpu_trend) = predictions.get("cpu_trend") {
             if *cpu_trend > 0.5 {
                 warn!("Predictive analytics: CPU usage trending upward");
             }
         }
-        
-        debug!("Predictive analytics completed with {} predictions", predictions.len());
+
+        debug!(
+            "Predictive analytics completed with {} predictions",
+            predictions.len()
+        );
     }
 
     /// Simple linear trend prediction
@@ -245,23 +251,19 @@ impl HealthMonitor {
         if history.len() < 2 {
             return 0.0;
         }
-        
+
         let recent_count = std::cmp::min(10, history.len());
         let recent_metrics = &history[history.len() - recent_count..];
-        
+
         let values: Vec<f64> = recent_metrics.iter().map(extractor).collect();
-        
+
         // Simple slope calculation
         let n = values.len() as f64;
         let sum_x: f64 = (0..values.len()).map(|i| i as f64).sum();
         let sum_y: f64 = values.iter().sum();
-        let sum_xy: f64 = values
-            .iter()
-            .enumerate()
-            .map(|(i, &y)| i as f64 * y)
-            .sum();
+        let sum_xy: f64 = values.iter().enumerate().map(|(i, &y)| i as f64 * y).sum();
         let sum_x2: f64 = (0..values.len()).map(|i| (i as f64).powi(2)).sum();
-        
+
         // Calculate slope (trend)
         let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x.powi(2));
         slope
@@ -341,7 +343,7 @@ mod tests {
     async fn test_health_monitor_creation() {
         let config = HealthMonitorConfig::default();
         let monitor = HealthMonitor::new(config);
-        
+
         let status = monitor.get_current_status().await;
         assert_eq!(status, HealthStatus::Unknown);
     }
@@ -350,11 +352,14 @@ mod tests {
     async fn test_health_check() {
         let config = HealthMonitorConfig::default();
         let monitor = HealthMonitor::new(config);
-        
-        let metrics = monitor.perform_health_check("nats://localhost:4222").await.unwrap();
+
+        let metrics = monitor
+            .perform_health_check("nats://localhost:4222")
+            .await
+            .unwrap();
         assert!(metrics.cpu_usage >= 0.0);
         assert!(metrics.memory_usage >= 0.0);
-        
+
         let status = monitor.get_current_status().await;
         assert_ne!(status, HealthStatus::Unknown);
     }
@@ -363,12 +368,15 @@ mod tests {
     async fn test_metrics_history() {
         let config = HealthMonitorConfig::default();
         let monitor = HealthMonitor::new(config);
-        
+
         // Perform multiple checks
         for _ in 0..5 {
-            monitor.perform_health_check("nats://localhost:4222").await.unwrap();
+            monitor
+                .perform_health_check("nats://localhost:4222")
+                .await
+                .unwrap();
         }
-        
+
         let history = monitor.get_metrics_history(None).await;
         assert_eq!(history.len(), 5);
     }

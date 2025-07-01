@@ -1,4 +1,4 @@
-//! Kafka configuration types and utilities
+//! Kafka configuration types and settings
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -36,11 +36,11 @@ impl Default for KafkaProducerConfig {
             transaction_id: None,
             enable_idempotence: true,
             acks: KafkaAcks::All,
-            retries: 2147483647,
-            retry_backoff_ms: 100,  
+            retries: 2147483647, // Max retries for exactly-once
+            retry_backoff_ms: 100,
             batch_size: 65536,
             linger_ms: 10,
-            buffer_memory: 33554432,
+            buffer_memory: 33554432, // 32MB
             compression_type: KafkaCompressionType::Snappy,
             max_in_flight_requests: 5,
             request_timeout_ms: 30000,
@@ -66,7 +66,7 @@ impl ToString for KafkaAcks {
     fn to_string(&self) -> String {
         match self {
             KafkaAcks::None => "0".to_string(),
-            KafkaAcks::Leader => "1".to_string(), 
+            KafkaAcks::Leader => "1".to_string(),
             KafkaAcks::All => "all".to_string(),
         }
     }
@@ -94,29 +94,35 @@ impl ToString for KafkaCompressionType {
     }
 }
 
-/// Partition strategy for message routing
+/// Partition strategies for message distribution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PartitionStrategy {
     RoundRobin,
-    Random,
-    KeyBased,
+    Hash,
     Manual,
+    Sticky,
 }
 
-/// Schema registry configuration
+/// Schema Registry configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaRegistryConfig {
     pub url: String,
-    pub auth: Option<SchemaRegistryAuth>,
+    pub username: Option<String>,
+    pub password: Option<String>,
     pub timeout_ms: u32,
     pub cache_size: usize,
 }
 
-/// Schema registry authentication
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SchemaRegistryAuth {
-    pub username: String,
-    pub password: String,
+impl Default for SchemaRegistryConfig {
+    fn default() -> Self {
+        Self {
+            url: "http://localhost:8081".to_string(),
+            username: None,
+            password: None,
+            timeout_ms: 30000,
+            cache_size: 1000,
+        }
+    }
 }
 
 /// Kafka security configuration
@@ -147,7 +153,7 @@ impl ToString for SecurityProtocol {
     }
 }
 
-/// SASL configuration
+/// SASL authentication configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaslConfig {
     pub mechanism: SaslMechanism,
@@ -186,4 +192,16 @@ pub struct SslConfig {
     pub key_password: Option<String>,
     pub keystore_location: Option<String>,
     pub keystore_password: Option<String>,
+}
+
+/// Producer statistics for monitoring
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct KafkaProducerStats {
+    pub events_published: u64,
+    pub events_failed: u64,
+    pub bytes_sent: u64,
+    pub delivery_errors: u64,
+    pub last_publish: Option<chrono::DateTime<chrono::Utc>>,
+    pub max_latency_ms: u64,
+    pub avg_latency_ms: f64,
 }

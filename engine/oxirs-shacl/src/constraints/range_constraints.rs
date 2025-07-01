@@ -115,7 +115,7 @@ impl ConstraintValidator for MinExclusiveConstraint {
 impl ConstraintEvaluator for MinExclusiveConstraint {
     fn evaluate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {
@@ -196,7 +196,7 @@ impl ConstraintValidator for MaxExclusiveConstraint {
 impl ConstraintEvaluator for MaxExclusiveConstraint {
     fn evaluate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {
@@ -277,7 +277,7 @@ impl ConstraintValidator for MinInclusiveConstraint {
 impl ConstraintEvaluator for MinInclusiveConstraint {
     fn evaluate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {
@@ -358,7 +358,7 @@ impl ConstraintValidator for MaxInclusiveConstraint {
 impl ConstraintEvaluator for MaxInclusiveConstraint {
     fn evaluate(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {

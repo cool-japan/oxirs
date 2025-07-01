@@ -2,6 +2,7 @@ use crate::{Vector, VectorData, VectorError};
 use half::f16;
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use tracing::debug;
 use zstd;
 
 #[derive(Debug, Clone)]
@@ -718,7 +719,7 @@ impl AdaptiveCompressor {
         self.analysis_cache = Some(analysis);
 
         let analysis_time = start_time.elapsed().as_secs_f64() * 1000.0;
-        log::debug!("Adaptive compression analysis took {:.2}ms", analysis_time);
+        tracing::debug!("Adaptive compression analysis took {:.2}ms", analysis_time);
 
         Ok(())
     }

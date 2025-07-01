@@ -243,9 +243,7 @@ impl NatsEventMessage {
                     .as_str()
                     .ok_or_else(|| anyhow!("Missing object"))?
                     .to_string();
-                let graph = self.data["graph"]
-                    .as_str()
-                    .map(|s| s.to_string());
+                let graph = self.data["graph"].as_str().map(|s| s.to_string());
 
                 StreamEvent::TripleAdded {
                     subject,
@@ -268,9 +266,7 @@ impl NatsEventMessage {
                     .as_str()
                     .ok_or_else(|| anyhow!("Missing object"))?
                     .to_string();
-                let graph = self.data["graph"]
-                    .as_str()
-                    .map(|s| s.to_string());
+                let graph = self.data["graph"].as_str().map(|s| s.to_string());
 
                 StreamEvent::TripleRemoved {
                     subject,

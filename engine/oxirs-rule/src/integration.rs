@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use tracing::{debug, info, trace, warn};
 
 /// Integration bridge for connecting oxirs-rule with oxirs-core
-#[derive(Debug)]
 pub struct RuleIntegration {
     /// Core rule engine
     pub rule_engine: RuleEngine,
@@ -56,7 +55,7 @@ impl RuleIntegration {
 
     /// Load facts from the core store into the rule engine
     pub fn load_facts_from_store(&mut self) -> Result<usize> {
-        let quads = self.store.iter_quads()?;
+        let quads = self.store.find_quads(None, None, None, None)?;
         let rule_atoms: Vec<RuleAtom> = quads
             .into_iter()
             .map(|quad| self.quad_to_rule_atom(&quad))
@@ -81,7 +80,13 @@ impl RuleIntegration {
         let mut new_fact_count = 0;
         for rule_atom in derived_facts {
             if let Ok(triple) = self.rule_atom_to_triple(&rule_atom) {
-                if self.store.insert_triple(triple)? {
+                // Convert triple to quad with default graph
+                let quad = Quad::new_default_graph(
+                    triple.subject().clone(),
+                    triple.predicate().clone(),
+                    triple.object().clone(),
+                );
+                if self.store.insert_quad(quad)? {
                     new_fact_count += 1;
                 }
             }
@@ -111,13 +116,33 @@ impl RuleIntegration {
         object: Option<&Object>,
     ) -> Result<Vec<Triple>> {
         // First get direct matches from store
-        let direct_matches = self.store.query_triples(subject, predicate, object)?;
+        let quads = self.store.find_quads(subject, predicate, object, None)?;
+        let direct_matches: Vec<Triple> = quads
+            .into_iter()
+            .map(|quad| {
+                Triple::new(
+                    quad.subject().clone(),
+                    quad.predicate().clone(),
+                    quad.object().clone(),
+                )
+            })
+            .collect();
 
         // Apply rules to potentially derive more facts
         self.apply_rules()?;
 
         // Query again after applying rules
-        let rule_enhanced_matches = self.store.query_triples(subject, predicate, object)?;
+        let enhanced_quads = self.store.find_quads(subject, predicate, object, None)?;
+        let rule_enhanced_matches: Vec<Triple> = enhanced_quads
+            .into_iter()
+            .map(|quad| {
+                Triple::new(
+                    quad.subject().clone(),
+                    quad.predicate().clone(),
+                    quad.object().clone(),
+                )
+            })
+            .collect();
 
         Ok(rule_enhanced_matches)
     }
@@ -169,6 +194,15 @@ impl RuleIntegration {
             }
             RuleAtom::Builtin { .. } => Err(anyhow::anyhow!(
                 "Cannot convert builtin rule atom to triple"
+            )),
+            RuleAtom::NotEqual { .. } => Err(anyhow::anyhow!(
+                "Cannot convert not-equal constraint to triple"
+            )),
+            RuleAtom::GreaterThan { .. } => Err(anyhow::anyhow!(
+                "Cannot convert greater-than constraint to triple"
+            )),
+            RuleAtom::LessThan { .. } => Err(anyhow::anyhow!(
+                "Cannot convert less-than constraint to triple"
             )),
         }
     }
@@ -224,6 +258,10 @@ impl RuleIntegration {
                 "Cannot convert unbound variable to subject"
             )),
             Term::Literal(_) => Err(anyhow::anyhow!("Literals cannot be subjects in RDF")),
+            Term::Function { name, .. } => Err(anyhow::anyhow!(
+                "Cannot convert function term '{}' to subject - function terms are not valid RDF subjects",
+                name
+            )),
         }
     }
 
@@ -235,6 +273,10 @@ impl RuleIntegration {
                 "Cannot convert unbound variable to predicate"
             )),
             Term::Literal(_) => Err(anyhow::anyhow!("Literals cannot be predicates in RDF")),
+            Term::Function { name, .. } => Err(anyhow::anyhow!(
+                "Cannot convert function term '{}' to predicate - function terms are not valid RDF predicates",
+                name
+            )),
         }
     }
 
@@ -252,6 +294,14 @@ impl RuleIntegration {
             }
             Term::Literal(value) => Ok(Object::Literal(Literal::new(value))),
             Term::Variable(_) => Err(anyhow::anyhow!("Cannot convert unbound variable to object")),
+            Term::Function { name, args } => {
+                // Convert function terms to complex literals for RDF representation
+                let func_repr = format!("{}({})", name, args.len());
+                Ok(Object::Literal(Literal::new_typed_literal(
+                    &func_repr,
+                    NamedNode::new("http://oxirs.org/function")?,
+                )))
+            }
         }
     }
 
@@ -267,7 +317,13 @@ impl RuleIntegration {
         for triple_result in data_stream {
             match triple_result {
                 Ok(triple) => {
-                    if self.store.insert_triple(triple)? {
+                    // Convert triple to quad with default graph
+                    let quad = Quad::new_default_graph(
+                        triple.subject().clone(),
+                        triple.predicate().clone(),
+                        triple.object().clone(),
+                    );
+                    if self.store.insert_quad(quad)? {
                         processed += 1;
 
                         // Apply rules incrementally
@@ -427,7 +483,13 @@ impl RuleIntegration {
 
             // Process batch
             for triple in triple_batch {
-                if self.store.insert_triple(triple.clone())? {
+                // Convert triple to quad with default graph
+                let quad = Quad::new_default_graph(
+                    triple.subject().clone(),
+                    triple.predicate().clone(),
+                    triple.object().clone(),
+                );
+                if self.store.insert_quad(quad)? {
                     total_processed += 1;
                 }
             }
@@ -465,17 +527,25 @@ impl RuleIntegration {
 
         for (index, triple_result) in triples.into_iter().enumerate() {
             match triple_result {
-                Ok(triple) => match self.store.insert_triple(triple) {
-                    Ok(inserted) => {
-                        if inserted {
-                            successful += 1;
+                Ok(triple) => {
+                    // Convert triple to quad with default graph
+                    let quad = Quad::new_default_graph(
+                        triple.subject().clone(),
+                        triple.predicate().clone(),
+                        triple.object().clone(),
+                    );
+                    match self.store.insert_quad(quad) {
+                        Ok(inserted) => {
+                            if inserted {
+                                successful += 1;
+                            }
+                        }
+                        Err(e) => {
+                            failed += 1;
+                            error_details.push(format!("Triple {}: {}", index, e));
                         }
                     }
-                    Err(e) => {
-                        failed += 1;
-                        error_details.push(format!("Triple {}: {}", index, e));
-                    }
-                },
+                }
                 Err(e) => {
                     failed += 1;
                     error_details.push(format!("Parse error {}: {}", index, e));
@@ -563,7 +633,13 @@ impl RuleIntegration {
         // Insert all triples first
         let mut inserted = 0;
         for triple in triples {
-            if self.store.insert_triple(triple)? {
+            // Convert triple to quad with default graph
+            let quad = Quad::new_default_graph(
+                triple.subject().clone(),
+                triple.predicate().clone(),
+                triple.object().clone(),
+            );
+            if self.store.insert_quad(quad)? {
                 inserted += 1;
             }
         }
@@ -586,7 +662,7 @@ impl RuleIntegration {
     pub fn export_reasoning_results(&self, format: ExportFormat) -> Result<String> {
         match format {
             ExportFormat::NTriples => {
-                let quads = self.store.iter_quads()?;
+                let quads = self.store.find_quads(None, None, None, None)?;
                 let mut output = String::new();
                 for quad in quads {
                     let triple = quad.to_triple();
@@ -990,7 +1066,12 @@ mod tests {
             Object::NamedNode(object),
         );
 
-        integration.store.insert_triple(triple.clone()).unwrap();
+        let quad = Quad::new_default_graph(
+            triple.subject().clone(),
+            triple.predicate().clone(),
+            triple.object().clone(),
+        );
+        integration.store.insert_quad(quad).unwrap();
 
         // Add a rule: Human -> Mortal
         let rule = Rule {
@@ -1111,8 +1192,18 @@ mod tests {
             Object::NamedNode(student),
         );
 
-        integration.store.insert_triple(subclass_triple).unwrap();
-        integration.store.insert_triple(alice_type_triple).unwrap();
+        let subclass_quad = Quad::new_default_graph(
+            subclass_triple.subject().clone(),
+            subclass_triple.predicate().clone(),
+            subclass_triple.object().clone(),
+        );
+        let alice_type_quad = Quad::new_default_graph(
+            alice_type_triple.subject().clone(),
+            alice_type_triple.predicate().clone(),
+            alice_type_triple.object().clone(),
+        );
+        integration.store.insert_quad(subclass_quad).unwrap();
+        integration.store.insert_quad(alice_type_quad).unwrap();
 
         // Query for all types of alice (should include both Student and Person via inference)
         let results = integration
@@ -1147,7 +1238,12 @@ mod tests {
             NamedNode::new("http://example.org/p").unwrap(),
             Literal::new("o"),
         );
-        integration.store.insert_triple(triple).unwrap();
+        let quad = Quad::new_default_graph(
+            triple.subject().clone(),
+            triple.predicate().clone(),
+            triple.object().clone(),
+        );
+        integration.store.insert_quad(quad).unwrap();
 
         // Add a rule
         integration.add_rule(rule_builders::rdfs_type_inheritance());

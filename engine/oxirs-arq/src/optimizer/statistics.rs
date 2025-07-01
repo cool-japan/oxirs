@@ -5,8 +5,8 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use super::index_types::{IndexType, IndexStatistics};
 use super::execution_tracking::{ExecutionRecord, OptimizationDecision, OptimizationType};
+use super::index_types::{IndexStatistics, IndexType};
 
 /// Query optimization statistics
 #[derive(Debug, Clone, Default)]
@@ -21,6 +21,8 @@ pub struct Statistics {
     pub execution_times: HashMap<String, Duration>,
     /// Cardinality estimates
     pub cardinalities: HashMap<String, usize>,
+    /// Pattern cardinality estimates
+    pub pattern_cardinality: HashMap<String, usize>,
     /// Optimization success rates
     pub optimization_success_rates: HashMap<OptimizationType, f64>,
     /// Total queries processed
@@ -38,7 +40,7 @@ impl Statistics {
     /// Update statistics with execution record
     pub fn update_with_execution(&mut self, record: &ExecutionRecord) {
         self.total_queries += 1;
-        
+
         // Update optimization success rates
         for decision in &record.optimization_decisions {
             self.update_optimization_success_rate(decision);
@@ -46,7 +48,8 @@ impl Statistics {
 
         // Update execution times
         let query_hash = record.query_hash.to_string();
-        self.execution_times.insert(query_hash.clone(), record.execution_time);
+        self.execution_times
+            .insert(query_hash.clone(), record.execution_time);
         self.cardinalities.insert(query_hash, record.cardinality);
     }
 
@@ -72,7 +75,8 @@ impl Statistics {
 
     /// Set filter selectivity
     pub fn set_filter_selectivity(&mut self, filter_pattern: String, selectivity: f64) {
-        self.filter_selectivities.insert(filter_pattern, selectivity);
+        self.filter_selectivities
+            .insert(filter_pattern, selectivity);
     }
 
     /// Get estimated cardinality
@@ -103,7 +107,8 @@ impl Statistics {
     }
 
     fn update_optimization_success_rate(&mut self, decision: &OptimizationDecision) {
-        let current_rate = self.optimization_success_rates
+        let current_rate = self
+            .optimization_success_rates
             .get(&decision.optimization_type)
             .copied()
             .unwrap_or(0.5);
@@ -112,8 +117,9 @@ impl Statistics {
         let alpha = 0.1;
         let success_value = if decision.success { 1.0 } else { 0.0 };
         let new_rate = alpha * success_value + (1.0 - alpha) * current_rate;
-        
-        self.optimization_success_rates.insert(decision.optimization_type.clone(), new_rate);
+
+        self.optimization_success_rates
+            .insert(decision.optimization_type.clone(), new_rate);
     }
 }
 

@@ -573,41 +573,51 @@ impl SemanticEnhancer {
 
         let limit = max_predictions.unwrap_or(self.config.max_predictions);
         let predictor = self.link_predictor.read().await;
-        
+
         let mut predictions = Vec::new();
-        
+
         // Get entity information
         if let Some(entity) = self.entities.read().await.get(entity_uri) {
             // Use embeddings to find similar entities
             if let Some(embedding) = &entity.embedding {
-                let similar_entities = self.find_similar_entities(entity_uri, embedding, 10).await?;
-                
+                let similar_entities = self
+                    .find_similar_entities(entity_uri, embedding, 10)
+                    .await?;
+
                 // Generate predictions based on similar entities
                 for similar_entity in similar_entities {
-                    let entity_predictions = self.generate_predictions_from_similar_entity(
-                        entity_uri,
-                        &similar_entity,
-                        &predictor,
-                    ).await?;
+                    let entity_predictions = self
+                        .generate_predictions_from_similar_entity(
+                            entity_uri,
+                            &similar_entity,
+                            &predictor,
+                        )
+                        .await?;
                     predictions.extend(entity_predictions);
                 }
             }
-            
+
             // Generate predictions based on type patterns
-            let type_predictions = self.generate_predictions_from_type_patterns(
-                entity_uri,
-                &entity.entity_type,
-                &predictor,
-            ).await?;
+            let type_predictions = self
+                .generate_predictions_from_type_patterns(
+                    entity_uri,
+                    &entity.entity_type,
+                    &predictor,
+                )
+                .await?;
             predictions.extend(type_predictions);
         }
-        
+
         // Filter by confidence threshold and sort
         predictions.retain(|p| p.confidence >= self.config.confidence_threshold);
         predictions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
         predictions.truncate(limit);
-        
-        info!("Generated {} link predictions for entity {}", predictions.len(), entity_uri);
+
+        info!(
+            "Generated {} link predictions for entity {}",
+            predictions.len(),
+            entity_uri
+        );
         Ok(predictions)
     }
 
@@ -630,10 +640,12 @@ impl SemanticEnhancer {
         }
 
         let resolver = self.entity_resolver.read().await;
-        
+
         // Find potential matches
-        let candidates = self.find_resolution_candidates(entity_uri, context_entities).await?;
-        
+        let candidates = self
+            .find_resolution_candidates(entity_uri, context_entities)
+            .await?;
+
         if candidates.is_empty() {
             return Ok(EntityResolutionResult {
                 original_uri: entity_uri.to_string(),
@@ -645,15 +657,18 @@ impl SemanticEnhancer {
                 merged_properties: HashMap::new(),
             });
         }
-        
+
         // Find best match
-        let best_match = candidates.into_iter()
+        let best_match = candidates
+            .into_iter()
             .max_by(|a, b| a.similarity_score.partial_cmp(&b.similarity_score).unwrap())
             .unwrap();
-        
-        debug!("Resolved entity {} to {} with confidence {:.2}", 
-               entity_uri, best_match.canonical_uri, best_match.confidence);
-        
+
+        debug!(
+            "Resolved entity {} to {} with confidence {:.2}",
+            entity_uri, best_match.canonical_uri, best_match.confidence
+        );
+
         Ok(best_match)
     }
 
@@ -669,14 +684,18 @@ impl SemanticEnhancer {
 
         let aligner = self.schema_aligner.read().await;
         let mut alignments = Vec::new();
-        
+
         for source_element in source_schema {
             for target_element in target_schema {
-                let similarity = self.calculate_semantic_similarity(source_element, target_element).await;
-                
+                let similarity = self
+                    .calculate_semantic_similarity(source_element, target_element)
+                    .await;
+
                 if similarity >= self.config.schema_alignment_threshold {
-                    let alignment_type = self.determine_alignment_type(source_element, target_element, similarity).await;
-                    
+                    let alignment_type = self
+                        .determine_alignment_type(source_element, target_element, similarity)
+                        .await;
+
                     alignments.push(SchemaAlignment {
                         source_element: source_element.clone(),
                         target_element: target_element.clone(),
@@ -688,10 +707,10 @@ impl SemanticEnhancer {
                 }
             }
         }
-        
+
         // Sort by confidence
         alignments.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
-        
+
         info!("Generated {} schema alignments", alignments.len());
         Ok(alignments)
     }
@@ -716,23 +735,28 @@ impl SemanticEnhancer {
         }
 
         let assessor = self.quality_assessor.read().await;
-        
+
         // Calculate individual quality metrics
         let completeness = self.assess_completeness(data, schema).await;
         let consistency = self.assess_consistency(data).await;
         let accuracy = self.assess_accuracy(data).await;
         let timeliness = self.assess_timeliness(data).await;
         let relevance = self.assess_relevance(data).await;
-        
+
         // Calculate overall score
         let overall_score = (completeness + consistency + accuracy + timeliness + relevance) / 5.0;
-        
+
         // Identify quality issues
-        let issues = self.identify_quality_issues(data, &[completeness, consistency, accuracy, timeliness, relevance]).await;
-        
+        let issues = self
+            .identify_quality_issues(
+                data,
+                &[completeness, consistency, accuracy, timeliness, relevance],
+            )
+            .await;
+
         // Generate recommendations
         let recommendations = self.generate_quality_recommendations(&issues).await;
-        
+
         let assessment = QualityAssessment {
             overall_score,
             completeness,
@@ -743,7 +767,7 @@ impl SemanticEnhancer {
             issues,
             recommendations,
         };
-        
+
         debug!("Quality assessment: overall score {:.2}", overall_score);
         Ok(assessment)
     }
@@ -765,35 +789,31 @@ impl SemanticEnhancer {
         }
 
         let engine = self.recommendation_engine.read().await;
-        
+
         // Generate query recommendations
-        let query_recommendations = self.generate_query_recommendations(
-            user_context,
-            query_history,
-            current_query,
-            &engine,
-        ).await?;
-        
+        let query_recommendations = self
+            .generate_query_recommendations(user_context, query_history, current_query, &engine)
+            .await?;
+
         // Generate source recommendations
-        let source_recommendations = self.generate_source_recommendations(
-            user_context,
-            query_history,
-            &engine,
-        ).await?;
-        
+        let source_recommendations = self
+            .generate_source_recommendations(user_context, query_history, &engine)
+            .await?;
+
         // Generate optimization recommendations
-        let optimization_recommendations = self.generate_optimization_recommendations(
-            query_history,
-            &engine,
-        ).await?;
-        
+        let optimization_recommendations = self
+            .generate_optimization_recommendations(query_history, &engine)
+            .await?;
+
         // Calculate overall recommendation score
-        let overall_score = self.calculate_recommendation_score(
-            &query_recommendations,
-            &source_recommendations,
-            &optimization_recommendations,
-        ).await;
-        
+        let overall_score = self
+            .calculate_recommendation_score(
+                &query_recommendations,
+                &source_recommendations,
+                &optimization_recommendations,
+            )
+            .await;
+
         Ok(RecommendationResult {
             query_recommendations,
             source_recommendations,
@@ -806,7 +826,7 @@ impl SemanticEnhancer {
     pub async fn add_entity(&self, entity: EntityInfo) {
         let mut entities = self.entities.write().await;
         entities.insert(entity.uri.clone(), entity);
-        
+
         // Update statistics
         let mut stats = self.kg_stats.write().await;
         stats.total_entities += 1;
@@ -827,35 +847,39 @@ impl SemanticEnhancer {
     ) -> Result<Vec<String>> {
         let entities = self.entities.read().await;
         let mut similarities = Vec::new();
-        
+
         for (uri, entity) in entities.iter() {
             if uri == entity_uri {
                 continue;
             }
-            
+
             if let Some(other_embedding) = &entity.embedding {
                 let similarity = self.cosine_similarity(embedding, other_embedding);
                 similarities.push((uri.clone(), similarity));
             }
         }
-        
+
         similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        Ok(similarities.into_iter().take(limit).map(|(uri, _)| uri).collect())
+        Ok(similarities
+            .into_iter()
+            .take(limit)
+            .map(|(uri, _)| uri)
+            .collect())
     }
 
     fn cosine_similarity(&self, a: &[f64], b: &[f64]) -> f64 {
         if a.len() != b.len() {
             return 0.0;
         }
-        
+
         let dot_product: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let norm_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
         let norm_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
-        
+
         if norm_a == 0.0 || norm_b == 0.0 {
             return 0.0;
         }
-        
+
         dot_product / (norm_a * norm_b)
     }
 
@@ -893,7 +917,12 @@ impl SemanticEnhancer {
         0.5
     }
 
-    async fn determine_alignment_type(&self, _source: &str, _target: &str, similarity: f64) -> AlignmentType {
+    async fn determine_alignment_type(
+        &self,
+        _source: &str,
+        _target: &str,
+        similarity: f64,
+    ) -> AlignmentType {
         if similarity > 0.95 {
             AlignmentType::Exact
         } else if similarity > 0.8 {
@@ -903,7 +932,11 @@ impl SemanticEnhancer {
         }
     }
 
-    async fn assess_completeness(&self, _data: &serde_json::Value, _schema: Option<&[String]>) -> f64 {
+    async fn assess_completeness(
+        &self,
+        _data: &serde_json::Value,
+        _schema: Option<&[String]>,
+    ) -> f64 {
         // Implementation would assess data completeness
         0.8
     }
@@ -928,7 +961,11 @@ impl SemanticEnhancer {
         0.8
     }
 
-    async fn identify_quality_issues(&self, _data: &serde_json::Value, _scores: &[f64]) -> Vec<QualityIssue> {
+    async fn identify_quality_issues(
+        &self,
+        _data: &serde_json::Value,
+        _scores: &[f64],
+    ) -> Vec<QualityIssue> {
         // Implementation would identify specific quality issues
         vec![]
     }
@@ -1083,7 +1120,7 @@ mod tests {
             .predict_missing_links("http://example.org/entity1", Some(5))
             .await
             .unwrap();
-        
+
         // Should return empty for new enhancer
         assert!(predictions.is_empty());
     }
@@ -1108,8 +1145,11 @@ mod tests {
         let source_schema = vec!["name".to_string(), "age".to_string()];
         let target_schema = vec!["fullName".to_string(), "years".to_string()];
 
-        let alignments = enhancer.align_schemas(&source_schema, &target_schema).await.unwrap();
-        
+        let alignments = enhancer
+            .align_schemas(&source_schema, &target_schema)
+            .await
+            .unwrap();
+
         // Should return empty for basic test
         assert!(alignments.is_empty());
     }

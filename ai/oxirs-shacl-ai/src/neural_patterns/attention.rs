@@ -3,14 +3,11 @@
 use ndarray::{Array1, Array2, Array3, Axis};
 use std::collections::HashMap;
 
-use crate::{
-    patterns::Pattern,
-    Result, ShaclAiError,
-};
+use crate::{patterns::Pattern, Result, ShaclAiError};
 
 use super::types::{
-    AttentionAnalysisResult, AttentionPattern, AttentionFocus, AttentionFocusType,
-    CrossPatternInfluence, InfluenceType, CorrelationType,
+    AttentionAnalysisResult, AttentionFocus, AttentionFocusType, AttentionPattern, CorrelationType,
+    CrossPatternInfluence, InfluenceType,
 };
 
 /// Cross-pattern attention mechanism for discovering subtle relationships
@@ -84,7 +81,7 @@ impl CrossPatternAttention {
     /// Initialize multi-scale attention heads
     fn initialize_attention_heads(&mut self) {
         let scales = vec![0.5, 1.0, 2.0, 4.0]; // Different scales for multi-scale analysis
-        
+
         for scale in scales {
             let head = AttentionHead {
                 scale,
@@ -102,7 +99,7 @@ impl CrossPatternAttention {
     fn initialize_projection_matrix(&self) -> Array2<f64> {
         let dim = self.config.embedding_dim;
         let mut matrix = Array2::zeros((dim, self.config.head_dim));
-        
+
         // Xavier initialization
         let bound = (6.0 / (dim + self.config.head_dim) as f64).sqrt();
         for mut row in matrix.axis_iter_mut(Axis(0)) {
@@ -110,7 +107,7 @@ impl CrossPatternAttention {
                 *elem = rand::random::<f64>() * 2.0 * bound - bound;
             }
         }
-        
+
         matrix
     }
 
@@ -126,7 +123,7 @@ impl CrossPatternAttention {
         for pos in 0..max_len {
             for i in 0..d_model {
                 let angle = pos as f64 / 10000_f64.powf(2.0 * (i / 2) as f64 / d_model as f64);
-                
+
                 if i % 2 == 0 {
                     self.position_encodings[[pos, i]] = angle.sin();
                 } else {
@@ -143,13 +140,13 @@ impl CrossPatternAttention {
     ) -> Result<AttentionAnalysisResult> {
         // Convert patterns to embeddings
         let pattern_embeddings = self.patterns_to_embeddings(patterns).await?;
-        
+
         // Compute multi-head attention
         let attention_weights = self.compute_multi_head_attention(&pattern_embeddings)?;
-        
+
         // Analyze attention patterns
         let attention_patterns = self.analyze_attention_patterns(&attention_weights, patterns)?;
-        
+
         // Identify cross-pattern influences
         let influences = self.identify_cross_pattern_influences(&attention_weights, patterns)?;
 
@@ -164,14 +161,14 @@ impl CrossPatternAttention {
     async fn patterns_to_embeddings(&self, patterns: &[Pattern]) -> Result<Array2<f64>> {
         let num_patterns = patterns.len();
         let embedding_dim = self.config.embedding_dim;
-        
+
         let mut embeddings = Array2::zeros((num_patterns, embedding_dim));
-        
+
         for (i, pattern) in patterns.iter().enumerate() {
             let embedding = self.pattern_to_embedding(pattern).await?;
             embeddings.row_mut(i).assign(&embedding);
         }
-        
+
         Ok(embeddings)
     }
 
@@ -181,12 +178,12 @@ impl CrossPatternAttention {
         // This would extract features from the pattern structure, constraints, etc.
         let embedding_dim = self.config.embedding_dim;
         let mut embedding = Array1::zeros(embedding_dim);
-        
+
         // Simple placeholder embedding based on pattern properties
         for i in 0..embedding_dim {
             embedding[i] = rand::random::<f64>();
         }
-        
+
         Ok(embedding)
     }
 
@@ -196,12 +193,12 @@ impl CrossPatternAttention {
         embeddings: &Array2<f64>,
     ) -> Result<HashMap<String, Array2<f64>>> {
         let mut attention_weights = HashMap::new();
-        
+
         for (head_idx, head) in self.multi_scale_heads.iter().enumerate() {
             let head_attention = self.compute_single_head_attention(embeddings, head)?;
             attention_weights.insert(format!("head_{}", head_idx), head_attention);
         }
-        
+
         Ok(attention_weights)
     }
 
@@ -212,15 +209,15 @@ impl CrossPatternAttention {
         head: &AttentionHead,
     ) -> Result<Array2<f64>> {
         let num_patterns = embeddings.nrows();
-        
+
         // Compute queries, keys, values
         let queries = embeddings.dot(&head.query_proj);
         let keys = embeddings.dot(&head.key_proj);
         let values = embeddings.dot(&head.value_proj);
-        
+
         // Compute attention scores
         let scores = queries.dot(&keys.t()) / (self.config.head_dim as f64).sqrt();
-        
+
         // Apply temperature and softmax
         let mut attention_weights = Array2::zeros((num_patterns, num_patterns));
         for i in 0..num_patterns {
@@ -230,13 +227,13 @@ impl CrossPatternAttention {
                 attention_weights[[i, j]] = score;
                 row_sum += score;
             }
-            
+
             // Normalize to get probabilities
             for j in 0..num_patterns {
                 attention_weights[[i, j]] /= row_sum;
             }
         }
-        
+
         Ok(attention_weights)
     }
 
@@ -247,12 +244,12 @@ impl CrossPatternAttention {
         patterns: &[Pattern],
     ) -> Result<Vec<AttentionPattern>> {
         let mut attention_patterns = Vec::new();
-        
+
         for (head_name, weights) in attention_weights {
             for (pattern_idx, pattern) in patterns.iter().enumerate() {
                 let attention_distribution = weights.row(pattern_idx).to_owned();
                 let focus_regions = self.identify_attention_foci(&attention_distribution)?;
-                
+
                 attention_patterns.push(AttentionPattern {
                     pattern_id: format!("{}_{}", head_name, pattern_idx),
                     attention_distribution,
@@ -260,7 +257,7 @@ impl CrossPatternAttention {
                 });
             }
         }
-        
+
         Ok(attention_patterns)
     }
 
@@ -268,7 +265,7 @@ impl CrossPatternAttention {
     fn identify_attention_foci(&self, attention_dist: &Array1<f64>) -> Result<Vec<AttentionFocus>> {
         let mut foci = Vec::new();
         let threshold = 0.1; // Attention values above this are considered significant
-        
+
         for (i, &attention_value) in attention_dist.iter().enumerate() {
             if attention_value > threshold {
                 let focus_type = if attention_value > 0.5 {
@@ -278,7 +275,7 @@ impl CrossPatternAttention {
                 } else {
                     AttentionFocusType::Local
                 };
-                
+
                 foci.push(AttentionFocus {
                     focus_type,
                     intensity: attention_value,
@@ -286,7 +283,7 @@ impl CrossPatternAttention {
                 });
             }
         }
-        
+
         Ok(foci)
     }
 
@@ -298,13 +295,13 @@ impl CrossPatternAttention {
     ) -> Result<Vec<CrossPatternInfluence>> {
         let mut influences = Vec::new();
         let influence_threshold = 0.2;
-        
+
         for (head_name, weights) in attention_weights {
             for i in 0..patterns.len() {
                 for j in 0..patterns.len() {
                     if i != j {
                         let influence_strength = weights[[i, j]];
-                        
+
                         if influence_strength > influence_threshold {
                             let influence_type = if influence_strength > 0.7 {
                                 InfluenceType::Excitatory
@@ -313,7 +310,7 @@ impl CrossPatternAttention {
                             } else {
                                 InfluenceType::Competitive
                             };
-                            
+
                             influences.push(CrossPatternInfluence {
                                 source_pattern: format!("pattern_{}", i),
                                 target_pattern: format!("pattern_{}", j),
@@ -325,7 +322,7 @@ impl CrossPatternAttention {
                 }
             }
         }
-        
+
         Ok(influences)
     }
 

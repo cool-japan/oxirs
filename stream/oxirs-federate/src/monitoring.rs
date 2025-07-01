@@ -907,14 +907,25 @@ impl FederationMonitor {
             .iter()
             .rev()
             .take(100)
-            .filter(|e| matches!(e.event_type, FederationEventType::Error | FederationEventType::ServiceFailure))
+            .filter(|e| {
+                matches!(
+                    e.event_type,
+                    FederationEventType::Error | FederationEventType::ServiceFailure
+                )
+            })
             .count();
 
         if recent_errors > 10 {
             anomalies.push(AnomalyReport {
                 anomaly_type: AnomalyType::ErrorSpike,
-                detected_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-                details: format!("High error frequency detected: {} errors in last 100 events", recent_errors),
+                detected_at: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+                details: format!(
+                    "High error frequency detected: {} errors in last 100 events",
+                    recent_errors
+                ),
                 severity: AnomalySeverity::High,
                 confidence: 0.9,
             });
@@ -931,20 +942,22 @@ impl FederationMonitor {
                 .collect();
 
             if recent_queries.len() >= 10 {
-                let recent_avg_duration: Duration = recent_queries
-                    .iter()
-                    .map(|q| q.duration)
-                    .sum::<Duration>() / recent_queries.len() as u32;
+                let recent_avg_duration: Duration =
+                    recent_queries.iter().map(|q| q.duration).sum::<Duration>()
+                        / recent_queries.len() as u32;
 
                 // Check for significant performance degradation
                 if recent_avg_duration > type_metrics.avg_duration + Duration::from_millis(500) {
-                    let degradation_factor = recent_avg_duration.as_millis() as f64 
+                    let degradation_factor = recent_avg_duration.as_millis() as f64
                         / type_metrics.avg_duration.as_millis() as f64;
 
                     if degradation_factor > 2.0 {
                         anomalies.push(AnomalyReport {
                             anomaly_type: AnomalyType::PerformanceDegradation,
-                            detected_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                            detected_at: SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs(),
                             details: format!(
                                 "Performance degradation in {}: {:.1}x slower than baseline",
                                 query_type, degradation_factor
@@ -956,7 +969,10 @@ impl FederationMonitor {
                             } else {
                                 AnomalySeverity::Medium
                             },
-                            confidence: self.calculate_prediction_confidence(recent_queries.len(), type_metrics.total_count),
+                            confidence: self.calculate_prediction_confidence(
+                                recent_queries.len(),
+                                type_metrics.total_count,
+                            ),
                         });
                     }
                 }
@@ -969,9 +985,9 @@ impl FederationMonitor {
     /// Analyze cross-service latency patterns
     pub async fn analyze_cross_service_latency(&self) -> CrossServiceLatencyAnalysis {
         let metrics = self.metrics.read().await;
-        
+
         let mut service_interactions: HashMap<(String, String), Vec<Duration>> = HashMap::new();
-        
+
         // Simulate service interaction analysis from trace spans
         for trace_span in &metrics.trace_spans {
             if let Some(ref service_id) = trace_span.service_id {
@@ -991,7 +1007,7 @@ impl FederationMonitor {
                 let avg_duration = durations.iter().sum::<Duration>() / durations.len() as u32;
                 let max_duration = *durations.iter().max().unwrap();
                 let min_duration = *durations.iter().min().unwrap();
-                
+
                 interactions.push(ServiceInteractionLatency {
                     from_service,
                     to_service,
@@ -1009,7 +1025,10 @@ impl FederationMonitor {
         CrossServiceLatencyAnalysis {
             interactions,
             total_traces_analyzed: metrics.trace_spans.len(),
-            analysis_timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            analysis_timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
         }
     }
 
@@ -1030,21 +1049,27 @@ impl FederationMonitor {
                     .collect();
 
                 if recent_queries.len() >= 10 {
-                    let recent_avg_duration: Duration = recent_queries
-                        .iter()
-                        .map(|q| q.duration)
-                        .sum::<Duration>() / recent_queries.len() as u32;
+                    let recent_avg_duration: Duration =
+                        recent_queries.iter().map(|q| q.duration).sum::<Duration>()
+                            / recent_queries.len() as u32;
 
                     // Predict performance degradation trend
-                    if recent_avg_duration > type_metrics.avg_duration + Duration::from_millis(100) {
-                        let degradation_trend = recent_avg_duration.as_millis() as f64 
+                    if recent_avg_duration > type_metrics.avg_duration + Duration::from_millis(100)
+                    {
+                        let degradation_trend = recent_avg_duration.as_millis() as f64
                             / type_metrics.avg_duration.as_millis() as f64;
 
                         predictions.push(PerformancePrediction {
                             prediction_type: PredictionType::PerformanceDegradation,
                             component: format!("Query Type: {}", query_type),
-                            predicted_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-                            confidence: self.calculate_prediction_confidence(recent_queries.len(), type_metrics.total_count),
+                            predicted_at: SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs(),
+                            confidence: self.calculate_prediction_confidence(
+                                recent_queries.len(),
+                                type_metrics.total_count,
+                            ),
                             description: format!(
                                 "Query type {} showing {:.1}x performance degradation trend",
                                 query_type, degradation_trend
@@ -1064,13 +1089,17 @@ impl FederationMonitor {
         for (service_id, service_metrics) in &metrics.service_metrics {
             if service_metrics.total_requests > 100 {
                 let current_load = service_metrics.total_requests as f64 / 3600.0; // Requests per hour
-                
+
                 // Simple linear extrapolation
-                if current_load > 1000.0 { // High load threshold
+                if current_load > 1000.0 {
+                    // High load threshold
                     predictions.push(PerformancePrediction {
                         prediction_type: PredictionType::CapacityIssue,
                         component: format!("Service: {}", service_id),
-                        predicted_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                        predicted_at: SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
                         confidence: 0.7,
                         description: format!(
                             "Service {} approaching capacity limits at {:.0} requests/hour",
@@ -1094,8 +1123,8 @@ impl FederationMonitor {
         metrics.trace_statistics.total_spans += 1;
         metrics.trace_statistics.total_duration += duration;
         if metrics.trace_statistics.total_spans > 0 {
-            metrics.trace_statistics.avg_span_duration = 
-                metrics.trace_statistics.total_duration / metrics.trace_statistics.total_spans as u32;
+            metrics.trace_statistics.avg_span_duration = metrics.trace_statistics.total_duration
+                / metrics.trace_statistics.total_spans as u32;
         }
 
         // Update span duration histogram
@@ -1116,7 +1145,9 @@ impl FederationMonitor {
             "500ms+"
         };
 
-        *metrics.trace_statistics.span_duration_histogram
+        *metrics
+            .trace_statistics
+            .span_duration_histogram
             .entry(bucket.to_string())
             .or_insert(0) += 1;
     }

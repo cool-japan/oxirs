@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::{debug, info};
 
 use crate::{
-    planner::{FilterExpression, QueryInfo as PlannerQueryInfo, TriplePattern},
+    planner::{FilterExpression, QueryInfo, TriplePattern},
     FederatedService, ServiceCapability, ServiceRegistry,
 };
 
@@ -866,7 +866,7 @@ impl ServiceOptimizer {
     }
 
     /// Extract all variables used by a service
-    pub fn extract_service_variables(&self, service: &OptimizedService) -> HashSet<String> {
+    pub fn extract_service_variables(&self, service: &OptimizedServiceClause) -> HashSet<String> {
         let mut variables = HashSet::new();
         for pattern in &service.patterns {
             variables.extend(self.extract_pattern_variables(pattern));

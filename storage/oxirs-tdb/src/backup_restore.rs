@@ -22,7 +22,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::checkpoint::{CheckpointMetadata, CheckpointType};
-use crate::compression::{AdaptiveCompressor, CompressedData};
+use crate::compression::{AdaptiveCompressor, CompressedData, CompressionAlgorithm};
 use crate::mvcc::TransactionId;
 use crate::timestamp_ordering::{HybridLogicalClock, TimestampBundle};
 

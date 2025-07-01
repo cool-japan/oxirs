@@ -45,11 +45,7 @@ impl EmbeddingManager {
     }
 
     /// Get embedding for text using the specified model
-    pub async fn get_embedding(
-        &self,
-        text: &str,
-        model_name: Option<&str>,
-    ) -> Result<Vector> {
+    pub async fn get_embedding(&self, text: &str, model_name: Option<&str>) -> Result<Vector> {
         let model_key = model_name.unwrap_or(&self.config.default_model);
         let cache_key = format!("{}:{}", model_key, text);
 
@@ -67,7 +63,9 @@ impl EmbeddingManager {
         }
 
         // Cache miss - generate embedding
-        let model = self.model_registry.get(model_key)
+        let model = self
+            .model_registry
+            .get(model_key)
             .ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_key))?;
 
         let embed_vector = model.get_entity_embedding(text)?;
@@ -78,7 +76,7 @@ impl EmbeddingManager {
             let cached_embedding = CachedEmbedding::new(vector.clone());
             if let Ok(mut cache) = self.embedding_cache.write().await {
                 cache.insert(cache_key, cached_embedding);
-                
+
                 // Cleanup old entries if cache is too large
                 if cache.len() > self.config.max_cache_size {
                     self.cleanup_cache(&mut cache).await;
@@ -89,7 +87,8 @@ impl EmbeddingManager {
         self.update_stats(|stats| {
             stats.cache_misses += 1;
             stats.embeddings_generated += 1;
-        }).await;
+        })
+        .await;
 
         info!("Generated embedding for text: {}", text);
         Ok(vector)
@@ -102,7 +101,7 @@ impl EmbeddingManager {
         model_name: Option<&str>,
     ) -> Result<Vec<Vector>> {
         let mut embeddings = Vec::new();
-        
+
         // Process in batches for efficiency
         for batch in texts.chunks(self.config.batch_size) {
             let batch_results = self.process_batch(batch, model_name).await?;
@@ -119,7 +118,7 @@ impl EmbeddingManager {
         model_name: Option<&str>,
     ) -> Result<()> {
         info!("Precomputing embeddings for {} terms", terms.len());
-        
+
         for term in terms {
             if let Err(e) = self.get_embedding(term, model_name).await {
                 warn!("Failed to precompute embedding for '{}': {}", term, e);
@@ -160,7 +159,7 @@ impl EmbeddingManager {
         model_name: Option<&str>,
     ) -> Result<Vec<Vector>> {
         let mut results = Vec::new();
-        
+
         for text in texts {
             let embedding = self.get_embedding(text, model_name).await?;
             results.push(embedding);
@@ -178,7 +177,7 @@ impl EmbeddingManager {
         if cache.len() > self.config.max_cache_size {
             let mut entries: Vec<_> = cache.iter().collect();
             entries.sort_by_key(|(_, cached)| cached.created_at);
-            
+
             let to_remove = cache.len() - self.config.max_cache_size;
             for (key, _) in entries.iter().take(to_remove) {
                 cache.remove(*key);
@@ -301,7 +300,7 @@ impl EmbeddingStats {
     /// Update average processing time
     pub fn update_avg_processing_time(&mut self) {
         if self.embeddings_generated > 0 {
-            self.avg_processing_time_ms = 
+            self.avg_processing_time_ms =
                 self.total_processing_time_ms as f64 / self.embeddings_generated as f64;
         }
     }
@@ -316,7 +315,7 @@ pub struct SimpleEmbeddingModel {
 
 impl SimpleEmbeddingModel {
     pub fn new(dimensions: usize) -> Self {
-        Self { 
+        Self {
             dimensions,
             config: oxirs_embed::ModelConfig {
                 model_type: "simple".to_string(),
@@ -357,7 +356,7 @@ impl EmbeddingModel for SimpleEmbeddingModel {
 
     async fn train(&mut self, epochs: Option<usize>) -> Result<oxirs_embed::TrainingStats> {
         let epochs = epochs.unwrap_or(self.config.epochs);
-        
+
         // Simple mock training for testing purposes
         let stats = oxirs_embed::TrainingStats {
             total_epochs: epochs,
@@ -365,7 +364,7 @@ impl EmbeddingModel for SimpleEmbeddingModel {
             training_time_seconds: 1,
             convergence_epoch: Some(epochs / 2),
         };
-        
+
         Ok(stats)
     }
 
@@ -373,12 +372,12 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         // Simple hash-based embedding for testing
         let mut embedding = vec![0.0f32; self.dimensions];
         let bytes = entity.as_bytes();
-        
+
         for (i, &byte) in bytes.iter().enumerate() {
             let idx = i % self.dimensions;
             embedding[idx] += (byte as f32) / 255.0;
         }
-        
+
         // Normalize
         let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
         if norm > 0.0 {
@@ -494,13 +493,19 @@ mod tests {
         manager.register_model("test_model".to_string(), model);
 
         // First call should miss cache
-        let embedding1 = manager.get_embedding("test", Some("test_model")).await.unwrap();
-        
+        let embedding1 = manager
+            .get_embedding("test", Some("test_model"))
+            .await
+            .unwrap();
+
         // Second call should hit cache
-        let embedding2 = manager.get_embedding("test", Some("test_model")).await.unwrap();
-        
+        let embedding2 = manager
+            .get_embedding("test", Some("test_model"))
+            .await
+            .unwrap();
+
         assert_eq!(embedding1.values, embedding2.values);
-        
+
         let stats = manager.get_stats().await;
         assert_eq!(stats.cache_hits, 1);
         assert_eq!(stats.cache_misses, 1);
@@ -512,9 +517,16 @@ mod tests {
         let model = Arc::new(SimpleEmbeddingModel::new(128));
         manager.register_model("test_model".to_string(), model);
 
-        let texts = vec!["text1".to_string(), "text2".to_string(), "text3".to_string()];
-        let embeddings = manager.get_embeddings_batch(&texts, Some("test_model")).await.unwrap();
-        
+        let texts = vec![
+            "text1".to_string(),
+            "text2".to_string(),
+            "text3".to_string(),
+        ];
+        let embeddings = manager
+            .get_embeddings_batch(&texts, Some("test_model"))
+            .await
+            .unwrap();
+
         assert_eq!(embeddings.len(), 3);
         for embedding in embeddings {
             assert_eq!(embedding.values.len(), 128);
@@ -525,14 +537,14 @@ mod tests {
     fn test_cached_embedding_expiry() {
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);
         let mut cached = CachedEmbedding::new(vector);
-        
+
         // Should not be expired immediately
         assert!(!cached.is_expired());
-        
+
         // Set TTL to very short duration for testing
         cached.ttl = chrono::Duration::milliseconds(1);
         std::thread::sleep(std::time::Duration::from_millis(2));
-        
+
         // Should now be expired
         assert!(cached.is_expired());
     }
@@ -542,13 +554,13 @@ mod tests {
         let mut stats = EmbeddingStats::default();
         stats.cache_hits = 8;
         stats.cache_misses = 2;
-        
+
         assert_eq!(stats.cache_hit_ratio(), 0.8);
-        
+
         stats.embeddings_generated = 5;
         stats.total_processing_time_ms = 1000;
         stats.update_avg_processing_time();
-        
+
         assert_eq!(stats.avg_processing_time_ms, 200.0);
     }
 }

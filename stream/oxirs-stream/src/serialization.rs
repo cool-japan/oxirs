@@ -911,24 +911,18 @@ impl ProtobufStreamEvent {
 }
 
 impl prost::Message for ProtobufStreamEvent {
-    fn encode_raw<B>(&self, buf: &mut B)
-    where
-        B: prost::bytes::BufMut,
-    {
+    fn encode_raw(&self, buf: &mut impl prost::bytes::BufMut) {
         // Simplified implementation
         buf.put_slice(&self.data);
     }
 
-    fn merge_field<B>(
+    fn merge_field(
         &mut self,
         _tag: u32,
         _wire_type: prost::encoding::WireType,
-        _buf: &mut B,
+        _buf: &mut impl prost::bytes::Buf,
         _ctx: prost::encoding::DecodeContext,
-    ) -> Result<(), prost::DecodeError>
-    where
-        B: prost::bytes::Buf,
-    {
+    ) -> Result<(), prost::DecodeError> {
         Ok(())
     }
 

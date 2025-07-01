@@ -15,12 +15,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 use url::Url;
 use uuid::Uuid;
 
 /// Service registry for managing federated endpoints
+#[derive(Debug)]
 pub struct ServiceRegistry {
     /// Registered SPARQL endpoints
     sparql_endpoints: Arc<DashMap<String, SparqlEndpoint>>,
@@ -132,7 +133,11 @@ pub enum AuthConfig {
     /// API key authentication
     ApiKey { key: String, header: String },
     /// OAuth 2.0
-    OAuth2 { token_url: String, client_id: String, client_secret: String },
+    OAuth2 {
+        token_url: String,
+        client_id: String,
+        client_secret: String,
+    },
     /// Custom headers
     Custom { headers: HashMap<String, String> },
 }
@@ -333,8 +338,13 @@ pub enum CapabilityData {
 }
 
 impl ServiceRegistry {
-    /// Create a new service registry
-    pub fn new(config: RegistryConfig) -> Self {
+    /// Create a new service registry with default configuration
+    pub fn new() -> Self {
+        Self::with_config(RegistryConfig::default())
+    }
+
+    /// Create a new service registry with custom configuration
+    pub fn with_config(config: RegistryConfig) -> Self {
         let http_client = Client::builder()
             .timeout(config.service_timeout)
             .build()
@@ -380,7 +390,10 @@ impl ServiceRegistry {
 
     /// Register a SPARQL endpoint
     pub async fn register_sparql_endpoint(&self, endpoint: SparqlEndpoint) -> Result<()> {
-        info!("Registering SPARQL endpoint: {} ({})", endpoint.name, endpoint.url);
+        info!(
+            "Registering SPARQL endpoint: {} ({})",
+            endpoint.name, endpoint.url
+        );
 
         // Validate endpoint
         self.validate_sparql_endpoint(&endpoint).await?;
@@ -395,14 +408,17 @@ impl ServiceRegistry {
         self.sparql_endpoints.insert(endpoint_id.clone(), endpoint);
 
         // Initialize health status
-        self.health_status.insert(endpoint_id.clone(), HealthStatus {
-            service_id: endpoint_id,
-            status: HealthState::Unknown,
-            last_check: Utc::now(),
-            consecutive_failures: 0,
-            last_error: None,
-            response_time_ms: None,
-        });
+        self.health_status.insert(
+            endpoint_id.clone(),
+            HealthStatus {
+                service_id: endpoint_id,
+                status: HealthState::Unknown,
+                last_check: Utc::now(),
+                consecutive_failures: 0,
+                last_error: None,
+                response_time_ms: None,
+            },
+        );
 
         debug!("SPARQL endpoint registered successfully");
         Ok(())
@@ -410,7 +426,10 @@ impl ServiceRegistry {
 
     /// Register a GraphQL service
     pub async fn register_graphql_service(&self, service: GraphQLService) -> Result<()> {
-        info!("Registering GraphQL service: {} ({})", service.name, service.url);
+        info!(
+            "Registering GraphQL service: {} ({})",
+            service.name, service.url
+        );
 
         // Validate service
         self.validate_graphql_service(&service).await?;
@@ -426,14 +445,17 @@ impl ServiceRegistry {
         self.graphql_services.insert(service_id.clone(), service);
 
         // Initialize health status
-        self.health_status.insert(service_id.clone(), HealthStatus {
-            service_id,
-            status: HealthState::Unknown,
-            last_check: Utc::now(),
-            consecutive_failures: 0,
-            last_error: None,
-            response_time_ms: None,
-        });
+        self.health_status.insert(
+            service_id.clone(),
+            HealthStatus {
+                service_id,
+                status: HealthState::Unknown,
+                last_check: Utc::now(),
+                consecutive_failures: 0,
+                last_error: None,
+                response_time_ms: None,
+            },
+        );
 
         debug!("GraphQL service registered successfully");
         Ok(())
@@ -441,17 +463,25 @@ impl ServiceRegistry {
 
     /// Get all registered SPARQL endpoints
     pub fn get_sparql_endpoints(&self) -> Vec<SparqlEndpoint> {
-        self.sparql_endpoints.iter().map(|entry| entry.clone()).collect()
+        self.sparql_endpoints
+            .iter()
+            .map(|entry| entry.clone())
+            .collect()
     }
 
     /// Get all registered GraphQL services
     pub fn get_graphql_services(&self) -> Vec<GraphQLService> {
-        self.graphql_services.iter().map(|entry| entry.clone()).collect()
+        self.graphql_services
+            .iter()
+            .map(|entry| entry.clone())
+            .collect()
     }
 
     /// Get service health status
     pub fn get_health_status(&self, service_id: &str) -> Option<HealthStatus> {
-        self.health_status.get(service_id).map(|entry| entry.clone())
+        self.health_status
+            .get(service_id)
+            .map(|entry| entry.clone())
     }
 
     /// Get all healthy SPARQL endpoints
@@ -506,10 +536,7 @@ impl ServiceRegistry {
         }
 
         // Test connectivity
-        let response = self.http_client
-            .get(endpoint.url.clone())
-            .send()
-            .await?;
+        let response = self.http_client.get(endpoint.url.clone()).send().await?;
 
         if !response.status().is_success() {
             return Err(anyhow!("Endpoint not accessible: {}", response.status()));
@@ -536,7 +563,8 @@ impl ServiceRegistry {
             }
         "#;
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(service.url.clone())
             .json(&serde_json::json!({
                 "query": introspection_query
@@ -552,13 +580,23 @@ impl ServiceRegistry {
     }
 
     /// Detect SPARQL endpoint capabilities
-    async fn detect_sparql_capabilities(&self, endpoint: &SparqlEndpoint) -> Result<SparqlCapabilities> {
+    async fn detect_sparql_capabilities(
+        &self,
+        endpoint: &SparqlEndpoint,
+    ) -> Result<SparqlCapabilities> {
         // TODO: Implement comprehensive capability detection
         // For now, return basic capabilities
         Ok(SparqlCapabilities {
             sparql_version: SparqlVersion::V11,
-            result_formats: vec!["application/sparql-results+json".to_string(), "application/sparql-results+xml".to_string()].into_iter().collect(),
-            graph_formats: vec!["text/turtle".to_string(), "application/rdf+xml".to_string()].into_iter().collect(),
+            result_formats: vec![
+                "application/sparql-results+json".to_string(),
+                "application/sparql-results+xml".to_string(),
+            ]
+            .into_iter()
+            .collect(),
+            graph_formats: vec!["text/turtle".to_string(), "application/rdf+xml".to_string()]
+                .into_iter()
+                .collect(),
             custom_functions: HashSet::new(),
             max_query_complexity: Some(1000),
             supports_federation: true,
@@ -569,7 +607,10 @@ impl ServiceRegistry {
     }
 
     /// Introspect GraphQL service
-    async fn introspect_graphql_service(&self, service: &GraphQLService) -> Result<(GraphQLCapabilities, Option<String>)> {
+    async fn introspect_graphql_service(
+        &self,
+        service: &GraphQLService,
+    ) -> Result<(GraphQLCapabilities, Option<String>)> {
         // TODO: Implement comprehensive GraphQL introspection
         // For now, return basic capabilities
         let capabilities = GraphQLCapabilities {
@@ -644,7 +685,7 @@ impl ServiceRegistry {
 
         // Simple ASK query for health check
         let query = "ASK { ?s ?p ?o }";
-        
+
         match client
             .post(endpoint.url.clone())
             .header("Content-Type", "application/sparql-query")
@@ -655,7 +696,7 @@ impl ServiceRegistry {
         {
             Ok(response) => {
                 let response_time = start.elapsed().as_millis() as u64;
-                
+
                 if response.status().is_success() {
                     HealthStatus {
                         service_id,
@@ -676,16 +717,14 @@ impl ServiceRegistry {
                     }
                 }
             }
-            Err(e) => {
-                HealthStatus {
-                    service_id,
-                    status: HealthState::Unhealthy,
-                    last_check: Utc::now(),
-                    consecutive_failures: 1,
-                    last_error: Some(e.to_string()),
-                    response_time_ms: None,
-                }
-            }
+            Err(e) => HealthStatus {
+                service_id,
+                status: HealthState::Unhealthy,
+                last_check: Utc::now(),
+                consecutive_failures: 1,
+                last_error: Some(e.to_string()),
+                response_time_ms: None,
+            },
         }
     }
 
@@ -696,7 +735,7 @@ impl ServiceRegistry {
 
         // Simple introspection query for health check
         let query = r#"{ __schema { queryType { name } } }"#;
-        
+
         match client
             .post(service.url.clone())
             .header("Content-Type", "application/json")
@@ -708,7 +747,7 @@ impl ServiceRegistry {
         {
             Ok(response) => {
                 let response_time = start.elapsed().as_millis() as u64;
-                
+
                 if response.status().is_success() {
                     HealthStatus {
                         service_id,
@@ -729,16 +768,14 @@ impl ServiceRegistry {
                     }
                 }
             }
-            Err(e) => {
-                HealthStatus {
-                    service_id,
-                    status: HealthState::Unhealthy,
-                    last_check: Utc::now(),
-                    consecutive_failures: 1,
-                    last_error: Some(e.to_string()),
-                    response_time_ms: None,
-                }
-            }
+            Err(e) => HealthStatus {
+                service_id,
+                status: HealthState::Unhealthy,
+                last_check: Utc::now(),
+                consecutive_failures: 1,
+                last_error: Some(e.to_string()),
+                response_time_ms: None,
+            },
         }
     }
 }
@@ -750,8 +787,8 @@ mod tests {
     #[tokio::test]
     async fn test_service_registry_creation() {
         let config = RegistryConfig::default();
-        let registry = ServiceRegistry::new(config);
-        
+        let registry = ServiceRegistry::with_config(config);
+
         assert_eq!(registry.get_sparql_endpoints().len(), 0);
         assert_eq!(registry.get_graphql_services().len(), 0);
     }
@@ -759,7 +796,7 @@ mod tests {
     #[tokio::test]
     async fn test_sparql_endpoint_registration() {
         let config = RegistryConfig::default();
-        let registry = ServiceRegistry::new(config);
+        let registry = ServiceRegistry::with_config(config);
 
         let endpoint = SparqlEndpoint {
             id: "test-endpoint".to_string(),

@@ -250,15 +250,15 @@ impl StatisticsCollector {
                     TermPosition::Subject => {
                         *self
                             .stats
-                            .subject_cardinality
-                            .entry(iri.as_str().to_string())
+                            .pattern_cardinality
+                            .entry(format!("subject:{}", iri.as_str()))
                             .or_insert(0) += 1;
                     }
                     TermPosition::Predicate => {
                         *self
                             .stats
-                            .predicate_frequency
-                            .entry(iri.as_str().to_string())
+                            .cardinalities
+                            .entry(format!("predicate:{}", iri.as_str()))
                             .or_insert(0) += 1;
 
                         // Create histogram for this predicate if needed
@@ -272,8 +272,8 @@ impl StatisticsCollector {
                     TermPosition::Object => {
                         *self
                             .stats
-                            .object_cardinality
-                            .entry(iri.as_str().to_string())
+                            .pattern_cardinality
+                            .entry(format!("object:{}", iri.as_str()))
                             .or_insert(0) += 1;
                     }
                 }
@@ -293,13 +293,13 @@ impl StatisticsCollector {
                 // Track variable selectivity
                 let current = self
                     .stats
-                    .variable_selectivity
-                    .get(var)
+                    .filter_selectivities
+                    .get(&format!("var:{}", var.as_str()))
                     .copied()
                     .unwrap_or(1.0);
                 self.stats
-                    .variable_selectivity
-                    .insert(var.clone(), current * 0.9);
+                    .filter_selectivities
+                    .insert(format!("var:{}", var.as_str()), current * 0.9);
             }
             Term::QuotedTriple(triple) => {
                 // Recursively update statistics for the quoted triple's components
@@ -329,7 +329,7 @@ impl StatisticsCollector {
                     // Add to predicate frequency to track path usage
                     *self
                         .stats
-                        .predicate_frequency
+                        .cardinalities
                         .entry(format!("path:{}", path))
                         .or_insert(0) += 1;
                 }
@@ -340,15 +340,15 @@ impl StatisticsCollector {
                     TermPosition::Subject => {
                         *self
                             .stats
-                            .subject_cardinality
-                            .entry(format!("_:{}", id))
+                            .pattern_cardinality
+                            .entry(format!("subject:_:{}", id))
                             .or_insert(0) += 1;
                     }
                     TermPosition::Object => {
                         *self
                             .stats
-                            .object_cardinality
-                            .entry(format!("_:{}", id))
+                            .pattern_cardinality
+                            .entry(format!("object:_:{}", id))
                             .or_insert(0) += 1;
                     }
                     TermPosition::Predicate => {
@@ -374,8 +374,8 @@ impl StatisticsCollector {
             // Update variable occurrence count
             let current = self
                 .stats
-                .variable_selectivity
-                .get(&var)
+                .filter_selectivities
+                .get(&format!("var:{}", var.as_str()))
                 .copied()
                 .unwrap_or(0.5);
 
@@ -388,8 +388,8 @@ impl StatisticsCollector {
             };
 
             self.stats
-                .variable_selectivity
-                .insert(var, (current * position_factor).clamp(0.001, 1.0));
+                .filter_selectivities
+                .insert(format!("var:{}", var.as_str()), (current * position_factor).clamp(0.001, 1.0));
         }
 
         Ok(())
@@ -429,7 +429,9 @@ impl StatisticsCollector {
     /// Compute join selectivities between patterns
     fn compute_join_selectivities(&mut self) -> Result<()> {
         // Analyze co-occurrence of predicates to estimate join selectivity
-        let predicates: Vec<_> = self.stats.predicate_frequency.keys().cloned().collect();
+        let predicates: Vec<_> = self.stats.cardinalities.keys()
+            .filter(|k| k.starts_with("predicate:"))
+            .cloned().collect();
 
         for i in 0..predicates.len() {
             for j in i + 1..predicates.len() {
@@ -439,17 +441,19 @@ impl StatisticsCollector {
                 // Estimate selectivity based on frequencies
                 let freq1 = self
                     .stats
-                    .predicate_frequency
+                    .cardinalities
                     .get(pred1)
                     .copied()
                     .unwrap_or(1) as f64;
                 let freq2 = self
                     .stats
-                    .predicate_frequency
+                    .cardinalities
                     .get(pred2)
                     .copied()
                     .unwrap_or(1) as f64;
-                let total = self.stats.predicate_frequency.values().sum::<usize>() as f64;
+                let total = self.stats.cardinalities.values()
+                    .filter(|_| true) // All cardinalities contribute to total
+                    .sum::<usize>() as f64;
 
                 let selectivity = (freq1.min(freq2) / total).sqrt();
 

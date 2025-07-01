@@ -1067,6 +1067,24 @@ impl SwrlEngine {
             Term::Variable(name) => SwrlArgument::Variable(name.clone()),
             Term::Constant(name) => SwrlArgument::Individual(name.clone()),
             Term::Literal(value) => SwrlArgument::Literal(value.clone()),
+            Term::Function { name, args } => {
+                // For functions, convert to a complex literal representation
+                let arg_strs: Vec<String> = args
+                    .iter()
+                    .map(|arg| match arg {
+                        Term::Variable(v) => format!("?{}", v),
+                        Term::Constant(c) => c.clone(),
+                        Term::Literal(l) => l.clone(),
+                        Term::Function {
+                            name: fn_name,
+                            args: fn_args,
+                        } => {
+                            format!("{}({} args)", fn_name, fn_args.len())
+                        }
+                    })
+                    .collect();
+                SwrlArgument::Literal(format!("{}({})", name, arg_strs.join(",")))
+            }
         }
     }
 

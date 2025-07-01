@@ -537,7 +537,7 @@ impl EnhancedBatchValidationEngine {
     /// Validate a large dataset with comprehensive monitoring and error recovery
     pub fn validate_large_dataset<I>(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraints: Vec<Constraint>,
         node_iterator: I,
     ) -> Result<EnhancedBatchValidationResult>
@@ -650,7 +650,7 @@ impl EnhancedBatchValidationEngine {
     /// Process a single batch with error recovery
     fn process_batch_with_recovery(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraints: &[Constraint],
         nodes: &[Term],
         batch_index: usize,
@@ -726,7 +726,7 @@ impl EnhancedBatchValidationEngine {
     /// Process a batch internally
     fn process_batch_internal(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraints: &[Constraint],
         nodes: &[Term],
         batch_index: usize,
@@ -756,7 +756,7 @@ impl EnhancedBatchValidationEngine {
                             error_type: BatchErrorType::ConstraintError,
                             message: error.to_string(),
                             node: Some(node.clone()),
-                            shape: Some(context.shape_id),
+                            shape: Some(context.shape_id.clone()),
                             constraint: Some(format!("{:?}", constraint)),
                             timestamp: Instant::now(),
                             batch_index,
@@ -782,7 +782,7 @@ impl EnhancedBatchValidationEngine {
     /// Process nodes individually when batch processing fails
     fn process_nodes_individually(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraints: &[Constraint],
         nodes: &[Term],
         batch_index: usize,
@@ -808,7 +808,7 @@ impl EnhancedBatchValidationEngine {
     /// Process a single node
     fn process_single_node(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraints: &[Constraint],
         node: &Term,
         batch_index: usize,

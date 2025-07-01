@@ -302,7 +302,23 @@ impl MemoryPool {
     pub fn allocate(&mut self, size: usize) -> Result<*mut u8> {
         self.stats.total_allocations += 1;
 
-        let pool = self.select_pool(size);
+        // Determine pool type and capacity first
+        let pool_capacity = self.pool_capacity(size);
+
+        // Check if we can find an available object
+        let pool_index = if size <= self.limits.small_size_threshold {
+            0
+        } else if size <= self.limits.medium_size_threshold {
+            1
+        } else {
+            2
+        };
+
+        let pool = match pool_index {
+            0 => &mut self.small_pool,
+            1 => &mut self.medium_pool,
+            _ => &mut self.large_pool,
+        };
 
         // Try to find an available object in the pool
         for obj in pool.iter_mut() {
@@ -321,7 +337,7 @@ impl MemoryPool {
         }
 
         // No available object found, create a new one if pool not full
-        if pool.len() < self.pool_capacity(size) {
+        if pool.len() < pool_capacity {
             let mut data = Vec::with_capacity(size);
             data.resize(size, 0);
 
@@ -996,11 +1012,6 @@ pub mod compact {
 }
 
 // Implement required error conversions
-impl From<std::io::Error> for ShaclError {
-    fn from(err: std::io::Error) -> Self {
-        ShaclError::Io(err)
-    }
-}
 
 #[cfg(test)]
 mod tests {

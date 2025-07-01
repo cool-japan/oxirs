@@ -1,6 +1,8 @@
 //! Performance optimization functionality
 
-use crate::performance_analytics::{config::PerformanceOptimizationConfig, types::OptimizationRecommendation};
+use crate::performance_analytics::{
+    config::PerformanceOptimizationConfig, types::OptimizationRecommendation,
+};
 
 /// Performance optimizer
 #[derive(Debug)]

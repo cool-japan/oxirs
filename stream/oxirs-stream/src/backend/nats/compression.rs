@@ -142,7 +142,7 @@ impl CompressionManager {
 
         // Select optimal algorithm
         let algorithm = self.select_optimal_algorithm(data);
-        
+
         let start_time = std::time::Instant::now();
         let compressed_data = self.compress_with_algorithm(data, &algorithm)?;
         let compression_time = start_time.elapsed();
@@ -171,8 +171,10 @@ impl CompressionManager {
         }
 
         // Cache result
-        if self.config.cache_enabled && self.compression_cache.len() < self.config.cache_size_limit {
-            self.compression_cache.insert(data.to_vec(), (algorithm.clone(), compressed_data.clone()));
+        if self.config.cache_enabled && self.compression_cache.len() < self.config.cache_size_limit
+        {
+            self.compression_cache
+                .insert(data.to_vec(), (algorithm.clone(), compressed_data.clone()));
         }
 
         // Periodic benchmarking
@@ -181,8 +183,13 @@ impl CompressionManager {
             self.last_benchmark = std::time::Instant::now();
         }
 
-        info!("Compressed {} bytes to {} bytes using {:?} (ratio: {:.2})", 
-              data.len(), compressed_data.len(), algorithm, stats.compression_ratio);
+        info!(
+            "Compressed {} bytes to {} bytes using {:?} (ratio: {:.2})",
+            data.len(),
+            compressed_data.len(),
+            algorithm,
+            stats.compression_ratio
+        );
 
         Ok((compressed_data, stats))
     }
@@ -217,11 +224,11 @@ impl CompressionManager {
     /// Heuristic-based algorithm selection
     fn heuristic_algorithm_selection(&self, data: &[u8]) -> CompressionAlgorithm {
         let size = data.len();
-        
+
         // Analyze data characteristics
         let entropy = self.calculate_entropy(data);
         let repetition_factor = self.calculate_repetition_factor(data);
-        
+
         // Size-based selection
         if size < 1024 {
             CompressionAlgorithm::Lz4 // Fast for small data
@@ -279,15 +286,22 @@ impl CompressionManager {
     }
 
     /// Compress with specific algorithm
-    fn compress_with_algorithm(&self, data: &[u8], algorithm: &CompressionAlgorithm) -> Result<Vec<u8>> {
+    fn compress_with_algorithm(
+        &self,
+        data: &[u8],
+        algorithm: &CompressionAlgorithm,
+    ) -> Result<Vec<u8>> {
         match algorithm {
             CompressionAlgorithm::None => Ok(data.to_vec()),
-            
+
             #[cfg(feature = "compression")]
             CompressionAlgorithm::Gzip => {
-                let mut encoder = GzEncoder::new(Vec::new(), GzCompression::new(self.config.level as u32));
+                let mut encoder =
+                    GzEncoder::new(Vec::new(), GzCompression::new(self.config.level as u32));
                 encoder.write_all(data)?;
-                encoder.finish().map_err(|e| anyhow!("Gzip compression failed: {}", e))
+                encoder
+                    .finish()
+                    .map_err(|e| anyhow!("Gzip compression failed: {}", e))
             }
 
             #[cfg(feature = "compression")]
@@ -304,14 +318,18 @@ impl CompressionManager {
             CompressionAlgorithm::Snappy => {
                 let mut encoder = SnapEncoder::new(Vec::new());
                 encoder.write_all(data)?;
-                encoder.into_inner().map_err(|e| anyhow!("Snappy compression failed: {}", e))
+                encoder
+                    .into_inner()
+                    .map_err(|e| anyhow!("Snappy compression failed: {}", e))
             }
 
             #[cfg(feature = "compression")]
             CompressionAlgorithm::Zstd => {
                 let mut encoder = ZstdEncoder::new(Vec::new(), self.config.level as i32)?;
                 encoder.write_all(data)?;
-                encoder.finish().map_err(|e| anyhow!("Zstd compression failed: {}", e))
+                encoder
+                    .finish()
+                    .map_err(|e| anyhow!("Zstd compression failed: {}", e))
             }
 
             #[cfg(not(feature = "compression"))]
@@ -325,7 +343,11 @@ impl CompressionManager {
     }
 
     /// Decompress with specific algorithm
-    fn decompress_with_algorithm(&self, data: &[u8], algorithm: &CompressionAlgorithm) -> Result<Vec<u8>> {
+    fn decompress_with_algorithm(
+        &self,
+        data: &[u8],
+        algorithm: &CompressionAlgorithm,
+    ) -> Result<Vec<u8>> {
         match algorithm {
             CompressionAlgorithm::None => Ok(data.to_vec()),
 
@@ -380,14 +402,15 @@ impl CompressionManager {
 
         let bytes_per_ms = stats.original_size as f64 / total_time as f64;
         let compression_benefit = stats.compression_ratio;
-        
+
         // Combine throughput and compression benefit
         (bytes_per_ms * compression_benefit).min(1.0)
     }
 
     /// Update algorithm metrics
     fn update_metrics(&mut self, algorithm: &CompressionAlgorithm, stats: &CompressionStats) {
-        let metrics = self.algorithm_metrics
+        let metrics = self
+            .algorithm_metrics
             .entry(algorithm.clone())
             .or_insert_with(|| AlgorithmMetrics {
                 total_compressions: 0,
@@ -406,17 +429,24 @@ impl CompressionManager {
         metrics.total_decompression_time_ms += stats.decompression_time_ms;
 
         // Update averages
-        metrics.average_ratio = metrics.total_original_bytes as f64 / metrics.total_compressed_bytes as f64;
-        
-        let total_time_s = (metrics.total_compression_time_ms + metrics.total_decompression_time_ms) as f64 / 1000.0;
+        metrics.average_ratio =
+            metrics.total_original_bytes as f64 / metrics.total_compressed_bytes as f64;
+
+        let total_time_s = (metrics.total_compression_time_ms + metrics.total_decompression_time_ms)
+            as f64
+            / 1000.0;
         let total_mb = metrics.total_original_bytes as f64 / (1024.0 * 1024.0);
-        metrics.average_speed_mbps = if total_time_s > 0.0 { total_mb / total_time_s } else { 0.0 };
+        metrics.average_speed_mbps = if total_time_s > 0.0 {
+            total_mb / total_time_s
+        } else {
+            0.0
+        };
     }
 
     /// Run performance benchmark
     fn run_benchmark(&self, sample_data: &[u8]) {
         info!("Running compression algorithm benchmark");
-        
+
         let algorithms = vec![
             CompressionAlgorithm::Gzip,
             CompressionAlgorithm::Lz4,
@@ -473,7 +503,7 @@ impl CompressionMLModel {
     fn predict_best_algorithm(&self, data: &[u8]) -> Option<CompressionAlgorithm> {
         // Simple algorithm selection based on learned scores and data size
         let size = data.len();
-        
+
         // Check size-based thresholds first
         for (threshold, algorithm) in &self.size_based_thresholds {
             if size <= *threshold {
@@ -491,9 +521,10 @@ impl CompressionMLModel {
     fn update(&mut self, algorithm: &CompressionAlgorithm, _data: &[u8], stats: &CompressionStats) {
         // Update algorithm score based on performance
         let performance_score = stats.cpu_efficiency * stats.compression_ratio;
-        
+
         if let Some(current_score) = self.algorithm_scores.get_mut(algorithm) {
-            *current_score = *current_score * (1.0 - self.learning_rate) + performance_score * self.learning_rate;
+            *current_score = *current_score * (1.0 - self.learning_rate)
+                + performance_score * self.learning_rate;
         }
 
         self.update_count += 1;
@@ -528,7 +559,7 @@ mod tests {
     fn test_compression_manager_creation() {
         let config = CompressionConfig::default();
         let manager = CompressionManager::new(config);
-        
+
         assert_eq!(manager.compression_cache.len(), 0);
     }
 
@@ -536,12 +567,12 @@ mod tests {
     fn test_entropy_calculation() {
         let config = CompressionConfig::default();
         let manager = CompressionManager::new(config);
-        
+
         // Test with uniform data (high entropy)
         let uniform_data = vec![0u8; 100];
         let entropy = manager.calculate_entropy(&uniform_data);
         assert!(entropy < 0.1); // Should be very low entropy
-        
+
         // Test with random data
         let random_data: Vec<u8> = (0..100).map(|i| (i * 7) as u8).collect();
         let entropy2 = manager.calculate_entropy(&random_data);
@@ -552,11 +583,11 @@ mod tests {
     fn test_repetition_factor() {
         let config = CompressionConfig::default();
         let manager = CompressionManager::new(config);
-        
+
         let repetitive_data = vec![1u8, 1, 2, 2, 3, 3];
         let factor = manager.calculate_repetition_factor(&repetitive_data);
         assert!(factor > 0.0);
-        
+
         let non_repetitive_data = vec![1u8, 2, 3, 4, 5, 6];
         let factor2 = manager.calculate_repetition_factor(&non_repetitive_data);
         assert_eq!(factor2, 0.0);
@@ -566,11 +597,11 @@ mod tests {
     fn test_algorithm_selection() {
         let config = CompressionConfig::default();
         let manager = CompressionManager::new(config);
-        
+
         let small_data = vec![1u8; 100];
         let algorithm = manager.heuristic_algorithm_selection(&small_data);
         assert_eq!(algorithm, CompressionAlgorithm::Lz4);
-        
+
         let large_data = vec![1u8; 100000];
         let algorithm2 = manager.heuristic_algorithm_selection(&large_data);
         assert_eq!(algorithm2, CompressionAlgorithm::Zstd); // High repetition

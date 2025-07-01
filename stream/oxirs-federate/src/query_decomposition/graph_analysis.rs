@@ -8,13 +8,14 @@ use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::debug;
 
-use crate::planner::{QueryInfo, TriplePattern};
+use crate::planner::{TriplePattern};
+use crate::planner::planning::types::QueryInfo as PlanningQueryInfo;
 
 use super::types::*;
 
 impl QueryDecomposer {
     /// Build a graph representation of the query
-    pub fn build_query_graph(&self, query_info: &QueryInfo) -> Result<QueryGraph> {
+    pub fn build_query_graph(&self, query_info: &PlanningQueryInfo) -> Result<QueryGraph> {
         let mut graph = QueryGraph::new();
         let mut variable_nodes: HashMap<String, NodeIndex> = HashMap::new();
         let mut pattern_nodes: Vec<NodeIndex> = Vec::new();

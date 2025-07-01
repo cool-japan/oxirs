@@ -336,7 +336,7 @@ impl Timeline {
             connections: Vec::new(),
         }
     }
-    
+
     /// Check if timeline is stable
     pub fn is_stable(&self) -> bool {
         self.stability > 0.8 && self.causal_consistency > 0.8

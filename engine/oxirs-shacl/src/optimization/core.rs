@@ -315,7 +315,7 @@ impl BatchConstraintEvaluator {
     /// Evaluate multiple constraints in batches
     pub fn evaluate_batch(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraints_with_contexts: Vec<(Constraint, ConstraintContext)>,
     ) -> Result<Vec<ConstraintEvaluationResult>> {
         let mut results = Vec::with_capacity(constraints_with_contexts.len());
@@ -336,7 +336,7 @@ impl BatchConstraintEvaluator {
     /// Evaluate constraints sequentially with caching
     fn evaluate_batch_sequential(
         &self,
-        store: &Store,
+        store: &dyn Store,
         batch: &[(Constraint, ConstraintContext)],
     ) -> Result<Vec<ConstraintEvaluationResult>> {
         let mut results = Vec::new();
@@ -364,7 +364,7 @@ impl BatchConstraintEvaluator {
     /// Evaluate constraints in parallel (when safe to do so)
     fn evaluate_batch_parallel(
         &self,
-        store: &Store,
+        store: &dyn Store,
         batch: &[(Constraint, ConstraintContext)],
     ) -> Result<Vec<ConstraintEvaluationResult>> {
         // For parallel evaluation, we need to be careful about thread safety
@@ -602,7 +602,7 @@ impl ValidationOptimizationEngine {
     /// Optimize and evaluate a set of constraints
     pub fn optimize_and_evaluate(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         constraints_with_contexts: Vec<(Constraint, ConstraintContext)>,
     ) -> Result<Vec<ConstraintEvaluationResult>> {
         let start_time = Instant::now();
@@ -683,7 +683,7 @@ impl ValidationOptimizationEngine {
     /// Evaluate constraints without caching (for comparison)
     fn evaluate_without_cache(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraints_with_contexts: Vec<(Constraint, ConstraintContext)>,
     ) -> Result<Vec<ConstraintEvaluationResult>> {
         let mut results = Vec::new();
@@ -773,7 +773,7 @@ impl AdvancedConstraintEvaluator {
     /// Evaluate constraints with advanced optimizations
     pub fn evaluate_optimized(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraints: Vec<Constraint>,
         context: ConstraintContext,
     ) -> Result<Vec<ConstraintEvaluationResult>> {
@@ -928,7 +928,7 @@ impl StreamingValidationEngine {
     /// Validate large dataset in streaming fashion
     pub fn validate_streaming<I>(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraints: Vec<Constraint>,
         node_stream: I,
     ) -> Result<StreamingValidationResult>
@@ -981,7 +981,7 @@ impl StreamingValidationEngine {
     /// Process a single batch of nodes
     fn process_batch(
         &self,
-        store: &Store,
+        store: &dyn Store,
         constraints: &[Constraint],
         nodes: &[Term],
     ) -> Result<BatchValidationResult> {
@@ -1122,7 +1122,7 @@ impl IncrementalValidationEngine {
     /// Validate only changed nodes since last validation
     pub fn validate_incremental(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         constraints: Vec<Constraint>,
         nodes: &[Term],
         force_revalidate: bool,
@@ -1195,7 +1195,7 @@ impl IncrementalValidationEngine {
     }
 
     /// Hash node properties for change detection with comprehensive RDF triple analysis
-    fn hash_node_properties(&self, store: &Store, node: &Term) -> Result<u64> {
+    fn hash_node_properties(&self, store: &dyn Store, node: &Term) -> Result<u64> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::Hash;
         let mut hasher = DefaultHasher::new();
@@ -1235,7 +1235,7 @@ impl IncrementalValidationEngine {
     /// Query store for all triples where the node is the subject
     fn query_node_triples_as_subject(
         &self,
-        store: &Store,
+        store: &dyn Store,
         node: &Term,
     ) -> Result<Vec<oxirs_core::model::Triple>> {
         use oxirs_core::model::Quad;
@@ -1275,7 +1275,7 @@ impl IncrementalValidationEngine {
     /// Query store for all triples where the node is the object
     fn query_node_triples_as_object(
         &self,
-        store: &Store,
+        store: &dyn Store,
         node: &Term,
     ) -> Result<Vec<oxirs_core::model::Triple>> {
         use oxirs_core::model::Quad;
@@ -1330,7 +1330,7 @@ impl IncrementalValidationEngine {
     /// Compute detailed change delta between current state and cached snapshots
     pub fn compute_change_delta(
         &self,
-        store: &Store,
+        store: &dyn Store,
         current_constraints: &[Constraint],
         nodes: &[Term],
     ) -> Result<ChangesDelta> {
@@ -1521,7 +1521,11 @@ impl IncrementalValidationEngine {
     }
 
     /// Compute specific property changes for a node (simplified implementation)
-    fn compute_property_changes(&self, store: &Store, node: &Term) -> Result<Vec<PropertyChange>> {
+    fn compute_property_changes(
+        &self,
+        store: &dyn Store,
+        node: &Term,
+    ) -> Result<Vec<PropertyChange>> {
         // This is a simplified implementation that could be enhanced with:
         // 1. Actual before/after triple comparison
         // 2. Property-specific change detection

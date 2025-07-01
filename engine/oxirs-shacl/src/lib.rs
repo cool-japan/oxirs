@@ -529,6 +529,8 @@ use oxirs_core::{
     OxirsError, Store,
 };
 
+pub use crate::optimization::integration::ValidationStrategy;
+
 pub mod analytics;
 pub mod builders;
 pub mod constraints;
@@ -613,13 +615,13 @@ pub enum ShaclError {
     Core(#[from] OxirsError),
 
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(String),
 
     #[error("Regex error: {0}")]
     Regex(#[from] regex::Error),
 
     #[error("JSON error: {0}")]
-    Json(#[from] serde_json::Error),
+    Json(String),
 
     #[error("IRI resolution error: {0}")]
     IriResolution(#[from] crate::iri_resolver::IriResolutionError),
@@ -647,6 +649,18 @@ pub enum ShaclError {
 
     #[error("Async operation error: {0}")]
     AsyncOperation(String),
+}
+
+impl From<serde_json::Error> for ShaclError {
+    fn from(err: serde_json::Error) -> Self {
+        ShaclError::Json(err.to_string())
+    }
+}
+
+impl From<std::io::Error> for ShaclError {
+    fn from(err: std::io::Error) -> Self {
+        ShaclError::Io(err.to_string())
+    }
 }
 
 /// Result type alias for SHACL operations
@@ -918,7 +932,7 @@ impl Default for ShapeMetadata {
 }
 
 /// Violation severity levels
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Severity {
     Info,
     Warning,
@@ -967,6 +981,9 @@ pub struct ValidationConfig {
 
     /// Custom validation context
     pub context: HashMap<String, String>,
+
+    /// Validation strategy
+    pub strategy: ValidationStrategy,
 }
 
 impl Default for ValidationConfig {
@@ -980,7 +997,22 @@ impl Default for ValidationConfig {
             timeout_ms: None,
             parallel: false,
             context: HashMap::new(),
+            strategy: ValidationStrategy::default(),
         }
+    }
+}
+
+impl ValidationConfig {
+    /// Set the validation strategy
+    pub fn with_strategy(mut self, strategy: ValidationStrategy) -> Self {
+        self.strategy = strategy;
+        self
+    }
+
+    /// Enable inference during validation
+    pub fn with_inference_enabled(mut self, enabled: bool) -> Self {
+        self.context.insert("inference_enabled".to_string(), enabled.to_string());
+        self
     }
 }
 
@@ -1079,7 +1111,7 @@ impl Validator {
     /// Load shapes from an RDF graph in a store
     pub fn load_shapes_from_store(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<usize> {
         let mut parser = shapes::ShapeParser::new();
@@ -1114,7 +1146,7 @@ impl Validator {
     /// Validate data in a store against all loaded shapes
     pub fn validate_store(
         &self,
-        store: &Store,
+        store: &dyn Store,
         config: Option<ValidationConfig>,
     ) -> Result<ValidationReport> {
         let config = config.unwrap_or_else(|| self.config.clone());
@@ -1125,7 +1157,7 @@ impl Validator {
     /// Validate specific nodes against a specific shape
     pub fn validate_nodes(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shape_id: &ShapeId,
         nodes: &[Term],
         config: Option<ValidationConfig>,
@@ -1142,7 +1174,7 @@ impl Validator {
     /// Validate a single node against a specific shape
     pub fn validate_node(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shape_id: &ShapeId,
         node: &Term,
         config: Option<ValidationConfig>,

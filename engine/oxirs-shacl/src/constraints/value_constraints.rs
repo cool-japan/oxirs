@@ -106,7 +106,7 @@ impl ConstraintValidator for ClassConstraint {
 impl ConstraintEvaluator for ClassConstraint {
     fn evaluate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         // For each value, check if it's an instance of the required class
@@ -135,7 +135,7 @@ impl ConstraintEvaluator for ClassConstraint {
 }
 
 impl ClassConstraint {
-    fn check_class_membership(&self, store: &Store, value: &Term) -> Result<bool> {
+    fn check_class_membership(&self, store: &dyn Store, value: &Term) -> Result<bool> {
         // Check if the value is an instance of the class
         // This involves checking for rdf:type triples and possibly rdfs:subClassOf inference
         match value {
@@ -228,7 +228,7 @@ impl ConstraintValidator for DatatypeConstraint {
 impl ConstraintEvaluator for DatatypeConstraint {
     fn evaluate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         // For each value, check if it has the required datatype
@@ -346,7 +346,7 @@ impl ConstraintValidator for NodeKindConstraint {
 impl ConstraintEvaluator for NodeKindConstraint {
     fn evaluate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         // For each value, check if it matches the required node kind

@@ -5,12 +5,8 @@
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::performance_analytics::{
-    alerts::AlertEngine,
-    config::PerformanceAnalyticsConfig,
-    dashboard::DashboardProvider,
-    metrics::MetricsCollector,
-    monitoring::RealTimeMonitor,
-    optimization::PerformanceOptimizer,
+    alerts::AlertEngine, config::PerformanceAnalyticsConfig, dashboard::DashboardProvider,
+    metrics::MetricsCollector, monitoring::RealTimeMonitor, optimization::PerformanceOptimizer,
     types::PerformanceStatistics,
 };
 
@@ -31,13 +27,13 @@ pub struct PerformanceAnalyticsEngine {
 pub struct PerformanceAnalyticsStatistics {
     /// Current performance statistics
     pub current_stats: PerformanceStatistics,
-    
+
     /// Total monitoring sessions
     pub total_sessions: u64,
-    
+
     /// Total alerts generated
     pub total_alerts: u64,
-    
+
     /// Total optimizations performed
     pub total_optimizations: u64,
 }

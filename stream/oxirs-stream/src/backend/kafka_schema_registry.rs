@@ -242,7 +242,7 @@ impl SchemaRegistryClient {
                     .ok_or_else(|| anyhow!("Missing schema in response"))?
                     .to_string(),
                 schema_type: SchemaType::Json, // Default, should be parsed from response
-                subject: String::new(),         // Subject needs to be fetched separately
+                subject: String::new(),        // Subject needs to be fetched separately
                 references: vec![],
             };
 
@@ -290,8 +290,7 @@ impl SchemaRegistryClient {
             let metadata = SchemaMetadata {
                 id: result["id"]
                     .as_u64()
-                    .ok_or_else(|| anyhow!("Missing schema ID"))?
-                    as u32,
+                    .ok_or_else(|| anyhow!("Missing schema ID"))? as u32,
                 version: result["version"]
                     .as_u64()
                     .ok_or_else(|| anyhow!("Missing schema version"))?
@@ -368,9 +367,7 @@ impl SchemaRegistryClient {
                 .await
                 .map_err(|e| anyhow!("Failed to parse response: {}", e))?;
 
-            Ok(result["is_compatible"]
-                .as_bool()
-                .unwrap_or(false))
+            Ok(result["is_compatible"].as_bool().unwrap_or(false))
         } else {
             Err(anyhow!(
                 "Failed to check compatibility: {}",
@@ -622,7 +619,10 @@ impl RdfEventSchemas {
             )
             .await?;
 
-        info!("Registered all RDF event schemas with prefix: {}", subject_prefix);
+        info!(
+            "Registered all RDF event schemas with prefix: {}",
+            subject_prefix
+        );
         Ok(())
     }
 }
@@ -677,9 +677,11 @@ mod tests {
 
         let sparql_schema = RdfEventSchemas::sparql_update_schema();
         let parsed: serde_json::Value = serde_json::from_str(sparql_schema).unwrap();
-        assert!(parsed["properties"]["data"]["properties"]["operation_type"]["enum"]
-            .as_array()
-            .unwrap()
-            .contains(&serde_json::Value::String("INSERT".to_string())));
+        assert!(
+            parsed["properties"]["data"]["properties"]["operation_type"]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::Value::String("INSERT".to_string()))
+        );
     }
 }

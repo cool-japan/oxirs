@@ -12,9 +12,9 @@ use crate::embeddings::{EmbeddingManager, EmbeddingStrategy};
 use crate::enhanced_performance_monitoring::{
     AlertSeverity, EnhancedPerformanceMonitor, QueryType,
 };
-use crate::index::{VectorId, VectorIndex};
 use crate::similarity::SimilarityResult;
 use crate::storage_optimizations::{StorageUtils, VectorBlock};
+use crate::{index::VectorIndex, VectorId};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock as ParkingRwLock;
@@ -365,59 +365,73 @@ impl RealTimeVectorUpdater {
         stats: &Arc<RwLock<UpdateStats>>,
         config: &RealTimeConfig,
     ) -> Result<()> {
-        let mut queue_guard = queue.lock().await;
-        let mut processor_guard = processor.lock().await;
+        // Extract operations from queue/processor in a separate scope
+        let operations = {
+            let mut queue_guard = queue.lock().await;
+            let mut processor_guard = processor.lock().await;
 
-        // Move operations from queue to batch
-        let mut batch_size = processor_guard.pending_batch.len();
-        while batch_size < config.max_batch_size && !queue_guard.is_empty() {
-            if let Some(operation) = queue_guard.pop_front() {
-                processor_guard.pending_batch.push(operation);
-                batch_size += 1;
-            }
-        }
-
-        // Process batch if not empty
-        if !processor_guard.pending_batch.is_empty() {
-            let start_time = Instant::now();
-
-            // Apply operations to index
-            let operations = std::mem::take(&mut processor_guard.pending_batch);
-            drop(queue_guard);
-            drop(processor_guard);
-
-            let mut index_guard = index.write().unwrap();
-            let mut successful_ops = 0;
-            let mut failed_ops = 0;
-
-            for operation in &operations {
-                match Self::apply_operation(&mut *index_guard, operation) {
-                    Ok(_) => successful_ops += 1,
-                    Err(_) => failed_ops += 1,
+            // Move operations from queue to batch
+            let mut batch_size = processor_guard.pending_batch.len();
+            while batch_size < config.max_batch_size && !queue_guard.is_empty() {
+                if let Some(operation) = queue_guard.pop_front() {
+                    processor_guard.pending_batch.push(operation);
+                    batch_size += 1;
                 }
             }
 
-            drop(index_guard);
+            // Extract batch operations if not empty
+            if !processor_guard.pending_batch.is_empty() {
+                std::mem::take(&mut processor_guard.pending_batch)
+            } else {
+                return Ok(());
+            }
+        }; // Guards are dropped here
 
-            // Update statistics
-            let processing_time = start_time.elapsed();
-            let mut stats_guard = stats.write().unwrap();
-            stats_guard.total_batches += 1;
-            stats_guard.total_updates += successful_ops;
-            stats_guard.failed_updates += failed_ops;
-            stats_guard.average_batch_size = (stats_guard.average_batch_size
-                * (stats_guard.total_batches - 1) as f64
-                + operations.len() as f64)
-                / stats_guard.total_batches as f64;
+        // Process operations and collect results
+        let start_time = Instant::now();
+        let (successful_ops, failed_ops) = {
+            let index_guard = index.write();
+            if let Ok(mut index_ref) = index_guard {
+                let mut successful = 0;
+                let mut failed = 0;
 
-            // Update average processing time
-            let total_time = stats_guard.average_processing_time.as_nanos() as f64
-                * (stats_guard.total_batches - 1) as f64
-                + processing_time.as_nanos() as f64;
-            stats_guard.average_processing_time =
-                Duration::from_nanos((total_time / stats_guard.total_batches as f64) as u64);
+                for operation in &operations {
+                    match Self::apply_operation(&mut *index_ref, operation) {
+                        Ok(_) => successful += 1,
+                        Err(_) => failed += 1,
+                    }
+                }
+                (successful, failed)
+            } else {
+                return Err(anyhow!("Failed to acquire index lock"));
+            }
+        }; // index_guard is dropped here
 
-            // Update processor state
+        let processing_time = start_time.elapsed();
+        
+        // Update statistics without holding lock across await
+        {
+            let stats_guard = stats.write();
+            if let Ok(mut stats_ref) = stats_guard {
+                stats_ref.total_batches += 1;
+                stats_ref.total_updates += successful_ops;
+                stats_ref.failed_updates += failed_ops;
+                stats_ref.average_batch_size = (stats_ref.average_batch_size
+                    * (stats_ref.total_batches - 1) as f64
+                    + operations.len() as f64)
+                    / stats_ref.total_batches as f64;
+
+                // Update average processing time
+                let total_time = stats_ref.average_processing_time.as_nanos() as f64
+                    * (stats_ref.total_batches - 1) as f64
+                    + processing_time.as_nanos() as f64;
+                stats_ref.average_processing_time =
+                    Duration::from_nanos((total_time / stats_ref.total_batches as f64) as u64);
+            }
+        }; // stats_guard is dropped here
+
+        // Update processor state - separate async scope
+        {
             let mut processor_guard = processor.lock().await;
             processor_guard.total_updates_since_rebuild += successful_ops as usize;
         }
@@ -555,8 +569,21 @@ impl RealTimeVectorSearch {
 
         // Perform search
         let index = self.updater.index.read().unwrap();
-        let results = index.search(query_vector, k)?;
+        // Create Vector from query slice
+        let query_vec = crate::Vector::new(query_vector.to_vec());
+        let search_results = index.search_knn(&query_vec, k)?;
         drop(index);
+
+        // Convert to SimilarityResult
+        let results: Vec<crate::similarity::SimilarityResult> = search_results
+            .into_iter()
+            .map(|(uri, similarity)| crate::similarity::SimilarityResult {
+                uri,
+                similarity,
+                metrics: std::collections::HashMap::new(),
+                metadata: None,
+            })
+            .collect();
 
         // Cache results
         self.cache_results(query_hash, &results);

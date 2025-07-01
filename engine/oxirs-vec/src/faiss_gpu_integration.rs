@@ -14,7 +14,7 @@
 use crate::{
     faiss_integration::{FaissConfig, FaissIndex, FaissSearchParams},
     faiss_native_integration::{NativeFaissConfig, NativeFaissIndex},
-    gpu::{GpuAccelerator, GpuBuffer, GpuConfig, GpuMemoryPool},
+    gpu::{GpuAccelerator, GpuBuffer, GpuConfig, GpuExecutionConfig, GpuMemoryPool},
     similarity::SimilarityMetric,
     Vector, VectorPrecision,
 };
@@ -210,9 +210,9 @@ pub struct FaissGpuIndex {
     /// GPU-specific configuration
     gpu_config: FaissGpuConfig,
     /// GPU runtime for operations
-    gpu_runtime: Arc<GpuRuntime>,
+    gpu_runtime: Arc<GpuExecutionConfig>,
     /// GPU memory pools per device
-    memory_pools: Arc<RwLock<HashMap<i32, GpuMemoryPool>>>,
+    memory_pools: Arc<RwLock<HashMap<i32, FaissGpuMemoryPool>>>,
     /// Compute streams per device
     compute_streams: Arc<RwLock<HashMap<i32, Vec<GpuComputeStream>>>>,
     /// Performance statistics
@@ -227,7 +227,7 @@ pub struct FaissGpuIndex {
 
 /// GPU memory pool for efficient allocation
 #[derive(Debug)]
-pub struct GpuMemoryPool {
+pub struct FaissGpuMemoryPool {
     /// Device ID
     pub device_id: i32,
     /// Total pool size
@@ -243,7 +243,7 @@ pub struct GpuMemoryPool {
 }
 
 /// GPU memory block
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GpuMemoryBlock {
     /// Block address on GPU
     pub gpu_address: usize,
@@ -255,6 +255,18 @@ pub struct GpuMemoryBlock {
     pub ref_count: AtomicUsize,
     /// Block type
     pub block_type: MemoryBlockType,
+}
+
+impl Clone for GpuMemoryBlock {
+    fn clone(&self) -> Self {
+        Self {
+            gpu_address: self.gpu_address,
+            size: self.size,
+            allocated_at: self.allocated_at,
+            ref_count: AtomicUsize::new(self.ref_count.load(Ordering::Relaxed)),
+            block_type: self.block_type,
+        }
+    }
 }
 
 /// Memory block types
@@ -290,7 +302,7 @@ pub struct GpuComputeStream {
 }
 
 /// GPU operation
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GpuOperation {
     /// Operation ID
     pub id: String,
@@ -547,7 +559,7 @@ pub struct AllocationStatistics {
 }
 
 /// Cached result for performance optimization
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CachedResult {
     /// Result data
     pub data: GpuResultData,
@@ -557,6 +569,17 @@ pub struct CachedResult {
     pub hit_count: AtomicUsize,
     /// Result size
     pub size: usize,
+}
+
+impl Clone for CachedResult {
+    fn clone(&self) -> Self {
+        Self {
+            data: self.data.clone(),
+            timestamp: self.timestamp,
+            hit_count: AtomicUsize::new(self.hit_count.load(Ordering::Acquire)),
+            size: self.size,
+        }
+    }
 }
 
 /// GPU load balancer for multi-GPU operations
@@ -608,13 +631,33 @@ impl FaissGpuIndex {
         let span = span!(Level::INFO, "faiss_gpu_index_new");
         let _enter = span.enter();
 
-        // Initialize GPU runtime
-        let gpu_runtime = Arc::new(GpuAccelerator::new(gpu_config.clone())?);
+        // Convert FaissGpuConfig to GpuConfig for the accelerator
+        let base_gpu_config = crate::gpu::GpuConfig {
+            device_id: gpu_config.device_ids.first().copied().unwrap_or(0),
+            enable_mixed_precision: true,
+            enable_tensor_cores: true,
+            batch_size: 1024,
+            memory_pool_size: gpu_config.memory_per_device,
+            stream_count: gpu_config.stream_config.streams_per_device,
+            enable_peer_access: gpu_config.enable_multi_gpu,
+            enable_unified_memory: matches!(gpu_config.memory_strategy, GpuMemoryStrategy::Unified),
+            enable_async_execution: true,
+            enable_multi_gpu: gpu_config.enable_multi_gpu,
+            preferred_gpu_ids: gpu_config.device_ids.clone(),
+            dynamic_batch_sizing: true,
+            enable_memory_compression: false,
+            kernel_cache_size: 1024 * 1024,
+            optimization_level: crate::gpu::OptimizationLevel::Performance,
+            precision_mode: crate::gpu::PrecisionMode::Mixed,
+        };
+
+        // Initialize GPU execution configuration
+        let gpu_runtime = Arc::new(GpuExecutionConfig::default());
 
         // Initialize memory pools for each device
         let mut memory_pools = HashMap::new();
         for &device_id in &gpu_config.device_ids {
-            let pool = GpuMemoryPool::new(device_id, gpu_config.memory_per_device)?;
+            let pool = FaissGpuMemoryPool::new(device_id, gpu_config.memory_per_device)?;
             memory_pools.insert(device_id, pool);
         }
 
@@ -629,6 +672,7 @@ impl FaissGpuIndex {
         let load_balancer =
             GpuLoadBalancer::new(&gpu_config.device_ids, LoadBalancingStrategy::Hybrid);
 
+        let device_count = gpu_config.device_ids.len();
         let index = Self {
             faiss_config,
             gpu_config,
@@ -646,7 +690,7 @@ impl FaissGpuIndex {
 
         info!(
             "Created GPU-accelerated FAISS index with {} devices",
-            gpu_config.device_ids.len()
+            device_count
         );
         Ok(index)
     }
@@ -740,7 +784,7 @@ impl FaissGpuIndex {
 
     /// Process a single GPU operation
     async fn process_gpu_operation(
-        operation: GpuOperation,
+        mut operation: GpuOperation,
         compute_streams: &Arc<RwLock<HashMap<i32, Vec<GpuComputeStream>>>>,
         stats: &Arc<RwLock<GpuPerformanceStats>>,
         gpu_config: &FaissGpuConfig,
@@ -751,18 +795,21 @@ impl FaissGpuIndex {
         let (device_id, stream_id) =
             Self::select_optimal_stream(compute_streams, &operation).await?;
 
+        // Extract result_sender before executing operation
+        let result_sender = operation.result_sender.take();
+
         // Execute operation
         let result =
-            Self::execute_operation_on_device(operation.clone(), device_id, stream_id, gpu_config)
+            Self::execute_operation_on_device(operation, device_id, stream_id, gpu_config)
                 .await?;
-
+        
         // Send result back if callback provided
-        if let Some(sender) = operation.result_sender {
+        if let Some(sender) = result_sender {
             let _ = sender.send(result.clone());
         }
 
         // Update statistics
-        Self::update_operation_stats(stats, &operation, &result, start_time.elapsed()).await?;
+        Self::update_operation_stats(stats, &result, start_time.elapsed()).await?;
 
         Ok(())
     }
@@ -860,7 +907,6 @@ impl FaissGpuIndex {
     /// Update operation statistics
     async fn update_operation_stats(
         stats: &Arc<RwLock<GpuPerformanceStats>>,
-        operation: &GpuOperation,
         result: &GpuOperationResult,
         execution_time: Duration,
     ) -> Result<()> {
@@ -963,7 +1009,7 @@ impl FaissGpuIndex {
 
     /// Manage GPU memory pools
     async fn manage_gpu_memory(
-        memory_pools: &Arc<RwLock<HashMap<i32, GpuMemoryPool>>>,
+        memory_pools: &Arc<RwLock<HashMap<i32, FaissGpuMemoryPool>>>,
         gpu_config: &FaissGpuConfig,
     ) -> Result<()> {
         let pools = memory_pools.read().unwrap();
@@ -1193,7 +1239,7 @@ impl FaissGpuIndex {
     }
 }
 
-impl GpuMemoryPool {
+impl FaissGpuMemoryPool {
     /// Create a new GPU memory pool
     pub fn new(device_id: i32, total_size: usize) -> Result<Self> {
         Ok(Self {
@@ -1373,7 +1419,7 @@ mod tests {
 
     #[test]
     fn test_gpu_memory_pool() {
-        let pool = GpuMemoryPool::new(0, 1024 * 1024).unwrap(); // 1MB pool
+        let pool = FaissGpuMemoryPool::new(0, 1024 * 1024).unwrap(); // 1MB pool
 
         let block = pool.allocate(1024, MemoryBlockType::Vectors).unwrap();
         assert_eq!(block.size, 1024);

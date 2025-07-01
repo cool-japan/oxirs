@@ -3,12 +3,12 @@
 //! This module contains specific implementations of interpretability analyzers
 //! for different types of AI analysis and feature importance calculations.
 
-use std::collections::HashMap;
 use async_trait::async_trait;
+use std::collections::HashMap;
 
-use crate::Result;
 use super::traits::InterpretabilityAnalyzer;
 use super::types::*;
+use crate::Result;
 
 /// Analyzer for feature importance
 #[derive(Debug, Clone)]

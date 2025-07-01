@@ -1,8 +1,8 @@
 //! Core types for error handling
 
+use oxirs_shacl::{Severity, ValidationViolation as Violation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use oxirs_shacl::{Severity, ValidationViolation as Violation};
 
 /// Error severity levels
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

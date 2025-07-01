@@ -240,7 +240,7 @@ impl VectorQueryOptimizer {
         let mut indexes = self.vector_indexes.lock().unwrap();
         let size = index_info.size;
         indexes.insert(name.clone(), index_info);
-        
+
         info!("Registered vector index: {} with {} vectors", name, size);
         Ok(())
     }
@@ -269,15 +269,13 @@ impl VectorQueryOptimizer {
 
         // Select the best vector optimization strategy
         let vector_strategy = self.select_vector_strategy(&vector_opportunities, algebra)?;
-        
+
         // Choose the optimal vector index
         let recommended_vector_index = self.select_vector_index(&vector_strategy)?;
 
         // Estimate vector performance
-        let vector_performance_estimate = self.estimate_vector_performance(
-            &vector_strategy,
-            &recommended_vector_index,
-        )?;
+        let vector_performance_estimate =
+            self.estimate_vector_performance(&vector_strategy, &recommended_vector_index)?;
 
         // Configure hybrid search if applicable
         let hybrid_config = self.configure_hybrid_search(&vector_strategy)?;
@@ -315,7 +313,7 @@ impl VectorQueryOptimizer {
             Algebra::Join { left, right } => {
                 opportunities.extend(self.analyze_vector_opportunities(left)?);
                 opportunities.extend(self.analyze_vector_opportunities(right)?);
-                
+
                 // Check for join optimization opportunities
                 if let Some(join_opportunity) = self.analyze_join_opportunity(left, right)? {
                     opportunities.push(join_opportunity);
@@ -379,8 +377,7 @@ impl VectorQueryOptimizer {
         match &pattern.object {
             Term::Literal(literal) => {
                 // Check if literal contains text that could benefit from semantic search
-                literal.value.len() > 5 && 
-                literal.value.chars().any(|c| c.is_alphabetic())
+                literal.value.len() > 5 && literal.value.chars().any(|c| c.is_alphabetic())
             }
             _ => false,
         }
@@ -390,12 +387,12 @@ impl VectorQueryOptimizer {
     fn is_entity_similarity_pattern(&self, pattern: &TriplePattern) -> bool {
         // Look for patterns that query for related entities
         match &pattern.predicate {
-            Term::NamedNode(iri) => {
+            Term::Iri(iri) => {
                 // Common predicates that indicate entity relationships
-                iri.as_str().contains("similar") ||
-                iri.as_str().contains("related") ||
-                iri.as_str().contains("type") ||
-                iri.as_str().contains("category")
+                iri.as_str().contains("similar")
+                    || iri.as_str().contains("related")
+                    || iri.as_str().contains("type")
+                    || iri.as_str().contains("category")
             }
             _ => false,
         }
@@ -406,14 +403,23 @@ impl VectorQueryOptimizer {
         // Look for patterns with specific predicates that could be semantically expanded
         match &pattern.predicate {
             Term::Variable(_) => true, // Variable predicates can often be expanded
-            Term::NamedNode(iri) => {
+            Term::Iri(iri) => {
                 // Common expandable predicates
                 let expandable_predicates = [
-                    "type", "category", "topic", "subject", "theme",
-                    "describes", "about", "concerns", "deals_with"
+                    "type",
+                    "category",
+                    "topic",
+                    "subject",
+                    "theme",
+                    "describes",
+                    "about",
+                    "concerns",
+                    "deals_with",
                 ];
-                
-                expandable_predicates.iter().any(|pred| iri.as_str().contains(pred))
+
+                expandable_predicates
+                    .iter()
+                    .any(|pred| iri.as_str().contains(pred))
             }
             _ => false,
         }
@@ -423,18 +429,22 @@ impl VectorQueryOptimizer {
     fn is_semantic_filter(&self, expression: &Expression) -> bool {
         // Look for filter expressions that involve text similarity functions
         match expression {
-            Expression::FunctionCall { name, .. } => {
-                name.as_str().contains("similarity") ||
-                name.as_str().contains("match") ||
-                name.as_str().contains("distance") ||
-                name.as_str().contains("semantic")
+            Expression::Function { name, .. } => {
+                name.as_str().contains("similarity")
+                    || name.as_str().contains("match")
+                    || name.as_str().contains("distance")
+                    || name.as_str().contains("semantic")
             }
             _ => false,
         }
     }
 
     /// Analyze join opportunities for vector optimization
-    fn analyze_join_opportunity(&self, left: &Algebra, right: &Algebra) -> Result<Option<VectorOpportunity>> {
+    fn analyze_join_opportunity(
+        &self,
+        left: &Algebra,
+        right: &Algebra,
+    ) -> Result<Option<VectorOpportunity>> {
         // Check if the join involves patterns that could benefit from vector-based join optimization
         let left_vars = self.extract_variables(left);
         let right_vars = self.extract_variables(right);
@@ -443,7 +453,9 @@ impl VectorQueryOptimizer {
         if !shared_vars.is_empty() {
             // Check if any shared variables represent entities that could benefit from vector similarity
             for var in shared_vars {
-                if self.is_vector_suitable_variable(var, left) || self.is_vector_suitable_variable(var, right) {
+                if self.is_vector_suitable_variable(var, left)
+                    || self.is_vector_suitable_variable(var, right)
+                {
                     return Ok(Some(VectorOpportunity::VectorJoin {
                         left_pattern: Box::new(left.clone()),
                         right_pattern: Box::new(right.clone()),
@@ -460,7 +472,7 @@ impl VectorQueryOptimizer {
     /// Extract variables from algebra expression
     fn extract_variables(&self, algebra: &Algebra) -> HashSet<Variable> {
         let mut vars = HashSet::new();
-        
+
         match algebra {
             Algebra::Bgp(patterns) => {
                 for pattern in patterns {
@@ -480,7 +492,7 @@ impl VectorQueryOptimizer {
                 // Implementation would continue for other algebra types
             }
         }
-        
+
         vars
     }
 
@@ -560,7 +572,7 @@ impl VectorQueryOptimizer {
     fn extract_text_from_pattern(&self, pattern: &TriplePattern) -> Result<String> {
         match &pattern.object {
             Term::Literal(literal) => Ok(literal.value.clone()),
-            Term::NamedNode(iri) => {
+            Term::Iri(iri) => {
                 // Extract local name from IRI
                 let iri_str = iri.as_str();
                 if let Some(fragment) = iri_str.split('#').last() {
@@ -578,7 +590,7 @@ impl VectorQueryOptimizer {
     /// Select the optimal vector index for the strategy
     fn select_vector_index(&self, strategy: &VectorSearchStrategy) -> Result<Option<String>> {
         let indexes = self.vector_indexes.lock().unwrap();
-        
+
         if indexes.is_empty() {
             return Ok(None);
         }
@@ -599,7 +611,11 @@ impl VectorQueryOptimizer {
     }
 
     /// Calculate suitability score for an index given a strategy
-    fn calculate_index_score(&self, info: &VectorIndexInfo, strategy: &VectorSearchStrategy) -> f32 {
+    fn calculate_index_score(
+        &self,
+        info: &VectorIndexInfo,
+        strategy: &VectorSearchStrategy,
+    ) -> f32 {
         let mut score = 0.0f32;
 
         // Base score from index type preferences
@@ -653,19 +669,22 @@ impl VectorQueryOptimizer {
             if let Some(info) = indexes.get(name) {
                 estimate.estimated_query_time = info.performance_stats.average_query_time;
                 estimate.estimated_memory_usage = info.performance_stats.memory_usage;
-                
+
                 // Estimate recall based on strategy
                 estimate.estimated_recall = match strategy {
-                    VectorSearchStrategy::PureVector { .. } => {
-                        info.accuracy_stats.recall_at_k.get(&10).unwrap_or(&0.9).clone()
-                    }
+                    VectorSearchStrategy::PureVector { .. } => info
+                        .accuracy_stats
+                        .recall_at_k
+                        .get(&10)
+                        .unwrap_or(&0.9)
+                        .clone(),
                     VectorSearchStrategy::Hybrid { .. } => {
                         // Hybrid search typically has higher effective recall
                         info.accuracy_stats.recall_at_k.get(&10).unwrap_or(&0.9) * 1.1
                     }
                     _ => 0.8, // Conservative estimate
                 };
-                
+
                 estimate.confidence = 0.8; // Base confidence
             }
         } else {
@@ -680,16 +699,21 @@ impl VectorQueryOptimizer {
     }
 
     /// Configure hybrid search parameters
-    fn configure_hybrid_search(&self, strategy: &VectorSearchStrategy) -> Result<Option<HybridSearchConfig>> {
+    fn configure_hybrid_search(
+        &self,
+        strategy: &VectorSearchStrategy,
+    ) -> Result<Option<HybridSearchConfig>> {
         match strategy {
-            VectorSearchStrategy::Hybrid { text_weight, vector_weight, .. } => {
-                Ok(Some(HybridSearchConfig {
-                    text_weight: *text_weight,
-                    vector_weight: *vector_weight,
-                    reranking_k: 100,
-                    fusion_method: ResultFusionMethod::LinearCombination,
-                }))
-            }
+            VectorSearchStrategy::Hybrid {
+                text_weight,
+                vector_weight,
+                ..
+            } => Ok(Some(HybridSearchConfig {
+                text_weight: *text_weight,
+                vector_weight: *vector_weight,
+                reranking_k: 100,
+                fusion_method: ResultFusionMethod::LinearCombination,
+            })),
             _ => Ok(None),
         }
     }
@@ -697,7 +721,7 @@ impl VectorQueryOptimizer {
     /// Update optimization performance metrics
     fn update_optimization_metrics(&self, strategy: &VectorSearchStrategy) {
         let mut metrics = self.performance_metrics.lock().unwrap();
-        
+
         match strategy {
             VectorSearchStrategy::PureVector { .. } => {
                 metrics.vector_queries_optimized += 1;
@@ -728,18 +752,19 @@ impl VectorQueryOptimizer {
     ) -> Result<()> {
         // Update performance metrics and adaptive thresholds based on execution feedback
         let mut metrics = self.performance_metrics.lock().unwrap();
-        
+
         if success {
             // Update average speedup calculation
             let base_time = Duration::from_millis(500); // Estimated base query time
             let speedup = base_time.as_millis() as f32 / actual_duration.as_millis() as f32;
-            
-            let total_optimizations = metrics.vector_queries_optimized + 
-                                    metrics.hybrid_queries_optimized;
-            
+
+            let total_optimizations =
+                metrics.vector_queries_optimized + metrics.hybrid_queries_optimized;
+
             if total_optimizations > 0 {
-                metrics.average_optimization_speedup = 
-                    (metrics.average_optimization_speedup * (total_optimizations - 1) as f32 + speedup) 
+                metrics.average_optimization_speedup = (metrics.average_optimization_speedup
+                    * (total_optimizations - 1) as f32
+                    + speedup)
                     / total_optimizations as f32;
             }
         }

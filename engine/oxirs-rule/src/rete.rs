@@ -437,6 +437,19 @@ impl ReteNetwork {
                 let arg_keys: Vec<String> = args.iter().map(|arg| self.term_key(arg)).collect();
                 format!("builtin:{}:{}", name, arg_keys.join(","))
             }
+            RuleAtom::NotEqual { left, right } => {
+                format!("notequal:{}:{}", self.term_key(left), self.term_key(right))
+            }
+            RuleAtom::GreaterThan { left, right } => {
+                format!(
+                    "greaterthan:{}:{}",
+                    self.term_key(left),
+                    self.term_key(right)
+                )
+            }
+            RuleAtom::LessThan { left, right } => {
+                format!("lessthan:{}:{}", self.term_key(left), self.term_key(right))
+            }
         }
     }
 
@@ -446,6 +459,10 @@ impl ReteNetwork {
             Term::Variable(v) => format!("?{}", v),
             Term::Constant(c) => format!("c:{}", c),
             Term::Literal(l) => format!("l:{}", l),
+            Term::Function { name, args } => {
+                let arg_keys: Vec<String> = args.iter().map(|arg| self.term_key(arg)).collect();
+                format!("f:{}({})", name, arg_keys.join(","))
+            }
         }
     }
 
@@ -534,6 +551,36 @@ impl ReteNetwork {
                     if let Term::Variable(var) = arg {
                         vars.push(var.clone());
                     }
+                }
+                vars
+            }
+            RuleAtom::NotEqual { left, right } => {
+                let mut vars = Vec::new();
+                if let Term::Variable(var) = left {
+                    vars.push(var.clone());
+                }
+                if let Term::Variable(var) = right {
+                    vars.push(var.clone());
+                }
+                vars
+            }
+            RuleAtom::GreaterThan { left, right } => {
+                let mut vars = Vec::new();
+                if let Term::Variable(var) = left {
+                    vars.push(var.clone());
+                }
+                if let Term::Variable(var) = right {
+                    vars.push(var.clone());
+                }
+                vars
+            }
+            RuleAtom::LessThan { left, right } => {
+                let mut vars = Vec::new();
+                if let Term::Variable(var) = left {
+                    vars.push(var.clone());
+                }
+                if let Term::Variable(var) = right {
+                    vars.push(var.clone());
                 }
                 vars
             }
@@ -1056,6 +1103,18 @@ impl ReteNetwork {
                     args: substituted_args,
                 })
             }
+            RuleAtom::NotEqual { left, right } => Ok(RuleAtom::NotEqual {
+                left: self.substitute_term(left, substitution),
+                right: self.substitute_term(right, substitution),
+            }),
+            RuleAtom::GreaterThan { left, right } => Ok(RuleAtom::GreaterThan {
+                left: self.substitute_term(left, substitution),
+                right: self.substitute_term(right, substitution),
+            }),
+            RuleAtom::LessThan { left, right } => Ok(RuleAtom::LessThan {
+                left: self.substitute_term(left, substitution),
+                right: self.substitute_term(right, substitution),
+            }),
         }
     }
 
@@ -1066,6 +1125,16 @@ impl ReteNetwork {
                 .get(var)
                 .cloned()
                 .unwrap_or_else(|| term.clone()),
+            Term::Function { name, args } => {
+                let substituted_args = args
+                    .iter()
+                    .map(|arg| self.substitute_term(arg, substitution))
+                    .collect();
+                Term::Function {
+                    name: name.clone(),
+                    args: substituted_args,
+                }
+            }
             _ => term.clone(),
         }
     }

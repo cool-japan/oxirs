@@ -431,28 +431,44 @@ impl NetworkOptimizer {
 
     async fn compress_lz4(&self, data: &[u8]) -> Result<Bytes> {
         let compressed = compress_prepend_size(data);
-        debug!("LZ4 compressed {} bytes to {} bytes", data.len(), compressed.len());
+        debug!(
+            "LZ4 compressed {} bytes to {} bytes",
+            data.len(),
+            compressed.len()
+        );
         Ok(Bytes::from(compressed))
     }
 
     async fn decompress_lz4(&self, data: &[u8]) -> Result<Bytes> {
         let decompressed = decompress_size_prepended(data)
             .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
-        debug!("LZ4 decompressed {} bytes to {} bytes", data.len(), decompressed.len());
+        debug!(
+            "LZ4 decompressed {} bytes to {} bytes",
+            data.len(),
+            decompressed.len()
+        );
         Ok(Bytes::from(decompressed))
     }
 
     async fn compress_zstd(&self, data: &[u8]) -> Result<Bytes> {
         let compressed = encode_all(data, 6) // Level 6 for good balance
             .map_err(|e| anyhow!("Zstd compression failed: {}", e))?;
-        debug!("Zstd compressed {} bytes to {} bytes", data.len(), compressed.len());
+        debug!(
+            "Zstd compressed {} bytes to {} bytes",
+            data.len(),
+            compressed.len()
+        );
         Ok(Bytes::from(compressed))
     }
 
     async fn decompress_zstd(&self, data: &[u8]) -> Result<Bytes> {
-        let decompressed = decode_all(data)
-            .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?;
-        debug!("Zstd decompressed {} bytes to {} bytes", data.len(), decompressed.len());
+        let decompressed =
+            decode_all(data).map_err(|e| anyhow!("Zstd decompression failed: {}", e))?;
+        debug!(
+            "Zstd decompressed {} bytes to {} bytes",
+            data.len(),
+            decompressed.len()
+        );
         Ok(Bytes::from(decompressed))
     }
 
@@ -465,7 +481,11 @@ impl NetworkOptimizer {
                     Ok(value) => {
                         let encoded = to_vec(&value)
                             .map_err(|e| anyhow!("MessagePack encoding failed: {}", e))?;
-                        debug!("MessagePack encoded {} bytes to {} bytes", data.len(), encoded.len());
+                        debug!(
+                            "MessagePack encoded {} bytes to {} bytes",
+                            data.len(),
+                            encoded.len()
+                        );
                         Ok(encoded)
                     }
                     Err(_) => {
@@ -492,7 +512,11 @@ impl NetworkOptimizer {
                     Ok(value) => {
                         let encoded = serde_cbor::to_vec(&value)
                             .map_err(|e| anyhow!("CBOR encoding failed: {}", e))?;
-                        debug!("CBOR encoded {} bytes to {} bytes", data.len(), encoded.len());
+                        debug!(
+                            "CBOR encoded {} bytes to {} bytes",
+                            data.len(),
+                            encoded.len()
+                        );
                         Ok(encoded)
                     }
                     Err(_) => {

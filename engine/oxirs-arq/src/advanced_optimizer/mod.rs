@@ -5,14 +5,14 @@
 //! query optimization.
 
 pub mod index_advisor;
-pub mod streaming_analyzer;
 pub mod ml_predictor;
 pub mod optimization_cache;
+pub mod streaming_analyzer;
 
 pub use index_advisor::*;
-pub use streaming_analyzer::*;
 pub use ml_predictor::*;
 pub use optimization_cache::*;
+pub use streaming_analyzer::*;
 
 use std::sync::{Arc, Mutex};
 
@@ -50,6 +50,8 @@ pub struct AdvancedOptimizerConfig {
     pub learning_rate: f64,
     /// Cache size for optimization decisions
     pub cache_size: usize,
+    /// Enable parallel optimization
+    pub parallel_optimization: bool,
 }
 
 impl Default for AdvancedOptimizerConfig {
@@ -62,6 +64,7 @@ impl Default for AdvancedOptimizerConfig {
             cross_query_optimization: true,
             learning_rate: 0.01,
             cache_size: 10000,
+            parallel_optimization: true,
         }
     }
 }
@@ -122,14 +125,18 @@ impl AdvancedOptimizer {
 
         // Apply streaming optimizations
         if self.config.enable_streaming {
-            if let Ok(Some(strategy)) = self.streaming_analyzer.analyze_streaming_potential(&optimized) {
+            if let Ok(Some(strategy)) = self
+                .streaming_analyzer
+                .analyze_streaming_potential(&optimized)
+            {
                 optimized = self.apply_streaming_strategy(optimized, strategy)?;
             }
         }
 
         // Cache the optimized plan
         let cost = self.estimate_cost(&optimized)?;
-        self.optimization_cache.cache_plan(query_hash, optimized.clone(), cost);
+        self.optimization_cache
+            .cache_plan(query_hash, optimized.clone(), cost);
 
         Ok(optimized)
     }
@@ -149,7 +156,11 @@ impl AdvancedOptimizer {
         0
     }
 
-    fn apply_ml_recommendations(&self, algebra: Algebra, _prediction: MLPrediction) -> Result<Algebra> {
+    fn apply_ml_recommendations(
+        &self,
+        algebra: Algebra,
+        _prediction: MLPrediction,
+    ) -> Result<Algebra> {
         // Implementation would apply ML recommendations
         Ok(algebra)
     }
@@ -159,7 +170,11 @@ impl AdvancedOptimizer {
         Ok(algebra)
     }
 
-    fn apply_streaming_strategy(&self, algebra: Algebra, _strategy: StreamingStrategy) -> Result<Algebra> {
+    fn apply_streaming_strategy(
+        &self,
+        algebra: Algebra,
+        _strategy: StreamingStrategy,
+    ) -> Result<Algebra> {
         // Implementation would apply streaming strategy
         Ok(algebra)
     }
@@ -172,12 +187,12 @@ impl AdvancedOptimizer {
     /// Optimize multiple queries in parallel for improved throughput
     pub fn optimize_batch(&mut self, queries: Vec<Algebra>) -> Result<Vec<Algebra>> {
         use rayon::prelude::*;
-        
+
         // Check cache for all queries first
         let mut cached_results = Vec::with_capacity(queries.len());
         let mut uncached_queries = Vec::new();
         let mut uncached_indices = Vec::new();
-        
+
         for (i, algebra) in queries.iter().enumerate() {
             let query_hash = self.hash_algebra(algebra);
             if let Some(cached_plan) = self.optimization_cache.get_cached_plan(query_hash) {
@@ -187,7 +202,7 @@ impl AdvancedOptimizer {
                 uncached_indices.push(i);
             }
         }
-        
+
         // Process uncached queries in parallel
         let uncached_results: Result<Vec<_>> = uncached_queries
             .into_par_iter()
@@ -199,45 +214,51 @@ impl AdvancedOptimizer {
                 Ok((uncached_indices[idx], optimized))
             })
             .collect();
-        
+
         let uncached_results = uncached_results?;
-        
+
         // Merge results
         let mut final_results = vec![Algebra::Empty; queries.len()];
         for (index, result) in cached_results.into_iter().chain(uncached_results) {
             final_results[index] = result;
         }
-        
+
         Ok(final_results)
     }
-    
+
     /// Optimize with workload-aware adaptation
-    pub fn optimize_with_workload_adaptation(&mut self, algebra: Algebra, workload_context: WorkloadContext) -> Result<Algebra> {
+    pub fn optimize_with_workload_adaptation(
+        &mut self,
+        algebra: Algebra,
+        workload_context: WorkloadContext,
+    ) -> Result<Algebra> {
         // Adapt optimization strategy based on workload characteristics
         let adapted_config = self.adapt_config_for_workload(&workload_context);
         let original_config = std::mem::replace(&mut self.config, adapted_config);
-        
+
         let result = self.optimize(algebra);
-        
+
         // Restore original config
         self.config = original_config;
-        
+
         result
     }
-    
+
     /// Get performance metrics for monitoring
     pub fn get_performance_metrics(&self) -> OptimizerPerformanceMetrics {
         OptimizerPerformanceMetrics {
             cache_hit_ratio: self.optimization_cache.hit_ratio(),
             total_optimizations: self.optimization_cache.total_requests(),
-            ml_predictions_made: self.ml_predictor.as_ref()
+            ml_predictions_made: self
+                .ml_predictor
+                .as_ref()
                 .map(|p| p.predictions_count())
                 .unwrap_or(0),
             index_recommendations_generated: self.index_advisor.recommendations_count(),
             streaming_optimizations_applied: self.streaming_analyzer.optimizations_count(),
         }
     }
-    
+
     /// Create a thread-safe copy for parallel processing
     fn clone_for_thread(&self) -> Self {
         Self {
@@ -250,35 +271,38 @@ impl AdvancedOptimizer {
             optimization_cache: self.optimization_cache.clone(),
         }
     }
-    
+
     /// Single-threaded optimization for parallel execution
     fn optimize_single_threaded(&mut self, algebra: Algebra) -> Result<Algebra> {
         // Same as optimize() but without cache writes to avoid contention
         let mut optimized = algebra;
-        
+
         if let Some(ref mut ml_predictor) = self.ml_predictor {
             if let Ok(prediction) = ml_predictor.predict_cost(&optimized) {
                 optimized = self.apply_ml_recommendations(optimized, prediction)?;
             }
         }
-        
+
         if self.config.adaptive_index_selection {
             optimized = self.apply_index_recommendations(optimized)?;
         }
-        
+
         if self.config.enable_streaming {
-            if let Ok(Some(strategy)) = self.streaming_analyzer.analyze_streaming_potential(&optimized) {
+            if let Ok(Some(strategy)) = self
+                .streaming_analyzer
+                .analyze_streaming_potential(&optimized)
+            {
                 optimized = self.apply_streaming_strategy(optimized, strategy)?;
             }
         }
-        
+
         Ok(optimized)
     }
-    
+
     /// Adapt configuration based on workload characteristics
     fn adapt_config_for_workload(&self, workload: &WorkloadContext) -> AdvancedOptimizerConfig {
         let mut config = self.config.clone();
-        
+
         // Adapt based on query complexity
         if workload.query_complexity == QueryComplexity::High {
             config.enable_ml_optimization = true;
@@ -287,22 +311,22 @@ impl AdvancedOptimizer {
             config.enable_ml_optimization = false;
             config.cache_size /= 2;
         }
-        
+
         // Adapt based on workload type
         match workload.workload_type {
             WorkloadType::AnalyticalHeavy => {
                 config.enable_streaming = true;
                 config.adaptive_index_selection = true;
-            },
+            }
             WorkloadType::TransactionalLight => {
                 config.cache_size *= 2;
                 config.cross_query_optimization = false;
-            },
+            }
             WorkloadType::Mixed => {
                 // Keep defaults
             }
         }
-        
+
         config
     }
 }

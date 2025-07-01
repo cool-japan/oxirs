@@ -26,6 +26,7 @@ pub use generation::{
 };
 
 // Re-export analytics types
-pub use analytics::{
-    AnalyticsConfig, AnalyzedReport, AsyncValidationStats, ReportMetrics, ValidationReportAnalytics,
-};
+pub use analytics::{AnalyticsConfig, AnalyzedReport, ReportMetrics, ValidationReportAnalytics};
+
+// Re-export validation types
+pub use crate::validation::AsyncValidationStats;

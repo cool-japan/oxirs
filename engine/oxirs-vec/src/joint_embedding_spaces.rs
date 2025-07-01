@@ -518,8 +518,9 @@ impl CrossModalAttention {
 
     fn apply_relative_position_encoding(&self, output: &mut [f32]) -> Result<()> {
         // Simplified relative positional encoding
+        let output_len = output.len();
         for (i, value) in output.iter_mut().enumerate() {
-            let pos_encoding = (i as f32 / output.len() as f32).sin();
+            let pos_encoding = (i as f32 / output_len as f32).sin();
             *value += 0.1 * pos_encoding; // Small positional bias
         }
         Ok(())

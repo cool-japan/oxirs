@@ -19,7 +19,7 @@ use tracing::{debug, info, warn};
 use crate::{
     executor::{GraphQLResponse, SparqlResults},
     graphql::FederatedSchema,
-    planner::QueryInfo,
+    planner::planning::types::QueryInfo,
     service::{ServiceCapability, ServiceMetadata},
 };
 
@@ -373,14 +373,19 @@ impl FederationCache {
             };
 
             let cache_key = self.generate_query_key(&query_info);
-            
+
             // Pre-populate with empty result sets to indicate query structure
             let placeholder_result = QueryResultCache::Sparql(crate::executor::SparqlResults {
                 head: crate::executor::SparqlHead { vars: vec![] },
                 results: crate::executor::SparqlResultsData { bindings: vec![] },
             });
 
-            self.put_query_result(&cache_key, placeholder_result, Some(Duration::from_secs(300))).await;
+            self.put_query_result(
+                &cache_key,
+                placeholder_result,
+                Some(Duration::from_secs(300)),
+            )
+            .await;
         }
 
         Ok(())
@@ -411,7 +416,8 @@ impl FederationCache {
 
         // Cache for common service types
         for service_type in &["sparql", "graphql", "federation"] {
-            self.put_service_metadata(&format!("warmup-{}", service_type), metadata.clone()).await;
+            self.put_service_metadata(&format!("warmup-{}", service_type), metadata.clone())
+                .await;
         }
 
         Ok(())
@@ -457,10 +463,10 @@ impl FederationCache {
     /// Predictive caching loop that runs in the background
     async fn predictive_caching_loop(&self) {
         let mut interval = tokio::time::interval(Duration::from_secs(300)); // Every 5 minutes
-        
+
         loop {
             interval.tick().await;
-            
+
             if let Err(e) = self.perform_predictive_caching().await {
                 warn!("Predictive caching failed: {}", e);
             }
@@ -482,7 +488,10 @@ impl FederationCache {
 
         // 2. If hit rate is low, increase cache warming
         if hit_rate < 0.7 {
-            info!("Low cache hit rate ({}), increasing cache warming", hit_rate);
+            info!(
+                "Low cache hit rate ({}), increasing cache warming",
+                hit_rate
+            );
             self.adaptive_cache_warming().await?;
         }
 
@@ -499,13 +508,16 @@ impl FederationCache {
     async fn adaptive_cache_warming(&self) -> Result<()> {
         // Increase cache warming for frequently accessed patterns
         self.warmup_popular_queries().await?;
-        
+
         // Extend TTL for frequently accessed items
         let extended_ttl = Duration::from_secs(1800); // 30 minutes
-        
+
         // This is a simplified implementation - in practice you'd track access patterns
-        debug!("Applied adaptive cache warming with extended TTL: {:?}", extended_ttl);
-        
+        debug!(
+            "Applied adaptive cache warming with extended TTL: {:?}",
+            extended_ttl
+        );
+
         Ok(())
     }
 
@@ -514,7 +526,7 @@ impl FederationCache {
         // This is a simplified implementation
         // In practice, you'd maintain a query pattern similarity index
         debug!("Prefetching related queries based on recent patterns");
-        
+
         // Example: if we see a SELECT query, prefetch common variations
         let related_patterns = vec![
             "SELECT ?s ?p WHERE { ?s ?p ?o }",
@@ -533,7 +545,7 @@ impl FederationCache {
             };
 
             let cache_key = self.generate_query_key(&query_info);
-            
+
             // Only prefetch if not already cached
             if self.get_query_result(&cache_key).await.is_none() {
                 let placeholder_result = QueryResultCache::Sparql(crate::executor::SparqlResults {
@@ -541,7 +553,12 @@ impl FederationCache {
                     results: crate::executor::SparqlResultsData { bindings: vec![] },
                 });
 
-                self.put_query_result(&cache_key, placeholder_result, Some(Duration::from_secs(600))).await;
+                self.put_query_result(
+                    &cache_key,
+                    placeholder_result,
+                    Some(Duration::from_secs(600)),
+                )
+                .await;
             }
         }
 
@@ -551,20 +568,20 @@ impl FederationCache {
     /// Optimize TTL values based on access patterns
     async fn optimize_ttl_values(&self) -> Result<()> {
         debug!("Optimizing TTL values based on access patterns");
-        
+
         // This is a simplified implementation
         // In practice, you'd analyze access frequency and adjust TTL accordingly
-        
+
         // For frequently accessed items, extend TTL
         // For rarely accessed items, reduce TTL to free up memory
-        
+
         Ok(())
     }
 
     /// Get cache efficiency metrics
     pub async fn get_efficiency_metrics(&self) -> CacheEfficiencyMetrics {
         let stats = self.stats.read().await;
-        
+
         let hit_rate = if stats.total_requests > 0 {
             stats.hits as f64 / stats.total_requests as f64
         } else {
@@ -584,7 +601,7 @@ impl FederationCache {
         };
 
         let memory_efficiency = self.calculate_memory_efficiency().await;
-        
+
         CacheEfficiencyMetrics {
             hit_rate,
             l1_hit_rate,
@@ -593,7 +610,8 @@ impl FederationCache {
             total_requests: stats.total_requests,
             total_hits: stats.hits,
             query_cache_effectiveness: stats.query_hits as f64 / stats.total_requests.max(1) as f64,
-            metadata_cache_effectiveness: stats.metadata_hits as f64 / stats.total_requests.max(1) as f64,
+            metadata_cache_effectiveness: stats.metadata_hits as f64
+                / stats.total_requests.max(1) as f64,
         }
     }
 
@@ -603,13 +621,13 @@ impl FederationCache {
             let l1 = self.l1_cache.read().await;
             l1.len()
         };
-        
+
         let l2_size = self.l2_cache.entry_count();
-        
+
         // Calculate efficiency based on utilization vs capacity
         let l1_efficiency = l1_size as f64 / self.config.l1_capacity as f64;
         let l2_efficiency = l2_size as f64 / self.config.l2_capacity as f64;
-        
+
         (l1_efficiency + l2_efficiency) / 2.0
     }
 

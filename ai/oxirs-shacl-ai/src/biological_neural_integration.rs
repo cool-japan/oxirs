@@ -73,8 +73,7 @@ impl BiologicalNeuralIntegrator {
         let plasticity_manager = Arc::new(RwLock::new(SynapticPlasticityManager::new(&config)));
         let neurotransmitter_processor =
             Arc::new(RwLock::new(NeurotransmitterProcessor::new(&config)));
-        let bio_hybrid_coordinator =
-            Arc::new(RwLock::new(BioHybridAICoordinator::new(&config)));
+        let bio_hybrid_coordinator = Arc::new(RwLock::new(BioHybridAICoordinator::new(&config)));
         let living_network_manager =
             Arc::new(RwLock::new(LivingNeuralNetworkManager::new(&config)));
         let bio_metrics = Arc::new(RwLock::new(BiologicalMetrics::new()));
@@ -291,7 +290,8 @@ impl BiologicalNeuralIntegrator {
             let init_result = organoid_processor.initialize_organoid().await?;
             if init_result.success {
                 total_processing_capacity += organoid_processor.processing_capacity;
-                self.organoid_processors.insert(organoid_id, organoid_processor);
+                self.organoid_processors
+                    .insert(organoid_id, organoid_processor);
                 organoids_initialized += 1;
             }
         }
@@ -618,7 +618,9 @@ impl BiologicalNeuralIntegrator {
 
         // Integrate biological and artificial intelligence signals
         let integration_results = coordinator
-            .integrate_bio_artificial_signals(&neurotransmitter_results.overall_neurotransmitter_strength)
+            .integrate_bio_artificial_signals(
+                &neurotransmitter_results.overall_neurotransmitter_strength,
+            )
             .await?;
 
         // Make hybrid validation decisions
@@ -727,7 +729,8 @@ impl BiologicalNeuralIntegrator {
     ) -> Result<f64> {
         // Estimate ATP consumption based on neural activity
         let synaptic_energy = plasticity_results.overall_plasticity_adaptation * 1e12; // ATP molecules
-        let neurotransmitter_energy = neurotransmitter_results.overall_neurotransmitter_strength * 5e11;
+        let neurotransmitter_energy =
+            neurotransmitter_results.overall_neurotransmitter_strength * 5e11;
 
         Ok(synaptic_energy + neurotransmitter_energy)
     }
@@ -850,7 +853,8 @@ pub struct OrganoidConfig {
 impl Default for OrganoidConfig {
     fn default() -> Self {
         Self {
-            development_protocol: "Cerebral organoid protocol with guided differentiation".to_string(),
+            development_protocol: "Cerebral organoid protocol with guided differentiation"
+                .to_string(),
             target_size_micrometers: 4000.0, // 4mm diameter
             neural_complexity_level: 8,      // High complexity
             vascularization_enabled: true,
@@ -874,9 +878,9 @@ pub struct SignalProcessingConfig {
 impl Default for SignalProcessingConfig {
     fn default() -> Self {
         Self {
-            sampling_rate_hz: 30000.0, // 30 kHz sampling
+            sampling_rate_hz: 30000.0,        // 30 kHz sampling
             filter_range_hz: (300.0, 3000.0), // Typical neural signal range
-            noise_threshold: 50.0,     // 50 µV noise threshold
+            noise_threshold: 50.0,            // 50 µV noise threshold
             action_potential_sensitivity: 0.95,
         }
     }
@@ -898,8 +902,8 @@ pub struct PlasticityConfig {
 impl Default for PlasticityConfig {
     fn default() -> Self {
         Self {
-            ltp_threshold: 0.8,     // 80% activation threshold for LTP
-            ltd_threshold: 0.3,     // 30% activation threshold for LTD
+            ltp_threshold: 0.8,        // 80% activation threshold for LTP
+            ltd_threshold: 0.3,        // 30% activation threshold for LTD
             stdp_time_window_ms: 20.0, // 20ms STDP window
             homeostatic_scaling_factor: 0.1,
         }
@@ -1156,7 +1160,10 @@ impl BioElectricalSignalAnalyzer {
     async fn calibrate_action_potential_detection(&self) -> Result<ActionPotentialCalibration> {
         Ok(ActionPotentialCalibration {
             accuracy: 0.99,
-            sensitivity: self.config.signal_processing_config.action_potential_sensitivity,
+            sensitivity: self
+                .config
+                .signal_processing_config
+                .action_potential_sensitivity,
         })
     }
 
@@ -1168,14 +1175,20 @@ impl BioElectricalSignalAnalyzer {
         Ok(OscillationAnalysisInit { precision: 0.95 })
     }
 
-    async fn analyze_action_potential_patterns(&self, _quality: &f64) -> Result<ActionPotentialPatterns> {
+    async fn analyze_action_potential_patterns(
+        &self,
+        _quality: &f64,
+    ) -> Result<ActionPotentialPatterns> {
         Ok(ActionPotentialPatterns {
             pattern_count: 1000,
             coherence: 0.93,
         })
     }
 
-    async fn analyze_synaptic_transmission(&self, _efficiency: &f64) -> Result<SynapticTransmissionAnalysis> {
+    async fn analyze_synaptic_transmission(
+        &self,
+        _efficiency: &f64,
+    ) -> Result<SynapticTransmissionAnalysis> {
         Ok(SynapticTransmissionAnalysis {
             transmission_quality: 0.89,
         })
@@ -1325,7 +1338,10 @@ impl NeurotransmitterProcessor {
         })
     }
 
-    async fn process_acetylcholine_attention(&self, _input: &f64) -> Result<AcetylcholineProcessing> {
+    async fn process_acetylcholine_attention(
+        &self,
+        _input: &f64,
+    ) -> Result<AcetylcholineProcessing> {
         Ok(AcetylcholineProcessing {
             attention_strength: 0.90,
         })

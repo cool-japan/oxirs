@@ -9,8 +9,8 @@ use anyhow::Result;
 use oxirs_core::model::{
     BlankNode, GraphName, Literal as OxiLiteral, NamedNode, Quad, Subject, Term, Triple, Variable,
 };
-use oxirs_core::Store;
-use std::sync::Arc;
+use oxirs_core::{ConcreteStore, Store};
+use std::sync::{Arc, Mutex};
 
 // Re-export QueryResults for other modules
 pub use oxirs_core::query::QueryResults;
@@ -19,7 +19,7 @@ pub use oxirs_core::query::QueryResults;
 
 /// RDF store wrapper for GraphQL integration
 pub struct RdfStore {
-    store: Store,
+    store: Arc<Mutex<ConcreteStore>>,
 }
 
 impl std::fmt::Debug for RdfStore {
@@ -33,13 +33,13 @@ impl std::fmt::Debug for RdfStore {
 impl RdfStore {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            store: Store::new()?,
+            store: Arc::new(Mutex::new(ConcreteStore::new()?)),
         })
     }
 
     pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         Ok(Self {
-            store: Store::open(path)?,
+            store: Arc::new(Mutex::new(ConcreteStore::open(path)?)),
         })
     }
 
@@ -47,9 +47,13 @@ impl RdfStore {
     pub fn query(&self, query: &str) -> Result<QueryResults> {
         use oxirs_core::query::{QueryEngine, QueryResult};
 
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex lock error: {}", e))?;
         let engine = QueryEngine::new();
         let result = engine
-            .query(query, &self.store)
+            .query(query, &*store)
             .map_err(|e| anyhow::anyhow!("SPARQL query error: {}", e))?;
 
         match result {
@@ -199,7 +203,11 @@ impl RdfStore {
         };
 
         let quad = Quad::new(subject, predicate, object, GraphName::DefaultGraph);
-        self.store.insert_quad(quad)?;
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex lock error: {}", e))?;
+        store.insert_quad(quad)?;
         Ok(())
     }
 
@@ -224,8 +232,12 @@ impl RdfStore {
         let quads = parser.parse_str_to_quads(&content)?;
 
         // Insert quads into store
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex lock error: {}", e))?;
         for quad in quads {
-            self.store.insert_quad(quad)?;
+            store.insert_quad(quad)?;
         }
 
         Ok(())

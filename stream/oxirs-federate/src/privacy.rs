@@ -309,17 +309,23 @@ impl PrivacyBudgetTracker {
 
         // Clean expired entries
         budget_map.retain(|_, (_, timestamp)| {
-            current_time.duration_since(*timestamp).unwrap_or(Duration::ZERO) <= self.window_duration
+            current_time
+                .duration_since(*timestamp)
+                .unwrap_or(Duration::ZERO)
+                <= self.window_duration
         });
 
         // Calculate used budget for user
-        let used = budget_map.get(user_id).map(|(budget, _)| *budget).unwrap_or(0.0);
+        let used = budget_map
+            .get(user_id)
+            .map(|(budget, _)| *budget)
+            .unwrap_or(0.0);
 
         if used + requested > self.total_budget {
-            return Err(PrivacyError::BudgetExhausted(
-                format!("User {} would exceed budget: used={}, requested={}, total={}", 
-                       user_id, used, requested, self.total_budget)
-            ));
+            return Err(PrivacyError::BudgetExhausted(format!(
+                "User {} would exceed budget: used={}, requested={}, total={}",
+                user_id, used, requested, self.total_budget
+            )));
         }
 
         Ok(())
@@ -328,14 +334,17 @@ impl PrivacyBudgetTracker {
     /// Consume budget
     pub fn consume_budget(&self, user_id: &str, amount: f64) -> Result<(), PrivacyError> {
         self.check_budget(user_id, amount)?;
-        
+
         let current_time = SystemTime::now();
         let mut budget_map = self.used_budget.write().unwrap();
-        
-        budget_map.entry(user_id.to_string()).and_modify(|(budget, timestamp)| {
-            *budget += amount;
-            *timestamp = current_time;
-        }).or_insert((amount, current_time));
+
+        budget_map
+            .entry(user_id.to_string())
+            .and_modify(|(budget, timestamp)| {
+                *budget += amount;
+                *timestamp = current_time;
+            })
+            .or_insert((amount, current_time));
 
         Ok(())
     }
@@ -343,7 +352,10 @@ impl PrivacyBudgetTracker {
     /// Get remaining budget for user
     pub fn remaining_budget(&self, user_id: &str) -> f64 {
         let budget_map = self.used_budget.read().unwrap();
-        let used = budget_map.get(user_id).map(|(budget, _)| *budget).unwrap_or(0.0);
+        let used = budget_map
+            .get(user_id)
+            .map(|(budget, _)| *budget)
+            .unwrap_or(0.0);
         (self.total_budget - used).max(0.0)
     }
 }
@@ -390,27 +402,31 @@ impl PrivacyManager {
         data: &mut serde_json::Value,
     ) -> Result<PrivacyProtectionResult, PrivacyError> {
         let policies = self.policies.read().await;
-        let policy = policies.get(policy_id)
+        let policy = policies
+            .get(policy_id)
             .ok_or_else(|| PrivacyError::PolicyNotFound(policy_id.to_string()))?;
 
         // Check sensitive data
-        self.sensitive_detector.detect_sensitive_data(data, &policy.sensitive_patterns)?;
+        self.sensitive_detector
+            .detect_sensitive_data(data, &policy.sensitive_patterns)?;
 
         // Apply differential privacy if configured
         let mut protection_result = PrivacyProtectionResult::default();
-        
+
         if let Some(dp_config) = &policy.dp_config {
-            self.budget_tracker.consume_budget(user_id, dp_config.epsilon)?;
+            self.budget_tracker
+                .consume_budget(user_id, dp_config.epsilon)?;
             protection_result.differential_privacy_applied = true;
             protection_result.epsilon_used = dp_config.epsilon;
-            
+
             // Apply noise based on mechanism
             self.apply_differential_privacy(data, dp_config)?;
         }
 
         // Apply anonymization
         if !policy.anonymization_rules.is_empty() {
-            self.anonymizer.anonymize_data(data, &policy.anonymization_rules)?;
+            self.anonymizer
+                .anonymize_data(data, &policy.anonymization_rules)?;
             protection_result.anonymization_applied = true;
         }
 
@@ -449,13 +465,13 @@ impl PrivacyManager {
                 self.apply_laplace_noise(data, config.sensitivity / config.epsilon)?;
             }
             NoiseMechanism::Gaussian => {
-                let sigma = (2.0 * config.sensitivity.powi(2) * 
-                           (1.25 / config.delta).ln()) / config.epsilon.powi(2);
+                let sigma = (2.0 * config.sensitivity.powi(2) * (1.25 / config.delta).ln())
+                    / config.epsilon.powi(2);
                 self.apply_gaussian_noise(data, sigma.sqrt())?;
             }
             _ => {
                 return Err(PrivacyError::AnonymizationFailed(
-                    "Unsupported noise mechanism".to_string()
+                    "Unsupported noise mechanism".to_string(),
                 ));
             }
         }
@@ -463,7 +479,11 @@ impl PrivacyManager {
     }
 
     /// Apply Laplace noise to numeric values
-    fn apply_laplace_noise(&self, data: &mut serde_json::Value, scale: f64) -> Result<(), PrivacyError> {
+    fn apply_laplace_noise(
+        &self,
+        data: &mut serde_json::Value,
+        scale: f64,
+    ) -> Result<(), PrivacyError> {
         use rand::distributions::{Distribution, Uniform};
         use rand::thread_rng;
 
@@ -476,7 +496,8 @@ impl PrivacyManager {
                 let u2 = uniform.sample(&mut rng);
                 let noise = scale * (u1 - 0.5).signum() * (1.0 - 2.0 * u2.min(1.0 - u2)).ln();
                 *value = serde_json::Value::Number(
-                    serde_json::Number::from_f64(num + noise).unwrap_or_else(|| serde_json::Number::from(0))
+                    serde_json::Number::from_f64(num + noise)
+                        .unwrap_or_else(|| serde_json::Number::from(0)),
                 );
             }
         });
@@ -485,8 +506,13 @@ impl PrivacyManager {
     }
 
     /// Apply Gaussian noise to numeric values
-    fn apply_gaussian_noise(&self, data: &mut serde_json::Value, sigma: f64) -> Result<(), PrivacyError> {
-        use rand::distributions::{Distribution, Normal};
+    fn apply_gaussian_noise(
+        &self,
+        data: &mut serde_json::Value,
+        sigma: f64,
+    ) -> Result<(), PrivacyError> {
+        use rand::distributions::Distribution;
+        use rand_distr::Normal;
         use rand::thread_rng;
 
         let mut rng = thread_rng();
@@ -498,7 +524,8 @@ impl PrivacyManager {
             if let Some(num) = value.as_f64() {
                 let noise = normal.sample(&mut rng);
                 *value = serde_json::Value::Number(
-                    serde_json::Number::from_f64(num + noise).unwrap_or_else(|| serde_json::Number::from(0))
+                    serde_json::Number::from_f64(num + noise)
+                        .unwrap_or_else(|| serde_json::Number::from(0)),
                 );
             }
         });
@@ -539,7 +566,7 @@ impl PrivacyManager {
         // 1. Group records by quasi-identifiers
         // 2. Suppress or generalize records in groups < k
         // 3. Apply generalization hierarchy
-        
+
         // For now, implement basic generalization
         if let serde_json::Value::Array(records) = data {
             for record in records.iter_mut() {
@@ -565,17 +592,18 @@ impl PrivacyManager {
         // Implementation for l-diversity would involve:
         // 1. Check diversity of sensitive attributes within equivalence classes
         // 2. Suppress records that don't meet l-diversity requirement
-        
+
         // Basic implementation - ensure minimum diversity
         if let serde_json::Value::Array(records) = data {
             let mut diversity_groups: HashMap<String, HashSet<String>> = HashMap::new();
-            
+
             for record in records.iter() {
                 if let serde_json::Value::Object(map) = record {
                     for sensitive_attr in &config.sensitive_attributes {
                         if let Some(value) = map.get(sensitive_attr) {
                             let group_key = self.get_equivalence_class_key(map);
-                            diversity_groups.entry(group_key)
+                            diversity_groups
+                                .entry(group_key)
                                 .or_insert_with(HashSet::new)
                                 .insert(value.to_string());
                         }
@@ -587,7 +615,8 @@ impl PrivacyManager {
             records.retain(|record| {
                 if let serde_json::Value::Object(map) = record {
                     let group_key = self.get_equivalence_class_key(map);
-                    diversity_groups.get(&group_key)
+                    diversity_groups
+                        .get(&group_key)
                         .map(|group| group.len() >= config.l)
                         .unwrap_or(false)
                 } else {
@@ -600,7 +629,10 @@ impl PrivacyManager {
     }
 
     /// Get equivalence class key for record
-    fn get_equivalence_class_key(&self, record: &serde_json::Map<String, serde_json::Value>) -> String {
+    fn get_equivalence_class_key(
+        &self,
+        record: &serde_json::Map<String, serde_json::Value>,
+    ) -> String {
         // Create key based on quasi-identifiers
         let mut key_parts = Vec::new();
         for (field, value) in record.iter() {
@@ -640,9 +672,11 @@ impl PrivacyManager {
         join_keys: &[String],
     ) -> Result<serde_json::Value, PrivacyError> {
         if join_config.enable_psi {
-            self.private_set_intersection_join(left_data, right_data, join_keys).await
+            self.private_set_intersection_join(left_data, right_data, join_keys)
+                .await
         } else if join_config.enable_smpc {
-            self.secure_multiparty_join(left_data, right_data, join_keys).await
+            self.secure_multiparty_join(left_data, right_data, join_keys)
+                .await
         } else {
             // Fallback to basic anonymized join
             self.anonymized_join(left_data, right_data, join_keys).await
@@ -658,20 +692,22 @@ impl PrivacyManager {
     ) -> Result<serde_json::Value, PrivacyError> {
         // Implementation of PSI-based join
         // This would involve cryptographic protocols for secure intersection
-        
+
         // For now, implement a simplified version
         let mut result = Vec::new();
-        
-        if let (serde_json::Value::Array(left_records), serde_json::Value::Array(right_records)) = 
-            (left_data, right_data) {
-            
+
+        if let (serde_json::Value::Array(left_records), serde_json::Value::Array(right_records)) =
+            (left_data, right_data)
+        {
             for left_record in left_records {
                 for right_record in right_records {
                     if self.records_match_on_keys(left_record, right_record, join_keys) {
                         let mut joined_record = left_record.clone();
-                        if let (serde_json::Value::Object(left_map), serde_json::Value::Object(right_map)) = 
-                            (&mut joined_record, right_record) {
-                            
+                        if let (
+                            serde_json::Value::Object(left_map),
+                            serde_json::Value::Object(right_map),
+                        ) = (&mut joined_record, right_record)
+                        {
                             for (key, value) in right_map {
                                 if !join_keys.contains(key) {
                                     left_map.insert(format!("right_{}", key), value.clone());
@@ -683,7 +719,7 @@ impl PrivacyManager {
                 }
             }
         }
-        
+
         Ok(serde_json::Value::Array(result))
     }
 
@@ -696,7 +732,7 @@ impl PrivacyManager {
     ) -> Result<serde_json::Value, PrivacyError> {
         // Implementation would involve SMPC protocols
         Err(PrivacyError::AnonymizationFailed(
-            "SMPC join not yet implemented".to_string()
+            "SMPC join not yet implemented".to_string(),
         ))
     }
 
@@ -709,17 +745,19 @@ impl PrivacyManager {
     ) -> Result<serde_json::Value, PrivacyError> {
         // Standard join with post-processing anonymization
         let mut result = Vec::new();
-        
-        if let (serde_json::Value::Array(left_records), serde_json::Value::Array(right_records)) = 
-            (left_data, right_data) {
-            
+
+        if let (serde_json::Value::Array(left_records), serde_json::Value::Array(right_records)) =
+            (left_data, right_data)
+        {
             for left_record in left_records {
                 for right_record in right_records {
                     if self.records_match_on_keys(left_record, right_record, join_keys) {
                         let mut joined_record = left_record.clone();
-                        if let (serde_json::Value::Object(left_map), serde_json::Value::Object(right_map)) = 
-                            (&mut joined_record, right_record) {
-                            
+                        if let (
+                            serde_json::Value::Object(left_map),
+                            serde_json::Value::Object(right_map),
+                        ) = (&mut joined_record, right_record)
+                        {
                             for (key, value) in right_map {
                                 if !join_keys.contains(key) {
                                     left_map.insert(format!("right_{}", key), value.clone());
@@ -731,7 +769,7 @@ impl PrivacyManager {
                 }
             }
         }
-        
+
         Ok(serde_json::Value::Array(result))
     }
 
@@ -742,9 +780,9 @@ impl PrivacyManager {
         right: &serde_json::Value,
         join_keys: &[String],
     ) -> bool {
-        if let (serde_json::Value::Object(left_map), serde_json::Value::Object(right_map)) = 
-            (left, right) {
-            
+        if let (serde_json::Value::Object(left_map), serde_json::Value::Object(right_map)) =
+            (left, right)
+        {
             for key in join_keys {
                 if left_map.get(key) != right_map.get(key) {
                     return false;
@@ -833,16 +871,18 @@ impl SensitiveDataDetector {
             serde_json::Value::String(s) => {
                 for pattern in &self.patterns {
                     if pattern.is_match(s) {
-                        return Err(PrivacyError::SensitiveDataDetected(
-                            format!("Sensitive pattern detected: {}", pattern.as_str())
-                        ));
+                        return Err(PrivacyError::SensitiveDataDetected(format!(
+                            "Sensitive pattern detected: {}",
+                            pattern.as_str()
+                        )));
                     }
                 }
                 for pattern in custom_regexes {
                     if pattern.is_match(s) {
-                        return Err(PrivacyError::SensitiveDataDetected(
-                            format!("Custom sensitive pattern detected: {}", pattern.as_str())
-                        ));
+                        return Err(PrivacyError::SensitiveDataDetected(format!(
+                            "Custom sensitive pattern detected: {}",
+                            pattern.as_str()
+                        )));
                     }
                 }
             }
@@ -902,7 +942,7 @@ impl GdprComplianceChecker {
         // Check consent requirements
         // Check lawful basis
         // Log audit entry
-        
+
         if config.consent_required {
             // Would check for valid consent in real implementation
         }
@@ -1001,9 +1041,8 @@ impl DataAnonymizer {
             }
             AnonymizationTechnique::Generalization => {
                 if let Some(s) = value.as_str() {
-                    *value = serde_json::Value::String(
-                        s.chars().take(3).collect::<String>() + "***"
-                    );
+                    *value =
+                        serde_json::Value::String(s.chars().take(3).collect::<String>() + "***");
                 }
             }
             AnonymizationTechnique::Hashing => {
@@ -1017,7 +1056,8 @@ impl DataAnonymizer {
             }
             AnonymizationTechnique::Masking => {
                 if let Some(s) = value.as_str() {
-                    let masked = s.chars()
+                    let masked = s
+                        .chars()
                         .enumerate()
                         .map(|(i, c)| if i < s.len() / 2 { c } else { '*' })
                         .collect::<String>();
@@ -1025,9 +1065,10 @@ impl DataAnonymizer {
                 }
             }
             _ => {
-                return Err(PrivacyError::AnonymizationFailed(
-                    format!("Technique {:?} not implemented", technique)
-                ));
+                return Err(PrivacyError::AnonymizationFailed(format!(
+                    "Technique {:?} not implemented",
+                    technique
+                )));
             }
         }
         Ok(())
@@ -1048,11 +1089,11 @@ mod tests {
     #[tokio::test]
     async fn test_budget_tracking() {
         let tracker = PrivacyBudgetTracker::new(5.0, Duration::from_hours(1));
-        
+
         // Test budget consumption
         assert!(tracker.consume_budget("user1", 2.0).is_ok());
         assert!(tracker.remaining_budget("user1") == 3.0);
-        
+
         // Test budget exhaustion
         assert!(tracker.consume_budget("user1", 4.0).is_err());
     }
@@ -1064,7 +1105,7 @@ mod tests {
             "email": "test@example.com",
             "phone": "123-456-7890"
         });
-        
+
         assert!(detector.detect_sensitive_data(&data, &[]).is_err());
     }
 
@@ -1075,15 +1116,13 @@ mod tests {
             "name": "John Doe",
             "email": "john@example.com"
         });
-        
-        let rules = vec![
-            AnonymizationRule {
-                field_pattern: "name".to_string(),
-                technique: AnonymizationTechnique::Suppression,
-                config: serde_json::Value::Null,
-            }
-        ];
-        
+
+        let rules = vec![AnonymizationRule {
+            field_pattern: "name".to_string(),
+            technique: AnonymizationTechnique::Suppression,
+            config: serde_json::Value::Null,
+        }];
+
         assert!(anonymizer.anonymize_data(&mut data, &rules).is_ok());
         assert_eq!(data["name"], "***");
     }

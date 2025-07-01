@@ -68,7 +68,7 @@ impl ShapeParser {
     /// Parse shapes from an RDF store
     pub fn parse_shapes_from_store(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Shape>> {
         let start_time = std::time::Instant::now();
@@ -213,7 +213,7 @@ impl ShapeParser {
     }
 
     /// Find all shape nodes in the store
-    fn find_shape_nodes(&self, store: &Store, _graph_name: Option<&str>) -> Result<Vec<Term>> {
+    fn find_shape_nodes(&self, store: &dyn Store, _graph_name: Option<&str>) -> Result<Vec<Term>> {
         // This is a simplified implementation
         // The actual implementation would query the store for shape nodes
         // using SPARQL or graph iteration
@@ -273,7 +273,7 @@ impl ShapeParser {
     /// Parse a single shape from the store
     fn parse_shape_from_store(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shape_node: &Term,
         _graph_name: Option<&str>,
     ) -> Result<Shape> {

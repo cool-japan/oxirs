@@ -252,8 +252,9 @@ impl ConstraintSelectivityAnalyzer {
             selectivity_stats.total_violations as f64 / selectivity_stats.total_evaluations as f64;
 
         // Update confidence based on sample size
-        selectivity_stats.confidence =
-            self.calculate_confidence(selectivity_stats.total_evaluations);
+        let total_evaluations = selectivity_stats.total_evaluations;
+        let confidence = self.calculate_confidence(total_evaluations);
+        selectivity_stats.confidence = confidence;
         selectivity_stats.last_updated = Instant::now();
 
         // Update performance stats

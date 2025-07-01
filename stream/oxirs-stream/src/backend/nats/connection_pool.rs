@@ -110,11 +110,14 @@ impl ConnectionPool {
         // Round-robin selection
         let selected_index = self.round_robin_counter % healthy_connections.len();
         self.round_robin_counter = self.round_robin_counter.wrapping_add(1);
-        
+
         let (original_index, connection) = healthy_connections[selected_index];
         self.active_index = original_index;
-        
-        debug!("Selected connection: {} (index: {})", connection.url, original_index);
+
+        debug!(
+            "Selected connection: {} (index: {})",
+            connection.url, original_index
+        );
         Some(connection)
     }
 
@@ -157,14 +160,17 @@ impl ConnectionPool {
         if let Some(connection) = self.connections.get_mut(index) {
             connection.is_healthy = false;
             connection.last_error = Some(error.clone());
-            warn!("Marked connection as unhealthy: {} - {}", connection.url, error);
+            warn!(
+                "Marked connection as unhealthy: {} - {}",
+                connection.url, error
+            );
         }
     }
 
     /// Get pool statistics
     pub fn get_stats(&self) -> ConnectionPoolStats {
         let healthy_count = self.connections.iter().filter(|c| c.is_healthy).count();
-        
+
         ConnectionPoolStats {
             total_connections: self.connections.len(),
             healthy_connections: healthy_count,
@@ -180,7 +186,7 @@ impl ConnectionPool {
         let initial_count = self.connections.len();
         self.connections.retain(|conn| conn.is_healthy);
         let removed_count = initial_count - self.connections.len();
-        
+
         if removed_count > 0 {
             info!("Removed {} unhealthy connections from pool", removed_count);
             // Reset active index if it's out of bounds
@@ -217,7 +223,7 @@ mod tests {
     async fn test_connection_pool_stats() {
         let pool = ConnectionPool::new(10);
         let stats = pool.get_stats();
-        
+
         assert_eq!(stats.total_connections, 0);
         assert_eq!(stats.healthy_connections, 0);
         assert_eq!(stats.max_connections, 10);

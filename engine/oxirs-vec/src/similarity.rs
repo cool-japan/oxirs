@@ -73,6 +73,8 @@ pub enum SimilarityMetric {
     Angular,
     /// Chebyshev distance (L∞ norm)
     Chebyshev,
+    /// Dot product (inner product)
+    DotProduct,
 }
 
 impl SimilarityMetric {
@@ -101,9 +103,38 @@ impl SimilarityMetric {
             SimilarityMetric::Canberra => canberra_similarity(a, b),
             SimilarityMetric::Angular => angular_similarity(a, b),
             SimilarityMetric::Chebyshev => chebyshev_similarity(a, b),
+            SimilarityMetric::DotProduct => dot_product_similarity(a, b),
         };
 
         Ok(similarity.clamp(0.0, 1.0))
+    }
+
+    /// Calculate distance between two vectors (lower is more similar)
+    pub fn distance(&self, a: &Vector, b: &Vector) -> Result<f32> {
+        let a_f32 = a.as_f32();
+        let b_f32 = b.as_f32();
+        
+        if a_f32.len() != b_f32.len() {
+            return Err(anyhow!("Vector dimensions must match"));
+        }
+
+        let distance = match self {
+            // Distance metrics - use direct calculation
+            SimilarityMetric::Euclidean => euclidean_distance(&a_f32, &b_f32),
+            SimilarityMetric::Manhattan => manhattan_distance(&a_f32, &b_f32),
+            SimilarityMetric::Minkowski(p) => minkowski_distance(&a_f32, &b_f32, *p),
+            SimilarityMetric::Hamming => hamming_distance(&a_f32, &b_f32),
+            SimilarityMetric::Canberra => canberra_distance(&a_f32, &b_f32),
+            SimilarityMetric::Chebyshev => chebyshev_distance(&a_f32, &b_f32),
+            
+            // Similarity metrics - convert to distance (1 - similarity)
+            _ => {
+                let similarity = self.similarity(&a_f32, &b_f32)?;
+                1.0 - similarity
+            }
+        };
+
+        Ok(distance.max(0.0))
     }
 }
 
@@ -592,9 +623,71 @@ fn angular_similarity(a: &[f32], b: &[f32]) -> f32 {
     1.0 - (angle / std::f32::consts::PI)
 }
 
+fn dot_product_similarity(a: &[f32], b: &[f32]) -> f32 {
+    // Use oxirs-core SIMD operations
+    f32::dot_product(a, b)
+}
+
 fn vector_magnitude(vector: &[f32]) -> f32 {
     // Use oxirs-core SIMD operations
     f32::norm(vector)
+}
+
+// Distance function implementations (lower values mean more similar)
+
+fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
+    // Use oxirs-core SIMD operations
+    f32::euclidean_distance(a, b)
+}
+
+fn manhattan_distance(a: &[f32], b: &[f32]) -> f32 {
+    // Use oxirs-core SIMD operations
+    f32::manhattan_distance(a, b)
+}
+
+fn minkowski_distance(a: &[f32], b: &[f32], p: f32) -> f32 {
+    if p <= 0.0 {
+        return euclidean_distance(a, b);
+    }
+
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs().powf(p))
+        .sum::<f32>()
+        .powf(1.0 / p)
+}
+
+fn chebyshev_distance(a: &[f32], b: &[f32]) -> f32 {
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, |acc, diff| acc.max(diff))
+}
+
+fn hamming_distance(a: &[f32], b: &[f32]) -> f32 {
+    let threshold = 0.5;
+    let mismatches = a
+        .iter()
+        .zip(b)
+        .filter(|(x, y)| (**x > threshold) != (**y > threshold))
+        .count();
+
+    mismatches as f32 / a.len() as f32
+}
+
+fn canberra_distance(a: &[f32], b: &[f32]) -> f32 {
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| {
+            let numerator = (x - y).abs();
+            let denominator = x.abs() + y.abs();
+            if denominator > 0.0 {
+                numerator / denominator
+            } else {
+                0.0
+            }
+        })
+        .sum()
 }
 
 /// Similarity search result with metadata

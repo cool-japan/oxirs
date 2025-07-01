@@ -64,7 +64,11 @@ impl Default for SsoConfig {
             client_id: String::new(),
             client_secret: String::new(),
             redirect_uri: String::new(),
-            scopes: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
+            scopes: vec![
+                "openid".to_string(),
+                "profile".to_string(),
+                "email".to_string(),
+            ],
             auto_provision_users: true,
             role_mapping: HashMap::new(),
         }
@@ -822,8 +826,16 @@ pub trait ComplianceMonitor {
 
 #[async_trait::async_trait]
 pub trait WorkflowEngine {
-    async fn start_workflow(&self, workflow_id: &str, data: HashMap<String, serde_json::Value>) -> Result<String>;
-    async fn complete_task(&self, task_id: &str, result: HashMap<String, serde_json::Value>) -> Result<()>;
+    async fn start_workflow(
+        &self,
+        workflow_id: &str,
+        data: HashMap<String, serde_json::Value>,
+    ) -> Result<String>;
+    async fn complete_task(
+        &self,
+        task_id: &str,
+        result: HashMap<String, serde_json::Value>,
+    ) -> Result<()>;
     async fn get_workflow_status(&self, instance_id: &str) -> Result<WorkflowStatus>;
 }
 
@@ -904,7 +916,7 @@ impl EnterpriseIntegrationManager {
     /// Initialize all enterprise integrations
     pub async fn initialize(&mut self) -> Result<()> {
         let config = self.config.read().await;
-        
+
         // Initialize SSO if enabled
         if config.sso.enabled {
             info!("Initializing SSO integration");
@@ -978,7 +990,11 @@ impl EnterpriseIntegrationManager {
     }
 
     /// Start a workflow
-    pub async fn start_workflow(&self, workflow_id: &str, data: HashMap<String, serde_json::Value>) -> Result<String> {
+    pub async fn start_workflow(
+        &self,
+        workflow_id: &str,
+        data: HashMap<String, serde_json::Value>,
+    ) -> Result<String> {
         if let Some(ref workflow) = self.workflow_engine {
             workflow.start_workflow(workflow_id, data).await
         } else {
@@ -1017,7 +1033,7 @@ mod tests {
     async fn test_enterprise_integration_manager_creation() {
         let config = EnterpriseConfig::default();
         let manager = EnterpriseIntegrationManager::new(config);
-        
+
         let retrieved_config = manager.get_config().await;
         assert!(!retrieved_config.sso.enabled);
     }

@@ -37,6 +37,28 @@ pub enum PropertyPath {
     NegatedPropertySet(Vec<Term>),
 }
 
+impl std::fmt::Display for PropertyPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PropertyPath::Direct(term) => write!(f, "{:?}", term),
+            PropertyPath::Inverse(path) => write!(f, "^{}", path),
+            PropertyPath::Sequence(left, right) => write!(f, "{}/{}", left, right),
+            PropertyPath::Alternative(left, right) => write!(f, "{}|{}", left, right),
+            PropertyPath::ZeroOrMore(path) => write!(f, "{}*", path),
+            PropertyPath::OneOrMore(path) => write!(f, "{}+", path),
+            PropertyPath::ZeroOrOne(path) => write!(f, "{}?", path),
+            PropertyPath::NegatedPropertySet(terms) => {
+                write!(f, "!(")?;
+                for (i, term) in terms.iter().enumerate() {
+                    if i > 0 { write!(f, "|")?; }
+                    write!(f, "{:?}", term)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
 /// Property path evaluation context
 #[derive(Debug, Clone)]
 pub struct PathContext {

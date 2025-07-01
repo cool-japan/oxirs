@@ -866,7 +866,7 @@ pub struct BenchmarkDataset {
 }
 
 /// Comparison result
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ComparisonResult {
     /// Dataset name
     pub dataset_name: String,
@@ -881,7 +881,7 @@ pub struct ComparisonResult {
 }
 
 /// Performance ratios
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceRatios {
     /// Speed ratio (oxirs/faiss)
     pub speed_ratio: f64,
@@ -892,7 +892,7 @@ pub struct PerformanceRatios {
 }
 
 /// Statistical significance test results
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatisticalSignificance {
     /// P-value for speed difference
     pub speed_p_value: f64,
@@ -952,7 +952,7 @@ impl FaissPerformanceComparison {
         let ratios = PerformanceRatios {
             speed_ratio: oxirs_perf.search_latency_us / faiss_perf.search_latency_us,
             memory_ratio: oxirs_perf.memory_usage_mb / faiss_perf.memory_usage_mb,
-            accuracy_ratio: oxirs_perf.recall_at_10 / faiss_perf.recall_at_10,
+            accuracy_ratio: (oxirs_perf.recall_at_10 as f64) / (faiss_perf.recall_at_10 as f64),
         };
 
         // Perform statistical significance testing

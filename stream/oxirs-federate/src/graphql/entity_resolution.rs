@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use std::collections::{HashMap, HashSet, VecDeque};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::executor::GraphQLResponse;
 

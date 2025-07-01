@@ -163,9 +163,7 @@ pub enum ChangeData {
         graph: String,
     },
     /// Batch of changes
-    Batch {
-        changes: Vec<ChangeData>,
-    },
+    Batch { changes: Vec<ChangeData> },
     /// Schema modification
     Schema {
         schema_type: String,
@@ -212,7 +210,8 @@ impl VectorClock {
     pub fn update(&mut self, other: &VectorClock) {
         for (service_id, &clock_value) in &other.clocks {
             let current = self.clocks.get(service_id).copied().unwrap_or(0);
-            self.clocks.insert(service_id.clone(), current.max(clock_value));
+            self.clocks
+                .insert(service_id.clone(), current.max(clock_value));
         }
         self.last_updated = SystemTime::now();
     }
@@ -327,7 +326,7 @@ impl ChangeLog {
         change.sequence_number = self.current_sequence;
         self.vector_clock.increment(&self.service_id);
         change.vector_clock = self.vector_clock.clone();
-        
+
         self.changes.push_back(change);
     }
 
@@ -352,7 +351,7 @@ impl ChangeLog {
     /// Prune old changes
     pub fn prune_changes(&mut self, retention_period: Duration) {
         let cutoff_time = SystemTime::now() - retention_period;
-        
+
         while let Some(front) = self.changes.front() {
             if front.timestamp < cutoff_time {
                 self.changes.pop_front();
@@ -489,7 +488,7 @@ impl CdcProcessor {
     /// Create CDC processor with configuration
     pub fn with_config(config: CdcConfig) -> Self {
         let processing_semaphore = Arc::new(Semaphore::new(100)); // Limit concurrent operations
-        
+
         Self {
             config,
             change_logs: Arc::new(RwLock::new(HashMap::new())),
@@ -508,12 +507,12 @@ impl CdcProcessor {
         }
 
         let _permit = self.processing_semaphore.acquire().await?;
-        
+
         // Generate change ID if not provided
         if change.change_id.is_empty() {
             change.change_id = Uuid::new_v4().to_string();
         }
-        
+
         // Set timestamp if not provided
         if change.timestamp.duration_since(UNIX_EPOCH)?.as_secs() == 0 {
             change.timestamp = SystemTime::now();
@@ -522,11 +521,12 @@ impl CdcProcessor {
         // Add change to service log
         {
             let mut logs = self.change_logs.write().await;
-            let log = logs.entry(change.source_service.clone())
+            let log = logs
+                .entry(change.source_service.clone())
                 .or_insert_with(|| ChangeLog::new(change.source_service.clone()));
-            
+
             log.add_change(change.clone());
-            
+
             // Prune old changes
             log.prune_changes(self.config.change_retention_period);
         }
@@ -534,7 +534,7 @@ impl CdcProcessor {
         // Check for conflicts
         if let Some(conflict) = self.detect_conflict(&change).await? {
             change.conflict_info = Some(conflict);
-            
+
             // Attempt automatic resolution
             if let Some(resolved_change) = self.resolve_conflict(&change).await? {
                 self.apply_change(&resolved_change).await?;
@@ -554,7 +554,10 @@ impl CdcProcessor {
         {
             let mut stats = self.statistics.write().await;
             stats.total_changes_processed += 1;
-            *stats.changes_per_service.entry(change.source_service.clone()).or_insert(0) += 1;
+            *stats
+                .changes_per_service
+                .entry(change.source_service.clone())
+                .or_insert(0) += 1;
         }
 
         debug!("Recorded change: {}", change.change_id);
@@ -569,7 +572,7 @@ impl CdcProcessor {
         since_time: Option<SystemTime>,
     ) -> Result<IncrementalUpdate> {
         let logs = self.change_logs.read().await;
-        
+
         let changes = if let Some(log) = logs.get(service_id) {
             if let Some(sequence) = since_sequence {
                 log.get_changes_since(sequence)
@@ -592,7 +595,10 @@ impl CdcProcessor {
                 ChangeType::Delete => removed.push(change.data.clone()),
                 ChangeType::Update => modified.push(change.data.clone()),
                 ChangeType::Batch => {
-                    if let ChangeData::Batch { changes: batch_changes } = &change.data {
+                    if let ChangeData::Batch {
+                        changes: batch_changes,
+                    } = &change.data
+                    {
                         for batch_change in batch_changes {
                             added.push(batch_change.clone());
                         }
@@ -628,41 +634,59 @@ impl CdcProcessor {
         service_id: &str,
     ) -> Result<impl futures_util::Stream<Item = ChangeRecord>> {
         self.ensure_change_publisher_exists(service_id).await?;
-        
+
         let publishers = self.change_publishers.read().await;
         if let Some(publisher) = publishers.get(service_id) {
             let receiver = publisher.subscribe();
-            Ok(BroadcastStream::new(receiver).filter_map(|result| async move {
-                match result {
-                    Ok(change) => Some(change),
-                    Err(e) => {
-                        warn!("Change subscription error: {}", e);
-                        None
+            Ok(
+                BroadcastStream::new(receiver).filter_map(|result| async move {
+                    match result {
+                        Ok(change) => Some(change),
+                        Err(e) => {
+                            warn!("Change subscription error: {}", e);
+                            None
+                        }
                     }
-                }
-            }))
+                }),
+            )
         } else {
-            Err(anyhow!("Failed to create change subscription for service: {}", service_id))
+            Err(anyhow!(
+                "Failed to create change subscription for service: {}",
+                service_id
+            ))
         }
     }
 
     /// Synchronize changes between services
-    pub async fn synchronize_services(&self, source_service: &str, target_services: &[String]) -> Result<()> {
+    pub async fn synchronize_services(
+        &self,
+        source_service: &str,
+        target_services: &[String],
+    ) -> Result<()> {
         let _permit = self.processing_semaphore.acquire().await?;
-        
+
         for target_service in target_services {
-            if let Err(e) = self.synchronize_service_pair(source_service, target_service).await {
-                error!("Failed to synchronize {} -> {}: {}", source_service, target_service, e);
-                
+            if let Err(e) = self
+                .synchronize_service_pair(source_service, target_service)
+                .await
+            {
+                error!(
+                    "Failed to synchronize {} -> {}: {}",
+                    source_service, target_service, e
+                );
+
                 // Update failed sync count
                 {
                     let mut sync_state = self.sync_state.write().await;
-                    let failed_count = sync_state.failed_syncs.entry(target_service.clone()).or_insert(0);
+                    let failed_count = sync_state
+                        .failed_syncs
+                        .entry(target_service.clone())
+                        .or_insert(0);
                     *failed_count += 1;
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -675,20 +699,23 @@ impl CdcProcessor {
     pub async fn start_background_sync(&self) -> Result<()> {
         let processor = self.clone();
         let sync_interval = self.config.sync_interval;
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(sync_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 if let Err(e) = processor.perform_background_sync().await {
                     error!("Background sync error: {}", e);
                 }
             }
         });
-        
-        info!("Started background synchronization with interval: {:?}", sync_interval);
+
+        info!(
+            "Started background synchronization with interval: {:?}",
+            sync_interval
+        );
         Ok(())
     }
 
@@ -697,13 +724,12 @@ impl CdcProcessor {
     async fn detect_conflict(&self, change: &ChangeRecord) -> Result<Option<ConflictInfo>> {
         // Simple conflict detection - would be more sophisticated in practice
         let logs = self.change_logs.read().await;
-        
+
         if let Some(log) = logs.get(&change.source_service) {
             // Check for recent conflicting changes
-            let recent_changes = log.get_changes_since_time(
-                SystemTime::now() - Duration::from_secs(60)
-            );
-            
+            let recent_changes =
+                log.get_changes_since_time(SystemTime::now() - Duration::from_secs(60));
+
             for recent_change in recent_changes {
                 if self.changes_conflict(change, &recent_change) {
                     return Ok(Some(ConflictInfo {
@@ -717,24 +743,34 @@ impl CdcProcessor {
                 }
             }
         }
-        
+
         Ok(None)
     }
 
     fn changes_conflict(&self, change1: &ChangeRecord, change2: &ChangeRecord) -> bool {
         // Simple conflict detection based on data
         match (&change1.data, &change2.data) {
-            (ChangeData::Triple { subject: s1, predicate: p1, object: _, graph: g1 },
-             ChangeData::Triple { subject: s2, predicate: p2, object: _, graph: g2 }) => {
-                s1 == s2 && p1 == p2 && g1 == g2
-            }
+            (
+                ChangeData::Triple {
+                    subject: s1,
+                    predicate: p1,
+                    object: _,
+                    graph: g1,
+                },
+                ChangeData::Triple {
+                    subject: s2,
+                    predicate: p2,
+                    object: _,
+                    graph: g2,
+                },
+            ) => s1 == s2 && p1 == p2 && g1 == g2,
             _ => false,
         }
     }
 
     async fn resolve_conflict(&self, change: &ChangeRecord) -> Result<Option<ChangeRecord>> {
         let resolver = self.conflict_resolver.read().await;
-        
+
         match self.config.conflict_resolution {
             ConflictResolutionStrategy::LastWriterWins => {
                 // Return the newer change
@@ -758,81 +794,110 @@ impl CdcProcessor {
     async fn queue_for_manual_resolution(&self, change: ChangeRecord) -> Result<()> {
         let mut resolver = self.conflict_resolver.write().await;
         resolver.manual_resolution_queue.push_back(change);
-        
+
         let mut stats = self.statistics.write().await;
         stats.pending_manual_resolutions += 1;
-        
+
         Ok(())
     }
 
     async fn apply_change(&self, change: &ChangeRecord) -> Result<()> {
         // In a real implementation, this would apply the change to the data store
-        debug!("Applying change: {} of type {:?}", change.change_id, change.change_type);
+        debug!(
+            "Applying change: {} of type {:?}",
+            change.change_id, change.change_type
+        );
         Ok(())
     }
 
     async fn publish_change_notification(&self, change: &ChangeRecord) -> Result<()> {
-        self.ensure_change_publisher_exists(&change.source_service).await?;
-        
+        self.ensure_change_publisher_exists(&change.source_service)
+            .await?;
+
         let publishers = self.change_publishers.read().await;
         if let Some(publisher) = publishers.get(&change.source_service) {
             if let Err(_) = publisher.send(change.clone()) {
-                debug!("No subscribers for change notifications on service: {}", change.source_service);
+                debug!(
+                    "No subscribers for change notifications on service: {}",
+                    change.source_service
+                );
             }
         }
-        
+
         Ok(())
     }
 
     async fn ensure_change_publisher_exists(&self, service_id: &str) -> Result<()> {
         let mut publishers = self.change_publishers.write().await;
-        
+
         if !publishers.contains_key(service_id) {
             let (sender, _) = broadcast::channel(1000);
             publishers.insert(service_id.to_string(), sender);
         }
-        
+
         Ok(())
     }
 
-    async fn synchronize_service_pair(&self, source_service: &str, target_service: &str) -> Result<()> {
+    async fn synchronize_service_pair(
+        &self,
+        source_service: &str,
+        target_service: &str,
+    ) -> Result<()> {
         // Mark synchronization as active
         {
             let mut sync_state = self.sync_state.write().await;
-            sync_state.active_syncs.insert(format!("{}->{}", source_service, target_service));
+            sync_state
+                .active_syncs
+                .insert(format!("{}->{}", source_service, target_service));
         }
-        
+
         // Get last sync time
         let last_sync = {
             let sync_state = self.sync_state.read().await;
-            sync_state.last_sync_times.get(target_service)
+            sync_state
+                .last_sync_times
+                .get(target_service)
                 .copied()
                 .unwrap_or(SystemTime::UNIX_EPOCH)
         };
-        
+
         // Get incremental update
-        let update = self.get_incremental_update(source_service, None, Some(last_sync)).await?;
-        
+        let update = self
+            .get_incremental_update(source_service, None, Some(last_sync))
+            .await?;
+
         // Apply changes to target service (mock implementation)
         for added_change in &update.added {
-            debug!("Syncing added change to {}: {:?}", target_service, added_change);
+            debug!(
+                "Syncing added change to {}: {:?}",
+                target_service, added_change
+            );
         }
-        
+
         for removed_change in &update.removed {
-            debug!("Syncing removed change to {}: {:?}", target_service, removed_change);
+            debug!(
+                "Syncing removed change to {}: {:?}",
+                target_service, removed_change
+            );
         }
-        
+
         // Update sync state
         {
             let mut sync_state = self.sync_state.write().await;
-            sync_state.last_sync_times.insert(target_service.to_string(), SystemTime::now());
-            sync_state.active_syncs.remove(&format!("{}->{}", source_service, target_service));
+            sync_state
+                .last_sync_times
+                .insert(target_service.to_string(), SystemTime::now());
+            sync_state
+                .active_syncs
+                .remove(&format!("{}->{}", source_service, target_service));
             sync_state.failed_syncs.remove(target_service);
         }
-        
-        info!("Synchronized {} changes from {} to {}", 
-              update.statistics.total_changes, source_service, target_service);
-        
+
+        info!(
+            "Synchronized {} changes from {} to {}",
+            update.statistics.total_changes, source_service, target_service
+        );
+
         Ok(())
     }
 
@@ -840,19 +905,21 @@ impl CdcProcessor {
         let logs = self.change_logs.read().await;
         let service_ids: Vec<String> = logs.keys().cloned().collect();
         drop(logs);
-        
+
         // Sync each service with all others
         for source_service in &service_ids {
-            let target_services: Vec<String> = service_ids.iter()
+            let target_services: Vec<String> = service_ids
+                .iter()
                 .filter(|&s| s != source_service)
                 .cloned()
                 .collect();
-            
+
             if !target_services.is_empty() {
-                self.synchronize_services(source_service, &target_services).await?;
+                self.synchronize_services(source_service, &target_services)
+                    .await?;
             }
         }
-        
+
         Ok(())
     }
 }
@@ -898,7 +965,7 @@ mod tests {
     #[tokio::test]
     async fn test_change_recording() {
         let processor = CdcProcessor::new();
-        
+
         let change = ChangeRecord {
             change_id: "test-change-1".to_string(),
             change_type: ChangeType::Insert,
@@ -916,9 +983,9 @@ mod tests {
             conflict_info: None,
             retry_count: 0,
         };
-        
+
         processor.record_change(change).await.unwrap();
-        
+
         let stats = processor.get_statistics().await;
         assert_eq!(stats.total_changes_processed, 1);
     }
@@ -926,7 +993,7 @@ mod tests {
     #[tokio::test]
     async fn test_incremental_update() {
         let processor = CdcProcessor::new();
-        
+
         // Record some changes
         let change = ChangeRecord {
             change_id: "test-change-1".to_string(),
@@ -945,11 +1012,14 @@ mod tests {
             conflict_info: None,
             retry_count: 0,
         };
-        
+
         processor.record_change(change).await.unwrap();
-        
+
         // Get incremental update
-        let update = processor.get_incremental_update("test-service", None, None).await.unwrap();
+        let update = processor
+            .get_incremental_update("test-service", None, None)
+            .await
+            .unwrap();
         assert_eq!(update.added.len(), 1);
         assert_eq!(update.statistics.total_changes, 1);
     }
@@ -958,25 +1028,28 @@ mod tests {
     fn test_vector_clock() {
         let mut clock1 = VectorClock::new();
         let mut clock2 = VectorClock::new();
-        
+
         clock1.increment("service1");
         clock2.increment("service2");
-        
+
         assert_eq!(clock1.compare(&clock2), ClockOrdering::Concurrent);
-        
+
         clock1.update(&clock2);
         clock1.increment("service1");
-        
+
         assert_eq!(clock1.compare(&clock2), ClockOrdering::After);
     }
 
     #[tokio::test]
     async fn test_change_subscription() {
         let processor = CdcProcessor::new();
-        
+
         // Subscribe to changes
-        let _change_stream = processor.subscribe_to_changes("test-service").await.unwrap();
-        
+        let _change_stream = processor
+            .subscribe_to_changes("test-service")
+            .await
+            .unwrap();
+
         // Record a change
         let change = ChangeRecord {
             change_id: "test-change-1".to_string(),
@@ -995,9 +1068,9 @@ mod tests {
             conflict_info: None,
             retry_count: 0,
         };
-        
+
         processor.record_change(change).await.unwrap();
-        
+
         // Change should be published to subscribers
     }
 }

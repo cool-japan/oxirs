@@ -27,31 +27,38 @@ impl QuantumRetrievalState {
             coherence_time: Duration::from_secs((query_complexity * 10.0) as u64),
         }
     }
-    
+
     /// Quantum superposition for multiple retrieval paths
     pub fn superposition_search(&self, candidates: &[RagDocument]) -> Vec<QuantumSearchResult> {
-        candidates.iter().map(|doc| {
-            let probability = self.amplitude.powi(2) * 
-                (self.phase + doc.content.len() as f64 * 0.001).cos().abs();
-            
-            QuantumSearchResult {
-                document: doc.clone(),
-                quantum_probability: probability,
-                entanglement_score: self.entanglement_factor * probability,
-                coherence_remaining: self.coherence_time,
-            }
-        }).collect()
+        candidates
+            .iter()
+            .map(|doc| {
+                let probability = self.amplitude.powi(2)
+                    * (self.phase + doc.content.len() as f64 * 0.001).cos().abs();
+
+                QuantumSearchResult {
+                    document: doc.clone(),
+                    quantum_probability: probability,
+                    entanglement_score: self.entanglement_factor * probability,
+                    coherence_remaining: self.coherence_time,
+                }
+            })
+            .collect()
     }
-    
+
     /// Quantum interference for result optimization
     pub fn interference_optimization(&self, results: &mut Vec<QuantumSearchResult>) {
         for result in results.iter_mut() {
             let interference = (self.phase - result.quantum_probability * PI).sin();
             result.quantum_probability *= (1.0 + interference * 0.1).max(0.1);
         }
-        
+
         // Sort by quantum probability
-        results.sort_by(|a, b| b.quantum_probability.partial_cmp(&a.quantum_probability).unwrap());
+        results.sort_by(|a, b| {
+            b.quantum_probability
+                .partial_cmp(&a.quantum_probability)
+                .unwrap()
+        });
     }
 
     /// Apply quantum tunneling effect for unexpected relevant results
@@ -59,7 +66,7 @@ impl QuantumRetrievalState {
         for result in results.iter_mut() {
             // Calculate tunneling probability based on barrier height
             let tunneling_prob = (-2.0 * barrier_height.sqrt()).exp();
-            
+
             // If tunneling occurs, boost probability of low-scoring but potentially relevant results
             if result.quantum_probability < 0.3 && rand::random::<f64>() < tunneling_prob {
                 result.quantum_probability *= 1.5;
@@ -70,17 +77,17 @@ impl QuantumRetrievalState {
 
     /// Quantum decoherence simulation for result stability
     pub fn apply_decoherence(&mut self, elapsed_time: Duration) {
-        let decoherence_factor = (-elapsed_time.as_secs_f64() / self.coherence_time.as_secs_f64()).exp();
+        let decoherence_factor =
+            (-elapsed_time.as_secs_f64() / self.coherence_time.as_secs_f64()).exp();
         self.amplitude *= decoherence_factor;
         self.entanglement_factor *= decoherence_factor;
     }
 
     /// Quantum error correction for result consistency
     pub fn error_correction(&self, results: &mut Vec<QuantumSearchResult>) {
-        let mean_probability = results.iter()
-            .map(|r| r.quantum_probability)
-            .sum::<f64>() / results.len() as f64;
-        
+        let mean_probability =
+            results.iter().map(|r| r.quantum_probability).sum::<f64>() / results.len() as f64;
+
         // Apply error correction based on deviation from mean
         for result in results.iter_mut() {
             let deviation = (result.quantum_probability - mean_probability).abs();
@@ -117,8 +124,7 @@ impl QuantumSearchResult {
 
     /// Check if result is still quantum coherent
     pub fn is_coherent(&self) -> bool {
-        self.coherence_remaining > Duration::from_secs(1) && 
-        self.quantum_probability > 0.01
+        self.coherence_remaining > Duration::from_secs(1) && self.quantum_probability > 0.01
     }
 
     /// Measure quantum state (collapses superposition)
@@ -155,16 +161,18 @@ impl QuantumEntanglementManager {
     pub fn apply_entanglement(&self, results: &mut Vec<QuantumSearchResult>) {
         for &(idx1, idx2) in &self.entangled_pairs {
             if idx1 < results.len() && idx2 < results.len() {
-                let avg_probability = (results[idx1].quantum_probability + 
-                                    results[idx2].quantum_probability) / 2.0;
-                
+                let avg_probability =
+                    (results[idx1].quantum_probability + results[idx2].quantum_probability) / 2.0;
+
                 // Entangled results have correlated probabilities
                 let strength = self.entanglement_strength;
-                results[idx1].quantum_probability = 
-                    results[idx1].quantum_probability * (1.0 - strength) + avg_probability * strength;
-                results[idx2].quantum_probability = 
-                    results[idx2].quantum_probability * (1.0 - strength) + avg_probability * strength;
-                
+                results[idx1].quantum_probability = results[idx1].quantum_probability
+                    * (1.0 - strength)
+                    + avg_probability * strength;
+                results[idx2].quantum_probability = results[idx2].quantum_probability
+                    * (1.0 - strength)
+                    + avg_probability * strength;
+
                 // Update entanglement scores
                 results[idx1].entanglement_score = strength;
                 results[idx2].entanglement_score = strength;
@@ -174,7 +182,8 @@ impl QuantumEntanglementManager {
 
     /// Break entanglement (decoherence)
     pub fn break_entanglement(&mut self, index: usize) {
-        self.entangled_pairs.retain(|&(idx1, idx2)| idx1 != index && idx2 != index);
+        self.entangled_pairs
+            .retain(|&(idx1, idx2)| idx1 != index && idx2 != index);
     }
 }
 
@@ -202,22 +211,25 @@ impl QuantumRanker {
     pub fn rank_documents(&mut self, documents: &[RagDocument]) -> Vec<QuantumSearchResult> {
         // Create quantum superposition of all possible rankings
         let mut quantum_results = self.quantum_state.superposition_search(documents);
-        
+
         // Apply quantum interference for optimization
-        self.quantum_state.interference_optimization(&mut quantum_results);
-        
+        self.quantum_state
+            .interference_optimization(&mut quantum_results);
+
         // Create entanglements between semantically related documents
         self.create_semantic_entanglements(&quantum_results);
-        
+
         // Apply entanglement effects
-        self.entanglement_manager.apply_entanglement(&mut quantum_results);
-        
+        self.entanglement_manager
+            .apply_entanglement(&mut quantum_results);
+
         // Apply quantum tunneling for serendipitous discoveries
-        self.quantum_state.quantum_tunneling(&mut quantum_results, 0.5);
-        
+        self.quantum_state
+            .quantum_tunneling(&mut quantum_results, 0.5);
+
         // Error correction
         self.quantum_state.error_correction(&mut quantum_results);
-        
+
         quantum_results
     }
 
@@ -228,7 +240,7 @@ impl QuantumRanker {
                 // Simple semantic similarity check (would use actual embedding similarity in production)
                 let doc1 = &results[i].document;
                 let doc2 = &results[j].document;
-                
+
                 if self.are_semantically_similar(doc1, doc2) {
                     self.entanglement_manager.entangle_results(i, j);
                 }
@@ -239,11 +251,12 @@ impl QuantumRanker {
     /// Check if two documents are semantically similar (simplified implementation)
     fn are_semantically_similar(&self, doc1: &RagDocument, doc2: &RagDocument) -> bool {
         // Simplified similarity check - in production would use embeddings
-        let common_words: Vec<&str> = doc1.content
+        let common_words: Vec<&str> = doc1
+            .content
             .split_whitespace()
             .filter(|word| doc2.content.contains(word))
             .collect();
-        
+
         common_words.len() > 3 // Threshold for semantic similarity
     }
 }
@@ -262,17 +275,15 @@ mod tests {
     #[test]
     fn test_quantum_superposition() {
         let state = QuantumRetrievalState::new(0.5);
-        let docs = vec![
-            RagDocument {
-                id: "doc1".to_string(),
-                content: "test content".to_string(),
-                metadata: std::collections::HashMap::new(),
-                embedding: None,
-                timestamp: chrono::Utc::now(),
-                source: "test".to_string(),
-            }
-        ];
-        
+        let docs = vec![RagDocument {
+            id: "doc1".to_string(),
+            content: "test content".to_string(),
+            metadata: std::collections::HashMap::new(),
+            embedding: None,
+            timestamp: chrono::Utc::now(),
+            source: "test".to_string(),
+        }];
+
         let results = state.superposition_search(&docs);
         assert_eq!(results.len(), 1);
         assert!(results[0].quantum_probability >= 0.0);
@@ -283,7 +294,7 @@ mod tests {
         let mut manager = QuantumEntanglementManager::new();
         manager.entangle_results(0, 1);
         assert_eq!(manager.entangled_pairs.len(), 1);
-        
+
         manager.break_entanglement(0);
         assert_eq!(manager.entangled_pairs.len(), 0);
     }

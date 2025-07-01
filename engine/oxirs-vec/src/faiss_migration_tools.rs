@@ -582,11 +582,13 @@ impl FaissMigrationTool {
         }
 
         // Check for FAISS magic number
-        let file_content = std::fs::read(
-            source_path
-                .join("header")
-                .unwrap_or(source_path.to_path_buf()),
-        )?;
+        let header_path = source_path.join("header");
+        let read_path = if header_path.exists() {
+            header_path
+        } else {
+            source_path.to_path_buf()
+        };
+        let file_content = std::fs::read(read_path)?;
 
         if file_content.len() >= 5 && &file_content[0..5] == b"FAISS" {
             debug!("Detected FAISS native format");
@@ -1003,7 +1005,7 @@ impl FaissMigrationTool {
             latency_ratio: target_perf.search_latency_us / source_perf.search_latency_us,
             memory_ratio: target_perf.memory_usage_mb / source_perf.memory_usage_mb,
             throughput_ratio: target_perf.qps / source_perf.qps,
-            accuracy_ratio: target_perf.recall_at_10 / source_perf.recall_at_10,
+            accuracy_ratio: target_perf.recall_at_10 as f64 / source_perf.recall_at_10 as f64,
         };
 
         Ok(PerformanceComparison {

@@ -9,9 +9,10 @@ use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
 use crate::{
-    planner::{ExecutionPlan, ExecutionStep, QueryInfo, StepType},
+    planner::{ExecutionPlan, ExecutionStep, StepType},
     FederatedService, ServiceCapability, ServiceRegistry,
 };
+use crate::planner::planning::types::QueryInfo as PlanningQueryInfo;
 
 use super::{
     cost_estimation::*, graph_analysis::*, pattern_analysis::*, plan_generation::*, types::*,
@@ -37,7 +38,7 @@ impl QueryDecomposer {
     /// Decompose a query into an optimized execution plan
     pub async fn decompose(
         &self,
-        query_info: &QueryInfo,
+        query_info: &PlanningQueryInfo,
         registry: &ServiceRegistry,
     ) -> Result<DecompositionResult> {
         let start_time = Instant::now();
@@ -130,7 +131,7 @@ impl QueryDecomposer {
     pub fn build_execution_plan(
         &self,
         component_plans: Vec<ComponentPlan>,
-        query_info: &QueryInfo,
+        query_info: &PlanningQueryInfo,
     ) -> Result<ExecutionPlan> {
         let mut plan = ExecutionPlan {
             query_id: uuid::Uuid::new_v4().to_string(),

@@ -98,11 +98,10 @@ pub use adaptive_compression::{
     VectorStats,
 };
 pub use advanced_analytics::{
-    AnomalyDetection, AnomalyDetector, AnomalyType, BottleneckInsight, BottleneckSeverity,
-    CachingStatistics, DerivationPath, DerivationStep, ImplementationEffort,
+    AnomalyDetection, AnomalyDetector, AnomalyType, ImplementationEffort,
     OptimizationRecommendation, PerformanceTrends, Priority, QualityAspect, QualityRecommendation,
-    QueryAnalytics, QueryAnomaly, RecommendationType, TraceAction, TraceEntry,
-    VectorAnalyticsEngine, VectorDistributionAnalysis, VectorQualityAssessment,
+    QueryAnalytics, QueryAnomaly, RecommendationType, VectorAnalyticsEngine,
+    VectorDistributionAnalysis, VectorQualityAssessment,
 };
 pub use advanced_benchmarking::{
     AdvancedBenchmarkConfig, AdvancedBenchmarkResult, AdvancedBenchmarkSuite, AlgorithmParameters,
@@ -218,10 +217,10 @@ pub use real_time_analytics::{
     VectorAnalyticsEngine as RealTimeVectorAnalyticsEngine,
 };
 pub use real_time_embedding_pipeline::{
-    AlertThresholds, AutoScalingConfig, CompressionConfig, ContentItem,
-    MonitoringConfig as PipelineMonitoringConfig, PipelineStats, ProcessingPriority,
-    ProcessingResult, ProcessingStatus, RealTimeEmbeddingConfig, RealTimeEmbeddingPipeline,
-    VersioningStrategy,
+    AlertThresholds as PipelineAlertThresholds, AutoScalingConfig, CompressionConfig, ContentItem,
+    MonitoringConfig as PipelineMonitoringConfig, PipelineConfig as RealTimeEmbeddingConfig,
+    PipelineStatistics as PipelineStats, ProcessingPriority, ProcessingResult, ProcessingStatus,
+    RealTimeEmbeddingPipeline, VersioningStrategy,
 };
 pub use real_time_updates::{
     BatchProcessor, RealTimeConfig, RealTimeVectorSearch, RealTimeVectorUpdater, UpdateBatch,
@@ -233,15 +232,15 @@ pub use result_fusion::{
 };
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
-    CrossLanguageProcessor, FederatedQueryResult, PerformanceMonitor, QueryExecutor,
-    SparqlVectorFunctions, SparqlVectorService, VectorQuery, VectorQueryResult, VectorServiceArg,
-    VectorServiceConfig, VectorServiceResult,
+    CrossLanguageProcessor, FederatedQueryResult, QueryExecutor, SparqlVectorFunctions,
+    SparqlVectorService, VectorQuery, VectorQueryResult, VectorServiceArg, VectorServiceConfig,
+    VectorServiceResult,
 };
 pub use sparql_service_endpoint::{
     AuthenticationInfo, AuthenticationType, CustomFunctionRegistry, FederatedOperation,
     FederatedSearchResult, FederatedServiceEndpoint, FederatedVectorQuery, FunctionMetadata,
-    LoadBalancer, ParameterInfo, ParameterType, PartialSearchResult, QueryScope, ReturnType,
-    ServiceCapability, ServiceEndpointManager, ServiceType,
+    LoadBalancer, ParameterInfo, ParameterType as ServiceParameterType, PartialSearchResult,
+    QueryScope, ReturnType, ServiceCapability, ServiceEndpointManager, ServiceType,
 };
 pub use sparse::{COOMatrix, CSRMatrix, SparseVector};
 pub use storage_optimizations::{

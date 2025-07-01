@@ -2,6 +2,7 @@
 
 use crate::{Result, ShaclError};
 use oxirs_core::model::{Literal, NamedNode, Term};
+use oxirs_core::RdfTerm;
 
 /// Format a term for use in SPARQL queries
 pub fn format_term_for_sparql(term: &Term) -> Result<String> {
