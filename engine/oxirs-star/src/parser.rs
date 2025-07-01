@@ -1569,10 +1569,6 @@ impl StarParser {
         Ok(())
     }
 
-    /// Set error recovery mode for parsing
-    pub fn set_error_recovery(&mut self, enable: bool) {
-        self.config.max_parse_errors = if enable { Some(100) } else { None };
-    }
 
     /// Get parsing errors (placeholder implementation)
     /// Parse JSON-LD-star format with RDF-star extension
@@ -1883,11 +1879,6 @@ impl StarParser {
         }
     }
 
-    pub fn get_errors(&self) -> Vec<StarError> {
-        // For now, return empty list. In a complete implementation,
-        // this would return accumulated parsing errors
-        Vec::new()
-    }
 }
 
 impl Default for StarParser {

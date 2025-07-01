@@ -1,10 +1,14 @@
 //! Type definitions for optimization engine
+//!
+//! This module contains all shared data structures, enums, and type aliases
+//! used across the optimization engine modules.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-use oxirs_shacl::{Shape, ShapeId, ValidationReport};
+use crate::shape::{AiShape, PropertyConstraint};
+use crate::shape_management::{OptimizationOpportunity, PerformanceProfile};
 
 /// Optimized validation strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]

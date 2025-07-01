@@ -9,6 +9,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::transactions::IsolationLevel;
+
 // External dependencies
 extern crate num_cpus;
 extern crate toml;
@@ -397,14 +399,6 @@ pub enum SyncStrategy {
     SyncAlways,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IsolationLevel {
-    ReadUncommitted,
-    ReadCommitted,
-    RepeatableRead,
-    Serializable,
-    SnapshotIsolation,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EvictionPolicy {

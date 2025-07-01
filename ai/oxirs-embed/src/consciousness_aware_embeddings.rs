@@ -4,11 +4,12 @@
 //! can adapt based on context, reasoning, and multi-dimensional awareness patterns.
 //! Inspired by theories of consciousness, cognitive science, and advanced AI research.
 
-use crate::{EmbeddingError, ModelConfig, Vector};
+use crate::{ModelConfig, Vector};
 use anyhow::Result;
 use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
 /// Levels of consciousness awareness in the embedding system
@@ -255,6 +256,12 @@ impl MetaCognition {
         let alpha = 0.2;
         let new_effectiveness = (1.0 - alpha) * current + alpha * effectiveness;
         self.strategy_effectiveness.insert(strategy.to_string(), new_effectiveness);
+    }
+}
+
+impl Default for MetaCognition {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -608,7 +615,7 @@ mod tests {
         
         assert_eq!(insights.consciousness_level, ConsciousnessLevel::SelfAware);
         assert!(insights.total_experiences > 0);
-        assert!(insights.active_concepts.len() > 0);
-        assert!(insights.attention_distribution.len() > 0);
+        assert!(!insights.active_concepts.is_empty());
+        assert!(!insights.attention_distribution.is_empty());
     }
 }

@@ -9,9 +9,83 @@ use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
+use async_trait::async_trait;
 
-// QueryResults placeholder - will be implemented in Phase 2
-pub type QueryResults = Vec<Quad>; // Temporary placeholder
+/// SPARQL query results supporting different result types
+#[derive(Debug, Clone)]
+pub enum QueryResults {
+    /// SELECT query results - variable bindings
+    Bindings(Vec<VariableBinding>),
+    /// ASK query results - boolean
+    Boolean(bool),
+    /// CONSTRUCT/DESCRIBE query results - RDF quads
+    Graph(Vec<Quad>),
+}
+
+impl QueryResults {
+    /// Create empty SELECT results
+    pub fn empty_bindings() -> Self {
+        QueryResults::Bindings(Vec::new())
+    }
+    
+    /// Create ASK result
+    pub fn boolean(value: bool) -> Self {
+        QueryResults::Boolean(value)
+    }
+    
+    /// Create CONSTRUCT/DESCRIBE results
+    pub fn graph(quads: Vec<Quad>) -> Self {
+        QueryResults::Graph(quads)
+    }
+    
+    /// Check if results are empty
+    pub fn is_empty(&self) -> bool {
+        match self {
+            QueryResults::Bindings(bindings) => bindings.is_empty(),
+            QueryResults::Boolean(_) => false,
+            QueryResults::Graph(quads) => quads.is_empty(),
+        }
+    }
+    
+    /// Get the number of results
+    pub fn len(&self) -> usize {
+        match self {
+            QueryResults::Bindings(bindings) => bindings.len(),
+            QueryResults::Boolean(_) => 1,
+            QueryResults::Graph(quads) => quads.len(),
+        }
+    }
+}
+
+/// Variable binding for SELECT query results
+#[derive(Debug, Clone)]
+pub struct VariableBinding {
+    bindings: std::collections::HashMap<String, Term>,
+}
+
+impl VariableBinding {
+    pub fn new() -> Self {
+        Self {
+            bindings: std::collections::HashMap::new(),
+        }
+    }
+    
+    pub fn bind(&mut self, variable: String, value: Term) {
+        self.bindings.insert(variable, value);
+    }
+    
+    pub fn get(&self, variable: &str) -> Option<&Term> {
+        self.bindings.get(variable)
+    }
+    
+    pub fn variables(&self) -> impl Iterator<Item = &String> {
+        self.bindings.keys()
+    }
+    
+    pub fn values(&self) -> impl Iterator<Item = &Term> {
+        self.bindings.values()
+    }
+}
 
 /// Storage backend for RDF quads
 #[derive(Debug)]
@@ -208,16 +282,122 @@ impl MemoryStorage {
     }
 }
 
-/// Main RDF store interface
+/// Store trait for RDF operations
+#[async_trait]
+pub trait Store: Send + Sync {
+    /// Insert a quad into the store
+    fn insert_quad(&mut self, quad: Quad) -> Result<bool>;
+    
+    /// Remove a quad from the store  
+    fn remove_quad(&mut self, quad: &Quad) -> Result<bool>;
+    
+    /// Find quads matching the given pattern
+    fn find_quads(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+        graph_name: Option<&GraphName>,
+    ) -> Result<Vec<Quad>>;
+    
+    /// Check if the store is ready for operations
+    fn is_ready(&self) -> bool;
+    
+    /// Get the number of quads in the store
+    fn len(&self) -> Result<usize>;
+    
+    /// Check if the store is empty
+    fn is_empty(&self) -> Result<bool>;
+    
+    /// Query the store with SPARQL
+    fn query(&self, sparql: &str) -> Result<OxirsQueryResults>;
+    
+    /// Prepare a SPARQL query for execution
+    fn prepare_query(&self, sparql: &str) -> Result<PreparedQuery>;
+    
+    /// Get all triples in the store (converts quads to triples)
+    fn triples(&self) -> Result<Vec<Triple>> {
+        let quads = self.find_quads(None, None, None, None)?;
+        Ok(quads.into_iter().map(|quad| {
+            Triple::new(quad.subject().clone(), quad.predicate().clone(), quad.object().clone())
+        }).collect())
+    }
+}
+
+/// Prepared SPARQL query
+pub struct PreparedQuery {
+    sparql: String,
+}
+
+impl PreparedQuery {
+    pub fn new(sparql: String) -> Self {
+        Self { sparql }
+    }
+    
+    /// Execute the prepared query
+    pub fn exec(&self) -> Result<QueryResultsIterator> {
+        // Simplified implementation - in reality this would parse and execute SPARQL
+        Ok(QueryResultsIterator::empty())
+    }
+}
+
+/// Iterator over query results 
+pub struct QueryResultsIterator {
+    results: Vec<SolutionMapping>,
+    index: usize,
+}
+
+impl QueryResultsIterator {
+    pub fn empty() -> Self {
+        Self {
+            results: Vec::new(),
+            index: 0,
+        }
+    }
+}
+
+impl Iterator for QueryResultsIterator {
+    type Item = SolutionMapping;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.results.len() {
+            let result = self.results[self.index].clone();
+            self.index += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+}
+
+/// Solution mapping for SPARQL query results
+#[derive(Debug, Clone)]
+pub struct SolutionMapping {
+    bindings: std::collections::HashMap<String, Term>,
+}
+
+impl SolutionMapping {
+    pub fn new() -> Self {
+        Self {
+            bindings: std::collections::HashMap::new(),
+        }
+    }
+    
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &Term)> {
+        self.bindings.iter()
+    }
+}
+
+/// Main RDF store implementation
 #[derive(Debug)]
-pub struct Store {
+pub struct RdfStore {
     backend: StorageBackend,
 }
 
-impl Store {
+impl RdfStore {
     /// Create a new ultra-high performance in-memory store
     pub fn new() -> Result<Self> {
-        Ok(Store {
+        Ok(RdfStore {
             backend: StorageBackend::UltraMemory(
                 Arc::new(UltraIndex::new()),
                 Arc::new(RdfArena::new()),
@@ -227,7 +407,7 @@ impl Store {
 
     /// Create a new legacy in-memory store for compatibility
     pub fn new_legacy() -> Result<Self> {
-        Ok(Store {
+        Ok(RdfStore {
             backend: StorageBackend::Memory(Arc::new(RwLock::new(MemoryStorage::new()))),
         })
     }
@@ -238,7 +418,7 @@ impl Store {
     /// Future versions will implement disk-based persistence.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_buf = path.as_ref().to_path_buf();
-        Ok(Store {
+        Ok(RdfStore {
             backend: StorageBackend::Persistent(
                 Arc::new(RwLock::new(MemoryStorage::new())),
                 path_buf,
@@ -660,21 +840,166 @@ impl Store {
     }
 }
 
-impl Default for Store {
+impl Default for RdfStore {
     fn default() -> Self {
-        Store::new().unwrap()
+        RdfStore::new().unwrap()
     }
 }
 
-/// Query results container (placeholder for future SPARQL implementation)
+// Implement the Store trait for RdfStore
+#[async_trait]
+impl Store for RdfStore {
+    fn insert_quad(&mut self, quad: Quad) -> Result<bool> {
+        self.insert_quad(quad)
+    }
+    
+    fn remove_quad(&mut self, quad: &Quad) -> Result<bool> {
+        self.remove_quad(quad)
+    }
+    
+    fn find_quads(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+        graph_name: Option<&GraphName>,
+    ) -> Result<Vec<Quad>> {
+        self.query_quads(subject, predicate, object, graph_name)
+    }
+    
+    fn is_ready(&self) -> bool {
+        true // Simple implementation
+    }
+    
+    fn len(&self) -> Result<usize> {
+        self.len()
+    }
+    
+    fn is_empty(&self) -> Result<bool> {
+        self.is_empty()
+    }
+    
+    fn query(&self, sparql: &str) -> Result<OxirsQueryResults> {
+        self.query(sparql)
+    }
+    
+    fn prepare_query(&self, sparql: &str) -> Result<PreparedQuery> {
+        Ok(PreparedQuery::new(sparql.to_string()))
+    }
+}
+
+// ConcreteStore struct for external use with easy construction
+#[derive(Debug)]
+pub struct ConcreteStore {
+    inner: RdfStore,
+}
+
+impl ConcreteStore {
+    pub fn new() -> Result<Self> {
+        Ok(ConcreteStore {
+            inner: RdfStore::new()?,
+        })
+    }
+}
+
+impl Default for ConcreteStore {
+    fn default() -> Self {
+        ConcreteStore::new().unwrap()
+    }
+}
+
+// Implement Store trait for ConcreteStore
+#[async_trait]
+impl Store for ConcreteStore {
+    fn insert_quad(&mut self, quad: Quad) -> Result<bool> {
+        self.inner.insert_quad(quad)
+    }
+    
+    fn remove_quad(&mut self, quad: &Quad) -> Result<bool> {
+        self.inner.remove_quad(quad)
+    }
+    
+    fn find_quads(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+        graph_name: Option<&GraphName>,
+    ) -> Result<Vec<Quad>> {
+        self.inner.find_quads(subject, predicate, object, graph_name)
+    }
+    
+    fn is_ready(&self) -> bool {
+        self.inner.is_ready()
+    }
+    
+    fn len(&self) -> Result<usize> {
+        self.inner.len()
+    }
+    
+    fn is_empty(&self) -> Result<bool> {
+        self.inner.is_empty()
+    }
+    
+    fn query(&self, sparql: &str) -> Result<OxirsQueryResults> {
+        self.inner.query(sparql)
+    }
+    
+    fn prepare_query(&self, sparql: &str) -> Result<PreparedQuery> {
+        self.inner.prepare_query(sparql)
+    }
+}
+
+/// Query results container for SPARQL queries
 #[derive(Debug, Clone)]
 pub struct OxirsQueryResults {
-    // TODO: Implement query results with SPARQL bindings
+    results: QueryResults,
+    variables: Vec<String>,
 }
 
 impl OxirsQueryResults {
     pub fn new() -> Self {
-        OxirsQueryResults {}
+        OxirsQueryResults {
+            results: QueryResults::empty_bindings(),
+            variables: Vec::new(),
+        }
+    }
+    
+    pub fn from_bindings(bindings: Vec<VariableBinding>, variables: Vec<String>) -> Self {
+        OxirsQueryResults {
+            results: QueryResults::Bindings(bindings),
+            variables,
+        }
+    }
+    
+    pub fn from_boolean(value: bool) -> Self {
+        OxirsQueryResults {
+            results: QueryResults::Boolean(value),
+            variables: Vec::new(),
+        }
+    }
+    
+    pub fn from_graph(quads: Vec<Quad>) -> Self {
+        OxirsQueryResults {
+            results: QueryResults::Graph(quads),
+            variables: Vec::new(),
+        }
+    }
+    
+    pub fn results(&self) -> &QueryResults {
+        &self.results
+    }
+    
+    pub fn variables(&self) -> &[String] {
+        &self.variables
+    }
+    
+    pub fn is_empty(&self) -> bool {
+        self.results.is_empty()
+    }
+    
+    pub fn len(&self) -> usize {
+        self.results.len()
     }
 }
 
@@ -708,7 +1033,7 @@ mod tests {
 
     #[test]
     fn test_store_creation() {
-        let store = Store::new().unwrap();
+        let store = RdfStore::new().unwrap();
         assert!(store.is_empty().unwrap());
         assert_eq!(store.len().unwrap(), 0);
     }
@@ -716,7 +1041,7 @@ mod tests {
     #[test]
     fn test_store_quad_operations() {
         // Use legacy backend for faster testing
-        let mut store = Store::new_legacy().unwrap();
+        let mut store = RdfStore::new_legacy().unwrap();
         let quad = create_test_quad();
 
         // Test insertion
@@ -741,7 +1066,7 @@ mod tests {
 
     #[test]
     fn test_store_triple_operations() {
-        let mut store = Store::new().unwrap();
+        let mut store = RdfStore::new().unwrap();
         let triple = create_test_triple();
 
         // Test insertion
@@ -760,7 +1085,7 @@ mod tests {
 
     #[test]
     fn test_store_string_insertion() {
-        let mut store = Store::new().unwrap();
+        let mut store = RdfStore::new().unwrap();
 
         let result = store
             .insert_string_triple(
@@ -776,7 +1101,7 @@ mod tests {
 
     #[test]
     fn test_store_query_patterns() {
-        let mut store = Store::new().unwrap();
+        let mut store = RdfStore::new().unwrap();
 
         // Create test data
         let subject1 = NamedNode::new("http://example.org/subject1").unwrap();
@@ -839,7 +1164,7 @@ mod tests {
 
     #[test]
     fn test_store_clear() {
-        let mut store = Store::new().unwrap();
+        let mut store = RdfStore::new().unwrap();
 
         // Insert some data
         for i in 0..5 {
@@ -861,7 +1186,7 @@ mod tests {
 
     #[test]
     fn test_bulk_insert() {
-        let mut store = Store::new().unwrap();
+        let mut store = RdfStore::new().unwrap();
 
         let mut quads = Vec::new();
         for i in 0..100 {
@@ -880,7 +1205,7 @@ mod tests {
 
     #[test]
     fn test_default_graph_operations() {
-        let mut store = Store::new().unwrap();
+        let mut store = RdfStore::new().unwrap();
 
         // Insert into default graph
         let triple = create_test_triple();

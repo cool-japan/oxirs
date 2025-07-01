@@ -1150,7 +1150,7 @@ impl NovelArchitectureModel {
             simulator.execute_circuit(&circuit)?;
 
             // Measure all qubits and return expectation values
-            let target_dim = self.config.base_config.dimensions;
+            let target_dim = input.len(); // Use input dimension instead of configured dimensions
             let quantum_dim = params.num_qubits;
             let mut output = Array1::zeros(target_dim);
 
@@ -1673,8 +1673,20 @@ mod tests {
 
     #[test]
     fn test_quantum_forward() {
+        // Configure quantum system with 3 qubits to match input dimension
         let config = NovelArchitectureConfig {
             architecture: ArchitectureType::QuantumInspired,
+            base_config: ModelConfig {
+                dimensions: 3, // Match the input dimension
+                ..Default::default()
+            },
+            architecture_params: ArchitectureParams {
+                quantum_params: QuantumParams {
+                    num_qubits: 3, // Set to match input dimension
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
             ..Default::default()
         };
         let mut model = NovelArchitectureModel::new(config);
@@ -1686,7 +1698,7 @@ mod tests {
         let output = model.quantum_forward(&input).unwrap();
 
         assert_eq!(output.len(), input.len());
-        assert!(output.iter().all(|&x| x >= -1.0 && x <= 1.0));
+        assert!(output.iter().all(|&x| (-1.0..=1.0).contains(&x)));
     }
 
     #[tokio::test]

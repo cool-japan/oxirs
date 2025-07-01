@@ -20,19 +20,24 @@ use crate::{
 };
 
 // Re-export submodules
+#[cfg(feature = "async")]
 pub mod async_engine;
 pub mod batch;
 pub mod cache;
 pub mod constraint_validators;
 pub mod engine;
 pub mod error_recovery;
+pub mod multi_graph;
 pub mod stats;
+#[cfg(feature = "async")]
+pub mod streaming;
 pub mod utils;
 
 #[cfg(test)]
 pub mod tests;
 
 // Re-export main types
+#[cfg(feature = "async")]
 pub use async_engine::{
     AsyncValidationConfig, AsyncValidationEngine, AsyncValidationEngineBuilder,
     AsyncValidationResult, AsyncValidationStats, ValidationEvent,
@@ -42,7 +47,16 @@ pub use cache::*;
 pub use constraint_validators::*;
 pub use engine::ValidationEngine;
 pub use error_recovery::*;
+pub use multi_graph::{
+    MultiGraphValidationConfig, MultiGraphValidationEngine, MultiGraphValidationResult,
+    GraphSelectionStrategy, CrossGraphViolation, MultiGraphStats,
+};
 pub use stats::*;
+#[cfg(feature = "async")]
+pub use streaming::{
+    StreamingValidationConfig, StreamingValidationEngine, StreamingValidationResult,
+    StreamEvent, StreamingStats, ValidationAlert,
+};
 pub use utils::*;
 
 /// Cache key for constraint results

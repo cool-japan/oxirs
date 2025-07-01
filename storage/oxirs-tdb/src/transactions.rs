@@ -19,6 +19,8 @@ pub enum IsolationLevel {
     ReadCommitted,
     /// Prevents dirty reads and non-repeatable reads, allows phantom reads
     RepeatableRead,
+    /// MVCC-specific isolation with snapshot reads
+    SnapshotIsolation,
     /// Prevents all phenomena (dirty reads, non-repeatable reads, phantom reads)
     Serializable,
 }
@@ -117,9 +119,9 @@ pub struct LockInfo {
     pub owner_tx_id: String,
 }
 
-/// Transaction configuration
+/// Transaction manager configuration
 #[derive(Debug, Clone)]
-pub struct TransactionConfig {
+pub struct TransactionManagerConfig {
     /// Default isolation level
     pub default_isolation: IsolationLevel,
     /// Transaction timeout duration
@@ -140,7 +142,7 @@ pub struct TransactionConfig {
     pub max_transaction_age: Duration,
 }
 
-impl Default for TransactionConfig {
+impl Default for TransactionManagerConfig {
     fn default() -> Self {
         Self {
             default_isolation: IsolationLevel::ReadCommitted,
@@ -378,7 +380,7 @@ pub struct TransactionManager {
     /// Active transactions
     transactions: Arc<RwLock<HashMap<String, TransactionInfo>>>,
     /// Transaction configuration
-    config: TransactionConfig,
+    config: TransactionManagerConfig,
     /// Lock manager
     lock_manager: Arc<Mutex<HashMap<Resource, Vec<LockInfo>>>>,
     /// Deadlock detector
@@ -396,11 +398,11 @@ pub struct TransactionManager {
 impl TransactionManager {
     /// Create a new transaction manager
     pub fn new() -> Self {
-        Self::with_config(TransactionConfig::default())
+        Self::with_config(TransactionManagerConfig::default())
     }
 
     /// Create a new transaction manager with custom configuration
-    pub fn with_config(config: TransactionConfig) -> Self {
+    pub fn with_config(config: TransactionManagerConfig) -> Self {
         let manager = Self {
             transactions: Arc::new(RwLock::new(HashMap::new())),
             config,

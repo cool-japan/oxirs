@@ -7,8 +7,9 @@ use crate::rdf_integration::{convert_rule_atom, NamespaceManager, RdfRuleAtom};
 use crate::rdf_integration::RdfTerm;  // Import the enum, not the trait
 use crate::{RuleAtom, Term as RuleTerm};
 use anyhow::{anyhow, Result};
-use oxirs_core::model::{Dataset, Graph, Quad, Triple};
+use oxirs_core::model::{Dataset, Graph, Quad, Triple, NamedNode};
 use oxirs_core::{OxirsError, Store};
+use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
@@ -33,6 +34,24 @@ pub enum RdfFormat {
 }
 
 impl RdfFormat {
+    /// Convert to graph format for parsing
+    pub fn to_graph_format(&self) -> Option<oxirs_core::GraphFormat> {
+        match self {
+            RdfFormat::RdfXml => Some(oxirs_core::GraphFormat::RdfXml),
+            RdfFormat::Turtle => Some(oxirs_core::GraphFormat::Turtle),
+            RdfFormat::NTriples => Some(oxirs_core::GraphFormat::NTriples),
+            _ => None,
+        }
+    }
+
+    /// Convert to dataset format for parsing
+    pub fn to_dataset_format(&self) -> Option<oxirs_core::DatasetFormat> {
+        match self {
+            RdfFormat::NQuads => Some(oxirs_core::DatasetFormat::NQuads),
+            RdfFormat::TriG => Some(oxirs_core::DatasetFormat::TriG),
+            _ => None,
+        }
+    }
 
     /// Detect format from file extension
     pub fn from_extension(path: &Path) -> Option<Self> {
@@ -286,29 +305,10 @@ impl RdfProcessor {
 
     /// Process JSON-LD format
     async fn process_jsonld(&mut self, data: &[u8], stats: &mut ProcessingStats) -> Result<()> {
-        // For now, we'll use oxirs-core's JSON-LD support if available
-        // This is a placeholder for full JSON-LD processing
-        
-        use oxirs_core::jsonld;
-        
-        let json: serde_json::Value = serde_json::from_slice(data)?;
-        let quads = jsonld::to_rdf(&json, None)?;
-        
-        for quad in quads {
-            self.store.insert(&quad)?;
-            
-            if self.config.collect_stats {
-                stats.quads_processed += 1;
-                stats.subjects.insert(quad.subject.to_string());
-                stats.predicates.insert(quad.predicate.to_string());
-                stats.objects.insert(quad.object.to_string());
-                if let Some(graph) = &quad.graph_name {
-                    stats.graphs.insert(graph.to_string());
-                }
-            }
-        }
-        
-        Ok(())
+        // TODO: Implement JSON-LD processing when oxirs-core supports it
+        // For now, we'll just parse as JSON and error
+        let _json: serde_json::Value = serde_json::from_slice(data)?;
+        return Err(anyhow!("JSON-LD processing not yet implemented"));
     }
 
     /// Process line-based formats in streaming mode
@@ -369,7 +369,7 @@ impl RdfProcessor {
     fn parse_ntriples_line(&self, line: &str) -> Result<Triple> {
         // Use oxirs-core's parser
         let mut cursor = std::io::Cursor::new(line.as_bytes());
-        let graph = Graph::parse(&mut cursor, GraphFormat::NTriples, None)?;
+        let graph = Graph::parse(&mut cursor, oxirs_core::GraphFormat::NTriples, None)?;
         let triple = graph.iter().next()
             .ok_or_else(|| anyhow!("No triple parsed from line"))?;
         Ok(triple.clone())
@@ -379,7 +379,7 @@ impl RdfProcessor {
     fn parse_nquads_line(&self, line: &str) -> Result<Quad> {
         // Use oxirs-core's parser
         let mut cursor = std::io::Cursor::new(line.as_bytes());
-        let dataset = Dataset::parse(&mut cursor, DatasetFormat::NQuads, None)?;
+        let dataset = Dataset::parse(&mut cursor, oxirs_core::DatasetFormat::NQuads, None)?;
         let quad = dataset.iter().next()
             .ok_or_else(|| anyhow!("No quad parsed from line"))?;
         Ok(quad.clone())
@@ -388,7 +388,7 @@ impl RdfProcessor {
     /// Extract namespace prefixes from Turtle content
     fn extract_turtle_prefixes(&mut self, content: &str) -> Result<()> {
         // Simple regex-based extraction for @prefix declarations
-        let prefix_regex = regex::Regex::new(r"@prefix\s+(\w+):\s*<([^>]+)>\s*\.")?;
+        let prefix_regex = Regex::new(r"@prefix\s+(\w+):\s*<([^>]+)>\s*\.")?;
         
         for cap in prefix_regex.captures_iter(content) {
             if let (Some(prefix), Some(namespace)) = (cap.get(1), cap.get(2)) {
@@ -400,7 +400,7 @@ impl RdfProcessor {
         }
         
         // Extract @base declaration
-        let base_regex = regex::Regex::new(r"@base\s*<([^>]+)>\s*\.")?;
+        let base_regex = Regex::new(r"@base\s*<([^>]+)>\s*\.")?;
         if let Some(cap) = base_regex.captures(content) {
             if let Some(base) = cap.get(1) {
                 self.namespaces.set_base(base.as_str().to_string());

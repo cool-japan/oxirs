@@ -247,6 +247,218 @@ pub struct LinearRegressionModel {
     pub last_trained: SystemTime,
 }
 
+/// Neural network model for advanced performance prediction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NeuralNetworkModel {
+    /// Hidden layer weights (input to hidden)
+    pub weights_input_hidden: Vec<Vec<f64>>,
+    /// Hidden layer biases
+    pub bias_hidden: Vec<f64>,
+    /// Output layer weights (hidden to output)
+    pub weights_hidden_output: Vec<f64>,
+    /// Output bias
+    pub bias_output: f64,
+    /// Training iterations
+    pub iterations: u32,
+    /// Model accuracy
+    pub accuracy: f64,
+    /// Learning rate
+    pub learning_rate: f64,
+    /// Last training time
+    pub last_trained: SystemTime,
+}
+
+impl NeuralNetworkModel {
+    /// Create new neural network model
+    pub fn new(input_size: usize, hidden_size: usize, learning_rate: f64) -> Self {
+        let mut weights_input_hidden = Vec::new();
+        for _ in 0..hidden_size {
+            let mut layer_weights = Vec::new();
+            for _ in 0..input_size {
+                // Xavier initialization
+                let limit = (6.0 / (input_size + hidden_size) as f64).sqrt();
+                layer_weights.push(rand::random::<f64>() * 2.0 * limit - limit);
+            }
+            weights_input_hidden.push(layer_weights);
+        }
+        
+        let mut weights_hidden_output = Vec::new();
+        for _ in 0..hidden_size {
+            let limit = (6.0 / (hidden_size + 1) as f64).sqrt();
+            weights_hidden_output.push(rand::random::<f64>() * 2.0 * limit - limit);
+        }
+        
+        Self {
+            weights_input_hidden,
+            bias_hidden: vec![0.0; hidden_size],
+            weights_hidden_output,
+            bias_output: 0.0,
+            iterations: 0,
+            accuracy: 0.0,
+            learning_rate,
+            last_trained: SystemTime::now(),
+        }
+    }
+    
+    /// Forward pass through the network
+    pub fn forward(&self, features: &[f64]) -> f64 {
+        // Input to hidden layer
+        let mut hidden_activations = Vec::new();
+        for (i, neuron_weights) in self.weights_input_hidden.iter().enumerate() {
+            let mut activation = self.bias_hidden[i];
+            for (j, &feature) in features.iter().enumerate() {
+                if j < neuron_weights.len() {
+                    activation += neuron_weights[j] * feature;
+                }
+            }
+            // ReLU activation
+            hidden_activations.push(activation.max(0.0));
+        }
+        
+        // Hidden to output layer
+        let mut output = self.bias_output;
+        for (i, &hidden_val) in hidden_activations.iter().enumerate() {
+            if i < self.weights_hidden_output.len() {
+                output += self.weights_hidden_output[i] * hidden_val;
+            }
+        }
+        
+        output.max(0.0) // Ensure non-negative prediction
+    }
+    
+    /// Train the neural network using backpropagation
+    pub fn train(&mut self, samples: &[TrainingSample]) {
+        if samples.is_empty() {
+            return;
+        }
+        
+        let epochs = 200;
+        
+        for epoch in 0..epochs {
+            let mut total_loss = 0.0;
+            
+            for sample in samples {
+                let features = self.extract_features(&sample.features);
+                let target = sample.outcome.execution_time_ms;
+                
+                // Forward pass
+                let prediction = self.forward(&features);
+                let error = prediction - target;
+                
+                // Backward pass
+                self.backpropagate(&features, error, target);
+                
+                total_loss += error * error;
+            }
+            
+            total_loss /= samples.len() as f64;
+            
+            if epoch % 20 == 0 {
+                debug!("NN training epoch {}: loss = {:.2}", epoch, total_loss);
+            }
+        }
+        
+        self.iterations += epochs;
+        self.last_trained = SystemTime::now();
+        self.accuracy = self.calculate_accuracy(samples);
+    }
+    
+    /// Backpropagation algorithm
+    fn backpropagate(&mut self, features: &[f64], output_error: f64, _target: f64) {
+        // Forward pass to get hidden activations
+        let mut hidden_activations = Vec::new();
+        for (i, neuron_weights) in self.weights_input_hidden.iter().enumerate() {
+            let mut activation = self.bias_hidden[i];
+            for (j, &feature) in features.iter().enumerate() {
+                if j < neuron_weights.len() {
+                    activation += neuron_weights[j] * feature;
+                }
+            }
+            hidden_activations.push(activation.max(0.0));
+        }
+        
+        // Output layer gradients
+        let output_gradient = output_error;
+        
+        // Update output layer weights
+        for (i, &hidden_val) in hidden_activations.iter().enumerate() {
+            if i < self.weights_hidden_output.len() {
+                self.weights_hidden_output[i] -= self.learning_rate * output_gradient * hidden_val;
+            }
+        }
+        self.bias_output -= self.learning_rate * output_gradient;
+        
+        // Hidden layer gradients
+        for (i, neuron_weights) in self.weights_input_hidden.iter_mut().enumerate() {
+            if i < self.weights_hidden_output.len() {
+                let hidden_gradient = if hidden_activations[i] > 0.0 {
+                    output_gradient * self.weights_hidden_output[i]
+                } else {
+                    0.0 // ReLU derivative
+                };
+                
+                // Update hidden layer weights
+                for (j, &feature) in features.iter().enumerate() {
+                    if j < neuron_weights.len() {
+                        neuron_weights[j] -= self.learning_rate * hidden_gradient * feature;
+                    }
+                }
+                self.bias_hidden[i] -= self.learning_rate * hidden_gradient;
+            }
+        }
+    }
+    
+    /// Extract features as vector (same as LinearRegressionModel)
+    fn extract_features(&self, features: &QueryFeatures) -> Vec<f64> {
+        vec![
+            features.pattern_count as f64,
+            features.join_count as f64,
+            features.filter_count as f64,
+            features.complexity_score,
+            features.selectivity,
+            features.service_count as f64,
+            features.avg_service_latency,
+            (features.data_size_estimate as f64).log10(),
+            features.query_depth as f64,
+            if features.has_optional { 1.0 } else { 0.0 },
+            if features.has_union { 1.0 } else { 0.0 },
+            if features.has_aggregation { 1.0 } else { 0.0 },
+            features.variable_count as f64,
+        ]
+    }
+    
+    /// Calculate model accuracy
+    fn calculate_accuracy(&self, samples: &[TrainingSample]) -> f64 {
+        if samples.is_empty() {
+            return 0.0;
+        }
+        
+        let mut total_error = 0.0;
+        let mut total_actual = 0.0;
+        
+        for sample in samples {
+            let features = self.extract_features(&sample.features);
+            let prediction = self.forward(&features);
+            let actual = sample.outcome.execution_time_ms;
+            
+            total_error += (prediction - actual).abs();
+            total_actual += actual;
+        }
+        
+        let mean_absolute_error = total_error / samples.len() as f64;
+        let mean_actual = total_actual / samples.len() as f64;
+        
+        // Accuracy as 1 - normalized MAE
+        1.0 - (mean_absolute_error / mean_actual).min(1.0)
+    }
+    
+    /// Predict performance for features
+    pub fn predict(&self, features: &QueryFeatures) -> f64 {
+        let feature_vec = self.extract_features(features);
+        self.forward(&feature_vec)
+    }
+}
+
 impl LinearRegressionModel {
     /// Create new linear regression model
     pub fn new(feature_count: usize) -> Self {
@@ -372,8 +584,10 @@ impl LinearRegressionModel {
 pub struct MLOptimizer {
     /// Configuration
     config: MLConfig,
-    /// Performance prediction model
-    performance_model: Arc<RwLock<LinearRegressionModel>>,
+    /// Linear regression performance model
+    linear_model: Arc<RwLock<LinearRegressionModel>>,
+    /// Neural network performance model
+    neural_model: Arc<RwLock<NeuralNetworkModel>>,
     /// Source selection model
     source_selection_model: Arc<RwLock<HashMap<String, f64>>>,
     /// Join order optimization model
@@ -416,10 +630,12 @@ impl MLOptimizer {
     /// Create ML optimizer with configuration
     pub fn with_config(config: MLConfig) -> Self {
         let feature_count = 13; // Number of features in QueryFeatures
+        let hidden_size = 16; // Neural network hidden layer size
         
         Self {
-            config,
-            performance_model: Arc::new(RwLock::new(LinearRegressionModel::new(feature_count))),
+            config: config.clone(),
+            linear_model: Arc::new(RwLock::new(LinearRegressionModel::new(feature_count))),
+            neural_model: Arc::new(RwLock::new(NeuralNetworkModel::new(feature_count, hidden_size, config.learning_rate))),
             source_selection_model: Arc::new(RwLock::new(HashMap::new())),
             join_order_model: Arc::new(RwLock::new(HashMap::new())),
             caching_model: Arc::new(RwLock::new(HashMap::new())),
@@ -429,26 +645,54 @@ impl MLOptimizer {
         }
     }
 
-    /// Predict query performance
+    /// Predict query performance using ensemble of linear and neural network models
     pub async fn predict_performance(&self, features: &QueryFeatures) -> Result<f64> {
         if !self.config.enable_performance_prediction {
             return Ok(0.0);
         }
 
-        let model = self.performance_model.read().await;
-        let prediction = model.predict(features);
+        // Get predictions from both models
+        let linear_prediction = {
+            let model = self.linear_model.read().await;
+            model.predict(features)
+        };
+        
+        let neural_prediction = {
+            let model = self.neural_model.read().await;
+            model.predict(features)
+        };
+        
+        // Ensemble prediction: weighted average based on model accuracies
+        let linear_accuracy = {
+            let model = self.linear_model.read().await;
+            model.accuracy
+        };
+        
+        let neural_accuracy = {
+            let model = self.neural_model.read().await;
+            model.accuracy
+        };
+        
+        let ensemble_prediction = if linear_accuracy + neural_accuracy > 0.0 {
+            let linear_weight = linear_accuracy / (linear_accuracy + neural_accuracy);
+            let neural_weight = neural_accuracy / (linear_accuracy + neural_accuracy);
+            linear_prediction * linear_weight + neural_prediction * neural_weight
+        } else {
+            // If no accuracy data, use simple average
+            (linear_prediction + neural_prediction) / 2.0
+        };
         
         // Update statistics
         {
             let mut stats = self.statistics.write().await;
             stats.total_predictions += 1;
-            stats.model_accuracy = model.accuracy;
+            stats.model_accuracy = (linear_accuracy + neural_accuracy) / 2.0;
         }
 
-        debug!("Performance prediction: {:.2}ms for query with {} patterns", 
-               prediction, features.pattern_count);
+        debug!("Performance prediction: {:.2}ms (linear: {:.2}, neural: {:.2}) for query with {} patterns", 
+               ensemble_prediction, linear_prediction, neural_prediction, features.pattern_count);
         
-        Ok(prediction)
+        Ok(ensemble_prediction)
     }
 
     /// Recommend source selection
@@ -709,10 +953,15 @@ impl MLOptimizer {
             return Ok(());
         }
 
-        // Retrain performance model
+        // Retrain both performance models
         {
-            let mut model = self.performance_model.write().await;
-            model.train(&samples, self.config.learning_rate, self.config.regularization);
+            let mut linear_model = self.linear_model.write().await;
+            linear_model.train(&samples, self.config.learning_rate, self.config.regularization);
+        }
+        
+        {
+            let mut neural_model = self.neural_model.write().await;
+            neural_model.train(&samples);
         }
 
         // Update source selection model
@@ -731,8 +980,9 @@ impl MLOptimizer {
         {
             let mut stats = self.statistics.write().await;
             stats.last_training = Some(SystemTime::now());
-            let model = self.performance_model.read().await;
-            stats.model_accuracy = model.accuracy;
+            let linear_model = self.linear_model.read().await;
+            let neural_model = self.neural_model.read().await;
+            stats.model_accuracy = (linear_model.accuracy + neural_model.accuracy) / 2.0;
         }
 
         info!("ML model retraining completed with {} samples", samples.len());
@@ -1147,5 +1397,43 @@ mod tests {
         assert_eq!(model.weights.len(), 5);
         assert_eq!(model.bias, 0.0);
         assert_eq!(model.iterations, 0);
+    }
+    
+    #[test]
+    fn test_neural_network_model() {
+        let model = NeuralNetworkModel::new(5, 3, 0.01);
+        assert_eq!(model.weights_input_hidden.len(), 3); // 3 hidden neurons
+        assert_eq!(model.weights_input_hidden[0].len(), 5); // 5 input features
+        assert_eq!(model.weights_hidden_output.len(), 3); // 3 hidden to 1 output
+        assert_eq!(model.bias_hidden.len(), 3);
+        assert_eq!(model.iterations, 0);
+        assert_eq!(model.learning_rate, 0.01);
+    }
+    
+    #[tokio::test]
+    async fn test_ensemble_prediction() {
+        let optimizer = MLOptimizer::new();
+        let features = QueryFeatures {
+            pattern_count: 3,
+            join_count: 1,
+            filter_count: 1,
+            complexity_score: 2.5,
+            selectivity: 0.6,
+            service_count: 2,
+            avg_service_latency: 75.0,
+            data_size_estimate: 2048,
+            query_depth: 1,
+            has_optional: false,
+            has_union: false,
+            has_aggregation: false,
+            variable_count: 4,
+        };
+
+        let prediction = optimizer.predict_performance(&features).await.unwrap();
+        assert!(prediction >= 0.0);
+        
+        // Test that we get consistent predictions
+        let prediction2 = optimizer.predict_performance(&features).await.unwrap();
+        assert_eq!(prediction, prediction2);
     }
 }

@@ -58,7 +58,7 @@ pub mod simd;
 
 // Re-export core types for convenience
 pub use model::*;
-pub use rdf_store::Store;
+pub use rdf_store::{Store, RdfStore, ConcreteStore};
 
 /// Core error type for OxiRS operations
 #[derive(Debug, Clone, thiserror::Error)]
@@ -102,24 +102,28 @@ impl From<serde_json::Error> for OxirsError {
     }
 }
 
+#[cfg(feature = "rocksdb")]
 impl From<rocksdb::Error> for OxirsError {
     fn from(err: rocksdb::Error) -> Self {
         OxirsError::Store(err.to_string())
     }
 }
 
+#[cfg(feature = "datafusion")]
 impl From<datafusion::error::DataFusionError> for OxirsError {
     fn from(err: datafusion::error::DataFusionError) -> Self {
         OxirsError::Query(err.to_string())
     }
 }
 
+#[cfg(feature = "arrow")]
 impl From<arrow::error::ArrowError> for OxirsError {
     fn from(err: arrow::error::ArrowError) -> Self {
         OxirsError::Store(err.to_string())
     }
 }
 
+#[cfg(feature = "parquet")]
 impl From<parquet::errors::ParquetError> for OxirsError {
     fn from(err: parquet::errors::ParquetError) -> Self {
         OxirsError::Store(err.to_string())

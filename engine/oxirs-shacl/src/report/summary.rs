@@ -86,7 +86,7 @@ impl ValidationSummary {
         // Calculate top violation types
         let mut component_counts: Vec<_> = self.violations_by_component
             .iter()
-            .map( < /dev/null | (k, v)| (k.clone(), *v))
+            .map(|(k, v)| (k.clone(), *v))
             .collect();
         component_counts.sort_by(|a, b| b.1.cmp(&a.1));
         self.top_violation_types = component_counts.into_iter().take(5).collect();

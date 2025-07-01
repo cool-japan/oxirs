@@ -93,9 +93,9 @@ pub enum WriteOperation {
     Delete,
 }
 
-/// Comprehensive transaction metadata
+/// Optimistic concurrency transaction metadata
 #[derive(Debug, Clone)]
-pub struct TransactionInfo {
+pub struct OptimisticTransactionInfo {
     /// Transaction identifier
     pub id: u64,
     /// Current phase
@@ -116,7 +116,7 @@ pub struct TransactionInfo {
     pub validation_attempts: u32,
 }
 
-impl TransactionInfo {
+impl OptimisticTransactionInfo {
     pub fn new(id: u64, start_version: u64) -> Self {
         Self {
             id,
@@ -274,13 +274,13 @@ pub struct OptimisticStats {
 /// Advanced optimistic concurrency control manager
 pub struct OptimisticConcurrencyController {
     /// Active transactions
-    active_transactions: Arc<RwLock<HashMap<u64, TransactionInfo>>>,
+    active_transactions: Arc<RwLock<HashMap<u64, OptimisticTransactionInfo>>>,
     /// Transaction counter
     transaction_counter: Arc<Mutex<u64>>,
     /// Version counter
     version_counter: Arc<Mutex<u64>>,
     /// Committed transaction history for validation
-    commit_history: Arc<RwLock<VecDeque<TransactionInfo>>>,
+    commit_history: Arc<RwLock<VecDeque<OptimisticTransactionInfo>>>,
     /// Configuration
     config: OptimisticConfig,
     /// Statistics
@@ -321,7 +321,7 @@ impl OptimisticConcurrencyController {
         let version = *self.version_counter.lock()
             .map_err(|_| anyhow!("Failed to acquire version counter lock"))?;
 
-        let tx_info = TransactionInfo::new(tx_id, version);
+        let tx_info = OptimisticTransactionInfo::new(tx_id, version);
 
         {
             let mut active = self.active_transactions.write()
@@ -764,7 +764,7 @@ impl OptimisticConcurrencyController {
     }
 
     /// Get transaction information
-    pub fn get_transaction_info(&self, tx_id: u64) -> Result<Option<TransactionInfo>> {
+    pub fn get_transaction_info(&self, tx_id: u64) -> Result<Option<OptimisticTransactionInfo>> {
         let active = self.active_transactions.read()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
         Ok(active.get(&tx_id).cloned())

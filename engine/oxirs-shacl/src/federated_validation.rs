@@ -5,7 +5,8 @@
 
 use crate::shapes::types::{Shape, NodeShape, PropertyShape};
 use crate::validation::engine::ValidationEngine;
-use crate::report::{ValidationReport, ValidationResult};
+use crate::report::ValidationReport;
+use crate::validation::ValidationViolation;
 use anyhow::{Result, Context, Error as AnyhowError};
 use std::collections::{HashMap, BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};

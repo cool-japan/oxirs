@@ -68,6 +68,39 @@ pub enum StreamError {
     #[error("Unsupported operation: {0}")]
     UnsupportedOperation(String),
 
+    #[error("Quantum processing error: {0}")]
+    QuantumProcessing(String),
+
+    #[error("Quantum error correction failed: {code_type:?}, error: {error}")]
+    QuantumErrorCorrection { code_type: String, error: String },
+
+    #[error("Quantum decoherence detected: coherence_time: {coherence_time:?}")]
+    QuantumDecoherence { coherence_time: std::time::Duration },
+
+    #[error("Biological computation error: {0}")]
+    BiologicalComputation(String),
+
+    #[error("DNA encoding error: sequence_length: {length}, gc_content: {gc_content}")]
+    DNAEncoding { length: usize, gc_content: f64 },
+
+    #[error("Cellular automaton error: generation: {generation}, error: {error}")]
+    CellularAutomaton { generation: usize, error: String },
+
+    #[error("Consciousness processing error: level: {level:?}, error: {error}")]
+    ConsciousnessProcessing { level: String, error: String },
+
+    #[error("Neural network error: {0}")]
+    NeuralNetwork(String),
+
+    #[error("Time travel query error: {0}")]
+    TimeTravelQuery(String),
+
+    #[error("WASM edge computing error: {0}")]
+    WasmEdgeComputing(String),
+
+    #[error("Performance optimization error: {metric}, expected: {expected}, actual: {actual}")]
+    PerformanceOptimization { metric: String, expected: f64, actual: f64 },
+
     #[error("Other error: {0}")]
     Other(String),
 }

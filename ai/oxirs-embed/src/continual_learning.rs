@@ -4,13 +4,14 @@
 //! catastrophic forgetting prevention, task-incremental learning,
 //! and lifelong adaptation capabilities.
 
-use crate::{EmbeddingModel, ModelConfig, NamedNode, TrainingStats, Triple, Vector};
+use crate::{EmbeddingModel, ModelConfig, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{s, Array1, Array2, Array3, Axis};
+use ndarray::{Array1, Array2};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
 
 /// Configuration for continual learning
@@ -562,6 +563,9 @@ pub struct ContinualLearningModel {
 impl ContinualLearningModel {
     /// Create new continual learning model
     pub fn new(config: ContinualLearningConfig) -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        
         let model_id = Uuid::new_v4();
         let dimensions = config.base_config.dimensions;
 
@@ -578,16 +582,25 @@ impl ContinualLearningModel {
             current_task: None,
             task_history: Vec::new(),
             task_boundaries: Vec::new(),
-            network_columns: vec![Array2::from_shape_fn((dimensions, dimensions), |_| {
-                rand::random::<f32>() * 0.1
-            })],
+            network_columns: {
+                let mut rng = rand::thread_rng();
+                vec![Array2::from_shape_fn((dimensions, dimensions), |_| {
+                    rng.gen::<f32>() * 0.1
+                })]
+            },
             lateral_connections: Vec::new(),
-            generator: Some(Array2::from_shape_fn((dimensions, dimensions), |_| {
-                rand::random::<f32>() * 0.1
-            })),
-            discriminator: Some(Array2::from_shape_fn((dimensions, dimensions), |_| {
-                rand::random::<f32>() * 0.1
-            })),
+            generator: Some({
+                let mut rng = rand::thread_rng();
+                Array2::from_shape_fn((dimensions, dimensions), |_| {
+                    rng.gen::<f32>() * 0.1
+                })
+            }),
+            discriminator: Some({
+                let mut rng = rand::thread_rng();
+                Array2::from_shape_fn((dimensions, dimensions), |_| {
+                    rng.gen::<f32>() * 0.1
+                })
+            }),
             entities: HashMap::new(),
             relations: HashMap::new(),
             examples_seen: 0,
@@ -654,20 +667,21 @@ impl ContinualLearningModel {
         if matches!(
             self.config.task_config.detection_method,
             TaskDetection::Automatic
-        ) {
-            if self.detect_task_boundary(&data)? {
-                let new_task_id = format!("task_{}", self.task_history.len() + 1);
-                self.start_task(new_task_id.clone(), "automatic".to_string())?;
-            }
+        ) && self.detect_task_boundary(&data)? {
+            let new_task_id = format!("task_{}", self.task_history.len() + 1);
+            self.start_task(new_task_id.clone(), "automatic".to_string())?;
         }
 
         // Initialize network if needed
         if self.embeddings.nrows() == 0 {
             let input_dim = data.len();
             let output_dim = target.len();
-            self.embeddings = Array2::from_shape_fn((output_dim, input_dim), |(_, _)| {
-                (rand::random::<f32>() - 0.5) * 0.1
-            });
+            self.embeddings = {
+                let mut rng = rand::thread_rng();
+                Array2::from_shape_fn((output_dim, input_dim), |(_, _)| {
+                    (rng.gen::<f32>() - 0.5) * 0.1
+                })
+            };
             self.synaptic_importance = Array2::zeros((output_dim, input_dim));
             self.parameter_trajectory = Array2::zeros((output_dim, input_dim));
         }
@@ -706,7 +720,7 @@ impl ContinualLearningModel {
             }
             MemoryUpdateStrategy::Random => {
                 if self.episodic_memory.len() >= self.config.memory_config.memory_capacity {
-                    let idx = rand::random::<usize>() % self.episodic_memory.len();
+                    let idx = rand::thread_rng().gen_range(0..self.episodic_memory.len());
                     self.episodic_memory.remove(idx);
                 }
                 self.episodic_memory.push_back(entry);
@@ -1057,7 +1071,7 @@ impl ContinualLearningModel {
         let batch_size = replay_batch_size.min(self.episodic_memory.len());
 
         for _ in 0..batch_size {
-            let idx = rand::random::<usize>() % self.episodic_memory.len();
+            let idx = rand::thread_rng().gen_range(0..self.episodic_memory.len());
 
             // Extract data before modifying entry to avoid borrow conflicts
             let (data, target) = {
@@ -1209,7 +1223,7 @@ impl ContinualLearningModel {
         let consolidation_steps = 100;
         for _ in 0..consolidation_steps {
             if !self.episodic_memory.is_empty() {
-                let idx = rand::random::<usize>() % self.episodic_memory.len();
+                let idx = rand::thread_rng().gen_range(0..self.episodic_memory.len());
                 let entry = &self.episodic_memory[idx];
 
                 // Weak replay for consolidation
@@ -1613,9 +1627,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_memory_management() {
-        let mut config = ContinualLearningConfig::default();
-        config.memory_config.memory_capacity = 3;
-        config.memory_config.update_strategy = MemoryUpdateStrategy::FIFO;
+        let config = ContinualLearningConfig {
+            memory_config: MemoryConfig {
+                memory_capacity: 3,
+                update_strategy: MemoryUpdateStrategy::FIFO,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
 
         let mut model = ContinualLearningModel::new(config);
         model

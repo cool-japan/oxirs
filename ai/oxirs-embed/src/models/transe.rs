@@ -37,8 +37,12 @@ pub struct TransE {
 /// Distance metrics supported by TransE
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum DistanceMetric {
+    /// L1 (Manhattan) distance
     L1,
+    /// L2 (Euclidean) distance
     L2,
+    /// Cosine distance (1 - cosine similarity)
+    Cosine,
 }
 
 impl TransE {
@@ -50,6 +54,7 @@ impl TransE {
         let distance_metric = match config.model_params.get("distance_metric") {
             Some(0.0) => DistanceMetric::L1,
             Some(1.0) => DistanceMetric::L2,
+            Some(2.0) => DistanceMetric::Cosine,
             _ => DistanceMetric::L2, // Default to L2
         };
 
@@ -63,6 +68,40 @@ impl TransE {
             distance_metric,
             margin,
         }
+    }
+
+    /// Create a new TransE model with L1 (Manhattan) distance metric
+    pub fn with_l1_distance(mut config: ModelConfig) -> Self {
+        config.model_params.insert("distance_metric".to_string(), 0.0);
+        Self::new(config)
+    }
+
+    /// Create a new TransE model with L2 (Euclidean) distance metric
+    pub fn with_l2_distance(mut config: ModelConfig) -> Self {
+        config.model_params.insert("distance_metric".to_string(), 1.0);
+        Self::new(config)
+    }
+
+    /// Create a new TransE model with Cosine distance metric
+    pub fn with_cosine_distance(mut config: ModelConfig) -> Self {
+        config.model_params.insert("distance_metric".to_string(), 2.0);
+        Self::new(config)
+    }
+
+    /// Create a new TransE model with custom margin for ranking loss
+    pub fn with_margin(mut config: ModelConfig, margin: f64) -> Self {
+        config.model_params.insert("margin".to_string(), margin);
+        Self::new(config)
+    }
+
+    /// Get the current distance metric
+    pub fn distance_metric(&self) -> DistanceMetric {
+        self.distance_metric
+    }
+
+    /// Get the current margin value
+    pub fn margin(&self) -> f64 {
+        self.margin
     }
 
     /// Initialize embeddings after entities and relations are known
@@ -82,7 +121,7 @@ impl TransE {
         let mut rng = if let Some(seed) = self.base.config.seed {
             StdRng::seed_from_u64(seed)
         } else {
-            StdRng::from_entropy()
+            StdRng::from_rng(&mut rand::thread_rng()).expect("Failed to create RNG")
         };
 
         // Initialize entity embeddings with Xavier initialization
@@ -129,6 +168,20 @@ impl TransE {
         let distance = match self.distance_metric {
             DistanceMetric::L1 => diff.mapv(|x| x.abs()).sum(),
             DistanceMetric::L2 => diff.mapv(|x| x * x).sum().sqrt(),
+            DistanceMetric::Cosine => {
+                // For cosine distance, we compute 1 - cosine_similarity(h + r, t)
+                let h_plus_r = &h + &r;
+                let dot_product = (&h_plus_r * &t).sum();
+                let norm_h_plus_r = h_plus_r.mapv(|x| x * x).sum().sqrt();
+                let norm_t = t.mapv(|x| x * x).sum().sqrt();
+                
+                if norm_h_plus_r == 0.0 || norm_t == 0.0 {
+                    1.0 // Maximum distance for zero vectors
+                } else {
+                    let cosine_sim = dot_product / (norm_h_plus_r * norm_t);
+                    1.0 - cosine_sim.max(-1.0).min(1.0) // Clamp to [-1, 1] and convert to distance
+                }
+            }
         };
 
         // Return negative distance as score (higher is better)
@@ -164,11 +217,27 @@ impl TransE {
         let pos_distance = match self.distance_metric {
             DistanceMetric::L1 => pos_diff.mapv(|x| x.abs()).sum(),
             DistanceMetric::L2 => pos_diff.mapv(|x| x * x).sum().sqrt(),
+            DistanceMetric::Cosine => {
+                let norm = pos_diff.mapv(|x| x * x).sum().sqrt();
+                if norm > 1e-10 {
+                    1.0 - (pos_diff.dot(&pos_diff) / (norm * norm)).max(-1.0).min(1.0)
+                } else {
+                    0.0
+                }
+            },
         };
 
         let neg_distance = match self.distance_metric {
             DistanceMetric::L1 => neg_diff.mapv(|x| x.abs()).sum(),
             DistanceMetric::L2 => neg_diff.mapv(|x| x * x).sum().sqrt(),
+            DistanceMetric::Cosine => {
+                let norm = neg_diff.mapv(|x| x * x).sum().sqrt();
+                if norm > 1e-10 {
+                    1.0 - (neg_diff.dot(&neg_diff) / (norm * norm)).max(-1.0).min(1.0)
+                } else {
+                    0.0
+                }
+            },
         };
 
         // Check if we need to update (margin loss > 0)
@@ -191,7 +260,15 @@ impl TransE {
                     } else {
                         Array1::zeros(pos_diff.len())
                     }
-                }
+                },
+                DistanceMetric::Cosine => {
+                    let norm_sq = pos_diff.mapv(|x| x * x).sum();
+                    if norm_sq > 1e-10 {
+                        &pos_diff / norm_sq.sqrt()
+                    } else {
+                        Array1::zeros(pos_diff.len())
+                    }
+                },
             };
 
             let neg_grad_direction = match self.distance_metric {
@@ -210,7 +287,15 @@ impl TransE {
                     } else {
                         Array1::zeros(neg_diff.len())
                     }
-                }
+                },
+                DistanceMetric::Cosine => {
+                    let norm_sq = neg_diff.mapv(|x| x * x).sum();
+                    if norm_sq > 1e-10 {
+                        &neg_diff / norm_sq.sqrt()
+                    } else {
+                        Array1::zeros(neg_diff.len())
+                    }
+                },
             };
 
             // Update gradients for positive triple (increase distance)
@@ -234,9 +319,10 @@ impl TransE {
     /// Perform one training epoch
     async fn train_epoch(&mut self, learning_rate: f64) -> Result<f64> {
         let mut rng = if let Some(seed) = self.base.config.seed {
-            StdRng::seed_from_u64(seed + rand::random::<u64>())
+            let mut thread_rng = rand::thread_rng();
+            StdRng::seed_from_u64(seed + thread_rng.gen::<u64>())
         } else {
-            StdRng::from_entropy()
+            StdRng::from_rng(&mut rand::thread_rng()).expect("Failed to create RNG")
         };
 
         let mut total_loss = 0.0;
@@ -598,6 +684,72 @@ mod tests {
 
         // Score should be a finite number
         assert!(score.is_finite());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_transe_distance_metrics() -> Result<()> {
+        let base_config = ModelConfig::default()
+            .with_dimensions(10)
+            .with_max_epochs(5)
+            .with_seed(42);
+
+        // Test L1 distance
+        let mut model_l1 = TransE::with_l1_distance(base_config.clone());
+        assert!(matches!(model_l1.distance_metric(), DistanceMetric::L1));
+
+        // Test L2 distance
+        let mut model_l2 = TransE::with_l2_distance(base_config.clone());
+        assert!(matches!(model_l2.distance_metric(), DistanceMetric::L2));
+
+        // Test Cosine distance
+        let mut model_cosine = TransE::with_cosine_distance(base_config.clone());
+        assert!(matches!(model_cosine.distance_metric(), DistanceMetric::Cosine));
+
+        // Test custom margin
+        let mut model_margin = TransE::with_margin(base_config.clone(), 2.0);
+        assert_eq!(model_margin.margin(), 2.0);
+
+        // Add same triples to all models
+        let alice = NamedNode::new("http://example.org/alice")?;
+        let knows = NamedNode::new("http://example.org/knows")?;
+        let bob = NamedNode::new("http://example.org/bob")?;
+        let triple = Triple::new(alice, knows, bob);
+
+        model_l1.add_triple(triple.clone())?;
+        model_l2.add_triple(triple.clone())?;
+        model_cosine.add_triple(triple.clone())?;
+
+        // Train all models
+        model_l1.train(Some(3)).await?;
+        model_l2.train(Some(3)).await?;
+        model_cosine.train(Some(3)).await?;
+
+        // Test that all models produce finite scores
+        let score_l1 = model_l1.score_triple(
+            "http://example.org/alice",
+            "http://example.org/knows", 
+            "http://example.org/bob"
+        )?;
+        let score_l2 = model_l2.score_triple(
+            "http://example.org/alice",
+            "http://example.org/knows",
+            "http://example.org/bob"
+        )?;
+        let score_cosine = model_cosine.score_triple(
+            "http://example.org/alice",
+            "http://example.org/knows",
+            "http://example.org/bob"
+        )?;
+
+        assert!(score_l1.is_finite());
+        assert!(score_l2.is_finite());
+        assert!(score_cosine.is_finite());
+
+        // Scores may differ due to different distance metrics
+        // This tests that the cosine distance implementation works
+        println!("L1 score: {}, L2 score: {}, Cosine score: {}", score_l1, score_l2, score_cosine);
 
         Ok(())
     }

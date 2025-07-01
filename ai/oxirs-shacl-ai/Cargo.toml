@@ -34,7 +34,7 @@ num-complex = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
 futures = "0.3"
 dashmap = "6.1"
-datafusion = "48.0"  # Re-enabled with compatible version
+# datafusion.workspace = true  # Temporarily disabled due to version conflicts
 fastrand = "2.3"
 base64 = "0.22"
 url = { version = "2.5", features = ["serde"] }

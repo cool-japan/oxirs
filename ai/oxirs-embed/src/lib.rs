@@ -153,24 +153,40 @@ pub mod training;
 pub mod utils;
 pub mod vision_language_graph;
 
-// Local type definitions (normally would import from oxirs-core and oxirs-vec)
+// Import Vector from oxirs-vec for type compatibility across the ecosystem
+pub use oxirs_vec::Vector as VecVector;
+
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
+use std::ops::{Add, Sub};
 
-/// Vector for embeddings
+/// Compatibility wrapper for Vector that provides the old interface
+/// while using the sophisticated oxirs-vec Vector internally
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Vector {
     pub values: Vec<f32>,
     pub dimensions: usize,
+    inner: VecVector,
 }
 
 impl Vector {
     pub fn new(values: Vec<f32>) -> Self {
         let dimensions = values.len();
-        Self { values, dimensions }
+        let inner = VecVector::new(values.clone());
+        Self {
+            values,
+            dimensions,
+            inner,
+        }
+    }
+
+    /// Update internal state when values or dimensions change
+    fn sync_internal(&mut self) {
+        self.dimensions = self.values.len();
+        self.inner = VecVector::new(self.values.clone());
     }
 
     /// Create from ndarray Array1
@@ -180,7 +196,7 @@ impl Vector {
 
     /// Convert to ndarray Array1
     pub fn to_array1(&self) -> ndarray::Array1<f32> {
-        ndarray::Array1::from_vec(self.values.clone())
+        ndarray::Array1::from_vec(self.values())
     }
 
     /// Element-wise mapping
@@ -188,38 +204,55 @@ impl Vector {
     where
         F: Fn(f32) -> f32,
     {
-        Self::new(self.values.iter().map(|&x| f(x)).collect())
+        Self::new(self.values().iter().map(|&x| f(x)).collect())
     }
 
     /// Sum of all elements
     pub fn sum(&self) -> f32 {
-        self.values.iter().sum()
+        self.values().iter().sum()
     }
 
     /// Square root of the sum
     pub fn sqrt(&self) -> f32 {
         self.sum().sqrt()
     }
+
+    /// Get the inner VecVector for advanced operations
+    pub fn inner(&self) -> &VecVector {
+        &self.inner
+    }
+
+    /// Convert into the inner VecVector
+    pub fn into_inner(self) -> VecVector {
+        self.inner
+    }
+
+    /// Create from VecVector
+    pub fn from_vec_vector(vec_vector: VecVector) -> Self {
+        Self { inner: vec_vector }
+    }
 }
 
-// Arithmetic operations for Vector
-use std::ops::{Add, Sub};
-
+// Arithmetic operations for Vector (compatibility with old interface)
 impl Add for &Vector {
     type Output = Vector;
 
     fn add(self, other: &Vector) -> Vector {
-        assert_eq!(
-            self.dimensions, other.dimensions,
-            "Vector dimensions must match"
-        );
-        let values: Vec<f32> = self
-            .values
-            .iter()
-            .zip(other.values.iter())
-            .map(|(a, b)| a + b)
-            .collect();
-        Vector::new(values)
+        // Use the sophisticated vector addition from oxirs-vec
+        if let Ok(result) = self.inner.add(&other.inner) {
+            Vector::from_vec_vector(result)
+        } else {
+            // Fallback to element-wise addition for compatibility
+            let values = self.values();
+            let other_values = other.values();
+            assert_eq!(values.len(), other_values.len(), "Vector dimensions must match");
+            let result_values: Vec<f32> = values
+                .iter()
+                .zip(other_values.iter())
+                .map(|(a, b)| a + b)
+                .collect();
+            Vector::new(result_values)
+        }
     }
 }
 
@@ -227,17 +260,21 @@ impl Sub for &Vector {
     type Output = Vector;
 
     fn sub(self, other: &Vector) -> Vector {
-        assert_eq!(
-            self.dimensions, other.dimensions,
-            "Vector dimensions must match"
-        );
-        let values: Vec<f32> = self
-            .values
-            .iter()
-            .zip(other.values.iter())
-            .map(|(a, b)| a - b)
-            .collect();
-        Vector::new(values)
+        // Use the sophisticated vector subtraction from oxirs-vec
+        if let Ok(result) = self.inner.subtract(&other.inner) {
+            Vector::from_vec_vector(result)
+        } else {
+            // Fallback to element-wise subtraction for compatibility
+            let values = self.values();
+            let other_values = other.values();
+            assert_eq!(values.len(), other_values.len(), "Vector dimensions must match");
+            let result_values: Vec<f32> = values
+                .iter()
+                .zip(other_values.iter())
+                .map(|(a, b)| a - b)
+                .collect();
+            Vector::new(result_values)
+        }
     }
 }
 

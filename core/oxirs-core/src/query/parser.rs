@@ -96,7 +96,11 @@ impl SparqlParser {
 
         // Parse template (simplified - just get the content between braces)
         let construct_clause = query[construct_start..where_start].trim();
-        let template = self.parse_construct_template(construct_clause)?;
+        let algebra_template = self.parse_construct_template(construct_clause)?;
+        let template: Vec<TriplePattern> = algebra_template
+            .iter()
+            .map(|p| self.convert_triple_pattern(p))
+            .collect();
 
         // Parse WHERE clause
         let pattern = self.parse_where_clause(&query[where_start + 5..])?;
@@ -270,6 +274,44 @@ impl SparqlParser {
         } else {
             Err(OxirsError::Parse(format!("Invalid term pattern: {}", term)))
         }
+    }
+
+    /// Convert algebra TermPattern to sparql_algebra TermPattern
+    fn convert_term_pattern(&self, term: &AlgebraTermPattern) -> TermPattern {
+        match term {
+            AlgebraTermPattern::NamedNode(n) => TermPattern::NamedNode(n.clone()),
+            AlgebraTermPattern::BlankNode(b) => TermPattern::BlankNode(b.clone()),
+            AlgebraTermPattern::Literal(l) => TermPattern::Literal(l.clone()),
+            AlgebraTermPattern::Variable(v) => TermPattern::Variable(v.clone()),
+        }
+    }
+
+    /// Convert AlgebraTriplePattern to sparql_algebra TriplePattern
+    fn convert_triple_pattern(&self, pattern: &AlgebraTriplePattern) -> TriplePattern {
+        TriplePattern::new(
+            self.convert_term_pattern(&pattern.subject),
+            self.convert_term_pattern(&pattern.predicate),
+            self.convert_term_pattern(&pattern.object),
+        )
+    }
+
+    /// Convert sparql_algebra TermPattern back to algebra TermPattern
+    fn convert_term_pattern_back(&self, term: &TermPattern) -> AlgebraTermPattern {
+        match term {
+            TermPattern::NamedNode(n) => AlgebraTermPattern::NamedNode(n.clone()),
+            TermPattern::BlankNode(b) => AlgebraTermPattern::BlankNode(b.clone()),
+            TermPattern::Literal(l) => AlgebraTermPattern::Literal(l.clone()),
+            TermPattern::Variable(v) => AlgebraTermPattern::Variable(v.clone()),
+        }
+    }
+
+    /// Convert sparql_algebra TriplePattern back to AlgebraTriplePattern
+    pub fn convert_triple_pattern_back(&self, pattern: &TriplePattern) -> AlgebraTriplePattern {
+        AlgebraTriplePattern::new(
+            self.convert_term_pattern_back(&pattern.subject),
+            self.convert_term_pattern_back(&pattern.predicate),
+            self.convert_term_pattern_back(&pattern.object),
+        )
     }
 }
 

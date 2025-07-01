@@ -133,6 +133,5 @@ pub mod kinesis;
 #[cfg(feature = "pulsar")]
 pub mod pulsar;
 
-// TODO: Add reqwest dependency to enable this
-// #[cfg(feature = "kafka")]
-// pub mod kafka_schema_registry;
+#[cfg(feature = "kafka")]
+pub mod kafka_schema_registry;

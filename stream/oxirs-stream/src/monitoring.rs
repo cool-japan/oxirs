@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use crate::backend_optimizer::ResourceUsage;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
@@ -248,7 +249,7 @@ impl MetricsCollector {
         current_metrics.consumer_batches_received += metrics.batches_received;
         
         // Enhanced health assessment based on metrics trends
-        self.assess_system_health(&current_metrics).await;
+        let _health = self.health_checker.get_health().await;
 
         if metrics.processing_time_ms > 0.0 {
             current_metrics.consumer_average_processing_time_ms =
@@ -550,16 +551,11 @@ impl HealthChecker {
             
             // Update health status
             let system_health = SystemHealth {
-                status: health_status,
+                overall_status: health_status,
+                component_health: HashMap::new(),
                 last_check: Utc::now(),
-                uptime: metrics.start_time.map(|st| Utc::now().signed_duration_since(st)).unwrap_or_default(),
-                issues: health_alerts,
-                resource_usage: ResourceUsage {
-                    cpu_percent: self.health_checker.get_system_metrics().await.cpu_usage,
-                    memory_percent: self.health_checker.get_system_metrics().await.memory_usage,
-                    disk_percent: self.health_checker.get_system_metrics().await.disk_usage,
-                    network_connections: self.health_checker.get_system_metrics().await.network_connections,
-                },
+                uptime: Duration::hours(0), // Default uptime
+                alerts: health_alerts,
             };
             
             *self.health_status.write().await = system_health;

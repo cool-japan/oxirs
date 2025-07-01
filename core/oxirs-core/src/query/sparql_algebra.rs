@@ -314,7 +314,8 @@ impl fmt::Display for FunctionExpression {
 }
 
 /// Built-in SPARQL functions
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BuiltInFunction {
     // String functions
     Str,
@@ -1064,7 +1065,8 @@ impl GroundSubject {
 }
 
 /// A triple pattern
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TriplePattern {
     pub subject: TermPattern,
     pub predicate: TermPattern,
@@ -1102,7 +1104,8 @@ impl fmt::Display for TriplePattern {
 }
 
 /// A term pattern that can be either a concrete term or a variable
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TermPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -1167,7 +1170,8 @@ impl From<Literal> for TermPattern {
 }
 
 /// A named node pattern (can be a concrete named node or a variable)
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum NamedNodePattern {
     NamedNode(NamedNode),
     Variable(Variable),
@@ -1204,7 +1208,8 @@ impl From<Variable> for NamedNodePattern {
 }
 
 /// An order expression
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum OrderExpression {
     /// Ascending order
     Asc(Expression),
@@ -1239,7 +1244,8 @@ impl fmt::Display for OrderExpression {
 }
 
 /// An aggregate expression
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AggregateExpression {
     Count {
         expr: Option<Box<Expression>>,

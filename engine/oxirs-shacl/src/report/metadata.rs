@@ -37,7 +37,7 @@ impl ReportMetadata {
                 .unwrap_or_default()
                 .as_secs(),
             shacl_version: "1.0".to_string(),
-            validator_version: env\!("CARGO_PKG_VERSION").to_string(),
+            validator_version: env!("CARGO_PKG_VERSION").to_string(),
             validation_duration: None,
             shapes_count: None,
             data_graph_size: None,
@@ -75,7 +75,7 @@ impl ReportMetadata {
             SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(self.timestamp))
         {
             // In a real implementation, you'd use chrono or similar for proper formatting
-            format\!("{:?}", datetime)
+            format!("{:?}", datetime)
         } else {
             "Invalid timestamp".to_string()
         }
@@ -84,7 +84,7 @@ impl ReportMetadata {
     /// Get validation duration in human-readable format
     pub fn formatted_duration(&self) -> String {
         match self.validation_duration {
-            Some(duration) => format\!("{:.2?}", duration),
+            Some(duration) => format!("{:.2?}", duration),
             None => "Unknown".to_string(),
         }
     }
@@ -94,20 +94,20 @@ impl ReportMetadata {
         let mut summary = Vec::new();
         
         if let Some(duration) = self.validation_duration {
-            summary.push(format\!("Duration: {:.2?}", duration));
+            summary.push(format!("Duration: {:.2?}", duration));
         }
         
         if let Some(shapes) = self.shapes_count {
-            summary.push(format\!("Shapes: {}", shapes));
+            summary.push(format!("Shapes: {}", shapes));
         }
         
         if let Some(size) = self.data_graph_size {
-            summary.push(format\!("Triples: {}", size));
+            summary.push(format!("Triples: {}", size));
         }
 
         if let (Some(duration), Some(size)) = (self.validation_duration, self.data_graph_size) {
             let rate = size as f64 / duration.as_secs_f64();
-            summary.push(format\!("Rate: {:.0} triples/sec", rate));
+            summary.push(format!("Rate: {:.0} triples/sec", rate));
         }
 
         summary.join(", ")
@@ -208,15 +208,15 @@ impl EfficiencyMetrics {
         let mut parts = Vec::new();
         
         if let Some(tps) = self.triples_per_second {
-            parts.push(format\!("{:.0} triples/sec", tps));
+            parts.push(format!("{:.0} triples/sec", tps));
         }
         
         if let Some(sps) = self.shapes_per_second {
-            parts.push(format\!("{:.1} shapes/sec", sps));
+            parts.push(format!("{:.1} shapes/sec", sps));
         }
         
         if let Some(eff) = self.memory_efficiency {
-            parts.push(format\!("{:.1} triples/shape", eff));
+            parts.push(format!("{:.1} triples/shape", eff));
         }
 
         if parts.is_empty() {
@@ -281,4 +281,3 @@ impl ValidationTimer {
         self.start_time.elapsed().unwrap_or_default()
     }
 }
-EOF < /dev/null

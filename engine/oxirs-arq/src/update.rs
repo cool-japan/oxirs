@@ -131,7 +131,7 @@ impl Default for UpdateResult {
 
 /// Executor for SPARQL UPDATE operations
 pub struct UpdateExecutor<'a> {
-    store: &'a mut Store,
+    store: &'a mut dyn Store,
     context: ExecutionContext,
     /// Transaction mode for atomic updates
     transaction_mode: bool,
@@ -153,7 +153,7 @@ pub struct UpdateStatistics {
 
 impl<'a> UpdateExecutor<'a> {
     /// Create a new update executor
-    pub fn new(store: &'a mut Store) -> Self {
+    pub fn new(store: &'a mut dyn Store) -> Self {
         UpdateExecutor {
             store,
             context: ExecutionContext::default(),
@@ -1125,6 +1125,12 @@ impl<'a> UpdateExecutor<'a> {
             }
             crate::term::Term::Variable(_) => Err(OxirsError::Query(
                 "Cannot convert variable to concrete term".to_string(),
+            )),
+            crate::term::Term::QuotedTriple(_) => Err(OxirsError::Query(
+                "Cannot convert quoted triple to concrete term".to_string(),
+            )),
+            crate::term::Term::PropertyPath(_) => Err(OxirsError::Query(
+                "Cannot convert property path to concrete term".to_string(),
             )),
         }
     }

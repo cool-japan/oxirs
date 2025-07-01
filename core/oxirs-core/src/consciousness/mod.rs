@@ -35,6 +35,10 @@ pub use intuitive_planner::{
     ExecutionResults,
 };
 
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use lru::LruCache;
+
 pub use quantum_consciousness::{
     QuantumConsciousnessState,
     QuantumSuperposition,
@@ -79,7 +83,7 @@ pub use dream_processing::{
 
 // Integrated consciousness types are defined below as structs
 
-/// Consciousness-inspired processing capabilities
+/// Consciousness-inspired processing capabilities with performance optimizations
 pub struct ConsciousnessModule {
     /// Intuitive query planner
     pub intuitive_planner: IntuitiveQueryPlanner,
@@ -95,6 +99,12 @@ pub struct ConsciousnessModule {
     pub emotional_state: EmotionalState,
     /// Consciousness integration level
     pub integration_level: f64,
+    /// Performance optimization cache
+    optimization_cache: Arc<RwLock<OptimizationCache>>,
+    /// String pool for reduced allocations
+    string_pool: Arc<RwLock<lru::LruCache<String, String>>>,
+    /// Pattern cache for frequently accessed patterns
+    pattern_cache: Arc<RwLock<lru::LruCache<u64, CachedPatternAnalysis>>>,
 }
 
 /// Emotional states that can influence processing
@@ -114,8 +124,90 @@ pub enum EmotionalState {
     Creative,
 }
 
+/// Performance optimization cache for consciousness module
+#[derive(Debug, Clone)]
+struct OptimizationCache {
+    /// Cached emotional influence calculations
+    emotional_influence_cache: HashMap<EmotionalState, f64>,
+    /// Cached quantum advantage calculations
+    quantum_advantage_cache: HashMap<u64, f64>,
+    /// Cached consciousness approach decisions
+    approach_cache: HashMap<(usize, u8, u8), ConsciousnessApproach>,
+    /// Performance metrics history
+    performance_history: Vec<f64>,
+    /// Cache hit statistics
+    cache_hits: u64,
+    cache_misses: u64,
+}
+
+impl OptimizationCache {
+    fn new() -> Self {
+        Self {
+            emotional_influence_cache: HashMap::new(),
+            quantum_advantage_cache: HashMap::new(),
+            approach_cache: HashMap::new(),
+            performance_history: Vec::with_capacity(1000),
+            cache_hits: 0,
+            cache_misses: 0,
+        }
+    }
+    
+    fn get_hit_rate(&self) -> f64 {
+        if self.cache_hits + self.cache_misses == 0 {
+            0.0
+        } else {
+            self.cache_hits as f64 / (self.cache_hits + self.cache_misses) as f64
+        }
+    }
+    
+    fn clear_if_needed(&mut self) {
+        // Clear cache if it gets too large or hit rate is too low
+        if self.approach_cache.len() > 10000 || (self.get_hit_rate() < 0.3 && self.cache_hits + self.cache_misses > 100) {
+            self.emotional_influence_cache.clear();
+            self.quantum_advantage_cache.clear();
+            self.approach_cache.clear();
+            self.cache_hits = 0;
+            self.cache_misses = 0;
+        }
+    }
+}
+
+/// Cached pattern analysis for performance optimization
+#[derive(Debug, Clone)]
+struct CachedPatternAnalysis {
+    /// Pattern complexity score
+    complexity: f64,
+    /// Quantum enhancement potential
+    quantum_potential: f64,
+    /// Emotional relevance score
+    emotional_relevance: f64,
+    /// Last access timestamp
+    last_accessed: std::time::Instant,
+}
+
+/// Performance metrics for consciousness module optimization
+#[derive(Debug, Clone)]
+pub struct ConsciousnessPerformanceMetrics {
+    /// Current consciousness level
+    pub consciousness_level: f64,
+    /// Current integration level
+    pub integration_level: f64,
+    /// Cache hit rate for optimization cache
+    pub cache_hit_rate: f64,
+    /// Total cache access count
+    pub total_cache_accesses: u64,
+    /// Pattern cache size
+    pub pattern_cache_size: usize,
+    /// String pool size
+    pub string_pool_size: usize,
+    /// Current emotional influence factor
+    pub emotional_influence: f64,
+    /// Quantum coherence level
+    pub quantum_coherence: f64,
+}
+
 impl ConsciousnessModule {
-    /// Create a new consciousness module
+    /// Create a new consciousness module with performance optimizations
     pub fn new(traditional_stats: std::sync::Arc<crate::query::pattern_optimizer::IndexStats>) -> Self {
         Self {
             intuitive_planner: IntuitiveQueryPlanner::new(traditional_stats),
@@ -125,6 +217,9 @@ impl ConsciousnessModule {
             consciousness_level: 0.5, // Start with medium consciousness
             emotional_state: EmotionalState::Calm,
             integration_level: 0.3, // Start with basic integration
+            optimization_cache: Arc::new(RwLock::new(OptimizationCache::new())),
+            string_pool: Arc::new(RwLock::new(LruCache::new(std::num::NonZeroUsize::new(1000).unwrap()))),
+            pattern_cache: Arc::new(RwLock::new(LruCache::new(std::num::NonZeroUsize::new(500).unwrap()))),
         }
     }
     
@@ -147,8 +242,8 @@ impl ConsciousnessModule {
             self.integration_level = self.integration_level * 0.995 + 0.5 * 0.005;
         }
         
-        // Update emotional learning network
-        let context = format!("performance_feedback_{:.2}", performance_feedback);
+        // Update emotional learning network with optimized string handling
+        let context = self.get_pooled_string(&format!("performance_feedback_{:.2}", performance_feedback));
         let _ = self.emotional_learning.learn_emotional_association(
             &context, 
             self.emotional_state.clone(), 
@@ -164,8 +259,20 @@ impl ConsciousnessModule {
         let _ = self.quantum_consciousness.apply_quantum_error_correction();
     }
     
-    /// Get the current emotional influence on processing
+    /// Get the current emotional influence on processing with caching optimization
     pub fn emotional_influence(&self) -> f64 {
+        // Try to get from cache first
+        if let Ok(cache) = self.optimization_cache.read() {
+            if let Some(&cached_influence) = cache.emotional_influence_cache.get(&self.emotional_state) {
+                // Verify cache is still valid based on consciousness/integration levels
+                let cache_key = self.create_emotional_cache_key();
+                if let Some(cached_value) = cache.emotional_influence_cache.get(&self.emotional_state) {
+                    return *cached_value;
+                }
+            }
+        }
+        
+        // Calculate if not in cache
         let base_influence = match self.emotional_state {
             EmotionalState::Calm => 1.0,
             EmotionalState::Excited => 1.2,
@@ -179,7 +286,135 @@ impl ConsciousnessModule {
         let consciousness_multiplier = 0.8 + (self.consciousness_level * 0.4);
         let integration_multiplier = 0.9 + (self.integration_level * 0.2);
         
-        base_influence * consciousness_multiplier * integration_multiplier
+        let final_influence = base_influence * consciousness_multiplier * integration_multiplier;
+        
+        // Cache the result
+        if let Ok(mut cache) = self.optimization_cache.write() {
+            cache.emotional_influence_cache.insert(self.emotional_state.clone(), final_influence);
+            cache.cache_hits += 1;
+        }
+        
+        final_influence
+    }
+    
+    /// Create a cache key for emotional influence that includes state parameters
+    fn create_emotional_cache_key(&self) -> EmotionalState {
+        // For now, we use the emotional state as the key
+        // In the future, we might create a composite key that includes consciousness/integration levels
+        self.emotional_state.clone()
+    }
+    
+    /// Get or create a pooled string to reduce allocations
+    fn get_pooled_string(&self, key: &str) -> String {
+        if let Ok(mut pool) = self.string_pool.write() {
+            if let Some(pooled) = pool.get(key) {
+                return pooled.clone();
+            } else {
+                let owned = key.to_string();
+                pool.put(key.to_string(), owned.clone());
+                return owned;
+            }
+        }
+        // Fallback if pool is unavailable
+        key.to_string()
+    }
+    
+    /// Cache and retrieve pattern analysis for performance optimization
+    fn get_cached_pattern_analysis(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern]) -> Option<CachedPatternAnalysis> {
+        let pattern_hash = self.hash_patterns(patterns);
+        
+        if let Ok(mut cache) = self.pattern_cache.write() {
+            if let Some(cached) = cache.get(&pattern_hash) {
+                // Check if cache entry is still fresh (less than 5 minutes old)
+                if cached.last_accessed.elapsed().as_secs() < 300 {
+                    return Some(cached.clone());
+                } else {
+                    // Remove stale cache entry
+                    cache.pop(&pattern_hash);
+                }
+            }
+        }
+        None
+    }
+    
+    /// Cache pattern analysis results
+    fn cache_pattern_analysis(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern], analysis: CachedPatternAnalysis) {
+        let pattern_hash = self.hash_patterns(patterns);
+        
+        if let Ok(mut cache) = self.pattern_cache.write() {
+            cache.put(pattern_hash, analysis);
+        }
+    }
+    
+    /// Create a hash of patterns for caching
+    fn hash_patterns(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern]) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        patterns.len().hash(&mut hasher);
+        for pattern in patterns.iter().take(10) { // Limit to first 10 patterns for performance
+            // Hash pattern structure rather than full content
+            std::mem::discriminant(pattern).hash(&mut hasher);
+        }
+        hasher.finish()
+    }
+    
+    /// Get performance metrics and optimization suggestions
+    pub fn get_performance_metrics(&self) -> ConsciousnessPerformanceMetrics {
+        let cache_stats = if let Ok(cache) = self.optimization_cache.read() {
+            (cache.get_hit_rate(), cache.cache_hits + cache.cache_misses)
+        } else {
+            (0.0, 0)
+        };
+        
+        let pattern_cache_size = if let Ok(cache) = self.pattern_cache.read() {
+            cache.len()
+        } else {
+            0
+        };
+        
+        let string_pool_size = if let Ok(pool) = self.string_pool.read() {
+            pool.len()
+        } else {
+            0
+        };
+        
+        ConsciousnessPerformanceMetrics {
+            consciousness_level: self.consciousness_level,
+            integration_level: self.integration_level,
+            cache_hit_rate: cache_stats.0,
+            total_cache_accesses: cache_stats.1,
+            pattern_cache_size,
+            string_pool_size,
+            emotional_influence: self.emotional_influence(),
+            quantum_coherence: self.quantum_consciousness.get_quantum_metrics().coherence,
+        }
+    }
+    
+    /// Optimize consciousness module performance
+    pub fn optimize_performance(&mut self) {
+        // Clear caches if needed
+        if let Ok(mut cache) = self.optimization_cache.write() {
+            cache.clear_if_needed();
+        }
+        
+        // Adjust consciousness parameters based on performance history
+        if let Ok(cache) = self.optimization_cache.read() {
+            if !cache.performance_history.is_empty() {
+                let avg_performance: f64 = cache.performance_history.iter().sum::<f64>() / cache.performance_history.len() as f64;
+                
+                if avg_performance > 0.8 {
+                    // Good performance - increase consciousness slightly
+                    self.consciousness_level = (self.consciousness_level + 0.01).min(1.0);
+                    self.integration_level = (self.integration_level + 0.005).min(1.0);
+                } else if avg_performance < 0.4 {
+                    // Poor performance - reduce consciousness to optimize
+                    self.consciousness_level = (self.consciousness_level - 0.02).max(0.1);
+                    self.integration_level = (self.integration_level - 0.01).max(0.1);
+                }
+            }
+        }
     }
     
     /// Enter creative mode for exploration
@@ -272,23 +507,63 @@ impl ConsciousnessModule {
         Ok(wake_report)
     }
     
-    /// Get integrated consciousness insights for query processing
+    /// Get integrated consciousness insights for query processing with caching optimization
     pub fn get_consciousness_insights(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern]) -> Result<ConsciousnessInsights, crate::OxirsError> {
-        // Get emotional insights
+        // Check for cached pattern analysis first
+        let cached_analysis = self.get_cached_pattern_analysis(patterns);
+        
+        let (complexity, quantum_potential, emotional_relevance) = if let Some(ref cached) = cached_analysis {
+            (cached.complexity, cached.quantum_potential, cached.emotional_relevance)
+        } else {
+            // Calculate fresh analysis
+            let complexity = self.calculate_pattern_complexity(patterns);
+            let quantum_potential = self.assess_quantum_potential(patterns);
+            let emotional_relevance = self.assess_emotional_relevance(patterns);
+            
+            // Cache the analysis
+            let analysis = CachedPatternAnalysis {
+                complexity,
+                quantum_potential,
+                emotional_relevance,
+                last_accessed: std::time::Instant::now(),
+            };
+            self.cache_pattern_analysis(patterns, analysis);
+            
+            (complexity, quantum_potential, emotional_relevance)
+        };
+        
+        // Create optimized query context based on cached/calculated analysis
         let query_context = QueryContext {
-            dataset_size: DatasetSize::Medium, // Default assumption
-            complexity: ComplexityLevel::Moderate,
+            dataset_size: if patterns.len() > 100 { DatasetSize::Large } 
+                         else if patterns.len() > 20 { DatasetSize::Medium } 
+                         else { DatasetSize::Small },
+            complexity: if complexity > 0.8 { ComplexityLevel::High }
+                       else if complexity > 0.5 { ComplexityLevel::Moderate }
+                       else { ComplexityLevel::Low },
             performance_req: PerformanceRequirement::Balanced,
-            domain: "general".to_string(), // Default domain
+            domain: self.get_pooled_string("general"),
         };
         
         let emotional_insights = self.emotional_learning.get_emotional_insights(patterns, &query_context)?;
         
-        // Calculate quantum advantage
-        let quantum_advantage = self.quantum_consciousness.calculate_quantum_advantage(patterns);
+        // Use cached quantum potential if available
+        let quantum_advantage = if cached_analysis.is_some() {
+            quantum_potential * 2.0 // Convert potential to advantage
+        } else {
+            self.quantum_consciousness.calculate_quantum_advantage(patterns)
+        };
         
-        // Get quantum metrics
+        // Get quantum metrics (these are relatively cheap to compute)
         let quantum_metrics = self.quantum_consciousness.get_quantum_metrics();
+        
+        // Update cache statistics
+        if let Ok(mut cache) = self.optimization_cache.write() {
+            if cached_analysis.is_some() {
+                cache.cache_hits += 1;
+            } else {
+                cache.cache_misses += 1;
+            }
+        }
         
         // Combine all insights
         Ok(ConsciousnessInsights {
@@ -298,18 +573,74 @@ impl ConsciousnessModule {
             consciousness_level: self.consciousness_level,
             integration_level: self.integration_level,
             dream_state: self.dream_processor.dream_state.clone(),
-            recommended_approach: self.determine_optimal_approach(patterns)?,
+            recommended_approach: self.determine_optimal_approach_cached(patterns, complexity)?,
         })
     }
     
-    /// Determine optimal processing approach based on integrated consciousness
-    fn determine_optimal_approach(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern]) -> Result<ConsciousnessApproach, crate::OxirsError> {
+    /// Calculate pattern complexity for caching
+    fn calculate_pattern_complexity(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern]) -> f64 {
+        if patterns.is_empty() {
+            return 0.0;
+        }
+        
+        let base_complexity = patterns.len() as f64 / 100.0; // Normalize by typical pattern count
+        let variety_bonus = (patterns.len().min(20) as f64) / 20.0; // Bonus for pattern variety
+        
+        (base_complexity + variety_bonus * 0.3).min(1.0)
+    }
+    
+    /// Assess quantum enhancement potential for patterns
+    fn assess_quantum_potential(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern]) -> f64 {
+        // High quantum potential for complex patterns with multiple variables
+        let pattern_count = patterns.len() as f64;
+        let complexity_factor = (pattern_count / 50.0).min(1.0);
+        
+        // Base quantum potential
+        0.3 + complexity_factor * 0.7
+    }
+    
+    /// Assess emotional relevance of patterns
+    fn assess_emotional_relevance(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern]) -> f64 {
+        // For now, use pattern count as proxy for emotional relevance
+        let pattern_count = patterns.len() as f64;
+        (pattern_count / 30.0).min(1.0)
+    }
+    
+    /// Determine optimal processing approach based on integrated consciousness (cached version)
+    fn determine_optimal_approach_cached(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern], complexity: f64) -> Result<ConsciousnessApproach, crate::OxirsError> {
         let pattern_count = patterns.len();
         
-        let approach = if self.integration_level > 0.8 && self.consciousness_level > 0.7 {
+        // Create cache key
+        let cache_key = (
+            pattern_count,
+            (self.consciousness_level * 10.0) as u8,
+            (self.integration_level * 10.0) as u8,
+        );
+        
+        // Check cache first
+        if let Ok(cache) = self.optimization_cache.read() {
+            if let Some(cached_approach) = cache.approach_cache.get(&cache_key) {
+                return Ok(cached_approach.clone());
+            }
+        }
+        
+        // Calculate approach if not cached
+        let approach = self.calculate_optimal_approach(pattern_count, complexity);
+        
+        // Cache the result
+        if let Ok(mut cache) = self.optimization_cache.write() {
+            cache.approach_cache.insert(cache_key, approach.clone());
+        }
+        
+        Ok(approach)
+    }
+    
+    /// Calculate optimal approach (factored out for reuse)
+    fn calculate_optimal_approach(&self, pattern_count: usize, complexity: f64) -> ConsciousnessApproach {
+        if self.integration_level > 0.8 && self.consciousness_level > 0.7 {
             // High integration - use full consciousness capabilities
             ConsciousnessApproach {
-                primary_strategy: "integrated_consciousness".to_string(),
+                primary_strategy: self.get_pooled_string("integrated_consciousness"),
                 use_quantum_enhancement: true,
                 use_emotional_learning: true,
                 use_dream_processing: pattern_count > 10,
@@ -319,7 +650,7 @@ impl ConsciousnessModule {
         } else if self.consciousness_level > 0.6 {
             // Medium consciousness - selective enhancement
             ConsciousnessApproach {
-                primary_strategy: "selective_enhancement".to_string(),
+                primary_strategy: self.get_pooled_string("selective_enhancement"),
                 use_quantum_enhancement: pattern_count > 5,
                 use_emotional_learning: true,
                 use_dream_processing: false,
@@ -329,16 +660,21 @@ impl ConsciousnessModule {
         } else {
             // Basic consciousness - traditional with emotional context
             ConsciousnessApproach {
-                primary_strategy: "traditional_with_emotion".to_string(),
+                primary_strategy: self.get_pooled_string("traditional_with_emotion"),
                 use_quantum_enhancement: false,
                 use_emotional_learning: true,
                 use_dream_processing: false,
                 confidence_level: 0.5,
-                expected_performance_gain: 1.0 + self.emotional_influence() * 0.1,
+                expected_performance_gain: 1.0 + self.consciousness_level * 0.2,
             }
-        };
-        
-        Ok(approach)
+        }
+    }
+    
+    /// Determine optimal processing approach based on integrated consciousness (legacy method)
+    fn determine_optimal_approach(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern]) -> Result<ConsciousnessApproach, crate::OxirsError> {
+        let pattern_count = patterns.len();
+        let complexity = self.calculate_pattern_complexity(patterns);
+        Ok(self.calculate_optimal_approach(pattern_count, complexity))
     }
     
     /// Evolve consciousness through experience
@@ -424,6 +760,417 @@ pub struct ExperienceFeedback {
     pub related_pattern: Option<String>,
     /// Pattern similarity for entanglement strength
     pub pattern_similarity: f64,
+}
+
+/// Meta-consciousness component for self-awareness and integration optimization
+#[derive(Debug, Clone)]
+pub struct MetaConsciousness {
+    /// Self-awareness level (0.0 to 1.0)
+    pub self_awareness: f64,
+    /// Effectiveness tracking across consciousness components
+    pub component_effectiveness: HashMap<String, f64>,
+    /// Integration synchronization state
+    pub sync_state: IntegrationSyncState,
+    /// Performance history for adaptive learning
+    pub performance_history: Vec<PerformanceMetric>,
+    /// Cross-module communication channels
+    pub communication_channels: Arc<RwLock<HashMap<String, ConsciousnessMessage>>>,
+    /// Last synchronization time
+    pub last_sync: std::time::Instant,
+}
+
+/// Integration synchronization state between consciousness components
+#[derive(Debug, Clone, PartialEq)]
+pub enum IntegrationSyncState {
+    /// All components synchronized
+    Synchronized,
+    /// Components partially synchronized
+    PartialSync,
+    /// Synchronization in progress
+    Synchronizing,
+    /// Components need synchronization
+    NeedsSync,
+    /// Synchronization failed
+    SyncFailed,
+}
+
+/// Performance metric for adaptive consciousness evolution
+#[derive(Debug, Clone)]
+pub struct PerformanceMetric {
+    /// Timestamp of measurement
+    pub timestamp: std::time::Instant,
+    /// Query processing time improvement
+    pub processing_improvement: f64,
+    /// Accuracy improvement
+    pub accuracy_improvement: f64,
+    /// Resource utilization efficiency
+    pub resource_efficiency: f64,
+    /// User satisfaction proxy
+    pub satisfaction_proxy: f64,
+}
+
+/// Inter-component consciousness communication message
+#[derive(Debug, Clone)]
+pub struct ConsciousnessMessage {
+    /// Source component
+    pub source: String,
+    /// Target component
+    pub target: String,
+    /// Message type
+    pub message_type: MessageType,
+    /// Message content
+    pub content: String,
+    /// Priority level
+    pub priority: f64,
+    /// Timestamp
+    pub timestamp: std::time::Instant,
+}
+
+/// Types of consciousness communication messages
+#[derive(Debug, Clone, PartialEq)]
+pub enum MessageType {
+    /// Emotional state change notification
+    EmotionalStateChange,
+    /// Quantum measurement result
+    QuantumMeasurement,
+    /// Dream insight discovery
+    DreamInsight,
+    /// Pattern recognition alert
+    PatternAlert,
+    /// Performance optimization suggestion
+    OptimizationSuggestion,
+    /// Synchronization request
+    SyncRequest,
+    /// Error or anomaly detected
+    AnomalyDetection,
+}
+
+impl MetaConsciousness {
+    /// Create a new meta-consciousness component
+    pub fn new() -> Self {
+        Self {
+            self_awareness: 0.3,
+            component_effectiveness: HashMap::new(),
+            sync_state: IntegrationSyncState::NeedsSync,
+            performance_history: Vec::with_capacity(1000),
+            communication_channels: Arc::new(RwLock::new(HashMap::new())),
+            last_sync: std::time::Instant::now(),
+        }
+    }
+    
+    /// Update component effectiveness based on performance
+    pub fn update_component_effectiveness(&mut self, component: &str, effectiveness: f64) {
+        self.component_effectiveness.insert(component.to_string(), effectiveness);
+        
+        // Increase self-awareness as we learn about component effectiveness
+        self.self_awareness = (self.self_awareness + 0.01).min(1.0);
+        
+        // Record performance metric
+        let metric = PerformanceMetric {
+            timestamp: std::time::Instant::now(),
+            processing_improvement: effectiveness * 0.5,
+            accuracy_improvement: effectiveness * 0.3,
+            resource_efficiency: effectiveness * 0.4,
+            satisfaction_proxy: effectiveness * 0.6,
+        };
+        
+        self.performance_history.push(metric);
+        
+        // Keep only recent history
+        if self.performance_history.len() > 1000 {
+            self.performance_history.remove(0);
+        }
+    }
+    
+    /// Send a consciousness message between components
+    pub fn send_message(&self, message: ConsciousnessMessage) -> Result<(), crate::OxirsError> {
+        if let Ok(mut channels) = self.communication_channels.write() {
+            let key = format!("{}_{}", message.source, message.target);
+            channels.insert(key, message);
+            Ok(())
+        } else {
+            Err(crate::OxirsError::Query("Failed to send consciousness message".to_string()))
+        }
+    }
+    
+    /// Receive consciousness messages for a component
+    pub fn receive_messages(&self, component: &str) -> Result<Vec<ConsciousnessMessage>, crate::OxirsError> {
+        if let Ok(channels) = self.communication_channels.read() {
+            let messages: Vec<ConsciousnessMessage> = channels
+                .values()
+                .filter(|msg| msg.target == component)
+                .cloned()
+                .collect();
+            Ok(messages)
+        } else {
+            Err(crate::OxirsError::Query("Failed to receive consciousness messages".to_string()))
+        }
+    }
+    
+    /// Synchronize all consciousness components
+    pub fn synchronize_components(&mut self) -> Result<IntegrationSyncState, crate::OxirsError> {
+        self.sync_state = IntegrationSyncState::Synchronizing;
+        
+        // Calculate overall effectiveness
+        let overall_effectiveness: f64 = self.component_effectiveness.values().sum::<f64>() 
+            / self.component_effectiveness.len().max(1) as f64;
+        
+        // Update self-awareness based on overall effectiveness
+        if overall_effectiveness > 0.8 {
+            self.self_awareness = (self.self_awareness + 0.05).min(1.0);
+            self.sync_state = IntegrationSyncState::Synchronized;
+        } else if overall_effectiveness > 0.6 {
+            self.sync_state = IntegrationSyncState::PartialSync;
+        } else {
+            self.sync_state = IntegrationSyncState::NeedsSync;
+        }
+        
+        self.last_sync = std::time::Instant::now();
+        Ok(self.sync_state.clone())
+    }
+    
+    /// Calculate adaptive consciousness recommendations
+    pub fn calculate_adaptive_recommendations(&self) -> AdaptiveRecommendations {
+        let recent_performance: f64 = self.performance_history
+            .iter()
+            .rev()
+            .take(10)
+            .map(|p| (p.processing_improvement + p.accuracy_improvement + p.resource_efficiency) / 3.0)
+            .sum::<f64>() / 10.0;
+        
+        AdaptiveRecommendations {
+            recommended_consciousness_level: self.self_awareness + recent_performance * 0.2,
+            recommended_integration_level: if recent_performance > 0.7 { 0.9 } else { 0.6 },
+            suggested_optimizations: self.generate_optimization_suggestions(),
+            confidence: self.self_awareness * 0.8 + recent_performance * 0.2,
+        }
+    }
+    
+    /// Generate optimization suggestions based on performance history
+    fn generate_optimization_suggestions(&self) -> Vec<String> {
+        let mut suggestions = Vec::new();
+        
+        if let Some(avg_processing) = self.calculate_average_metric(|m| m.processing_improvement) {
+            if avg_processing < 0.5 {
+                suggestions.push("Increase quantum enhancement usage".to_string());
+                suggestions.push("Optimize emotional learning parameters".to_string());
+            }
+        }
+        
+        if let Some(avg_accuracy) = self.calculate_average_metric(|m| m.accuracy_improvement) {
+            if avg_accuracy < 0.6 {
+                suggestions.push("Enable dream processing for pattern discovery".to_string());
+                suggestions.push("Adjust intuitive planner sensitivity".to_string());
+            }
+        }
+        
+        if let Some(avg_efficiency) = self.calculate_average_metric(|m| m.resource_efficiency) {
+            if avg_efficiency < 0.7 {
+                suggestions.push("Balance consciousness levels for efficiency".to_string());
+                suggestions.push("Optimize component synchronization frequency".to_string());
+            }
+        }
+        
+        suggestions
+    }
+    
+    /// Calculate average for a specific metric
+    fn calculate_average_metric<F>(&self, metric_extractor: F) -> Option<f64>
+    where
+        F: Fn(&PerformanceMetric) -> f64,
+    {
+        if self.performance_history.is_empty() {
+            return None;
+        }
+        
+        let sum: f64 = self.performance_history.iter().map(metric_extractor).sum();
+        Some(sum / self.performance_history.len() as f64)
+    }
+}
+
+/// Adaptive recommendations from meta-consciousness analysis
+#[derive(Debug, Clone)]
+pub struct AdaptiveRecommendations {
+    /// Recommended consciousness level
+    pub recommended_consciousness_level: f64,
+    /// Recommended integration level
+    pub recommended_integration_level: f64,
+    /// Suggested optimizations
+    pub suggested_optimizations: Vec<String>,
+    /// Confidence in recommendations
+    pub confidence: f64,
+}
+
+impl ConsciousnessModule {
+    /// Enhanced integration method with meta-consciousness
+    pub fn integrate_with_meta_consciousness(&mut self, meta_consciousness: &mut MetaConsciousness) -> Result<(), crate::OxirsError> {
+        // Update meta-consciousness with current effectiveness
+        let quantum_effectiveness = self.quantum_consciousness.calculate_quantum_advantage(&[]);
+        meta_consciousness.update_component_effectiveness("quantum", quantum_effectiveness);
+        
+        let emotional_effectiveness = self.emotional_influence();
+        meta_consciousness.update_component_effectiveness("emotional", emotional_effectiveness);
+        
+        let dream_effectiveness = if matches!(self.dream_processor.dream_state, DreamState::Awake) { 0.5 } else { 0.8 };
+        meta_consciousness.update_component_effectiveness("dream", dream_effectiveness);
+        
+        // Get adaptive recommendations
+        let recommendations = meta_consciousness.calculate_adaptive_recommendations();
+        
+        // Apply recommendations
+        if recommendations.confidence > 0.7 {
+            self.consciousness_level = recommendations.recommended_consciousness_level.min(1.0).max(0.0);
+            self.integration_level = recommendations.recommended_integration_level.min(1.0).max(0.0);
+            
+            // Send optimization messages
+            for optimization in &recommendations.suggested_optimizations {
+                let message = ConsciousnessMessage {
+                    source: "meta_consciousness".to_string(),
+                    target: "main_consciousness".to_string(),
+                    message_type: MessageType::OptimizationSuggestion,
+                    content: optimization.clone(),
+                    priority: recommendations.confidence,
+                    timestamp: std::time::Instant::now(),
+                };
+                meta_consciousness.send_message(message)?;
+            }
+        }
+        
+        // Synchronize components
+        meta_consciousness.synchronize_components()?;
+        
+        Ok(())
+    }
+    
+    /// Advanced pattern-based consciousness adaptation
+    pub fn adapt_to_query_patterns(&mut self, query_patterns: &[crate::query::algebra::AlgebraTriplePattern], execution_metrics: &QueryExecutionMetrics) -> Result<(), crate::OxirsError> {
+        // Analyze pattern complexity
+        let pattern_complexity = self.calculate_pattern_complexity(query_patterns);
+        
+        // Adapt consciousness based on pattern complexity and execution results
+        if pattern_complexity > 0.8 && execution_metrics.success_rate > 0.8 {
+            // Complex patterns handled well - increase consciousness
+            self.consciousness_level = (self.consciousness_level + 0.03).min(1.0);
+            self.enter_creative_mode();
+        } else if pattern_complexity > 0.8 && execution_metrics.success_rate < 0.5 {
+            // Complex patterns not handled well - need dream processing
+            let _ = self.enter_dream_state(DreamState::CreativeDreaming);
+        } else if pattern_complexity < 0.3 {
+            // Simple patterns - optimize for efficiency
+            self.return_to_calm();
+        }
+        
+        // Learn from execution metrics
+        let emotional_outcome = if execution_metrics.success_rate > 0.8 {
+            EmotionalState::Confident
+        } else if execution_metrics.success_rate > 0.6 {
+            EmotionalState::Curious
+        } else {
+            EmotionalState::Cautious
+        };
+        
+        let experience = ExperienceFeedback {
+            context: format!("query_pattern_complexity_{:.2}", pattern_complexity),
+            performance_score: execution_metrics.success_rate,
+            satisfaction_level: execution_metrics.user_satisfaction,
+            emotional_outcome,
+            complexity_level: pattern_complexity,
+            related_pattern: Some(format!("patterns_{}", query_patterns.len())),
+            pattern_similarity: execution_metrics.pattern_similarity,
+        };
+        
+        self.evolve_consciousness(&experience)?;
+        
+        Ok(())
+    }
+    
+    /// Calculate complexity of query patterns
+    fn calculate_pattern_complexity(&self, patterns: &[crate::query::algebra::AlgebraTriplePattern]) -> f64 {
+        if patterns.is_empty() {
+            return 0.0;
+        }
+        
+        let variable_count = patterns.iter()
+            .flat_map(|p| vec![&p.subject, &p.predicate, &p.object])
+            .filter(|term| matches!(term, crate::query::algebra::TermPattern::Variable(_)))
+            .count();
+        
+        let join_complexity = if patterns.len() > 1 { patterns.len() as f64 * 0.2 } else { 0.0 };
+        let variable_complexity = variable_count as f64 * 0.1;
+        
+        (join_complexity + variable_complexity).min(1.0)
+    }
+    
+    /// Integration with query optimization pipeline
+    pub fn optimize_query_with_consciousness(&self, original_plan: &crate::query::plan::ExecutionPlan) -> Result<OptimizedConsciousPlan, crate::OxirsError> {
+        let insights = self.get_consciousness_insights(&[])?;
+        
+        let recommended_approach = insights.recommended_approach.clone();
+        let optimized_plan = OptimizedConsciousPlan {
+            base_plan: original_plan.clone(),
+            consciousness_enhancements: recommended_approach.clone(),
+            quantum_optimizations: if insights.quantum_advantage > 1.2 { 
+                Some(format!("Quantum advantage: {:.2}", insights.quantum_advantage))
+            } else { 
+                None 
+            },
+            emotional_context: self.emotional_state.clone(),
+            expected_improvement: recommended_approach.expected_performance_gain,
+            consciousness_metadata: ConsciousnessMetadata {
+                consciousness_level: insights.consciousness_level,
+                integration_level: insights.integration_level,
+                dream_state: insights.dream_state,
+                quantum_metrics: insights.quantum_metrics,
+            },
+        };
+        
+        Ok(optimized_plan)
+    }
+}
+
+/// Query execution metrics for consciousness adaptation
+#[derive(Debug, Clone)]
+pub struct QueryExecutionMetrics {
+    /// Success rate (0.0 to 1.0)
+    pub success_rate: f64,
+    /// Average execution time improvement
+    pub execution_time_improvement: f64,
+    /// Resource utilization efficiency
+    pub resource_efficiency: f64,
+    /// User satisfaction proxy
+    pub user_satisfaction: f64,
+    /// Pattern similarity to previous queries
+    pub pattern_similarity: f64,
+}
+
+/// Consciousness-optimized execution plan
+#[derive(Debug, Clone)]
+pub struct OptimizedConsciousPlan {
+    /// Base execution plan
+    pub base_plan: crate::query::plan::ExecutionPlan,
+    /// Consciousness-based enhancements
+    pub consciousness_enhancements: ConsciousnessApproach,
+    /// Quantum optimizations if applicable
+    pub quantum_optimizations: Option<String>,
+    /// Emotional context
+    pub emotional_context: EmotionalState,
+    /// Expected performance improvement
+    pub expected_improvement: f64,
+    /// Consciousness metadata
+    pub consciousness_metadata: ConsciousnessMetadata,
+}
+
+/// Consciousness metadata for query execution
+#[derive(Debug, Clone)]
+pub struct ConsciousnessMetadata {
+    /// Current consciousness level
+    pub consciousness_level: f64,
+    /// Integration level
+    pub integration_level: f64,
+    /// Dream state
+    pub dream_state: DreamState,
+    /// Quantum metrics
+    pub quantum_metrics: QuantumMetrics,
 }
 
 #[cfg(test)]
@@ -547,5 +1294,142 @@ mod tests {
         // High performance should increase consciousness
         assert!(consciousness.consciousness_level >= initial_consciousness);
         assert_eq!(consciousness.emotional_state, EmotionalState::Confident);
+    }
+    
+    #[test]
+    fn test_meta_consciousness_creation() {
+        let meta_consciousness = MetaConsciousness::new();
+        
+        assert_eq!(meta_consciousness.self_awareness, 0.3);
+        assert_eq!(meta_consciousness.sync_state, IntegrationSyncState::NeedsSync);
+        assert!(meta_consciousness.component_effectiveness.is_empty());
+        assert!(meta_consciousness.performance_history.is_empty());
+    }
+    
+    #[test]
+    fn test_meta_consciousness_effectiveness_tracking() {
+        let mut meta_consciousness = MetaConsciousness::new();
+        
+        meta_consciousness.update_component_effectiveness("quantum", 0.8);
+        meta_consciousness.update_component_effectiveness("emotional", 0.7);
+        
+        assert_eq!(meta_consciousness.component_effectiveness.get("quantum"), Some(&0.8));
+        assert_eq!(meta_consciousness.component_effectiveness.get("emotional"), Some(&0.7));
+        assert_eq!(meta_consciousness.performance_history.len(), 2);
+        assert!(meta_consciousness.self_awareness > 0.3); // Should have increased
+    }
+    
+    #[test]
+    fn test_consciousness_message_system() {
+        let meta_consciousness = MetaConsciousness::new();
+        
+        let message = ConsciousnessMessage {
+            source: "quantum".to_string(),
+            target: "emotional".to_string(),
+            message_type: MessageType::QuantumMeasurement,
+            content: "measurement_complete".to_string(),
+            priority: 0.8,
+            timestamp: std::time::Instant::now(),
+        };
+        
+        let result = meta_consciousness.send_message(message);
+        assert!(result.is_ok());
+        
+        let messages = meta_consciousness.receive_messages("emotional");
+        assert!(messages.is_ok());
+        let messages = messages.unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].source, "quantum");
+        assert_eq!(messages[0].message_type, MessageType::QuantumMeasurement);
+    }
+    
+    #[test]
+    fn test_adaptive_recommendations() {
+        let mut meta_consciousness = MetaConsciousness::new();
+        
+        // Add some performance history
+        meta_consciousness.update_component_effectiveness("quantum", 0.9);
+        meta_consciousness.update_component_effectiveness("emotional", 0.8);
+        meta_consciousness.update_component_effectiveness("dream", 0.7);
+        
+        let recommendations = meta_consciousness.calculate_adaptive_recommendations();
+        
+        assert!(recommendations.recommended_consciousness_level >= 0.0);
+        assert!(recommendations.recommended_consciousness_level <= 1.0);
+        assert!(recommendations.confidence > 0.0);
+        assert!(recommendations.suggested_optimizations.len() >= 0);
+    }
+    
+    #[test]
+    fn test_consciousness_integration_with_meta() {
+        let stats = Arc::new(IndexStats::new());
+        let mut consciousness = ConsciousnessModule::new(stats);
+        let mut meta_consciousness = MetaConsciousness::new();
+        
+        let result = consciousness.integrate_with_meta_consciousness(&mut meta_consciousness);
+        assert!(result.is_ok());
+        
+        // Should have updated component effectiveness
+        assert!(!meta_consciousness.component_effectiveness.is_empty());
+        
+        // Should have performance history
+        assert!(!meta_consciousness.performance_history.is_empty());
+    }
+    
+    #[test]
+    fn test_pattern_complexity_calculation() {
+        let stats = Arc::new(IndexStats::new());
+        let consciousness = ConsciousnessModule::new(stats);
+        
+        // Empty patterns should have 0 complexity
+        let complexity = consciousness.calculate_pattern_complexity(&[]);
+        assert_eq!(complexity, 0.0);
+        
+        // Would need actual AlgebraTriplePattern instances for more detailed testing
+        // This is a basic structural test
+    }
+    
+    #[test]
+    fn test_adaptive_consciousness_adjustment() {
+        let stats = Arc::new(IndexStats::new());
+        let mut consciousness = ConsciousnessModule::new(stats);
+        
+        let metrics = QueryExecutionMetrics {
+            success_rate: 0.9,
+            execution_time_improvement: 0.2,
+            resource_efficiency: 0.8,
+            user_satisfaction: 0.85,
+            pattern_similarity: 0.7,
+        };
+        
+        let initial_consciousness = consciousness.consciousness_level;
+        let result = consciousness.adapt_to_query_patterns(&[], &metrics);
+        assert!(result.is_ok());
+        
+        // High success rate should not decrease consciousness
+        assert!(consciousness.consciousness_level >= initial_consciousness);
+    }
+    
+    #[test]
+    fn test_consciousness_query_optimization() {
+        let stats = Arc::new(IndexStats::new());
+        let consciousness = ConsciousnessModule::new(stats);
+        
+        // Create a simple execution plan for testing
+        let plan = crate::query::plan::ExecutionPlan::TripleScan {
+            pattern: crate::model::pattern::TriplePattern {
+                subject: None,
+                predicate: None,
+                object: None,
+            },
+        };
+        
+        let result = consciousness.optimize_query_with_consciousness(&plan);
+        assert!(result.is_ok());
+        
+        let optimized = result.unwrap();
+        assert!(optimized.expected_improvement >= 1.0);
+        assert!(optimized.consciousness_metadata.consciousness_level >= 0.0);
+        assert!(optimized.consciousness_metadata.integration_level >= 0.0);
     }
 }

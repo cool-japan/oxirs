@@ -1,4 +1,4 @@
-//\! GPU configuration structures and enums
+//! GPU configuration structures and enums
 
 /// Configuration for GPU operations
 #[derive(Debug, Clone)]
@@ -53,7 +53,7 @@ impl Default for GpuConfig {
             enable_unified_memory: false,
             enable_async_execution: true,
             enable_multi_gpu: false,
-            preferred_gpu_ids: vec\![0],
+            preferred_gpu_ids: vec![0],
             dynamic_batch_sizing: true,
             enable_memory_compression: false,
             kernel_cache_size: 100, // Cache up to 100 compiled kernels
@@ -103,19 +103,19 @@ impl GpuConfig {
     /// Validate the configuration
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.batch_size == 0 {
-            return Err(anyhow::anyhow\!("Batch size must be greater than 0"));
+            return Err(anyhow::anyhow!("Batch size must be greater than 0"));
         }
         if self.stream_count == 0 {
-            return Err(anyhow::anyhow\!("Stream count must be greater than 0"));
+            return Err(anyhow::anyhow!("Stream count must be greater than 0"));
         }
         if self.memory_pool_size == 0 {
-            return Err(anyhow::anyhow\!("Memory pool size must be greater than 0"));
+            return Err(anyhow::anyhow!("Memory pool size must be greater than 0"));
         }
         if self.kernel_cache_size == 0 {
-            return Err(anyhow::anyhow\!("Kernel cache size must be greater than 0"));
+            return Err(anyhow::anyhow!("Kernel cache size must be greater than 0"));
         }
         if self.preferred_gpu_ids.is_empty() {
-            return Err(anyhow::anyhow\!("Must specify at least one preferred GPU ID"));
+            return Err(anyhow::anyhow!("Must specify at least one preferred GPU ID"));
         }
         Ok(())
     }
@@ -127,4 +127,3 @@ impl GpuConfig {
         max_vectors.min(self.batch_size * 4).max(self.batch_size / 4)
     }
 }
-EOF < /dev/null

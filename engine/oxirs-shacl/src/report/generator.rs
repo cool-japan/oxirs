@@ -41,7 +41,7 @@ impl ReportGenerator {
     pub fn generate_to_file(&self, report: &ValidationReport, path: &str) -> Result<()> {
         let content = self.generate(report)?;
         std::fs::write(path, content)
-            .map_err( < /dev/null | e| ShaclError::ReportError(format!("Failed to write file: {}", e)))?;
+            .map_err(|e| ShaclError::ReportError(format!("Failed to write file: {}", e)))?;
         Ok(())
     }
 

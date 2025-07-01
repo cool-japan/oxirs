@@ -234,17 +234,113 @@ mod triple_serde {
     where
         S: Serializer,
     {
-        // TODO: Implement proper triple serialization
-        serializer.serialize_str(&format!("{:?}", triple))
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("Triple", 3)?;
+        state.serialize_field("subject", &format!("{}", triple.subject))?;
+        state.serialize_field("predicate", &format!("{}", triple.predicate))?;
+        state.serialize_field("object", &format!("{}", triple.object))?;
+        state.end()
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> std::result::Result<Triple, D::Error>
     where
         D: Deserializer<'de>,
     {
-        // TODO: Implement proper triple deserialization
-        let _s = String::deserialize(deserializer)?;
-        unimplemented!("Triple deserialization not yet implemented")
+        use serde::de::{self, MapAccess, Visitor};
+        use std::fmt;
+        use oxirs_core::{NamedNode, BlankNode, Literal, Subject, Term};
+
+        #[derive(Deserialize)]
+        struct TripleHelper {
+            subject: String,
+            predicate: String,
+            object: String,
+        }
+
+        struct TripleVisitor;
+
+        impl<'de> Visitor<'de> for TripleVisitor {
+            type Value = Triple;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a Triple struct")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Triple, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut subject: Option<String> = None;
+                let mut predicate: Option<String> = None;
+                let mut object: Option<String> = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        "subject" => {
+                            if subject.is_some() {
+                                return Err(de::Error::duplicate_field("subject"));
+                            }
+                            subject = Some(map.next_value()?);
+                        }
+                        "predicate" => {
+                            if predicate.is_some() {
+                                return Err(de::Error::duplicate_field("predicate"));
+                            }
+                            predicate = Some(map.next_value()?);
+                        }
+                        "object" => {
+                            if object.is_some() {
+                                return Err(de::Error::duplicate_field("object"));
+                            }
+                            object = Some(map.next_value()?);
+                        }
+                        _ => {
+                            let _: String = map.next_value()?;
+                        }
+                    }
+                }
+
+                let subject = subject.ok_or_else(|| de::Error::missing_field("subject"))?;
+                let predicate = predicate.ok_or_else(|| de::Error::missing_field("predicate"))?;
+                let object = object.ok_or_else(|| de::Error::missing_field("object"))?;
+
+                // Parse subject
+                let subject = if subject.starts_with("_:") {
+                    Subject::BlankNode(BlankNode::new(&subject[2..]).map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?)
+                } else if subject.starts_with('<') && subject.ends_with('>') {
+                    let iri = &subject[1..subject.len() - 1];
+                    Subject::NamedNode(NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?)
+                } else {
+                    return Err(de::Error::custom("Invalid subject format"));
+                };
+
+                // Parse predicate
+                let predicate = if predicate.starts_with('<') && predicate.ends_with('>') {
+                    let iri = &predicate[1..predicate.len() - 1];
+                    NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid predicate IRI: {}", e)))?
+                } else {
+                    return Err(de::Error::custom("Invalid predicate format"));
+                };
+
+                // Parse object
+                let object = if object.starts_with("_:") {
+                    Term::BlankNode(BlankNode::new(&object[2..]).map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?)
+                } else if object.starts_with('<') && object.ends_with('>') {
+                    let iri = &object[1..object.len() - 1];
+                    Term::NamedNode(NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?)
+                } else if object.starts_with('"') {
+                    // Parse literal (simplified - just treat as string for now)
+                    let literal_value = &object[1..object.len() - 1];
+                    Term::Literal(Literal::new_simple_literal(literal_value))
+                } else {
+                    return Err(de::Error::custom("Invalid object format"));
+                };
+
+                Ok(Triple::new(subject, predicate, object))
+            }
+        }
+
+        deserializer.deserialize_struct("Triple", &["subject", "predicate", "object"], TripleVisitor)
     }
 }
 
@@ -256,17 +352,125 @@ mod quad_serde {
     where
         S: Serializer,
     {
-        // TODO: Implement proper quad serialization
-        serializer.serialize_str(&format!("{:?}", quad))
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("Quad", 4)?;
+        state.serialize_field("subject", &format!("{}", quad.subject))?;
+        state.serialize_field("predicate", &format!("{}", quad.predicate))?;
+        state.serialize_field("object", &format!("{}", quad.object))?;
+        state.serialize_field("graph_name", &format!("{}", quad.graph_name))?;
+        state.end()
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> std::result::Result<Quad, D::Error>
     where
         D: Deserializer<'de>,
     {
-        // TODO: Implement proper quad deserialization
-        let _s = String::deserialize(deserializer)?;
-        unimplemented!("Quad deserialization not yet implemented")
+        use serde::de::{self, MapAccess, Visitor};
+        use std::fmt;
+        use oxirs_core::{NamedNode, BlankNode, Literal, Subject, Term, GraphName};
+
+        struct QuadVisitor;
+
+        impl<'de> Visitor<'de> for QuadVisitor {
+            type Value = Quad;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a Quad struct")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Quad, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut subject: Option<String> = None;
+                let mut predicate: Option<String> = None;
+                let mut object: Option<String> = None;
+                let mut graph_name: Option<String> = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        "subject" => {
+                            if subject.is_some() {
+                                return Err(de::Error::duplicate_field("subject"));
+                            }
+                            subject = Some(map.next_value()?);
+                        }
+                        "predicate" => {
+                            if predicate.is_some() {
+                                return Err(de::Error::duplicate_field("predicate"));
+                            }
+                            predicate = Some(map.next_value()?);
+                        }
+                        "object" => {
+                            if object.is_some() {
+                                return Err(de::Error::duplicate_field("object"));
+                            }
+                            object = Some(map.next_value()?);
+                        }
+                        "graph_name" => {
+                            if graph_name.is_some() {
+                                return Err(de::Error::duplicate_field("graph_name"));
+                            }
+                            graph_name = Some(map.next_value()?);
+                        }
+                        _ => {
+                            let _: String = map.next_value()?;
+                        }
+                    }
+                }
+
+                let subject = subject.ok_or_else(|| de::Error::missing_field("subject"))?;
+                let predicate = predicate.ok_or_else(|| de::Error::missing_field("predicate"))?;
+                let object = object.ok_or_else(|| de::Error::missing_field("object"))?;
+                let graph_name = graph_name.ok_or_else(|| de::Error::missing_field("graph_name"))?;
+
+                // Parse subject
+                let subject = if subject.starts_with("_:") {
+                    Subject::BlankNode(BlankNode::new(&subject[2..]).map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?)
+                } else if subject.starts_with('<') && subject.ends_with('>') {
+                    let iri = &subject[1..subject.len() - 1];
+                    Subject::NamedNode(NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?)
+                } else {
+                    return Err(de::Error::custom("Invalid subject format"));
+                };
+
+                // Parse predicate
+                let predicate = if predicate.starts_with('<') && predicate.ends_with('>') {
+                    let iri = &predicate[1..predicate.len() - 1];
+                    NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid predicate IRI: {}", e)))?
+                } else {
+                    return Err(de::Error::custom("Invalid predicate format"));
+                };
+
+                // Parse object
+                let object = if object.starts_with("_:") {
+                    Term::BlankNode(BlankNode::new(&object[2..]).map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?)
+                } else if object.starts_with('<') && object.ends_with('>') {
+                    let iri = &object[1..object.len() - 1];
+                    Term::NamedNode(NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?)
+                } else if object.starts_with('"') {
+                    // Parse literal (simplified - just treat as string for now)
+                    let literal_value = &object[1..object.len() - 1];
+                    Term::Literal(Literal::new_simple_literal(literal_value))
+                } else {
+                    return Err(de::Error::custom("Invalid object format"));
+                };
+
+                // Parse graph name
+                let graph_name = if graph_name.starts_with('<') && graph_name.ends_with('>') {
+                    let iri = &graph_name[1..graph_name.len() - 1];
+                    GraphName::NamedNode(NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid graph IRI: {}", e)))?)
+                } else if graph_name.starts_with("_:") {
+                    GraphName::BlankNode(BlankNode::new(&graph_name[2..]).map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?)
+                } else {
+                    return Err(de::Error::custom("Invalid graph name format"));
+                };
+
+                Ok(Quad::new(subject, predicate, object, graph_name))
+            }
+        }
+
+        deserializer.deserialize_struct("Quad", &["subject", "predicate", "object", "graph_name"], QuadVisitor)
     }
 }
 

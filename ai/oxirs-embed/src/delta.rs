@@ -800,8 +800,7 @@ mod tests {
 
         assert_eq!(delta_result.changes_processed, 1);
         assert!(!delta_result.entities_affected.is_empty());
-        // Processing time can be 0 for very fast operations in tests
-        assert!(delta_result.processing_time_ms >= 0);
+        // Processing time is always >= 0 for unsigned type, so no need to assert
     }
 
     #[test]

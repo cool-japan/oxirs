@@ -24,6 +24,7 @@ pub use sparql_algebra::{
     GraphPattern as SparqlGraphPattern, Expression as SparqlExpression, 
     PropertyPathExpression, NamedNodePattern
 };
+pub use crate::{GraphName, Triple};
 pub use sparql_query::*;
 
 // Re-export execution plan types
@@ -124,7 +125,7 @@ impl QueryEngine {
     }
 
     /// Execute a SPARQL query string against a store
-    pub fn query(&self, query_str: &str, store: &Store) -> Result<QueryResult, OxirsError> {
+    pub fn query(&self, query_str: &str, store: &dyn Store) -> Result<QueryResult, OxirsError> {
         // Parse the query string
         let parsed_query = self.parser.parse(query_str)?;
 
@@ -133,7 +134,7 @@ impl QueryEngine {
     }
 
     /// Execute a parsed Query object against a store
-    pub fn execute_query(&self, query: &sparql_query::Query, store: &Store) -> Result<QueryResult, OxirsError> {
+    pub fn execute_query(&self, query: &sparql_query::Query, store: &dyn Store) -> Result<QueryResult, OxirsError> {
         match query {
             sparql_query::Query::Select {
                 pattern, dataset, ..
@@ -158,7 +159,7 @@ impl QueryEngine {
         &self,
         pattern: &SparqlGraphPattern,
         _dataset: Option<&QueryDataset>,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<QueryResult, OxirsError> {
         let executor = QueryExecutor::new(store);
 
@@ -198,7 +199,7 @@ impl QueryEngine {
         &self,
         pattern: &SparqlGraphPattern,
         _dataset: Option<&QueryDataset>,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<QueryResult, OxirsError> {
         let executor = QueryExecutor::new(store);
 
@@ -215,10 +216,10 @@ impl QueryEngine {
     /// Execute a CONSTRUCT query
     fn execute_construct_query(
         &self,
-        template: &[AlgebraTriplePattern],
+        template: &[SparqlTriplePattern],
         pattern: &SparqlGraphPattern,
         _dataset: Option<&QueryDataset>,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<QueryResult, OxirsError> {
         let executor = QueryExecutor::new(store);
 
@@ -246,7 +247,7 @@ impl QueryEngine {
         &self,
         pattern: &SparqlGraphPattern,
         _dataset: Option<&QueryDataset>,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<QueryResult, OxirsError> {
         // For now, treat DESCRIBE like CONSTRUCT *
         // This is a simplified implementation
@@ -263,8 +264,9 @@ impl QueryEngine {
         for solution in solutions.into_iter().take(self.executor_config.max_results) {
             // For each bound entity, get all triples where it appears
             for (_, term) in solution.iter() {
-                if let Ok(store_triples) = store.triples() {
-                    for triple in store_triples {
+                if let Ok(store_quads) = store.find_quads(None, None, None, Some(&GraphName::DefaultGraph)) {
+                    for quad in store_quads {
+                        let triple = Triple::new(quad.subject().clone(), quad.predicate().clone(), quad.object().clone());
                         if self.triple_involves_term(&triple, term) {
                             triples.push(triple);
                         }
@@ -602,13 +604,13 @@ impl QueryEngine {
     /// Instantiate a triple pattern with a solution
     fn instantiate_triple_pattern(
         &self,
-        pattern: &AlgebraTriplePattern,
+        pattern: &SparqlTriplePattern,
         solution: &Solution,
     ) -> Result<Option<crate::model::Triple>, OxirsError> {
         use crate::model::*;
 
         let subject = match &pattern.subject {
-            TermPattern::Variable(v) => {
+            SparqlTermPattern::Variable(v) => {
                 if let Some(term) = solution.get(&v) {
                     match term {
                         Term::NamedNode(n) => Subject::NamedNode(n.clone()),
@@ -619,25 +621,25 @@ impl QueryEngine {
                     return Ok(None); // Unbound variable
                 }
             }
-            TermPattern::NamedNode(n) => Subject::NamedNode(n.clone()),
-            TermPattern::BlankNode(b) => Subject::BlankNode(b.clone()),
+            SparqlTermPattern::NamedNode(n) => Subject::NamedNode(n.clone()),
+            SparqlTermPattern::BlankNode(b) => Subject::BlankNode(b.clone()),
             _ => return Ok(None), // Invalid subject pattern
         };
 
         let predicate = match &pattern.predicate {
-            TermPattern::Variable(v) => {
+            SparqlTermPattern::Variable(v) => {
                 if let Some(Term::NamedNode(n)) = solution.get(&v) {
                     Predicate::NamedNode(n.clone())
                 } else {
                     return Ok(None); // Unbound or invalid predicate
                 }
             }
-            TermPattern::NamedNode(n) => Predicate::NamedNode(n.clone()),
+            SparqlTermPattern::NamedNode(n) => Predicate::NamedNode(n.clone()),
             _ => return Ok(None), // Invalid predicate pattern
         };
 
         let object = match &pattern.object {
-            TermPattern::Variable(v) => {
+            SparqlTermPattern::Variable(v) => {
                 if let Some(term) = solution.get(&v) {
                     match term {
                         Term::NamedNode(n) => Object::NamedNode(n.clone()),
@@ -649,9 +651,9 @@ impl QueryEngine {
                     return Ok(None); // Unbound variable
                 }
             }
-            TermPattern::NamedNode(n) => Object::NamedNode(n.clone()),
-            TermPattern::BlankNode(b) => Object::BlankNode(b.clone()),
-            TermPattern::Literal(l) => Object::Literal(l.clone()),
+            SparqlTermPattern::NamedNode(n) => Object::NamedNode(n.clone()),
+            SparqlTermPattern::BlankNode(b) => Object::BlankNode(b.clone()),
+            SparqlTermPattern::Literal(l) => Object::Literal(l.clone()),
             _ => return Ok(None), // Invalid object pattern
         };
 

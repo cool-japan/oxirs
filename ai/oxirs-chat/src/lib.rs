@@ -5,7 +5,7 @@
 //! This crate provides a conversational interface for knowledge graphs,
 //! combining retrieval-augmented generation (RAG) with SPARQL querying.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -56,7 +56,7 @@ pub struct OxiRSChat {
     /// Configuration for the chat system
     pub config: ChatConfig,
     /// RDF store for knowledge graph access
-    pub store: Arc<oxirs_core::Store>,
+    pub store: Arc<oxirs_core::ConcreteStore>,
     /// Session storage
     sessions: Arc<RwLock<HashMap<String, Arc<Mutex<ChatSession>>>>>,
     /// Session timeout duration
@@ -538,7 +538,7 @@ impl OxiRSChat {
     pub fn create_default() -> Result<Self> {
         let rt = tokio::runtime::Runtime::new()?;
         rt.block_on(async {
-            let store = Arc::new(oxirs_core::Store::new()?);
+            let store = Arc::new(oxirs_core::ConcreteStore::new()?);
             Self::new(ChatConfig::default(), store).await
         })
     }
@@ -563,7 +563,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_chat_creation() {
-        let store = Arc::new(oxirs_core::Store::new().expect("Failed to create store"));
+        let store = Arc::new(oxirs_core::ConcreteStore::new().expect("Failed to create store"));
         let chat = OxiRSChat::new(ChatConfig::default(), store).await.expect("Failed to create chat");
         
         assert_eq!(chat.session_count().await, 0);
@@ -571,7 +571,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_session_management() {
-        let store = Arc::new(oxirs_core::Store::new().expect("Failed to create store"));
+        let store = Arc::new(oxirs_core::ConcreteStore::new().expect("Failed to create store"));
         let chat = OxiRSChat::new(ChatConfig::default(), store).await.expect("Failed to create chat");
         
         let session_id = "test-session".to_string();

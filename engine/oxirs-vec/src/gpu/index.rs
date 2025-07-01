@@ -1,4 +1,4 @@
-//\! GPU-accelerated vector index implementations
+//! GPU-accelerated vector index implementations
 
 use super::{GpuAccelerator, GpuConfig, GpuMemoryPool, GpuPerformanceStats};
 use crate::{similarity::SimilarityMetric, Vector, VectorData, VectorPrecision};
@@ -43,8 +43,8 @@ impl GpuVectorIndex {
 
         // Validate all vectors have the same dimension
         for vector in &vectors {
-            if vector.data.len() \!= self.dimension {
-                return Err(anyhow\!("Vector dimension mismatch: expected {}, got {}", 
+            if vector.data.len() != self.dimension {
+                return Err(anyhow!("Vector dimension mismatch: expected {}, got {}", 
                                  self.dimension, vector.data.len()));
             }
         }
@@ -53,7 +53,7 @@ impl GpuVectorIndex {
         for vector in &vectors {
             match &vector.data {
                 VectorData::Dense(data) => self.vector_data.extend(data),
-                VectorData::Sparse(_) => return Err(anyhow\!("Sparse vectors not yet supported on GPU")),
+                VectorData::Sparse(_) => return Err(anyhow!("Sparse vectors not yet supported on GPU")),
             }
         }
 
@@ -74,11 +74,11 @@ impl GpuVectorIndex {
 
         let query_data = match &query.data {
             VectorData::Dense(data) => data.clone(),
-            VectorData::Sparse(_) => return Err(anyhow\!("Sparse queries not yet supported on GPU")),
+            VectorData::Sparse(_) => return Err(anyhow!("Sparse queries not yet supported on GPU")),
         };
 
-        if query_data.len() \!= self.dimension {
-            return Err(anyhow\!("Query dimension mismatch: expected {}, got {}", 
+        if query_data.len() != self.dimension {
+            return Err(anyhow!("Query dimension mismatch: expected {}, got {}", 
                              self.dimension, query_data.len()));
         }
 
@@ -96,7 +96,7 @@ impl GpuVectorIndex {
         let mut results: Vec<(usize, f32)> = similarities
             .into_iter()
             .enumerate()
-            .map( < /dev/null | (idx, sim)| (idx, sim))
+            .map(|(idx, sim)| (idx, sim))
             .collect();
 
         // Sort by similarity (descending for similarity, ascending for distance)

@@ -4,8 +4,11 @@
 
 use oxirs_core::model::{Literal, NamedNode, Variable};
 use oxirs_core::query::{
-    AggregateExpression, AlgebraTriplePattern as TriplePattern, BuiltInFunction, Expression, FunctionExpression, GraphPattern,
-    OrderExpression, PropertyPathExpression, Query, QueryDataset, TermPattern,
+    algebra::{AlgebraTriplePattern as TriplePattern, Expression as AlgebraExpression, GraphPattern as AlgebraGraphPattern, 
+              TermPattern as AlgebraTermPattern, Query as AlgebraQuery},
+    sparql_algebra::{AggregateExpression, BuiltInFunction, Expression, FunctionExpression, GraphPattern,
+                     OrderExpression, PropertyPathExpression, TermPattern},
+    sparql_query::{Query, QueryDataset},
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

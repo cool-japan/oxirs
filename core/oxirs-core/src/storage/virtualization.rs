@@ -4,7 +4,8 @@
 //! route requests to different storage backends and migrate data between them.
 
 use crate::model::{Triple, TriplePattern};
-use crate::storage::{tiered::TieredStorageEngine, StorageEngine};
+use crate::storage::StorageEngine;
+// Note: tiered::TieredStorageEngine temporarily disabled due to dependency conflicts
 use crate::OxirsError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -547,9 +548,10 @@ impl VirtualStorage {
     ) -> Result<Arc<dyn StorageEngine>, OxirsError> {
         match &config.backend_type {
             BackendType::Tiered => {
-                let storage_config = serde_json::from_value(config.config.clone())
-                    .map_err(|e| OxirsError::Parse(e.to_string()))?;
-                TieredStorageEngine::new(storage_config).await
+                // Tiered backend temporarily disabled due to dependency conflicts
+                Err(OxirsError::Store(
+                    "Tiered backend temporarily disabled due to RocksDB dependency conflicts".to_string(),
+                ))
             }
             BackendType::Columnar => {
                 // Create columnar backend

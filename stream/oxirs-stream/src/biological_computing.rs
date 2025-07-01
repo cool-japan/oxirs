@@ -226,7 +226,7 @@ pub enum ComputationalFunction {
 }
 
 /// Cell in cellular automaton
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Cell {
     /// Cell state (alive/dead or value)
     pub state: CellState,
@@ -537,7 +537,7 @@ impl EvolutionaryOptimizer {
         let mut best_individual = &self.population[0];
         
         for _ in 0..tournament_size {
-            let candidate = &self.population[rand::random::<usize>() % self.population.len()];
+            let candidate = &self.population[rand::thread_rng().gen_range(0..self.population.len())];
             if candidate.fitness > best_individual.fitness {
                 best_individual = candidate;
             }
@@ -548,7 +548,7 @@ impl EvolutionaryOptimizer {
 
     /// Crossover operation
     fn crossover(&self, parent1: &Individual, parent2: &Individual) -> (Individual, Individual) {
-        let crossover_point = rand::random::<usize>() % parent1.genome.len();
+        let crossover_point = rand::thread_rng().gen_range(0..parent1.genome.len());
         
         let mut child1_genome = parent1.genome.clone();
         let mut child2_genome = parent2.genome.clone();
@@ -606,7 +606,7 @@ pub struct BiologicalStreamProcessor {
 }
 
 /// Statistics for biological processing
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BiologicalProcessingStats {
     /// Total events processed
     pub events_processed: u64,
@@ -650,7 +650,7 @@ impl BiologicalStreamProcessor {
         dna_sequence.add_redundancy(1.5);
         
         // Store in DNA storage
-        self.dna_storage.insert(event.id.clone(), dna_sequence.clone());
+        self.dna_storage.insert(event.event_id().to_string(), dna_sequence.clone());
         
         // Process data through cellular automaton
         self.process_with_automaton(&event_bytes).await?;
@@ -731,7 +731,7 @@ impl BiologicalStreamProcessor {
 
     /// Get processing statistics
     pub async fn get_stats(&self) -> BiologicalProcessingStats {
-        self.stats.read().await.clone()
+        (*self.stats.read().await).clone()
     }
 
     /// Retrieve data from DNA storage

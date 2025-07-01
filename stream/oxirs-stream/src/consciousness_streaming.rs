@@ -5,6 +5,7 @@
 //! for advanced stream analysis and pattern recognition.
 
 use async_trait::async_trait;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -236,7 +237,7 @@ impl EmotionalPredictionModel {
     pub fn predict_emotion(&self, event: &StreamEvent) -> (String, f64) {
         let features = self.extract_emotional_features(event);
         let mut best_emotion = "neutral".to_string();
-        let mut best_score = 0.0;
+        let mut best_score: f64 = 0.0;
         
         for (emotion, base_weight) in &self.emotion_weights {
             let score = features.iter()
@@ -442,9 +443,10 @@ impl ConsciousnessEvolutionEngine {
             "transcend".to_string(),
         ];
         
-        if rand::random::<f64>() < self.epsilon {
+        let mut rng = rand::thread_rng();
+        if rng.gen::<f64>() < self.epsilon {
             // Exploration: random action
-            actions[rand::random::<usize>() % actions.len()].clone()
+            actions[rng.gen_range(0..actions.len())].clone()
         } else {
             // Exploitation: best known action
             self.get_best_action(state)
@@ -1075,19 +1077,19 @@ impl ConsciousnessStreamProcessor {
         // Apply consciousness-based processing with AI enhancement
         match new_level {
             ConsciousnessLevel::Unconscious => {
-                results = self.ai_enhanced_unconscious_processing(event, &neural_output).await?;
+                results = self.ai_enhanced_unconscious_processing(event.clone(), &neural_output).await?;
             }
             ConsciousnessLevel::Subconscious => {
-                results = self.ai_enhanced_subconscious_processing(event, &neural_output).await?;
+                results = self.ai_enhanced_subconscious_processing(event.clone(), &neural_output).await?;
             }
             ConsciousnessLevel::Conscious => {
-                results = self.ai_enhanced_conscious_processing(event, &neural_output).await?;
+                results = self.ai_enhanced_conscious_processing(event.clone(), &neural_output).await?;
             }
             ConsciousnessLevel::Superconscious => {
-                results = self.ai_enhanced_superconscious_processing(event, &neural_output).await?;
+                results = self.ai_enhanced_superconscious_processing(event.clone(), &neural_output).await?;
             }
             ConsciousnessLevel::Cosmic => {
-                results = self.ai_enhanced_cosmic_processing(event, &neural_output).await?;
+                results = self.ai_enhanced_cosmic_processing(event.clone(), &neural_output).await?;
             }
         }
         

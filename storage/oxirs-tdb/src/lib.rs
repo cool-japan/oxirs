@@ -69,6 +69,7 @@ pub mod nodes;
 pub mod optimistic_concurrency;
 pub mod page;
 pub mod production_hardening;
+pub mod query_execution;
 pub mod query_optimizer;
 pub mod storage;
 pub mod timestamp_ordering;
@@ -80,6 +81,7 @@ pub mod wal;
 pub use config::{TdbConfig as TdbAdvancedConfig, WorkloadType};
 
 use anyhow::{anyhow, Result};
+use serde::{Serialize, Deserialize};
 use std::path::Path;
 
 // Re-export main types for convenience
@@ -120,7 +122,7 @@ pub use mvcc::{TransactionId, Version};
 pub use nodes::{NodeId, NodeTable, Term};
 pub use optimistic_concurrency::{
     ConflictType, OptimisticConcurrencyController, OptimisticConfig, OptimisticStats,
-    TransactionInfo, TransactionPhase, ValidationResult, VersionVector, WriteOperation,
+    OptimisticTransactionInfo, TransactionPhase, ValidationResult, VersionVector, WriteOperation,
 };
 pub use production_hardening::{
     CircuitBreaker, EdgeCaseValidator, HealthMetrics, HealthMonitor, ResourceLimits,

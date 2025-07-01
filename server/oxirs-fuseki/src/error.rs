@@ -185,10 +185,9 @@ impl FusekiError {
             | FusekiError::Json(..)
             | FusekiError::Yaml(..)
             | FusekiError::Toml(..)
-            | FusekiError::Http(..)
+            | FusekiError::Http(..) => StatusCode::INTERNAL_SERVER_ERROR,
             #[cfg(feature = "auth")]
-            | FusekiError::Jwt(..)
-            => StatusCode::INTERNAL_SERVER_ERROR,
+            FusekiError::Jwt(..) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 

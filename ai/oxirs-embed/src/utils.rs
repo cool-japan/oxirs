@@ -4,6 +4,8 @@
 use anyhow::{anyhow, Result};
 use ndarray::{Array1, Array2};
 use rand::prelude::*;
+use rand::{thread_rng, SeedableRng};
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -195,7 +197,7 @@ pub mod dataset_splitter {
         let mut rng = if let Some(s) = seed {
             StdRng::seed_from_u64(s)
         } else {
-            StdRng::from_entropy()
+            StdRng::from_rng(&mut thread_rng()).expect("Failed to create RNG")
         };
 
         let mut shuffled_triples = triples;

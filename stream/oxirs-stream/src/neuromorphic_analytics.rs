@@ -354,6 +354,102 @@ pub struct NetworkTopology {
     pub connection_stats: ConnectionStatistics,
 }
 
+/// Temporal context for neuromorphic processing
+#[derive(Debug, Clone)]
+pub struct TemporalContext {
+    /// Temporal windows for each neuron
+    pub temporal_windows: HashMap<NeuronId, TemporalWindow>,
+    /// Synchronization groups
+    pub synchronization_groups: Vec<SynchronizationGroup>,
+    /// Oscillatory phases for each neuron
+    pub oscillatory_phases: HashMap<NeuronId, OscillatoryPhase>,
+    /// Causal relationships between neurons
+    pub causal_relationships: HashMap<NeuronId, Vec<CausalConnection>>,
+    /// Global synchrony measure
+    pub global_synchrony: f64,
+    /// Temporal complexity measure
+    pub temporal_complexity: f64,
+    /// Causal density measure
+    pub causal_density: f64,
+    /// Context creation timestamp
+    pub context_timestamp: Instant,
+}
+
+/// Temporal window for neural processing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemporalWindow {
+    /// Window duration in milliseconds
+    pub duration_ms: f64,
+    /// Overlap ratio with adjacent windows
+    pub overlap_ratio: f64,
+    /// Window start time
+    pub start_time: f64,
+    /// Window end time
+    pub end_time: f64,
+    /// Processing priority
+    pub priority: f64,
+}
+
+/// Synchronization group of neurons
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SynchronizationGroup {
+    /// Unique group identifier
+    pub group_id: u64,
+    /// Neurons in the synchronization group
+    pub neurons: Vec<NeuronId>,
+    /// Coherence strength (0-1)
+    pub coherence_strength: f64,
+    /// Synchrony index
+    pub synchrony_index: f64,
+    /// Leader neuron in the group
+    pub leader_neuron: NeuronId,
+    /// Dominant oscillation frequency
+    pub oscillation_frequency: f64,
+}
+
+/// Oscillatory phase information for a neuron
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OscillatoryPhase {
+    /// Theta rhythm phase (4-8 Hz)
+    pub theta_phase: f64,
+    /// Alpha rhythm phase (8-12 Hz)
+    pub alpha_phase: f64,
+    /// Beta rhythm phase (12-30 Hz)
+    pub beta_phase: f64,
+    /// Gamma rhythm phase (30-100 Hz)
+    pub gamma_phase: f64,
+    /// Phase coupling strength
+    pub phase_coupling: f64,
+}
+
+/// Causal connection between neurons
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CausalConnection {
+    /// Target neuron ID
+    pub target_neuron: NeuronId,
+    /// Connection strength (0-1)
+    pub connection_strength: f64,
+    /// Temporal delay in milliseconds
+    pub temporal_delay_ms: f64,
+    /// Type of causal connection
+    pub connection_type: CausalConnectionType,
+    /// Connection reliability (0-1)
+    pub reliability: f64,
+}
+
+/// Types of causal connections
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CausalConnectionType {
+    /// Direct synaptic connection
+    Direct,
+    /// Indirect connection through intermediate neurons
+    Indirect,
+    /// Modulatory connection
+    Modulatory,
+    /// Feedback connection
+    Feedback,
+}
+
 impl NeuromorphicAnalytics {
     /// Create a new neuromorphic analytics engine
     pub fn new(config: NeuromorphicConfig) -> Self {
@@ -671,36 +767,256 @@ impl NeuromorphicAnalytics {
         Ok(())
     }
 
-    // Helper methods with simplified implementations
-    async fn extract_event_features(&self, _event: &StreamEvent) -> StreamResult<Vec<f64>> {
-        Ok(vec![1.0, 0.5, 0.8]) // Would implement feature extraction
+    // Helper methods with enhanced implementations
+    async fn extract_event_features(&self, event: &StreamEvent) -> StreamResult<Vec<f64>> {
+        let mut features = Vec::new();
+        
+        // Extract temporal features (event timestamp encoded as neural firing rate)
+        let timestamp_feature = (event.timestamp().timestamp_millis() as f64 % 1000.0) / 1000.0;
+        features.push(timestamp_feature);
+        
+        // Extract event type features based on category
+        let category_feature = match event.category() {
+            crate::event::EventCategory::Triple => 0.2,
+            crate::event::EventCategory::Graph => 0.4,
+            crate::event::EventCategory::Query => 0.6,
+            crate::event::EventCategory::Transaction => 0.8,
+            crate::event::EventCategory::Schema => 1.0,
+        };
+        features.push(category_feature);
+        
+        // Extract priority features (maps to neural activation strength)
+        let priority_feature = match event.priority() {
+            crate::event::EventPriority::Low => 0.1,
+            crate::event::EventPriority::Normal => 0.5,
+            crate::event::EventPriority::High => 0.8,
+            crate::event::EventPriority::Critical => 1.0,
+        };
+        features.push(priority_feature);
+        
+        // Extract metadata complexity (count of metadata fields normalized)
+        let metadata_complexity = event.metadata().custom_metadata.len() as f64 / 10.0;
+        features.push(metadata_complexity.min(1.0));
+        
+        // Add spatial features based on event ID hash (deterministic spatial mapping)
+        let id_hash = event.id().to_string().chars()
+            .fold(0u32, |acc, c| acc.wrapping_add(c as u32)) as f64;
+        let spatial_x = (id_hash % 100.0) / 100.0;
+        let spatial_y = ((id_hash / 100.0) % 100.0) / 100.0;
+        features.push(spatial_x);
+        features.push(spatial_y);
+        
+        Ok(features)
     }
 
     async fn encode_features_as_spikes(&self, features: &[f64]) -> StreamResult<Vec<SpikeEvent>> {
         let mut spikes = Vec::new();
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as f64;
+        
         for (i, &feature) in features.iter().enumerate() {
-            if feature > 0.5 {
+            // Rate coding: higher features generate more spikes
+            let spike_rate = feature * 100.0; // Max 100 Hz firing rate
+            let poisson_lambda = spike_rate / 1000.0; // Convert to per-millisecond rate
+            
+            // Generate Poisson-distributed spike times
+            let mut rng = rand::thread_rng();
+            let spike_count = if poisson_lambda > 0.0 {
+                // Simple Poisson approximation for small lambda
+                let uniform: f64 = rng.gen();
+                if uniform < poisson_lambda {
+                    1
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+            
+            for spike_idx in 0..spike_count {
+                // Add jitter to spike timing for realism
+                let jitter: f64 = rng.gen_range(-0.5..0.5);
                 spikes.push(SpikeEvent {
                     neuron_id: i as u64,
-                    timestamp: 0.0,
-                    amplitude: feature * 70.0, // Convert to mV
-                    metadata: HashMap::new(),
+                    timestamp: current_time + (spike_idx as f64) + jitter,
+                    amplitude: self.calculate_spike_amplitude(feature),
+                    metadata: {
+                        let mut meta = HashMap::new();
+                        meta.insert("feature_value".to_string(), feature.to_string());
+                        meta.insert("encoding_type".to_string(), "rate_coding".to_string());
+                        meta
+                    },
                 });
             }
         }
         Ok(spikes)
     }
+    
+    /// Calculate realistic spike amplitude based on feature value
+    fn calculate_spike_amplitude(&self, feature_value: f64) -> f64 {
+        // Realistic spike amplitude ranges from 70-100mV
+        let base_amplitude = 70.0;
+        let max_additional = 30.0;
+        base_amplitude + (feature_value * max_additional)
+    }
 
     async fn apply_spatial_mapping(&self, spikes: &[SpikeEvent]) -> StreamResult<HashMap<NeuronId, SpatialLocation>> {
         let mut mapping = HashMap::new();
-        for spike in spikes {
-            mapping.insert(spike.neuron_id, SpatialLocation { x: 0.0, y: 0.0, z: 0.0 });
+        
+        // Create realistic spatial mapping based on cortical column organization
+        let grid_size = (spikes.len() as f64).sqrt().ceil() as usize;
+        
+        for (index, spike) in spikes.iter().enumerate() {
+            // Map neurons to 3D cortical space with layer organization
+            let x = (index % grid_size) as f64 / grid_size as f64;
+            let y = (index / grid_size) as f64 / grid_size as f64;
+            
+            // Z coordinate represents cortical layer based on spike amplitude
+            // Higher amplitude spikes are placed in deeper layers (higher Z)
+            let z = if spike.amplitude > 90.0 {
+                0.8 // Layer 5/6 - deep pyramidal neurons
+            } else if spike.amplitude > 80.0 {
+                0.6 // Layer 4 - input layer
+            } else if spike.amplitude > 75.0 {
+                0.4 // Layer 2/3 - superficial layers
+            } else {
+                0.2 // Layer 1 - molecular layer
+            };
+            
+            mapping.insert(
+                spike.neuron_id,
+                SpatialLocation { 
+                    x: x * 2.0 - 1.0, // Normalize to [-1, 1] range
+                    y: y * 2.0 - 1.0, 
+                    z 
+                }
+            );
         }
+        
         Ok(mapping)
     }
 
-    async fn add_temporal_context(&self, _mapping: &HashMap<NeuronId, SpatialLocation>) -> StreamResult<TemporalContext> {
-        Ok(TemporalContext::default())
+    /// Add temporal context to spatial mapping with realistic neural timing patterns
+    async fn add_temporal_context(&self, mapping: &HashMap<NeuronId, SpatialLocation>) -> StreamResult<TemporalContext> {
+        // Create temporal context based on neural activity patterns
+        let mut temporal_windows = HashMap::new();
+        let mut synchronization_groups = Vec::new();
+        let mut oscillatory_phases = HashMap::new();
+        let mut causal_relationships = HashMap::new();
+        
+        // Analyze temporal patterns for each neuron in the spatial mapping
+        for (&neuron_id, location) in mapping {
+            // Create temporal window based on spatial proximity and neural type
+            let window_size = self.calculate_temporal_window_size(location).await?;
+            let window_overlap = self.calculate_window_overlap(location).await?;
+            
+            temporal_windows.insert(neuron_id, TemporalWindow {
+                duration_ms: window_size,
+                overlap_ratio: window_overlap,
+                start_time: 0.0,
+                end_time: window_size,
+                priority: self.calculate_temporal_priority(location).await?,
+            });
+            
+            // Determine oscillatory phase based on spatial coordinate
+            let phase = (location.x + location.y + location.z) * std::f64::consts::PI * 2.0;
+            let normalized_phase = phase % (2.0 * std::f64::consts::PI);
+            
+            oscillatory_phases.insert(neuron_id, OscillatoryPhase {
+                theta_phase: normalized_phase * 0.3, // 4-8 Hz theta rhythm
+                alpha_phase: normalized_phase * 0.6, // 8-12 Hz alpha rhythm  
+                beta_phase: normalized_phase * 1.2,  // 12-30 Hz beta rhythm
+                gamma_phase: normalized_phase * 2.5, // 30-100 Hz gamma rhythm
+                phase_coupling: self.calculate_phase_coupling(location).await?,
+            });
+        }
+        
+        // Build synchronization groups based on spatial proximity
+        let mut processed_neurons = std::collections::HashSet::new();
+        for (&neuron_id, location) in mapping {
+            if processed_neurons.contains(&neuron_id) {
+                continue;
+            }
+            
+            let mut sync_group = SynchronizationGroup {
+                group_id: synchronization_groups.len() as u64,
+                neurons: vec![neuron_id],
+                coherence_strength: 0.0,
+                synchrony_index: 0.0,
+                leader_neuron: neuron_id,
+                oscillation_frequency: 40.0, // Default gamma frequency
+            };
+            
+            // Find nearby neurons for synchronization
+            for (&other_id, other_location) in mapping {
+                if other_id != neuron_id && !processed_neurons.contains(&other_id) {
+                    let distance = self.calculate_spatial_distance(location, other_location).await?;
+                    
+                    // Neurons within 0.1 units tend to synchronize
+                    if distance < 0.1 {
+                        sync_group.neurons.push(other_id);
+                        processed_neurons.insert(other_id);
+                    }
+                }
+            }
+            
+            // Calculate synchronization metrics
+            sync_group.coherence_strength = self.calculate_coherence_strength(&sync_group.neurons, mapping).await?;
+            sync_group.synchrony_index = sync_group.coherence_strength * (sync_group.neurons.len() as f64).sqrt();
+            sync_group.oscillation_frequency = 40.0 + (sync_group.neurons.len() as f64 * 2.5); // Higher freq for larger groups
+            
+            synchronization_groups.push(sync_group);
+            processed_neurons.insert(neuron_id);
+        }
+        
+        // Build causal relationships based on spatial-temporal connectivity
+        for (&neuron_id, location) in mapping {
+            let mut causal_connections = Vec::new();
+            
+            for (&target_id, target_location) in mapping {
+                if neuron_id != target_id {
+                    let distance = self.calculate_spatial_distance(location, target_location).await?;
+                    let temporal_delay = self.calculate_temporal_delay(distance).await?;
+                    
+                    // Create causal connection if within reasonable range
+                    if distance < 0.5 && temporal_delay < 20.0 { // max 20ms delay
+                        causal_connections.push(CausalConnection {
+                            target_neuron: target_id,
+                            connection_strength: 1.0 / (1.0 + distance), // Stronger for closer neurons
+                            temporal_delay_ms: temporal_delay,
+                            connection_type: if distance < 0.2 {
+                                CausalConnectionType::Direct
+                            } else {
+                                CausalConnectionType::Indirect
+                            },
+                            reliability: 0.95 - (distance * 0.5), // More reliable for closer neurons
+                        });
+                    }
+                }
+            }
+            
+            if !causal_connections.is_empty() {
+                causal_relationships.insert(neuron_id, causal_connections);
+            }
+        }
+        
+        // Calculate global temporal metrics
+        let global_synchrony = self.calculate_global_synchrony(&synchronization_groups).await?;
+        let temporal_complexity = self.calculate_temporal_complexity(&temporal_windows, &oscillatory_phases).await?;
+        let causal_density = causal_relationships.values().map(|v| v.len()).sum::<usize>() as f64 / mapping.len() as f64;
+        
+        Ok(TemporalContext {
+            temporal_windows,
+            synchronization_groups,
+            oscillatory_phases,
+            causal_relationships,
+            global_synchrony,
+            temporal_complexity,
+            causal_density,
+            context_timestamp: Instant::now(),
+        })
     }
 
     async fn apply_input_currents(&self, _network: &mut SpikeNeuralNetwork, _input: &NeuralInput) -> StreamResult<()> {
@@ -864,6 +1180,199 @@ impl NeuromorphicAnalytics {
     async fn apply_memory_consolidation(&self, _memory: &mut NeuromorphicMemory, _results: &[NeuromorphicProcessingResult]) -> StreamResult<()> {
         Ok(())
     }
+
+    // Helper methods for temporal context processing
+    async fn calculate_temporal_window_size(&self, location: &SpatialLocation) -> StreamResult<f64> {
+        // Window size based on cortical layer (Z coordinate) and spatial density
+        let base_window = 50.0; // Base 50ms window
+        let layer_modifier = match location.z {
+            z if z > 0.8 => 1.5,  // Deep layers (5/6) - longer integration
+            z if z > 0.6 => 1.2,  // Layer 4 - medium integration 
+            z if z > 0.4 => 1.0,  // Layers 2/3 - standard integration
+            _ => 0.8,             // Layer 1 - shorter integration
+        };
+        
+        // Add spatial density effect
+        let density_factor = (location.x.abs() + location.y.abs()).min(2.0) * 0.1 + 1.0;
+        
+        Ok(base_window * layer_modifier * density_factor)
+    }
+
+    async fn calculate_window_overlap(&self, location: &SpatialLocation) -> StreamResult<f64> {
+        // Overlap ratio based on neural connectivity patterns
+        let base_overlap = 0.25; // 25% base overlap
+        let connectivity_factor = (location.x.powi(2) + location.y.powi(2)).sqrt() * 0.1;
+        
+        Ok((base_overlap + connectivity_factor).min(0.8).max(0.1))
+    }
+
+    async fn calculate_temporal_priority(&self, location: &SpatialLocation) -> StreamResult<f64> {
+        // Priority based on distance from center and cortical layer
+        let center_distance = (location.x.powi(2) + location.y.powi(2)).sqrt();
+        let layer_priority = match location.z {
+            z if z > 0.8 => 0.9,  // Deep layers have high priority
+            z if z > 0.6 => 0.7,  // Layer 4 has medium-high priority
+            z if z > 0.4 => 0.5,  // Layers 2/3 have medium priority
+            _ => 0.3,             // Layer 1 has lower priority
+        };
+        
+        let distance_factor = (2.0 - center_distance).max(0.1).min(2.0);
+        Ok(layer_priority * distance_factor)
+    }
+
+    async fn calculate_phase_coupling(&self, location: &SpatialLocation) -> StreamResult<f64> {
+        // Phase coupling strength based on local neural density
+        let local_density = self.estimate_local_neural_density(location).await?;
+        let coupling_strength = (local_density / 10.0).min(1.0).max(0.1);
+        
+        Ok(coupling_strength)
+    }
+
+    async fn estimate_local_neural_density(&self, location: &SpatialLocation) -> StreamResult<f64> {
+        // Estimate neural density based on cortical organization
+        let cortical_density = match location.z {
+            z if z > 0.8 => 8.0,   // Deep layers - high density
+            z if z > 0.6 => 12.0,  // Layer 4 - highest density (input)
+            z if z > 0.4 => 10.0,  // Layers 2/3 - high density
+            _ => 5.0,              // Layer 1 - lower density
+        };
+        
+        // Add spatial variation
+        let spatial_variation = ((location.x * 3.0).sin() + (location.y * 3.0).cos()) * 2.0 + 8.0;
+        
+        Ok(cortical_density + spatial_variation)
+    }
+
+    async fn calculate_spatial_distance(&self, loc1: &SpatialLocation, loc2: &SpatialLocation) -> StreamResult<f64> {
+        let dx = loc1.x - loc2.x;
+        let dy = loc1.y - loc2.y;
+        let dz = loc1.z - loc2.z;
+        
+        Ok((dx.powi(2) + dy.powi(2) + dz.powi(2)).sqrt())
+    }
+
+    async fn calculate_temporal_delay(&self, spatial_distance: f64) -> StreamResult<f64> {
+        // Temporal delay based on axonal conduction velocity
+        let conduction_velocity = 10.0; // m/s (10 m/s for unmyelinated axons)
+        let distance_meters = spatial_distance * 0.001; // Convert to meters
+        let delay_ms = (distance_meters / conduction_velocity) * 1000.0;
+        
+        // Add synaptic delay
+        let synaptic_delay = 0.5; // 0.5ms synaptic delay
+        
+        Ok(delay_ms + synaptic_delay)
+    }
+
+    async fn calculate_coherence_strength(&self, neurons: &[NeuronId], mapping: &HashMap<NeuronId, SpatialLocation>) -> StreamResult<f64> {
+        if neurons.len() < 2 {
+            return Ok(0.0);
+        }
+        
+        // Calculate average pairwise distances within the group
+        let mut total_distance = 0.0;
+        let mut pair_count = 0;
+        
+        for i in 0..neurons.len() {
+            for j in (i+1)..neurons.len() {
+                if let (Some(loc1), Some(loc2)) = (mapping.get(&neurons[i]), mapping.get(&neurons[j])) {
+                    total_distance += self.calculate_spatial_distance(loc1, loc2).await?;
+                    pair_count += 1;
+                }
+            }
+        }
+        
+        if pair_count == 0 {
+            return Ok(0.0);
+        }
+        
+        let avg_distance = total_distance / pair_count as f64;
+        
+        // Coherence is inversely related to average distance
+        let coherence = (1.0 / (1.0 + avg_distance * 2.0)).max(0.1).min(1.0);
+        
+        Ok(coherence)
+    }
+
+    async fn calculate_global_synchrony(&self, sync_groups: &[SynchronizationGroup]) -> StreamResult<f64> {
+        if sync_groups.is_empty() {
+            return Ok(0.0);
+        }
+        
+        // Global synchrony based on weighted average of group synchrony indices
+        let total_weighted_synchrony: f64 = sync_groups.iter()
+            .map(|group| group.synchrony_index * group.neurons.len() as f64)
+            .sum();
+        
+        let total_neurons: usize = sync_groups.iter()
+            .map(|group| group.neurons.len())
+            .sum();
+        
+        if total_neurons == 0 {
+            return Ok(0.0);
+        }
+        
+        Ok(total_weighted_synchrony / total_neurons as f64)
+    }
+
+    async fn calculate_temporal_complexity(&self, windows: &HashMap<NeuronId, TemporalWindow>, phases: &HashMap<NeuronId, OscillatoryPhase>) -> StreamResult<f64> {
+        // Temporal complexity based on diversity of temporal patterns
+        let window_diversity = self.calculate_window_diversity(windows).await?;
+        let phase_diversity = self.calculate_phase_diversity(phases).await?;
+        
+        // Combine diversities with weighted average
+        let complexity = (window_diversity * 0.6) + (phase_diversity * 0.4);
+        
+        Ok(complexity.min(1.0).max(0.0))
+    }
+
+    async fn calculate_window_diversity(&self, windows: &HashMap<NeuronId, TemporalWindow>) -> StreamResult<f64> {
+        if windows.is_empty() {
+            return Ok(0.0);
+        }
+        
+        // Calculate coefficient of variation for window durations
+        let durations: Vec<f64> = windows.values().map(|w| w.duration_ms).collect();
+        let mean = durations.iter().sum::<f64>() / durations.len() as f64;
+        let variance = durations.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / durations.len() as f64;
+        let std_dev = variance.sqrt();
+        
+        let cv = if mean > 0.0 { std_dev / mean } else { 0.0 };
+        
+        // Normalize coefficient of variation to 0-1 range
+        Ok(cv.min(2.0) / 2.0)
+    }
+
+    async fn calculate_phase_diversity(&self, phases: &HashMap<NeuronId, OscillatoryPhase>) -> StreamResult<f64> {
+        if phases.is_empty() {
+            return Ok(0.0);
+        }
+        
+        // Calculate phase dispersion across different frequency bands
+        let theta_phases: Vec<f64> = phases.values().map(|p| p.theta_phase).collect();
+        let gamma_phases: Vec<f64> = phases.values().map(|p| p.gamma_phase).collect();
+        
+        let theta_dispersion = self.calculate_circular_dispersion(&theta_phases).await?;
+        let gamma_dispersion = self.calculate_circular_dispersion(&gamma_phases).await?;
+        
+        // Average dispersion across frequency bands
+        Ok((theta_dispersion + gamma_dispersion) / 2.0)
+    }
+
+    async fn calculate_circular_dispersion(&self, phases: &[f64]) -> StreamResult<f64> {
+        if phases.is_empty() {
+            return Ok(0.0);
+        }
+        
+        // Calculate circular variance for phase dispersion
+        let sum_cos: f64 = phases.iter().map(|p| p.cos()).sum();
+        let sum_sin: f64 = phases.iter().map(|p| p.sin()).sum();
+        let n = phases.len() as f64;
+        
+        let r = ((sum_cos / n).powi(2) + (sum_sin / n).powi(2)).sqrt();
+        let circular_variance = 1.0 - r;
+        
+        Ok(circular_variance.min(1.0).max(0.0))
+    }
 }
 
 /// Result structures for neuromorphic processing
@@ -981,6 +1490,21 @@ impl SpikeNeuralNetwork {
             spike_trains: HashMap::new(),
             simulation_time: 0.0,
             dynamics_stats: NetworkDynamicsStats::default(),
+        }
+    }
+}
+
+impl Default for TemporalContext {
+    fn default() -> Self {
+        Self {
+            temporal_windows: HashMap::new(),
+            synchronization_groups: Vec::new(),
+            oscillatory_phases: HashMap::new(),
+            causal_relationships: HashMap::new(),
+            global_synchrony: 0.0,
+            temporal_complexity: 0.0,
+            causal_density: 0.0,
+            context_timestamp: Instant::now(),
         }
     }
 }

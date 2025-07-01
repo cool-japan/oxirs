@@ -29,15 +29,15 @@ pub enum ReportFormat {
 impl fmt::Display for ReportFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ReportFormat::Turtle => write\!(f, "turtle"),
-            ReportFormat::JsonLd => write\!(f, "jsonld"),
-            ReportFormat::RdfXml => write\!(f, "rdfxml"),
-            ReportFormat::NTriples => write\!(f, "ntriples"),
-            ReportFormat::Json => write\!(f, "json"),
-            ReportFormat::Html => write\!(f, "html"),
-            ReportFormat::Csv => write\!(f, "csv"),
-            ReportFormat::Text => write\!(f, "text"),
-            ReportFormat::Yaml => write\!(f, "yaml"),
+            ReportFormat::Turtle => write!(f, "turtle"),
+            ReportFormat::JsonLd => write!(f, "jsonld"),
+            ReportFormat::RdfXml => write!(f, "rdfxml"),
+            ReportFormat::NTriples => write!(f, "ntriples"),
+            ReportFormat::Json => write!(f, "json"),
+            ReportFormat::Html => write!(f, "html"),
+            ReportFormat::Csv => write!(f, "csv"),
+            ReportFormat::Text => write!(f, "text"),
+            ReportFormat::Yaml => write!(f, "yaml"),
         }
     }
 }
@@ -76,7 +76,7 @@ impl ReportFormat {
     /// Parse format from string
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "turtle"  < /dev/null |  "ttl" => Some(ReportFormat::Turtle),
+            "turtle" | "ttl" => Some(ReportFormat::Turtle),
             "jsonld" | "json-ld" => Some(ReportFormat::JsonLd),
             "rdfxml" | "rdf-xml" | "xml" => Some(ReportFormat::RdfXml),
             "ntriples" | "nt" => Some(ReportFormat::NTriples),

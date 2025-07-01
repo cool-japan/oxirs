@@ -11,7 +11,7 @@ use std::io::{Cursor, Read, Write};
 use std::time::{Duration, Instant};
 
 /// Compression algorithms supported by the serialization layer
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CompressionAlgorithm {
     /// No compression
     None,

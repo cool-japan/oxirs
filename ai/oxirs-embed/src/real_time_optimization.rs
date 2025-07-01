@@ -7,6 +7,7 @@
 
 use crate::{EmbeddingModel, Vector};
 use anyhow::{anyhow, Result};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -610,13 +611,14 @@ impl DynamicArchitectureOptimizer {
             let mut config = self.current_architecture.clone();
 
             // Random mutations
+            let mut rng = rand::thread_rng();
             config.embedding_dim =
-                (64..=512).step_by(32).collect::<Vec<_>>()[rand::random::<usize>() % 15];
-            config.num_layers = (1..=6).collect::<Vec<_>>()[rand::random::<usize>() % 6];
+                (64..=512).step_by(32).collect::<Vec<_>>()[rng.gen_range(0..15)];
+            config.num_layers = (1..=6).collect::<Vec<_>>()[rng.gen_range(0..6)];
 
             // Generate random hidden dimensions
             config.hidden_dims = (0..config.num_layers)
-                .map(|_| (32..=1024).step_by(32).collect::<Vec<_>>()[rand::random::<usize>() % 31])
+                .map(|_| (32..=1024).step_by(32).collect::<Vec<_>>()[rng.gen_range(0..31)])
                 .collect();
 
             population.push(config);

@@ -16,7 +16,9 @@
 //! The original large file has been preserved as `rag_old_large.rs` for reference.
 //! All public APIs have been maintained for backward compatibility.
 
-// Re-export everything from the modular implementation
-pub use rag::*;
+// Re-export everything from the rag submodule directory
+pub use self::rag_impl::*;
 
-pub mod rag;
+// The actual implementation lives in the rag/ directory (mod.rs and submodules)
+#[path = "rag/mod.rs"] 
+mod rag_impl;

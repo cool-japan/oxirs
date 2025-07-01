@@ -5,10 +5,12 @@
 use crate::model::{
     BlankNode, Literal, NamedNode, Object, Predicate, RdfTerm, Subject, Triple, Variable,
 };
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// A pattern for matching triples
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TriplePattern {
     pub subject: Option<SubjectPattern>,
     pub predicate: Option<PredicatePattern>,
@@ -72,7 +74,8 @@ impl TriplePattern {
 }
 
 /// Pattern for matching subjects
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SubjectPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -100,7 +103,8 @@ impl SubjectPattern {
 }
 
 /// Pattern for matching predicates
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PredicatePattern {
     NamedNode(NamedNode),
     Variable(Variable),
@@ -125,7 +129,8 @@ impl PredicatePattern {
 }
 
 /// Pattern for matching objects
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ObjectPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),

@@ -17,7 +17,7 @@ use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use oxirs_core::rdf_store::Store as CoreStore;
+use oxirs_core::rdf_store::{ConcreteStore as CoreStore, Store};
 use tracing::{debug, info, span, warn, Level};
 
 use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
@@ -475,7 +475,7 @@ impl StarCache {
 }
 
 /// RDF-star storage backend with support for quoted triples
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StarStore {
     /// Core RDF storage backend
     core_store: Arc<RwLock<CoreStore>>,
@@ -593,10 +593,11 @@ impl StarStore {
         // Convert StarTriple to core RDF triple
         let core_triple = self.convert_to_core_triple(triple)?;
 
-        // Insert into core store
+        // Insert into core store (convert triple to quad in default graph)
+        let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
         let mut core_store = self.core_store.write().unwrap();
         core_store
-            .insert_triple(core_triple)
+            .insert_quad(core_quad)
             .map_err(|e| StarError::CoreError(e))?;
 
         Ok(())
@@ -872,8 +873,13 @@ impl StarStore {
             if let Ok(core_triple) = self.convert_to_core_triple(triple) {
                 // Convert triple to quad with default graph
                 let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
-                if let Ok(exists) = core_store.contains_quad(&core_quad) {
-                    return exists;
+                if let Ok(quads) = core_store.find_quads(
+                    Some(core_quad.subject()),
+                    Some(core_quad.predicate()),
+                    Some(core_quad.object()),
+                    Some(core_quad.graph_name()),
+                ) {
+                    return !quads.is_empty();
                 }
             }
         }
@@ -1220,18 +1226,25 @@ impl StarStore {
             None => None,
         };
 
-        // Query core store
-        let core_triples = core_store
-            .query_triples(
+        // Query core store (find quads and convert to triples)
+        let core_quads = core_store
+            .find_quads(
                 core_subject.as_ref(),
                 core_predicate.as_ref(),
                 core_object.as_ref(),
+                None, // Query all graphs
             )
             .map_err(|e| StarError::CoreError(e))?;
 
         // Convert results back to StarTriples
         let mut results = Vec::new();
-        for triple in core_triples {
+        for quad in core_quads {
+            // Convert quad to triple (lose graph information)
+            let triple = oxirs_core::model::Triple::new(
+                quad.subject().clone(),
+                quad.predicate().clone(),
+                quad.object().clone(),
+            );
             let star_triple = self.convert_from_core_triple(&triple)?;
             results.push(star_triple);
         }

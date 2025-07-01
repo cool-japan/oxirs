@@ -150,7 +150,7 @@ impl JuniperGraphQLServer {
                     .body(format!(
                         r#"{{"errors": [{{ "message": "{}" }}]}}"#,
                         err.to_string().replace('"', "\\\"")
-                    )))
+                    ))
                     .unwrap()
             }
         };

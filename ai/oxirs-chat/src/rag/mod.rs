@@ -33,6 +33,11 @@ pub mod entity_extraction;
 pub mod query_processing;
 pub mod advanced_reasoning;
 pub mod knowledge_extraction;
+pub mod retrieval;
+pub mod embedding;
+pub mod context;
+pub mod types;
+pub mod quantum;
 
 // Re-export main types for convenience
 pub use quantum_rag::{
@@ -67,6 +72,12 @@ pub use knowledge_extraction::{
     KnowledgeExtractionEngine, KnowledgeExtractionConfig, ExtractedKnowledge,
     ExtractedEntity, ExtractedRelationship, EntityType, RelationshipType,
 };
+
+// Additional imports from submodules
+pub use retrieval::*;
+pub use embedding::*;
+pub use context::*;
+pub use types::*;
 
 use anyhow::{anyhow, Result};
 use oxirs_core::{
@@ -495,6 +506,10 @@ impl RagEngine {
         self.config = config;
     }
 }
+
+// Type aliases for compatibility with lib.rs
+pub type RAGSystem = RagEngine;
+pub type RAGConfig = RagConfig;
 
 #[cfg(test)]
 mod tests {

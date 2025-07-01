@@ -2,15 +2,27 @@
 //!
 //! This module provides columnar storage optimized for analytical queries,
 //! supporting efficient aggregations, range scans, and OLAP operations.
+//!
+//! Note: This module requires datafusion and arrow dependencies which are
+//! currently disabled. Enable with appropriate features in Cargo.toml.
+
+#![cfg(feature = "columnar")]
 
 use crate::model::{BlankNode, Literal, NamedNode, Triple};
 use crate::OxirsError;
+
+// Conditional imports for columnar storage - currently disabled due to dependency conflicts
+#[cfg(all(feature = "columnar", feature = "arrow"))]
 use arrow::{
     array::{ArrayBuilder, StringArray, StringBuilder, UInt64Array, UInt64Builder},
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
+
+#[cfg(all(feature = "columnar", feature = "datafusion"))]
 use datafusion::prelude::*;
+
+#[cfg(all(feature = "columnar", feature = "parquet"))]
 use parquet::{arrow::ArrowWriter, file::properties::WriterProperties};
 use std::collections::HashMap;
 use std::path::PathBuf;

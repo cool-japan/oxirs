@@ -177,6 +177,342 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! ### Advanced Enterprise Features
+//!
+//! #### Streaming Validation for Large Datasets
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, ValidationConfig, ValidationStrategy, ReportFormat};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let mut validator = ShaclValidator::new();
+//!
+//! // Configure for large dataset processing
+//! let config = ValidationConfig::default()
+//!     .with_strategy(ValidationStrategy::Streaming)
+//!     .with_batch_size(10000)
+//!     .with_memory_limit_mb(4096)
+//!     .with_progress_reporting(true);
+//!
+//! // Process large RDF dataset with progress tracking
+//! // let report = validator.validate_large_dataset(&large_store, config)?;
+//!
+//! // Export results in different formats
+//! // let json_report = report.export_as(ReportFormat::Json)?;
+//! // let html_report = report.export_as(ReportFormat::Html)?;
+//! // let csv_report = report.export_as(ReportFormat::Csv)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! #### Performance Analytics and Monitoring
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, ValidationConfig, PerformanceAnalytics};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let mut validator = ShaclValidator::new();
+//! let config = ValidationConfig::default()
+//!     .with_performance_monitoring(true)
+//!     .with_analytics_enabled(true);
+//!
+//! // Validate with performance tracking
+//! // let report = validator.validate_store(&store, config)?;
+//!
+//! // Get detailed performance analytics
+//! // let analytics = validator.get_performance_analytics()?;
+//! // println!("Average validation time: {}ms", analytics.average_validation_time());
+//! // println!("Memory usage: {}MB", analytics.peak_memory_usage_mb());
+//! // println!("Bottlenecks: {:?}", analytics.identify_bottlenecks());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! #### Builder Pattern for Complex Configurations
+//!
+//! ```rust
+//! use oxirs_shacl::{ValidatorBuilder, EnhancedValidatorBuilder, ValidationStrategy};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Enhanced validator with all enterprise features
+//! let validator = EnhancedValidatorBuilder::new()
+//!     .with_strategy(ValidationStrategy::Parallel)
+//!     .with_batch_size(5000)
+//!     .with_thread_count(8)
+//!     .with_memory_limit_mb(8192)
+//!     .with_caching_enabled(true)
+//!     .with_cache_size_mb(1024)
+//!     .with_performance_monitoring(true)
+//!     .with_error_recovery(true)
+//!     .with_timeout_seconds(300)
+//!     .build()?;
+//!
+//! // Configure shape loading with advanced options
+//! let shape_config = ShapeLoaderBuilder::new()
+//!     .with_format_detection(true)
+//!     .with_async_loading(true)
+//!     .with_validation_on_load(true)
+//!     .build();
+//!
+//! // Load shapes from multiple sources
+//! // validator.load_shapes_with_config(&shape_config).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! #### Advanced Report Generation
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, ReportBuilder, ReportFormat, FilterCriteria};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let validator = ShaclValidator::new();
+//! // let report = validator.validate_store(&store, config)?;
+//!
+//! // Generate customized reports with filtering
+//! let filtered_report = ReportBuilder::new()
+//!     .filter_by_severity(&[Severity::Violation, Severity::Warning])
+//!     .filter_by_shape_pattern("http://example.org/shapes/*")
+//!     .include_metadata(true)
+//!     .include_statistics(true)
+//!     .format(ReportFormat::Html)
+//!     .build();
+//!
+//! // Export with custom formatting
+//! // let html_output = filtered_report.generate(&report)?;
+//! // let json_export = report.export_as(ReportFormat::Json)?;
+//! // let prometheus_metrics = report.export_as(ReportFormat::Prometheus)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Enterprise Integration Patterns
+//!
+//! #### External System Integration
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, ValidationConfig, IntegrationBuilder};
+//! use std::time::Duration;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let mut validator = ShaclValidator::new();
+//!
+//! // Configure integration with external validation services
+//! let integration_config = IntegrationBuilder::new()
+//!     .with_external_validator("http://validation-service.example.org/api")
+//!     .with_timeout(Duration::from_secs(30))
+//!     .with_fallback_strategy(FallbackStrategy::LocalValidation)
+//!     .with_circuit_breaker(CircuitBreakerConfig::default())
+//!     .with_retry_policy(RetryPolicy::exponential_backoff(3))
+//!     .build();
+//!
+//! let config = ValidationConfig::default()
+//!     .with_external_integration(integration_config)
+//!     .with_hybrid_validation(true);
+//!
+//! // Validate with external service integration
+//! // let report = validator.validate_with_external_services(&store, config).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! #### Federated Validation Across Multiple Graphs
+//!
+//! ```rust
+//! use oxirs_shacl::{FederatedValidator, GraphEndpoint, ValidationStrategy};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let federated_validator = FederatedValidator::new();
+//!
+//! // Configure multiple graph endpoints
+//! let endpoints = vec![
+//!     GraphEndpoint::new("http://graph1.example.org/sparql")
+//!         .with_authentication("bearer", "token1")
+//!         .with_timeout(Duration::from_secs(60)),
+//!     GraphEndpoint::new("http://graph2.example.org/sparql")
+//!         .with_authentication("basic", "user:pass")
+//!         .with_load_balancing(true),
+//!     GraphEndpoint::new("http://graph3.example.org/sparql")
+//!         .with_failover_priority(1),
+//! ];
+//!
+//! let config = FederatedValidationConfig::new()
+//!     .with_endpoints(endpoints)
+//!     .with_strategy(ValidationStrategy::DistributedParallel)
+//!     .with_result_aggregation(AggregationStrategy::Union)
+//!     .with_conflict_resolution(ConflictResolution::MajorityVote);
+//!
+//! // Validate across federated knowledge graphs
+//! // let federated_report = federated_validator
+//! //     .validate_federated_graphs(&shapes, config).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Security and Compliance
+//!
+//! #### Enterprise Security Configuration
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, SecurityConfig, EncryptionConfig, AuditConfig};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let security_config = SecurityConfig::new()
+//!     .with_encryption(EncryptionConfig::Aes256Gcm {
+//!         key_rotation_interval: Duration::from_days(90),
+//!         key_derivation: KeyDerivation::Pbkdf2,
+//!     })
+//!     .with_access_control(AccessControlConfig::RoleBased {
+//!         roles: vec!["validator", "admin", "readonly"],
+//!         permissions: HashMap::from([
+//!             ("validator", vec!["validate", "read"]),
+//!             ("admin", vec!["validate", "read", "write", "configure"]),
+//!             ("readonly", vec!["read"]),
+//!         ]),
+//!     })
+//!     .with_audit_logging(AuditConfig::Comprehensive {
+//!         log_all_operations: true,
+//!         include_data_samples: false, // For GDPR compliance
+//!         retention_period: Duration::from_days(2555), // 7 years
+//!         encryption_at_rest: true,
+//!     });
+//!
+//! let validator = ShaclValidator::with_security_config(security_config)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! #### Data Privacy and GDPR Compliance
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, PrivacyConfig, DataClassification};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let privacy_config = PrivacyConfig::new()
+//!     .with_data_classification(DataClassification::Automatic)
+//!     .with_pii_detection(true)
+//!     .with_anonymization_on_export(true)
+//!     .with_right_to_be_forgotten(true)
+//!     .with_consent_tracking(true)
+//!     .with_lawful_basis_validation(true);
+//!
+//! let validator = ShaclValidator::new()
+//!     .with_privacy_compliance(privacy_config);
+//!
+//! // Shapes can specify privacy requirements
+//! let privacy_aware_shapes = r#"
+//! @prefix sh: <http://www.w3.org/ns/shacl#> .
+//! @prefix privacy: <http://example.org/privacy#> .
+//! @prefix ex: <http://example.org/> .
+//!
+//! ex:PersonShape
+//!     a sh:NodeShape ;
+//!     sh:targetClass ex:Person ;
+//!     sh:property [
+//!         sh:path ex:email ;
+//!         privacy:classification privacy:PII ;
+//!         privacy:processingBasis privacy:Consent ;
+//!         privacy:retentionPeriod "P5Y" ;
+//!     ] .
+//! "#;
+//!
+//! // Validation includes privacy compliance checking
+//! // let report = validator.validate_with_privacy_check(data, privacy_aware_shapes)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Production Deployment Patterns
+//!
+//! #### Cloud-Native Kubernetes Deployment
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, CloudConfig, KubernetesConfig, ScalingConfig};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let cloud_config = CloudConfig::kubernetes()
+//!     .with_namespace("validation-service")
+//!     .with_replica_count(3)
+//!     .with_scaling(ScalingConfig::HorizontalPodAutoscaler {
+//!         min_replicas: 2,
+//!         max_replicas: 10,
+//!         cpu_threshold: 70,
+//!         memory_threshold: 80,
+//!     })
+//!     .with_resource_limits(ResourceLimits {
+//!         cpu: "2000m",
+//!         memory: "4Gi",
+//!         storage: "20Gi",
+//!     })
+//!     .with_health_checks(HealthCheckConfig {
+//!         liveness_probe: "/health/live",
+//!         readiness_probe: "/health/ready",
+//!         startup_probe: "/health/startup",
+//!     })
+//!     .with_service_mesh(ServiceMeshConfig::Istio {
+//!         circuit_breaker: true,
+//!         rate_limiting: true,
+//!         observability: true,
+//!     });
+//!
+//! let validator = ShaclValidator::with_cloud_config(cloud_config)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! #### Error Recovery and Resilience Patterns
+//!
+//! ```rust
+//! use oxirs_shacl::{ShaclValidator, ResilienceConfig, ErrorRecoveryStrategy};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let resilience_config = ResilienceConfig::new()
+//!     .with_circuit_breaker(CircuitBreakerConfig {
+//!         failure_threshold: 5,
+//!         timeout: Duration::from_secs(60),
+//!         half_open_max_calls: 3,
+//!     })
+//!     .with_bulkhead(BulkheadConfig {
+//!         max_concurrent_calls: 100,
+//!         max_wait_duration: Duration::from_secs(30),
+//!     })
+//!     .with_timeout(TimeoutConfig {
+//!         default_timeout: Duration::from_secs(120),
+//!         per_operation_timeouts: HashMap::from([
+//!             ("validation", Duration::from_secs(300)),
+//!             ("shape_loading", Duration::from_secs(60)),
+//!         ]),
+//!     })
+//!     .with_retry(RetryConfig {
+//!         max_attempts: 3,
+//!         backoff_strategy: BackoffStrategy::ExponentialWithJitter {
+//!             initial_delay: Duration::from_millis(100),
+//!             max_delay: Duration::from_secs(30),
+//!             multiplier: 2.0,
+//!         },
+//!         retryable_errors: vec![
+//!             ErrorKind::NetworkTimeout,
+//!             ErrorKind::ServiceUnavailable,
+//!             ErrorKind::RateLimitExceeded,
+//!         ],
+//!     });
+//!
+//! let validator = ShaclValidator::with_resilience_config(resilience_config)?;
+//!
+//! // Validation with comprehensive error recovery
+//! // match validator.validate_with_recovery(&store, &shapes, config).await {
+//! //     Ok(report) => println!("Validation completed: {}", report.conforms()),
+//! //     Err(e) if e.is_recoverable() => {
+//! //         // Automatic retry with backoff
+//! //         let recovery_report = validator.attempt_recovery(&e).await?;
+//! //         println!("Recovered from error: {:?}", recovery_report);
+//! //     }
+//! //     Err(e) => return Err(e.into()),
+//! // }
+//! # Ok(())
+//! # }
+//! ```
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -205,6 +541,7 @@ pub mod report;
 pub mod security;
 pub mod shape_import;
 pub mod shape_inheritance;
+pub mod shape_versioning;
 pub mod shapes;
 pub mod sparql;
 pub mod targets;

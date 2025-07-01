@@ -126,7 +126,7 @@ pub use advanced_result_merging::{
 };
 pub use benchmarking::{
     BenchmarkConfig, BenchmarkDataset, BenchmarkOutputFormat, BenchmarkResult, BenchmarkRunner,
-    BenchmarkSuite, BenchmarkTestCase, MemoryMetrics, PerformanceMetrics, PerformanceProfiler,
+    BenchmarkSuite, BenchmarkTestCase, MemoryMetrics, PerformanceMetrics,
     QualityMetrics as BenchmarkQualityMetrics, ScalabilityMetrics, SystemInfo,
 };
 pub use cache_friendly_index::{CacheFriendlyVectorIndex, IndexConfig as CacheFriendlyIndexConfig};

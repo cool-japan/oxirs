@@ -1553,5 +1553,432 @@ pub enum AdvancedInsightType {
     MetacognitiveAssessment,
 }
 
-// Many more structures would be defined here for a complete implementation...
-// This provides the foundation for the enhanced consciousness system
+/// Advanced Consciousness State Machine
+/// Dynamic state transitions for adaptive consciousness behavior
+#[derive(Debug, Clone)]
+pub struct ConsciousnessStateMachine {
+    current_state: ConsciousnessState,
+    state_history: VecDeque<StateTransition>,
+    transition_rules: HashMap<ConsciousnessState, Vec<TransitionRule>>,
+    state_metrics: StateMetrics,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ConsciousnessState {
+    /// Relaxed state for routine processing
+    Baseline,
+    /// Heightened awareness for complex queries
+    Focused,
+    /// Deep contemplation for philosophical questions
+    Contemplative,
+    /// Creative mode for synthesis and innovation
+    Creative,
+    /// Analytical mode for logical reasoning
+    Analytical,
+    /// Empathetic mode for emotional understanding
+    Empathetic,
+    /// Memory consolidation during idle periods
+    Consolidating,
+    /// Integration of multiple perspectives
+    Integrative,
+}
+
+#[derive(Debug, Clone)]
+pub struct StateTransition {
+    from_state: ConsciousnessState,
+    to_state: ConsciousnessState,
+    trigger: TransitionTrigger,
+    timestamp: std::time::Instant,
+    success_probability: f64,
+}
+
+#[derive(Debug, Clone)]
+pub enum TransitionTrigger {
+    QueryComplexity(f64),
+    EmotionalIntensity(f64),
+    MemoryPressure(f64),
+    AttentionShift(String),
+    TimeBased(Duration),
+    ExternalStimulus(String),
+}
+
+impl ConsciousnessStateMachine {
+    pub fn new() -> Result<Self> {
+        let mut transition_rules = HashMap::new();
+        
+        // Define state transition rules
+        transition_rules.insert(ConsciousnessState::Baseline, vec![
+            TransitionRule::new(ConsciousnessState::Focused, 
+                TransitionCondition::QueryComplexity(0.7), 0.8),
+            TransitionRule::new(ConsciousnessState::Creative, 
+                TransitionCondition::KeywordPresence(vec!["creative", "innovative", "design"]), 0.7),
+            TransitionRule::new(ConsciousnessState::Empathetic, 
+                TransitionCondition::EmotionalContent(0.6), 0.75),
+        ]);
+        
+        transition_rules.insert(ConsciousnessState::Focused, vec![
+            TransitionRule::new(ConsciousnessState::Analytical, 
+                TransitionCondition::LogicalPattern, 0.8),
+            TransitionRule::new(ConsciousnessState::Contemplative, 
+                TransitionCondition::PhilosophicalContent, 0.7),
+            TransitionRule::new(ConsciousnessState::Baseline, 
+                TransitionCondition::TimeElapsed(Duration::from_mins(10)), 0.6),
+        ]);
+        
+        Ok(Self {
+            current_state: ConsciousnessState::Baseline,
+            state_history: VecDeque::new(),
+            transition_rules,
+            state_metrics: StateMetrics::new(),
+        })
+    }
+    
+    /// Evaluate and potentially transition consciousness state
+    pub fn evaluate_transition(&mut self, query: &str, context: &AssembledContext) -> Result<Option<StateTransition>> {
+        let current_rules = self.transition_rules.get(&self.current_state)
+            .ok_or_else(|| anyhow::anyhow!("No transition rules for current state"))?;
+        
+        for rule in current_rules {
+            if self.evaluate_condition(&rule.condition, query, context)? {
+                let transition = StateTransition {
+                    from_state: self.current_state.clone(),
+                    to_state: rule.target_state.clone(),
+                    trigger: self.identify_trigger(query, context)?,
+                    timestamp: std::time::Instant::now(),
+                    success_probability: rule.probability,
+                };
+                
+                // Apply state transition
+                self.current_state = rule.target_state.clone();
+                self.state_history.push_back(transition.clone());
+                
+                // Keep history bounded
+                if self.state_history.len() > 50 {
+                    self.state_history.pop_front();
+                }
+                
+                debug!("Consciousness state transition: {:?} -> {:?}", 
+                       transition.from_state, transition.to_state);
+                
+                return Ok(Some(transition));
+            }
+        }
+        
+        Ok(None)
+    }
+    
+    /// Get state-specific processing parameters
+    pub fn get_state_parameters(&self) -> StateProcessingParameters {
+        match self.current_state {
+            ConsciousnessState::Baseline => StateProcessingParameters {
+                attention_focus: 0.5,
+                emotional_sensitivity: 0.5,
+                creativity_boost: 0.3,
+                analytical_depth: 0.5,
+                memory_consolidation: 0.2,
+            },
+            ConsciousnessState::Focused => StateProcessingParameters {
+                attention_focus: 0.9,
+                emotional_sensitivity: 0.3,
+                creativity_boost: 0.4,
+                analytical_depth: 0.8,
+                memory_consolidation: 0.3,
+            },
+            ConsciousnessState::Creative => StateProcessingParameters {
+                attention_focus: 0.6,
+                emotional_sensitivity: 0.7,
+                creativity_boost: 0.9,
+                analytical_depth: 0.4,
+                memory_consolidation: 0.5,
+            },
+            ConsciousnessState::Empathetic => StateProcessingParameters {
+                attention_focus: 0.7,
+                emotional_sensitivity: 0.9,
+                creativity_boost: 0.6,
+                analytical_depth: 0.5,
+                memory_consolidation: 0.4,
+            },
+            // Add more state parameters as needed
+            _ => StateProcessingParameters::default(),
+        }
+    }
+}
+
+/// Dream State Processing System
+/// Implements memory consolidation and creative insight generation during idle periods
+#[derive(Debug, Clone)]
+pub struct DreamStateProcessor {
+    is_dreaming: bool,
+    dream_intensity: f64,
+    memory_fragments: Vec<MemoryFragment>,
+    dream_scenarios: VecDeque<DreamScenario>,
+    consolidation_metrics: ConsolidationMetrics,
+    creative_insights: Vec<CreativeInsight>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryFragment {
+    content: String,
+    emotional_weight: f64,
+    temporal_marker: std::time::Instant,
+    consolidation_priority: f64,
+    associations: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DreamScenario {
+    narrative: String,
+    participating_memories: Vec<usize>, // indices into memory_fragments
+    emotional_tone: EmotionalTone,
+    insight_potential: f64,
+    symbolic_elements: Vec<String>,
+}
+
+impl DreamStateProcessor {
+    pub fn new() -> Self {
+        Self {
+            is_dreaming: false,
+            dream_intensity: 0.0,
+            memory_fragments: Vec::new(),
+            dream_scenarios: VecDeque::new(),
+            consolidation_metrics: ConsolidationMetrics::new(),
+            creative_insights: Vec::new(),
+        }
+    }
+    
+    /// Enter dream state for memory consolidation
+    pub fn enter_dream_state(&mut self, idle_duration: Duration) -> Result<()> {
+        if idle_duration < Duration::from_secs(30) {
+            return Ok(()); // Not enough idle time for dreaming
+        }
+        
+        self.is_dreaming = true;
+        self.dream_intensity = (idle_duration.as_secs() as f64 / 300.0).min(1.0); // Max intensity after 5 minutes
+        
+        debug!("Entering dream state with intensity: {:.2}", self.dream_intensity);
+        
+        // Initiate memory consolidation
+        self.consolidate_memories()?;
+        
+        // Generate dream scenarios
+        self.generate_dream_scenarios()?;
+        
+        // Extract creative insights
+        self.extract_creative_insights()?;
+        
+        Ok(())
+    }
+    
+    /// Consolidate memories during dream state
+    fn consolidate_memories(&mut self) -> Result<()> {
+        // Sort memory fragments by consolidation priority
+        self.memory_fragments.sort_by(|a, b| 
+            b.consolidation_priority.partial_cmp(&a.consolidation_priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        );
+        
+        let consolidation_count = (self.memory_fragments.len() as f64 * self.dream_intensity * 0.3) as usize;
+        
+        for fragment in self.memory_fragments.iter_mut().take(consolidation_count) {
+            // Strengthen important memories
+            fragment.consolidation_priority *= 1.1;
+            
+            // Create new associations
+            if let Some(similar_fragment) = self.find_similar_memory(&fragment.content) {
+                fragment.associations.push(similar_fragment.content.clone());
+            }
+        }
+        
+        self.consolidation_metrics.update(consolidation_count, self.dream_intensity);
+        debug!("Consolidated {} memory fragments", consolidation_count);
+        
+        Ok(())
+    }
+    
+    /// Generate creative dream scenarios
+    fn generate_dream_scenarios(&mut self) -> Result<()> {
+        let scenario_count = (self.dream_intensity * 5.0) as usize;
+        
+        for _ in 0..scenario_count {
+            let participating_memories: Vec<usize> = (0..self.memory_fragments.len())
+                .choose_multiple(&mut rand::thread_rng(), 
+                                rand::thread_rng().gen_range(2..=5))
+                .collect();
+            
+            let scenario = DreamScenario {
+                narrative: self.weave_narrative(&participating_memories)?,
+                participating_memories: participating_memories.clone(),
+                emotional_tone: self.determine_emotional_tone(&participating_memories)?,
+                insight_potential: rand::thread_rng().gen_range(0.0..1.0),
+                symbolic_elements: self.extract_symbolic_elements(&participating_memories)?,
+            };
+            
+            self.dream_scenarios.push_back(scenario);
+        }
+        
+        // Keep scenarios bounded
+        while self.dream_scenarios.len() > 20 {
+            self.dream_scenarios.pop_front();
+        }
+        
+        debug!("Generated {} dream scenarios", scenario_count);
+        Ok(())
+    }
+    
+    /// Extract creative insights from dream processing
+    fn extract_creative_insights(&mut self) -> Result<()> {
+        for scenario in &self.dream_scenarios {
+            if scenario.insight_potential > 0.7 {
+                let insight = CreativeInsight {
+                    description: format!("Dream insight: {}", scenario.narrative),
+                    source_memories: scenario.participating_memories.clone(),
+                    creativity_score: scenario.insight_potential,
+                    symbolic_meaning: scenario.symbolic_elements.join(", "),
+                    emotional_resonance: self.calculate_emotional_resonance(&scenario.emotional_tone),
+                };
+                
+                self.creative_insights.push(insight);
+            }
+        }
+        
+        debug!("Extracted {} creative insights", self.creative_insights.len());
+        Ok(())
+    }
+}
+
+/// Temporal Consciousness System
+/// Maintains awareness of historical context and temporal patterns
+#[derive(Debug, Clone)]
+pub struct TemporalConsciousness {
+    temporal_memory: TemporalMemoryBank,
+    pattern_recognition: TemporalPatternRecognition,
+    future_projection: FutureProjectionEngine,
+    temporal_metrics: TemporalMetrics,
+}
+
+#[derive(Debug, Clone)]
+pub struct TemporalMemoryBank {
+    short_term: VecDeque<TemporalEvent>,
+    medium_term: Vec<TemporalPattern>,
+    long_term: Vec<TemporalTrend>,
+    cyclic_patterns: HashMap<Duration, Vec<CyclicEvent>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TemporalEvent {
+    content: String,
+    timestamp: std::time::Instant,
+    significance: f64,
+    context_tags: Vec<String>,
+    emotional_valence: f64,
+}
+
+impl TemporalConsciousness {
+    pub fn new() -> Self {
+        Self {
+            temporal_memory: TemporalMemoryBank::new(),
+            pattern_recognition: TemporalPatternRecognition::new(),
+            future_projection: FutureProjectionEngine::new(),
+            temporal_metrics: TemporalMetrics::new(),
+        }
+    }
+    
+    /// Analyze temporal context for consciousness processing
+    pub fn analyze_temporal_context(&self, query: &str, current_time: std::time::Instant) -> Result<TemporalContext> {
+        let recent_events = self.temporal_memory.get_recent_events(Duration::from_hours(1));
+        let relevant_patterns = self.pattern_recognition.find_relevant_patterns(query)?;
+        let future_implications = self.future_projection.project_implications(query, &recent_events)?;
+        
+        Ok(TemporalContext {
+            recent_events,
+            relevant_patterns,
+            future_implications,
+            temporal_coherence: self.calculate_temporal_coherence(),
+            time_awareness: self.calculate_time_awareness(current_time),
+        })
+    }
+    
+    /// Record new temporal event
+    pub fn record_event(&mut self, content: String, significance: f64, tags: Vec<String>) -> Result<()> {
+        let event = TemporalEvent {
+            content,
+            timestamp: std::time::Instant::now(),
+            significance,
+            context_tags: tags,
+            emotional_valence: 0.0, // Could be calculated from content
+        };
+        
+        self.temporal_memory.short_term.push_back(event);
+        
+        // Keep short-term memory bounded
+        if self.temporal_memory.short_term.len() > 100 {
+            self.temporal_memory.short_term.pop_front();
+        }
+        
+        // Update patterns
+        self.pattern_recognition.update_patterns(&self.temporal_memory.short_term)?;
+        
+        Ok(())
+    }
+}
+
+/// Supporting structures for consciousness enhancements
+#[derive(Debug, Clone)]
+pub struct TransitionRule {
+    target_state: ConsciousnessState,
+    condition: TransitionCondition,
+    probability: f64,
+}
+
+#[derive(Debug, Clone)]
+pub enum TransitionCondition {
+    QueryComplexity(f64),
+    EmotionalContent(f64),
+    KeywordPresence(Vec<&'static str>),
+    LogicalPattern,
+    PhilosophicalContent,
+    TimeElapsed(Duration),
+}
+
+#[derive(Debug, Clone)]
+pub struct StateProcessingParameters {
+    pub attention_focus: f64,
+    pub emotional_sensitivity: f64,
+    pub creativity_boost: f64,
+    pub analytical_depth: f64,
+    pub memory_consolidation: f64,
+}
+
+impl Default for StateProcessingParameters {
+    fn default() -> Self {
+        Self {
+            attention_focus: 0.5,
+            emotional_sensitivity: 0.5,
+            creativity_boost: 0.5,
+            analytical_depth: 0.5,
+            memory_consolidation: 0.5,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StateMetrics {
+    state_transitions: usize,
+    average_state_duration: Duration,
+    most_frequent_state: ConsciousnessState,
+    state_effectiveness: HashMap<ConsciousnessState, f64>,
+}
+
+impl StateMetrics {
+    pub fn new() -> Self {
+        Self {
+            state_transitions: 0,
+            average_state_duration: Duration::from_secs(0),
+            most_frequent_state: ConsciousnessState::Baseline,
+            state_effectiveness: HashMap::new(),
+        }
+    }
+}
+
+// Additional supporting structures would continue here...
+// This provides an extensive foundation for advanced consciousness processing

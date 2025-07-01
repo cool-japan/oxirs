@@ -2198,7 +2198,7 @@ mod tests {
         let decompressed = compression.decompress(&compressed).unwrap();
 
         assert_eq!(params.len(), decompressed.len());
-        assert!(compressed.len() > 0);
+        assert!(!compressed.is_empty());
     }
 
     #[tokio::test]

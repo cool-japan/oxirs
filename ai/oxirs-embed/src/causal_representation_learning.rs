@@ -4,13 +4,13 @@
 //! causal structures in embedding spaces with interventional learning, structural
 //! causal models, and counterfactual reasoning capabilities.
 
-use crate::{EmbeddingModel, ModelConfig, NamedNode, TrainingStats, Triple, Vector};
+use crate::{EmbeddingModel, ModelConfig, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{s, Array1, Array2, Array3, Array4, Axis};
+use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 /// Configuration for causal representation learning

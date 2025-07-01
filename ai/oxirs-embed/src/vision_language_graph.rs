@@ -2038,7 +2038,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(unified_embedding.len() > 0);
+        assert!(!unified_embedding.is_empty());
         assert_eq!(model.vision_embeddings.len(), 1);
         assert_eq!(model.language_embeddings.len(), 1);
         assert_eq!(model.graph_embeddings.len(), 1);

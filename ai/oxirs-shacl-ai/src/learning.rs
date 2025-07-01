@@ -1729,6 +1729,128 @@ impl ShapeLearner {
         
         recommendations
     }
+
+    /// Performance monitoring for learning efficiency
+    pub fn get_performance_metrics(&self) -> LearningPerformanceMetrics {
+        let success_rate = if self.stats.total_shapes_learned + self.stats.failed_shapes > 0 {
+            self.stats.total_shapes_learned as f64 / 
+            (self.stats.total_shapes_learned + self.stats.failed_shapes) as f64
+        } else {
+            0.0
+        };
+
+        let constraint_density = if self.stats.total_shapes_learned > 0 {
+            self.stats.total_constraints_discovered as f64 / self.stats.total_shapes_learned as f64
+        } else {
+            0.0
+        };
+
+        let temporal_constraint_ratio = if self.stats.total_constraints_discovered > 0 {
+            self.stats.temporal_constraints_discovered as f64 / 
+            self.stats.total_constraints_discovered as f64
+        } else {
+            0.0
+        };
+
+        LearningPerformanceMetrics {
+            success_rate,
+            constraint_density,
+            temporal_constraint_ratio,
+            shapes_per_class: if self.stats.classes_analyzed > 0 {
+                self.stats.total_shapes_learned as f64 / self.stats.classes_analyzed as f64
+            } else {
+                0.0
+            },
+            training_accuracy: self.stats.last_training_accuracy,
+        }
+    }
+
+    /// Optimize constraint quality by removing low-confidence constraints
+    pub fn optimize_constraint_quality(&mut self, shapes: &mut [Shape], min_quality_threshold: f64) -> Result<usize> {
+        let mut optimized_count = 0;
+        
+        for shape in shapes.iter_mut() {
+            let property_shapes = shape.property_shapes_mut();
+            let initial_count = property_shapes.len();
+            
+            // Keep only high-quality constraints
+            property_shapes.retain(|property_shape| {
+                let constraint_count = property_shape.constraints().len();
+                let quality_score = if constraint_count > 0 {
+                    // Higher score for shapes with multiple complementary constraints
+                    (constraint_count as f64).min(3.0) / 3.0
+                } else {
+                    0.0
+                };
+                
+                quality_score >= min_quality_threshold
+            });
+            
+            optimized_count += initial_count - property_shapes.len();
+        }
+        
+        tracing::info!("Optimized {} low-quality constraints", optimized_count);
+        Ok(optimized_count)
+    }
+
+    /// Enhanced pattern analysis with statistical validation
+    pub fn analyze_pattern_statistics(&self, patterns: &[Pattern]) -> PatternStatistics {
+        let mut datatype_patterns = 0;
+        let mut cardinality_patterns = 0;
+        let mut temporal_patterns = 0;
+        let mut range_patterns = 0;
+        
+        for pattern in patterns {
+            match pattern.pattern_type().as_str() {
+                "datatype" => datatype_patterns += 1,
+                "cardinality" => cardinality_patterns += 1,
+                "temporal" => temporal_patterns += 1,
+                "range" => range_patterns += 1,
+                _ => {}
+            }
+        }
+        
+        let total_patterns = patterns.len();
+        let diversity_score = if total_patterns > 0 {
+            let unique_types = [datatype_patterns, cardinality_patterns, temporal_patterns, range_patterns]
+                .iter()
+                .filter(|&&count| count > 0)
+                .count() as f64;
+            unique_types / 4.0 // 4 main pattern types
+        } else {
+            0.0
+        };
+        
+        PatternStatistics {
+            total_patterns,
+            datatype_patterns,
+            cardinality_patterns,
+            temporal_patterns,
+            range_patterns,
+            diversity_score,
+        }
+    }
+}
+
+/// Performance metrics for learning efficiency analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningPerformanceMetrics {
+    pub success_rate: f64,
+    pub constraint_density: f64,
+    pub temporal_constraint_ratio: f64,
+    pub shapes_per_class: f64,
+    pub training_accuracy: f64,
+}
+
+/// Statistics for pattern analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatternStatistics {
+    pub total_patterns: usize,
+    pub datatype_patterns: usize,
+    pub cardinality_patterns: usize,
+    pub temporal_patterns: usize,
+    pub range_patterns: usize,
+    pub diversity_score: f64,
 }
 
 #[cfg(test)]

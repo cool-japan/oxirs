@@ -17,7 +17,8 @@ use tracing::{debug, info, span, warn, Level};
 
 use crate::algebra::{Algebra, Expression, Term, TriplePattern, Variable};
 use crate::cost_model::{CostEstimate, CostModel};
-use crate::executor::{Dataset, ExecutionStats, QueryExecutor, Solution};
+use crate::executor::{Dataset, ExecutionStats, QueryExecutor};
+use crate::algebra::Solution;
 use crate::statistics_collector::StatisticsCollector;
 
 /// Materialized view manager for query optimization
@@ -727,7 +728,7 @@ impl MaterializedViewManager {
         name: String,
         definition: Algebra,
         metadata: ViewMetadata,
-        executor: &QueryExecutor,
+        executor: &mut QueryExecutor,
         dataset: &dyn Dataset,
     ) -> Result<String> {
         let _span = span!(Level::INFO, "create_materialized_view").entered();
@@ -785,7 +786,7 @@ impl MaterializedViewManager {
         let view = MaterializedView {
             id: view_id.clone(),
             name,
-            definition,
+            definition: definition.clone(),
             data: view_data.clone(),
             metadata,
             maintenance_info,
@@ -1142,7 +1143,7 @@ impl MaterializedViewManager {
     fn update_view_fully(
         &mut self,
         view_id: &str,
-        executor: &QueryExecutor,
+        executor: &mut QueryExecutor,
         dataset: &dyn Dataset,
     ) -> Result<()> {
         debug!("Performing full update for view {}", view_id);
@@ -1209,9 +1210,10 @@ impl ViewStorage {
 
     fn store_view_data(&mut self, view_id: String, data: ViewData) -> Result<()> {
         // Store in memory if under threshold
-        if self.memory_usage + data.size_bytes <= self.memory_usage {
+        let data_size = data.size_bytes;
+        if self.memory_usage + data_size <= self.memory_usage {
             self.memory_storage.insert(view_id, data);
-            self.memory_usage += data.size_bytes;
+            self.memory_usage += data_size;
             self.storage_stats.memory_view_count += 1;
         } else {
             // Would implement disk storage here

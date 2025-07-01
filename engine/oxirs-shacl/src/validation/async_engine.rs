@@ -4,19 +4,30 @@
 //! enabling efficient concurrent validation, streaming operations, and integration
 //! with async I/O systems.
 
+#[cfg(feature = "async")]
 use std::collections::HashMap;
+#[cfg(feature = "async")]
 use std::future::Future;
+#[cfg(feature = "async")]
 use std::pin::Pin;
+#[cfg(feature = "async")]
 use std::sync::Arc;
+#[cfg(feature = "async")]
 use std::time::Duration;
 
+#[cfg(feature = "async")]
 use indexmap::IndexMap;
+#[cfg(feature = "async")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "async")]
 use tokio::sync::{mpsc, RwLock, Semaphore};
+#[cfg(feature = "async")]
 use tokio::time::{sleep, timeout};
 
+#[cfg(feature = "async")]
 use oxirs_core::{model::Term, Store};
 
+#[cfg(feature = "async")]
 use crate::{
     builders::{EnhancedValidatorBuilder, ValidationConfigBuilder},
     validation::{ValidationEngine, ValidationStats},

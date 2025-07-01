@@ -1674,6 +1674,1066 @@ pub struct AnalysisMetadata {
     pub confidence_score: f64,
 }
 
+/// Advanced error report with comprehensive analytics
+#[derive(Debug, Clone)]
+pub struct AdvancedErrorReport {
+    pub executive_summary: ExecutiveSummary,
+    pub detailed_analysis: DetailedAnalysis,
+    pub severity_breakdown: SeverityBreakdown,
+    pub impact_analysis: ImpactAnalysis,
+    pub recommendation_matrix: RecommendationMatrix,
+    pub trend_analysis: TrendAnalysis,
+    pub risk_assessment: RiskAssessment,
+    pub actionable_insights: Vec<ActionableInsight>,
+    pub metadata: ProcessingMetadata,
+}
+
+/// Executive summary for stakeholders
+#[derive(Debug, Clone)]
+pub struct ExecutiveSummary {
+    pub total_errors: usize,
+    pub critical_errors: usize,
+    pub average_business_impact: f64,
+    pub key_findings: Vec<String>,
+    pub immediate_actions: Vec<String>,
+    pub estimated_resolution_time: Duration,
+}
+
+/// Detailed technical analysis
+#[derive(Debug, Clone)]
+pub struct DetailedAnalysis {
+    pub error_categorization: HashMap<String, usize>,
+    pub root_cause_analysis: Vec<String>,
+    pub dependency_mapping: HashMap<String, Vec<String>>,
+    pub resolution_complexity: ComplexityAssessment,
+    pub technical_debt_analysis: TechnicalDebtAnalysis,
+}
+
+/// Severity breakdown with visualization data
+#[derive(Debug, Clone)]
+pub struct SeverityBreakdown {
+    pub severity_distribution: HashMap<ErrorSeverity, usize>,
+    pub severity_trends: Vec<TrendPoint>,
+    pub escalation_risks: Vec<EscalationRisk>,
+}
+
+/// Comprehensive impact analysis
+#[derive(Debug, Clone)]
+pub struct ImpactAnalysis {
+    pub business_impact_assessment: BusinessImpactAssessment,
+    pub technical_impact_assessment: TechnicalImpactAssessment,
+    pub user_experience_impact: UserExperienceImpact,
+    pub compliance_impact: ComplianceImpact,
+    pub financial_impact_estimation: FinancialImpact,
+}
+
+/// Recommendation matrix with prioritization
+#[derive(Debug, Clone)]
+pub struct RecommendationMatrix {
+    pub prioritized_recommendations: Vec<PrioritizedRecommendation>,
+    pub quick_wins: Vec<QuickWin>,
+    pub long_term_improvements: Vec<LongTermImprovement>,
+}
+
+/// Prioritized recommendation with scoring
+#[derive(Debug, Clone)]
+pub struct PrioritizedRecommendation {
+    pub recommendation: RepairSuggestion,
+    pub priority_score: f64,
+    pub impact_potential: f64,
+    pub effort_estimate: f64,
+    pub dependencies: Vec<String>,
+}
+
+/// Trend analysis for proactive insights
+#[derive(Debug, Clone)]
+pub struct TrendAnalysis {
+    pub error_frequency_trends: Vec<FrequencyTrend>,
+    pub severity_escalation_patterns: Vec<SeverityPattern>,
+    pub resolution_time_trends: Vec<ResolutionTimeTrend>,
+    pub prediction_models: Vec<PredictionModel>,
+}
+
+/// Risk assessment with mitigation strategies
+#[derive(Debug, Clone)]
+pub struct RiskAssessment {
+    pub identified_risks: Vec<IdentifiedRisk>,
+    pub risk_probability_matrix: RiskMatrix,
+    pub mitigation_strategies: Vec<MitigationStrategy>,
+    pub contingency_plans: Vec<ContingencyPlan>,
+}
+
+/// Actionable insight for immediate use
+#[derive(Debug, Clone)]
+pub struct ActionableInsight {
+    pub insight_type: InsightType,
+    pub title: String,
+    pub description: String,
+    pub recommended_actions: Vec<String>,
+    pub urgency: InsightUrgency,
+    pub impact_level: ImpactLevel,
+}
+
+/// Types of insights
+#[derive(Debug, Clone)]
+pub enum InsightType {
+    CriticalAlert,
+    PatternDetection,
+    PerformanceOptimization,
+    ComplianceViolation,
+    TechnicalDebt,
+    BusinessImpact,
+}
+
+/// Insight urgency levels
+#[derive(Debug, Clone)]
+pub enum InsightUrgency {
+    Immediate,
+    High,
+    Medium,
+    Low,
+}
+
+/// Impact levels for insights
+#[derive(Debug, Clone)]
+pub enum ImpactLevel {
+    High,
+    Medium,
+    Low,
+}
+
+// Supporting structures for advanced reporting
+#[derive(Debug, Clone, Default)]
+pub struct ComplexityAssessment {
+    pub overall_complexity: f64,
+    pub technical_complexity: f64,
+    pub business_complexity: f64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TechnicalDebtAnalysis {
+    pub debt_score: f64,
+    pub maintainability_impact: f64,
+    pub recommended_refactoring: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrendPoint {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub value: f64,
+    pub category: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct EscalationRisk {
+    pub risk_type: String,
+    pub probability: f64,
+    pub potential_impact: f64,
+    pub mitigation_suggestions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BusinessImpactAssessment {
+    pub revenue_impact: f64,
+    pub operational_impact: f64,
+    pub customer_satisfaction_impact: f64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TechnicalImpactAssessment {
+    pub system_stability_impact: f64,
+    pub performance_impact: f64,
+    pub security_impact: f64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UserExperienceImpact {
+    pub usability_impact: f64,
+    pub accessibility_impact: f64,
+    pub satisfaction_impact: f64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ComplianceImpact {
+    pub regulatory_compliance: f64,
+    pub policy_violations: Vec<String>,
+    pub audit_risks: f64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct FinancialImpact {
+    pub estimated_cost: f64,
+    pub potential_savings: f64,
+    pub roi_projection: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct QuickWin {
+    pub description: String,
+    pub effort_hours: u32,
+    pub expected_benefit: f64,
+    pub implementation_steps: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LongTermImprovement {
+    pub description: String,
+    pub strategic_value: f64,
+    pub investment_required: f64,
+    pub timeline_months: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct FrequencyTrend {
+    pub period: String,
+    pub error_count: usize,
+    pub trend_direction: TrendDirection,
+}
+
+#[derive(Debug, Clone)]
+pub struct SeverityPattern {
+    pub pattern_name: String,
+    pub frequency: usize,
+    pub escalation_rate: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolutionTimeTrend {
+    pub error_type: String,
+    pub average_resolution_hours: f64,
+    pub trend_direction: TrendDirection,
+}
+
+#[derive(Debug, Clone)]
+pub struct PredictionModel {
+    pub model_name: String,
+    pub accuracy: f64,
+    pub predictions: Vec<ErrorPrediction>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ErrorPrediction {
+    pub predicted_error_type: String,
+    pub probability: f64,
+    pub timeframe: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct IdentifiedRisk {
+    pub risk_name: String,
+    pub probability: f64,
+    pub impact_severity: f64,
+    pub risk_category: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RiskMatrix {
+    pub high_probability_high_impact: Vec<String>,
+    pub high_probability_low_impact: Vec<String>,
+    pub low_probability_high_impact: Vec<String>,
+    pub low_probability_low_impact: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MitigationStrategy {
+    pub strategy_name: String,
+    pub effectiveness: f64,
+    pub implementation_complexity: f64,
+    pub steps: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContingencyPlan {
+    pub plan_name: String,
+    pub trigger_conditions: Vec<String>,
+    pub action_steps: Vec<String>,
+    pub estimated_response_time: Duration,
+}
+
+#[derive(Debug, Clone)]
+pub enum TrendDirection {
+    Increasing,
+    Decreasing,
+    Stable,
+    Volatile,
+}
+
+impl SmartErrorAnalysis {
+    /// Generate comprehensive error report with advanced analytics
+    pub fn generate_comprehensive_report(&self) -> AdvancedErrorReport {
+        AdvancedErrorReport {
+            executive_summary: self.generate_executive_summary(),
+            detailed_analysis: self.generate_detailed_analysis(),
+            severity_breakdown: self.generate_severity_breakdown(),
+            impact_analysis: self.generate_impact_analysis(),
+            recommendation_matrix: self.generate_recommendation_matrix(),
+            trend_analysis: self.generate_trend_analysis(),
+            risk_assessment: self.generate_risk_assessment(),
+            actionable_insights: self.generate_actionable_insights(),
+            metadata: self.processing_metadata.clone(),
+        }
+    }
+
+    /// Generate executive summary for stakeholders
+    fn generate_executive_summary(&self) -> ExecutiveSummary {
+        let total_errors = self.individual_analyses.len();
+        let critical_errors = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.severity, ErrorSeverity::Critical | ErrorSeverity::Blocker))
+            .count();
+        
+        let avg_business_impact = self.individual_analyses.iter()
+            .map(|a| a.impact_assessment.business_impact)
+            .sum::<f64>() / total_errors as f64;
+
+        ExecutiveSummary {
+            total_errors,
+            critical_errors,
+            average_business_impact: avg_business_impact,
+            key_findings: self.extract_key_findings(),
+            immediate_actions: self.extract_immediate_actions(),
+            estimated_resolution_time: self.estimate_total_resolution_time(),
+        }
+    }
+
+    /// Generate detailed technical analysis
+    fn generate_detailed_analysis(&self) -> DetailedAnalysis {
+        DetailedAnalysis {
+            error_categorization: self.categorize_errors(),
+            root_cause_analysis: self.analyze_root_causes(),
+            dependency_mapping: self.map_error_dependencies(),
+            resolution_complexity: self.assess_resolution_complexity(),
+            technical_debt_analysis: self.analyze_technical_debt(),
+        }
+    }
+
+    /// Generate severity breakdown with visualizable data
+    fn generate_severity_breakdown(&self) -> SeverityBreakdown {
+        let mut severity_counts = HashMap::new();
+        for analysis in &self.individual_analyses {
+            *severity_counts.entry(analysis.classification.severity.clone()).or_insert(0) += 1;
+        }
+
+        SeverityBreakdown {
+            severity_distribution: severity_counts,
+            severity_trends: self.calculate_severity_trends(),
+            escalation_risks: self.identify_escalation_risks(),
+        }
+    }
+
+    /// Generate comprehensive impact analysis
+    fn generate_impact_analysis(&self) -> ImpactAnalysis {
+        ImpactAnalysis {
+            business_impact_assessment: self.assess_business_impact(),
+            technical_impact_assessment: self.assess_technical_impact(),
+            user_experience_impact: self.assess_user_experience_impact(),
+            compliance_impact: self.assess_compliance_impact(),
+            financial_impact_estimation: self.estimate_financial_impact(),
+        }
+    }
+
+    /// Generate recommendation matrix with prioritization
+    fn generate_recommendation_matrix(&self) -> RecommendationMatrix {
+        let mut recommendations = Vec::new();
+        
+        for analysis in &self.individual_analyses {
+            for suggestion in &analysis.repair_suggestions {
+                recommendations.push(PrioritizedRecommendation {
+                    recommendation: suggestion.clone(),
+                    priority_score: self.calculate_priority_score(suggestion, &analysis.classification),
+                    impact_potential: suggestion.effectiveness,
+                    effort_estimate: self.effort_to_numeric(&suggestion.effort),
+                    dependencies: self.identify_recommendation_dependencies(suggestion),
+                });
+            }
+        }
+
+        recommendations.sort_by(|a, b| b.priority_score.partial_cmp(&a.priority_score).unwrap());
+
+        RecommendationMatrix {
+            prioritized_recommendations: recommendations,
+            quick_wins: self.identify_quick_wins(),
+            long_term_improvements: self.identify_long_term_improvements(),
+        }
+    }
+
+    /// Generate trend analysis for proactive insights
+    fn generate_trend_analysis(&self) -> TrendAnalysis {
+        TrendAnalysis {
+            error_frequency_trends: self.analyze_error_frequency(),
+            severity_escalation_patterns: self.analyze_severity_patterns(),
+            resolution_time_trends: self.analyze_resolution_times(),
+            prediction_models: self.generate_prediction_models(),
+        }
+    }
+
+    /// Generate risk assessment with mitigation strategies
+    fn generate_risk_assessment(&self) -> RiskAssessment {
+        RiskAssessment {
+            identified_risks: self.identify_risks(),
+            risk_probability_matrix: self.generate_risk_matrix(),
+            mitigation_strategies: self.generate_mitigation_strategies(),
+            contingency_plans: self.generate_contingency_plans(),
+        }
+    }
+
+    /// Generate actionable insights for immediate use
+    fn generate_actionable_insights(&self) -> Vec<ActionableInsight> {
+        let mut insights = Vec::new();
+        
+        // Add critical error insights
+        if self.has_critical_errors() {
+            insights.push(ActionableInsight {
+                insight_type: InsightType::CriticalAlert,
+                title: "Critical Errors Require Immediate Attention".to_string(),
+                description: self.format_critical_error_description(),
+                recommended_actions: self.get_critical_error_actions(),
+                urgency: InsightUrgency::Immediate,
+                impact_level: ImpactLevel::High,
+            });
+        }
+
+        // Add pattern-based insights
+        for pattern in &self.comprehensive_analysis.error_patterns {
+            if pattern.frequency > 5 {
+                insights.push(ActionableInsight {
+                    insight_type: InsightType::PatternDetection,
+                    title: format!("Recurring Pattern Detected: {}", pattern.pattern_type),
+                    description: format!("Pattern occurs {} times with {} confidence", 
+                                       pattern.frequency, pattern.confidence),
+                    recommended_actions: self.get_pattern_based_actions(pattern),
+                    urgency: self.calculate_pattern_urgency(pattern),
+                    impact_level: self.calculate_pattern_impact(pattern),
+                });
+            }
+        }
+
+        insights
+    }
+
+    // Helper methods for report generation
+    fn extract_key_findings(&self) -> Vec<String> {
+        let mut findings = Vec::new();
+        
+        let critical_count = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.severity, ErrorSeverity::Critical | ErrorSeverity::Blocker))
+            .count();
+            
+        if critical_count > 0 {
+            findings.push(format!("{} critical errors requiring immediate attention", critical_count));
+        }
+
+        if !self.comprehensive_analysis.error_patterns.is_empty() {
+            findings.push(format!("{} error patterns identified for systematic resolution", 
+                                self.comprehensive_analysis.error_patterns.len()));
+        }
+
+        findings
+    }
+
+    fn extract_immediate_actions(&self) -> Vec<String> {
+        let mut actions = Vec::new();
+        
+        for analysis in &self.individual_analyses {
+            if matches!(analysis.classification.priority, ErrorPriority::Critical | ErrorPriority::Urgent) {
+                if let Some(top_suggestion) = analysis.repair_suggestions.first() {
+                    actions.push(format!("Address {}: {}", 
+                                       analysis.classification.error_type, 
+                                       top_suggestion.description));
+                }
+            }
+        }
+
+        actions
+    }
+
+    fn estimate_total_resolution_time(&self) -> Duration {
+        let total_hours: u64 = self.individual_analyses.iter()
+            .map(|a| a.repair_suggestions.first()
+                 .map(|s| s.effort_estimate.implementation_hours)
+                 .unwrap_or(1))
+            .sum();
+        
+        Duration::from_secs(total_hours * 3600)
+    }
+
+    fn has_critical_errors(&self) -> bool {
+        self.individual_analyses.iter()
+            .any(|a| matches!(a.classification.severity, ErrorSeverity::Critical | ErrorSeverity::Blocker))
+    }
+
+    fn format_critical_error_description(&self) -> String {
+        let critical_errors: Vec<_> = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.severity, ErrorSeverity::Critical | ErrorSeverity::Blocker))
+            .collect();
+            
+        format!("Found {} critical errors that could impact system stability and data integrity", 
+                critical_errors.len())
+    }
+
+    fn get_critical_error_actions(&self) -> Vec<String> {
+        self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.severity, ErrorSeverity::Critical | ErrorSeverity::Blocker))
+            .flat_map(|a| a.repair_suggestions.iter().take(1))
+            .map(|s| s.description.clone())
+            .collect()
+    }
+
+    // Advanced analysis implementations for validation result analytics
+    fn categorize_errors(&self) -> HashMap<String, usize> {
+        let mut categories = HashMap::new();
+        
+        for analysis in &self.individual_analyses {
+            // Categorize by error type
+            let type_key = format!("type_{}", analysis.classification.error_type);
+            *categories.entry(type_key).or_insert(0) += 1;
+            
+            // Categorize by severity
+            let severity_key = format!("severity_{:?}", analysis.classification.severity);
+            *categories.entry(severity_key).or_insert(0) += 1;
+            
+            // Categorize by business criticality
+            let criticality_key = format!("criticality_{:?}", analysis.classification.business_criticality);
+            *categories.entry(criticality_key).or_insert(0) += 1;
+            
+            // Categorize by shape source
+            let shape_key = format!("shape_{}", analysis.violation.source_shape.0);
+            *categories.entry(shape_key).or_insert(0) += 1;
+            
+            // Categorize by constraint component
+            let constraint_key = format!("constraint_{}", analysis.violation.source_constraint_component.0);
+            *categories.entry(constraint_key).or_insert(0) += 1;
+        }
+        
+        categories
+    }
+    
+    fn analyze_root_causes(&self) -> Vec<String> {
+        let mut root_causes = Vec::new();
+        let total_errors = self.individual_analyses.len() as f64;
+        
+        // Analyze constraint type patterns
+        let mut constraint_counts = HashMap::new();
+        for analysis in &self.individual_analyses {
+            let constraint = &analysis.violation.source_constraint_component.0;
+            *constraint_counts.entry(constraint.clone()).or_insert(0) += 1;
+        }
+        
+        // Identify dominant constraint issues
+        for (constraint, count) in constraint_counts {
+            let percentage = (*count as f64 / total_errors) * 100.0;
+            if percentage > 20.0 {
+                root_causes.push(format!("High frequency of {} violations ({:.1}% of errors)", constraint, percentage));
+            }
+        }
+        
+        // Analyze shape patterns
+        let mut shape_counts = HashMap::new();
+        for analysis in &self.individual_analyses {
+            let shape = &analysis.violation.source_shape.0;
+            *shape_counts.entry(shape.clone()).or_insert(0) += 1;
+        }
+        
+        for (shape, count) in shape_counts {
+            let percentage = (*count as f64 / total_errors) * 100.0;
+            if percentage > 25.0 {
+                root_causes.push(format!("Shape {} has systemic issues ({:.1}% of errors)", shape, percentage));
+            }
+        }
+        
+        // Analyze severity distribution patterns
+        let critical_ratio = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.severity, ErrorSeverity::Critical | ErrorSeverity::Blocker))
+            .count() as f64 / total_errors;
+            
+        if critical_ratio > 0.3 {
+            root_causes.push("High proportion of critical errors suggests systemic validation issues".to_string());
+        }
+        
+        // Analyze error clustering by focus node
+        let mut focus_node_counts = HashMap::new();
+        for analysis in &self.individual_analyses {
+            if let Some(focus_node) = &analysis.violation.focus_node {
+                *focus_node_counts.entry(focus_node.to_string()).or_insert(0) += 1;
+            }
+        }
+        
+        let clustered_nodes: Vec<_> = focus_node_counts.iter()
+            .filter(|(_, count)| **count > 1)
+            .collect();
+            
+        if clustered_nodes.len() > total_errors as usize / 4 {
+            root_causes.push("Multiple errors per entity suggest data quality issues at source".to_string());
+        }
+        
+        root_causes
+    }
+    
+    fn map_error_dependencies(&self) -> HashMap<String, Vec<String>> {
+        let mut dependencies = HashMap::new();
+        
+        // Map shape dependencies
+        for analysis in &self.individual_analyses {
+            let shape_id = analysis.violation.source_shape.0.clone();
+            let constraint_id = analysis.violation.source_constraint_component.0.clone();
+            
+            dependencies.entry(shape_id.clone())
+                .or_insert_with(Vec::new)
+                .push(constraint_id);
+                
+            // Map focus node dependencies
+            if let Some(focus_node) = &analysis.violation.focus_node {
+                dependencies.entry(focus_node.to_string())
+                    .or_insert_with(Vec::new)
+                    .push(shape_id);
+            }
+        }
+        
+        // Identify constraint co-occurrence patterns
+        let mut constraint_pairs = HashMap::new();
+        for analysis in &self.individual_analyses {
+            let constraint = &analysis.violation.source_constraint_component.0;
+            for other_analysis in &self.individual_analyses {
+                let other_constraint = &other_analysis.violation.source_constraint_component.0;
+                if constraint != other_constraint && 
+                   analysis.violation.focus_node == other_analysis.violation.focus_node {
+                    let pair_key = if constraint < other_constraint {
+                        format!("{}+{}", constraint, other_constraint)
+                    } else {
+                        format!("{}+{}", other_constraint, constraint)
+                    };
+                    *constraint_pairs.entry(pair_key).or_insert(0) += 1;
+                }
+            }
+        }
+        
+        // Add frequent constraint pairs as dependencies
+        for (pair, count) in constraint_pairs {
+            if count > 2 {
+                let parts: Vec<&str> = pair.split('+').collect();
+                if parts.len() == 2 {
+                    dependencies.entry(parts[0].to_string())
+                        .or_insert_with(Vec::new)
+                        .push(parts[1].to_string());
+                }
+            }
+        }
+        
+        dependencies
+    }
+    
+    fn assess_resolution_complexity(&self) -> ComplexityAssessment {
+        let total_errors = self.individual_analyses.len() as f64;
+        if total_errors == 0.0 {
+            return ComplexityAssessment::default();
+        }
+        
+        // Technical complexity based on constraint types and error distribution
+        let unique_constraints = self.individual_analyses.iter()
+            .map(|a| &a.violation.source_constraint_component.0)
+            .collect::<std::collections::HashSet<_>>()
+            .len() as f64;
+            
+        let unique_shapes = self.individual_analyses.iter()
+            .map(|a| &a.violation.source_shape.0)
+            .collect::<std::collections::HashSet<_>>()
+            .len() as f64;
+            
+        let technical_complexity = ((unique_constraints / 10.0) + (unique_shapes / 5.0)).min(1.0);
+        
+        // Business complexity based on impact and criticality
+        let high_impact_ratio = self.individual_analyses.iter()
+            .filter(|a| a.impact_assessment.business_impact > 0.7)
+            .count() as f64 / total_errors;
+            
+        let critical_ratio = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.business_criticality, 
+                                BusinessCriticality::High | BusinessCriticality::Mission))
+            .count() as f64 / total_errors;
+            
+        let business_complexity = (high_impact_ratio * 0.6 + critical_ratio * 0.4).min(1.0);
+        
+        // Overall complexity
+        let overall_complexity = (technical_complexity * 0.7 + business_complexity * 0.3).min(1.0);
+        
+        ComplexityAssessment {
+            overall_complexity,
+            technical_complexity,
+            business_complexity,
+        }
+    }
+    
+    fn analyze_technical_debt(&self) -> TechnicalDebtAnalysis {
+        let total_errors = self.individual_analyses.len() as f64;
+        if total_errors == 0.0 {
+            return TechnicalDebtAnalysis::default();
+        }
+        
+        // Calculate debt score based on error patterns and resolution difficulty
+        let complex_errors_ratio = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.resolution_difficulty, 
+                               ResolutionDifficulty::Hard | ResolutionDifficulty::Complex))
+            .count() as f64 / total_errors;
+            
+        let recurring_patterns = self.comprehensive_analysis.error_patterns.len() as f64;
+        let debt_score = (complex_errors_ratio * 0.6 + (recurring_patterns / 10.0) * 0.4).min(1.0);
+        
+        // Assess maintainability impact
+        let high_effort_suggestions = self.individual_analyses.iter()
+            .flat_map(|a| &a.repair_suggestions)
+            .filter(|s| matches!(s.effort, ImplementationEffort::High | ImplementationEffort::Extensive))
+            .count() as f64;
+            
+        let total_suggestions = self.individual_analyses.iter()
+            .map(|a| a.repair_suggestions.len())
+            .sum::<usize>() as f64;
+            
+        let maintainability_impact = if total_suggestions > 0.0 {
+            (high_effort_suggestions / total_suggestions).min(1.0)
+        } else {
+            0.0
+        };
+        
+        // Generate refactoring recommendations
+        let mut refactoring_recommendations = Vec::new();
+        
+        if complex_errors_ratio > 0.4 {
+            refactoring_recommendations.push("Consider simplifying validation rules to reduce complexity".to_string());
+        }
+        
+        if recurring_patterns > 3.0 {
+            refactoring_recommendations.push("Implement systematic fixes for recurring error patterns".to_string());
+        }
+        
+        if maintainability_impact > 0.5 {
+            refactoring_recommendations.push("Refactor high-effort resolution processes for better maintainability".to_string());
+        }
+        
+        // Add shape-specific recommendations
+        let shape_error_counts: HashMap<_, _> = self.individual_analyses.iter()
+            .fold(HashMap::new(), |mut acc, analysis| {
+                *acc.entry(&analysis.violation.source_shape.0).or_insert(0) += 1;
+                acc
+            });
+            
+        for (shape, count) in shape_error_counts {
+            if count > total_errors as usize / 4 {
+                refactoring_recommendations.push(
+                    format!("Review and refactor shape {} which has {} validation errors", shape, count)
+                );
+            }
+        }
+        
+        TechnicalDebtAnalysis {
+            debt_score,
+            maintainability_impact,
+            recommended_refactoring: refactoring_recommendations,
+        }
+    }
+    fn calculate_severity_trends(&self) -> Vec<TrendPoint> {
+        let mut trend_points = Vec::new();
+        let current_time = chrono::Utc::now();
+        
+        // Create severity distribution over time (simulated time segments)
+        let mut severity_counts = HashMap::new();
+        for analysis in &self.individual_analyses {
+            let severity_key = format!("{:?}", analysis.classification.severity);
+            *severity_counts.entry(severity_key).or_insert(0) += 1;
+        }
+        
+        // Generate trend points for each severity level
+        for (severity, count) in severity_counts {
+            trend_points.push(TrendPoint {
+                timestamp: current_time,
+                value: count as f64,
+                category: severity,
+            });
+        }
+        
+        trend_points
+    }
+    
+    fn identify_escalation_risks(&self) -> Vec<EscalationRisk> {
+        let mut risks = Vec::new();
+        let total_errors = self.individual_analyses.len() as f64;
+        
+        // Risk of severity escalation based on current error patterns
+        let critical_ratio = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.severity, ErrorSeverity::Critical | ErrorSeverity::Blocker))
+            .count() as f64 / total_errors;
+            
+        if critical_ratio > 0.2 {
+            risks.push(EscalationRisk {
+                risk_type: "Severity Escalation".to_string(),
+                probability: critical_ratio,
+                potential_impact: 0.9,
+                mitigation_suggestions: vec![
+                    "Implement immediate fixes for critical errors".to_string(),
+                    "Add monitoring for early detection of similar issues".to_string(),
+                    "Review validation processes to prevent recurrence".to_string(),
+                ],
+            });
+        }
+        
+        // Risk of pattern amplification
+        let pattern_frequency: f64 = self.comprehensive_analysis.error_patterns.iter()
+            .map(|p| p.frequency as f64)
+            .sum();
+            
+        if pattern_frequency > total_errors * 0.5 {
+            risks.push(EscalationRisk {
+                risk_type: "Pattern Amplification".to_string(),
+                probability: (pattern_frequency / total_errors).min(1.0),
+                potential_impact: 0.7,
+                mitigation_suggestions: vec![
+                    "Address root causes of recurring patterns".to_string(),
+                    "Implement systematic prevention measures".to_string(),
+                    "Enhance data quality controls".to_string(),
+                ],
+            });
+        }
+        
+        // Risk of business impact escalation
+        let high_business_impact = self.individual_analyses.iter()
+            .filter(|a| a.impact_assessment.business_impact > 0.7)
+            .count() as f64 / total_errors;
+            
+        if high_business_impact > 0.3 {
+            risks.push(EscalationRisk {
+                risk_type: "Business Impact Escalation".to_string(),
+                probability: high_business_impact,
+                potential_impact: 0.8,
+                mitigation_suggestions: vec![
+                    "Prioritize business-critical error resolution".to_string(),
+                    "Implement business continuity measures".to_string(),
+                    "Establish stakeholder communication protocols".to_string(),
+                ],
+            });
+        }
+        
+        risks
+    }
+    
+    fn assess_business_impact(&self) -> BusinessImpactAssessment {
+        let total_errors = self.individual_analyses.len() as f64;
+        if total_errors == 0.0 {
+            return BusinessImpactAssessment::default();
+        }
+        
+        // Calculate average business impact across all errors
+        let avg_business_impact = self.individual_analyses.iter()
+            .map(|a| a.impact_assessment.business_impact)
+            .sum::<f64>() / total_errors;
+        
+        // Estimate revenue impact based on business criticality and error severity
+        let revenue_impact_factors: f64 = self.individual_analyses.iter()
+            .map(|a| {
+                let criticality_factor = match a.classification.business_criticality {
+                    BusinessCriticality::Mission => 1.0,
+                    BusinessCriticality::High => 0.8,
+                    BusinessCriticality::Medium => 0.5,
+                    BusinessCriticality::Low => 0.2,
+                    BusinessCriticality::None => 0.0,
+                };
+                let severity_factor = match a.classification.severity {
+                    ErrorSeverity::Blocker => 1.0,
+                    ErrorSeverity::Critical => 0.8,
+                    ErrorSeverity::High => 0.6,
+                    ErrorSeverity::Medium => 0.3,
+                    ErrorSeverity::Low => 0.1,
+                };
+                criticality_factor * severity_factor
+            })
+            .sum();
+        
+        let revenue_impact = (revenue_impact_factors / total_errors).min(1.0);
+        
+        // Operational impact based on resolution complexity
+        let complex_resolutions = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.resolution_difficulty, 
+                               ResolutionDifficulty::Hard | ResolutionDifficulty::Complex))
+            .count() as f64;
+        let operational_impact = (complex_resolutions / total_errors).min(1.0);
+        
+        // Customer satisfaction impact based on user-facing errors
+        let user_facing_impact = self.individual_analyses.iter()
+            .map(|a| a.impact_assessment.user_impact.user_experience_degradation)
+            .sum::<f64>() / total_errors;
+        
+        BusinessImpactAssessment {
+            revenue_impact,
+            operational_impact,
+            customer_satisfaction_impact: user_facing_impact,
+        }
+    }
+    
+    fn assess_technical_impact(&self) -> TechnicalImpactAssessment {
+        let total_errors = self.individual_analyses.len() as f64;
+        if total_errors == 0.0 {
+            return TechnicalImpactAssessment::default();
+        }
+        
+        // System stability impact based on error severity and frequency
+        let stability_affecting_errors = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.severity, 
+                               ErrorSeverity::Critical | ErrorSeverity::Blocker))
+            .count() as f64;
+        let system_stability_impact = (stability_affecting_errors / total_errors).min(1.0);
+        
+        // Performance impact based on constraint complexity and error types
+        let performance_errors = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.error_type, ErrorType::Performance))
+            .count() as f64;
+        let performance_impact = (performance_errors / total_errors + 
+                                self.comprehensive_analysis.aggregated_metrics.resolution_complexity).min(1.0);
+        
+        // Security impact based on data integrity and structural issues
+        let security_affecting_errors = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.error_type, 
+                               ErrorType::DataQuality | ErrorType::Structural | ErrorType::SchemaInconsistency))
+            .count() as f64;
+        let security_impact = (security_affecting_errors / total_errors * 0.7).min(1.0);
+        
+        TechnicalImpactAssessment {
+            system_stability_impact,
+            performance_impact,
+            security_impact,
+        }
+    }
+    
+    fn assess_user_experience_impact(&self) -> UserExperienceImpact {
+        let total_errors = self.individual_analyses.len() as f64;
+        if total_errors == 0.0 {
+            return UserExperienceImpact::default();
+        }
+        
+        // Usability impact based on constraint violations that affect user workflows
+        let workflow_affecting_errors = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.error_type, 
+                               ErrorType::ConstraintViolation | ErrorType::DataQuality))
+            .count() as f64;
+        let usability_impact = (workflow_affecting_errors / total_errors * 0.8).min(1.0);
+        
+        // Accessibility impact based on structural and semantic errors
+        let accessibility_errors = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.error_type, 
+                               ErrorType::Structural | ErrorType::Semantic))
+            .count() as f64;
+        let accessibility_impact = (accessibility_errors / total_errors * 0.6).min(1.0);
+        
+        // Overall satisfaction impact
+        let avg_user_impact = self.individual_analyses.iter()
+            .map(|a| a.impact_assessment.user_impact.user_experience_degradation)
+            .sum::<f64>() / total_errors;
+        
+        UserExperienceImpact {
+            usability_impact,
+            accessibility_impact,
+            satisfaction_impact: avg_user_impact,
+        }
+    }
+    
+    fn assess_compliance_impact(&self) -> ComplianceImpact {
+        let total_errors = self.individual_analyses.len() as f64;
+        if total_errors == 0.0 {
+            return ComplianceImpact::default();
+        }
+        
+        // Regulatory compliance impact based on data quality and schema issues
+        let compliance_affecting_errors = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.error_type, 
+                               ErrorType::DataQuality | ErrorType::SchemaInconsistency))
+            .count() as f64;
+        let regulatory_compliance = 1.0 - (compliance_affecting_errors / total_errors).min(1.0);
+        
+        // Identify policy violations
+        let mut policy_violations = Vec::new();
+        let high_severity_ratio = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.severity, 
+                               ErrorSeverity::High | ErrorSeverity::Critical | ErrorSeverity::Blocker))
+            .count() as f64 / total_errors;
+            
+        if high_severity_ratio > 0.2 {
+            policy_violations.push("High severity error threshold exceeded".to_string());
+        }
+        
+        let data_quality_ratio = self.individual_analyses.iter()
+            .filter(|a| matches!(a.classification.error_type, ErrorType::DataQuality))
+            .count() as f64 / total_errors;
+            
+        if data_quality_ratio > 0.15 {
+            policy_violations.push("Data quality standards not met".to_string());
+        }
+        
+        // Audit risk based on unresolved issues and complexity
+        let audit_risk = (compliance_affecting_errors / total_errors + 
+                         self.comprehensive_analysis.aggregated_metrics.resolution_complexity) / 2.0;
+        
+        ComplianceImpact {
+            regulatory_compliance,
+            policy_violations,
+            audit_risks: audit_risk.min(1.0),
+        }
+    }
+    
+    fn estimate_financial_impact(&self) -> FinancialImpact {
+        let total_errors = self.individual_analyses.len() as f64;
+        if total_errors == 0.0 {
+            return FinancialImpact::default();
+        }
+        
+        // Estimate cost based on resolution effort and business impact
+        let total_resolution_effort: f64 = self.individual_analyses.iter()
+            .flat_map(|a| &a.repair_suggestions)
+            .map(|s| match s.effort {
+                ImplementationEffort::Minimal => 1.0,
+                ImplementationEffort::Low => 4.0,
+                ImplementationEffort::Medium => 16.0,
+                ImplementationEffort::High => 40.0,
+                ImplementationEffort::Extensive => 80.0,
+            })
+            .sum();
+        
+        // Assuming $100/hour average cost
+        let estimated_cost = total_resolution_effort * 100.0;
+        
+        // Potential savings from preventing similar issues
+        let prevention_value: f64 = self.individual_analyses.iter()
+            .flat_map(|a| &a.prevention_strategies)
+            .map(|s| s.cost_benefit.annual_savings)
+            .sum();
+        
+        let potential_savings = prevention_value * 0.8; // Conservative estimate
+        
+        // ROI projection based on cost vs savings
+        let roi_projection = if estimated_cost > 0.0 {
+            ((potential_savings - estimated_cost) / estimated_cost) * 100.0
+        } else {
+            0.0
+        };
+        
+        FinancialImpact {
+            estimated_cost,
+            potential_savings,
+            roi_projection,
+        }
+    }
+    fn calculate_priority_score(&self, _suggestion: &RepairSuggestion, _classification: &ErrorClassificationResult) -> f64 { 0.8 }
+    fn identify_recommendation_dependencies(&self, _suggestion: &RepairSuggestion) -> Vec<String> { Vec::new() }
+    fn identify_quick_wins(&self) -> Vec<QuickWin> { Vec::new() }
+    fn identify_long_term_improvements(&self) -> Vec<LongTermImprovement> { Vec::new() }
+    fn analyze_error_frequency(&self) -> Vec<FrequencyTrend> { Vec::new() }
+    fn analyze_severity_patterns(&self) -> Vec<SeverityPattern> { Vec::new() }
+    fn analyze_resolution_times(&self) -> Vec<ResolutionTimeTrend> { Vec::new() }
+    fn generate_prediction_models(&self) -> Vec<PredictionModel> { Vec::new() }
+    fn identify_risks(&self) -> Vec<IdentifiedRisk> { Vec::new() }
+    fn generate_risk_matrix(&self) -> RiskMatrix { RiskMatrix::default() }
+    fn generate_mitigation_strategies(&self) -> Vec<MitigationStrategy> { Vec::new() }
+    fn generate_contingency_plans(&self) -> Vec<ContingencyPlan> { Vec::new() }
+    fn get_pattern_based_actions(&self, _pattern: &ErrorPattern) -> Vec<String> { Vec::new() }
+    fn calculate_pattern_urgency(&self, _pattern: &ErrorPattern) -> InsightUrgency { InsightUrgency::Medium }
+    fn calculate_pattern_impact(&self, _pattern: &ErrorPattern) -> ImpactLevel { ImpactLevel::Medium }
+}
+
 impl Default for IntelligentErrorHandler {
     fn default() -> Self {
         Self::new()

@@ -313,8 +313,6 @@ pub struct DiffusionUNet {
     middle_block: AttentionBlock,
     /// Up blocks
     up_blocks: Vec<ResNetBlock>,
-    /// Output projection
-    output_proj: Array2<f64>,
 }
 
 impl DiffusionUNet {
@@ -324,21 +322,30 @@ impl DiffusionUNet {
         
         // Create down blocks
         let mut down_blocks = Vec::new();
-        for _ in 0..config.num_layers {
-            down_blocks.push(ResNetBlock::new(config.embedding_dim, config.hidden_dim));
+        for i in 0..config.num_layers {
+            if i == 0 {
+                // First block: embedding_dim -> hidden_dim
+                down_blocks.push(ResNetBlock::new(config.embedding_dim, config.hidden_dim));
+            } else {
+                // Subsequent blocks: hidden_dim -> hidden_dim
+                down_blocks.push(ResNetBlock::new(config.hidden_dim, config.hidden_dim));
+            }
         }
         
         // Create middle block
         let middle_block = AttentionBlock::new(config.hidden_dim, config.num_heads);
         
-        // Create up blocks
+        // Create up blocks  
         let mut up_blocks = Vec::new();
-        for _ in 0..config.num_layers {
-            up_blocks.push(ResNetBlock::new(config.hidden_dim, config.embedding_dim));
+        for i in 0..config.num_layers {
+            if i == config.num_layers - 1 {
+                // Last block: (hidden_dim + hidden_dim) -> embedding_dim (after skip connection concatenation)
+                up_blocks.push(ResNetBlock::new(config.hidden_dim * 2, config.embedding_dim));
+            } else {
+                // Other blocks: (hidden_dim + hidden_dim) -> hidden_dim (after skip connection concatenation)
+                up_blocks.push(ResNetBlock::new(config.hidden_dim * 2, config.hidden_dim));
+            }
         }
-        
-        // Output projection - corrected dimensions for proper matrix multiplication
-        let output_proj = Array2::zeros((config.hidden_dim, config.embedding_dim));
         
         Self {
             config,
@@ -346,7 +353,6 @@ impl DiffusionUNet {
             down_blocks,
             middle_block,
             up_blocks,
-            output_proj,
         }
     }
     
@@ -386,9 +392,8 @@ impl DiffusionUNet {
             h = block.forward(&h, &time_emb)?;
         }
         
-        // Output projection - now h is (batch, hidden_dim) and output_proj is (hidden_dim, embedding_dim)
-        let output = h.dot(&self.output_proj);
-        Ok(output)
+        // Output is already the correct dimension from the last up block
+        Ok(h)
     }
     
     /// Apply conditioning
@@ -846,7 +851,7 @@ impl EmbeddingModel for DiffusionEmbeddingModel {
         let start_time = std::time::Instant::now();
         
         // Initialize embeddings with diffusion generation
-        if self.entities.len() > 0 && self.relations.len() > 0 {
+        if !self.entities.is_empty() && !self.relations.is_empty() {
             let entity_types: Vec<String> = self.entities.keys().cloned().collect();
             let relation_types: Vec<String> = self.relations.keys().cloned().collect();
             
@@ -1087,12 +1092,20 @@ mod tests {
     #[test]
     fn test_diffusion_generation() {
         let model_config = ModelConfig::default();
-        let diffusion_config = DiffusionConfig::default();
+        // Use lightweight config for fast testing
+        let diffusion_config = DiffusionConfig {
+            num_timesteps: 10,      // Much smaller for testing (vs 1000 default)
+            embedding_dim: 64,      // Smaller embedding (vs 512 default)
+            hidden_dim: 128,        // Smaller hidden dim (vs 1024 default)
+            num_layers: 2,          // Fewer layers (vs 6 default)
+            use_cfg: false,         // Disable CFG for faster testing
+            ..DiffusionConfig::default()
+        };
         let model = DiffusionEmbeddingModel::new(model_config, diffusion_config);
 
-        // Use correct conditioning dimension that matches embedding_dim
-        let condition = Array2::zeros((1, 512));
+        // Use correct conditioning dimension that matches hidden_dim (128)
+        let condition = Array2::zeros((1, 128));
         let embeddings = model.generate_embeddings(Some(&condition), 2, 7.5).unwrap();
-        assert_eq!(embeddings.dim(), (2, 512));
+        assert_eq!(embeddings.dim(), (2, 64));  // Updated to match new embedding_dim
     }
 }

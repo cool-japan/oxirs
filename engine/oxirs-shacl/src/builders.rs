@@ -19,7 +19,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
+#[cfg(feature = "async")]
 use futures::future::try_join_all;
+#[cfg(feature = "async")]
 use tokio::time::timeout;
 
 use oxirs_core::{Store, model::NamedNode};

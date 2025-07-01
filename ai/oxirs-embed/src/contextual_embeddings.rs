@@ -978,7 +978,7 @@ impl ContextProcessor {
             }
 
             // Encode temporal weights if available
-            if temporal_ctx.temporal_weights.len() > 0 {
+            if !temporal_ctx.temporal_weights.is_empty() {
                 let copy_len = std::cmp::min(
                     temporal_ctx.temporal_weights.len(),
                     context_vector.len() - 10,

@@ -2,6 +2,9 @@
 //!
 //! This module implements a multi-tier storage system that automatically
 //! moves data between tiers based on access patterns and age.
+//!
+//! NOTE: This module is currently disabled due to RocksDB dependency conflicts.
+//! TODO: Implement with alternative storage backend or resolve RocksDB conflicts.
 
 use super::*;
 use crate::model::{Triple, TriplePattern};

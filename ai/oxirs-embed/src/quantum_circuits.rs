@@ -12,6 +12,7 @@ use ndarray::{Array1, Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f64::consts::PI;
+use rand::Rng;
 
 /// Complex number representation for quantum amplitudes
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -882,7 +883,342 @@ impl QuantumNeuralNetworkLayer {
     }
 }
 
-/// Quantum Neural Network
+/// Quantum Error Correction Syndrome
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorSyndrome {
+    /// Detected error pattern
+    pub error_pattern: Vec<bool>,
+    /// Error correction suggestions
+    pub corrections: Vec<QuantumGate>,
+    /// Confidence in error detection
+    pub confidence: f64,
+    /// Error type classification
+    pub error_types: Vec<ErrorType>,
+}
+
+/// Types of quantum errors
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ErrorType {
+    /// Bit flip error (X error)
+    BitFlip(usize),
+    /// Phase flip error (Z error)
+    PhaseFlip(usize),
+    /// Depolarizing error
+    Depolarizing(usize, f64),
+    /// Coherence decay
+    CoherenceDecay(usize, f64),
+    /// Cross-talk between qubits
+    CrossTalk(usize, usize, f64),
+}
+
+/// Quantum Error Correction Engine
+#[derive(Debug, Clone)]
+pub struct QuantumErrorCorrection {
+    /// Error detection threshold
+    pub detection_threshold: f64,
+    /// Correction confidence threshold
+    pub correction_threshold: f64,
+    /// Error syndrome history
+    pub syndrome_history: Vec<ErrorSyndrome>,
+    /// Error mitigation strategies
+    pub mitigation_strategies: Vec<ErrorMitigationStrategy>,
+}
+
+/// Error mitigation strategies
+#[derive(Debug, Clone, PartialEq)]
+pub enum ErrorMitigationStrategy {
+    /// Zero noise extrapolation
+    ZeroNoiseExtrapolation,
+    /// Readout error mitigation
+    ReadoutErrorMitigation,
+    /// Symmetry verification
+    SymmetryVerification,
+    /// Virtual distillation
+    VirtualDistillation,
+}
+
+impl QuantumErrorCorrection {
+    /// Create new error correction engine
+    pub fn new() -> Self {
+        Self {
+            detection_threshold: 0.01,
+            correction_threshold: 0.8,
+            syndrome_history: Vec::new(),
+            mitigation_strategies: vec![
+                ErrorMitigationStrategy::ZeroNoiseExtrapolation,
+                ErrorMitigationStrategy::ReadoutErrorMitigation,
+                ErrorMitigationStrategy::SymmetryVerification,
+            ],
+        }
+    }
+
+    /// Detect quantum errors in state vector
+    pub fn detect_errors(&mut self, state_vector: &[Complex]) -> Result<ErrorSyndrome> {
+        let mut error_pattern = Vec::new();
+        let mut corrections = Vec::new();
+        let mut error_types = Vec::new();
+        let mut total_error_magnitude = 0.0;
+
+        // Check for amplitude anomalies
+        let expected_normalization = state_vector.iter()
+            .map(|amp| amp.magnitude_squared())
+            .sum::<f64>();
+
+        if (expected_normalization - 1.0).abs() > self.detection_threshold {
+            error_types.push(ErrorType::CoherenceDecay(0, expected_normalization - 1.0));
+            corrections.push(QuantumGate::I); // Placeholder for normalization correction
+            total_error_magnitude += (expected_normalization - 1.0).abs();
+        }
+
+        // Detect phase inconsistencies
+        for (i, amplitude) in state_vector.iter().enumerate() {
+            let phase = amplitude.imag.atan2(amplitude.real);
+            if phase.abs() > PI * 0.9 && amplitude.magnitude_squared() > 0.01 {
+                error_pattern.push(true);
+                error_types.push(ErrorType::PhaseFlip(i));
+                corrections.push(QuantumGate::Z);
+                total_error_magnitude += phase.abs() / PI;
+            } else {
+                error_pattern.push(false);
+            }
+        }
+
+        // Calculate confidence based on error magnitude
+        let confidence = if total_error_magnitude > 0.0 {
+            (1.0 - total_error_magnitude.min(1.0)).max(0.0)
+        } else {
+            1.0
+        };
+
+        let syndrome = ErrorSyndrome {
+            error_pattern,
+            corrections,
+            confidence,
+            error_types,
+        };
+
+        self.syndrome_history.push(syndrome.clone());
+        if self.syndrome_history.len() > 100 {
+            self.syndrome_history.remove(0);
+        }
+
+        Ok(syndrome)
+    }
+
+    /// Apply error corrections to quantum circuit
+    pub fn apply_corrections(&self, circuit: &mut QuantumCircuit, syndrome: &ErrorSyndrome) -> Result<()> {
+        if syndrome.confidence < self.correction_threshold {
+            return Ok(()); // Don't apply corrections if confidence is too low
+        }
+
+        for (i, correction) in syndrome.corrections.iter().enumerate() {
+            match correction {
+                QuantumGate::Z => {
+                    // Apply phase correction
+                    circuit.add_gate(QuantumGate::Z);
+                }
+                QuantumGate::X => {
+                    // Apply bit flip correction
+                    circuit.add_gate(QuantumGate::X);
+                }
+                QuantumGate::I => {
+                    // Apply identity (normalization will be handled by simulator)
+                }
+                _ => {
+                    // Apply custom correction
+                    circuit.add_gate(correction.clone());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get error correction statistics
+    pub fn get_correction_stats(&self) -> (f64, f64, usize) {
+        if self.syndrome_history.is_empty() {
+            return (0.0, 0.0, 0);
+        }
+
+        let avg_confidence = self.syndrome_history.iter()
+            .map(|s| s.confidence)
+            .sum::<f64>() / self.syndrome_history.len() as f64;
+
+        let error_rate = self.syndrome_history.iter()
+            .filter(|s| !s.error_types.is_empty())
+            .count() as f64 / self.syndrome_history.len() as f64;
+
+        (avg_confidence, error_rate, self.syndrome_history.len())
+    }
+}
+
+/// Coherence Time Manager
+#[derive(Debug, Clone)]
+pub struct CoherenceTimeManager {
+    /// T1 relaxation times for each qubit (seconds)
+    pub t1_times: Vec<f64>,
+    /// T2 dephasing times for each qubit (seconds)
+    pub t2_times: Vec<f64>,
+    /// Current circuit execution time (seconds)
+    pub execution_time: f64,
+    /// Coherence decay models
+    pub decay_models: Vec<CoherenceDecayModel>,
+}
+
+/// Coherence decay models
+#[derive(Debug, Clone)]
+pub enum CoherenceDecayModel {
+    /// Exponential decay
+    Exponential,
+    /// Gaussian decay
+    Gaussian,
+    /// Power law decay
+    PowerLaw(f64), // exponent
+}
+
+impl CoherenceTimeManager {
+    /// Create new coherence time manager
+    pub fn new(num_qubits: usize) -> Self {
+        // Realistic coherence times for current quantum devices
+        let t1_times = vec![50e-6; num_qubits]; // 50 microseconds
+        let t2_times = vec![25e-6; num_qubits]; // 25 microseconds (T2 < T1)
+        let decay_models = vec![CoherenceDecayModel::Exponential; num_qubits];
+
+        Self {
+            t1_times,
+            t2_times,
+            execution_time: 0.0,
+            decay_models,
+        }
+    }
+
+    /// Set custom coherence times
+    pub fn set_coherence_times(&mut self, t1_times: Vec<f64>, t2_times: Vec<f64>) {
+        self.t1_times = t1_times;
+        self.t2_times = t2_times;
+    }
+
+    /// Calculate coherence factor for a qubit
+    pub fn calculate_coherence_factor(&self, qubit: usize) -> f64 {
+        if qubit >= self.t1_times.len() || qubit >= self.t2_times.len() {
+            return 1.0;
+        }
+
+        let t1 = self.t1_times[qubit];
+        let t2 = self.t2_times[qubit];
+        let time = self.execution_time;
+
+        match &self.decay_models[qubit] {
+            CoherenceDecayModel::Exponential => {
+                let relaxation_factor = (-time / t1).exp();
+                let dephasing_factor = (-2.0 * time / t2).exp();
+                (relaxation_factor * dephasing_factor).max(0.01) // Minimum coherence
+            }
+            CoherenceDecayModel::Gaussian => {
+                let sigma = t2 / (2.0 * (2.0 * (2.0_f64).ln()).sqrt());
+                (-(time * time) / (2.0 * sigma * sigma)).exp().max(0.01)
+            }
+            CoherenceDecayModel::PowerLaw(exponent) => {
+                (1.0 + time / t2).powf(-exponent).max(0.01)
+            }
+        }
+    }
+
+    /// Apply coherence decay to quantum state
+    pub fn apply_coherence_decay(&self, state_vector: &mut Vec<Complex>) -> Result<()> {
+        let num_qubits = (state_vector.len() as f64).log2() as usize;
+        
+        for qubit in 0..num_qubits {
+            let coherence_factor = self.calculate_coherence_factor(qubit);
+            
+            // Apply amplitude damping (T1 process)
+            for i in 0..state_vector.len() {
+                let bit = (i >> qubit) & 1;
+                if bit == 1 {
+                    // Excited state decays
+                    state_vector[i] = state_vector[i] * coherence_factor;
+                }
+            }
+            
+            // Apply dephasing (T2 process) by adding random phase
+            if coherence_factor < 1.0 {
+                let phase_noise = (1.0 - coherence_factor) * rand::random::<f64>() * PI;
+                for i in 0..state_vector.len() {
+                    let phase_factor = Complex::new(phase_noise.cos(), phase_noise.sin());
+                    state_vector[i] = state_vector[i] * phase_factor;
+                }
+            }
+        }
+
+        // Renormalize
+        let norm = state_vector.iter()
+            .map(|amp| amp.magnitude_squared())
+            .sum::<f64>()
+            .sqrt();
+        
+        if norm > 0.0 {
+            for amp in state_vector.iter_mut() {
+                *amp = *amp * (1.0 / norm);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Update execution time
+    pub fn update_execution_time(&mut self, delta_time: f64) {
+        self.execution_time += delta_time;
+    }
+
+    /// Reset execution time
+    pub fn reset_execution_time(&mut self) {
+        self.execution_time = 0.0;
+    }
+
+    /// Get coherence health report
+    pub fn get_coherence_report(&self) -> CoherenceReport {
+        let coherence_factors: Vec<f64> = (0..self.t1_times.len())
+            .map(|qubit| self.calculate_coherence_factor(qubit))
+            .collect();
+
+        let avg_coherence = coherence_factors.iter().sum::<f64>() / coherence_factors.len() as f64;
+        let min_coherence = coherence_factors.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+        let max_coherence = coherence_factors.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+
+        CoherenceReport {
+            execution_time: self.execution_time,
+            qubit_coherence_factors: coherence_factors,
+            average_coherence: avg_coherence,
+            minimum_coherence: min_coherence,
+            maximum_coherence: max_coherence,
+            coherence_uniformity: 1.0 - (max_coherence - min_coherence) / max_coherence,
+        }
+    }
+}
+
+/// Coherence health report
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoherenceReport {
+    pub execution_time: f64,
+    pub qubit_coherence_factors: Vec<f64>,
+    pub average_coherence: f64,
+    pub minimum_coherence: f64,
+    pub maximum_coherence: f64,
+    pub coherence_uniformity: f64,
+}
+
+/// Quantum system diagnostics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantumDiagnostics {
+    pub error_correction_confidence: f64,
+    pub error_rate: f64,
+    pub num_error_measurements: usize,
+    pub coherence_report: CoherenceReport,
+    pub error_correction_enabled: bool,
+    pub coherence_modeling_enabled: bool,
+}
+
+/// Enhanced Quantum Neural Network with Error Correction
 #[derive(Debug, Clone)]
 pub struct QuantumNeuralNetwork {
     /// Number of qubits
@@ -893,6 +1229,14 @@ pub struct QuantumNeuralNetwork {
     pub measurement_strategy: MeasurementStrategy,
     /// Training history
     pub loss_history: Vec<f64>,
+    /// Quantum error correction engine
+    pub error_correction: QuantumErrorCorrection,
+    /// Coherence time manager
+    pub coherence_manager: CoherenceTimeManager,
+    /// Error correction enabled flag
+    pub enable_error_correction: bool,
+    /// Coherence modeling enabled flag
+    pub enable_coherence_modeling: bool,
 }
 
 /// Measurement strategies for QNN output
@@ -909,7 +1253,7 @@ pub enum MeasurementStrategy {
 }
 
 impl QuantumNeuralNetwork {
-    /// Create new QNN
+    /// Create new QNN with advanced error correction
     pub fn new(num_qubits: usize, layer_configs: Vec<QNNLayerType>) -> Self {
         let layers = layer_configs
             .into_iter()
@@ -921,12 +1265,48 @@ impl QuantumNeuralNetwork {
             layers,
             measurement_strategy: MeasurementStrategy::ExpectationZ,
             loss_history: Vec::new(),
+            error_correction: QuantumErrorCorrection::new(),
+            coherence_manager: CoherenceTimeManager::new(num_qubits),
+            enable_error_correction: true,
+            enable_coherence_modeling: true,
         }
     }
 
-    /// Forward pass through QNN
-    pub fn forward(&self, input_data: &[f64]) -> Result<Vec<f64>> {
+    /// Create new QNN with custom error correction settings
+    pub fn new_with_error_correction(
+        num_qubits: usize,
+        layer_configs: Vec<QNNLayerType>,
+        enable_error_correction: bool,
+        enable_coherence_modeling: bool,
+    ) -> Self {
+        let layers = layer_configs
+            .into_iter()
+            .map(|layer_type| QuantumNeuralNetworkLayer::new(num_qubits, layer_type))
+            .collect();
+
+        Self {
+            num_qubits,
+            layers,
+            measurement_strategy: MeasurementStrategy::ExpectationZ,
+            loss_history: Vec::new(),
+            error_correction: QuantumErrorCorrection::new(),
+            coherence_manager: CoherenceTimeManager::new(num_qubits),
+            enable_error_correction,
+            enable_coherence_modeling,
+        }
+    }
+
+    /// Set custom coherence times
+    pub fn set_coherence_times(&mut self, t1_times: Vec<f64>, t2_times: Vec<f64>) {
+        self.coherence_manager.set_coherence_times(t1_times, t2_times);
+    }
+
+    /// Enhanced forward pass with error correction and coherence modeling
+    pub fn forward(&mut self, input_data: &[f64]) -> Result<Vec<f64>> {
         let mut circuit = QuantumCircuit::new(self.num_qubits);
+
+        // Reset coherence manager for new forward pass
+        self.coherence_manager.reset_execution_time();
 
         // Build circuit from all layers
         for (i, layer) in self.layers.iter().enumerate() {
@@ -938,15 +1318,41 @@ impl QuantumNeuralNetwork {
                 layer.build_circuit(None)
             };
 
+            // Update execution time for coherence modeling
+            if self.enable_coherence_modeling {
+                let gate_time = 0.1e-6; // 100 nanoseconds per gate (typical)
+                self.coherence_manager.update_execution_time(gate_time * layer_circuit.gates.len() as f64);
+            }
+
             // Add layer gates to main circuit
-            for gate in layer_circuit.gates {
-                circuit.add_gate(gate);
+            for gate in &layer_circuit.gates {
+                circuit.add_gate(gate.clone());
             }
         }
 
         // Execute circuit
         let mut simulator = QuantumSimulator::new(self.num_qubits);
         simulator.execute_circuit(&circuit)?;
+
+        // Apply coherence decay if enabled
+        if self.enable_coherence_modeling {
+            self.coherence_manager.apply_coherence_decay(&mut simulator.state_vector)?;
+        }
+
+        // Apply error detection and correction if enabled
+        if self.enable_error_correction {
+            let syndrome = self.error_correction.detect_errors(&simulator.state_vector)?;
+            
+            if syndrome.confidence > 0.5 {
+                // If error detected with reasonable confidence, apply corrections
+                let mut correction_circuit = QuantumCircuit::new(self.num_qubits);
+                self.error_correction.apply_corrections(&mut correction_circuit, &syndrome)?;
+                
+                if !correction_circuit.gates.is_empty() {
+                    simulator.execute_circuit(&correction_circuit)?;
+                }
+            }
+        }
 
         // Perform measurements based on strategy
         let output = match &self.measurement_strategy {
@@ -990,6 +1396,21 @@ impl QuantumNeuralNetwork {
         };
 
         Ok(output)
+    }
+
+    /// Get quantum error and coherence diagnostics
+    pub fn get_quantum_diagnostics(&self) -> QuantumDiagnostics {
+        let (avg_confidence, error_rate, num_measurements) = self.error_correction.get_correction_stats();
+        let coherence_report = self.coherence_manager.get_coherence_report();
+
+        QuantumDiagnostics {
+            error_correction_confidence: avg_confidence,
+            error_rate,
+            num_error_measurements: num_measurements,
+            coherence_report,
+            error_correction_enabled: self.enable_error_correction,
+            coherence_modeling_enabled: self.enable_coherence_modeling,
+        }
     }
 
     /// Train QNN using gradient descent
@@ -1209,7 +1630,7 @@ mod tests {
 
     #[test]
     fn test_qnn_forward() {
-        let qnn = QuantumNeuralNetwork::new(
+        let mut qnn = QuantumNeuralNetwork::new(
             2,
             vec![QNNLayerType::AngleEmbedding, QNNLayerType::BasicEntangling],
         );
@@ -1219,7 +1640,7 @@ mod tests {
 
         assert_eq!(output.len(), 2);
         // More tolerant bounds for quantum measurements
-        assert!(output.iter().all(|&x| x >= -1.1 && x <= 1.1));
+        assert!(output.iter().all(|&x| (-1.1..=1.1).contains(&x)));
         // Ensure we get reasonable values (not NaN or infinite)
         assert!(output.iter().all(|&x| x.is_finite()));
     }
@@ -1236,5 +1657,113 @@ mod tests {
         assert!((ry_matrix[(0, 1)].real + inv_sqrt2).abs() < 1e-10);
         assert!((ry_matrix[(1, 0)].real - inv_sqrt2).abs() < 1e-10);
         assert!((ry_matrix[(1, 1)].real - inv_sqrt2).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_error_correction() {
+        let mut error_correction = QuantumErrorCorrection::new();
+        
+        // Create a test state vector with some error
+        let mut state_vector = vec![
+            Complex::new(0.7, 0.0),   // |00⟩ - slightly denormalized
+            Complex::new(0.0, 0.0),   // |01⟩
+            Complex::new(0.7, 0.0),   // |10⟩ - slightly denormalized
+            Complex::new(0.0, 0.0),   // |11⟩
+        ];
+        
+        let syndrome = error_correction.detect_errors(&state_vector).unwrap();
+        
+        // Should detect normalization error
+        assert!(!syndrome.error_types.is_empty());
+        assert!(syndrome.confidence > 0.0);
+    }
+
+    #[test]
+    fn test_coherence_time_manager() {
+        let mut coherence_manager = CoherenceTimeManager::new(2);
+        
+        // Set custom coherence times
+        coherence_manager.set_coherence_times(vec![100e-6, 50e-6], vec![50e-6, 25e-6]);
+        
+        // Test coherence factor calculation
+        let factor_qubit0 = coherence_manager.calculate_coherence_factor(0);
+        let factor_qubit1 = coherence_manager.calculate_coherence_factor(1);
+        
+        assert!(factor_qubit0 > 0.0);
+        assert!(factor_qubit1 > 0.0);
+        assert!(factor_qubit0 <= 1.0);
+        assert!(factor_qubit1 <= 1.0);
+        
+        // Update execution time and check decay
+        coherence_manager.update_execution_time(10e-6); // 10 microseconds
+        
+        let factor_after = coherence_manager.calculate_coherence_factor(0);
+        assert!(factor_after < factor_qubit0); // Should decay with time
+    }
+
+    #[test]
+    fn test_enhanced_qnn() {
+        let mut qnn = QuantumNeuralNetwork::new(
+            2,
+            vec![QNNLayerType::AngleEmbedding, QNNLayerType::BasicEntangling],
+        );
+
+        // Test that error correction is enabled by default
+        assert!(qnn.enable_error_correction);
+        assert!(qnn.enable_coherence_modeling);
+
+        // Set custom coherence times
+        qnn.set_coherence_times(vec![100e-6, 50e-6], vec![50e-6, 25e-6]);
+
+        let input = vec![0.5, 0.8];
+        let output = qnn.forward(&input).unwrap();
+
+        assert_eq!(output.len(), 2);
+        assert!(output.iter().all(|&x| (-1.1..=1.1).contains(&x)));
+        assert!(output.iter().all(|&x| x.is_finite()));
+
+        // Test diagnostics
+        let diagnostics = qnn.get_quantum_diagnostics();
+        assert!(diagnostics.error_correction_enabled);
+        assert!(diagnostics.coherence_modeling_enabled);
+        assert!(diagnostics.coherence_report.execution_time >= 0.0);
+    }
+
+    #[test]
+    fn test_coherence_decay_models() {
+        let mut manager = CoherenceTimeManager::new(3);
+        
+        // Test different decay models
+        manager.decay_models = vec![
+            CoherenceDecayModel::Exponential,
+            CoherenceDecayModel::Gaussian,
+            CoherenceDecayModel::PowerLaw(1.5),
+        ];
+        
+        manager.update_execution_time(5e-6);
+        
+        for qubit in 0..3 {
+            let factor = manager.calculate_coherence_factor(qubit);
+            assert!(factor > 0.0);
+            assert!(factor <= 1.0);
+        }
+        
+        // Test coherence report
+        let report = manager.get_coherence_report();
+        assert_eq!(report.qubit_coherence_factors.len(), 3);
+        assert!(report.average_coherence > 0.0);
+        assert!(report.coherence_uniformity >= 0.0);
+        assert!(report.coherence_uniformity <= 1.0);
+    }
+
+    #[test]
+    fn test_error_mitigation_strategies() {
+        let error_correction = QuantumErrorCorrection::new();
+        
+        // Check that default mitigation strategies are set
+        assert!(!error_correction.mitigation_strategies.is_empty());
+        assert!(error_correction.mitigation_strategies.contains(&ErrorMitigationStrategy::ZeroNoiseExtrapolation));
+        assert!(error_correction.mitigation_strategies.contains(&ErrorMitigationStrategy::ReadoutErrorMitigation));
+        assert!(error_correction.mitigation_strategies.contains(&ErrorMitigationStrategy::SymmetryVerification));
     }
 }

@@ -2453,3 +2453,6 @@ mod tests {
         assert!(matches!(&optimized.patterns[0].object, Term::Literal(_)));
     }
 }
+
+// Include the optimizer submodule
+pub mod optimizer;

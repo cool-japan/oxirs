@@ -500,9 +500,9 @@ mod tests {
     #[test]
     fn test_polymerase_complement_synthesis() {
         let polymerase = DnaPolymerase::new();
-        let adenine = NucleotideData::Adenine(std::sync::Arc::new(Term::NamedNode(
+        let adenine = NucleotideData::Adenine(Term::NamedNode(
             NamedNode::new("test").unwrap(),
-        )));
+        ));
 
         if let Ok(NucleotideData::Thymine(_)) = polymerase.synthesize_complement(&adenine) {
             // Test passed
@@ -514,12 +514,12 @@ mod tests {
     #[test]
     fn test_mismatch_detection() {
         let detector = MismatchDetector::new();
-        let adenine = NucleotideData::Adenine(std::sync::Arc::new(Term::NamedNode(
+        let adenine = NucleotideData::Adenine(Term::NamedNode(
             NamedNode::new("test").unwrap(),
-        )));
-        let thymine = NucleotideData::Thymine(std::sync::Arc::new(Term::NamedNode(
+        ));
+        let thymine = NucleotideData::Thymine(Term::NamedNode(
             NamedNode::new("test").unwrap(),
-        )));
+        ));
 
         // This should generally not be detected as a mismatch (valid pair)
         let result = detector.detect_mismatch(&adenine, &thymine).unwrap();

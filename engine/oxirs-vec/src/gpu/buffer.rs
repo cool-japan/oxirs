@@ -1,4 +1,4 @@
-//\! GPU memory buffer management
+//! GPU memory buffer management
 
 use anyhow::{anyhow, Result};
 
@@ -25,7 +25,7 @@ impl GpuBuffer {
 
     pub fn copy_from_host(&mut self, data: &[f32]) -> Result<()> {
         if data.len() > self.size {
-            return Err(anyhow\!("Data size exceeds buffer capacity"));
+            return Err(anyhow!("Data size exceeds buffer capacity"));
         }
         self.copy_host_to_device(
             data.as_ptr(),
@@ -36,7 +36,7 @@ impl GpuBuffer {
 
     pub fn copy_to_host(&self, data: &mut [f32]) -> Result<()> {
         if data.len() > self.size {
-            return Err(anyhow\!("Host buffer too small"));
+            return Err(anyhow!("Host buffer too small"));
         }
         self.copy_device_to_host(
             self.ptr,
@@ -54,13 +54,13 @@ impl GpuBuffer {
             let mut ptr: *mut std::ffi::c_void = std::ptr::null_mut();
             unsafe {
                 let result = cudaSetDevice(device_id);
-                if result \!= cudaError_t::cudaSuccess {
-                    return Err(anyhow\!("Failed to set CUDA device"));
+                if result != cudaError_t::cudaSuccess {
+                    return Err(anyhow!("Failed to set CUDA device"));
                 }
 
                 let result = cudaMalloc(&mut ptr, size);
-                if result \!= cudaError_t::cudaSuccess {
-                    return Err(anyhow\!("Failed to allocate GPU memory"));
+                if result != cudaError_t::cudaSuccess {
+                    return Err(anyhow!("Failed to allocate GPU memory"));
                 }
             }
             Ok(ptr as *mut u8)
@@ -70,7 +70,7 @@ impl GpuBuffer {
         {
             // Fallback: allocate host memory for testing
             let layout = std::alloc::Layout::from_size_align(size, std::mem::align_of::<f32>())
-                .map_err( < /dev/null | e| anyhow!("Invalid memory layout: {}", e))?;
+                .map_err(|e| anyhow!("Invalid memory layout: {}", e))?;
             unsafe {
                 let ptr = std::alloc::alloc(layout);
                 if ptr.is_null() {

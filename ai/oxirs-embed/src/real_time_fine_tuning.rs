@@ -394,7 +394,7 @@ impl RealTimeFinetuningModel {
 
         // Sample with importance-based probability
         for _ in 0..batch_size {
-            let idx = rand::random::<usize>() % self.replay_buffer.len();
+            let idx = rand::thread_rng().gen_range(0..self.replay_buffer.len());
             batch.push(self.replay_buffer[idx].clone());
         }
 

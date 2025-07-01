@@ -32,23 +32,25 @@ impl IRI {
     }
 }
 
-juniper::graphql_scalar!(IRI {
-    description: "A valid IRI (Internationalized Resource Identifier)"
-
-    resolve(&self) -> Value {
+#[juniper::graphql_scalar(description = "A valid IRI (Internationalized Resource Identifier)")]
+impl<S> GraphQLScalar<S> for IRI
+where
+    S: ScalarValue,
+{
+    fn resolve(&self) -> Value<S> {
         Value::scalar(self.0.clone())
     }
 
-    from_input_value(v: &InputValue) -> Result<IRI, String> {
+    fn from_input_value(v: &InputValue<S>) -> Result<IRI, String> {
         v.as_string_value()
             .ok_or_else(|| format!("Expected `String`, found: {}", v))
             .and_then(|s| Self::new(s.to_string()))
     }
 
-    from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a> {
-        <String as ParseScalarValue>::from_str(value)
+    fn from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a, S> {
+        <String as ParseScalarValue<S>>::from_str(value)
     }
-});
+}
 
 // For now, use a simple string representation - proper IRI scalar can be added later
 impl From<String> for IRI {
@@ -97,10 +99,12 @@ impl RdfLiteral {
     }
 }
 
-juniper::graphql_scalar!(RdfLiteral {
-    description: "An RDF literal with optional language tag and datatype"
-
-    resolve(&self) -> Value {
+#[juniper::graphql_scalar(description = "An RDF literal with optional language tag and datatype")]
+impl<S> GraphQLScalar<S> for RdfLiteral
+where
+    S: ScalarValue,
+{
+    fn resolve(&self) -> Value<S> {
         Value::scalar(format!(
             "{}{}{}",
             self.value,
@@ -115,7 +119,7 @@ juniper::graphql_scalar!(RdfLiteral {
         ))
     }
 
-    from_input_value(v: &InputValue) -> Result<RdfLiteral, String> {
+    fn from_input_value(v: &InputValue<S>) -> Result<RdfLiteral, String> {
         v.as_string_value()
             .ok_or_else(|| format!("Expected `String`, found: {}", v))
             .and_then(|s| {
@@ -144,10 +148,10 @@ juniper::graphql_scalar!(RdfLiteral {
             })
     }
 
-    from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a> {
-        <String as ParseScalarValue>::from_str(value)
+    fn from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a, S> {
+        <String as ParseScalarValue<S>>::from_str(value)
     }
-});
+}
 
 /// RDF Term union type representing any RDF term (IRI, Literal, or Blank Node)
 #[derive(Debug, Clone, GraphQLUnion)]
@@ -567,6 +571,14 @@ fn convert_term_to_rdf_term(term: Term) -> RdfTerm {
                 iri: IRI("rdf-star:triple".to_string()),
                 label: Some("RDF-star Triple".to_string()),
                 description: Some("An RDF-star quoted triple".to_string()),
+            })
+        }
+        Term::Variable(var) => {
+            // Variable support - represent as a special named node with variable syntax
+            RdfTerm::NamedNode(RdfNamedNode {
+                iri: IRI(format!("var:{}", var.as_str())),
+                label: Some(format!("Variable: {}", var.as_str())),
+                description: Some("A SPARQL variable".to_string()),
             })
         }
     }

@@ -819,19 +819,22 @@ impl NASProcessor {
 
     /// Generate random architecture
     fn generate_random_architecture(&self) -> Result<Architecture> {
-        let num_layers = rand::random::<usize>() % 8 + 2; // 2-10 layers
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        
+        let num_layers = rng.gen::<usize>() % 8 + 2; // 2-10 layers
         let mut layers = Vec::new();
 
         for _ in 0..num_layers {
-            let layer_type = match rand::random::<usize>() % 4 {
+            let layer_type = match rng.gen::<usize>() % 4 {
                 0 => LayerType::Linear,
                 1 => LayerType::Attention,
                 2 => LayerType::Convolution,
                 _ => LayerType::Normalization,
             };
 
-            let input_dim = 128 + (rand::random::<usize>() % 512);
-            let output_dim = 128 + (rand::random::<usize>() % 512);
+            let input_dim = 128 + (rng.gen::<usize>() % 512);
+            let output_dim = 128 + (rng.gen::<usize>() % 512);
 
             layers.push(LayerConfig {
                 layer_type,
@@ -843,8 +846,8 @@ impl NASProcessor {
 
         Ok(Architecture {
             layers,
-            skip_connections: rand::random::<bool>(),
-            normalization: rand::random::<bool>(),
+            skip_connections: rng.gen::<bool>(),
+            normalization: rng.gen::<bool>(),
         })
     }
 
@@ -990,7 +993,10 @@ impl NASProcessor {
 
     /// Mutate architecture
     fn mutate_architecture(&self, architecture: &mut Architecture) -> Result<()> {
-        let mutation_type = rand::random::<usize>() % 4;
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        
+        let mutation_type = rng.gen::<usize>() % 4;
 
         match mutation_type {
             0 => {
@@ -999,10 +1005,10 @@ impl NASProcessor {
                 if layer_count > 0 {
                     if let Some(layer) = architecture
                         .layers
-                        .get_mut(rand::random::<usize>() % layer_count)
+                        .get_mut(rng.gen::<usize>() % layer_count)
                     {
                         layer.output_dim = (layer.output_dim as f32
-                            * (0.8 + rand::random::<f32>() * 0.4))
+                            * (0.8 + rng.gen::<f32>() * 0.4))
                             as usize;
                         layer.output_dim = layer.output_dim.max(32).min(1024);
                     }
@@ -1014,9 +1020,9 @@ impl NASProcessor {
                 if layer_count > 0 {
                     if let Some(layer) = architecture
                         .layers
-                        .get_mut(rand::random::<usize>() % layer_count)
+                        .get_mut(rng.gen::<usize>() % layer_count)
                     {
-                        layer.layer_type = match rand::random::<usize>() % 4 {
+                        layer.layer_type = match rng.gen::<usize>() % 4 {
                             0 => LayerType::Linear,
                             1 => LayerType::Attention,
                             2 => LayerType::Convolution,

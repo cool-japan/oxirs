@@ -841,7 +841,7 @@ pub struct Population {
 impl Population {
     /// Create initial random population
     pub fn initialize(config: &NeuroEvolutionConfig) -> Self {
-        let mut rng = rand::rngs::StdRng::from_entropy();
+        let mut rng = rand::rngs::StdRng::from_rng(&mut rand::thread_rng()).expect("Failed to create RNG");
         let mut individuals = Vec::new();
         
         for _ in 0..config.population_size {
@@ -903,7 +903,7 @@ impl Population {
     
     /// Evolve to next generation
     pub fn evolve(&mut self, config: &NeuroEvolutionConfig) -> Result<()> {
-        let mut rng = rand::rngs::StdRng::from_entropy();
+        let mut rng = rand::rngs::StdRng::from_rng(&mut rand::thread_rng()).expect("Failed to create RNG");
         
         // Sort by fitness
         self.individuals.sort_by(|a, b| {
@@ -1239,7 +1239,7 @@ mod tests {
         let arch2 = NeuralArchitecture::random(&config, &mut rng);
         
         let distance = arch1.diversity_distance(&arch2);
-        assert!(distance >= 0.0 && distance <= 1.0);
+        assert!((0.0..=1.0).contains(&distance));
     }
 
     #[tokio::test]
@@ -1268,11 +1268,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_neuro_evolution_system() {
-        let mut config = NeuroEvolutionConfig::default();
-        config.population_size = 5; // Very small population for testing
-        config.num_generations = 2; // Minimal generations for testing
-        config.max_depth = 3; // Limit architecture complexity
-        config.max_width = 16; // Limit architecture size
+        let config = NeuroEvolutionConfig {
+            population_size: 5, // Very small population for testing
+            num_generations: 2, // Minimal generations for testing
+            max_depth: 3, // Limit architecture complexity
+            max_width: 16, // Limit architecture size
+            ..Default::default()
+        };
         
         let mut system = NeuroEvolutionSystem::new(config);
         let best_arch = system.evolve().await.unwrap();

@@ -603,31 +603,33 @@ impl AdaptiveStream {
 
     /// Process next item in stream
     pub async fn next(&mut self) -> Option<Result<StreamData>> {
-        if !self.buffer.is_empty() && !self.paused {
-            return Some(Ok(self.buffer.pop_front().unwrap()));
-        }
-
-        tokio::select! {
-            data = self.data_receiver.recv() => {
-                match data {
-                    Some(data) => {
-                        if self.paused {
-                            self.buffer.push_back(data);
-                            None
-                        } else {
-                            Some(Ok(data))
-                        }
-                    }
-                    None => None, // Stream closed
-                }
+        loop {
+            if !self.buffer.is_empty() && !self.paused {
+                return Some(Ok(self.buffer.pop_front().unwrap()));
             }
-            control = self.control_receiver.recv() => {
-                match control {
-                    Some(control) => {
-                        self.handle_control_message(control).await;
-                        self.next().await // Recursively get next data
+
+            tokio::select! {
+                data = self.data_receiver.recv() => {
+                    match data {
+                        Some(data) => {
+                            if self.paused {
+                                self.buffer.push_back(data);
+                                continue; // Continue to check for control messages
+                            } else {
+                                return Some(Ok(data));
+                            }
+                        }
+                        None => return None, // Stream closed
                     }
-                    None => None, // Control channel closed
+                }
+                control = self.control_receiver.recv() => {
+                    match control {
+                        Some(control) => {
+                            self.handle_control_message(control).await;
+                            // Continue loop to check for next data/control
+                        }
+                        None => return None, // Control channel closed
+                    }
                 }
             }
         }

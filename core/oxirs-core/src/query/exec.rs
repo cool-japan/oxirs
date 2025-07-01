@@ -85,12 +85,12 @@ pub enum QueryResults {
 
 /// Query executor
 pub struct QueryExecutor<'a> {
-    store: &'a Store,
+    store: &'a dyn Store,
 }
 
 impl<'a> QueryExecutor<'a> {
     /// Creates a new query executor
-    pub fn new(store: &'a Store) -> Self {
+    pub fn new(store: &'a dyn Store) -> Self {
         QueryExecutor { store }
     }
 

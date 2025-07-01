@@ -1947,7 +1947,7 @@ mod tests {
 
         let (unified, score) = network.align(&text_emb, &kg_emb).unwrap();
         assert_eq!(unified.len(), 512);
-        assert!(score >= -1.0 && score <= 1.0);
+        assert!((-1.0..=1.0).contains(&score));
     }
 
     #[tokio::test]

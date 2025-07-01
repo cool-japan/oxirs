@@ -13,6 +13,7 @@
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
+use crate::transactions::IsolationLevel;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
@@ -73,9 +74,9 @@ impl<T> VersionedValue<T> {
     }
 }
 
-/// Transaction state and metadata
+/// MVCC transaction state and metadata
 #[derive(Debug, Clone)]
-pub struct Transaction {
+pub struct MvccTransaction {
     pub id: TransactionId,
     pub start_version: Version,
     pub read_set: HashSet<String>,  // Keys read in this transaction
@@ -85,7 +86,7 @@ pub struct Transaction {
     pub isolation_level: IsolationLevel,
 }
 
-impl Transaction {
+impl MvccTransaction {
     pub fn new(id: TransactionId, start_version: Version, is_read_only: bool) -> Self {
         Self {
             id,
@@ -103,15 +104,6 @@ impl Transaction {
     }
 }
 
-/// Isolation levels supported by the MVCC system
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IsolationLevel {
-    ReadUncommitted,
-    ReadCommitted,
-    RepeatableRead,
-    SnapshotIsolation,
-    Serializable,
-}
 
 /// MVCC storage configuration
 #[derive(Debug, Clone)]
@@ -159,7 +151,7 @@ where
     data: Arc<RwLock<HashMap<K, Vec<VersionedValue<V>>>>>,
     current_version: Arc<RwLock<Version>>,
     transaction_counter: Arc<RwLock<TransactionId>>,
-    active_transactions: Arc<RwLock<HashMap<TransactionId, Transaction>>>,
+    active_transactions: Arc<RwLock<HashMap<TransactionId, MvccTransaction>>>,
     config: MvccConfig,
     stats: Arc<Mutex<MvccStats>>,
     vacuum_queue: Arc<Mutex<VecDeque<K>>>, // Keys that need garbage collection
@@ -200,7 +192,7 @@ where
             .read()
             .map_err(|_| anyhow!("Failed to acquire version lock"))?;
 
-        let transaction = Transaction::new(tx_id, current_version, read_only);
+        let transaction = MvccTransaction::new(tx_id, current_version, read_only);
 
         let mut active_txs = self
             .active_transactions
@@ -593,7 +585,7 @@ where
 
     // Private helper methods
 
-    fn validate_transaction(&self, transaction: &Transaction) -> Result<()> {
+    fn validate_transaction(&self, transaction: &MvccTransaction) -> Result<()> {
         if !self.config.enable_write_skew_detection {
             return Ok(());
         }

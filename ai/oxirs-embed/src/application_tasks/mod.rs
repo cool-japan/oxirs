@@ -11,10 +11,10 @@ pub mod classification;
 pub mod retrieval;
 pub mod query_answering;
 
-use crate::{EmbeddingModel, Vector};
+use crate::EmbeddingModel;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 

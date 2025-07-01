@@ -1,4 +1,4 @@
-//\! CUDA kernel implementations for various vector operations
+//! CUDA kernel implementations for various vector operations
 
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -18,7 +18,7 @@ impl KernelManager {
     }
 
     fn initialize_kernels(&mut self) {
-        let kernels = vec\![
+        let kernels = vec![
             ("cosine_similarity".to_string(), self.get_cosine_similarity_kernel()),
             ("euclidean_distance".to_string(), self.get_euclidean_distance_kernel()),
             ("dot_product".to_string(), self.get_dot_product_kernel()),
@@ -333,4 +333,3 @@ impl Default for KernelManager {
         Self::new()
     }
 }
-EOF < /dev/null

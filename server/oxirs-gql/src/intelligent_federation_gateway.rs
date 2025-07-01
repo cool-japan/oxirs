@@ -123,6 +123,8 @@ pub enum OptimizationStrategy {
     Adaptive,
     /// Pipeline queries with dependency management
     Pipelined,
+    /// Execute queries in optimized batches
+    Batch,
 }
 
 /// Intelligent federation gateway
@@ -417,14 +419,21 @@ impl IntelligentFederationGateway {
         // Record performance metrics
         let execution_time = start_time.elapsed();
         self.performance_tracker.record_operation(OperationMetrics {
-            operation_type: "federated_query".to_string(),
+            operation_name: Some("federated_query".to_string()),
+            operation_type: OperationType::Query,
+            query_hash: 0, // TODO: Calculate actual hash
             execution_time,
-            complexity: execution_plan.total_complexity as f64,
-            success: true,
+            parsing_time: Duration::from_millis(0),
+            validation_time: Duration::from_millis(0),
+            planning_time: Duration::from_millis(0),
+            field_count: execution_plan.service_assignments.len(),
+            depth: 1,
+            complexity_score: execution_plan.total_complexity,
             cache_hit: false,
-            service_count: execution_plan.service_assignments.len(),
+            error_count: 0,
             timestamp: SystemTime::now(),
-        }).await;
+            client_info: Default::default(),
+        });
 
         info!("Federated query completed in {:?}: {}", execution_time, query_id);
         Ok(result)
@@ -896,31 +905,26 @@ impl IntelligentFederationGateway {
         if total_services > 0.0 {
             let service_health = self.service_health.read().await;
             let healthy_services = service_health.values()
-                .filter(|&&health| health > 0.8)
+                .filter(|health| health.success_rate > 0.8)
                 .count() as f64;
             let health_load = 1.0 - (healthy_services / total_services);
             load_factors.push(health_load * 0.3); // 30% weight
         }
         
         // 3. Recent performance metrics
-        if let Some(tracker) = &*performance_tracker {
-            let recent_metrics = tracker.get_recent_metrics(Duration::from_secs(60)).await;
-            if let Ok(metrics) = recent_metrics {
-                let avg_response_time = metrics.iter()
-                    .map(|m| m.response_time.as_millis() as f64)
-                    .sum::<f64>() / metrics.len().max(1) as f64;
-                
-                // Normalize response time (assume 1000ms is high load)
-                let response_time_load = (avg_response_time / 1000.0).min(1.0);
-                load_factors.push(response_time_load * 0.2); // 20% weight
-            }
+        if let Ok(stats) = performance_tracker.get_stats() {
+            let avg_response_time = stats.avg_execution_time.as_millis() as f64;
+            
+            // Normalize response time (assume 1000ms is high load)
+            let response_time_load = (avg_response_time / 1000.0).min(1.0);
+            load_factors.push(response_time_load * 0.2); // 20% weight
         }
         
         // 4. Circuit breaker status
         let circuit_breakers = self.circuit_breakers.read().await;
         if !circuit_breakers.is_empty() {
             let open_breakers = circuit_breakers.values()
-                .filter(|status| status.is_open)
+                .filter(|breaker| breaker.state == CircuitBreakerState::Open)
                 .count() as f64;
             let total_breakers = circuit_breakers.len() as f64;
             let breaker_load = open_breakers / total_breakers;

@@ -140,7 +140,7 @@ pub struct PerformanceProfile {
 }
 
 /// Security levels for plugins
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum SecurityLevel {
     Untrusted,
     BasicSandbox,
@@ -287,8 +287,6 @@ impl WasmEdgeProcessor {
             performance_metrics: RwLock::new(HashMap::new()),
             security_manager,
             #[cfg(feature = "wasm")]
-            wasm_engine,
-            #[cfg(not(feature = "wasm"))]
             wasm_engine,
         })
     }
@@ -646,7 +644,7 @@ impl WasmEdgeProcessor {
 }
 
 impl SecurityManager {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let mut execution_policies = HashMap::new();
         
         execution_policies.insert(SecurityLevel::Untrusted, ExecutionPolicy {
@@ -1018,7 +1016,7 @@ impl AdaptiveSecuritySandbox {
     pub async fn monitor_execution(
         &self,
         plugin_id: &str,
-        execution_context: &ExecutionContext,
+        execution_context: &WasmExecutionContext,
     ) -> Result<SecurityAssessment> {
         // Behavioral analysis
         let behavior = self.behavioral_analyzer.analyze_execution(execution_context).await?;
@@ -1326,7 +1324,7 @@ impl BehavioralAnalyzer {
         }
     }
 
-    pub async fn analyze_execution(&self, _context: &ExecutionContext) -> Result<BehaviorProfile> {
+    pub async fn analyze_execution(&self, _context: &WasmExecutionContext) -> Result<BehaviorProfile> {
         Ok(BehaviorProfile {
             memory_access_pattern: MemoryAccessPattern::Sequential,
             system_call_frequency: 10,
@@ -1453,14 +1451,6 @@ pub struct SecurityMetrics {
 }
 
 impl SecurityManager {
-    pub fn new() -> Self {
-        Self {
-            trusted_plugins: RwLock::new(HashMap::new()),
-            execution_policies: RwLock::new(HashMap::new()),
-            audit_log: RwLock::new(Vec::new()),
-        }
-    }
-
     pub async fn validate_plugin(&self, plugin: &WasmPlugin) -> Result<()> {
         // Enhanced plugin validation with ML-based threat detection
         self.validate_plugin_metadata(plugin).await?;

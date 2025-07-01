@@ -9,6 +9,7 @@
 //! - Storage virtualization with transparent migration
 //! - Multi-Version Concurrency Control (MVCC) for high-concurrency operations
 
+#[cfg(feature = "columnar")]
 pub mod columnar;
 pub mod compression;
 pub mod immutable;
@@ -286,9 +287,10 @@ pub struct QueryMetrics {
 }
 
 /// Create a new storage engine with the given configuration
-pub async fn create_engine(config: StorageConfig) -> Result<Arc<dyn StorageEngine>, OxirsError> {
-    // Implementation will be in tiered.rs
-    tiered::TieredStorageEngine::new(config).await
+pub async fn create_engine(_config: StorageConfig) -> Result<Arc<dyn StorageEngine>, OxirsError> {
+    // TODO: Implement alternative storage engine or resolve RocksDB conflicts
+    // Implementation was in tiered.rs but temporarily disabled due to RocksDB dependency
+    Err(OxirsError::Store("Tiered storage engine temporarily disabled due to RocksDB dependency conflicts".to_string()))
 }
 
 #[cfg(test)]

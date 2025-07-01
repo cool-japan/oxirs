@@ -238,9 +238,10 @@ impl VectorQueryOptimizer {
     /// Register a vector index for use in query optimization
     pub fn register_vector_index(&self, name: String, index_info: VectorIndexInfo) -> Result<()> {
         let mut indexes = self.vector_indexes.lock().unwrap();
+        let size = index_info.size;
         indexes.insert(name.clone(), index_info);
         
-        info!("Registered vector index: {} with {} vectors", name, index_info.size);
+        info!("Registered vector index: {} with {} vectors", name, size);
         Ok(())
     }
 

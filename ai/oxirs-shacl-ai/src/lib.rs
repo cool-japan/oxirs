@@ -98,6 +98,7 @@ pub mod quantum_consciousness_entanglement;
 pub mod quantum_enhanced_pattern_optimizer;
 pub mod quantum_neural_patterns;
 pub mod quantum_neuromorphic_fusion;
+pub mod quantum_consciousness_synthesis;
 pub mod realtime_adaptive_query_optimizer;
 pub mod recommendation_systems;
 pub mod self_adaptive_ai;
@@ -106,6 +107,7 @@ pub mod shape_management;
 pub mod swarm_neuromorphic_networks;
 pub mod streaming_adaptation;
 pub mod system_monitoring;
+pub mod temporal_paradox_resolution;
 pub mod time_space_validation;
 pub mod universal_knowledge_integration;
 pub mod omniscient_validation;
@@ -198,6 +200,12 @@ pub use quantum_consciousness_entanglement::{
     QuantumConsciousnessEntanglement, QuantumEntanglementConfig, QuantumEntanglementState,
     QuantumEntanglementValidationResult, QuantumInformation,
 };
+pub use quantum_consciousness_synthesis::{
+    QuantumConsciousnessSynthesisEngine, QuantumConsciousnessProcessor, SyntheticMind,
+    QuantumConsciousnessValidationResult, ConsciousnessLevel, ValidationOutcome,
+    QuantumCognitionEnhancer, ConsciousnessStateSynthesizer, QuantumIntuitionEngine,
+    SentientReasoningValidator, MultiDimensionalAwarenessSystem,
+};
 pub use quantum_enhanced_pattern_optimizer::{
     AnnealingSchedule, NeuralPredictor, PerformanceRecord, QuantumAnnealer,
     QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig, QuantumOptimizerStats,
@@ -275,6 +283,12 @@ pub use time_space_validation::{
     CoordinateSystem, InterferencePattern, MultiTimelineValidationResult, ReferenceFrame,
     SpacetimeContext, SpacetimeInitResult, SpacetimeStatistics, SpacetimeValidationResult,
     SpatialCoordinates, TemporalCoordinate, TimeSpaceConfig, TimeSpaceValidator, Timeline,
+};
+pub use temporal_paradox_resolution::{
+    TemporalParadoxResolutionEngine, TemporalValidationProcessor, Timeline as TemporalTimeline,
+    TemporalValidationResult, CausalityAnalysisResult, ParadoxDetectionResult,
+    ParadoxResolutionResult, TimelineContext, TemporalConstraint, CausalRelationship,
+    QuantumTemporalEngine, MultiTimelineValidator, TemporalConsistencyEnforcer,
 };
 
 // Version 2.1 Features - Neuromorphic Evolution

@@ -1,4 +1,4 @@
-//\! GPU memory pool management for efficient allocation and reuse
+//! GPU memory pool management for efficient allocation and reuse
 
 use super::{GpuBuffer, GpuConfig};
 use anyhow::{anyhow, Result};
@@ -38,12 +38,12 @@ impl GpuMemoryPool {
         // Try to get a buffer from the available pool
         {
             let mut available = self.available_buffers.lock()
-                .map_err( < /dev/null | e| anyhow\!("Failed to lock available buffers: {}", e))?;
+                .map_err(|e| anyhow!("Failed to lock available buffers: {}", e))?;
             
             if let Some(buffer) = available.pop_front() {
                 // Move to allocated buffers
                 self.allocated_buffers.lock()
-                    .map_err(|e| anyhow\!("Failed to lock allocated buffers: {}", e))?
+                    .map_err(|e| anyhow!("Failed to lock allocated buffers: {}", e))?
                     .push(buffer);
                 
                 return Ok(self.allocated_buffers.lock().unwrap().last().unwrap());
@@ -52,7 +52,7 @@ impl GpuMemoryPool {
 
         // No available buffers, check if we can allocate a new one
         if self.allocated_buffers.lock().unwrap().len() >= self.max_buffers {
-            return Err(anyhow\!("Memory pool exhausted"));
+            return Err(anyhow!("Memory pool exhausted"));
         }
 
         // Allocate a new buffer
@@ -60,7 +60,7 @@ impl GpuMemoryPool {
         self.used_memory += self.buffer_size * std::mem::size_of::<f32>();
         
         self.allocated_buffers.lock()
-            .map_err(|e| anyhow\!("Failed to lock allocated buffers: {}", e))?
+            .map_err(|e| anyhow!("Failed to lock allocated buffers: {}", e))?
             .push(buffer);
         
         Ok(self.allocated_buffers.lock().unwrap().last().unwrap())
@@ -71,15 +71,15 @@ impl GpuMemoryPool {
         // Remove from allocated buffers
         {
             let mut allocated = self.allocated_buffers.lock()
-                .map_err(|e| anyhow\!("Failed to lock allocated buffers: {}", e))?;
+                .map_err(|e| anyhow!("Failed to lock allocated buffers: {}", e))?;
             
             // Find and remove the buffer (simplified - in practice would use better identification)
-            allocated.retain(|b| b.ptr() \!= buffer.ptr());
+            allocated.retain(|b| b.ptr() != buffer.ptr());
         }
 
         // Add to available buffers
         self.available_buffers.lock()
-            .map_err(|e| anyhow\!("Failed to lock available buffers: {}", e))?
+            .map_err(|e| anyhow!("Failed to lock available buffers: {}", e))?
             .push_back(buffer);
 
         Ok(())
@@ -114,7 +114,7 @@ impl GpuMemoryPool {
             self.used_memory += self.buffer_size * std::mem::size_of::<f32>();
             
             self.available_buffers.lock()
-                .map_err(|e| anyhow\!("Failed to lock available buffers: {}", e))?
+                .map_err(|e| anyhow!("Failed to lock available buffers: {}", e))?
                 .push_back(buffer);
         }
 
@@ -155,7 +155,7 @@ impl GpuMemoryPool {
         // In a real implementation, this might involve more sophisticated memory management
         // For now, we'll just ensure all available buffers are contiguous in the queue
         let mut available = self.available_buffers.lock()
-            .map_err(|e| anyhow\!("Failed to lock available buffers: {}", e))?;
+            .map_err(|e| anyhow!("Failed to lock available buffers: {}", e))?;
         
         // Sort available buffers by memory address for better locality
         let mut buffers: Vec<GpuBuffer> = available.drain(..).collect();
@@ -199,18 +199,18 @@ impl MemoryPoolStats {
 
     /// Print pool statistics
     pub fn print(&self) {
-        println\!("GPU Memory Pool Statistics:");
-        println\!("  Total buffers: {}", self.total_buffers);
-        println\!("  Allocated: {}, Available: {}", self.allocated_buffers, self.available_buffers);
-        println\!("  Memory usage: {:.2} MB / {:.2} MB ({:.1}%)", 
+        println!("GPU Memory Pool Statistics:");
+        println!("  Total buffers: {}", self.total_buffers);
+        println!("  Allocated: {}, Available: {}", self.allocated_buffers, self.available_buffers);
+        println!("  Memory usage: {:.2} MB / {:.2} MB ({:.1}%)", 
                  self.used_memory as f64 / 1024.0 / 1024.0,
                  self.total_memory as f64 / 1024.0 / 1024.0,
                  self.utilization * 100.0);
-        println\!("  Buffer size: {:.2} KB", self.buffer_size as f64 * 4.0 / 1024.0);
-        println\!("  Remaining capacity: {} buffers", self.remaining_capacity());
+        println!("  Buffer size: {:.2} KB", self.buffer_size as f64 * 4.0 / 1024.0);
+        println!("  Remaining capacity: {} buffers", self.remaining_capacity());
         
         if self.is_under_pressure() {
-            println\!("  ⚠️  Memory pool is under pressure\!");
+            println!("  ⚠️  Memory pool is under pressure!");
         }
     }
 }
@@ -245,7 +245,7 @@ impl AdvancedGpuMemoryPool {
         // Find the smallest buffer size that can accommodate the request
         let pool_index = self.buffer_sizes.iter()
             .position(|&size| size >= required_size)
-            .ok_or_else(|| anyhow\!("No buffer size large enough for request"))?;
+            .ok_or_else(|| anyhow!("No buffer size large enough for request"))?;
 
         self.pools[pool_index].get_buffer()
     }
@@ -257,7 +257,7 @@ impl AdvancedGpuMemoryPool {
         // Find the pool this buffer belongs to
         let pool_index = self.buffer_sizes.iter()
             .position(|&size| size == buffer_size)
-            .ok_or_else(|| anyhow\!("Buffer size does not match any pool"))?;
+            .ok_or_else(|| anyhow!("Buffer size does not match any pool"))?;
 
         self.pools[pool_index].return_buffer(buffer)
     }
@@ -320,13 +320,13 @@ pub struct AdvancedMemoryPoolStats {
 impl AdvancedMemoryPoolStats {
     /// Print detailed statistics for all pools
     pub fn print_detailed(&self) {
-        println\!("Advanced GPU Memory Pool Statistics:");
-        println\!("  Overall: {} buffers, {:.1}% utilization", 
+        println!("Advanced GPU Memory Pool Statistics:");
+        println!("  Overall: {} buffers, {:.1}% utilization", 
                  self.total_buffers, self.utilization * 100.0);
-        println\!("  Total memory: {:.2} MB", self.total_memory as f64 / 1024.0 / 1024.0);
+        println!("  Total memory: {:.2} MB", self.total_memory as f64 / 1024.0 / 1024.0);
         
         for (i, stats) in self.pool_stats.iter().enumerate() {
-            println\!("  Pool {}: {:.2} KB buffers, {} total, {:.1}% util", 
+            println!("  Pool {}: {:.2} KB buffers, {} total, {:.1}% util", 
                      i, stats.buffer_size as f64 * 4.0 / 1024.0,
                      stats.total_buffers, stats.utilization * 100.0);
         }

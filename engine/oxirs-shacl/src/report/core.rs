@@ -157,14 +157,14 @@ impl ValidationReport {
 
     /// Check if there are any violations
     pub fn has_violations(&self) -> bool {
-        \!self.violations.is_empty()
+        !self.violations.is_empty()
     }
 
     /// Get violations for a specific shape
     pub fn violations_for_shape(&self, shape_id: &ShapeId) -> Vec<&ValidationViolation> {
         self.violations
             .iter()
-            .filter( < /dev/null | v| &v.source_shape == shape_id)
+            .filter(|v| &v.source_shape == shape_id)
             .collect()
     }
 
@@ -211,7 +211,7 @@ impl ValidationReport {
     where
         F: Fn(&ValidationViolation) -> bool,
     {
-        self.violations.retain(|v| \!predicate(v));
+        self.violations.retain(|v| !predicate(v));
         self.update_conformance();
         self.update_summary();
     }
@@ -267,7 +267,7 @@ impl ValidationReport {
         if self.conforms {
             "✅ Validation passed - no violations found".to_string()
         } else {
-            format\!(
+            format!(
                 "❌ Validation failed - {} violations ({} errors, {} warnings)",
                 self.violation_count(),
                 self.summary.error_count(),
@@ -286,10 +286,10 @@ impl ValidationReport {
         let filtered_report = self.apply_config(config)?;
         if config.pretty_print {
             serde_json::to_string_pretty(&filtered_report)
-                .map_err(|e| crate::ShaclError::ReportError(format\!("JSON serialization failed: {}", e)))
+                .map_err(|e| crate::ShaclError::ReportError(format!("JSON serialization failed: {}", e)))
         } else {
             serde_json::to_string(&filtered_report)
-                .map_err(|e| crate::ShaclError::ReportError(format\!("JSON serialization failed: {}", e)))
+                .map_err(|e| crate::ShaclError::ReportError(format!("JSON serialization failed: {}", e)))
         }
     }
 
@@ -325,7 +325,7 @@ impl ValidationReport {
 
     /// Export to plain text format
     pub fn to_text(&self) -> Result<String> {
-        Ok(format\!("{}", self))
+        Ok(format!("{}", self))
     }
 
     /// Export to YAML format
@@ -337,7 +337,7 @@ impl ValidationReport {
     pub fn to_yaml_with_config(&self, config: &ReportConfig) -> Result<String> {
         let filtered_report = self.apply_config(config)?;
         serde_yaml::to_string(&filtered_report)
-            .map_err(|e| crate::ShaclError::ReportError(format\!("YAML serialization failed: {}", e)))
+            .map_err(|e| crate::ShaclError::ReportError(format!("YAML serialization failed: {}", e)))
     }
 
     /// Apply configuration filters to create a filtered report
@@ -350,17 +350,17 @@ impl ValidationReport {
         }
 
         // Remove summary if not included
-        if \!config.include_summary {
+        if !config.include_summary {
             filtered_report.summary = ValidationSummary::default();
         }
 
         // Remove metadata if not included
-        if \!config.include_metadata {
+        if !config.include_metadata {
             filtered_report.metadata = ReportMetadata::new();
         }
 
         // Remove timestamps if not included
-        if \!config.include_timestamps {
+        if !config.include_timestamps {
             filtered_report.metadata.timestamp = 0;
         }
 
@@ -369,7 +369,7 @@ impl ValidationReport {
 
     fn update_conformance(&mut self) {
         // Data conforms if there are no error-level violations
-        self.conforms = \!self.violations.iter().any(|v| v.result_severity == Severity::Violation);
+        self.conforms = !self.violations.iter().any(|v| v.result_severity == Severity::Violation);
     }
 
     /// Merge another report into this one
@@ -386,6 +386,11 @@ impl ValidationReport {
                 self.metadata.validation_duration = Some(other_duration);
             }
         }
+    }
+
+    /// Merge another report into this one (alias for merge)
+    pub fn merge_result(&mut self, other: ValidationReport) {
+        self.merge(other);
     }
 
     /// Create a subset report with only specific severities
@@ -419,16 +424,16 @@ impl Default for ValidationReport {
 
 impl fmt::Display for ValidationReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln\!(f, "SHACL Validation Report")?;
-        writeln\!(f, "======================")?;
-        writeln\!(f, "Conforms: {}", self.conforms)?;
-        writeln\!(f, "Violations: {}", self.violation_count())?;
-        writeln\!(f, "Generated: {}", self.metadata.formatted_timestamp())?;
+        writeln!(f, "SHACL Validation Report")?;
+        writeln!(f, "======================")?;
+        writeln!(f, "Conforms: {}", self.conforms)?;
+        writeln!(f, "Violations: {}", self.violation_count())?;
+        writeln!(f, "Generated: {}", self.metadata.formatted_timestamp())?;
 
-        if \!self.violations.is_empty() {
-            writeln\!(f, "\nViolations:")?;
+        if !self.violations.is_empty() {
+            writeln!(f, "\nViolations:")?;
             for (i, violation) in self.violations.iter().enumerate() {
-                writeln\!(
+                writeln!(
                     f,
                     "  {}. {} - {} ({})",
                     i + 1,
@@ -437,15 +442,15 @@ impl fmt::Display for ValidationReport {
                     violation.source_shape.as_str()
                 )?;
                 if let Some(message) = &violation.result_message {
-                    writeln\!(f, "     {}", message)?;
+                    writeln!(f, "     {}", message)?;
                 }
             }
         }
 
         // Add summary if available
         if self.summary.has_violations() {
-            writeln\!(f, "\nSummary:")?;
-            writeln\!(f, "{}", self.summary.text_summary())?;
+            writeln!(f, "\nSummary:")?;
+            writeln!(f, "{}", self.summary.text_summary())?;
         }
 
         Ok(())

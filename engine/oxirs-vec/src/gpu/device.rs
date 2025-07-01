@@ -1,4 +1,4 @@
-//\! GPU device information and management
+//! GPU device information and management
 
 use anyhow::{anyhow, Result};
 
@@ -25,21 +25,21 @@ impl GpuDevice {
             use cuda_runtime_sys::*;
             unsafe {
                 let result = cudaSetDevice(device_id);
-                if result \!= cudaError_t::cudaSuccess {
-                    return Err(anyhow\!("Failed to set CUDA device {}", device_id));
+                if result != cudaError_t::cudaSuccess {
+                    return Err(anyhow!("Failed to set CUDA device {}", device_id));
                 }
 
                 let mut props: cudaDeviceProp = std::mem::zeroed();
                 let result = cudaGetDeviceProperties(&mut props, device_id);
-                if result \!= cudaError_t::cudaSuccess {
-                    return Err(anyhow\!("Failed to get device properties"));
+                if result != cudaError_t::cudaSuccess {
+                    return Err(anyhow!("Failed to get device properties"));
                 }
 
                 let mut free_mem: usize = 0;
                 let mut total_mem: usize = 0;
                 let result = cudaMemGetInfo(&mut free_mem, &mut total_mem);
-                if result \!= cudaError_t::cudaSuccess {
-                    return Err(anyhow\!("Failed to get memory info"));
+                if result != cudaError_t::cudaSuccess {
+                    return Err(anyhow!("Failed to get memory info"));
                 }
 
                 Ok(Self {
@@ -64,7 +64,7 @@ impl GpuDevice {
             // Fallback for testing without CUDA
             Ok(Self {
                 device_id,
-                name: format\!("Simulated GPU {}", device_id),
+                name: format!("Simulated GPU {}", device_id),
                 compute_capability: (7, 5), // Simulate modern GPU
                 total_memory: 8 * 1024 * 1024 * 1024, // 8GB
                 free_memory: 6 * 1024 * 1024 * 1024,  // 6GB free
@@ -85,8 +85,8 @@ impl GpuDevice {
             unsafe {
                 let mut device_count: i32 = 0;
                 let result = cudaGetDeviceCount(&mut device_count);
-                if result \!= cudaError_t::cudaSuccess {
-                    return Err(anyhow\!("Failed to get device count"));
+                if result != cudaError_t::cudaSuccess {
+                    return Err(anyhow!("Failed to get device count"));
                 }
 
                 let mut devices = Vec::new();
@@ -102,7 +102,7 @@ impl GpuDevice {
         #[cfg(not(feature = "cuda"))]
         {
             // Fallback: simulate 2 GPUs for testing
-            Ok(vec\![
+            Ok(vec![
                 Self::get_device_info(0)?,
                 Self::get_device_info(1)?,
             ])
@@ -133,4 +133,3 @@ impl GpuDevice {
         (blocks, optimal_threads)
     }
 }
-EOF < /dev/null

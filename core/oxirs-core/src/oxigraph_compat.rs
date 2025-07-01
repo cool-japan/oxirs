@@ -4,8 +4,8 @@
 //! allowing OxiRS to be used as a drop-in replacement for Oxigraph.
 
 use crate::{
-    model::*, parser::RdfFormat, rdf_store::OxirsQueryResults, serializer::Serializer, OxirsError,
-    Result, Store as OxirsStore,
+    model::*, parser::RdfFormat, rdf_store::{OxirsQueryResults, RdfStore}, serializer::Serializer, OxirsError,
+    Result, Store as OxirsStoreTrait,
 };
 use std::io::{BufRead, Write};
 use std::path::Path;
@@ -17,7 +17,7 @@ use std::sync::{Arc, RwLock};
 ///
 /// Uses interior mutability to match Oxigraph's API where mutations take &self
 pub struct Store {
-    inner: Arc<RwLock<OxirsStore>>,
+    inner: Arc<RwLock<RdfStore>>,
 }
 
 impl Store {
@@ -26,7 +26,7 @@ impl Store {
     /// This matches oxigraph::Store::new()
     pub fn new() -> Result<Self> {
         Ok(Store {
-            inner: Arc::new(RwLock::new(OxirsStore::new()?)),
+            inner: Arc::new(RwLock::new(RdfStore::new()?)),
         })
     }
 
@@ -35,7 +35,7 @@ impl Store {
     /// This matches oxigraph::Store::open()
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         Ok(Store {
-            inner: Arc::new(RwLock::new(OxirsStore::open(path)?)),
+            inner: Arc::new(RwLock::new(RdfStore::open(path)?)),
         })
     }
 

@@ -119,7 +119,7 @@ pub use wasm_edge_computing::{
 };
 pub use quantum_communication::{
     BellState, EntanglementDistribution, QuantumCommConfig, QuantumCommSystem, 
-    QuantumOperation, QuantumSecurityProtocol, QuantumState, Qubit,
+    QuantumOperation as QuantumCommOperation, QuantumSecurityProtocol, QuantumState as QuantumCommState, Qubit,
 };
 
 #[cfg(test)]

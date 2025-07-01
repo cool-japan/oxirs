@@ -25,6 +25,9 @@ use crate::troubleshooting::{
 };
 use crate::{StarConfig, StarError, StarResult};
 
+// Import query types from oxirs-core
+use oxirs_core::query::{QueryExecutor, QueryResults};
+
 /// CLI application for RDF-star tools
 pub struct StarCli {
     config: StarConfig,
@@ -812,8 +815,6 @@ impl StarCli {
 
     /// Execute SPARQL-star query
     fn execute_query(&self, data_path: &str, query_input: &str, output_format: &str) -> Result<()> {
-        use oxirs_core::query::{QueryEngine, QueryResult};
-
         // Load data
         let content = fs::read_to_string(data_path)?;
         let format = self.detect_format(data_path, &content)?;
@@ -835,8 +836,8 @@ impl StarCli {
 
         info!("Executing SPARQL-star query on {} triples", store.len());
 
-        // Execute query using the query engine
-        let mut engine = QueryEngine::new();
+        // Execute query using the query executor  
+        // For now, we'll just demonstrate the setup since we need a proper Store instance
         let start_time = Instant::now();
 
         // Simple query execution placeholder
@@ -1318,8 +1319,6 @@ impl StarCli {
 
     /// Run performance analysis on a file
     fn run_performance_analysis(&self, input_file: &str) -> StarResult<PerformanceAnalysis> {
-        use std::fs;
-
         let metadata = fs::metadata(input_file).map_err(|e| {
             crate::StarError::parse_error(format!("Failed to read file metadata: {}", e))
         })?;
@@ -1431,7 +1430,7 @@ impl StarCli {
 
         let report = profiler.generate_report();
 
-        match format {
+        match format.as_str() {
             "json" => {
                 let report_json = serde_json::to_string_pretty(&report)?;
                 if let Some(output_path) = output_path {

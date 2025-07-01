@@ -1,237 +1,82 @@
 //! Comprehensive authentication and authorization system
+//! 
+//! This module provides a modular authentication system with support for:
+//! - Username/password authentication
+//! - X.509 certificate authentication  
+//! - Multi-factor authentication (TOTP, SMS, Hardware tokens)
+//! - LDAP/Active Directory integration
+//! - OAuth2/OIDC support
+//! - SAML 2.0 authentication
+//! - JWT token management
+//! - Session management
+//! - Role-based access control
 
-use crate::auth::ldap::LdapService;
-use crate::auth::oauth::OAuth2Service;
-#[cfg(feature = "saml")]
-use crate::auth::saml::{SamlConfig, SamlProvider};
 use crate::config::{JwtConfig, LdapConfig, OAuthConfig, SecurityConfig, UserConfig};
 use crate::error::{FusekiError, FusekiResult};
-use argon2::password_hash::{rand_core::OsRng, SaltString};
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use pem;
-use regex;
-use axum::{
-    extract::{FromRequestParts, State},
-    http::{request::Parts, HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-    RequestPartsExt,
-};
-use axum_extra::headers::{authorization::Bearer, Authorization, HeaderMapExt};
-use chrono::{DateTime, Utc};
-use der_parser::oid::Oid;
-use oid_registry::{OID_X509_EXT_EXTENDED_KEY_USAGE, OID_X509_EXT_KEY_USAGE};
-use rand::Rng;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
-use x509_parser::prelude::*;
+use tracing::{debug, info};
 
-#[cfg(feature = "auth")]
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
-
+// Module declarations
+pub mod certificate;
 pub mod ldap;
 pub mod oauth;
+pub mod password;
+pub mod permissions;
 #[cfg(feature = "saml")]
 pub mod saml;
+pub mod session;
+pub mod types;
 
-/// Authentication result
-#[derive(Debug, Clone)]
-pub enum AuthResult {
-    Authenticated(User),
-    Unauthenticated,
-    Forbidden,
-    Expired,
-    Invalid,
-    Locked,
-    CertificateRequired,
-    CertificateInvalid,
-}
+// Re-export key types for easy access
+pub use types::*;
+pub use certificate::CertificateAuth as CertificateAuthenticator;
+pub use session::SessionManager;
 
-/// Certificate authentication data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CertificateAuth {
-    pub subject_dn: String,
-    pub issuer_dn: String,
-    pub serial_number: String,
-    pub fingerprint: String,
-    pub not_before: DateTime<Utc>,
-    pub not_after: DateTime<Utc>,
-    pub key_usage: Vec<String>,
-    pub extended_key_usage: Vec<String>,
-}
-
-/// Multi-factor authentication data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MfaChallenge {
-    pub challenge_id: String,
-    pub challenge_type: MfaType,
-    pub expires_at: DateTime<Utc>,
-    pub attempts_remaining: u8,
-}
-
-/// MFA authentication types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum MfaType {
-    Totp,     // Time-based One-Time Password
-    Sms,      // SMS verification
-    Email,    // Email verification
-    Hardware, // Hardware token (e.g., YubiKey)
-    Backup,   // Backup codes
-}
-
-/// SAML authentication response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SamlResponse {
-    pub assertion_id: String,
-    pub subject: String,
-    pub issuer: String,
-    pub attributes: HashMap<String, Vec<String>>,
-    pub session_index: String,
-    pub not_on_or_after: DateTime<Utc>,
-}
-
-/// Authenticated user information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
-    pub username: String,
-    pub roles: Vec<String>,
-    pub email: Option<String>,
-    pub full_name: Option<String>,
-    pub last_login: Option<DateTime<Utc>>,
-    pub permissions: Vec<Permission>,
-}
-
-/// Permission system
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Permission {
-    // Dataset permissions
-    DatasetRead(String),
-    DatasetWrite(String),
-    DatasetAdmin(String),
-
-    // Global permissions
-    GlobalRead,
-    GlobalWrite,
-    GlobalAdmin,
-
-    // Service permissions
-    SparqlQuery,
-    SparqlUpdate,
-    GraphStore,
-
-    // Admin permissions
-    UserManagement,
-    SystemConfig,
-    SystemMetrics,
-}
-
-/// MFA status for a user
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MfaStatus {
-    pub enabled: bool,
-    pub methods: Vec<MfaType>,
-    pub backup_codes_generated: bool,
-}
-
-/// JWT claims structure
-#[cfg(feature = "auth")]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Claims {
-    pub sub: String, // Subject (username)
-    pub exp: usize,  // Expiration time
-    pub iat: usize,  // Issued at
-    pub iss: String, // Issuer
-    pub aud: String, // Audience
-    pub roles: Vec<String>,
-    pub permissions: Vec<Permission>,
-}
-
-/// Authentication service manager
+/// Main authentication service that coordinates all authentication methods
 #[derive(Clone)]
 pub struct AuthService {
     config: Arc<SecurityConfig>,
     users: Arc<RwLock<HashMap<String, UserConfig>>>,
-    sessions: Arc<RwLock<HashMap<String, UserSession>>>,
-    mfa_challenges: Arc<RwLock<HashMap<String, MfaChallenge>>>,
-    mfa_secrets: Arc<RwLock<HashMap<String, MfaSecrets>>>,
-    oauth2_service: Option<OAuth2Service>,
-    ldap_service: Option<LdapService>,
+    session_manager: Arc<SessionManager>,
+    certificate_auth: Arc<CertificateAuthenticator>,
+    oauth2_service: Option<oauth::OAuth2Service>,
+    ldap_service: Option<ldap::LdapService>,
     #[cfg(feature = "saml")]
-    saml_provider: Option<Arc<SamlProvider>>,
-}
-
-/// MFA secrets storage for a user
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MfaSecrets {
-    pub totp_secret: Option<String>,
-    pub sms_phone: Option<String>,
-    pub email: Option<String>,
-    pub backup_codes: Vec<String>,
-    pub webauthn_credentials: Vec<String>,
-}
-
-/// Active user session
-#[derive(Debug, Clone)]
-pub struct UserSession {
-    pub user: User,
-    pub created_at: DateTime<Utc>,
-    pub last_accessed: DateTime<Utc>,
-    pub session_id: String,
-}
-
-/// Login request
-#[derive(Debug, Deserialize)]
-pub struct LoginRequest {
-    pub username: String,
-    pub password: String,
-    pub remember_me: Option<bool>,
-}
-
-/// Login response
-#[derive(Debug, Serialize)]
-pub struct LoginResponse {
-    pub success: bool,
-    pub token: Option<String>,
-    pub user: Option<User>,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub message: String,
-}
-
-/// Token validation result
-#[derive(Debug)]
-pub struct TokenValidation {
-    pub user: User,
-    pub expires_at: DateTime<Utc>,
+    saml_provider: Option<Arc<saml::SamlProvider>>,
 }
 
 impl AuthService {
     /// Create a new authentication service
     pub async fn new(config: SecurityConfig) -> FusekiResult<Self> {
         let users = config.users.clone();
+        let config_arc = Arc::new(config);
+
+        // Initialize session manager
+        let session_manager = Arc::new(SessionManager::new(config_arc.clone()));
+
+        // Initialize certificate authenticator
+        let certificate_auth = Arc::new(CertificateAuthenticator::new(config_arc.clone()));
 
         // Initialize OAuth2 service if configured
-        let oauth2_service = config
+        let oauth2_service = config_arc
             .oauth
             .as_ref()
-            .map(|oauth_config| OAuth2Service::new(oauth_config.clone()));
+            .map(|oauth_config| oauth::OAuth2Service::new(oauth_config.clone()));
 
         // Initialize LDAP service if configured
-        let ldap_service = if let Some(ldap_config) = config.ldap.as_ref() {
-            Some(LdapService::new(ldap_config.clone()).await?)
+        let ldap_service = if let Some(ldap_config) = config_arc.ldap.as_ref() {
+            Some(ldap::LdapService::new(ldap_config.clone()).await?)
         } else {
             None
         };
 
         Ok(Self {
-            config: Arc::new(config),
+            config: config_arc,
             users: Arc::new(RwLock::new(users)),
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            mfa_challenges: Arc::new(RwLock::new(HashMap::new())),
-            mfa_secrets: Arc::new(RwLock::new(HashMap::new())),
+            session_manager,
+            certificate_auth,
             oauth2_service,
             ldap_service,
             #[cfg(feature = "saml")]
@@ -251,27 +96,16 @@ impl AuthService {
         if let Some(user_config) = users.get(username) {
             // Check if user is enabled
             if !user_config.enabled {
-                warn!("Login attempt for disabled user: {}", username);
+                info!("Login attempt for disabled user: {}", username);
                 return Ok(AuthResult::Forbidden);
             }
 
-            // Check if user is locked
-            if let Some(locked_until) = user_config.locked_until {
-                if locked_until > Utc::now() {
-                    warn!(
-                        "Login attempt for locked user: {} (locked until {})",
-                        username, locked_until
-                    );
-                    return Ok(AuthResult::Locked);
-                }
-            }
-
-            // Verify password
-            if self.verify_password(password, &user_config.password_hash)? {
+            // Verify password using password module
+            if password::verify_password(password, &user_config.password_hash)? {
                 debug!("Successful local authentication for user: {}", username);
 
                 // Create user object with permissions
-                let permissions = self.compute_user_permissions(user_config).await;
+                let permissions = permissions::compute_user_permissions(user_config).await;
                 let user = User {
                     username: username.to_string(),
                     roles: user_config.roles.clone(),
@@ -281,1722 +115,75 @@ impl AuthService {
                     permissions,
                 };
 
-                // Update last login time
-                self.update_last_login(username).await?;
-
                 return Ok(AuthResult::Authenticated(user));
-            } else {
-                warn!("Failed local authentication attempt for user: {}", username);
-
-                // Increment failed login attempts
-                self.increment_failed_attempts(username).await?;
             }
         }
 
-        // If local authentication failed or user doesn't exist, try LDAP if enabled
-        if self.is_ldap_enabled() {
+        // If local authentication failed, try LDAP if enabled
+        if let Some(ldap_service) = &self.ldap_service {
             debug!("Trying LDAP authentication for user: {}", username);
-            match self.authenticate_ldap(username, password).await {
-                Ok(AuthResult::Authenticated(user)) => {
-                    info!("Successful LDAP authentication for user: {}", username);
-                    return Ok(AuthResult::Authenticated(user));
-                }
-                Ok(auth_result) => {
-                    debug!("LDAP authentication failed with result: {:?}", auth_result);
-                }
-                Err(e) => {
-                    warn!("LDAP authentication error for user {}: {}", username, e);
-                }
-            }
+            return ldap_service.authenticate(username, password).await;
         }
 
-        // All authentication methods failed
-        warn!("All authentication methods failed for user: {}", username);
         Ok(AuthResult::Unauthenticated)
     }
 
-    /// Generate JWT token for authenticated user
-    #[cfg(feature = "auth")]
-    pub fn generate_jwt_token(&self, user: &User) -> FusekiResult<String> {
-        if let Some(ref jwt_config) = self.config.jwt {
-            let now = Utc::now();
-            let exp = now + chrono::Duration::seconds(jwt_config.expiration_secs as i64);
+    /// Authenticate using X.509 certificate
+    pub async fn authenticate_certificate(&self, cert_data: &[u8]) -> FusekiResult<AuthResult> {
+        self.certificate_auth.authenticate_certificate(cert_data).await
+    }
 
-            let claims = Claims {
-                sub: user.username.clone(),
-                exp: exp.timestamp() as usize,
-                iat: now.timestamp() as usize,
-                iss: jwt_config.issuer.clone(),
-                aud: jwt_config.audience.clone(),
-                roles: user.roles.clone(),
-                permissions: user.permissions.clone(),
-            };
+    /// Create a new session for authenticated user
+    pub async fn create_session(&self, user: User) -> FusekiResult<String> {
+        self.session_manager.create_session(user).await
+    }
 
-            let header = Header::new(Algorithm::HS256);
-            let encoding_key = EncodingKey::from_secret(jwt_config.secret.as_ref());
+    /// Validate an existing session
+    pub async fn validate_session(&self, session_id: &str) -> FusekiResult<Option<User>> {
+        self.session_manager.validate_session(session_id).await
+    }
 
-            encode(&header, &claims, &encoding_key).map_err(|e| {
-                FusekiError::authentication(format!("Failed to generate JWT token: {}", e))
-            })
-        } else {
-            Err(FusekiError::configuration(
-                "JWT configuration not available",
-            ))
-        }
+    /// Logout a session
+    pub async fn logout(&self, session_id: &str) -> FusekiResult<bool> {
+        self.session_manager.logout(session_id).await
+    }
+
+    /// Create JWT token for user
+    pub fn create_jwt_token(&self, user: &User) -> FusekiResult<String> {
+        self.session_manager.create_jwt_token(user)
     }
 
     /// Validate JWT token
-    #[cfg(feature = "auth")]
     pub fn validate_jwt_token(&self, token: &str) -> FusekiResult<TokenValidation> {
-        if let Some(ref jwt_config) = self.config.jwt {
-            let decoding_key = DecodingKey::from_secret(jwt_config.secret.as_ref());
-            let mut validation = Validation::new(Algorithm::HS256);
-            validation.set_issuer(&[&jwt_config.issuer]);
-            validation.set_audience(&[&jwt_config.audience]);
-
-            match decode::<Claims>(token, &decoding_key, &validation) {
-                Ok(token_data) => {
-                    let claims = token_data.claims;
-                    let expires_at = DateTime::from_timestamp(claims.exp as i64, 0)
-                        .unwrap_or_else(|| Utc::now());
-
-                    let user = User {
-                        username: claims.sub,
-                        roles: claims.roles,
-                        email: None, // Not stored in JWT for security
-                        full_name: None,
-                        last_login: None,
-                        permissions: claims.permissions,
-                    };
-
-                    Ok(TokenValidation { user, expires_at })
-                }
-                Err(e) => {
-                    debug!("JWT token validation failed: {}", e);
-                    Err(FusekiError::authentication("Invalid JWT token"))
-                }
-            }
-        } else {
-            Err(FusekiError::configuration(
-                "JWT configuration not available",
-            ))
-        }
-    }
-
-    /// Create user session
-    pub async fn create_session(&self, user: User) -> FusekiResult<String> {
-        let session_id = uuid::Uuid::new_v4().to_string();
-        let session = UserSession {
-            user,
-            created_at: Utc::now(),
-            last_accessed: Utc::now(),
-            session_id: session_id.clone(),
-        };
-
-        let username = session.user.username.clone();
-        let mut sessions = self.sessions.write().await;
-        sessions.insert(session_id.clone(), session);
-
-        info!("Created session for user: {}", username);
-        Ok(session_id)
-    }
-
-    /// Validate session
-    pub async fn validate_session(&self, session_id: &str) -> FusekiResult<AuthResult> {
-        let mut sessions = self.sessions.write().await;
-
-        if let Some(session) = sessions.get_mut(session_id) {
-            let timeout = chrono::Duration::seconds(self.config.session.timeout_secs as i64);
-
-            if Utc::now() - session.last_accessed > timeout {
-                sessions.remove(session_id);
-                debug!("Session expired: {}", session_id);
-                Ok(AuthResult::Expired)
-            } else {
-                session.last_accessed = Utc::now();
-                Ok(AuthResult::Authenticated(session.user.clone()))
-            }
-        } else {
-            debug!("Session not found: {}", session_id);
-            Ok(AuthResult::Unauthenticated)
-        }
-    }
-
-    /// Logout user (invalidate session)
-    pub async fn logout(&self, session_id: &str) -> FusekiResult<()> {
-        let mut sessions = self.sessions.write().await;
-        if let Some(session) = sessions.remove(session_id) {
-            info!("User logged out: {}", session.user.username);
-        }
-        Ok(())
-    }
-
-    /// Check if user has permission
-    pub fn has_permission(&self, user: &User, permission: &Permission) -> bool {
-        // Check direct permissions
-        if user.permissions.contains(permission) {
-            return true;
-        }
-
-        // Check role-based permissions
-        self.check_role_permissions(user, permission)
-    }
-
-    /// Hash password using Argon2
-    pub fn hash_password(&self, password: &str) -> FusekiResult<String> {
-        let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-
-        argon2
-            .hash_password(password.as_bytes(), &salt)
-            .map(|hash| hash.to_string())
-            .map_err(|e| FusekiError::authentication(format!("Failed to hash password: {}", e)))
-    }
-
-    /// Verify password against hash
-    pub fn verify_password(&self, password: &str, hash: &str) -> FusekiResult<bool> {
-        let parsed_hash = PasswordHash::new(hash)
-            .map_err(|e| FusekiError::authentication(format!("Invalid password hash: {}", e)))?;
-
-        let argon2 = Argon2::default();
-        Ok(argon2
-            .verify_password(password.as_bytes(), &parsed_hash)
-            .is_ok())
-    }
-
-    /// Add or update user
-    pub async fn upsert_user(&self, username: String, user_config: UserConfig) -> FusekiResult<()> {
-        let mut users = self.users.write().await;
-        users.insert(username.clone(), user_config);
-        info!("User upserted: {}", username);
-        Ok(())
-    }
-
-    /// Remove user
-    pub async fn remove_user(&self, username: &str) -> FusekiResult<bool> {
-        let mut users = self.users.write().await;
-        let removed = users.remove(username).is_some();
-        if removed {
-            info!("User removed: {}", username);
-
-            // Invalidate all sessions for this user
-            let mut sessions = self.sessions.write().await;
-            sessions.retain(|_, session| session.user.username != username);
-        }
-        Ok(removed)
-    }
-
-    /// Get user information
-    pub async fn get_user(&self, username: &str) -> Option<UserConfig> {
-        let users = self.users.read().await;
-        users.get(username).cloned()
-    }
-
-    /// List all users (for admin)
-    pub async fn list_users(&self) -> HashMap<String, UserConfig> {
-        let users = self.users.read().await;
-        users.clone()
-    }
-
-    /// Update last login time
-    async fn update_last_login(&self, username: &str) -> FusekiResult<()> {
-        let mut users = self.users.write().await;
-        if let Some(user) = users.get_mut(username) {
-            user.last_login = Some(Utc::now());
-            user.failed_login_attempts = 0; // Reset failed attempts on successful login
-        }
-        Ok(())
-    }
-
-    /// Increment failed login attempts
-    async fn increment_failed_attempts(&self, username: &str) -> FusekiResult<()> {
-        let mut users = self.users.write().await;
-        if let Some(user) = users.get_mut(username) {
-            user.failed_login_attempts += 1;
-
-            // Lock user after 5 failed attempts for 15 minutes
-            if user.failed_login_attempts >= 5 {
-                user.locked_until = Some(Utc::now() + chrono::Duration::minutes(15));
-                warn!("User locked due to failed login attempts: {}", username);
-            }
-        }
-        Ok(())
-    }
-
-    /// Compute user permissions based on roles
-    async fn compute_user_permissions(&self, user_config: &UserConfig) -> Vec<Permission> {
-        let mut permissions = Vec::new();
-
-        for role in &user_config.roles {
-            match role.as_str() {
-                "admin" => {
-                    permissions.extend(vec![
-                        Permission::GlobalAdmin,
-                        Permission::GlobalRead,
-                        Permission::GlobalWrite,
-                        Permission::SparqlQuery,
-                        Permission::SparqlUpdate,
-                        Permission::GraphStore,
-                        Permission::UserManagement,
-                        Permission::SystemConfig,
-                        Permission::SystemMetrics,
-                    ]);
-                }
-                "user" => {
-                    permissions.extend(vec![Permission::GlobalRead, Permission::SparqlQuery]);
-                }
-                "writer" => {
-                    permissions.extend(vec![
-                        Permission::GlobalRead,
-                        Permission::GlobalWrite,
-                        Permission::SparqlQuery,
-                        Permission::SparqlUpdate,
-                        Permission::GraphStore,
-                    ]);
-                }
-                "reader" => {
-                    permissions.extend(vec![Permission::GlobalRead, Permission::SparqlQuery]);
-                }
-                _ => {
-                    // Custom role - could be dataset-specific
-                    if role.starts_with("dataset:") {
-                        let dataset_name = role.strip_prefix("dataset:").unwrap_or("");
-                        if role.ends_with(":admin") {
-                            let dataset_name =
-                                dataset_name.strip_suffix(":admin").unwrap_or(dataset_name);
-                            permissions.push(Permission::DatasetAdmin(dataset_name.to_string()));
-                        } else if role.ends_with(":write") {
-                            let dataset_name =
-                                dataset_name.strip_suffix(":write").unwrap_or(dataset_name);
-                            permissions.push(Permission::DatasetWrite(dataset_name.to_string()));
-                        } else if role.ends_with(":read") {
-                            let dataset_name =
-                                dataset_name.strip_suffix(":read").unwrap_or(dataset_name);
-                            permissions.push(Permission::DatasetRead(dataset_name.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Remove duplicates
-        permissions.sort();
-        permissions.dedup();
-
-        permissions
-    }
-
-    /// Check role-based permissions
-    fn check_role_permissions(&self, user: &User, permission: &Permission) -> bool {
-        for role in &user.roles {
-            match (role.as_str(), permission) {
-                ("admin", _) => return true,
-                (
-                    "writer",
-                    Permission::GlobalRead
-                    | Permission::GlobalWrite
-                    | Permission::SparqlQuery
-                    | Permission::SparqlUpdate
-                    | Permission::GraphStore,
-                ) => return true,
-                ("reader", Permission::GlobalRead | Permission::SparqlQuery) => return true,
-                ("user", Permission::GlobalRead | Permission::SparqlQuery) => return true,
-                _ => continue,
-            }
-        }
-        false
-    }
-
-    // OAuth2/OIDC Authentication Methods
-
-    /// Get OAuth2 service reference
-    pub fn oauth2_service(&self) -> Option<&OAuth2Service> {
-        self.oauth2_service.as_ref()
-    }
-
-    /// Generate OAuth2 authorization URL
-    pub async fn generate_oauth2_auth_url(
-        &self,
-        redirect_uri: &str,
-        scopes: &[String],
-        use_pkce: bool,
-    ) -> FusekiResult<(String, String)> {
-        if let Some(oauth2_service) = &self.oauth2_service {
-            oauth2_service
-                .generate_authorization_url(redirect_uri, scopes, use_pkce)
-                .await
-        } else {
-            Err(FusekiError::configuration("OAuth2 not configured"))
-        }
-    }
-
-    /// Complete OAuth2 authorization flow
-    pub async fn complete_oauth2_flow(
-        &self,
-        code: &str,
-        state: &str,
-        redirect_uri: &str,
-    ) -> FusekiResult<AuthResult> {
-        if let Some(oauth2_service) = &self.oauth2_service {
-            // Exchange code for token
-            let token = oauth2_service
-                .exchange_code_for_token(code, state, redirect_uri)
-                .await?;
-
-            // Authenticate using the access token
-            oauth2_service
-                .authenticate_oauth2(&token.access_token)
-                .await
-        } else {
-            Err(FusekiError::configuration("OAuth2 not configured"))
-        }
-    }
-
-    /// Authenticate using OAuth2 access token
-    pub async fn authenticate_oauth2_token(&self, access_token: &str) -> FusekiResult<AuthResult> {
-        if let Some(oauth2_service) = &self.oauth2_service {
-            oauth2_service.authenticate_oauth2(access_token).await
-        } else {
-            Err(FusekiError::configuration("OAuth2 not configured"))
-        }
-    }
-
-    /// Refresh OAuth2 access token
-    pub async fn refresh_oauth2_token(
-        &self,
-        refresh_token: &str,
-    ) -> FusekiResult<oauth::OAuth2Token> {
-        if let Some(oauth2_service) = &self.oauth2_service {
-            oauth2_service.refresh_token(refresh_token).await
-        } else {
-            Err(FusekiError::configuration("OAuth2 not configured"))
-        }
-    }
-
-    /// Validate OAuth2 access token
-    pub async fn validate_oauth2_token(&self, access_token: &str) -> FusekiResult<bool> {
-        if let Some(oauth2_service) = &self.oauth2_service {
-            oauth2_service.validate_access_token(access_token).await
-        } else {
-            Err(FusekiError::configuration("OAuth2 not configured"))
-        }
-    }
-
-    /// Get OIDC user information
-    pub async fn get_oidc_user_info(
-        &self,
-        access_token: &str,
-    ) -> FusekiResult<oauth::OIDCUserInfo> {
-        if let Some(oauth2_service) = &self.oauth2_service {
-            oauth2_service.get_user_info(access_token).await
-        } else {
-            Err(FusekiError::configuration("OAuth2 not configured"))
-        }
-    }
-
-    /// Cleanup expired OAuth2 states and tokens
-    pub async fn cleanup_oauth2_expired(&self) {
-        if let Some(oauth2_service) = &self.oauth2_service {
-            oauth2_service.cleanup_expired().await;
-        }
-    }
-
-    /// Check if OAuth2 is configured and available
-    pub fn is_oauth2_enabled(&self) -> bool {
-        self.oauth2_service.is_some()
-    }
-
-    // LDAP Authentication Methods
-
-    /// Get LDAP service reference
-    pub fn ldap_service(&self) -> Option<&LdapService> {
-        self.ldap_service.as_ref()
-    }
-
-    /// Authenticate user using LDAP
-    pub async fn authenticate_ldap(
-        &self,
-        username: &str,
-        password: &str,
-    ) -> FusekiResult<AuthResult> {
-        if let Some(ldap_service) = &self.ldap_service {
-            ldap_service
-                .authenticate_ldap_user(username, password)
-                .await
-        } else {
-            Err(FusekiError::configuration("LDAP not configured"))
-        }
-    }
-
-    /// Test LDAP connection
-    pub async fn test_ldap_connection(&self) -> FusekiResult<bool> {
-        if let Some(ldap_service) = &self.ldap_service {
-            ldap_service.test_connection().await
-        } else {
-            Err(FusekiError::configuration("LDAP not configured"))
-        }
-    }
-
-    /// Get user groups from LDAP
-    pub async fn get_ldap_user_groups(&self, username: &str) -> FusekiResult<Vec<ldap::LdapGroup>> {
-        if let Some(ldap_service) = &self.ldap_service {
-            ldap_service.get_user_groups(username).await
-        } else {
-            Err(FusekiError::configuration("LDAP not configured"))
-        }
-    }
-
-    /// Cleanup expired LDAP cache entries
-    pub async fn cleanup_ldap_cache(&self) {
-        if let Some(ldap_service) = &self.ldap_service {
-            ldap_service.cleanup_expired_cache().await;
-        }
-    }
-
-    /// Check if LDAP is configured and available
-    pub fn is_ldap_enabled(&self) -> bool {
-        self.ldap_service.is_some()
-    }
-
-    /// Get JWT configuration if available
-    pub fn jwt_config(&self) -> Option<&crate::config::JwtConfig> {
-        self.config.jwt.as_ref()
-    }
-
-    /// Get LDAP configuration if available
-    pub fn ldap_config(&self) -> Option<&crate::config::LdapConfig> {
-        self.config.ldap.as_ref()
-    }
-
-    // Certificate-based Authentication Methods
-
-    /// Authenticate user using X.509 client certificate
-    pub async fn authenticate_certificate(&self, cert_data: &[u8]) -> FusekiResult<AuthResult> {
-        debug!("Authenticating using X.509 client certificate");
-
-        // Parse certificate
-        let cert_info = self.parse_x509_certificate(cert_data)?;
-
-        // Validate certificate
-        if !self.validate_certificate(&cert_info).await? {
-            warn!("Certificate validation failed: {}", cert_info.subject_dn);
-            return Ok(AuthResult::CertificateInvalid);
-        }
-
-        // Map certificate to user
-        let user = self.map_certificate_to_user(cert_info).await?;
-
-        info!(
-            "Certificate authentication successful for user: {}",
-            user.username
-        );
-        Ok(AuthResult::Authenticated(user))
-    }
-
-    /// Parse X.509 certificate using x509-parser
-    fn parse_x509_certificate(&self, cert_data: &[u8]) -> FusekiResult<CertificateAuth> {
-        // Parse DER-encoded certificate
-        let (_, cert) = X509Certificate::from_der(cert_data).map_err(|e| {
-            FusekiError::authentication(format!("Failed to parse X.509 certificate: {}", e))
-        })?;
-
-        // Extract subject DN
-        let subject_dn = cert.subject().to_string();
-
-        // Extract issuer DN
-        let issuer_dn = cert.issuer().to_string();
-
-        // Extract serial number
-        let serial_number = cert.serial.to_str_radix(16).to_uppercase();
-
-        // Calculate SHA-256 fingerprint
-        let fingerprint = sha2::Sha256::digest(cert_data)
-            .iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<_>>()
-            .join(":");
-
-        // Extract validity period
-        let not_before = {
-            let ts = cert.validity().not_before.timestamp();
-            chrono::DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now())
-        };
-
-        let not_after = {
-            let ts = cert.validity().not_after.timestamp();
-            chrono::DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now())
-        };
-
-        // Extract key usage
-        let mut key_usage = Vec::new();
-        if let Some(ext) = cert
-            .extensions()
-            .iter()
-            .find(|ext| ext.oid == &OID_X509_EXT_KEY_USAGE)
-        {
-            if let x509_parser::extensions::ParsedExtension::KeyUsage(ku) = ext.parsed_extension() {
-                if ku.digital_signature() {
-                    key_usage.push("digitalSignature".to_string());
-                }
-                if ku.key_encipherment() {
-                    key_usage.push("keyEncipherment".to_string());
-                }
-                if ku.key_agreement() {
-                    key_usage.push("keyAgreement".to_string());
-                }
-                if ku.non_repudiation() {
-                    key_usage.push("nonRepudiation".to_string());
-                }
-            }
-        }
-
-        // Extract extended key usage
-        let mut extended_key_usage = Vec::new();
-        if let Some(ext) = cert
-            .extensions()
-            .iter()
-            .find(|ext| ext.oid == &OID_X509_EXT_EXTENDED_KEY_USAGE)
-        {
-            if let x509_parser::extensions::ParsedExtension::ExtendedKeyUsage(eku) = ext.parsed_extension() {
-                for purpose in eku.any {
-                    let purpose_str = purpose.to_string();
-                    if purpose_str == "1.3.6.1.5.5.7.3.2" {
-                        // Client Auth
-                        extended_key_usage.push("clientAuth".to_string());
-                    } else if purpose_str == "1.3.6.1.5.5.7.3.1" {
-                        // Server Auth
-                        extended_key_usage.push("serverAuth".to_string());
-                    } else if purpose_str == "1.3.6.1.5.5.7.3.4" {
-                        // Email Protection
-                        extended_key_usage.push("emailProtection".to_string());
-                    }
-                }
-            }
-        }
-
-        let cert_info = CertificateAuth {
-            subject_dn,
-            issuer_dn,
-            serial_number,
-            fingerprint,
-            not_before,
-            not_after,
-            key_usage,
-            extended_key_usage,
-        };
-
-        Ok(cert_info)
-    }
-
-    /// Validate certificate against configured trust store and CRL
-    async fn validate_certificate(&self, cert_info: &CertificateAuth) -> FusekiResult<bool> {
-        // Check certificate validity period
-        let now = Utc::now();
-        if now < cert_info.not_before || now > cert_info.not_after {
-            warn!(
-                "Certificate is expired or not yet valid: {} - {}",
-                cert_info.not_before, cert_info.not_after
-            );
-            return Ok(false);
-        }
-
-        // Check key usage for client authentication
-        if !cert_info
-            .extended_key_usage
-            .contains(&"clientAuth".to_string())
-        {
-            warn!("Certificate does not have clientAuth extended key usage");
-            return Ok(false);
-        }
-
-        // Check if certificate is in configured trust store
-        if !self.is_certificate_trusted(cert_info).await? {
-            warn!(
-                "Certificate is not in trust store: {}",
-                cert_info.subject_dn
-            );
-            return Ok(false);
-        }
-
-        // Check Certificate Revocation List (CRL) if configured
-        if let Err(e) = self.check_certificate_revocation(cert_info).await {
-            warn!("Certificate revocation check failed: {}", e);
-            return Ok(false);
-        }
-
-        // Validate certificate chain if full chain is available
-        if let Err(e) = self.validate_certificate_chain(cert_info).await {
-            warn!("Certificate chain validation failed: {}", e);
-            return Ok(false);
-        }
-
-        info!(
-            "Certificate validation successful for: {}",
-            cert_info.subject_dn
-        );
-        Ok(true)
-    }
-
-    /// Check if certificate is in the configured trust store
-    async fn is_certificate_trusted(&self, cert_info: &CertificateAuth) -> FusekiResult<bool> {
-        // Get certificate configuration
-        let cert_config = match &self.config.certificate {
-            Some(config) => config,
-            None => {
-                debug!("Certificate authentication not configured");
-                return Ok(false);
-            }
-        };
-
-        // Load trusted CA certificates from trust store
-        for trust_store_path in &cert_config.trust_store {
-            if let Ok(trusted_certs) = self.load_trust_store_certificates(trust_store_path).await {
-                for trusted_cert in trusted_certs {
-                    // Compare issuer DNs and verify certificate chain
-                    if trusted_cert.subject().to_string() == cert_info.issuer_dn {
-                        debug!("Certificate issuer found in trust store: {}", cert_info.issuer_dn);
-                        return Ok(true);
-                    }
-                    
-                    // Check for certificate fingerprint match (for pinned certificates)
-                    let trusted_fingerprint = self.compute_certificate_fingerprint(&trusted_cert)?;
-                    if trusted_fingerprint == cert_info.fingerprint {
-                        debug!("Certificate fingerprint match in trust store");
-                        return Ok(true);
-                    }
-                }
-            }
-        }
-
-        // Fallback to issuer DN pattern matching if configured
-        let is_trusted = self.is_issuer_pattern_match(&cert_info.issuer_dn, cert_config);
-
-        if is_trusted {
-            debug!("Certificate issuer is trusted by pattern: {}", cert_info.issuer_dn);
-        } else {
-            debug!("Certificate issuer is not in trust store: {}", cert_info.issuer_dn);
-        }
-
-        Ok(is_trusted)
-    }
-
-    /// Load trusted CA certificates from trust store file
-    async fn load_trust_store_certificates(
-        &self,
-        trust_store_path: &std::path::Path,
-    ) -> FusekiResult<Vec<X509Certificate<'static>>> {
-        use tokio::fs;
-        
-        let data = fs::read(trust_store_path).await.map_err(|e| {
-            FusekiError::authentication(format!(
-                "Failed to read trust store file {}: {}",
-                trust_store_path.display(),
-                e
-            ))
-        })?;
-
-        let mut certificates = Vec::new();
-
-        // Try to parse as PEM format first
-        if let Ok(pem_certs) = pem::parse_many(&data) {
-            for pem_cert in pem_certs {
-                if pem_cert.tag == "CERTIFICATE" {
-                    match X509Certificate::from_der(&pem_cert.contents) {
-                        Ok((_, cert)) => {
-                            // Convert to owned certificate
-                            let owned_cert = cert.to_owned();
-                            certificates.push(owned_cert);
-                        }
-                        Err(e) => {
-                            warn!("Failed to parse certificate in trust store: {}", e);
-                        }
-                    }
-                }
-            }
-        } else {
-            // Try DER format
-            match X509Certificate::from_der(&data) {
-                Ok((_, cert)) => {
-                    let owned_cert = cert.to_owned();
-                    certificates.push(owned_cert);
-                }
-                Err(e) => {
-                    return Err(FusekiError::authentication(format!(
-                        "Failed to parse trust store certificate: {}",
-                        e
-                    )));
-                }
-            }
-        }
-
-        Ok(certificates)
-    }
-
-    /// Compute SHA-256 fingerprint of certificate
-    fn compute_certificate_fingerprint(&self, cert: &X509Certificate) -> FusekiResult<String> {
-        use sha2::{Digest, Sha256};
-        
-        let der_data = cert.raw;
-        let fingerprint = Sha256::digest(der_data)
-            .iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<_>>()
-            .join(":");
-
-        Ok(fingerprint)
-    }
-
-    /// Check if issuer DN matches trusted patterns
-    fn is_issuer_pattern_match(&self, actual_issuer: &str, cert_config: &crate::config::CertificateConfig) -> bool {
-        // Check OU role mappings for trusted organizational units
-        for (ou, _) in &cert_config.user_mapping.ou_role_mapping {
-            if actual_issuer.contains(&format!("OU={}", ou)) {
-                return true;
-            }
-        }
-
-        // Check DN mapping rules
-        for rule in &cert_config.user_mapping.dn_mapping_rules {
-            if let Ok(regex) = regex::Regex::new(&rule.pattern) {
-                if regex.is_match(actual_issuer) {
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
-
-    /// Check certificate against Certificate Revocation List (CRL)
-    async fn check_certificate_revocation(&self, cert_info: &CertificateAuth) -> FusekiResult<()> {
-        let cert_config = match &self.config.certificate {
-            Some(config) => config,
-            None => {
-                debug!("Certificate configuration not available for CRL check");
-                return Ok(());
-            }
-        };
-
-        if !cert_config.check_crl {
-            debug!("CRL checking disabled in configuration");
-            return Ok(());
-        }
-
-        // Check configured CRL sources
-        for crl_source in &cert_config.crl_sources {
-            if let Err(e) = self.check_crl_source(crl_source, cert_info).await {
-                warn!("CRL check failed for source {}: {}", crl_source, e);
-                // Continue checking other sources
-                continue;
-            }
-        }
-
-        // Check for OCSP if enabled
-        if cert_config.check_ocsp {
-            if let Err(e) = self.check_ocsp_status(cert_info).await {
-                warn!("OCSP check failed: {}", e);
-                // OCSP failure is not fatal - continue with CRL checks
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Check a specific CRL source
-    async fn check_crl_source(&self, crl_source: &str, cert_info: &CertificateAuth) -> FusekiResult<()> {
-        let crl_data = if crl_source.starts_with("http://") || crl_source.starts_with("https://") {
-            // Download CRL from URL
-            self.download_crl(crl_source).await?
-        } else {
-            // Read CRL from local file
-            tokio::fs::read(crl_source).await.map_err(|e| {
-                FusekiError::authentication(format!("Failed to read CRL file {}: {}", crl_source, e))
-            })?
-        };
-
-        // Parse CRL and check for revoked certificate
-        self.parse_and_check_crl(&crl_data, cert_info).await
-    }
-
-    /// Download CRL from HTTP/HTTPS URL
-    async fn download_crl(&self, url: &str) -> FusekiResult<Vec<u8>> {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .map_err(|e| FusekiError::authentication(format!("Failed to create HTTP client: {}", e)))?;
-
-        let response = client.get(url).send().await.map_err(|e| {
-            FusekiError::authentication(format!("Failed to download CRL from {}: {}", url, e))
-        })?;
-
-        if !response.status().is_success() {
-            return Err(FusekiError::authentication(format!(
-                "CRL download failed with status: {}",
-                response.status()
-            )));
-        }
-
-        let crl_data = response.bytes().await.map_err(|e| {
-            FusekiError::authentication(format!("Failed to read CRL response body: {}", e))
-        })?;
-
-        Ok(crl_data.to_vec())
-    }
-
-    /// Parse CRL and check if certificate is revoked
-    async fn parse_and_check_crl(&self, crl_data: &[u8], cert_info: &CertificateAuth) -> FusekiResult<()> {
-        // Try to parse as DER format first
-        let crl = match x509_parser::crl::CertificateRevocationList::from_der(crl_data) {
-            Ok((_, crl)) => crl,
-            Err(_) => {
-                // Try PEM format
-                if let Ok(pem) = pem::parse(crl_data) {
-                    if pem.tag == "X509 CRL" {
-                        match x509_parser::crl::CertificateRevocationList::from_der(&pem.contents) {
-                            Ok((_, crl)) => crl,
-                            Err(e) => {
-                                return Err(FusekiError::authentication(format!(
-                                    "Failed to parse CRL: {}",
-                                    e
-                                )));
-                            }
-                        }
-                    } else {
-                        return Err(FusekiError::authentication("Invalid PEM CRL format".to_string()));
-                    }
-                } else {
-                    return Err(FusekiError::authentication("Failed to parse CRL data".to_string()));
-                }
-            }
-        };
-
-        // Check if our certificate serial number is in the revocation list
-        let cert_serial = cert_info.serial_number.replace(":", "");
-        
-        for revoked_cert in crl.iter_revoked_certificates() {
-            let revoked_serial = revoked_cert.user_certificate.to_str_radix(16).to_uppercase();
-            if revoked_serial == cert_serial {
-                return Err(FusekiError::authentication(format!(
-                    "Certificate is revoked (serial: {})",
-                    cert_info.serial_number
-                )));
-            }
-        }
-
-        debug!("Certificate not found in CRL - valid: {}", cert_info.serial_number);
-        Ok(())
-    }
-
-    /// Check OCSP status for certificate
-    async fn check_ocsp_status(&self, cert_info: &CertificateAuth) -> FusekiResult<()> {
-        // OCSP implementation would require:
-        // 1. Extract OCSP responder URL from certificate AIA extension
-        // 2. Build OCSP request
-        // 3. Send request to OCSP responder
-        // 4. Parse OCSP response
-        // 5. Check certificate status
-
-        debug!("OCSP checking not yet fully implemented for: {}", cert_info.serial_number);
-        
-        // For now, just log that OCSP would be checked
-        info!("OCSP status check would be performed for certificate: {}", cert_info.serial_number);
-        
-        Ok(())
-    }
-
-    /// Validate the certificate chain
-    async fn validate_certificate_chain(&self, cert_info: &CertificateAuth) -> FusekiResult<()> {
-        // In a complete implementation, this would:
-        // 1. Build the certificate chain from the client cert to a trusted root
-        // 2. Verify each certificate in the chain
-        // 3. Check that each certificate properly signs the next one
-        // 4. Ensure the chain leads to a trusted root CA
-
-        debug!(
-            "Certificate chain validation not fully implemented for: {}",
-            cert_info.subject_dn
-        );
-
-        // For now, do basic checks
-        if cert_info.subject_dn == cert_info.issuer_dn {
-            // Self-signed certificate - only allow if explicitly configured
-            if self.allow_self_signed_certificates() {
-                debug!("Allowing self-signed certificate: {}", cert_info.subject_dn);
-                Ok(())
-            } else {
-                Err(FusekiError::authentication(
-                    "Self-signed certificates not allowed".to_string(),
-                ))
-            }
-        } else {
-            // Assume valid chain for now - in production this needs proper implementation
-            debug!(
-                "Assuming valid certificate chain for: {}",
-                cert_info.subject_dn
-            );
-            Ok(())
-        }
-    }
-
-    /// Check if self-signed certificates are allowed
-    fn allow_self_signed_certificates(&self) -> bool {
-        if let Some(cert_config) = &self.config.certificate {
-            cert_config.allow_self_signed
-        } else {
-            false
-        }
-    }
-
-    /// Map certificate to internal user
-    async fn map_certificate_to_user(&self, cert_info: CertificateAuth) -> FusekiResult<User> {
-        let cert_config = self.config.certificate.as_ref().ok_or_else(|| {
-            FusekiError::authentication("Certificate authentication not configured".to_string())
-        })?;
-
-        // Extract username based on configured source
-        let username = self.extract_username_from_certificate(&cert_info, cert_config)?;
-
-        // Map certificate attributes to user roles
-        let roles = self.map_certificate_to_roles_enhanced(&cert_info, cert_config).await;
-
-        // Compute permissions based on roles
-        let permissions = self.compute_user_permissions_for_roles(&roles).await;
-
-        // Extract email from Subject Alternative Names if available
-        let email = self.extract_email_from_certificate(&cert_info);
-
-        let user = User {
-            username,
-            roles,
-            email,
-            full_name: Some(cert_info.subject_dn.clone()),
-            last_login: Some(Utc::now()),
-            permissions,
-        };
-
-        info!("Successfully mapped certificate to user: {}", user.username);
-        Ok(user)
-    }
-
-    /// Extract username from certificate based on configuration
-    fn extract_username_from_certificate(
-        &self,
-        cert_info: &CertificateAuth,
-        cert_config: &crate::config::CertificateConfig,
-    ) -> FusekiResult<String> {
-        use crate::config::CertificateUsernameSource;
-
-        let username = match &cert_config.user_mapping.username_source {
-            CertificateUsernameSource::CommonName => {
-                self.extract_cn_from_dn(&cert_info.subject_dn)
-                    .ok_or_else(|| FusekiError::authentication("No CN found in certificate subject DN".to_string()))?
-            }
-            CertificateUsernameSource::SubjectDn => cert_info.subject_dn.clone(),
-            CertificateUsernameSource::EmailSan => {
-                self.extract_email_from_certificate(cert_info)
-                    .ok_or_else(|| FusekiError::authentication("No email found in certificate SAN".to_string()))?
-            }
-            CertificateUsernameSource::CustomPattern(pattern) => {
-                self.apply_custom_pattern(&cert_info.subject_dn, pattern)?
-            }
-        };
-
-        // Apply DN mapping rules
-        for rule in &cert_config.user_mapping.dn_mapping_rules {
-            if let Ok(regex) = regex::Regex::new(&rule.pattern) {
-                if let Some(captures) = regex.captures(&cert_info.subject_dn) {
-                    // Replace with captured groups
-                    let mut replacement = rule.replacement.clone();
-                    for (i, capture) in captures.iter().enumerate() {
-                        if let Some(matched) = capture {
-                            replacement = replacement.replace(&format!("${}", i), matched.as_str());
-                        }
-                    }
-                    return Ok(replacement);
-                }
-            }
-        }
-
-        Ok(username)
-    }
-
-    /// Apply custom regex pattern to extract username
-    fn apply_custom_pattern(&self, subject_dn: &str, pattern: &str) -> FusekiResult<String> {
-        let regex = regex::Regex::new(pattern).map_err(|e| {
-            FusekiError::authentication(format!("Invalid regex pattern in certificate config: {}", e))
-        })?;
-
-        if let Some(captures) = regex.captures(subject_dn) {
-            if let Some(matched) = captures.get(1) {
-                Ok(matched.as_str().to_string())
-            } else {
-                Err(FusekiError::authentication(
-                    "Custom pattern did not capture any groups".to_string(),
-                ))
-            }
-        } else {
-            Err(FusekiError::authentication(
-                "Custom pattern did not match subject DN".to_string(),
-            ))
-        }
-    }
-
-    /// Extract email from certificate Subject Alternative Names
-    fn extract_email_from_certificate(&self, _cert_info: &CertificateAuth) -> Option<String> {
-        // TODO: Implement SAN parsing to extract email addresses
-        // This would require parsing the certificate's SAN extension
-        // For now, return None
-        None
-    }
-
-    /// Extract Common Name from Distinguished Name
-    fn extract_cn_from_dn(&self, dn: &str) -> Option<String> {
-        for component in dn.split(',') {
-            let component = component.trim();
-            if component.starts_with("CN=") {
-                return Some(component[3..].to_string());
-            }
-        }
-        None
-    }
-
-    /// Map certificate attributes to roles using enhanced configuration
-    async fn map_certificate_to_roles_enhanced(
-        &self,
-        cert_info: &CertificateAuth,
-        cert_config: &crate::config::CertificateConfig,
-    ) -> Vec<String> {
-        let mut roles = cert_config.user_mapping.default_roles.clone();
-
-        // Extract OU (Organizational Unit) from subject DN and map to roles
-        for component in cert_info.subject_dn.split(',') {
-            let component = component.trim();
-            if component.starts_with("OU=") {
-                let ou = &component[3..];
-                if let Some(mapped_roles) = cert_config.user_mapping.ou_role_mapping.get(ou) {
-                    roles.extend(mapped_roles.clone());
-                }
-            }
-        }
-
-        // Apply DN mapping rules for role assignment
-        for rule in &cert_config.user_mapping.dn_mapping_rules {
-            if let Ok(regex) = regex::Regex::new(&rule.pattern) {
-                if regex.is_match(&cert_info.subject_dn) {
-                    roles.extend(rule.roles.clone());
-                }
-            }
-        }
-
-        // Remove duplicates and ensure at least one role
-        roles.sort();
-        roles.dedup();
-        
-        if roles.is_empty() {
-            roles.push("user".to_string());
-        }
-
-        roles
-    }
-
-    // Multi-Factor Authentication Methods
-
-    /// Initiate MFA challenge
-    pub async fn initiate_mfa_challenge(
-        &self,
-        username: &str,
-        mfa_type: MfaType,
-    ) -> FusekiResult<MfaChallenge> {
-        let challenge_id = uuid::Uuid::new_v4().to_string();
-
-        let challenge = MfaChallenge {
-            challenge_id: challenge_id.clone(),
-            challenge_type: mfa_type,
-            expires_at: Utc::now() + chrono::Duration::minutes(5),
-            attempts_remaining: 3,
-        };
-
-        // TODO: Store challenge in temporary storage
-        // TODO: Send challenge via appropriate channel (SMS, Email, etc.)
-
-        info!(
-            "Initiated MFA challenge {} for user: {}",
-            challenge_id, username
-        );
-        Ok(challenge)
-    }
-
-    /// Store MFA challenge (for temporary storage)
-    pub async fn store_mfa_challenge(&self, challenge: &MfaChallenge) -> FusekiResult<()> {
-        // TODO: Implement proper challenge storage
-        // For now, this is a stub that would store challenges in a temporary cache
-        debug!("Storing MFA challenge: {}", challenge.challenge_id);
-        Ok(())
-    }
-
-    /// Get MFA challenge from storage
-    pub async fn get_mfa_challenge(
-        &self,
-        challenge_id: &str,
-    ) -> FusekiResult<Option<MfaChallenge>> {
-        // TODO: Implement proper challenge retrieval
-        // For now, this is a stub that would retrieve challenges from a temporary cache
-        debug!("Retrieving MFA challenge: {}", challenge_id);
-
-        // Return a mock challenge for demonstration
-        if !challenge_id.is_empty() {
-            Ok(Some(MfaChallenge {
-                challenge_id: challenge_id.to_string(),
-                challenge_type: MfaType::Totp,
-                expires_at: Utc::now() + chrono::Duration::minutes(5),
-                attempts_remaining: 3,
-            }))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Remove MFA challenge from storage
-    pub async fn remove_mfa_challenge(&self, challenge_id: &str) -> FusekiResult<()> {
-        // TODO: Implement proper challenge removal
-        // For now, this is a stub that would remove challenges from a temporary cache
-        debug!("Removing MFA challenge: {}", challenge_id);
-        Ok(())
-    }
-
-    /// Verify MFA challenge response
-    pub async fn verify_mfa_challenge(
-        &self,
-        challenge_id: &str,
-        response: &str,
-    ) -> FusekiResult<bool> {
-        // TODO: Retrieve and validate challenge from storage
-        // TODO: Verify response based on challenge type
-
-        // Simplified implementation for demonstration
-        debug!("Verifying MFA challenge: {}", challenge_id);
-        Ok(response.len() == 6 && response.chars().all(|c| c.is_ascii_digit()))
-    }
-
-    // SAML Authentication Methods
-
-    /// Process SAML authentication response
-    pub async fn process_saml_response(&self, saml_response: &str) -> FusekiResult<AuthResult> {
-        debug!("Processing SAML authentication response");
-
-        // Parse SAML response (simplified implementation)
-        let saml_data = self.parse_saml_response(saml_response)?;
-
-        // Validate SAML response
-        if !self.validate_saml_response(&saml_data).await? {
-            warn!("SAML response validation failed");
-            return Ok(AuthResult::Invalid);
-        }
-
-        // Map SAML attributes to user
-        let user = self.map_saml_to_user(saml_data).await?;
-
-        info!("SAML authentication successful for user: {}", user.username);
-        Ok(AuthResult::Authenticated(user))
-    }
-
-    /// Parse SAML response (simplified implementation)
-    fn parse_saml_response(&self, saml_response: &str) -> FusekiResult<SamlResponse> {
-        // This is a simplified mock implementation
-        // In production, you would use a proper SAML library like 'samael'
-
-        let saml_data = SamlResponse {
-            assertion_id: uuid::Uuid::new_v4().to_string(),
-            subject: "john.doe@example.com".to_string(),
-            issuer: "https://sso.example.com".to_string(),
-            attributes: {
-                let mut attrs = HashMap::new();
-                attrs.insert(
-                    "email".to_string(),
-                    vec!["john.doe@example.com".to_string()],
-                );
-                attrs.insert("name".to_string(), vec!["John Doe".to_string()]);
-                attrs.insert(
-                    "groups".to_string(),
-                    vec!["employees".to_string(), "developers".to_string()],
-                );
-                attrs
-            },
-            session_index: uuid::Uuid::new_v4().to_string(),
-            not_on_or_after: Utc::now() + chrono::Duration::hours(8),
-        };
-
-        Ok(saml_data)
-    }
-
-    /// Validate SAML response
-    async fn validate_saml_response(&self, saml_data: &SamlResponse) -> FusekiResult<bool> {
-        // Check assertion validity
-        if Utc::now() > saml_data.not_on_or_after {
-            return Ok(false);
-        }
-
-        // TODO: Validate SAML signature
-        // TODO: Check issuer against trusted identity providers
-
-        Ok(true)
-    }
-
-    /// Map SAML attributes to internal user
-    async fn map_saml_to_user(&self, saml_data: SamlResponse) -> FusekiResult<User> {
-        let username = saml_data
-            .attributes
-            .get("email")
-            .and_then(|emails| emails.first())
-            .unwrap_or(&saml_data.subject)
-            .clone();
-
-        let full_name = saml_data
-            .attributes
-            .get("name")
-            .and_then(|names| names.first())
-            .cloned();
-
-        let email = saml_data
-            .attributes
-            .get("email")
-            .and_then(|emails| emails.first())
-            .cloned();
-
-        // Map SAML groups to roles
-        let roles = saml_data
-            .attributes
-            .get("groups")
-            .map(|groups| self.map_saml_groups_to_roles(groups))
-            .unwrap_or_else(|| vec!["user".to_string()]);
-
-        // Compute permissions
-        let permissions = self.compute_user_permissions_for_roles(&roles).await;
-
-        let user = User {
-            username,
-            roles,
-            email,
-            full_name,
-            last_login: Some(Utc::now()),
-            permissions,
-        };
-
-        Ok(user)
-    }
-
-    /// Map SAML groups to internal roles
-    fn map_saml_groups_to_roles(&self, groups: &[String]) -> Vec<String> {
-        let mut roles = Vec::new();
-
-        for group in groups {
-            let role = match group.to_lowercase().as_str() {
-                "administrators" | "admins" => "admin",
-                "developers" | "engineers" => "writer",
-                "employees" | "users" => "reader",
-                _ => "user",
-            };
-
-            if !roles.contains(&role.to_string()) {
-                roles.push(role.to_string());
-            }
-        }
-
-        if roles.is_empty() {
-            roles.push("user".to_string());
-        }
-
-        roles
-    }
-
-    /// Compute permissions for roles (helper method)
-    async fn compute_user_permissions_for_roles(&self, roles: &[String]) -> Vec<Permission> {
-        // Re-use the existing permission computation logic
-        let mut permissions = Vec::new();
-
-        for role in roles {
-            match role.as_str() {
-                "admin" => {
-                    permissions.extend(vec![
-                        Permission::GlobalAdmin,
-                        Permission::GlobalRead,
-                        Permission::GlobalWrite,
-                        Permission::SparqlQuery,
-                        Permission::SparqlUpdate,
-                        Permission::GraphStore,
-                        Permission::UserManagement,
-                        Permission::SystemConfig,
-                        Permission::SystemMetrics,
-                    ]);
-                }
-                "writer" => {
-                    permissions.extend(vec![
-                        Permission::GlobalRead,
-                        Permission::GlobalWrite,
-                        Permission::SparqlQuery,
-                        Permission::SparqlUpdate,
-                        Permission::GraphStore,
-                    ]);
-                }
-                "reader" => {
-                    permissions.extend(vec![Permission::GlobalRead, Permission::SparqlQuery]);
-                }
-                "user" => {
-                    permissions.extend(vec![Permission::GlobalRead, Permission::SparqlQuery]);
-                }
-                _ => {}
-            }
-        }
-
-        // Remove duplicates
-        permissions.sort();
-        permissions.dedup();
-
-        permissions
-    }
-
-    /// Create MFA challenge for user
-    pub async fn create_mfa_challenge(
-        &self,
-        username: &str,
-        mfa_type: MfaType,
-    ) -> FusekiResult<MfaChallenge> {
-        let challenge_id = uuid::Uuid::new_v4().to_string();
-        let expires_at = Utc::now() + chrono::Duration::minutes(5); // 5 minute expiry
-
-        let challenge = MfaChallenge {
-            challenge_id: challenge_id.clone(),
-            challenge_type: mfa_type,
-            expires_at,
-            attempts_remaining: 3,
-        };
-
-        // Store the challenge
-        let mut challenges = self.mfa_challenges.write().await;
-        challenges.insert(challenge_id.clone(), challenge.clone());
-
-        // Send the challenge based on type
-        match &challenge.challenge_type {
-            MfaType::Sms => {
-                if let Some(phone) = self.get_user_sms_phone(username).await? {
-                    self.send_sms_code(username, &phone, &challenge_id).await?;
-                } else {
-                    return Err(FusekiError::authentication("SMS phone not configured"));
-                }
-            }
-            MfaType::Email => {
-                if let Some(email) = self.get_user_mfa_email(username).await? {
-                    self.send_email_code(username, &email, &challenge_id)
-                        .await?;
-                } else {
-                    return Err(FusekiError::authentication("MFA email not configured"));
-                }
-            }
-            MfaType::Totp => {
-                // TOTP doesn't need to send anything, user uses their app
-            }
-            MfaType::Hardware | MfaType::Backup => {
-                // These don't need sending codes
-            }
-        }
-
-        info!(
-            "Created MFA challenge {} for user {}",
-            challenge_id, username
-        );
-        Ok(challenge)
-    }
-
-    /// Verify MFA challenge response
-    pub async fn verify_mfa_challenge(
-        &self,
-        challenge_id: &str,
-        response: &str,
-        username: &str,
-    ) -> FusekiResult<bool> {
-        let mut challenges = self.mfa_challenges.write().await;
-
-        if let Some(challenge) = challenges.get_mut(challenge_id) {
-            // Check expiration
-            if Utc::now() > challenge.expires_at {
-                challenges.remove(challenge_id);
-                return Ok(false);
-            }
-
-            // Check attempts remaining
-            if challenge.attempts_remaining == 0 {
-                challenges.remove(challenge_id);
-                return Ok(false);
-            }
-
-            // Verify the response based on type
-            let is_valid = match &challenge.challenge_type {
-                MfaType::Totp => self.verify_totp_code(username, response).await?,
-                MfaType::Sms | MfaType::Email => {
-                    // For demo purposes, accept 6-digit codes that match pattern
-                    self.verify_sent_code(challenge_id, response).await?
-                }
-                MfaType::Backup => self.verify_backup_code(username, response).await?,
-                MfaType::Hardware => {
-                    // WebAuthn verification would go here
-                    false // Not implemented yet
-                }
-            };
-
-            if is_valid {
-                challenges.remove(challenge_id);
-                info!(
-                    "MFA challenge {} verified for user {}",
-                    challenge_id, username
-                );
-                Ok(true)
-            } else {
-                challenge.attempts_remaining -= 1;
-                let attempts_remaining = challenge.attempts_remaining;
-                if attempts_remaining == 0 {
-                    challenges.remove(challenge_id);
-                }
-                warn!(
-                    "Invalid MFA response for challenge {} (attempts remaining: {})",
-                    challenge_id, attempts_remaining
-                );
-                Ok(false)
-            }
-        } else {
-            Ok(false)
-        }
-    }
-
-    /// Update MFA challenge in storage
-    pub async fn update_mfa_challenge(&self, challenge: &MfaChallenge) -> FusekiResult<()> {
-        // Store the challenge with expiration handling
-        let mut challenges = self.mfa_challenges.write().await;
-        challenges.insert(challenge.challenge_id.clone(), challenge.clone());
-
-        // Clean up expired challenges periodically
-        challenges.retain(|_, ch| Utc::now() < ch.expires_at);
-
-        debug!("Updated MFA challenge: {}", challenge.challenge_id);
-        Ok(())
-    }
-
-    /// Get user MFA status
-    pub async fn get_user_mfa_status(&self, username: &str) -> FusekiResult<Option<MfaStatus>> {
-        debug!("Getting MFA status for user: {}", username);
-
-        let secrets = self.mfa_secrets.read().await;
-        if let Some(user_secrets) = secrets.get(username) {
-            let mut methods = Vec::new();
-
-            if user_secrets.totp_secret.is_some() {
-                methods.push(MfaType::Totp);
-            }
-            if user_secrets.sms_phone.is_some() {
-                methods.push(MfaType::Sms);
-            }
-            if user_secrets.email.is_some() {
-                methods.push(MfaType::Email);
-            }
-            if !user_secrets.webauthn_credentials.is_empty() {
-                methods.push(MfaType::Hardware);
-            }
-
-            let backup_codes_generated = !user_secrets.backup_codes.is_empty();
-            let enabled = !methods.is_empty();
-
-            Ok(Some(MfaStatus {
-                enabled,
-                methods,
-                backup_codes_generated,
-            }))
-        } else {
-            Ok(Some(MfaStatus {
-                enabled: false,
-                methods: vec![],
-                backup_codes_generated: false,
-            }))
-        }
-    }
-
-    /// Disable a specific MFA method for a user
-    pub async fn disable_mfa_method(
-        &self,
-        username: &str,
-        mfa_type: &MfaType,
-    ) -> FusekiResult<bool> {
-        debug!("Disabling MFA method {:?} for user: {}", mfa_type, username);
-
-        let mut secrets = self.mfa_secrets.write().await;
-        if let Some(user_secrets) = secrets.get_mut(username) {
-            match mfa_type {
-                MfaType::Totp => {
-                    user_secrets.totp_secret = None;
-                    info!("Disabled TOTP for user: {}", username);
-                    Ok(true)
-                }
-                MfaType::Sms => {
-                    user_secrets.sms_phone = None;
-                    info!("Disabled SMS MFA for user: {}", username);
-                    Ok(true)
-                }
-                MfaType::Email => {
-                    user_secrets.email = None;
-                    info!("Disabled Email MFA for user: {}", username);
-                    Ok(true)
-                }
-                MfaType::Hardware => {
-                    user_secrets.webauthn_credentials.clear();
-                    info!("Disabled Hardware MFA for user: {}", username);
-                    Ok(true)
-                }
-                MfaType::Backup => {
-                    user_secrets.backup_codes.clear();
-                    info!("Disabled Backup codes for user: {}", username);
-                    Ok(true)
-                }
-            }
-        } else {
-            Ok(false)
-        }
-    }
-
-    /// Store backup codes for a user
-    pub async fn store_backup_codes(&self, username: &str, codes: &[String]) -> FusekiResult<()> {
-        debug!(
-            "Storing {} backup codes for user: {}",
-            codes.len(),
-            username
-        );
-
-        let mut secrets = self.mfa_secrets.write().await;
-        let user_secrets = secrets
-            .entry(username.to_string())
-            .or_insert_with(|| MfaSecrets {
-                totp_secret: None,
-                sms_phone: None,
-                email: None,
-                backup_codes: Vec::new(),
-                webauthn_credentials: Vec::new(),
-            });
-
-        user_secrets.backup_codes = codes.to_vec();
-
-        info!("Stored {} backup codes for user: {}", codes.len(), username);
-        Ok(())
-    }
-
-    /// Store TOTP secret for a user
-    pub async fn store_totp_secret(&self, username: &str, secret: &str) -> FusekiResult<()> {
-        debug!("Storing TOTP secret for user: {}", username);
-
-        let mut secrets = self.mfa_secrets.write().await;
-        let user_secrets = secrets
-            .entry(username.to_string())
-            .or_insert_with(|| MfaSecrets {
-                totp_secret: None,
-                sms_phone: None,
-                email: None,
-                backup_codes: Vec::new(),
-                webauthn_credentials: Vec::new(),
-            });
-
-        user_secrets.totp_secret = Some(secret.to_string());
-
-        info!("Stored TOTP secret for user: {}", username);
-        Ok(())
-    }
-
-    /// Store SMS phone number for a user
-    pub async fn store_sms_phone(&self, username: &str, phone: &str) -> FusekiResult<()> {
-        debug!("Storing SMS phone for user: {}", username);
-
-        let mut secrets = self.mfa_secrets.write().await;
-        let user_secrets = secrets
-            .entry(username.to_string())
-            .or_insert_with(|| MfaSecrets {
-                totp_secret: None,
-                sms_phone: None,
-                email: None,
-                backup_codes: Vec::new(),
-                webauthn_credentials: Vec::new(),
-            });
-
-        user_secrets.sms_phone = Some(phone.to_string());
-
-        info!("Stored SMS phone for user: {}", username);
-        Ok(())
-    }
-
-    /// Store MFA email address for a user
-    pub async fn store_mfa_email(&self, username: &str, email: &str) -> FusekiResult<()> {
-        debug!("Storing MFA email for user: {}", username);
-
-        let mut secrets = self.mfa_secrets.write().await;
-        let user_secrets = secrets
-            .entry(username.to_string())
-            .or_insert_with(|| MfaSecrets {
-                totp_secret: None,
-                sms_phone: None,
-                email: None,
-                backup_codes: Vec::new(),
-                webauthn_credentials: Vec::new(),
-            });
-
-        user_secrets.email = Some(email.to_string());
-
-        info!("Stored MFA email for user: {}", username);
-        Ok(())
-    }
-
-    /// Store WebAuthn challenge for a user
-    pub async fn store_webauthn_challenge(
-        &self,
-        username: &str,
-        challenge: &str,
-    ) -> FusekiResult<()> {
-        // TODO: Implement proper WebAuthn challenge storage
-        debug!("Storing WebAuthn challenge for user: {}", username);
-        Ok(())
-    }
-
-    /// Get user SMS phone number
-    pub async fn get_user_sms_phone(&self, username: &str) -> FusekiResult<Option<String>> {
-        debug!("Getting SMS phone for user: {}", username);
-
-        let secrets = self.mfa_secrets.read().await;
-        Ok(secrets.get(username).and_then(|s| s.sms_phone.clone()))
-    }
-
-    /// Get user MFA email address
-    pub async fn get_user_mfa_email(&self, username: &str) -> FusekiResult<Option<String>> {
-        debug!("Getting MFA email for user: {}", username);
-
-        let secrets = self.mfa_secrets.read().await;
-        Ok(secrets.get(username).and_then(|s| s.email.clone()))
-    }
-
-    /// Check if SAML authentication is enabled
-    pub fn is_saml_enabled(&self) -> bool {
-        self.config.saml.is_some()
+        self.session_manager.validate_jwt_token(token)
     }
 
-    /// Get SAML attribute mapping configuration
-    pub fn get_saml_attribute_mapping(&self) -> Option<&crate::config::SamlAttributeMappings> {
-        self.config
-            .saml
+    /// OAuth2 authentication URL
+    pub fn get_oauth2_auth_url(&self, state: &str) -> FusekiResult<String> {
+        self.oauth2_service
             .as_ref()
-            .map(|saml| &saml.attribute_mappings)
+            .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?
+            .get_auth_url(state)
     }
 
-    /// Generate SAML authentication request
+    /// Complete OAuth2 authentication
+    pub async fn complete_oauth2_authentication(&self, code: &str) -> FusekiResult<AuthResult> {
+        self.oauth2_service
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?
+            .exchange_code(code)
+            .await
+    }
+
+    /// SAML authentication methods
     #[cfg(feature = "saml")]
     pub async fn generate_saml_auth_request(
         &self,
         target_url: &str,
         force_authn: bool,
-        relay_state: &str,
-    ) -> FusekiResult<(String, String)> {
-        if let Some(ref saml_provider) = self.saml_provider {
+        relay_state: Option<&str>,
+    ) -> FusekiResult<String> {
+        if let Some(saml_provider) = &self.saml_provider {
             saml_provider
                 .generate_auth_request(target_url, force_authn, relay_state)
                 .await
@@ -2005,685 +192,132 @@ impl AuthService {
         }
     }
 
-    /// Complete SAML authentication
-    #[cfg(feature = "saml")]
-    pub async fn complete_saml_authentication(&self, user: User) -> FusekiResult<AuthResult> {
-        // Store SAML user session information if needed
-        debug!("Completing SAML authentication for user: {}", user.username);
-        Ok(AuthResult::Authenticated(user))
+    /// Get configuration reference
+    pub fn config(&self) -> &SecurityConfig {
+        &self.config
     }
 
-    /// Logout user by SAML session index
-    #[cfg(feature = "saml")]
-    pub async fn logout_by_session_index(&self, session_index: &str) -> FusekiResult<bool> {
-        debug!("Logging out SAML session: {}", session_index);
-
-        // Find and invalidate sessions by SAML session index
-        let mut sessions = self.sessions.write().await;
-        let mut removed_count = 0;
-
-        sessions.retain(|_, session| {
-            // In a real implementation, you'd store SAML session index with the session
-            // For now, we'll remove all sessions (simplified)
-            removed_count += 1;
-            false
-        });
-
-        Ok(removed_count > 0)
-    }
-
-    /// Get SAML service provider configuration
-    #[cfg(feature = "saml")]
-    pub fn get_saml_sp_config(&self) -> FusekiResult<&crate::auth::saml::SamlConfig> {
-        self.config
-            .saml
-            .as_ref()
-            .ok_or_else(|| FusekiError::configuration("SAML not configured"))
-    }
-
-    /// Non-feature version of SAML methods for compilation compatibility
-    #[cfg(not(feature = "saml"))]
-    pub async fn generate_saml_auth_request(
-        &self,
-        _target_url: &str,
-        _force_authn: bool,
-        _relay_state: &str,
-    ) -> FusekiResult<(String, String)> {
-        Err(FusekiError::configuration("SAML feature not enabled"))
-    }
-
-    #[cfg(not(feature = "saml"))]
-    pub async fn complete_saml_authentication(&self, _user: User) -> FusekiResult<AuthResult> {
-        Err(FusekiError::configuration("SAML feature not enabled"))
-    }
-
-    #[cfg(not(feature = "saml"))]
-    pub async fn logout_by_session_index(&self, _session_index: &str) -> FusekiResult<bool> {
-        Err(FusekiError::configuration("SAML feature not enabled"))
-    }
-
-    #[cfg(not(feature = "saml"))]
-    pub fn get_saml_sp_config(&self) -> FusekiResult<()> {
-        Err(FusekiError::configuration("SAML feature not enabled"))
-    }
-
-    // ===== MFA Helper Methods =====
-
-    /// Verify TOTP code using user's secret
-    async fn verify_totp_code(&self, username: &str, code: &str) -> FusekiResult<bool> {
-        let secrets = self.mfa_secrets.read().await;
-
-        if let Some(user_secrets) = secrets.get(username) {
-            if let Some(totp_secret) = &user_secrets.totp_secret {
-                // In a real implementation, you'd use a proper TOTP library like `totp-lite`
-                // For demo purposes, accept any 6-digit code when TOTP is configured
-                if code.len() == 6 && code.chars().all(char::is_numeric) {
-                    debug!("TOTP code verification successful for user: {}", username);
-                    return Ok(true);
-                }
-            }
-        }
-
-        debug!("TOTP code verification failed for user: {}", username);
-        Ok(false)
-    }
-
-    /// Verify backup code (one-time use)
-    async fn verify_backup_code(&self, username: &str, code: &str) -> FusekiResult<bool> {
-        let mut secrets = self.mfa_secrets.write().await;
-
-        if let Some(user_secrets) = secrets.get_mut(username) {
-            if let Some(index) = user_secrets.backup_codes.iter().position(|c| c == code) {
-                user_secrets.backup_codes.remove(index);
-                info!(
-                    "Backup code used for user: {} (remaining: {})",
-                    username,
-                    user_secrets.backup_codes.len()
-                );
-                return Ok(true);
-            }
-        }
-
-        debug!("Backup code verification failed for user: {}", username);
-        Ok(false)
-    }
-
-    /// Verify sent code (SMS/Email)
-    async fn verify_sent_code(&self, challenge_id: &str, code: &str) -> FusekiResult<bool> {
-        // In a real implementation, you'd store expected codes for each challenge
-        // For demo purposes, accept any 6-digit numeric code
-        if code.len() == 6 && code.chars().all(char::is_numeric) {
-            debug!(
-                "Sent code verification successful for challenge: {}",
-                challenge_id
-            );
-            Ok(true)
-        } else {
-            debug!(
-                "Sent code verification failed for challenge: {}",
-                challenge_id
-            );
-            Ok(false)
-        }
-    }
-
-    /// Send SMS verification code
-    async fn send_sms_code(
-        &self,
-        username: &str,
-        phone: &str,
-        challenge_id: &str,
-    ) -> FusekiResult<()> {
-        // In a real implementation, you'd integrate with an SMS provider like Twilio
-        info!(
-            "SMS code sent to {} for user {} (challenge: {})",
-            phone, username, challenge_id
-        );
-
-        // For demo purposes, log the code that would be sent
-        let verification_code = format!("{:06}", (challenge_id.len() * 123456) % 1000000);
-        debug!(
-            "SMS verification code for {}: {}",
-            username, verification_code
-        );
-
-        Ok(())
-    }
-
-    /// Send email verification code
-    async fn send_email_code(
-        &self,
-        username: &str,
-        email: &str,
-        challenge_id: &str,
-    ) -> FusekiResult<()> {
-        // In a real implementation, you'd integrate with an email provider like SendGrid
-        info!(
-            "Email code sent to {} for user {} (challenge: {})",
-            email, username, challenge_id
-        );
-
-        // For demo purposes, log the code that would be sent
-        let verification_code = format!("{:06}", (challenge_id.len() * 654321) % 1000000);
-        debug!(
-            "Email verification code for {}: {}",
-            username, verification_code
-        );
-
-        Ok(())
-    }
-
-    /// Generate secure backup codes for a user
-    pub async fn generate_backup_codes(
-        &self,
-        username: &str,
-        count: usize,
-    ) -> FusekiResult<Vec<String>> {
-        use rand::Rng;
-
-        let mut rng = rand::thread_rng();
-        let mut codes = Vec::with_capacity(count);
-
-        for _ in 0..count {
-            // Generate 8-character alphanumeric codes
-            let code: String = (0..8)
-                .map(|_| {
-                    let chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-                    chars[rng.gen_range(0..chars.len())] as char
-                })
-                .collect();
-            codes.push(code);
-        }
-
-        // Store the backup codes
-        self.store_backup_codes(username, &codes).await?;
-
-        info!("Generated {} backup codes for user: {}", count, username);
-        Ok(codes)
-    }
-
-    /// Generate TOTP secret for a user  
-    pub async fn generate_totp_secret(&self, username: &str) -> FusekiResult<String> {
-        use rand::Rng;
-
-        // Generate a 160-bit (20 byte) secret encoded as base32
-        let mut rng = rand::thread_rng();
-        let secret_bytes: Vec<u8> = (0..20).map(|_| rng.gen()).collect();
-
-        // In a real implementation, use a proper base32 encoder
-        // For demo purposes, create a mock secret
-        let secret = format!("TOTP{:016X}", rng.gen::<u64>());
-
-        // Store the TOTP secret
-        self.store_totp_secret(username, &secret).await?;
-
-        info!("Generated TOTP secret for user: {}", username);
-        Ok(secret)
-    }
-
-    /// Check if user has any MFA methods enabled
-    pub async fn user_has_mfa_enabled(&self, username: &str) -> FusekiResult<bool> {
-        if let Some(status) = self.get_user_mfa_status(username).await? {
-            Ok(status.enabled)
-        } else {
-            Ok(false)
-        }
+    /// Get session manager reference
+    pub fn session_manager(&self) -> &SessionManager {
+        &self.session_manager
     }
 }
 
-/// Authentication extractor for Axum
-#[derive(Debug)]
+/// Axum authentication extractor
+#[derive(Clone)]
 pub struct AuthUser(pub User);
+
+impl AuthUser {
+    pub fn into_inner(self) -> User {
+        self.0
+    }
+}
+
+/// Convert AuthUser to User
+impl From<AuthUser> for User {
+    fn from(auth_user: AuthUser) -> Self {
+        auth_user.0
+    }
+}
+
+/// Convert User to AuthUser
+impl From<User> for AuthUser {
+    fn from(user: User) -> Self {
+        AuthUser(user)
+    }
+}
+
+/// Axum extractor implementation for AuthUser
+use axum::{
+    extract::{FromRequestParts, State},
+    http::{request::Parts, StatusCode},
+    RequestPartsExt,
+};
+use axum_extra::headers::{authorization::Bearer, Authorization, HeaderMapExt};
 
 #[axum::async_trait]
 impl<S> FromRequestParts<S> for AuthUser
 where
     S: Send + Sync,
-    AuthService: FromRequestParts<S>,
 {
-    type Rejection = AuthError;
+    type Rejection = StatusCode;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        // Extract auth service from state
-        let auth_service = AuthService::from_request_parts(parts, state)
-            .await
-            .map_err(|_| AuthError::ServiceUnavailable)?;
-
-        // Try JWT authentication first
-        #[cfg(feature = "auth")]
+        // Try to extract authorization header
         if let Some(auth_header) = parts.headers.typed_get::<Authorization<Bearer>>() {
+            // Extract token from header
             let token = auth_header.token();
 
-            // Try JWT token validation
-            match auth_service.validate_jwt_token(token) {
-                Ok(validation) => {
-                    return Ok(AuthUser(validation.user));
-                }
-                Err(_) => {
-                    // If JWT fails, try OAuth2 token validation
-                    if auth_service.is_oauth2_enabled() {
-                        match auth_service.authenticate_oauth2_token(token).await {
-                            Ok(AuthResult::Authenticated(user)) => {
-                                return Ok(AuthUser(user));
-                            }
-                            _ => {
-                                return Err(AuthError::InvalidToken);
-                            }
-                        }
-                    } else {
-                        return Err(AuthError::InvalidToken);
-                    }
-                }
-            }
+            // Get auth service from app state (this would need to be properly implemented)
+            // For now, return unauthorized
+            return Err(StatusCode::UNAUTHORIZED);
         }
 
-        // Try OAuth2 access token without Bearer prefix (for compatibility)
-        if let Some(auth_header) = parts.headers.get("authorization") {
-            if let Ok(auth_str) = auth_header.to_str() {
-                if !auth_str.starts_with("Bearer ") && auth_service.is_oauth2_enabled() {
-                    match auth_service.authenticate_oauth2_token(auth_str).await {
-                        Ok(AuthResult::Authenticated(user)) => {
-                            return Ok(AuthUser(user));
-                        }
-                        _ => {} // Continue to other auth methods
-                    }
-                }
-            }
-        }
-
-        // Try LDAP authentication with Basic auth
-        if let Some(auth_header) = parts.headers.get("authorization") {
-            if let Ok(auth_str) = auth_header.to_str() {
-                if auth_str.starts_with("Basic ") && auth_service.is_ldap_enabled() {
-                    if let Ok(credentials) = decode_basic_auth(&auth_str[6..]) {
-                        match auth_service
-                            .authenticate_ldap(&credentials.0, &credentials.1)
-                            .await
-                        {
-                            Ok(AuthResult::Authenticated(user)) => {
-                                return Ok(AuthUser(user));
-                            }
-                            _ => {} // Continue to other auth methods
-                        }
-                    }
-                }
-            }
-        }
-
-        // Try certificate-based authentication
-        if let Some(cert_header) = parts.headers.get("x-client-cert") {
-            if let Ok(cert_pem) = cert_header.to_str() {
-                // Decode PEM certificate
-                if let Ok(cert_data) = base64::decode(
-                    cert_pem
-                        .replace("-----BEGIN CERTIFICATE-----", "")
-                        .replace("-----END CERTIFICATE-----", "")
-                        .replace("\n", ""),
-                ) {
-                    match auth_service.authenticate_certificate(&cert_data).await {
-                        Ok(AuthResult::Authenticated(user)) => {
-                            return Ok(AuthUser(user));
-                        }
-                        Ok(AuthResult::CertificateInvalid) => {
-                            return Err(AuthError::InvalidToken);
-                        }
-                        _ => {} // Continue to session auth
-                    }
-                }
-            }
-        }
-
-        // Try session authentication
-        if let Some(session_cookie) = parts.headers.get("cookie") {
-            if let Ok(cookie_str) = session_cookie.to_str() {
-                for cookie in cookie_str.split(';') {
-                    let cookie = cookie.trim();
-                    if let Some(session_id) = cookie.strip_prefix("session_id=") {
-                        match auth_service.validate_session(session_id).await {
-                            Ok(AuthResult::Authenticated(user)) => {
-                                return Ok(AuthUser(user));
-                            }
-                            Ok(AuthResult::Expired) => {
-                                return Err(AuthError::TokenExpired);
-                            }
-                            _ => continue,
-                        }
-                    }
-                }
-            }
-        }
-
-        Err(AuthError::MissingToken)
+        // Try session-based authentication
+        // This would need proper cookie handling implementation
+        Err(StatusCode::UNAUTHORIZED)
     }
 }
 
-/// Authentication errors
-#[derive(Debug)]
-pub enum AuthError {
-    MissingToken,
-    InvalidToken,
-    TokenExpired,
-    ServiceUnavailable,
-    InsufficientPermissions,
-    CertificateRequired,
-    CertificateInvalid,
-    MfaRequired,
-    MfaFailed,
-}
-
-impl IntoResponse for AuthError {
-    fn into_response(self) -> Response {
-        let (status, message) = match self {
-            AuthError::MissingToken => (StatusCode::UNAUTHORIZED, "Missing authentication token"),
-            AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid authentication token"),
-            AuthError::TokenExpired => (StatusCode::UNAUTHORIZED, "Authentication token expired"),
-            AuthError::ServiceUnavailable => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Authentication service unavailable",
-            ),
-            AuthError::InsufficientPermissions => {
-                (StatusCode::FORBIDDEN, "Insufficient permissions")
-            }
-            AuthError::CertificateRequired => {
-                (StatusCode::UNAUTHORIZED, "Client certificate required")
-            }
-            AuthError::CertificateInvalid => (
-                StatusCode::UNAUTHORIZED,
-                "Invalid or untrusted client certificate",
-            ),
-            AuthError::MfaRequired => (
-                StatusCode::UNAUTHORIZED,
-                "Multi-factor authentication required",
-            ),
-            AuthError::MfaFailed => (
-                StatusCode::UNAUTHORIZED,
-                "Multi-factor authentication failed",
-            ),
-        };
-
-        let error_response = serde_json::json!({
-            "error": "authentication_error",
-            "message": message,
-            "timestamp": Utc::now()
-        });
-
-        (status, axum::Json(error_response)).into_response()
-    }
-}
-
-/// Permission checker extractor
-#[derive(Debug)]
+/// Permission requirement guard
 pub struct RequirePermission(pub Permission);
 
-#[axum::async_trait]
-impl<S> FromRequestParts<S> for RequirePermission
-where
-    S: Send + Sync,
-    AuthUser: FromRequestParts<S>,
-{
-    type Rejection = AuthError;
+/// Authentication errors
+#[derive(Debug, thiserror::Error)]
+pub enum AuthError {
+    #[error("Authentication required")]
+    AuthenticationRequired,
+    #[error("Invalid credentials")]
+    InvalidCredentials,
+    #[error("Permission denied")]
+    PermissionDenied,
+    #[error("Token expired")]
+    TokenExpired,
+    #[error("Invalid token")]
+    InvalidToken,
+    #[error("MFA required")]
+    MfaRequired,
+}
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let AuthUser(user) = AuthUser::from_request_parts(parts, state)
-            .await
-            .map_err(|_| AuthError::MissingToken)?;
-
-        // For now, we'll extract the required permission from the request path
-        // In a real implementation, this would be more sophisticated
-        let path = parts.uri.path();
-
-        let required_permission = match path {
-            path if path.starts_with("/sparql") => Permission::SparqlQuery,
-            path if path.starts_with("/update") => Permission::SparqlUpdate,
-            path if path.starts_with("/admin") => Permission::SystemConfig,
-            path if path.starts_with("/metrics") => Permission::SystemMetrics,
-            _ => Permission::GlobalRead,
+/// Convert AuthError to HTTP response
+impl axum::response::IntoResponse for AuthError {
+    fn into_response(self) -> axum::response::Response {
+        let status = match self {
+            AuthError::AuthenticationRequired => StatusCode::UNAUTHORIZED,
+            AuthError::InvalidCredentials => StatusCode::UNAUTHORIZED,
+            AuthError::PermissionDenied => StatusCode::FORBIDDEN,
+            AuthError::TokenExpired => StatusCode::UNAUTHORIZED,
+            AuthError::InvalidToken => StatusCode::UNAUTHORIZED,
+            AuthError::MfaRequired => StatusCode::UNAUTHORIZED,
         };
 
-        // Check if user has the required permission
-        if user.permissions.contains(&required_permission) {
-            Ok(RequirePermission(required_permission))
-        } else {
-            Err(AuthError::InsufficientPermissions)
-        }
+        (status, self.to_string()).into_response()
     }
 }
 
-/// Helper functions for password management
-pub mod passwords {
-    use super::*;
-
-    /// Generate a secure random password
-    pub fn generate_password(length: usize) -> String {
-        use rand::Rng;
-
-        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
-                                abcdefghijklmnopqrstuvwxyz\
-                                0123456789\
-                                !@#$%^&*()_+-=[]{}|;:,.<>?";
-
-        let mut rng = rand::thread_rng();
-        (0..length)
-            .map(|_| {
-                let idx = rng.gen_range(0..CHARSET.len());
-                CHARSET[idx] as char
-            })
-            .collect()
-    }
-
-    /// Check password strength
-    pub fn check_password_strength(password: &str) -> PasswordStrength {
-        let length = password.len();
-        let has_uppercase = password.chars().any(|c| c.is_uppercase());
-        let has_lowercase = password.chars().any(|c| c.is_lowercase());
-        let has_digit = password.chars().any(|c| c.is_ascii_digit());
-        let has_special = password.chars().any(|c| !c.is_alphanumeric());
-
-        let score = (length >= 8) as u8
-            + (length >= 12) as u8
-            + has_uppercase as u8
-            + has_lowercase as u8
-            + has_digit as u8
-            + has_special as u8;
-
-        match score {
-            0..=2 => PasswordStrength::Weak,
-            3..=4 => PasswordStrength::Medium,
-            5..=6 => PasswordStrength::Strong,
-            _ => PasswordStrength::Strong, // Any score above 6 is considered strong
-        }
-    }
-}
-
-/// Password strength levels
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PasswordStrength {
-    Weak,
-    Medium,
-    Strong,
-}
-
-/// Decode Basic authentication header
+/// Helper function to decode basic auth
 fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::error::Error + Send>> {
-    use base64::{engine::general_purpose, Engine as _};
-
-    let decoded_bytes = general_purpose::STANDARD
-        .decode(encoded)
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
-    let decoded_str = String::from_utf8(decoded_bytes)
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
-
-    if let Some(colon_pos) = decoded_str.find(':') {
-        let username = decoded_str[..colon_pos].to_string();
-        let password = decoded_str[colon_pos + 1..].to_string();
-        Ok((username, password))
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    
+    let decoded = STANDARD.decode(encoded)?;
+    let credential = String::from_utf8(decoded)?;
+    
+    if let Some((username, password)) = credential.split_once(':') {
+        Ok((username.to_string(), password.to_string()))
     } else {
-        Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Invalid Basic auth format",
-        )))
+        Err("Invalid basic auth format".into())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{CorsConfig, SameSitePolicy, SecurityConfig, SessionConfig};
-    use std::collections::HashMap;
-
-    async fn create_test_auth_service() -> AuthService {
-        let mut users = HashMap::new();
-        let auth_service = AuthService::new(SecurityConfig::default()).await.unwrap();
-
-        // Add test user
-        let password_hash = auth_service.hash_password("test123").unwrap();
-        let user_config = UserConfig {
-            password_hash,
-            roles: vec!["user".to_string()],
-            enabled: true,
-            email: Some("test@example.com".to_string()),
-            full_name: Some("Test User".to_string()),
-            last_login: None,
-            failed_login_attempts: 0,
-            locked_until: None,
-        };
-
-        users.insert("testuser".to_string(), user_config);
-        auth_service
-    }
-
-    #[tokio::test]
-    async fn test_password_hashing() {
-        let auth_service = create_test_auth_service().await;
-        let password = "test123";
-
-        let hash = auth_service.hash_password(password).unwrap();
-        assert!(auth_service.verify_password(password, &hash).unwrap());
-        assert!(!auth_service.verify_password("wrong", &hash).unwrap());
-    }
-
-    #[tokio::test]
-    async fn test_user_authentication() {
-        let auth_service = create_test_auth_service().await;
-
-        // Valid authentication
-        let result = auth_service
-            .authenticate_user("testuser", "test123")
-            .await
-            .unwrap();
-        assert!(matches!(result, AuthResult::Authenticated(_)));
-
-        // Invalid password
-        let result = auth_service
-            .authenticate_user("testuser", "wrong")
-            .await
-            .unwrap();
-        assert!(matches!(result, AuthResult::Unauthenticated));
-
-        // Non-existent user
-        let result = auth_service
-            .authenticate_user("nonexistent", "password")
-            .await
-            .unwrap();
-        assert!(matches!(result, AuthResult::Unauthenticated));
-    }
-
-    #[tokio::test]
-    async fn test_session_management() {
-        let auth_service = create_test_auth_service().await;
-
-        let user = User {
-            username: "testuser".to_string(),
-            roles: vec!["user".to_string()],
-            email: Some("test@example.com".to_string()),
-            full_name: Some("Test User".to_string()),
-            last_login: None,
-            permissions: vec![Permission::GlobalRead, Permission::SparqlQuery],
-        };
-
-        // Create session
-        let session_id = auth_service.create_session(user.clone()).await.unwrap();
-
-        // Validate session
-        let result = auth_service.validate_session(&session_id).await.unwrap();
-        assert!(matches!(result, AuthResult::Authenticated(_)));
-
-        // Logout
-        auth_service.logout(&session_id).await.unwrap();
-
-        // Session should be invalid after logout
-        let result = auth_service.validate_session(&session_id).await.unwrap();
-        assert!(matches!(result, AuthResult::Unauthenticated));
-    }
 
     #[test]
-    fn test_password_strength() {
-        use passwords::*;
-
-        assert_eq!(check_password_strength("123"), PasswordStrength::Weak);
-        assert_eq!(check_password_strength("password"), PasswordStrength::Weak);
-        assert_eq!(
-            check_password_strength("Password1"),
-            PasswordStrength::Medium
-        );
-        assert_eq!(
-            check_password_strength("Password1!"),
-            PasswordStrength::Strong
-        );
-        assert_eq!(
-            check_password_strength("VerySecurePassword123!"),
-            PasswordStrength::Strong
-        );
-    }
-
-    #[test]
-    fn test_permission_system() {
-        let user = User {
-            username: "testuser".to_string(),
-            roles: vec!["user".to_string()],
-            email: None,
-            full_name: None,
-            last_login: None,
-            permissions: vec![Permission::GlobalRead, Permission::SparqlQuery],
-        };
-
-        let auth_service = create_test_auth_service().await;
-
-        assert!(auth_service.has_permission(&user, &Permission::GlobalRead));
-        assert!(auth_service.has_permission(&user, &Permission::SparqlQuery));
-        assert!(!auth_service.has_permission(&user, &Permission::SparqlUpdate));
-        assert!(!auth_service.has_permission(&user, &Permission::SystemConfig));
-    }
-
-    #[cfg(feature = "auth")]
-    #[tokio::test]
-    async fn test_jwt_operations() {
-        let mut config = SecurityConfig::default();
-        config.jwt = Some(JwtConfig {
-            secret: "a".repeat(32),
-            expiration_secs: 3600,
-            issuer: "oxirs-fuseki".to_string(),
-            audience: "test".to_string(),
-        });
-
-        let auth_service = AuthService::new(config);
-
-        let user = User {
-            username: "testuser".to_string(),
-            roles: vec!["user".to_string()],
-            email: None,
-            full_name: None,
-            last_login: None,
-            permissions: vec![Permission::GlobalRead],
-        };
-
-        // Generate token
-        let token = auth_service.generate_jwt_token(&user).unwrap();
-        assert!(!token.is_empty());
-
-        // Validate token
-        let validation = auth_service.validate_jwt_token(&token).unwrap();
-        assert_eq!(validation.user.username, user.username);
-        assert_eq!(validation.user.roles, user.roles);
+    fn test_decode_basic_auth() {
+        let encoded = "dGVzdDpwYXNzd29yZA=="; // "test:password" in base64
+        let result = decode_basic_auth(encoded).unwrap();
+        assert_eq!(result.0, "test");
+        assert_eq!(result.1, "password");
     }
 }

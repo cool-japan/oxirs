@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use oxirs_core::model::{NamedNode as CoreNamedNode, Triple as CoreTriple};
 use tracing::{debug, span, Level};
+use lru::LruCache;
 
 use crate::model::{NamedNode, StarGraph, StarTerm, StarTriple};
 use crate::{StarError, StarResult};
@@ -406,7 +407,7 @@ pub enum TermType {
 pub struct AdvancedReificator {
     strategy: AdvancedReificationStrategy,
     contexts: HashMap<String, ReificationContext>,
-    cache: std::collections::LruCache<String, Vec<StarTriple>>,
+    cache: lru::LruCache<String, Vec<StarTriple>>,
     statistics: ReificationStatistics,
 }
 
@@ -433,7 +434,7 @@ impl AdvancedReificator {
         Self {
             strategy,
             contexts: HashMap::new(),
-            cache: std::collections::LruCache::new(std::num::NonZeroUsize::new(1000).unwrap()),
+            cache: lru::LruCache::new(std::num::NonZeroUsize::new(1000).unwrap()),
             statistics: ReificationStatistics::default(),
         }
     }
@@ -782,174 +783,6 @@ mod tests {
         assert!(stats.strategy_usage.len() > 0);
     }
 }
-    /// Create a new dereificator
-    pub fn new(strategy: ReificationStrategy, base_iri: Option<String>) -> Self {
-        Self {
-            context: ReificationContext::new(strategy, base_iri),
-        }
-    }
-
-    /// Convert standard RDF with reification back to RDF-star
-    pub fn dereify_graph(&mut self, reified_graph: &StarGraph) -> StarResult<StarGraph> {
-        let span = span!(Level::INFO, "dereify_graph");
-        let _enter = span.enter();
-
-        // First pass: identify reification patterns
-        let mut statements = HashMap::new();
-        let mut non_reification_triples = Vec::new();
-
-        self.identify_reifications(reified_graph, &mut statements, &mut non_reification_triples)?;
-
-        // Second pass: reconstruct quoted triples
-        let mut star_graph = StarGraph::new();
-
-        // Add non-reification triples, substituting statement identifiers with quoted triples
-        for triple in non_reification_triples {
-            let star_triple = self.substitute_quoted_triples(triple, &statements)?;
-            star_graph.insert(star_triple)?;
-        }
-
-        debug!(
-            "Dereified {} standard RDF triples to {} RDF-star triples",
-            reified_graph.len(),
-            star_graph.len()
-        );
-        Ok(star_graph)
-    }
-
-    /// Identify reification patterns in the graph
-    fn identify_reifications(
-        &mut self,
-        graph: &StarGraph,
-        statements: &mut HashMap<String, (StarTerm, StarTerm, StarTerm)>,
-        non_reification_triples: &mut Vec<StarTriple>,
-    ) -> StarResult<()> {
-        let mut potential_statements = HashMap::new();
-
-        for triple in graph.triples() {
-            // Check if this is a reification triple
-            if let Some(stmt_id) = self.extract_statement_id(&triple.subject) {
-                if let Some(reification_property) = self.get_reification_property(&triple.predicate)
-                {
-                    match reification_property.as_str() {
-                        "subject" => {
-                            potential_statements
-                                .entry(stmt_id)
-                                .or_insert((None, None, None))
-                                .0 = Some(triple.object.clone());
-                        }
-                        "predicate" => {
-                            potential_statements
-                                .entry(stmt_id)
-                                .or_insert((None, None, None))
-                                .1 = Some(triple.object.clone());
-                        }
-                        "object" => {
-                            potential_statements
-                                .entry(stmt_id)
-                                .or_insert((None, None, None))
-                                .2 = Some(triple.object.clone());
-                        }
-                        "type" => {
-                            // Skip rdf:type rdf:Statement triples - they're reification metadata
-                            // We don't include them in the dereified graph
-                        }
-                        _ => {
-                            // Not a reification property, add to non-reification triples
-                            non_reification_triples.push(triple.clone());
-                        }
-                    }
-                } else {
-                    // Not a reification property, add to non-reification triples
-                    non_reification_triples.push(triple.clone());
-                }
-            } else {
-                // Not a statement identifier, add to non-reification triples
-                non_reification_triples.push(triple.clone());
-            }
-        }
-
-        // Convert complete reifications to statements
-        for (stmt_id, (subject, predicate, object)) in potential_statements {
-            if let (Some(s), Some(p), Some(o)) = (subject, predicate, object) {
-                statements.insert(stmt_id, (s, p, o));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Extract statement identifier if this term represents a reified statement
-    fn extract_statement_id(&self, term: &StarTerm) -> Option<String> {
-        match term {
-            StarTerm::NamedNode(node) => {
-                if node.iri.starts_with(&self.context.base_iri) {
-                    Some(node.iri.clone())
-                } else {
-                    None
-                }
-            }
-            StarTerm::BlankNode(node) => {
-                if matches!(self.context.strategy, ReificationStrategy::BlankNodes) {
-                    Some(format!("_:{}", node.id))
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
-    /// Check if this is a reification property and return its type
-    fn get_reification_property(&self, term: &StarTerm) -> Option<String> {
-        if let StarTerm::NamedNode(node) = term {
-            match node.iri.as_str() {
-                vocab::RDF_SUBJECT => Some("subject".to_string()),
-                vocab::RDF_PREDICATE => Some("predicate".to_string()),
-                vocab::RDF_OBJECT => Some("object".to_string()),
-                vocab::RDF_TYPE => Some("type".to_string()),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
-
-    /// Substitute statement identifiers with quoted triples in a triple
-    fn substitute_quoted_triples(
-        &self,
-        triple: StarTriple,
-        statements: &HashMap<String, (StarTerm, StarTerm, StarTerm)>,
-    ) -> StarResult<StarTriple> {
-        let subject = self.substitute_term(triple.subject, statements)?;
-        let predicate = self.substitute_term(triple.predicate, statements)?;
-        let object = self.substitute_term(triple.object, statements)?;
-
-        Ok(StarTriple::new(subject, predicate, object))
-    }
-
-    /// Substitute a term if it's a statement identifier
-    fn substitute_term(
-        &self,
-        term: StarTerm,
-        statements: &HashMap<String, (StarTerm, StarTerm, StarTerm)>,
-    ) -> StarResult<StarTerm> {
-        if let Some(stmt_id) = self.extract_statement_id(&term) {
-            if let Some((subject, predicate, object)) = statements.get(&stmt_id) {
-                // Recursively substitute in the components
-                let sub_subject = self.substitute_term(subject.clone(), statements)?;
-                let sub_predicate = self.substitute_term(predicate.clone(), statements)?;
-                let sub_object = self.substitute_term(object.clone(), statements)?;
-
-                let quoted_triple = StarTriple::new(sub_subject, sub_predicate, sub_object);
-                Ok(StarTerm::quoted_triple(quoted_triple))
-            } else {
-                Ok(term)
-            }
-        } else {
-            Ok(term)
-        }
-    }
 
 /// Utility functions for reification
 pub mod utils {

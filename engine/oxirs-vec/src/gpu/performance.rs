@@ -1,4 +1,4 @@
-//\! GPU performance monitoring and statistics
+//! GPU performance monitoring and statistics
 
 use std::time::{Duration, Instant};
 
@@ -150,7 +150,7 @@ impl GpuBenchmark {
         }
 
         let total_time: Duration = times.iter().sum();
-        let avg_time = if \!times.is_empty() {
+        let avg_time = if !times.is_empty() {
             total_time / times.len() as u32
         } else {
             Duration::ZERO
@@ -163,7 +163,7 @@ impl GpuBenchmark {
         let avg_secs = avg_time.as_secs_f64();
         let variance: f64 = times
             .iter()
-            .map( < /dev/null | t| {
+            .map(|t| {
                 let diff = t.as_secs_f64() - avg_secs;
                 diff * diff
             })

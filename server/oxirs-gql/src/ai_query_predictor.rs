@@ -390,7 +390,7 @@ impl AIQueryPredictor {
         let config = &self.config;
         
         // Advanced neural network with multi-layer processing
-        let mut layer_output = embedding.semantic_features.clone();
+        let mut layer_output = embedding.semantic_vector.clone();
         
         // Process through each neural layer with activation functions
         for (i, &layer_size) in config.neural_layers.iter().enumerate() {
@@ -424,7 +424,7 @@ impl AIQueryPredictor {
         }
         
         // Advanced output interpretation
-        let complexity_factor = embedding.structural_features.iter().sum::<f64>() / embedding.structural_features.len() as f64;
+        let complexity_factor = embedding.structural_vector.iter().sum::<f64>() / embedding.structural_vector.len() as f64;
         let execution_time = Duration::from_millis(
             ((layer_output[0] * 1000.0).abs() + complexity_factor * 100.0) as u64
         );
@@ -481,10 +481,10 @@ impl AIQueryPredictor {
         
         // Q-learning based query optimization
         let state_features = [
-            embedding.semantic_features.iter().sum::<f64>() / embedding.semantic_features.len() as f64,
-            embedding.structural_features.iter().sum::<f64>() / embedding.structural_features.len() as f64,
-            embedding.temporal_features.iter().sum::<f64>() / embedding.temporal_features.len() as f64,
-            embedding.graph_features.iter().sum::<f64>() / embedding.graph_features.len() as f64,
+            embedding.semantic_vector.iter().sum::<f64>() / embedding.semantic_vector.len() as f64,
+            embedding.structural_vector.iter().sum::<f64>() / embedding.structural_vector.len() as f64,
+            embedding.temporal_vector.iter().sum::<f64>() / embedding.temporal_vector.len() as f64,
+            embedding.graph_embedding.iter().sum::<f64>() / embedding.graph_embedding.len() as f64,
         ];
         
         // Simulate Q-value computation for different optimization actions
@@ -586,10 +586,10 @@ impl AIQueryPredictor {
         
         // Prepare input sequences from query embedding
         let input_sequence = [
-            &embedding.semantic_features,
-            &embedding.structural_features,
-            &embedding.temporal_features,
-            &embedding.graph_features,
+            &embedding.semantic_vector,
+            &embedding.structural_vector,
+            &embedding.temporal_vector,
+            &embedding.graph_embedding,
         ];
         
         let sequence_length = config.sequence_length.min(input_sequence[0].len());
@@ -718,8 +718,8 @@ impl AIQueryPredictor {
         embedding: &QueryEmbedding,
     ) -> Result<QueryPrediction> {
         // Construct query graph from embedding features
-        let num_nodes = embedding.graph_features.len().max(5);
-        let node_features = &embedding.graph_features;
+        let num_nodes = embedding.graph_embedding.len().max(5);
+        let node_features = &embedding.graph_embedding;
         
         // Initialize adjacency matrix (simplified graph structure)
         let mut adjacency_matrix = vec![vec![0.0; num_nodes]; num_nodes];
@@ -860,7 +860,7 @@ impl AIQueryPredictor {
         let config = &self.config;
         
         // Create temporal sequences from embedding features
-        let temporal_sequence = &embedding.temporal_features;
+        let temporal_sequence = &embedding.temporal_vector;
         let sequence_length = temporal_sequence.len().min(config.sequence_length);
         
         // LSTM cell parameters

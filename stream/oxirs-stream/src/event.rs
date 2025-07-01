@@ -318,6 +318,54 @@ impl StreamEvent {
             StreamEvent::ErrorOccurred { metadata, .. } => metadata.timestamp,
         }
     }
+
+    /// Extract event ID from any StreamEvent variant
+    pub fn event_id(&self) -> &str {
+        match self {
+            StreamEvent::TripleAdded { metadata, .. } => &metadata.event_id,
+            StreamEvent::TripleRemoved { metadata, .. } => &metadata.event_id,
+            StreamEvent::QuadAdded { metadata, .. } => &metadata.event_id,
+            StreamEvent::QuadRemoved { metadata, .. } => &metadata.event_id,
+            StreamEvent::GraphCreated { metadata, .. } => &metadata.event_id,
+            StreamEvent::GraphCleared { metadata, .. } => &metadata.event_id,
+            StreamEvent::GraphDeleted { metadata, .. } => &metadata.event_id,
+            StreamEvent::SparqlUpdate { metadata, .. } => &metadata.event_id,
+            StreamEvent::TransactionBegin { metadata, .. } => &metadata.event_id,
+            StreamEvent::TransactionCommit { metadata, .. } => &metadata.event_id,
+            StreamEvent::TransactionAbort { metadata, .. } => &metadata.event_id,
+            StreamEvent::SchemaChanged { metadata, .. } => &metadata.event_id,
+            StreamEvent::Heartbeat { metadata, .. } => &metadata.event_id,
+            StreamEvent::QueryResultAdded { metadata, .. } => &metadata.event_id,
+            StreamEvent::QueryResultRemoved { metadata, .. } => &metadata.event_id,
+            StreamEvent::QueryCompleted { metadata, .. } => &metadata.event_id,
+            StreamEvent::GraphMetadataUpdated { metadata, .. } => &metadata.event_id,
+            StreamEvent::GraphPermissionsChanged { metadata, .. } => &metadata.event_id,
+            StreamEvent::GraphStatisticsUpdated { metadata, .. } => &metadata.event_id,
+            StreamEvent::GraphRenamed { metadata, .. } => &metadata.event_id,
+            StreamEvent::GraphMerged { metadata, .. } => &metadata.event_id,
+            StreamEvent::GraphSplit { metadata, .. } => &metadata.event_id,
+            StreamEvent::SchemaDefinitionAdded { metadata, .. } => &metadata.event_id,
+            StreamEvent::SchemaDefinitionRemoved { metadata, .. } => &metadata.event_id,
+            StreamEvent::SchemaDefinitionModified { metadata, .. } => &metadata.event_id,
+            StreamEvent::OntologyImported { metadata, .. } => &metadata.event_id,
+            StreamEvent::OntologyRemoved { metadata, .. } => &metadata.event_id,
+            StreamEvent::ConstraintAdded { metadata, .. } => &metadata.event_id,
+            StreamEvent::ConstraintRemoved { metadata, .. } => &metadata.event_id,
+            StreamEvent::ConstraintViolated { metadata, .. } => &metadata.event_id,
+            StreamEvent::IndexCreated { metadata, .. } => &metadata.event_id,
+            StreamEvent::IndexDropped { metadata, .. } => &metadata.event_id,
+            StreamEvent::IndexRebuilt { metadata, .. } => &metadata.event_id,
+            StreamEvent::SchemaUpdated { metadata, .. } => &metadata.event_id,
+            StreamEvent::ShapeAdded { metadata, .. } => &metadata.event_id,
+            StreamEvent::ShapeUpdated { metadata, .. } => &metadata.event_id,
+            StreamEvent::ShapeRemoved { metadata, .. } => &metadata.event_id,
+            StreamEvent::ShapeModified { metadata, .. } => &metadata.event_id,
+            StreamEvent::ShapeValidationStarted { metadata, .. } => &metadata.event_id,
+            StreamEvent::ShapeValidationCompleted { metadata, .. } => &metadata.event_id,
+            StreamEvent::ShapeViolationDetected { metadata, .. } => &metadata.event_id,
+            StreamEvent::ErrorOccurred { metadata, .. } => &metadata.event_id,
+        }
+    }
 }
 
 /// Event metadata for tracking and provenance

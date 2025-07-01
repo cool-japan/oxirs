@@ -1,4 +1,4 @@
-//\! Main GPU accelerator implementation
+//! Main GPU accelerator implementation
 
 use super::{GpuConfig, GpuDevice, GpuBuffer, GpuPerformanceStats, KernelManager};
 use crate::similarity::SimilarityMetric;
@@ -79,14 +79,14 @@ impl GpuAccelerator {
             use cuda_runtime_sys::*;
             unsafe {
                 let result = cudaSetDevice(device_id);
-                if result \!= cudaError_t::cudaSuccess {
-                    return Err(anyhow\!("Failed to set CUDA device"));
+                if result != cudaError_t::cudaSuccess {
+                    return Err(anyhow!("Failed to set CUDA device"));
                 }
 
                 let mut stream: cudaStream_t = std::ptr::null_mut();
                 let result = cudaStreamCreate(&mut stream);
-                if result \!= cudaError_t::cudaSuccess {
-                    return Err(anyhow\!("Failed to create CUDA stream"));
+                if result != cudaError_t::cudaSuccess {
+                    return Err(anyhow!("Failed to create CUDA stream"));
                 }
                 Ok(stream as *mut std::ffi::c_void)
             }
@@ -124,7 +124,7 @@ impl GpuAccelerator {
         let kernel_name = match metric {
             SimilarityMetric::Cosine => "cosine_similarity",
             SimilarityMetric::Euclidean => "euclidean_distance",
-            _ => return Err(anyhow\!("Unsupported similarity metric for GPU")),
+            _ => return Err(anyhow!("Unsupported similarity metric for GPU")),
         };
 
         // Launch kernel
@@ -139,7 +139,7 @@ impl GpuAccelerator {
         )?;
 
         // Copy results back
-        let mut results = vec\![0.0f32; query_count * db_count];
+        let mut results = vec![0.0f32; query_count * db_count];
         result_buffer.copy_to_host(&mut results)?;
 
         // Record performance
@@ -199,9 +199,9 @@ impl GpuAccelerator {
         metric: &str,
     ) -> Result<()> {
         // Simplified CPU fallback
-        let query_data = vec\![0.0f32; query_count * dim];
-        let db_data = vec\![0.0f32; db_count * dim];
-        let mut results = vec\![0.0f32; query_count * db_count];
+        let query_data = vec![0.0f32; query_count * dim];
+        let db_data = vec![0.0f32; db_count * dim];
+        let mut results = vec![0.0f32; query_count * db_count];
 
         // Copy data from "GPU" buffers (actually host memory in fallback)
         // In real implementation, this would be proper GPU memory access
@@ -226,7 +226,7 @@ impl GpuAccelerator {
 
     #[cfg(not(feature = "cuda"))]
     fn compute_cosine_similarity(&self, a: &[f32], b: &[f32]) -> f32 {
-        let dot: f32 = a.iter().zip(b.iter()).map( < /dev/null | (x, y)| x * y).sum();
+        let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
         let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
         

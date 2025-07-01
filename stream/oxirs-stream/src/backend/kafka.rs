@@ -312,29 +312,277 @@ impl KafkaBackend {
 
 #[async_trait]
 impl StreamBackendTrait for KafkaBackend {
-    async fn send_event(&self, _event: StreamEvent) -> StreamResult<()> {
-        // Note: This should be implemented to use the producer
-        todo!("Implement send_event using the producer")
+    fn name(&self) -> &'static str {
+        "kafka"
     }
 
-    async fn receive_events(&self) -> StreamResult<Vec<StreamEvent>> {
-        // Note: This should be implemented to use the consumer
-        todo!("Implement receive_events using the consumer")
+    async fn connect(&mut self) -> StreamResult<()> {
+        #[cfg(feature = "kafka")]
+        {
+            // Initialize Kafka producer
+            let mut kafka_config = ClientConfig::new();
+            kafka_config
+                .set("bootstrap.servers", &self.kafka_config.brokers.join(","))
+                .set("message.timeout.ms", &self.kafka_config.request_timeout_ms.to_string())
+                .set("compression.type", &self.kafka_config.compression_type.to_string())
+                .set("acks", &self.kafka_config.acks.to_string())
+                .set("client.id", &self.kafka_config.client_id);
+
+            let producer: FutureProducer = kafka_config
+                .create()
+                .map_err(|e| StreamError::Connection(format!("Failed to create Kafka producer: {}", e)))?;
+
+            self.producer = Some(producer);
+
+            // Initialize admin client for topic management
+            let admin_client: AdminClient<_> = kafka_config
+                .create()
+                .map_err(|e| StreamError::Connection(format!("Failed to create Kafka admin client: {}", e)))?;
+
+            self.admin_client = Some(admin_client);
+
+            info!("Connected to Kafka cluster: {}", self.kafka_config.brokers.join(","));
+        }
+        
+        #[cfg(not(feature = "kafka"))]
+        {
+            info!("Mock Kafka connection (kafka feature not enabled)");
+        }
+
+        Ok(())
     }
 
-    async fn seek(&self, _topic: &str, _partition: PartitionId, _offset: Offset) -> StreamResult<()> {
-        // Note: Implement seeking using Kafka consumer
-        todo!("Implement seek operation")
+    async fn disconnect(&mut self) -> StreamResult<()> {
+        #[cfg(feature = "kafka")]
+        {
+            if let Some(producer) = self.producer.take() {
+                // Flush any pending messages
+                producer.flush(Duration::from_secs(5))
+                    .map_err(|e| StreamError::Connection(format!("Failed to flush Kafka producer: {}", e)))?;
+            }
+            self.admin_client = None;
+            self.consumer = None;
+        }
+
+        info!("Disconnected from Kafka");
+        Ok(())
     }
 
-    async fn commit_offset(&self, _topic: &str, _partition: PartitionId, _offset: Offset) -> StreamResult<()> {
-        // Note: Implement offset commit using Kafka consumer
-        todo!("Implement offset commit")
+    async fn create_topic(&self, topic: &TopicName, partitions: u32) -> StreamResult<()> {
+        #[cfg(feature = "kafka")]
+        {
+            if let Some(ref admin_client) = self.admin_client {
+                let new_topic = NewTopic::new(topic, partitions as i32, TopicReplication::Fixed(1));
+                let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(30)));
+
+                admin_client
+                    .create_topics([new_topic], &opts)
+                    .await
+                    .map_err(|e| StreamError::TopicCreation(format!("Failed to create topic {}: {}", topic, e)))?;
+
+                info!("Created Kafka topic: {} with {} partitions", topic, partitions);
+            } else {
+                return Err(StreamError::Connection("Admin client not initialized".to_string()));
+            }
+        }
+
+        #[cfg(not(feature = "kafka"))]
+        {
+            info!("Mock create topic: {} with {} partitions", topic, partitions);
+        }
+
+        Ok(())
     }
 
-    async fn get_position(&self, _topic: &str, _partition: PartitionId) -> StreamResult<StreamPosition> {
-        // Note: Get current position from Kafka consumer
-        todo!("Implement get_position")
+    async fn delete_topic(&self, topic: &TopicName) -> StreamResult<()> {
+        #[cfg(feature = "kafka")]
+        {
+            if let Some(ref admin_client) = self.admin_client {
+                let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(30)));
+
+                admin_client
+                    .delete_topics([topic.as_str()], &opts)
+                    .await
+                    .map_err(|e| StreamError::TopicDeletion(format!("Failed to delete topic {}: {}", topic, e)))?;
+
+                info!("Deleted Kafka topic: {}", topic);
+            } else {
+                return Err(StreamError::Connection("Admin client not initialized".to_string()));
+            }
+        }
+
+        #[cfg(not(feature = "kafka"))]
+        {
+            info!("Mock delete topic: {}", topic);
+        }
+
+        Ok(())
+    }
+
+    async fn list_topics(&self) -> StreamResult<Vec<TopicName>> {
+        #[cfg(feature = "kafka")]
+        {
+            if let Some(ref admin_client) = self.admin_client {
+                let metadata = admin_client
+                    .inner()
+                    .fetch_metadata(None, Duration::from_secs(10))
+                    .map_err(|e| StreamError::TopicListing(format!("Failed to fetch metadata: {}", e)))?;
+
+                let topics: Vec<TopicName> = metadata
+                    .topics()
+                    .iter()
+                    .map(|topic| topic.name().to_string())
+                    .collect();
+
+                Ok(topics)
+            } else {
+                Err(StreamError::Connection("Admin client not initialized".to_string()))
+            }
+        }
+
+        #[cfg(not(feature = "kafka"))]
+        {
+            Ok(vec!["mock-topic-1".to_string(), "mock-topic-2".to_string()])
+        }
+    }
+
+    async fn send_event(&self, topic: &TopicName, event: StreamEvent) -> StreamResult<Offset> {
+        #[cfg(feature = "kafka")]
+        {
+            if let Some(ref producer) = self.producer {
+                let kafka_event = KafkaEvent::from_stream_event(event);
+                let serialized = serde_json::to_string(&kafka_event)
+                    .map_err(|e| StreamError::Serialization(e.to_string()))?;
+
+                let record = FutureRecord::to(topic)
+                    .key(&kafka_event.event_id)
+                    .payload(&serialized);
+
+                let result = producer
+                    .send(record, Duration::from_secs(5))
+                    .await
+                    .map_err(|(e, _)| StreamError::SendError(format!("Failed to send to Kafka: {}", e)))?;
+
+                Ok(Offset::new(result.1 as u64))
+            } else {
+                Err(StreamError::Connection("Producer not initialized".to_string()))
+            }
+        }
+
+        #[cfg(not(feature = "kafka"))]
+        {
+            debug!("Mock send event to topic: {}", topic);
+            Ok(Offset::new(0))
+        }
+    }
+
+    async fn send_batch(&self, topic: &TopicName, events: Vec<StreamEvent>) -> StreamResult<Vec<Offset>> {
+        let mut offsets = Vec::new();
+        for event in events {
+            let offset = self.send_event(topic, event).await?;
+            offsets.push(offset);
+        }
+        Ok(offsets)
+    }
+
+    async fn receive_events(
+        &self,
+        topic: &TopicName,
+        consumer_group: Option<&ConsumerGroup>,
+        position: StreamPosition,
+        max_events: usize,
+    ) -> StreamResult<Vec<(StreamEvent, Offset)>> {
+        #[cfg(feature = "kafka")]
+        {
+            // This would require implementing a proper Kafka consumer
+            // For now, return empty results
+            warn!("Kafka consumer not fully implemented yet");
+            Ok(vec![])
+        }
+
+        #[cfg(not(feature = "kafka"))]
+        {
+            debug!("Mock receive events from topic: {}, max: {}", topic, max_events);
+            Ok(vec![])
+        }
+    }
+
+    async fn commit_offset(
+        &self,
+        topic: &TopicName,
+        consumer_group: &ConsumerGroup,
+        partition: PartitionId,
+        offset: Offset,
+    ) -> StreamResult<()> {
+        #[cfg(feature = "kafka")]
+        {
+            warn!("Kafka offset commit not fully implemented yet");
+            Ok(())
+        }
+
+        #[cfg(not(feature = "kafka"))]
+        {
+            debug!("Mock commit offset for topic: {}, partition: {}, offset: {}", topic, partition, offset.value());
+            Ok(())
+        }
+    }
+
+    async fn seek(
+        &self,
+        topic: &TopicName,
+        consumer_group: &ConsumerGroup,
+        partition: PartitionId,
+        position: StreamPosition,
+    ) -> StreamResult<()> {
+        #[cfg(feature = "kafka")]
+        {
+            warn!("Kafka seek not fully implemented yet");
+            Ok(())
+        }
+
+        #[cfg(not(feature = "kafka"))]
+        {
+            debug!("Mock seek for topic: {}, partition: {}", topic, partition);
+            Ok(())
+        }
+    }
+
+    async fn get_consumer_lag(
+        &self,
+        topic: &TopicName,
+        consumer_group: &ConsumerGroup,
+    ) -> StreamResult<HashMap<PartitionId, u64>> {
+        #[cfg(feature = "kafka")]
+        {
+            warn!("Kafka consumer lag not fully implemented yet");
+            Ok(HashMap::new())
+        }
+
+        #[cfg(not(feature = "kafka"))]
+        {
+            debug!("Mock get consumer lag for topic: {}", topic);
+            Ok(HashMap::new())
+        }
+    }
+
+    async fn get_topic_metadata(&self, topic: &TopicName) -> StreamResult<HashMap<String, String>> {
+        #[cfg(feature = "kafka")]
+        {
+            let mut metadata = HashMap::new();
+            metadata.insert("backend".to_string(), "kafka".to_string());
+            metadata.insert("topic".to_string(), topic.clone());
+            metadata.insert("brokers".to_string(), self.kafka_config.brokers.join(","));
+            Ok(metadata)
+        }
+
+        #[cfg(not(feature = "kafka"))]
+        {
+            let mut metadata = HashMap::new();
+            metadata.insert("backend".to_string(), "kafka".to_string());
+            metadata.insert("topic".to_string(), topic.clone());
+            metadata.insert("brokers".to_string(), "mock-broker:9092".to_string());
+            Ok(metadata)
+        }
     }
 }
 

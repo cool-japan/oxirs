@@ -14,11 +14,10 @@
 use crate::{Vector, EmbeddingError, ModelConfig, EmbeddingModel};
 use anyhow::Result;
 use async_trait::async_trait;
-use ndarray::{Array1, Array2, Array3, Axis, s};
-use rand::{Rng, SeedableRng};
+use ndarray::Array2;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::fmt;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Configuration for biological computing
@@ -243,7 +242,7 @@ impl DNASequence {
             current_fragment.push(self.sequence[i]);
             
             // Check for cut site (avoid underflow)
-            if i + 1 >= cut_site.len() && cut_site.len() > 0 {
+            if i + 1 >= cut_site.len() && !cut_site.is_empty() {
                 let start = (i + 1).saturating_sub(cut_site.len());
                 if start <= i && start < self.sequence.len() {
                     let window = &self.sequence[start..=i];
@@ -466,10 +465,8 @@ impl CellularAutomaton {
                 let ni = row as i32 + di;
                 let nj = col as i32 + dj;
                 
-                if ni >= 0 && ni < self.size.0 as i32 && nj >= 0 && nj < self.size.1 as i32 {
-                    if self.grid[[ni as usize, nj as usize]].is_alive() {
-                        count += 1;
-                    }
+                if ni >= 0 && ni < self.size.0 as i32 && nj >= 0 && nj < self.size.1 as i32 && self.grid[[ni as usize, nj as usize]].is_alive() {
+                    count += 1;
                 }
             }
         }
