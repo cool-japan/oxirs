@@ -5,9 +5,9 @@
 
 use std::collections::HashMap;
 
+use lru::LruCache;
 use oxirs_core::model::{NamedNode as CoreNamedNode, Triple as CoreTriple};
 use tracing::{debug, span, Level};
-use lru::LruCache;
 
 use crate::model::{NamedNode, StarGraph, StarTerm, StarTriple};
 use crate::{StarError, StarResult};
@@ -259,11 +259,15 @@ impl Reificator {
 
         // Find all rdf:Statement instances
         for triple in reified_graph.triples() {
-            if let (StarTerm::NamedNode(predicate), StarTerm::NamedNode(object)) = (&triple.predicate, &triple.object) {
+            if let (StarTerm::NamedNode(predicate), StarTerm::NamedNode(object)) =
+                (&triple.predicate, &triple.object)
+            {
                 if predicate.iri == vocab::RDF_TYPE && object.iri == vocab::RDF_STATEMENT {
                     if let StarTerm::NamedNode(stmt_node) = &triple.subject {
                         if !processed_statements.contains(&stmt_node.iri) {
-                            if let Some(star_triple) = self.reconstruct_quoted_triple(reified_graph, &stmt_node.iri)? {
+                            if let Some(star_triple) =
+                                self.reconstruct_quoted_triple(reified_graph, &stmt_node.iri)?
+                            {
                                 star_graph.insert(star_triple)?;
                                 processed_statements.insert(stmt_node.iri.clone());
                             }
@@ -289,7 +293,11 @@ impl Reificator {
     }
 
     /// Reconstruct a quoted triple from its reification
-    fn reconstruct_quoted_triple(&self, graph: &StarGraph, stmt_iri: &str) -> StarResult<Option<StarTriple>> {
+    fn reconstruct_quoted_triple(
+        &self,
+        graph: &StarGraph,
+        stmt_iri: &str,
+    ) -> StarResult<Option<StarTriple>> {
         let mut subject = None;
         let mut predicate = None;
         let mut object = None;
@@ -318,7 +326,11 @@ impl Reificator {
     }
 
     /// Check if a triple involves a reified statement
-    fn involves_reified_statement(&self, triple: &StarTriple, processed_statements: &std::collections::HashSet<String>) -> bool {
+    fn involves_reified_statement(
+        &self,
+        triple: &StarTriple,
+        processed_statements: &std::collections::HashSet<String>,
+    ) -> bool {
         if let StarTerm::NamedNode(subj_node) = &triple.subject {
             if processed_statements.contains(&subj_node.iri) {
                 return true;
@@ -449,10 +461,14 @@ impl AdvancedReificator {
 
         for triple in star_graph.triples() {
             self.statistics.total_triples += 1;
-            
+
             let strategy = self.select_strategy_for_triple(triple)?;
             let strategy_name = format!("{:?}", strategy);
-            *self.statistics.strategy_usage.entry(strategy_name).or_insert(0) += 1;
+            *self
+                .statistics
+                .strategy_usage
+                .entry(strategy_name)
+                .or_insert(0) += 1;
 
             let reified_triples = self.reify_triple_with_strategy(triple, &strategy)?;
             for reified_triple in reified_triples {
@@ -462,7 +478,8 @@ impl AdvancedReificator {
         }
 
         let processing_time = start_time.elapsed();
-        self.statistics.avg_processing_time = processing_time.as_micros() as f64 / self.statistics.total_triples as f64;
+        self.statistics.avg_processing_time =
+            processing_time.as_micros() as f64 / self.statistics.total_triples as f64;
 
         debug!(
             "Advanced reification completed: {} triples -> {} triples in {:?}",
@@ -478,10 +495,10 @@ impl AdvancedReificator {
     fn select_strategy_for_triple(&self, triple: &StarTriple) -> StarResult<ReificationStrategy> {
         match &self.strategy {
             AdvancedReificationStrategy::Standard(strategy) => Ok(strategy.clone()),
-            AdvancedReificationStrategy::Hybrid { 
-                simple_strategy, 
-                nested_strategy, 
-                predicate_strategies 
+            AdvancedReificationStrategy::Hybrid {
+                simple_strategy,
+                nested_strategy,
+                predicate_strategies,
             } => {
                 // Check for predicate-specific strategies
                 if let StarTerm::NamedNode(pred_node) = &triple.predicate {
@@ -497,9 +514,13 @@ impl AdvancedReificator {
                     Ok(simple_strategy.clone())
                 }
             }
-            AdvancedReificationStrategy::Conditional { default_strategy, rules } => {
+            AdvancedReificationStrategy::Conditional {
+                default_strategy,
+                rules,
+            } => {
                 // Evaluate rules by priority
-                let mut applicable_rules: Vec<_> = rules.iter()
+                let mut applicable_rules: Vec<_> = rules
+                    .iter()
                     .filter(|rule| self.evaluate_condition(&rule.condition, triple))
                     .collect();
                 applicable_rules.sort_by_key(|rule| std::cmp::Reverse(rule.priority));
@@ -518,9 +539,9 @@ impl AdvancedReificator {
 
     /// Check if a triple contains nested quoted triples
     fn has_nested_quoted_triples(&self, triple: &StarTriple) -> bool {
-        self.term_has_quoted_triples(&triple.subject) ||
-        self.term_has_quoted_triples(&triple.predicate) ||
-        self.term_has_quoted_triples(&triple.object)
+        self.term_has_quoted_triples(&triple.subject)
+            || self.term_has_quoted_triples(&triple.predicate)
+            || self.term_has_quoted_triples(&triple.object)
     }
 
     /// Check if a term contains quoted triples
@@ -583,41 +604,39 @@ impl AdvancedReificator {
         let subject_depth = self.term_nesting_depth(&triple.subject);
         let predicate_depth = self.term_nesting_depth(&triple.predicate);
         let object_depth = self.term_nesting_depth(&triple.object);
-        
+
         subject_depth.max(predicate_depth).max(object_depth)
     }
 
     /// Calculate the nesting depth of a term
     fn term_nesting_depth(&self, term: &StarTerm) -> usize {
         match term {
-            StarTerm::QuotedTriple(inner_triple) => {
-                1 + self.calculate_nesting_depth(inner_triple)
-            }
+            StarTerm::QuotedTriple(inner_triple) => 1 + self.calculate_nesting_depth(inner_triple),
             _ => 0,
         }
     }
 
     /// Reify a triple using a specific strategy
     fn reify_triple_with_strategy(
-        &mut self, 
-        triple: &StarTriple, 
-        strategy: &ReificationStrategy
+        &mut self,
+        triple: &StarTriple,
+        strategy: &ReificationStrategy,
     ) -> StarResult<Vec<StarTriple>> {
         // Get or create context for this strategy
         let context_key = format!("{:?}", strategy);
         if !self.contexts.contains_key(&context_key) {
             self.contexts.insert(
                 context_key.clone(),
-                ReificationContext::new(strategy.clone(), None)
+                ReificationContext::new(strategy.clone(), None),
             );
         }
 
         // Create a temporary reificator for this strategy
         let context = self.contexts.get_mut(&context_key).unwrap();
-        let mut temp_reificator = Reificator { 
-            context: ReificationContext::new(strategy.clone(), None) 
+        let mut temp_reificator = Reificator {
+            context: ReificationContext::new(strategy.clone(), None),
         };
-        
+
         // Copy the state from our context
         temp_reificator.context.counter = context.counter;
         temp_reificator.context.triple_to_id = context.triple_to_id.clone();
@@ -646,11 +665,11 @@ impl AdvancedReificator {
     /// Export reification mapping for external use
     pub fn export_mappings(&self) -> HashMap<String, HashMap<String, String>> {
         let mut mappings = HashMap::new();
-        
+
         for (strategy_key, context) in &self.contexts {
             mappings.insert(strategy_key.clone(), context.triple_to_id.clone());
         }
-        
+
         mappings
     }
 }
@@ -662,22 +681,22 @@ mod tests {
     #[test]
     fn test_basic_reification() {
         let mut reificator = Reificator::new(ReificationStrategy::StandardReification, None);
-        
+
         // Create a simple RDF-star triple
         let quoted_triple = StarTriple::new(
             StarTerm::iri("http://example.org/subject").unwrap(),
             StarTerm::iri("http://example.org/predicate").unwrap(),
             StarTerm::iri("http://example.org/object").unwrap(),
         );
-        
+
         let triple_with_quoted = StarTriple::new(
             StarTerm::QuotedTriple(Box::new(quoted_triple)),
             StarTerm::iri("http://example.org/hasMetadata").unwrap(),
             StarTerm::literal("metadata").unwrap(),
         );
-        
+
         let reified_triples = reificator.reify_triple(&triple_with_quoted).unwrap();
-        
+
         // Should generate multiple triples for reification
         assert!(reified_triples.len() > 1);
     }
@@ -685,7 +704,7 @@ mod tests {
     #[test]
     fn test_dereification() {
         let mut reificator = Reificator::new(ReificationStrategy::StandardReification, None);
-        
+
         // Create a test graph with RDF-star
         let mut star_graph = StarGraph::new();
         let quoted_triple = StarTriple::new(
@@ -693,19 +712,19 @@ mod tests {
             StarTerm::iri("http://example.org/predicate").unwrap(),
             StarTerm::iri("http://example.org/object").unwrap(),
         );
-        
+
         let triple_with_quoted = StarTriple::new(
             StarTerm::QuotedTriple(Box::new(quoted_triple)),
             StarTerm::iri("http://example.org/hasMetadata").unwrap(),
             StarTerm::literal("metadata").unwrap(),
         );
-        
+
         star_graph.insert(triple_with_quoted).unwrap();
-        
+
         // Reify and then dereify
         let reified_graph = reificator.reify_graph(&star_graph).unwrap();
         let dereified_graph = reificator.dereify_graph(&reified_graph).unwrap();
-        
+
         // Should round-trip successfully
         assert_eq!(star_graph.len(), dereified_graph.len());
     }
@@ -717,9 +736,9 @@ mod tests {
             nested_strategy: ReificationStrategy::BlankNodes,
             predicate_strategies: HashMap::new(),
         };
-        
+
         let mut advanced_reificator = AdvancedReificator::new(hybrid_strategy);
-        
+
         // Test with a simple graph
         let mut star_graph = StarGraph::new();
         let quoted_triple = StarTriple::new(
@@ -727,39 +746,39 @@ mod tests {
             StarTerm::iri("http://example.org/predicate").unwrap(),
             StarTerm::iri("http://example.org/object").unwrap(),
         );
-        
+
         let triple_with_quoted = StarTriple::new(
             StarTerm::QuotedTriple(Box::new(quoted_triple)),
             StarTerm::iri("http://example.org/hasMetadata").unwrap(),
             StarTerm::literal("metadata").unwrap(),
         );
-        
+
         star_graph.insert(triple_with_quoted).unwrap();
-        
-        let reified_graph = advanced_reificator.reify_graph_advanced(&star_graph).unwrap();
+
+        let reified_graph = advanced_reificator
+            .reify_graph_advanced(&star_graph)
+            .unwrap();
         assert!(reified_graph.len() > 0);
-        
+
         let stats = advanced_reificator.get_statistics();
         assert!(stats.total_triples > 0);
     }
 
     #[test]
     fn test_conditional_reification() {
-        let rules = vec![
-            ReificationRule {
-                condition: ReificationCondition::PredicateIri("http://example.org/special".to_string()),
-                strategy: ReificationStrategy::BlankNodes,
-                priority: 10,
-            }
-        ];
-        
+        let rules = vec![ReificationRule {
+            condition: ReificationCondition::PredicateIri("http://example.org/special".to_string()),
+            strategy: ReificationStrategy::BlankNodes,
+            priority: 10,
+        }];
+
         let conditional_strategy = AdvancedReificationStrategy::Conditional {
             default_strategy: ReificationStrategy::StandardReification,
             rules,
         };
-        
+
         let mut advanced_reificator = AdvancedReificator::new(conditional_strategy);
-        
+
         // Create test data that matches the condition
         let mut star_graph = StarGraph::new();
         let quoted_triple = StarTriple::new(
@@ -767,18 +786,20 @@ mod tests {
             StarTerm::iri("http://example.org/special").unwrap(), // Matches condition
             StarTerm::iri("http://example.org/object").unwrap(),
         );
-        
+
         let triple_with_quoted = StarTriple::new(
             StarTerm::QuotedTriple(Box::new(quoted_triple)),
             StarTerm::iri("http://example.org/hasMetadata").unwrap(),
             StarTerm::literal("metadata").unwrap(),
         );
-        
+
         star_graph.insert(triple_with_quoted).unwrap();
-        
-        let reified_graph = advanced_reificator.reify_graph_advanced(&star_graph).unwrap();
+
+        let reified_graph = advanced_reificator
+            .reify_graph_advanced(&star_graph)
+            .unwrap();
         assert!(reified_graph.len() > 0);
-        
+
         let stats = advanced_reificator.get_statistics();
         assert!(stats.strategy_usage.len() > 0);
     }

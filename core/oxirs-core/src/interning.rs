@@ -216,7 +216,7 @@ impl StringInterner {
     pub fn intern_batch(&self, strings: &[&str]) -> Vec<Arc<str>> {
         let mut result = Vec::with_capacity(strings.len());
         let mut to_create = Vec::new();
-        
+
         // First pass: collect existing strings with read lock
         {
             let string_map = self.strings.read().unwrap();
@@ -236,7 +236,7 @@ impl StringInterner {
         if !to_create.is_empty() {
             let mut string_map = self.strings.write().unwrap();
             let mut stats = self.stats.write().unwrap();
-            
+
             for (index, s) in to_create {
                 // Double-check in case another thread added it
                 if let Some(weak_ref) = string_map.get(s) {
@@ -246,18 +246,18 @@ impl StringInterner {
                         continue;
                     }
                 }
-                
+
                 // Create new interned string
                 let arc_str: Arc<str> = Arc::from(s);
                 let weak_ref = Arc::downgrade(&arc_str);
                 string_map.insert(s.to_string(), weak_ref);
                 result[index] = arc_str;
-                
+
                 stats.cache_misses += 1;
                 stats.total_strings_stored += 1;
                 stats.memory_saved_bytes += s.len();
             }
-            
+
             stats.total_requests += strings.len();
         }
 
@@ -275,17 +275,18 @@ impl StringInterner {
         let string_map_size = self.strings.read().unwrap().len();
         let id_map_size = self.string_to_id.read().unwrap().len();
         let stats = self.stats.read().unwrap();
-        
+
         MemoryUsage {
             interned_strings: string_map_size,
             id_mappings: id_map_size,
             estimated_memory_bytes: string_map_size * 64 + id_map_size * 8, // Rough estimate
             memory_saved_bytes: stats.memory_saved_bytes,
             compression_ratio: if stats.memory_saved_bytes > 0 {
-                stats.memory_saved_bytes as f64 / (stats.memory_saved_bytes + string_map_size * 32) as f64
+                stats.memory_saved_bytes as f64
+                    / (stats.memory_saved_bytes + string_map_size * 32) as f64
             } else {
                 0.0
-            }
+            },
         }
     }
 
@@ -293,7 +294,7 @@ impl StringInterner {
     pub fn optimize(&self) {
         // Clean up expired weak references
         self.cleanup();
-        
+
         // TODO: In a real implementation, we might want to:
         // - Rehash the HashMap with optimal capacity
         // - Defragment string storage

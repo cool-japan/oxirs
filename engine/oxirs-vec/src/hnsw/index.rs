@@ -1,7 +1,7 @@
 //! Main HNSW index implementation
 
+use crate::hnsw::{HnswConfig, HnswPerformanceStats, Node};
 use crate::{Vector, VectorIndex};
-use crate::hnsw::{HnswConfig, Node, HnswPerformanceStats};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
@@ -36,7 +36,7 @@ impl HnswIndex {
         #[cfg(feature = "gpu")]
         let (gpu_accelerator, multi_gpu_accelerators) = if config.enable_gpu {
             let gpu_config = config.gpu_config.clone().unwrap_or_default();
-            
+
             if config.enable_multi_gpu && gpu_config.preferred_gpu_ids.len() > 1 {
                 // Initialize multi-GPU setup
                 let mut accelerators = Vec::new();
@@ -77,7 +77,7 @@ impl HnswIndex {
         let mut cpu_config = config;
         cpu_config.enable_gpu = false;
         cpu_config.enable_multi_gpu = false;
-        
+
         Self {
             config: cpu_config,
             nodes: Vec::new(),
@@ -102,7 +102,8 @@ impl HnswIndex {
     /// Check if GPU acceleration is available and enabled
     #[cfg(feature = "gpu")]
     pub fn is_gpu_enabled(&self) -> bool {
-        self.config.enable_gpu && (self.gpu_accelerator.is_some() || !self.multi_gpu_accelerators.is_empty())
+        self.config.enable_gpu
+            && (self.gpu_accelerator.is_some() || !self.multi_gpu_accelerators.is_empty())
     }
 
     #[cfg(not(feature = "gpu"))]

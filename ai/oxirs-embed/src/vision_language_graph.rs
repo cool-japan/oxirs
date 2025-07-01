@@ -274,7 +274,7 @@ impl Default for GraphEncoderConfig {
             architecture: GraphArchitecture::GraphTransformer,
             node_dim: 256,
             edge_dim: 128,
-            graph_dim: 768,  // Match unified_dim for proper fusion
+            graph_dim: 768, // Match unified_dim for proper fusion
             num_layers: 6,
             aggregation: AggregationFunction::Attention,
             readout: ReadoutFunction::GlobalAttention,
@@ -1935,7 +1935,7 @@ mod tests {
         let config = VisionLanguageGraphConfig::default();
         assert_eq!(config.vision_config.vision_dim, 768);
         assert_eq!(config.language_config.language_dim, 768);
-        assert_eq!(config.graph_config.graph_dim, 768);  // Updated to match unified_dim
+        assert_eq!(config.graph_config.graph_dim, 768); // Updated to match unified_dim
     }
 
     #[test]

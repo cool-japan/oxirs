@@ -2,8 +2,8 @@
 
 #[cfg(feature = "gpu")]
 use crate::gpu::GpuAccelerator;
-use crate::Vector;
 use crate::hnsw::HnswIndex;
+use crate::Vector;
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -40,10 +40,10 @@ impl HnswIndex {
         // Placeholder for single GPU implementation
         // Real implementation would:
         // 1. Transfer query vector to GPU
-        // 2. Transfer candidate vectors to GPU 
+        // 2. Transfer candidate vectors to GPU
         // 3. Launch CUDA kernels for distance calculation
         // 4. Transfer results back to CPU
-        
+
         // For now, fall back to CPU
         self.cpu_batch_distance_calculation(query, candidates)
     }
@@ -57,14 +57,14 @@ impl HnswIndex {
         if self.multi_gpu_accelerators.is_empty() {
             return self.cpu_batch_distance_calculation(query, candidates);
         }
-        
+
         // Placeholder for multi-GPU implementation
         // Real implementation would:
         // 1. Partition candidates across GPUs
         // 2. Distribute work based on GPU capabilities
         // 3. Launch parallel computations
         // 4. Collect and merge results
-        
+
         // For now, fall back to CPU
         self.cpu_batch_distance_calculation(query, candidates)
     }
@@ -77,7 +77,7 @@ impl HnswIndex {
         // 2. Leverage GPU memory bandwidth
         // 3. Use parallel reduction for finding top-k
         // 4. Minimize CPU-GPU transfers
-        
+
         todo!("GPU search not yet implemented")
     }
 
@@ -86,13 +86,13 @@ impl HnswIndex {
         if !self.is_gpu_enabled() {
             return Ok(());
         }
-        
+
         // Placeholder for GPU warmup
         // Real implementation would:
         // 1. Pre-allocate GPU memory
         // 2. Compile and cache kernels
         // 3. Warm up GPU clocks
-        
+
         Ok(())
     }
 
@@ -101,13 +101,13 @@ impl HnswIndex {
         if !self.is_gpu_enabled() {
             return Ok(());
         }
-        
+
         // Placeholder for GPU data preloading
         // Real implementation would:
         // 1. Transfer all vectors to GPU memory
         // 2. Create optimized GPU data structures
         // 3. Cache frequently accessed data
-        
+
         Ok(())
     }
 }

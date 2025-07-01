@@ -115,15 +115,23 @@ impl GpuConfig {
             return Err(anyhow::anyhow!("Kernel cache size must be greater than 0"));
         }
         if self.preferred_gpu_ids.is_empty() {
-            return Err(anyhow::anyhow!("Must specify at least one preferred GPU ID"));
+            return Err(anyhow::anyhow!(
+                "Must specify at least one preferred GPU ID"
+            ));
         }
         Ok(())
     }
 
     /// Calculate optimal batch size based on available memory
-    pub fn calculate_optimal_batch_size(&self, vector_dim: usize, available_memory: usize) -> usize {
+    pub fn calculate_optimal_batch_size(
+        &self,
+        vector_dim: usize,
+        available_memory: usize,
+    ) -> usize {
         let bytes_per_vector = vector_dim * std::mem::size_of::<f32>();
         let max_vectors = available_memory / bytes_per_vector / 4; // Reserve 75% for safety
-        max_vectors.min(self.batch_size * 4).max(self.batch_size / 4)
+        max_vectors
+            .min(self.batch_size * 4)
+            .max(self.batch_size / 4)
     }
 }

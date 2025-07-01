@@ -167,7 +167,8 @@ impl GpuBenchmark {
                 let diff = t.as_secs_f64() - avg_secs;
                 diff * diff
             })
-            .sum::<f64>() / times.len() as f64;
+            .sum::<f64>()
+            / times.len() as f64;
         let std_dev = Duration::from_secs_f64(variance.sqrt());
 
         BenchmarkResult {
@@ -220,8 +221,10 @@ impl BenchmarkResult {
     /// Print benchmark results
     pub fn print(&self) {
         println!("Benchmark: {}", self.name);
-        println!("  Iterations: {} (success: {}, errors: {})", 
-                 self.iterations, self.successful_iterations, self.errors);
+        println!(
+            "  Iterations: {} (success: {}, errors: {})",
+            self.iterations, self.successful_iterations, self.errors
+        );
         println!("  Total time: {:?}", self.total_time);
         println!("  Average time: {:?}", self.average_time);
         println!("  Min/Max time: {:?} / {:?}", self.min_time, self.max_time);

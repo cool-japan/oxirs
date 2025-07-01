@@ -170,19 +170,20 @@ impl ConstraintSelectivityAnalyzer {
         constraints_with_contexts: Vec<(Constraint, ConstraintContext)>,
     ) -> Result<ConstraintOrderingResult> {
         let start_time = Instant::now();
-        
+
         // Convert to ordered constraints with metadata
         let mut ordered_constraints = Vec::with_capacity(constraints_with_contexts.len());
-        
+
         for (constraint, context) in constraints_with_contexts {
             let constraint_key = self.get_constraint_type_key(&constraint);
             let selectivity = self.get_constraint_selectivity(&constraint_key);
             let expected_duration = self.get_expected_duration(&constraint_key);
-            let early_termination_potential = self.calculate_early_termination_potential(&constraint, selectivity);
-            
+            let early_termination_potential =
+                self.calculate_early_termination_potential(&constraint, selectivity);
+
             // Calculate priority score: higher selectivity and lower duration = higher priority
             let priority_score = self.calculate_priority_score(selectivity, expected_duration);
-            
+
             ordered_constraints.push(OrderedConstraint {
                 constraint,
                 context,
@@ -195,7 +196,8 @@ impl ConstraintSelectivityAnalyzer {
 
         // Sort by priority score (descending - higher priority first)
         ordered_constraints.sort_by(|a, b| {
-            b.priority_score.partial_cmp(&a.priority_score)
+            b.priority_score
+                .partial_cmp(&a.priority_score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -203,7 +205,8 @@ impl ConstraintSelectivityAnalyzer {
         self.optimize_for_dependencies(&mut ordered_constraints)?;
 
         // Determine early termination strategy
-        let early_termination_strategy = self.determine_early_termination_strategy(&ordered_constraints);
+        let early_termination_strategy =
+            self.determine_early_termination_strategy(&ordered_constraints);
 
         // Calculate expected performance improvement
         let expected_improvement = self.calculate_expected_improvement(&ordered_constraints);
@@ -226,9 +229,10 @@ impl ConstraintSelectivityAnalyzer {
         evaluation_time: Duration,
     ) {
         let constraint_key = self.get_constraint_type_key(constraint);
-        
+
         // Update selectivity stats
-        let selectivity_stats = self.constraint_selectivity
+        let selectivity_stats = self
+            .constraint_selectivity
             .entry(constraint_key.clone())
             .or_insert_with(|| SelectivityStats {
                 total_evaluations: 0,
@@ -244,15 +248,17 @@ impl ConstraintSelectivityAnalyzer {
         }
 
         // Recalculate selectivity
-        selectivity_stats.selectivity = selectivity_stats.total_violations as f64 
-            / selectivity_stats.total_evaluations as f64;
-        
+        selectivity_stats.selectivity =
+            selectivity_stats.total_violations as f64 / selectivity_stats.total_evaluations as f64;
+
         // Update confidence based on sample size
-        selectivity_stats.confidence = self.calculate_confidence(selectivity_stats.total_evaluations);
+        selectivity_stats.confidence =
+            self.calculate_confidence(selectivity_stats.total_evaluations);
         selectivity_stats.last_updated = Instant::now();
 
         // Update performance stats
-        let performance_stats = self.performance_history
+        let performance_stats = self
+            .performance_history
             .entry(constraint_key)
             .or_insert_with(|| PerformanceStats {
                 avg_evaluation_time: Duration::from_millis(1),
@@ -264,10 +270,10 @@ impl ConstraintSelectivityAnalyzer {
 
         performance_stats.evaluation_count += 1;
         performance_stats.total_evaluation_time += evaluation_time;
-        
+
         // Update average with exponential moving average for recent responsiveness
         let alpha = 0.1; // Smoothing factor
-        let new_avg_ms = performance_stats.avg_evaluation_time.as_millis() as f64 * (1.0 - alpha) 
+        let new_avg_ms = performance_stats.avg_evaluation_time.as_millis() as f64 * (1.0 - alpha)
             + evaluation_time.as_millis() as f64 * alpha;
         performance_stats.avg_evaluation_time = Duration::from_millis(new_avg_ms as u64);
 
@@ -283,9 +289,10 @@ impl ConstraintSelectivityAnalyzer {
     fn get_constraint_type_key(&self, constraint: &Constraint) -> ConstraintTypeKey {
         let complexity_class = match constraint {
             Constraint::NodeKind(_) | Constraint::HasValue(_) => ConstraintComplexity::Simple,
-            Constraint::MinCount(_) | Constraint::MaxCount(_) | Constraint::Class(_) | Constraint::Datatype(_) => {
-                ConstraintComplexity::Moderate
-            }
+            Constraint::MinCount(_)
+            | Constraint::MaxCount(_)
+            | Constraint::Class(_)
+            | Constraint::Datatype(_) => ConstraintComplexity::Moderate,
             Constraint::Pattern(_) | Constraint::MinLength(_) | Constraint::MaxLength(_) => {
                 ConstraintComplexity::Moderate
             }
@@ -312,10 +319,10 @@ impl ConstraintSelectivityAnalyzer {
             } else {
                 // Use default selectivity based on complexity class
                 match key.complexity_class {
-                    ConstraintComplexity::Simple => 0.1,      // Simple constraints rarely fail
-                    ConstraintComplexity::Moderate => 0.3,    // Moderate selectivity
-                    ConstraintComplexity::Complex => 0.5,     // Neutral selectivity
-                    ConstraintComplexity::Expensive => 0.7,   // Expensive constraints often find issues
+                    ConstraintComplexity::Simple => 0.1, // Simple constraints rarely fail
+                    ConstraintComplexity::Moderate => 0.3, // Moderate selectivity
+                    ConstraintComplexity::Complex => 0.5, // Neutral selectivity
+                    ConstraintComplexity::Expensive => 0.7, // Expensive constraints often find issues
                 }
             }
         } else {
@@ -340,15 +347,19 @@ impl ConstraintSelectivityAnalyzer {
     }
 
     /// Calculate early termination potential for a constraint
-    fn calculate_early_termination_potential(&self, constraint: &Constraint, selectivity: f64) -> f64 {
+    fn calculate_early_termination_potential(
+        &self,
+        constraint: &Constraint,
+        selectivity: f64,
+    ) -> f64 {
         // Higher selectivity + faster execution = higher early termination potential
         let base_potential = selectivity;
-        
+
         // Boost for constraints that are known to be good early terminators
         let constraint_boost = match constraint {
-            Constraint::NodeKind(_) => 0.2,  // Very fast, good for early checks
-            Constraint::Class(_) => 0.15,    // Good type-based filtering
-            Constraint::HasValue(_) => 0.1,  // Simple value checks
+            Constraint::NodeKind(_) => 0.2, // Very fast, good for early checks
+            Constraint::Class(_) => 0.15,   // Good type-based filtering
+            Constraint::HasValue(_) => 0.1, // Simple value checks
             Constraint::MinCount(_) | Constraint::MaxCount(_) => 0.05, // Cardinality checks
             _ => 0.0,
         };
@@ -360,26 +371,29 @@ impl ConstraintSelectivityAnalyzer {
     fn calculate_priority_score(&self, selectivity: f64, expected_duration: Duration) -> f64 {
         // Higher selectivity = higher priority (more likely to find violations early)
         // Lower duration = higher priority (faster to execute)
-        
+
         let selectivity_component = selectivity * self.config.selectivity_weight;
-        
+
         // Normalize duration to 0-1 scale (assuming max reasonable duration is 100ms)
         let duration_ms = expected_duration.as_millis() as f64;
         let normalized_duration = (100.0 - duration_ms.min(100.0)) / 100.0;
         let performance_component = normalized_duration * self.config.performance_weight;
-        
+
         selectivity_component + performance_component
     }
 
     /// Optimize constraint order considering dependencies
-    fn optimize_for_dependencies(&self, ordered_constraints: &mut [OrderedConstraint]) -> Result<()> {
+    fn optimize_for_dependencies(
+        &self,
+        ordered_constraints: &mut [OrderedConstraint],
+    ) -> Result<()> {
         // For now, implement a simple dependency-aware optimization
         // More sophisticated dependency analysis could be added later
-        
+
         // Group constraints by dependency patterns
         let mut independent_constraints = Vec::new();
         let mut dependent_constraints = Vec::new();
-        
+
         for constraint in ordered_constraints.iter() {
             if self.is_independent_constraint(&constraint.constraint) {
                 independent_constraints.push(constraint.clone());
@@ -387,40 +401,51 @@ impl ConstraintSelectivityAnalyzer {
                 dependent_constraints.push(constraint.clone());
             }
         }
-        
+
         // Reorder: independent constraints first (for early termination potential),
         // then dependent constraints
         ordered_constraints.clear();
         ordered_constraints.extend(independent_constraints);
         ordered_constraints.extend(dependent_constraints);
-        
+
         Ok(())
     }
 
     /// Check if a constraint is independent (doesn't depend on other constraint results)
     fn is_independent_constraint(&self, constraint: &Constraint) -> bool {
         match constraint {
-            Constraint::NodeKind(_) | Constraint::Class(_) | Constraint::Datatype(_) |
-            Constraint::HasValue(_) | Constraint::MinCount(_) | Constraint::MaxCount(_) => true,
+            Constraint::NodeKind(_)
+            | Constraint::Class(_)
+            | Constraint::Datatype(_)
+            | Constraint::HasValue(_)
+            | Constraint::MinCount(_)
+            | Constraint::MaxCount(_) => true,
             Constraint::And(_) | Constraint::Or(_) | Constraint::Node(_) => false,
             _ => true, // Assume independent by default
         }
     }
 
     /// Determine the best early termination strategy
-    fn determine_early_termination_strategy(&self, ordered_constraints: &[OrderedConstraint]) -> EarlyTerminationStrategy {
+    fn determine_early_termination_strategy(
+        &self,
+        ordered_constraints: &[OrderedConstraint],
+    ) -> EarlyTerminationStrategy {
         if ordered_constraints.is_empty() {
             return EarlyTerminationStrategy::None;
         }
 
         // Analyze constraint patterns to determine best strategy
-        let avg_selectivity: f64 = ordered_constraints.iter()
+        let avg_selectivity: f64 = ordered_constraints
+            .iter()
             .map(|c| c.selectivity)
-            .sum::<f64>() / ordered_constraints.len() as f64;
+            .sum::<f64>()
+            / ordered_constraints.len() as f64;
 
-        let avg_early_termination_potential: f64 = ordered_constraints.iter()
+        let avg_early_termination_potential: f64 = ordered_constraints
+            .iter()
             .map(|c| c.early_termination_potential)
-            .sum::<f64>() / ordered_constraints.len() as f64;
+            .sum::<f64>()
+            / ordered_constraints.len() as f64;
 
         if avg_early_termination_potential > 0.7 {
             EarlyTerminationStrategy::FirstViolation
@@ -438,23 +463,30 @@ impl ConstraintSelectivityAnalyzer {
         }
 
         // Calculate potential time savings from early termination
-        let total_expected_time: Duration = ordered_constraints.iter()
+        let total_expected_time: Duration = ordered_constraints
+            .iter()
             .map(|c| c.expected_duration)
             .sum();
 
-        let early_termination_time: Duration = ordered_constraints.iter()
+        let early_termination_time: Duration = ordered_constraints
+            .iter()
             .take(3) // Assume early termination after first few constraints
             .map(|c| c.expected_duration)
             .sum();
 
-        let avg_selectivity: f64 = ordered_constraints.iter()
+        let avg_selectivity: f64 = ordered_constraints
+            .iter()
             .take(3)
             .map(|c| c.selectivity)
-            .sum::<f64>() / 3.0.min(ordered_constraints.len() as f64);
+            .sum::<f64>()
+            / 3.0.min(ordered_constraints.len() as f64);
 
         // Expected improvement is the probability of early termination * time saved
         if total_expected_time.as_millis() > 0 {
-            avg_selectivity * (1.0 - early_termination_time.as_millis() as f64 / total_expected_time.as_millis() as f64)
+            avg_selectivity
+                * (1.0
+                    - early_termination_time.as_millis() as f64
+                        / total_expected_time.as_millis() as f64)
         } else {
             0.0
         }
@@ -488,7 +520,7 @@ impl ConstraintSelectivityAnalyzer {
 
         if constraint_count > 0 {
             let avg_selectivity = total_selectivity / constraint_count as f64;
-            
+
             // Adjust early termination threshold based on observed selectivity patterns
             if avg_selectivity > 0.8 {
                 // High selectivity overall, can be more aggressive with early termination
@@ -497,9 +529,10 @@ impl ConstraintSelectivityAnalyzer {
                 // Low selectivity overall, be more conservative
                 self.config.early_termination_threshold *= 1.05;
             }
-            
+
             // Keep threshold in reasonable bounds
-            self.config.early_termination_threshold = self.config.early_termination_threshold.clamp(0.5, 0.95);
+            self.config.early_termination_threshold =
+                self.config.early_termination_threshold.clamp(0.5, 0.95);
         }
     }
 
@@ -514,13 +547,17 @@ impl ConstraintSelectivityAnalyzer {
         };
 
         if !self.constraint_selectivity.is_empty() {
-            let total_selectivity: f64 = self.constraint_selectivity.values()
+            let total_selectivity: f64 = self
+                .constraint_selectivity
+                .values()
                 .map(|s| s.selectivity)
                 .sum();
-            let total_confidence: f64 = self.constraint_selectivity.values()
+            let total_confidence: f64 = self
+                .constraint_selectivity
+                .values()
                 .map(|s| s.confidence)
                 .sum();
-            
+
             stats.avg_selectivity = total_selectivity / self.constraint_selectivity.len() as f64;
             stats.avg_confidence = total_confidence / self.constraint_selectivity.len() as f64;
         }
@@ -553,22 +590,22 @@ mod tests {
     #[test]
     fn test_constraint_ordering() {
         let mut analyzer = ConstraintSelectivityAnalyzer::new(SelectivityConfig::default());
-        
+
         // Create some test constraints
-        let constraints = vec![
-            (
-                Constraint::NodeKind(NodeKindConstraint {
-                    node_kind: crate::constraints::value_constraints::NodeKind::Iri,
-                }),
-                ConstraintContext::new(
-                    Term::NamedNode(oxirs_core::model::NamedNode::new("http://example.org/test").unwrap()),
-                    crate::ShapeId::new("test_shape"),
+        let constraints = vec![(
+            Constraint::NodeKind(NodeKindConstraint {
+                node_kind: crate::constraints::value_constraints::NodeKind::Iri,
+            }),
+            ConstraintContext::new(
+                Term::NamedNode(
+                    oxirs_core::model::NamedNode::new("http://example.org/test").unwrap(),
                 ),
+                crate::ShapeId::new("test_shape"),
             ),
-        ];
+        )];
 
         let result = analyzer.order_constraints(constraints).unwrap();
-        
+
         assert!(!result.ordered_constraints.is_empty());
         assert!(result.ordering_time.as_millis() < 100); // Should be fast
     }
@@ -576,7 +613,7 @@ mod tests {
     #[test]
     fn test_selectivity_updates() {
         let mut analyzer = ConstraintSelectivityAnalyzer::new(SelectivityConfig::default());
-        
+
         let constraint = Constraint::NodeKind(NodeKindConstraint {
             node_kind: crate::constraints::value_constraints::NodeKind::Iri,
         });
@@ -591,7 +628,7 @@ mod tests {
             } else {
                 ConstraintEvaluationResult::Satisfied
             };
-            
+
             analyzer.update_selectivity(&constraint, &result, Duration::from_micros(50));
         }
 

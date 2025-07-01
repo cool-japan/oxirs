@@ -13,44 +13,40 @@
 //! - **helpers**: Utility functions
 
 pub mod config;
-pub mod types;
 pub mod graphql;
 pub mod handlers;
-pub mod routes;
 pub mod helpers;
+pub mod routes;
+pub mod types;
 
 // Re-export main types and functions
 pub use config::*;
-pub use types::*;
-pub use routes::create_router;
 #[cfg(feature = "graphql")]
 pub use graphql::create_schema;
-
+pub use routes::create_router;
+pub use types::*;
 
 /// Start the API server
 #[cfg(feature = "api-server")]
-pub async fn start_server(
-    state: ApiState,
-) -> anyhow::Result<()> {
+pub async fn start_server(state: ApiState) -> anyhow::Result<()> {
     use axum::Router;
     use std::net::SocketAddr;
     use tower::ServiceBuilder;
     use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
     use tracing::info;
 
-    let app = create_router(state.clone())
-        .layer(
-            ServiceBuilder::new()
-                .layer(TraceLayer::new_for_http())
-                .layer(TimeoutLayer::new(std::time::Duration::from_secs(
-                    state.config.request_timeout_secs,
-                )))
-                .layer(if state.config.enable_cors {
-                    CorsLayer::permissive()
-                } else {
-                    CorsLayer::new()
-                }),
-        );
+    let app = create_router(state.clone()).layer(
+        ServiceBuilder::new()
+            .layer(TraceLayer::new_for_http())
+            .layer(TimeoutLayer::new(std::time::Duration::from_secs(
+                state.config.request_timeout_secs,
+            )))
+            .layer(if state.config.enable_cors {
+                CorsLayer::permissive()
+            } else {
+                CorsLayer::new()
+            }),
+    );
 
     let addr = SocketAddr::from(([127, 0, 0, 1], state.config.port));
     info!("API server starting on {}", addr);

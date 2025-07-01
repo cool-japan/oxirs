@@ -14,9 +14,7 @@ use uuid::Uuid;
 
 /// List available models
 #[cfg(feature = "api-server")]
-pub async fn list_models(
-    State(_state): State<ApiState>,
-) -> Result<Json<Vec<String>>, StatusCode> {
+pub async fn list_models(State(_state): State<ApiState>) -> Result<Json<Vec<String>>, StatusCode> {
     // TODO: Implement model listing
     Err(StatusCode::NOT_IMPLEMENTED)
 }

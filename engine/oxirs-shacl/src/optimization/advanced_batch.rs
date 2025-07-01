@@ -5,7 +5,7 @@
 //! optimizing memory usage, and providing intelligent scheduling.
 
 use crate::{
-    constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult, ConstraintType},
+    constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult},
     optimization::core::ConstraintCache,
     report::ValidationReport,
     validation::ValidationViolation,
@@ -141,7 +141,7 @@ pub struct ConstraintGroupingStrategy {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct ConstraintGroupKey {
     /// Type of constraint
-    constraint_type: ConstraintType,
+    constraint_type: std::mem::Discriminant<Constraint>,
     /// Path hash (for property constraints)
     path_hash: Option<u64>,
     /// Target node type pattern
@@ -199,25 +199,27 @@ impl AdvancedBatchValidator {
         store: &S,
     ) -> Result<BatchValidationResult> {
         let start_time = Instant::now();
-        
+
         // Phase 1: Intelligent constraint grouping
         let grouped_constraints = self.group_constraints_intelligently(constraints)?;
-        
+
         // Phase 2: Adaptive batch sizing
         let optimized_batches = self.optimize_batch_sizes(grouped_constraints)?;
-        
+
         // Phase 3: Memory-aware execution scheduling
         let scheduled_batches = self.schedule_batches_with_memory_awareness(optimized_batches)?;
-        
+
         // Phase 4: Parallel execution with load balancing
-        let results = self.execute_scheduled_batches(scheduled_batches, store).await?;
-        
+        let results = self
+            .execute_scheduled_batches(scheduled_batches, store)
+            .await?;
+
         // Phase 5: Result aggregation and statistics collection
         let batch_result = self.aggregate_results(results, start_time.elapsed())?;
-        
+
         // Update global statistics
         self.update_global_statistics(&batch_result)?;
-        
+
         Ok(batch_result)
     }
 
@@ -233,7 +235,7 @@ impl AdvancedBatchValidator {
             let group_key = self.create_constraint_group_key(&constraint, &context);
             let compatibility_score = self.calculate_compatibility_score(&constraint, &context);
             let estimated_cost = self.estimate_constraint_cost(&constraint, &context);
-            
+
             let batch_item = ConstraintBatchItem {
                 constraint,
                 context,
@@ -242,14 +244,20 @@ impl AdvancedBatchValidator {
                 compatibility_score,
             };
 
-            grouped.entry(group_key).or_insert_with(Vec::new).push(batch_item);
+            grouped
+                .entry(group_key)
+                .or_insert_with(Vec::new)
+                .push(batch_item);
         }
 
         // Sort each group by priority and compatibility
         for group in grouped.values_mut() {
             group.sort_by(|a, b| {
-                a.priority.cmp(&b.priority)
-                    .then(b.compatibility_score.partial_cmp(&a.compatibility_score).unwrap())
+                a.priority.cmp(&b.priority).then(
+                    b.compatibility_score
+                        .partial_cmp(&a.compatibility_score)
+                        .unwrap(),
+                )
             });
         }
 
@@ -263,13 +271,14 @@ impl AdvancedBatchValidator {
     ) -> Result<Vec<Vec<ConstraintBatchItem>>> {
         let mut optimized_batches = Vec::new();
         let memory_monitor = self.memory_monitor.read().unwrap();
-        
+
         // Calculate available memory for batching
-        let available_memory = if memory_monitor.current_usage_mb < self.config.memory_pressure_threshold {
-            self.config.memory_pressure_threshold - memory_monitor.current_usage_mb
-        } else {
-            self.config.target_batch_size / 2 // Conservative when under pressure
-        };
+        let available_memory =
+            if memory_monitor.current_usage_mb < self.config.memory_pressure_threshold {
+                self.config.memory_pressure_threshold - memory_monitor.current_usage_mb
+            } else {
+                self.config.target_batch_size / 2 // Conservative when under pressure
+            };
 
         let target_batch_size = if self.config.enable_adaptive_sizing {
             self.calculate_adaptive_batch_size(available_memory)
@@ -284,9 +293,9 @@ impl AdvancedBatchValidator {
         for (_group_key, items) in grouped_constraints {
             for item in items {
                 // Check if adding this item would exceed our limits
-                if current_batch.len() >= target_batch_size 
-                    || current_batch_cost + item.estimated_cost > target_cost_per_batch {
-                    
+                if current_batch.len() >= target_batch_size
+                    || current_batch_cost + item.estimated_cost > target_cost_per_batch
+                {
                     if !current_batch.is_empty() {
                         optimized_batches.push(current_batch);
                         current_batch = Vec::new();
@@ -313,11 +322,12 @@ impl AdvancedBatchValidator {
         batches: Vec<Vec<ConstraintBatchItem>>,
     ) -> Result<Vec<ScheduledBatch>> {
         let mut scheduled = Vec::new();
-        
+
         for (index, batch) in batches.into_iter().enumerate() {
             let total_cost: f64 = batch.iter().map(|item| item.estimated_cost).sum();
-            let avg_priority = batch.iter().map(|item| item.priority).sum::<usize>() / batch.len().max(1);
-            
+            let avg_priority =
+                batch.iter().map(|item| item.priority).sum::<usize>() / batch.len().max(1);
+
             let scheduled_batch = ScheduledBatch {
                 items: batch,
                 execution_order: index,
@@ -326,13 +336,14 @@ impl AdvancedBatchValidator {
                 avg_priority,
                 dependencies: self.analyze_batch_dependencies(&batch),
             };
-            
+
             scheduled.push(scheduled_batch);
         }
 
         // Sort by priority and dependencies
         scheduled.sort_by(|a, b| {
-            a.avg_priority.cmp(&b.avg_priority)
+            a.avg_priority
+                .cmp(&b.avg_priority)
                 .then(a.dependencies.len().cmp(&b.dependencies.len()))
                 .then(a.total_cost.partial_cmp(&b.total_cost).unwrap())
         });
@@ -348,37 +359,42 @@ impl AdvancedBatchValidator {
     ) -> Result<Vec<BatchExecutionResult>> {
         let total_batches = scheduled_batches.len();
         let results = Arc::new(Mutex::new(Vec::with_capacity(total_batches)));
-        
+
         // Use rayon for parallel execution
-        scheduled_batches.into_par_iter().enumerate().map(|(batch_index, scheduled_batch)| {
-            let batch_start = Instant::now();
-            
-            // Monitor memory usage before execution
-            self.update_memory_usage();
-            
-            // Execute batch with caching
-            let batch_results = self.execute_single_batch(&scheduled_batch, store, batch_index)?;
-            
-            let execution_time = batch_start.elapsed();
-            
-            // Collect results
-            let execution_result = BatchExecutionResult {
-                batch_index,
-                constraint_results: batch_results,
-                execution_time,
-                memory_used: self.estimate_batch_memory_usage(&scheduled_batch.items),
-                cache_hits: self.count_cache_hits(&scheduled_batch.items),
-                items_processed: scheduled_batch.items.len(),
-            };
-            
-            // Thread-safe result collection
-            {
-                let mut results_guard = results.lock().unwrap();
-                results_guard.push(execution_result);
-            }
-            
-            Ok(())
-        }).collect::<Result<Vec<_>>>()?;
+        scheduled_batches
+            .into_par_iter()
+            .enumerate()
+            .map(|(batch_index, scheduled_batch)| {
+                let batch_start = Instant::now();
+
+                // Monitor memory usage before execution
+                self.update_memory_usage();
+
+                // Execute batch with caching
+                let batch_results =
+                    self.execute_single_batch(&scheduled_batch, store, batch_index)?;
+
+                let execution_time = batch_start.elapsed();
+
+                // Collect results
+                let execution_result = BatchExecutionResult {
+                    batch_index,
+                    constraint_results: batch_results,
+                    execution_time,
+                    memory_used: self.estimate_batch_memory_usage(&scheduled_batch.items),
+                    cache_hits: self.count_cache_hits(&scheduled_batch.items),
+                    items_processed: scheduled_batch.items.len(),
+                };
+
+                // Thread-safe result collection
+                {
+                    let mut results_guard = results.lock().unwrap();
+                    results_guard.push(execution_result);
+                }
+
+                Ok(())
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         let final_results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
         Ok(final_results)
@@ -392,16 +408,16 @@ impl AdvancedBatchValidator {
         batch_index: usize,
     ) -> Result<Vec<ConstraintEvaluationResult>> {
         let mut results = Vec::with_capacity(scheduled_batch.items.len());
-        
+
         for item in &scheduled_batch.items {
             let constraint_start = Instant::now();
-            
+
             // Check cache first
             if let Some(cached_result) = self.cache.get(&item.constraint, &item.context) {
                 results.push(cached_result);
                 continue;
             }
-            
+
             // Execute constraint evaluation
             // Note: This would call the actual constraint evaluator
             // For now, we'll create a placeholder result
@@ -411,23 +427,29 @@ impl AdvancedBatchValidator {
                 execution_time: constraint_start.elapsed(),
                 cache_hit: false,
             };
-            
+
             // Cache the result
-            self.cache.put(&item.constraint, &item.context, evaluation_result.clone(), constraint_start.elapsed());
-            
+            self.cache.put(
+                &item.constraint,
+                &item.context,
+                evaluation_result.clone(),
+                constraint_start.elapsed(),
+            );
+
             results.push(evaluation_result);
         }
-        
+
         Ok(results)
     }
 
     /// Calculate adaptive batch size based on current system state
     fn calculate_adaptive_batch_size(&self, available_memory_mb: usize) -> usize {
         let base_size = self.config.target_batch_size;
-        
+
         // Adjust based on memory availability
-        let memory_factor = (available_memory_mb as f64 / self.config.memory_pressure_threshold as f64).min(2.0);
-        
+        let memory_factor =
+            (available_memory_mb as f64 / self.config.memory_pressure_threshold as f64).min(2.0);
+
         // Get recent performance statistics
         let stats = self.stats.read().unwrap();
         let performance_factor = if stats.avg_batch_execution_time.as_millis() > 1000 {
@@ -435,13 +457,17 @@ impl AdvancedBatchValidator {
         } else {
             1.2 // Increase batch size if execution is fast
         };
-        
+
         let adaptive_size = (base_size as f64 * memory_factor * performance_factor) as usize;
         adaptive_size.max(10).min(self.config.max_batch_size)
     }
 
     /// Create constraint group key for intelligent grouping
-    fn create_constraint_group_key(&self, constraint: &Constraint, context: &ConstraintContext) -> ConstraintGroupKey {
+    fn create_constraint_group_key(
+        &self,
+        constraint: &Constraint,
+        context: &ConstraintContext,
+    ) -> ConstraintGroupKey {
         ConstraintGroupKey {
             constraint_type: constraint.constraint_type(),
             path_hash: context.path.as_ref().map(|p| {
@@ -455,12 +481,20 @@ impl AdvancedBatchValidator {
     }
 
     /// Helper functions for advanced optimization features
-    fn calculate_compatibility_score(&self, _constraint: &Constraint, _context: &ConstraintContext) -> f64 {
+    fn calculate_compatibility_score(
+        &self,
+        _constraint: &Constraint,
+        _context: &ConstraintContext,
+    ) -> f64 {
         // Placeholder implementation - would analyze constraint similarity
         0.8
     }
 
-    fn estimate_constraint_cost(&self, _constraint: &Constraint, _context: &ConstraintContext) -> f64 {
+    fn estimate_constraint_cost(
+        &self,
+        _constraint: &Constraint,
+        _context: &ConstraintContext,
+    ) -> f64 {
         // Placeholder implementation - would estimate execution cost
         1.0
     }
@@ -527,17 +561,25 @@ impl AdvancedBatchValidator {
             batch_stats: BatchExecutionStats {
                 batches_executed: results.len(),
                 constraints_processed: total_items,
-                avg_batch_size: if results.len() > 0 { total_items as f64 / results.len() as f64 } else { 0.0 },
+                avg_batch_size: if results.len() > 0 {
+                    total_items as f64 / results.len() as f64
+                } else {
+                    0.0
+                },
                 avg_batch_execution_time: if results.len() > 0 {
                     Duration::from_nanos(
-                        results.iter().map(|r| r.execution_time.as_nanos()).sum::<u128>() / results.len() as u128
+                        results
+                            .iter()
+                            .map(|r| r.execution_time.as_nanos())
+                            .sum::<u128>()
+                            / results.len() as u128,
                     )
                 } else {
                     Duration::default()
                 },
                 batch_cache_hit_rate: cache_effectiveness,
                 memory_efficiency_score: 0.85, // Placeholder
-                grouping_effectiveness: 0.90, // Placeholder
+                grouping_effectiveness: 0.90,  // Placeholder
                 time_saved: Duration::from_millis(total_time.as_millis() / 2), // Placeholder
             },
             total_execution_time: total_time,
@@ -607,7 +649,7 @@ mod tests {
         let config = AdvancedBatchConfig::default();
         let cache = Arc::new(ConstraintCache::default());
         let validator = AdvancedBatchValidator::new(config, cache);
-        
+
         let batch_size = validator.calculate_adaptive_batch_size(200);
         assert!(batch_size > 0);
         assert!(batch_size <= validator.config.max_batch_size);
@@ -618,7 +660,7 @@ mod tests {
         let config = AdvancedBatchConfig::default();
         let cache = Arc::new(ConstraintCache::default());
         let validator = AdvancedBatchValidator::new(config, cache);
-        
+
         // Test would create actual constraints and contexts
         // This is a placeholder test structure
         assert!(true);

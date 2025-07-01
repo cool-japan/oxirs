@@ -22,11 +22,7 @@ pub struct QueryPattern {
 
 impl QueryPattern {
     /// Create a new query pattern
-    pub fn new(
-        subject: Option<NodeId>,
-        predicate: Option<NodeId>,
-        object: Option<NodeId>,
-    ) -> Self {
+    pub fn new(subject: Option<NodeId>, predicate: Option<NodeId>, object: Option<NodeId>) -> Self {
         Self {
             subject,
             predicate,
@@ -42,11 +38,11 @@ impl QueryPattern {
             .count();
 
         match bound_vars {
-            3 => 1.0,   // Most selective - all bound
-            2 => 0.7,   // High selectivity - two bound
-            1 => 0.3,   // Medium selectivity - one bound
-            0 => 0.0,   // Least selective - all unbound
-            _ => 1.0,   // Default to high selectivity for unexpected values
+            3 => 1.0, // Most selective - all bound
+            2 => 0.7, // High selectivity - two bound
+            1 => 0.3, // Medium selectivity - one bound
+            0 => 0.0, // Least selective - all unbound
+            _ => 1.0, // Default to high selectivity for unexpected values
         }
     }
 
@@ -81,26 +77,26 @@ pub enum PatternType {
 /// Available index types for query execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IndexType {
-    SPO,  // Subject-Predicate-Object
-    POS,  // Predicate-Object-Subject
-    OSP,  // Object-Subject-Predicate
-    SOP,  // Subject-Object-Predicate
-    PSO,  // Predicate-Subject-Object
-    OPS,  // Object-Predicate-Subject
+    SPO, // Subject-Predicate-Object
+    POS, // Predicate-Object-Subject
+    OSP, // Object-Subject-Predicate
+    SOP, // Subject-Object-Predicate
+    PSO, // Predicate-Subject-Object
+    OPS, // Object-Predicate-Subject
 }
 
 impl IndexType {
     /// Get the optimal index for a given pattern type
     pub fn optimal_for_pattern(pattern_type: PatternType) -> Self {
         match pattern_type {
-            PatternType::FullyBound => IndexType::SPO,      // Any index works, SPO is default
+            PatternType::FullyBound => IndexType::SPO, // Any index works, SPO is default
             PatternType::SubjectPredicate => IndexType::SPO, // SPO index optimal
-            PatternType::SubjectObject => IndexType::SOP,   // SOP index optimal
+            PatternType::SubjectObject => IndexType::SOP, // SOP index optimal
             PatternType::PredicateObject => IndexType::POS, // POS index optimal
-            PatternType::SubjectOnly => IndexType::SPO,     // SPO or PSO works
-            PatternType::PredicateOnly => IndexType::POS,   // POS or PSO works
-            PatternType::ObjectOnly => IndexType::OSP,      // OSP or OPS works
-            PatternType::Unbound => IndexType::SPO,         // Default to SPO
+            PatternType::SubjectOnly => IndexType::SPO, // SPO or PSO works
+            PatternType::PredicateOnly => IndexType::POS, // POS or PSO works
+            PatternType::ObjectOnly => IndexType::OSP, // OSP or OPS works
+            PatternType::Unbound => IndexType::SPO,    // Default to SPO
         }
     }
 
@@ -110,24 +106,24 @@ impl IndexType {
             (IndexType::SPO, PatternType::SubjectPredicate) => 1.0,
             (IndexType::SPO, PatternType::SubjectOnly) => 0.9,
             (IndexType::SPO, PatternType::FullyBound) => 0.8,
-            
+
             (IndexType::POS, PatternType::PredicateObject) => 1.0,
             (IndexType::POS, PatternType::PredicateOnly) => 0.9,
             (IndexType::POS, PatternType::FullyBound) => 0.8,
-            
+
             (IndexType::OSP, PatternType::ObjectOnly) => 0.9,
             (IndexType::OSP, PatternType::FullyBound) => 0.8,
-            
+
             (IndexType::SOP, PatternType::SubjectObject) => 1.0,
             (IndexType::SOP, PatternType::SubjectOnly) => 0.7,
             (IndexType::SOP, PatternType::FullyBound) => 0.8,
-            
+
             (IndexType::PSO, PatternType::PredicateOnly) => 0.8,
             (IndexType::PSO, PatternType::FullyBound) => 0.7,
-            
+
             (IndexType::OPS, PatternType::ObjectOnly) => 0.8,
             (IndexType::OPS, PatternType::FullyBound) => 0.7,
-            
+
             _ => 0.3, // Poor match
         }
     }
@@ -214,9 +210,10 @@ impl QueryOptimizer {
 
     /// Record query execution statistics
     pub fn record_execution(&self, stats: QueryStats) -> Result<()> {
-        let mut history = self.stats_history.write().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire write lock on stats history")
-        })?;
+        let mut history = self
+            .stats_history
+            .write()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire write lock on stats history"))?;
 
         history.push(stats);
 
@@ -244,11 +241,16 @@ impl QueryOptimizer {
 
         let pattern_type = pattern.pattern_type();
         let optimal_index = IndexType::optimal_for_pattern(pattern_type);
-        
+
         // Calculate costs for all possible indices
         let mut best_index = optimal_index;
-        let mut best_cost = self.cost_model.estimate_cost(pattern, optimal_index, store_stats);
-        let mut reasoning = format!("Optimal index {:?} for pattern {:?}", optimal_index, pattern_type);
+        let mut best_cost = self
+            .cost_model
+            .estimate_cost(pattern, optimal_index, store_stats);
+        let mut reasoning = format!(
+            "Optimal index {:?} for pattern {:?}",
+            optimal_index, pattern_type
+        );
 
         // Check if historical data suggests a better index
         if let Ok(history) = self.stats_history.read() {
@@ -260,7 +262,7 @@ impl QueryOptimizer {
             if !similar_patterns.is_empty() {
                 // Find the index with best average performance
                 let mut index_performance: HashMap<IndexType, Vec<f64>> = HashMap::new();
-                
+
                 for stats in similar_patterns {
                     let performance = 1.0 / (stats.execution_time.as_secs_f64() + 0.001);
                     index_performance
@@ -269,18 +271,21 @@ impl QueryOptimizer {
                         .push(performance);
                 }
 
-                if let Some((historical_best_index, performance_scores)) = index_performance
-                    .iter()
-                    .max_by(|(_, a), (_, b)| {
+                if let Some((historical_best_index, performance_scores)) =
+                    index_performance.iter().max_by(|(_, a), (_, b)| {
                         let avg_a = a.iter().sum::<f64>() / a.len() as f64;
                         let avg_b = b.iter().sum::<f64>() / b.len() as f64;
-                        avg_a.partial_cmp(&avg_b).unwrap_or(std::cmp::Ordering::Equal)
+                        avg_a
+                            .partial_cmp(&avg_b)
+                            .unwrap_or(std::cmp::Ordering::Equal)
                     })
                 {
                     if performance_scores.len() >= 3 {
                         // Use historical data if we have enough samples
                         best_index = *historical_best_index;
-                        best_cost = self.cost_model.estimate_cost(pattern, best_index, store_stats);
+                        best_cost = self
+                            .cost_model
+                            .estimate_cost(pattern, best_index, store_stats);
                         reasoning = format!(
                             "Historical data shows {:?} performs best for {:?} (avg performance: {:.3})",
                             best_index,
@@ -292,7 +297,11 @@ impl QueryOptimizer {
             }
         }
 
-        let confidence = if best_index == optimal_index { 0.9 } else { 0.7 };
+        let confidence = if best_index == optimal_index {
+            0.9
+        } else {
+            0.7
+        };
 
         let recommendation = OptimizationRecommendation {
             pattern: pattern.clone(),
@@ -312,9 +321,10 @@ impl QueryOptimizer {
 
     /// Get query statistics summary
     pub fn get_statistics_summary(&self) -> Result<QueryStatisticsSummary> {
-        let history = self.stats_history.read().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire read lock on stats history")
-        })?;
+        let history = self
+            .stats_history
+            .read()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire read lock on stats history"))?;
 
         if history.is_empty() {
             return Ok(QueryStatisticsSummary::default());
@@ -324,12 +334,11 @@ impl QueryOptimizer {
         let avg_execution_time = history
             .iter()
             .map(|s| s.execution_time.as_secs_f64())
-            .sum::<f64>() / total_queries as f64;
+            .sum::<f64>()
+            / total_queries as f64;
 
-        let avg_result_count = history
-            .iter()
-            .map(|s| s.result_count as f64)
-            .sum::<f64>() / total_queries as f64;
+        let avg_result_count =
+            history.iter().map(|s| s.result_count as f64).sum::<f64>() / total_queries as f64;
 
         // Index usage statistics
         let mut index_usage: HashMap<IndexType, u64> = HashMap::new();
@@ -340,7 +349,9 @@ impl QueryOptimizer {
         // Pattern type statistics
         let mut pattern_type_usage: HashMap<PatternType, u64> = HashMap::new();
         for stats in history.iter() {
-            *pattern_type_usage.entry(stats.pattern.pattern_type()).or_insert(0) += 1;
+            *pattern_type_usage
+                .entry(stats.pattern.pattern_type())
+                .or_insert(0) += 1;
         }
 
         Ok(QueryStatisticsSummary {
@@ -354,14 +365,16 @@ impl QueryOptimizer {
 
     /// Clear statistics history
     pub fn clear_history(&self) -> Result<()> {
-        let mut history = self.stats_history.write().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire write lock on stats history")
-        })?;
+        let mut history = self
+            .stats_history
+            .write()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire write lock on stats history"))?;
         history.clear();
-        
-        let mut cache = self.pattern_cache.write().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire write lock on pattern cache")
-        })?;
+
+        let mut cache = self
+            .pattern_cache
+            .write()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire write lock on pattern cache"))?;
         cache.clear();
 
         Ok(())
@@ -369,9 +382,10 @@ impl QueryOptimizer {
 
     /// Update cost model parameters based on observed performance
     pub fn adapt_cost_model(&mut self) -> Result<()> {
-        let history = self.stats_history.read().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire read lock on stats history")
-        })?;
+        let history = self
+            .stats_history
+            .read()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire read lock on stats history"))?;
 
         if history.len() < 100 {
             return Ok(()); // Need enough data for adaptation
@@ -388,14 +402,14 @@ impl QueryOptimizer {
                 &TripleStoreStats::default(), // Would need actual stats here
             );
             let actual_cost = stats.execution_time.as_secs_f64() * 1000.0; // Convert to cost units
-            
+
             let error = (predicted_cost - actual_cost).abs();
             total_error += error;
             samples += 1;
         }
 
         let avg_error = total_error / samples as f64;
-        
+
         // Adapt model if error is high
         if avg_error > 10.0 {
             self.cost_model.index_cost_factor *= 0.95;
@@ -527,7 +541,7 @@ mod tests {
     fn test_statistics_recording() {
         let optimizer = QueryOptimizer::new();
         let pattern = QueryPattern::new(Some(1), Some(2), None);
-        
+
         let stats = QueryStats {
             pattern,
             execution_time: Duration::from_millis(50),
@@ -538,7 +552,7 @@ mod tests {
         };
 
         optimizer.record_execution(stats).unwrap();
-        
+
         let summary = optimizer.get_statistics_summary().unwrap();
         assert_eq!(summary.total_queries, 1);
         assert_eq!(summary.avg_execution_time_ms, 50);

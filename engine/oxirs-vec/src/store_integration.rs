@@ -10,16 +10,19 @@
 //! - Multi-tenant support
 
 use crate::{
-    Vector, VectorIndex, VectorStore, VectorStoreTrait,
     embeddings::{EmbeddableContent, EmbeddingManager, EmbeddingStrategy},
-    rdf_integration::{RdfVectorIntegration, RdfVectorConfig},
+    rdf_integration::{RdfVectorConfig, RdfVectorIntegration},
     sparql_integration::SparqlVectorService,
+    Vector, VectorIndex, VectorStore, VectorStoreTrait,
 };
 use anyhow::{anyhow, Result};
-use parking_lot::{RwLock, Mutex};
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 use std::time::{Duration, Instant, SystemTime};
 
 /// Configuration for store integration
@@ -179,11 +182,27 @@ pub enum IsolationLevel {
 /// Transaction operations
 #[derive(Debug, Clone)]
 pub enum TransactionOperation {
-    Insert { uri: String, vector: Vector, embedding_content: Option<EmbeddableContent> },
-    Update { uri: String, vector: Vector, old_vector: Option<Vector> },
-    Delete { uri: String, vector: Option<Vector> },
-    BatchInsert { items: Vec<(String, Vector)> },
-    IndexRebuild { algorithm: String, parameters: HashMap<String, String> },
+    Insert {
+        uri: String,
+        vector: Vector,
+        embedding_content: Option<EmbeddableContent>,
+    },
+    Update {
+        uri: String,
+        vector: Vector,
+        old_vector: Option<Vector>,
+    },
+    Delete {
+        uri: String,
+        vector: Option<Vector>,
+    },
+    BatchInsert {
+        items: Vec<(String, Vector)>,
+    },
+    IndexRebuild {
+        algorithm: String,
+        parameters: HashMap<String, String>,
+    },
 }
 
 /// Write-ahead log for durability
@@ -207,11 +226,24 @@ pub struct LogEntry {
 /// Serializable operation for WAL
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SerializableOperation {
-    Insert { uri: String, vector_data: Vec<f32> },
-    Update { uri: String, new_vector: Vec<f32>, old_vector: Option<Vec<f32>> },
-    Delete { uri: String },
-    Commit { transaction_id: TransactionId },
-    Abort { transaction_id: TransactionId },
+    Insert {
+        uri: String,
+        vector_data: Vec<f32>,
+    },
+    Update {
+        uri: String,
+        new_vector: Vec<f32>,
+        old_vector: Option<Vec<f32>>,
+    },
+    Delete {
+        uri: String,
+    },
+    Commit {
+        transaction_id: TransactionId,
+    },
+    Abort {
+        transaction_id: TransactionId,
+    },
 }
 
 /// Lock manager for concurrency control
@@ -257,11 +289,28 @@ pub struct StreamingEngine {
 /// Streaming operations
 #[derive(Debug, Clone)]
 pub enum StreamingOperation {
-    VectorInsert { uri: String, vector: Vector, priority: Priority },
-    VectorUpdate { uri: String, vector: Vector, priority: Priority },
-    VectorDelete { uri: String, priority: Priority },
-    EmbeddingRequest { content: EmbeddableContent, uri: String, priority: Priority },
-    BatchOperation { operations: Vec<StreamingOperation> },
+    VectorInsert {
+        uri: String,
+        vector: Vector,
+        priority: Priority,
+    },
+    VectorUpdate {
+        uri: String,
+        vector: Vector,
+        priority: Priority,
+    },
+    VectorDelete {
+        uri: String,
+        priority: Priority,
+    },
+    EmbeddingRequest {
+        content: EmbeddableContent,
+        uri: String,
+        priority: Priority,
+    },
+    BatchOperation {
+        operations: Vec<StreamingOperation>,
+    },
 }
 
 /// Operation priority
@@ -424,7 +473,12 @@ pub struct ConflictResolver {
 }
 
 pub trait ConflictResolverTrait: Send + Sync {
-    fn resolve_conflict(&self, local: &Vector, remote: &Vector, metadata: &ConflictMetadata) -> Result<Vector>;
+    fn resolve_conflict(
+        &self,
+        local: &Vector,
+        remote: &Vector,
+        metadata: &ConflictMetadata,
+    ) -> Result<Vector>;
 }
 
 /// Conflict metadata
@@ -462,11 +516,25 @@ pub struct ChangeLogEntry {
 /// Change operations
 #[derive(Debug, Clone)]
 pub enum ChangeOperation {
-    VectorInserted { uri: String, vector: Vector },
-    VectorUpdated { uri: String, old_vector: Vector, new_vector: Vector },
-    VectorDeleted { uri: String, vector: Vector },
-    IndexRebuilt { algorithm: String },
-    ConfigurationChanged { changes: HashMap<String, String> },
+    VectorInserted {
+        uri: String,
+        vector: Vector,
+    },
+    VectorUpdated {
+        uri: String,
+        old_vector: Vector,
+        new_vector: Vector,
+    },
+    VectorDeleted {
+        uri: String,
+        vector: Vector,
+    },
+    IndexRebuilt {
+        algorithm: String,
+    },
+    ConfigurationChanged {
+        changes: HashMap<String, String>,
+    },
 }
 
 /// Change subscriber trait
@@ -545,14 +613,16 @@ impl IntegratedVectorStore {
         let rdf_integration = Arc::new(RwLock::new(RdfVectorIntegration::new(rdf_config)));
 
         let sparql_config = crate::sparql_integration::VectorServiceConfig::default();
-        let sparql_service = Arc::new(RwLock::new(
-            SparqlVectorService::new(sparql_config, embedding_strategy)?,
-        ));
+        let sparql_service = Arc::new(RwLock::new(SparqlVectorService::new(
+            sparql_config,
+            embedding_strategy,
+        )?));
 
         let transaction_manager = Arc::new(TransactionManager::new(config.clone()));
         let streaming_engine = Arc::new(StreamingEngine::new(config.streaming_config.clone()));
         let cache_manager = Arc::new(CacheManager::new(config.cache_config.clone()));
-        let replication_manager = Arc::new(ReplicationManager::new(config.replication_config.clone()));
+        let replication_manager =
+            Arc::new(ReplicationManager::new(config.replication_config.clone()));
         let consistency_manager = Arc::new(ConsistencyManager::new(config.consistency_level));
         let change_log = Arc::new(ChangeLog::new(10000)); // Keep last 10k changes
         let metrics = Arc::new(StoreMetrics::default());
@@ -574,19 +644,28 @@ impl IntegratedVectorStore {
 
     /// Begin a new transaction
     pub fn begin_transaction(&self, isolation_level: IsolationLevel) -> Result<TransactionId> {
-        let transaction_id = self.transaction_manager.begin_transaction(isolation_level)?;
-        self.metrics.active_transactions.fetch_add(1, Ordering::Relaxed);
-        
+        let transaction_id = self
+            .transaction_manager
+            .begin_transaction(isolation_level)?;
+        self.metrics
+            .active_transactions
+            .fetch_add(1, Ordering::Relaxed);
+
         tracing::debug!("Started transaction {}", transaction_id);
         Ok(transaction_id)
     }
 
     /// Commit a transaction
     pub fn commit_transaction(&self, transaction_id: TransactionId) -> Result<()> {
-        self.transaction_manager.commit_transaction(transaction_id)?;
-        self.metrics.active_transactions.fetch_sub(1, Ordering::Relaxed);
-        self.metrics.committed_transactions.fetch_add(1, Ordering::Relaxed);
-        
+        self.transaction_manager
+            .commit_transaction(transaction_id)?;
+        self.metrics
+            .active_transactions
+            .fetch_sub(1, Ordering::Relaxed);
+        self.metrics
+            .committed_transactions
+            .fetch_add(1, Ordering::Relaxed);
+
         tracing::debug!("Committed transaction {}", transaction_id);
         Ok(())
     }
@@ -594,9 +673,13 @@ impl IntegratedVectorStore {
     /// Abort a transaction
     pub fn abort_transaction(&self, transaction_id: TransactionId) -> Result<()> {
         self.transaction_manager.abort_transaction(transaction_id)?;
-        self.metrics.active_transactions.fetch_sub(1, Ordering::Relaxed);
-        self.metrics.aborted_transactions.fetch_add(1, Ordering::Relaxed);
-        
+        self.metrics
+            .active_transactions
+            .fetch_sub(1, Ordering::Relaxed);
+        self.metrics
+            .aborted_transactions
+            .fetch_add(1, Ordering::Relaxed);
+
         tracing::debug!("Aborted transaction {}", transaction_id);
         Ok(())
     }
@@ -622,7 +705,8 @@ impl IntegratedVectorStore {
             embedding_content,
         };
 
-        self.transaction_manager.add_operation(transaction_id, operation)?;
+        self.transaction_manager
+            .add_operation(transaction_id, operation)?;
 
         // Add to cache optimistically
         self.cache_manager.cache_vector(uri.clone(), vector.clone());
@@ -637,18 +721,19 @@ impl IntegratedVectorStore {
         };
         self.change_log.add_entry(change_entry);
 
-        self.metrics.total_operations.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .total_operations
+            .fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 
     /// Stream-based insert for high throughput
-    pub fn stream_insert(
-        &self,
-        uri: String,
-        vector: Vector,
-        priority: Priority,
-    ) -> Result<()> {
-        let operation = StreamingOperation::VectorInsert { uri, vector, priority };
+    pub fn stream_insert(&self, uri: String, vector: Vector, priority: Priority) -> Result<()> {
+        let operation = StreamingOperation::VectorInsert {
+            uri,
+            vector,
+            priority,
+        };
         self.streaming_engine.submit_operation(operation)?;
         Ok(())
     }
@@ -666,7 +751,8 @@ impl IntegratedVectorStore {
             let batch_operation = TransactionOperation::BatchInsert {
                 items: batch.to_vec(),
             };
-            self.transaction_manager.add_operation(transaction_id, batch_operation)?;
+            self.transaction_manager
+                .add_operation(transaction_id, batch_operation)?;
         }
 
         if auto_commit {
@@ -684,7 +770,7 @@ impl IntegratedVectorStore {
         consistency_level: Option<ConsistencyLevel>,
     ) -> Result<Vec<(String, f32)>> {
         let effective_consistency = consistency_level.unwrap_or(self.config.consistency_level);
-        
+
         // Check query cache first
         let query_hash = self.compute_query_hash(query, k);
         if let Some(cached_result) = self.cache_manager.get_cached_query(&query_hash) {
@@ -715,7 +801,8 @@ impl IntegratedVectorStore {
         let results = store.similarity_search_vector(query, k)?;
 
         // Cache the results
-        self.cache_manager.cache_query_result(query_hash, results.clone());
+        self.cache_manager
+            .cache_query_result(query_hash, results.clone());
 
         Ok(results)
     }
@@ -754,14 +841,28 @@ impl IntegratedVectorStore {
         StoreMetrics {
             total_vectors: AtomicU64::new(self.metrics.total_vectors.load(Ordering::Relaxed)),
             total_operations: AtomicU64::new(self.metrics.total_operations.load(Ordering::Relaxed)),
-            successful_operations: AtomicU64::new(self.metrics.successful_operations.load(Ordering::Relaxed)),
-            failed_operations: AtomicU64::new(self.metrics.failed_operations.load(Ordering::Relaxed)),
-            average_operation_time_ms: Arc::new(RwLock::new(*self.metrics.average_operation_time_ms.read())),
-            active_transactions: AtomicU64::new(self.metrics.active_transactions.load(Ordering::Relaxed)),
-            committed_transactions: AtomicU64::new(self.metrics.committed_transactions.load(Ordering::Relaxed)),
-            aborted_transactions: AtomicU64::new(self.metrics.aborted_transactions.load(Ordering::Relaxed)),
+            successful_operations: AtomicU64::new(
+                self.metrics.successful_operations.load(Ordering::Relaxed),
+            ),
+            failed_operations: AtomicU64::new(
+                self.metrics.failed_operations.load(Ordering::Relaxed),
+            ),
+            average_operation_time_ms: Arc::new(RwLock::new(
+                *self.metrics.average_operation_time_ms.read(),
+            )),
+            active_transactions: AtomicU64::new(
+                self.metrics.active_transactions.load(Ordering::Relaxed),
+            ),
+            committed_transactions: AtomicU64::new(
+                self.metrics.committed_transactions.load(Ordering::Relaxed),
+            ),
+            aborted_transactions: AtomicU64::new(
+                self.metrics.aborted_transactions.load(Ordering::Relaxed),
+            ),
             replication_lag_ms: Arc::new(RwLock::new(*self.metrics.replication_lag_ms.read())),
-            consistency_violations: AtomicU64::new(self.metrics.consistency_violations.load(Ordering::Relaxed)),
+            consistency_violations: AtomicU64::new(
+                self.metrics.consistency_violations.load(Ordering::Relaxed),
+            ),
         }
     }
 
@@ -782,10 +883,10 @@ impl IntegratedVectorStore {
 
         // Check cache health
         let cache_stats = self.cache_manager.get_stats();
-        let hit_ratio = cache_stats.vector_cache_hits.load(Ordering::Relaxed) as f64 /
-            (cache_stats.vector_cache_hits.load(Ordering::Relaxed) + 
-             cache_stats.vector_cache_misses.load(Ordering::Relaxed)) as f64;
-        
+        let hit_ratio = cache_stats.vector_cache_hits.load(Ordering::Relaxed) as f64
+            / (cache_stats.vector_cache_hits.load(Ordering::Relaxed)
+                + cache_stats.vector_cache_misses.load(Ordering::Relaxed)) as f64;
+
         if hit_ratio < 0.8 {
             issues.push("Low cache hit ratio".to_string());
         }
@@ -916,7 +1017,8 @@ impl TransactionManager {
 
         // Add to write-ahead log
         let serializable_op = self.convert_to_serializable(&operation);
-        self.write_ahead_log.append(transaction_id, serializable_op)?;
+        self.write_ahead_log
+            .append(transaction_id, serializable_op)?;
 
         transaction.operations.push(operation);
         Ok(())
@@ -979,22 +1081,27 @@ impl TransactionManager {
     ) -> Result<()> {
         match operation {
             TransactionOperation::Insert { uri, .. } => {
-                self.lock_manager.acquire_lock(transaction_id, uri, LockType::Exclusive)?;
+                self.lock_manager
+                    .acquire_lock(transaction_id, uri, LockType::Exclusive)?;
             }
             TransactionOperation::Update { uri, .. } => {
-                self.lock_manager.acquire_lock(transaction_id, uri, LockType::Exclusive)?;
+                self.lock_manager
+                    .acquire_lock(transaction_id, uri, LockType::Exclusive)?;
             }
             TransactionOperation::Delete { uri, .. } => {
-                self.lock_manager.acquire_lock(transaction_id, uri, LockType::Exclusive)?;
+                self.lock_manager
+                    .acquire_lock(transaction_id, uri, LockType::Exclusive)?;
             }
             TransactionOperation::BatchInsert { items } => {
                 for (uri, _) in items {
-                    self.lock_manager.acquire_lock(transaction_id, uri, LockType::Exclusive)?;
+                    self.lock_manager
+                        .acquire_lock(transaction_id, uri, LockType::Exclusive)?;
                 }
             }
             TransactionOperation::IndexRebuild { .. } => {
                 // Global exclusive lock for index rebuild
-                self.lock_manager.acquire_lock(transaction_id, "_global_", LockType::Exclusive)?;
+                self.lock_manager
+                    .acquire_lock(transaction_id, "_global_", LockType::Exclusive)?;
             }
         }
         Ok(())
@@ -1014,19 +1121,19 @@ impl TransactionManager {
 
     fn convert_to_serializable(&self, operation: &TransactionOperation) -> SerializableOperation {
         match operation {
-            TransactionOperation::Insert { uri, vector, .. } => {
-                SerializableOperation::Insert {
-                    uri: uri.clone(),
-                    vector_data: vector.as_f32(),
-                }
-            }
-            TransactionOperation::Update { uri, vector, old_vector } => {
-                SerializableOperation::Update {
-                    uri: uri.clone(),
-                    new_vector: vector.as_f32(),
-                    old_vector: old_vector.as_ref().map(|v| v.as_f32()),
-                }
-            }
+            TransactionOperation::Insert { uri, vector, .. } => SerializableOperation::Insert {
+                uri: uri.clone(),
+                vector_data: vector.as_f32(),
+            },
+            TransactionOperation::Update {
+                uri,
+                vector,
+                old_vector,
+            } => SerializableOperation::Update {
+                uri: uri.clone(),
+                new_vector: vector.as_f32(),
+                old_vector: old_vector.as_ref().map(|v| v.as_f32()),
+            },
             TransactionOperation::Delete { uri, .. } => {
                 SerializableOperation::Delete { uri: uri.clone() }
             }
@@ -1051,7 +1158,11 @@ impl WriteAheadLog {
         }
     }
 
-    pub fn append(&self, transaction_id: TransactionId, operation: SerializableOperation) -> Result<()> {
+    pub fn append(
+        &self,
+        transaction_id: TransactionId,
+        operation: SerializableOperation,
+    ) -> Result<()> {
         let entry = LogEntry {
             lsn: self.generate_lsn(),
             transaction_id,
@@ -1104,12 +1215,14 @@ impl LockManager {
         lock_type: LockType,
     ) -> Result<()> {
         let mut locks = self.locks.write();
-        let lock_info = locks.entry(resource.to_string()).or_insert_with(|| LockInfo {
-            lock_type: LockType::Shared,
-            holders: HashSet::new(),
-            waiters: VecDeque::new(),
-            granted_time: SystemTime::now(),
-        });
+        let lock_info = locks
+            .entry(resource.to_string())
+            .or_insert_with(|| LockInfo {
+                lock_type: LockType::Shared,
+                holders: HashSet::new(),
+                waiters: VecDeque::new(),
+                granted_time: SystemTime::now(),
+            });
 
         // Check if lock can be granted
         if self.can_grant_lock(&lock_info, lock_type) {
@@ -1120,10 +1233,10 @@ impl LockManager {
         } else {
             // Add to waiters
             lock_info.waiters.push_back((transaction_id, lock_type));
-            
+
             // Check for deadlocks
             self.deadlock_detector.check_deadlock(transaction_id)?;
-            
+
             Err(anyhow!("Lock not available, transaction waiting"))
         }
     }
@@ -1134,10 +1247,10 @@ impl LockManager {
 
         for (resource, lock_info) in locks.iter_mut() {
             lock_info.holders.remove(&transaction_id);
-            
+
             // Remove from waiters
             lock_info.waiters.retain(|(tid, _)| *tid != transaction_id);
-            
+
             if lock_info.holders.is_empty() {
                 to_remove.push(resource.clone());
             }
@@ -1194,8 +1307,10 @@ impl StreamingEngine {
 
         let mut buffer = self.stream_buffer.write();
         buffer.push_back(operation);
-        
-        self.stream_metrics.operations_pending.fetch_add(1, Ordering::Relaxed);
+
+        self.stream_metrics
+            .operations_pending
+            .fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 
@@ -1234,10 +1349,14 @@ impl CacheManager {
     pub fn get_vector(&self, uri: &str) -> Option<CachedVector> {
         let cache = self.vector_cache.read();
         if let Some(cached) = cache.get(uri) {
-            self.cache_stats.vector_cache_hits.fetch_add(1, Ordering::Relaxed);
+            self.cache_stats
+                .vector_cache_hits
+                .fetch_add(1, Ordering::Relaxed);
             Some(cached.clone())
         } else {
-            self.cache_stats.vector_cache_misses.fetch_add(1, Ordering::Relaxed);
+            self.cache_stats
+                .vector_cache_misses
+                .fetch_add(1, Ordering::Relaxed);
             None
         }
     }
@@ -1258,10 +1377,14 @@ impl CacheManager {
     pub fn get_cached_query(&self, query_hash: &u64) -> Option<CachedQueryResult> {
         let cache = self.query_cache.read();
         if let Some(cached) = cache.get(query_hash) {
-            self.cache_stats.query_cache_hits.fetch_add(1, Ordering::Relaxed);
+            self.cache_stats
+                .query_cache_hits
+                .fetch_add(1, Ordering::Relaxed);
             Some(cached.clone())
         } else {
-            self.cache_stats.query_cache_misses.fetch_add(1, Ordering::Relaxed);
+            self.cache_stats
+                .query_cache_misses
+                .fetch_add(1, Ordering::Relaxed);
             None
         }
     }
@@ -1404,7 +1527,7 @@ mod tests {
 
         cache_manager.cache_vector("test_uri".to_string(), vector.clone());
         let cached = cache_manager.get_vector("test_uri");
-        
+
         assert!(cached.is_some());
         assert_eq!(cached.unwrap().vector, vector);
     }
@@ -1435,7 +1558,9 @@ mod tests {
         let config = StoreIntegrationConfig::default();
         let store = IntegratedVectorStore::new(config, EmbeddingStrategy::TfIdf).unwrap();
 
-        let tx_id = store.begin_transaction(IsolationLevel::ReadCommitted).unwrap();
+        let tx_id = store
+            .begin_transaction(IsolationLevel::ReadCommitted)
+            .unwrap();
         assert!(tx_id > 0);
 
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);

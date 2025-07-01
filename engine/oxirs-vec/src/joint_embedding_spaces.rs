@@ -246,11 +246,24 @@ pub enum TextAugmentation {
 
 #[derive(Debug, Clone)]
 pub enum ImageAugmentation {
-    RandomCrop { size: (u32, u32) },
-    RandomFlip { horizontal: bool, vertical: bool },
-    ColorJitter { brightness: f32, contrast: f32, saturation: f32 },
-    RandomRotation { max_angle: f32 },
-    GaussianBlur { sigma: f32 },
+    RandomCrop {
+        size: (u32, u32),
+    },
+    RandomFlip {
+        horizontal: bool,
+        vertical: bool,
+    },
+    ColorJitter {
+        brightness: f32,
+        contrast: f32,
+        saturation: f32,
+    },
+    RandomRotation {
+        max_angle: f32,
+    },
+    GaussianBlur {
+        sigma: f32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -297,7 +310,7 @@ impl LinearProjector {
         // Xavier/Glorot initialization
         let limit = (6.0 / (input_dim + output_dim) as f32).sqrt();
         let mut weights = Vec::with_capacity(output_dim);
-        
+
         for _ in 0..output_dim {
             let mut row = Vec::with_capacity(input_dim);
             for _ in 0..input_dim {
@@ -598,12 +611,13 @@ impl DomainAdapter {
         for i in 0..adapted_values.len() {
             if i < stats.mean.len() && i < stats.variance.len() {
                 // Normalize using domain statistics
-                let normalized = (adapted_values[i] - stats.mean[i])
-                    / (stats.variance[i].sqrt() + 1e-8);
+                let normalized =
+                    (adapted_values[i] - stats.mean[i]) / (stats.variance[i].sqrt() + 1e-8);
 
                 // Apply adaptation weights
-                adapted_values[i] = normalized * self.adaptation_weights[i] * self.adaptation_strength
-                    + adapted_values[i] * (1.0 - self.adaptation_strength);
+                adapted_values[i] =
+                    normalized * self.adaptation_weights[i] * self.adaptation_strength
+                        + adapted_values[i] * (1.0 - self.adaptation_strength);
             }
         }
 
@@ -662,7 +676,8 @@ impl DomainAdapter {
         for i in 0..dim {
             // Compute domain discrepancy as statistical distance
             let mean_diff = (self.source_stats.mean[i] - self.target_stats.mean[i]).abs();
-            let var_ratio = (self.source_stats.variance[i] / (self.target_stats.variance[i] + 1e-8))
+            let var_ratio = (self.source_stats.variance[i]
+                / (self.target_stats.variance[i] + 1e-8))
                 .ln()
                 .abs();
 
@@ -758,12 +773,12 @@ impl JointEmbeddingSpace {
 
         // Apply cross-modal attention if different modalities
         if modality1 != modality2 {
-            let attended_emb1 = self
-                .attention_mechanism
-                .cross_attention(&joint_emb1, &joint_emb2, &joint_emb2)?;
-            let attended_emb2 = self
-                .attention_mechanism
-                .cross_attention(&joint_emb2, &joint_emb1, &joint_emb1)?;
+            let attended_emb1 =
+                self.attention_mechanism
+                    .cross_attention(&joint_emb1, &joint_emb2, &joint_emb2)?;
+            let attended_emb2 =
+                self.attention_mechanism
+                    .cross_attention(&joint_emb2, &joint_emb1, &joint_emb1)?;
 
             attended_emb1.cosine_similarity(&attended_emb2)
         } else {
@@ -895,7 +910,7 @@ impl JointEmbeddingSpace {
                         &joint_embeddings[j],
                         &joint_embeddings[j],
                     )?;
-                    
+
                     // Weighted combination
                     let weight = 1.0 / joint_embeddings.len() as f32;
                     attended = attended.add(&cross_attended.scale(weight))?;
@@ -999,13 +1014,8 @@ impl JointEmbeddingSpace {
                 }
 
                 // Perform search
-                let results = self.cross_modal_search(
-                    *query_mod,
-                    query_emb,
-                    *target_mod,
-                    &candidates,
-                    k,
-                )?;
+                let results =
+                    self.cross_modal_search(*query_mod, query_emb, *target_mod, &candidates, k)?;
 
                 // Check if target is in top-k (target is always at index 0)
                 let found_target = results.iter().any(|(idx, _)| *idx == 0);
@@ -1057,10 +1067,9 @@ impl CLIPAligner {
                 let augmented_negative = self.augment_pairs(&negative_pairs)?;
 
                 // Compute contrastive loss
-                let batch_loss = self.joint_space.contrastive_align(
-                    &augmented_positive,
-                    &augmented_negative,
-                )?;
+                let batch_loss = self
+                    .joint_space
+                    .contrastive_align(&augmented_positive, &augmented_negative)?;
 
                 epoch_loss += batch_loss;
                 batch_count += 1;
@@ -1082,7 +1091,9 @@ impl CLIPAligner {
                 epoch + 1,
                 epochs,
                 avg_epoch_loss,
-                self.joint_space.temperature_scheduler.get_current_temperature()
+                self.joint_space
+                    .temperature_scheduler
+                    .get_current_temperature()
             );
         }
 
@@ -1166,9 +1177,7 @@ impl CLIPAligner {
                 let embedding = self.create_video_embedding(video);
                 Ok(embedding)
             }
-            (Modality::Numeric, ModalityData::Numeric(values)) => {
-                Ok(Vector::new(values.clone()))
-            }
+            (Modality::Numeric, ModalityData::Numeric(values)) => Ok(Vector::new(values.clone())),
             _ => Err(anyhow!("Modality-data type mismatch")),
         }
     }
@@ -1277,7 +1286,7 @@ impl CLIPAligner {
     fn extract_color_features(&self, image: &ImageData) -> Vec<f32> {
         // Simplified color histogram
         let mut histogram = vec![0.0; 256];
-        
+
         match image.format {
             crate::cross_modal_embeddings::ImageFormat::RGB => {
                 for chunk in image.data.chunks(3) {
@@ -1325,9 +1334,14 @@ impl CLIPAligner {
 
                         // Check 8 neighbors
                         let neighbors = [
-                            (-1, -1), (0, -1), (1, -1),
-                            (-1,  0),          (1,  0),
-                            (-1,  1), (0,  1), (1,  1),
+                            (-1, -1),
+                            (0, -1),
+                            (1, -1),
+                            (-1, 0),
+                            (1, 0),
+                            (-1, 1),
+                            (0, 1),
+                            (1, 1),
                         ];
 
                         for (bit, (dx, dy)) in neighbors.iter().enumerate() {
@@ -1335,7 +1349,8 @@ impl CLIPAligner {
                             let ny = (y as i32 + dy) as usize;
                             let neighbor_idx = ny * width + nx;
 
-                            if neighbor_idx < image.data.len() && image.data[neighbor_idx] > center {
+                            if neighbor_idx < image.data.len() && image.data[neighbor_idx] > center
+                            {
                                 pattern |= 1 << bit;
                             }
                         }
@@ -1364,14 +1379,14 @@ impl CLIPAligner {
         if !audio.samples.is_empty() {
             // Simple frequency domain representation
             let chunk_size = audio.samples.len() / features.len();
-            
+
             for (i, feature) in features.iter_mut().enumerate() {
                 let start = i * chunk_size;
                 let end = ((i + 1) * chunk_size).min(audio.samples.len());
-                
+
                 if start < end {
                     let chunk = &audio.samples[start..end];
-                    
+
                     // Compute energy in this frequency band
                     let energy: f32 = chunk.iter().map(|x| x * x).sum();
                     *feature = energy.sqrt() / (chunk.len() as f32).sqrt();
@@ -1441,7 +1456,8 @@ impl ContrastiveOptimizer {
                 // Simplified cosine annealing
                 let progress = 0.01; // Would track actual progress
                 let lr_range = self.learning_rate - min_lr;
-                self.learning_rate = min_lr + lr_range * (1.0 + (std::f32::consts::PI * progress).cos()) / 2.0;
+                self.learning_rate =
+                    min_lr + lr_range * (1.0 + (std::f32::consts::PI * progress).cos()) / 2.0;
             }
             LearningRateSchedule::Constant => {
                 // No change
@@ -1458,8 +1474,15 @@ impl DataAugmentation {
                 TextAugmentation::SynonymReplacement(0.1),
             ],
             image_augmentations: vec![
-                ImageAugmentation::RandomFlip { horizontal: true, vertical: false },
-                ImageAugmentation::ColorJitter { brightness: 0.2, contrast: 0.2, saturation: 0.2 },
+                ImageAugmentation::RandomFlip {
+                    horizontal: true,
+                    vertical: false,
+                },
+                ImageAugmentation::ColorJitter {
+                    brightness: 0.2,
+                    contrast: 0.2,
+                    saturation: 0.2,
+                },
             ],
             audio_augmentations: vec![
                 AudioAugmentation::AddNoise { snr_db: 20.0 },
@@ -1549,23 +1572,19 @@ mod tests {
         let config = JointEmbeddingConfig::default();
         let mut joint_space = JointEmbeddingSpace::new(config);
 
-        let positive_pairs = vec![
-            (
-                Modality::Text,
-                Vector::new(vec![0.1; 768]),
-                Modality::Image,
-                Vector::new(vec![0.1; 2048]),
-            ),
-        ];
+        let positive_pairs = vec![(
+            Modality::Text,
+            Vector::new(vec![0.1; 768]),
+            Modality::Image,
+            Vector::new(vec![0.1; 2048]),
+        )];
 
-        let negative_pairs = vec![
-            (
-                Modality::Text,
-                Vector::new(vec![0.1; 768]),
-                Modality::Image,
-                Vector::new(vec![-0.1; 2048]),
-            ),
-        ];
+        let negative_pairs = vec![(
+            Modality::Text,
+            Vector::new(vec![0.1; 768]),
+            Modality::Image,
+            Vector::new(vec![-0.1; 2048]),
+        )];
 
         let loss = joint_space
             .contrastive_align(&positive_pairs, &negative_pairs)

@@ -821,7 +821,7 @@ impl NASProcessor {
     fn generate_random_architecture(&self) -> Result<Architecture> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        
+
         let num_layers = rng.gen::<usize>() % 8 + 2; // 2-10 layers
         let mut layers = Vec::new();
 
@@ -995,7 +995,7 @@ impl NASProcessor {
     fn mutate_architecture(&self, architecture: &mut Architecture) -> Result<()> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        
+
         let mutation_type = rng.gen::<usize>() % 4;
 
         match mutation_type {
@@ -1007,9 +1007,8 @@ impl NASProcessor {
                         .layers
                         .get_mut(rng.gen::<usize>() % layer_count)
                     {
-                        layer.output_dim = (layer.output_dim as f32
-                            * (0.8 + rng.gen::<f32>() * 0.4))
-                            as usize;
+                        layer.output_dim =
+                            (layer.output_dim as f32 * (0.8 + rng.gen::<f32>() * 0.4)) as usize;
                         layer.output_dim = layer.output_dim.max(32).min(1024);
                     }
                 }

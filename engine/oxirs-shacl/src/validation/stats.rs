@@ -3,11 +3,11 @@
 //! This module provides comprehensive statistics and metrics for SHACL validation
 //! including shape conformance rates, data quality metrics, and performance analytics.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
 
-use crate::{Severity, ShapeId, ConstraintComponentId};
+use crate::{ConstraintComponentId, Severity, ShapeId};
 
 /// Comprehensive statistics for validation operations
 #[derive(Debug, Clone, Default)]
@@ -21,7 +21,7 @@ pub struct ValidationStats {
     pub constraint_evaluation_times: HashMap<String, Duration>,
     pub cache_hits: usize,
     pub cache_misses: usize,
-    
+
     // Enhanced metrics for shape conformance and data quality
     pub shape_conformance_stats: ShapeConformanceStats,
     pub data_quality_metrics: DataQualityMetrics,
@@ -70,15 +70,34 @@ impl ValidationStats {
     }
 
     /// Record shape validation result
-    pub fn record_shape_validation(&mut self, shape_id: ShapeId, conforms: bool, violations: usize, evaluation_time: Duration) {
-        self.shape_conformance_stats.record_shape_validation(shape_id, conforms, violations, evaluation_time);
-        self.data_quality_metrics.update_from_shape_validation(conforms, violations);
-        self.performance_analytics.record_evaluation_time(evaluation_time);
+    pub fn record_shape_validation(
+        &mut self,
+        shape_id: ShapeId,
+        conforms: bool,
+        violations: usize,
+        evaluation_time: Duration,
+    ) {
+        self.shape_conformance_stats.record_shape_validation(
+            shape_id,
+            conforms,
+            violations,
+            evaluation_time,
+        );
+        self.data_quality_metrics
+            .update_from_shape_validation(conforms, violations);
+        self.performance_analytics
+            .record_evaluation_time(evaluation_time);
     }
 
     /// Record constraint violation with severity
-    pub fn record_violation(&mut self, shape_id: ShapeId, constraint_id: ConstraintComponentId, severity: Severity) {
-        self.shape_conformance_stats.record_violation(shape_id, constraint_id, severity);
+    pub fn record_violation(
+        &mut self,
+        shape_id: ShapeId,
+        constraint_id: ConstraintComponentId,
+        severity: Severity,
+    ) {
+        self.shape_conformance_stats
+            .record_violation(shape_id, constraint_id, severity);
         self.data_quality_metrics.record_violation(severity);
     }
 
@@ -166,9 +185,15 @@ pub struct ViolationMetrics {
 
 impl ShapeConformanceStats {
     /// Record a shape validation result
-    pub fn record_shape_validation(&mut self, shape_id: ShapeId, conforms: bool, violations: usize, evaluation_time: Duration) {
+    pub fn record_shape_validation(
+        &mut self,
+        shape_id: ShapeId,
+        conforms: bool,
+        violations: usize,
+        evaluation_time: Duration,
+    ) {
         let shape_metrics = self.shape_stats.entry(shape_id).or_default();
-        
+
         if conforms {
             shape_metrics.conforming_nodes += 1;
             self.overall_conforming_nodes += 1;
@@ -176,7 +201,7 @@ impl ShapeConformanceStats {
             shape_metrics.non_conforming_nodes += 1;
             self.overall_non_conforming_nodes += 1;
         }
-        
+
         shape_metrics.total_violations += violations;
         shape_metrics.total_evaluation_time += evaluation_time;
         shape_metrics.evaluations += 1;
@@ -184,10 +209,18 @@ impl ShapeConformanceStats {
     }
 
     /// Record a constraint violation
-    pub fn record_violation(&mut self, shape_id: ShapeId, constraint_id: ConstraintComponentId, severity: Severity) {
+    pub fn record_violation(
+        &mut self,
+        shape_id: ShapeId,
+        constraint_id: ConstraintComponentId,
+        severity: Severity,
+    ) {
         let shape_metrics = self.shape_stats.entry(shape_id).or_default();
-        let violation_metrics = shape_metrics.violations_by_constraint.entry(constraint_id).or_default();
-        
+        let violation_metrics = shape_metrics
+            .violations_by_constraint
+            .entry(constraint_id)
+            .or_default();
+
         violation_metrics.count += 1;
         *violation_metrics.by_severity.entry(severity).or_insert(0) += 1;
     }
@@ -218,7 +251,8 @@ impl ShapeConformanceStats {
 
     /// Get the most problematic shapes (lowest conformance rates)
     pub fn most_problematic_shapes(&self, limit: usize) -> Vec<(ShapeId, f64)> {
-        let mut shape_rates: Vec<(ShapeId, f64)> = self.shape_stats
+        let mut shape_rates: Vec<(ShapeId, f64)> = self
+            .shape_stats
             .iter()
             .map(|(shape_id, metrics)| {
                 let total = metrics.conforming_nodes + metrics.non_conforming_nodes;
@@ -300,7 +334,7 @@ impl DataQualityMetrics {
     pub fn update_from_shape_validation(&mut self, conforms: bool, violations: usize) {
         self.total_nodes_evaluated += 1;
         self.total_violations += violations;
-        
+
         if violations > 0 {
             self.nodes_with_violations += 1;
         } else {
@@ -320,19 +354,20 @@ impl DataQualityMetrics {
         }
 
         // Base score on conforming nodes
-        let conformance_score = self.nodes_without_violations as f64 / self.total_nodes_evaluated as f64;
-        
+        let conformance_score =
+            self.nodes_without_violations as f64 / self.total_nodes_evaluated as f64;
+
         // Apply severity penalties
         let severity_penalty = self.calculate_severity_penalty();
-        
+
         // Apply violation density penalty
         let density_penalty = self.calculate_density_penalty();
-        
+
         // Combine scores (weighted average)
-        let quality_score = (conformance_score * 0.5) + 
-                           ((1.0 - severity_penalty) * 0.3) + 
-                           ((1.0 - density_penalty) * 0.2);
-        
+        let quality_score = (conformance_score * 0.5)
+            + ((1.0 - severity_penalty) * 0.3)
+            + ((1.0 - density_penalty) * 0.2);
+
         quality_score.max(0.0).min(1.0)
     }
 
@@ -342,7 +377,9 @@ impl DataQualityMetrics {
             return 0.0;
         }
 
-        let total_weighted_violations = self.violations_by_severity.iter()
+        let total_weighted_violations = self
+            .violations_by_severity
+            .iter()
             .map(|(severity, count)| {
                 let weight = match severity {
                     Severity::Violation => 1.0,
@@ -364,7 +401,7 @@ impl DataQualityMetrics {
         }
 
         let density = self.total_violations as f64 / self.total_nodes_evaluated as f64;
-        
+
         // Apply logarithmic scaling to density penalty
         if density > 0.0 {
             (density.ln() + 5.0).max(0.0).min(1.0) / 5.0
@@ -400,9 +437,9 @@ impl DataQualityMetrics {
             violation_count: self.total_violations,
             nodes_evaluated: self.total_nodes_evaluated,
         };
-        
+
         self.quality_measurements.push(measurement);
-        
+
         // Keep only last 100 measurements to prevent unbounded growth
         if self.quality_measurements.len() > 100 {
             self.quality_measurements.remove(0);
@@ -417,7 +454,7 @@ impl DataQualityMetrics {
 
         let recent = &self.quality_measurements[self.quality_measurements.len() - 1];
         let previous = &self.quality_measurements[self.quality_measurements.len() - 2];
-        
+
         recent.quality_score - previous.quality_score
     }
 
@@ -440,13 +477,13 @@ pub struct PerformanceAnalytics {
     total_evaluation_time: Duration,
     min_evaluation_time: Option<Duration>,
     max_evaluation_time: Option<Duration>,
-    
+
     /// Throughput metrics
     throughput_measurements: Vec<ThroughputMeasurement>,
-    
+
     /// Memory usage tracking
     memory_usage_history: Vec<MemoryMeasurement>,
-    
+
     /// Bottleneck identification
     slow_operations: Vec<SlowOperation>,
 }
@@ -481,15 +518,15 @@ impl PerformanceAnalytics {
     pub fn record_evaluation_time(&mut self, duration: Duration) {
         self.evaluation_times.push(duration);
         self.total_evaluation_time += duration;
-        
+
         if self.min_evaluation_time.is_none() || duration < self.min_evaluation_time.unwrap() {
             self.min_evaluation_time = Some(duration);
         }
-        
+
         if self.max_evaluation_time.is_none() || duration > self.max_evaluation_time.unwrap() {
             self.max_evaluation_time = Some(duration);
         }
-        
+
         // Track slow operations (>1 second)
         if duration > Duration::from_secs(1) {
             self.slow_operations.push(SlowOperation {
@@ -499,7 +536,7 @@ impl PerformanceAnalytics {
                 context: "shape evaluation".to_string(),
             });
         }
-        
+
         // Keep only recent measurements to prevent unbounded growth
         if self.evaluation_times.len() > 10000 {
             self.evaluation_times.remove(0);
@@ -513,9 +550,9 @@ impl PerformanceAnalytics {
             nodes_per_second,
             constraints_per_second,
         };
-        
+
         self.throughput_measurements.push(measurement);
-        
+
         // Keep only last 100 measurements
         if self.throughput_measurements.len() > 100 {
             self.throughput_measurements.remove(0);
@@ -529,9 +566,9 @@ impl PerformanceAnalytics {
             memory_usage_bytes,
             cache_size_bytes,
         };
-        
+
         self.memory_usage_history.push(measurement);
-        
+
         // Keep only last 100 measurements
         if self.memory_usage_history.len() > 100 {
             self.memory_usage_history.remove(0);
@@ -555,7 +592,7 @@ impl PerformanceAnalytics {
 
         let mut times = self.evaluation_times.clone();
         times.sort();
-        
+
         let index = ((times.len() - 1) as f64 * percentile / 100.0).round() as usize;
         times[index]
     }
@@ -573,7 +610,11 @@ impl PerformanceAnalytics {
         if self.throughput_measurements.is_empty() {
             0.0
         } else {
-            let sum: f64 = self.throughput_measurements.iter().map(|m| m.nodes_per_second).sum();
+            let sum: f64 = self
+                .throughput_measurements
+                .iter()
+                .map(|m| m.nodes_per_second)
+                .sum();
             sum / self.throughput_measurements.len() as f64
         }
     }
@@ -686,7 +727,7 @@ impl ValidationStatsReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Severity, ShapeId, ConstraintComponentId};
+    use crate::{ConstraintComponentId, Severity, ShapeId};
     use std::time::Duration;
 
     #[test]
@@ -719,7 +760,7 @@ mod tests {
         let mut metrics = DataQualityMetrics::default();
 
         // Record some validations
-        metrics.update_from_shape_validation(true, 0);  // Perfect node
+        metrics.update_from_shape_validation(true, 0); // Perfect node
         metrics.update_from_shape_validation(false, 2); // Node with 2 violations
         metrics.update_from_shape_validation(false, 1); // Node with 1 violation
 
@@ -729,8 +770,11 @@ mod tests {
         metrics.record_violation(Severity::Info);
 
         assert_eq!(metrics.violation_density(), 1.0); // 3 violations / 3 nodes = 1.0
-        assert_eq!(metrics.violation_rate_by_severity(Severity::Violation), 1.0 / 3.0);
-        
+        assert_eq!(
+            metrics.violation_rate_by_severity(Severity::Violation),
+            1.0 / 3.0
+        );
+
         let quality_score = metrics.calculate_quality_score();
         assert!(quality_score >= 0.0 && quality_score <= 1.0);
         assert!(quality_score < 1.0); // Should be less than perfect due to violations
@@ -745,8 +789,11 @@ mod tests {
         analytics.record_evaluation_time(Duration::from_millis(200));
         analytics.record_evaluation_time(Duration::from_millis(150));
 
-        assert_eq!(analytics.average_evaluation_time(), Duration::from_millis(150));
-        
+        assert_eq!(
+            analytics.average_evaluation_time(),
+            Duration::from_millis(150)
+        );
+
         // Test percentiles
         let p50 = analytics.evaluation_time_percentile(50.0);
         assert_eq!(p50, Duration::from_millis(150)); // Median
@@ -777,7 +824,7 @@ mod tests {
 
         // Record a shape validation
         stats.record_shape_validation(shape_id.clone(), false, 1, Duration::from_millis(50));
-        
+
         // Record a violation
         stats.record_violation(shape_id.clone(), constraint_id, Severity::Violation);
 
@@ -791,7 +838,7 @@ mod tests {
         assert_eq!(report.basic_stats.total_validations, 0); // Only shape validation recorded
         assert_eq!(report.shape_conformance.total_shapes(), 1);
         assert!(report.data_quality.calculate_quality_score() < 1.0);
-        
+
         let summary = report.generate_summary();
         assert!(summary.contains("SHACL Validation Statistics Report"));
         assert!(summary.contains("Shape Conformance"));

@@ -4,10 +4,15 @@
 
 use oxirs_core::model::{Literal, NamedNode, Variable};
 use oxirs_core::query::{
-    algebra::{AlgebraTriplePattern as TriplePattern, Expression as AlgebraExpression, GraphPattern as AlgebraGraphPattern, 
-              TermPattern as AlgebraTermPattern, Query as AlgebraQuery},
-    sparql_algebra::{AggregateExpression, BuiltInFunction, Expression, FunctionExpression, GraphPattern,
-                     OrderExpression, PropertyPathExpression, TermPattern},
+    algebra::{
+        AlgebraTriplePattern as TriplePattern, Expression as AlgebraExpression,
+        GraphPattern as AlgebraGraphPattern, Query as AlgebraQuery,
+        TermPattern as AlgebraTermPattern,
+    },
+    sparql_algebra::{
+        AggregateExpression, BuiltInFunction, Expression, FunctionExpression, GraphPattern,
+        OrderExpression, PropertyPathExpression, TermPattern,
+    },
     sparql_query::{Query, QueryDataset},
 };
 

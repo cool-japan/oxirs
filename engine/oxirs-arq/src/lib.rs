@@ -5,5 +5,5 @@
 // Use minimal stub for testing
 pub mod algebra_stub;
 
-// Re-export core types 
+// Re-export core types
 pub use algebra_stub::*;

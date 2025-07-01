@@ -75,7 +75,7 @@
 //! // Check results
 //! println!("Validation conforms: {}", report.conforms());
 //! for violation in report.violations() {
-//!     println!("Violation: {} at {}", 
+//!     println!("Violation: {} at {}",
 //!         violation.result_message.as_deref().unwrap_or("No message"),
 //!         violation.focus_node
 //!     );
@@ -169,8 +169,8 @@
 //!
 //! // Incremental validation of just the new data
 //! // let incremental_report = validator.validate_incremental_change(
-//! //     &store, 
-//! //     vec![new_triple], 
+//! //     &store,
+//! //     vec![new_triple],
 //! //     vec![], // no deletions
 //! //     config
 //! // )?;
@@ -638,13 +638,13 @@ pub enum ShaclError {
 
     #[error("Recursion limit exceeded: {0}")]
     RecursionLimit(String),
-    
+
     #[error("Memory pool error: {0}")]
     MemoryPool(String),
-    
+
     #[error("Memory optimization error: {0}")]
     MemoryOptimization(String),
-    
+
     #[error("Async operation error: {0}")]
     AsyncOperation(String),
 }

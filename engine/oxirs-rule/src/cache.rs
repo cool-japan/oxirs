@@ -7,14 +7,14 @@
 //! - Intelligent cache warming and prefetching
 //! - Cache statistics and monitoring
 
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
-use std::time::{Duration, Instant};
 use std::sync::{Arc, RwLock};
-use anyhow::Result;
-use serde::{Serialize, Deserialize};
+use std::time::{Duration, Instant};
 
-use crate::{RuleAtom, Rule, Term};
+use crate::{Rule, RuleAtom, Term};
 
 /// Cache key for rule execution results
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -43,11 +43,11 @@ pub struct CacheEntry<T> {
 /// Cache eviction policies
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum EvictionPolicy {
-    LRU,           // Least Recently Used
-    LFU,           // Least Frequently Used
-    FIFO,          // First In, First Out
-    TTL,           // Time To Live
-    Adaptive,      // Combines multiple strategies
+    LRU,      // Least Recently Used
+    LFU,      // Least Frequently Used
+    FIFO,     // First In, First Out
+    TTL,      // Time To Live
+    Adaptive, // Combines multiple strategies
 }
 
 /// Cache statistics and monitoring
@@ -116,33 +116,50 @@ where
     /// Get value from cache
     pub fn get(&mut self, key: &K) -> Option<V> {
         let now = Instant::now();
-        
-        if let Some(entry) = self.entries.get_mut(key) {
+
+        // Check if entry exists and get value without holding the mutable borrow
+        let result = if let Some(entry) = self.entries.get(key) {
             // Check TTL expiration
             if let Some(ttl) = entry.ttl {
                 if now.duration_since(entry.timestamp) > ttl {
+                    None // Will be removed below
+                } else {
+                    Some(entry.value.clone())
+                }
+            } else {
+                Some(entry.value.clone())
+            }
+        } else {
+            None
+        };
+
+        match result {
+            Some(value) => {
+                // Update access statistics - now we can safely get mutable access
+                if let Some(entry) = self.entries.get_mut(key) {
+                    entry.access_count += 1;
+                    entry.last_access = now;
+                }
+
+                // Update access order for LRU
+                self.update_access_order(key);
+
+                self.stats.hits += 1;
+                self.update_hit_rate();
+
+                Some(value)
+            }
+            None => {
+                // Check if we need to remove expired entry
+                if self.entries.contains_key(key) {
                     self.entries.remove(key);
                     self.remove_from_access_order(key);
-                    self.stats.misses += 1;
-                    return None;
                 }
-            }
 
-            // Update access statistics
-            entry.access_count += 1;
-            entry.last_access = now;
-            
-            // Update access order for LRU
-            self.update_access_order(key);
-            
-            self.stats.hits += 1;
-            self.update_hit_rate();
-            
-            Some(entry.value.clone())
-        } else {
-            self.stats.misses += 1;
-            self.update_hit_rate();
-            None
+                self.stats.misses += 1;
+                self.update_hit_rate();
+                None
+            }
         }
     }
 
@@ -154,7 +171,7 @@ where
     /// Insert value with custom TTL
     pub fn insert_with_ttl(&mut self, key: K, value: V, ttl: Option<Duration>) {
         let now = Instant::now();
-        
+
         // Check if we need to evict
         if self.entries.len() >= self.max_size && !self.entries.contains_key(&key) {
             self.evict();
@@ -177,7 +194,7 @@ where
 
         self.entries.insert(key.clone(), entry);
         self.access_order.push_back(key);
-        
+
         self.update_memory_usage();
     }
 
@@ -209,7 +226,7 @@ where
     pub fn cleanup_expired(&mut self) {
         let now = Instant::now();
         let mut expired_keys = Vec::new();
-        
+
         for (key, entry) in &self.entries {
             if let Some(ttl) = entry.ttl {
                 if now.duration_since(entry.timestamp) > ttl {
@@ -217,7 +234,7 @@ where
                 }
             }
         }
-        
+
         for key in expired_keys {
             self.remove(&key);
         }
@@ -230,21 +247,11 @@ where
         }
 
         let key_to_evict = match self.policy {
-            EvictionPolicy::LRU => {
-                self.access_order.front().cloned()
-            },
-            EvictionPolicy::LFU => {
-                self.find_least_frequently_used()
-            },
-            EvictionPolicy::FIFO => {
-                self.access_order.front().cloned()
-            },
-            EvictionPolicy::TTL => {
-                self.find_expired_entry()
-            },
-            EvictionPolicy::Adaptive => {
-                self.adaptive_eviction()
-            },
+            EvictionPolicy::LRU => self.access_order.front().cloned(),
+            EvictionPolicy::LFU => self.find_least_frequently_used(),
+            EvictionPolicy::FIFO => self.access_order.front().cloned(),
+            EvictionPolicy::TTL => self.find_expired_entry(),
+            EvictionPolicy::Adaptive => self.adaptive_eviction(),
         };
 
         if let Some(key) = key_to_evict {
@@ -321,18 +328,14 @@ impl RuleCache {
     /// Create a new rule cache system
     pub fn new() -> Self {
         Self {
-            rule_results: Arc::new(RwLock::new(
-                SmartCache::new(1000, EvictionPolicy::Adaptive)
-            )),
-            derivation_results: Arc::new(RwLock::new(
-                SmartCache::new(500, EvictionPolicy::LRU)
-            )),
-            unification_cache: Arc::new(RwLock::new(
-                SmartCache::new(200, EvictionPolicy::LFU)
-            )),
-            pattern_cache: Arc::new(RwLock::new(
-                SmartCache::with_ttl(300, EvictionPolicy::TTL, Duration::from_secs(300))
-            )),
+            rule_results: Arc::new(RwLock::new(SmartCache::new(1000, EvictionPolicy::Adaptive))),
+            derivation_results: Arc::new(RwLock::new(SmartCache::new(500, EvictionPolicy::LRU))),
+            unification_cache: Arc::new(RwLock::new(SmartCache::new(200, EvictionPolicy::LFU))),
+            pattern_cache: Arc::new(RwLock::new(SmartCache::with_ttl(
+                300,
+                EvictionPolicy::TTL,
+                Duration::from_secs(300),
+            ))),
             enabled: true,
         }
     }
@@ -345,18 +348,23 @@ impl RuleCache {
         pattern_cache_size: usize,
     ) -> Self {
         Self {
-            rule_results: Arc::new(RwLock::new(
-                SmartCache::new(rule_cache_size, EvictionPolicy::Adaptive)
-            )),
-            derivation_results: Arc::new(RwLock::new(
-                SmartCache::new(derivation_cache_size, EvictionPolicy::LRU)
-            )),
-            unification_cache: Arc::new(RwLock::new(
-                SmartCache::new(unification_cache_size, EvictionPolicy::LFU)
-            )),
-            pattern_cache: Arc::new(RwLock::new(
-                SmartCache::with_ttl(pattern_cache_size, EvictionPolicy::TTL, Duration::from_secs(300))
-            )),
+            rule_results: Arc::new(RwLock::new(SmartCache::new(
+                rule_cache_size,
+                EvictionPolicy::Adaptive,
+            ))),
+            derivation_results: Arc::new(RwLock::new(SmartCache::new(
+                derivation_cache_size,
+                EvictionPolicy::LRU,
+            ))),
+            unification_cache: Arc::new(RwLock::new(SmartCache::new(
+                unification_cache_size,
+                EvictionPolicy::LFU,
+            ))),
+            pattern_cache: Arc::new(RwLock::new(SmartCache::with_ttl(
+                pattern_cache_size,
+                EvictionPolicy::TTL,
+                Duration::from_secs(300),
+            ))),
             enabled: true,
         }
     }
@@ -367,7 +375,12 @@ impl RuleCache {
     }
 
     /// Cache rule execution result
-    pub fn cache_rule_result(&self, rule_name: &str, input_facts: &[RuleAtom], result: Vec<RuleAtom>) {
+    pub fn cache_rule_result(
+        &self,
+        rule_name: &str,
+        input_facts: &[RuleAtom],
+        result: Vec<RuleAtom>,
+    ) {
         if !self.enabled {
             return;
         }
@@ -383,7 +396,11 @@ impl RuleCache {
     }
 
     /// Get cached rule result
-    pub fn get_rule_result(&self, rule_name: &str, input_facts: &[RuleAtom]) -> Option<Vec<RuleAtom>> {
+    pub fn get_rule_result(
+        &self,
+        rule_name: &str,
+        input_facts: &[RuleAtom],
+    ) -> Option<Vec<RuleAtom>> {
         if !self.enabled {
             return None;
         }
@@ -610,10 +627,10 @@ mod tests {
     #[test]
     fn test_smart_cache_basic_operations() {
         let mut cache = SmartCache::new(3, EvictionPolicy::LRU);
-        
+
         cache.insert("key1".to_string(), "value1".to_string());
         cache.insert("key2".to_string(), "value2".to_string());
-        
+
         assert_eq!(cache.get(&"key1".to_string()), Some("value1".to_string()));
         assert_eq!(cache.get(&"key2".to_string()), Some("value2".to_string()));
         assert_eq!(cache.get(&"key3".to_string()), None);
@@ -622,11 +639,11 @@ mod tests {
     #[test]
     fn test_cache_eviction() {
         let mut cache = SmartCache::new(2, EvictionPolicy::LRU);
-        
+
         cache.insert("key1", "value1");
         cache.insert("key2", "value2");
         cache.insert("key3", "value3"); // Should evict key1
-        
+
         assert_eq!(cache.get(&"key1"), None);
         assert_eq!(cache.get(&"key2"), Some("value2"));
         assert_eq!(cache.get(&"key3"), Some("value3"));
@@ -635,10 +652,10 @@ mod tests {
     #[test]
     fn test_ttl_expiration() {
         let mut cache = SmartCache::with_ttl(5, EvictionPolicy::TTL, Duration::from_millis(10));
-        
+
         cache.insert("key1", "value1");
         assert_eq!(cache.get(&"key1"), Some("value1"));
-        
+
         std::thread::sleep(Duration::from_millis(15));
         assert_eq!(cache.get(&"key1"), None);
     }
@@ -646,40 +663,36 @@ mod tests {
     #[test]
     fn test_rule_cache_operations() {
         let cache = RuleCache::new();
-        
+
         let rule_name = "test_rule";
-        let input_facts = vec![
-            RuleAtom::Triple {
-                subject: Term::Constant("test".to_string()),
-                predicate: Term::Constant("type".to_string()),
-                object: Term::Constant("entity".to_string()),
-            }
-        ];
-        let result = vec![
-            RuleAtom::Triple {
-                subject: Term::Constant("test".to_string()),
-                predicate: Term::Constant("derived".to_string()),
-                object: Term::Constant("property".to_string()),
-            }
-        ];
-        
+        let input_facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("test".to_string()),
+            predicate: Term::Constant("type".to_string()),
+            object: Term::Constant("entity".to_string()),
+        }];
+        let result = vec![RuleAtom::Triple {
+            subject: Term::Constant("test".to_string()),
+            predicate: Term::Constant("derived".to_string()),
+            object: Term::Constant("property".to_string()),
+        }];
+
         // Cache and retrieve
         cache.cache_rule_result(rule_name, &input_facts, result.clone());
         let cached_result = cache.get_rule_result(rule_name, &input_facts);
-        
+
         assert_eq!(cached_result, Some(result));
     }
 
     #[test]
     fn test_cache_statistics() {
         let mut cache = SmartCache::new(10, EvictionPolicy::LRU);
-        
+
         // Generate some activity
         cache.insert("key1", "value1");
         cache.insert("key2", "value2");
         cache.get(&"key1".to_string());
         cache.get(&"key3".to_string()); // Miss
-        
+
         let stats = cache.stats();
         assert_eq!(stats.hits, 1);
         assert_eq!(stats.misses, 1);
@@ -690,33 +703,29 @@ mod tests {
     #[test]
     fn test_cache_warm_up() {
         let cache = RuleCache::new();
-        
-        let rules = vec![
-            Rule {
-                name: "test_rule".to_string(),
-                body: vec![RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("type".to_string()),
-                    object: Term::Constant("test".to_string()),
-                }],
-                head: vec![RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("derived".to_string()),
-                    object: Term::Constant("property".to_string()),
-                }],
-            }
-        ];
-        
-        let facts = vec![
-            RuleAtom::Triple {
-                subject: Term::Constant("entity1".to_string()),
+
+        let rules = vec![Rule {
+            name: "test_rule".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
                 predicate: Term::Constant("type".to_string()),
                 object: Term::Constant("test".to_string()),
-            }
-        ];
-        
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("derived".to_string()),
+                object: Term::Constant("property".to_string()),
+            }],
+        }];
+
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("entity1".to_string()),
+            predicate: Term::Constant("type".to_string()),
+            object: Term::Constant("test".to_string()),
+        }];
+
         cache.warm_cache(&rules, &facts);
-        
+
         // Should have populated pattern cache
         let stats = cache.get_statistics();
         assert!(stats.pattern_cache.cache_size > 0);

@@ -260,7 +260,11 @@ impl AIQueryOptimizer {
     }
 
     /// Determine join type between triple patterns
-    fn get_join_type(&self, left: &AlgebraTriplePattern, right: &AlgebraTriplePattern) -> Option<JoinType> {
+    fn get_join_type(
+        &self,
+        left: &AlgebraTriplePattern,
+        right: &AlgebraTriplePattern,
+    ) -> Option<JoinType> {
         // Check if subjects match
         if self.patterns_match(&left.subject, &right.subject) {
             return Some(JoinType::SubjectSubject);
@@ -291,7 +295,6 @@ impl AIQueryOptimizer {
             _ => false,
         }
     }
-
 
     /// Check if pattern has filters
     fn has_filter(&self, pattern: &GraphPattern) -> bool {

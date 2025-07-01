@@ -52,11 +52,10 @@ pub mod embedding_pipeline;
 pub mod embeddings;
 pub mod enhanced_performance_monitoring;
 pub mod faiss_compatibility;
-pub mod faiss_integration;
-pub mod faiss_native_integration;
-pub mod faiss_migration_tools;
 pub mod faiss_gpu_integration;
-pub mod oxirs_arq_integration;
+pub mod faiss_integration;
+pub mod faiss_migration_tools;
+pub mod faiss_native_integration;
 pub mod gnn_embeddings;
 pub mod gpu;
 pub mod graph_aware_search;
@@ -71,6 +70,7 @@ pub mod lsh;
 pub mod mmap_advanced;
 pub mod mmap_index;
 pub mod opq;
+pub mod oxirs_arq_integration;
 pub mod pq;
 pub mod rdf_content_enhancement;
 pub mod rdf_integration;
@@ -108,8 +108,8 @@ pub use advanced_benchmarking::{
     AdvancedBenchmarkConfig, AdvancedBenchmarkResult, AdvancedBenchmarkSuite, AlgorithmParameters,
     BenchmarkAlgorithm, BuildTimeMetrics, CacheMetrics, DatasetQualityMetrics, DatasetStatistics,
     DistanceStatistics, EnhancedBenchmarkDataset, HyperparameterTuner, IndexSizeMetrics,
-    LatencyMetrics, MemoryMetrics, ObjectiveFunction, OptimizationStrategy, ParameterSpace,
-    ParameterType, ParameterValue, ParallelBenchmarkConfig, PerformanceMetrics,
+    LatencyMetrics, MemoryMetrics, ObjectiveFunction, OptimizationStrategy,
+    ParallelBenchmarkConfig, ParameterSpace, ParameterType, ParameterValue, PerformanceMetrics,
     PerformanceProfiler, QualityDegradation, QualityMetrics, ScalabilityMetrics,
     StatisticalAnalyzer, StatisticalMetrics, ThroughputMetrics,
 };
@@ -126,8 +126,9 @@ pub use advanced_result_merging::{
 };
 pub use benchmarking::{
     BenchmarkConfig, BenchmarkDataset, BenchmarkOutputFormat, BenchmarkResult, BenchmarkRunner,
-    BenchmarkSuite, BenchmarkTestCase, MemoryMetrics, PerformanceMetrics,
-    QualityMetrics as BenchmarkQualityMetrics, ScalabilityMetrics, SystemInfo,
+    BenchmarkSuite, BenchmarkTestCase, MemoryMetrics as BenchmarkMemoryMetrics,
+    PerformanceMetrics as BenchmarkPerformanceMetrics, QualityMetrics as BenchmarkQualityMetrics,
+    ScalabilityMetrics as BenchmarkScalabilityMetrics, SystemInfo,
 };
 pub use cache_friendly_index::{CacheFriendlyVectorIndex, IndexConfig as CacheFriendlyIndexConfig};
 pub use compression::{create_compressor, CompressionMethod, VectorCompressor};
@@ -143,9 +144,9 @@ pub use cross_modal_embeddings::{
     MultiModalContent, TextEncoder, VideoData, VideoEncoder,
 };
 pub use distributed_vector_search::{
-    DistributedVectorSearch, DistributedNodeConfig, DistributedQuery, DistributedSearchResponse,
-    NodeHealthStatus, ConsistencyLevel, PartitioningStrategy, LoadBalancingAlgorithm,
-    QueryExecutionStrategy, DistributedClusterStats,
+    ConsistencyLevel, DistributedClusterStats, DistributedNodeConfig, DistributedQuery,
+    DistributedSearchResponse, DistributedVectorSearch, LoadBalancingAlgorithm, NodeHealthStatus,
+    PartitioningStrategy, QueryExecutionStrategy,
 };
 pub use embedding_pipeline::{
     DimensionalityReduction, EmbeddingPipeline, NormalizationConfig, PostprocessingPipeline,
@@ -158,18 +159,23 @@ pub use embeddings::{
 pub use enhanced_performance_monitoring::{
     Alert, AlertManager, AlertSeverity, AlertThresholds, AlertType, AnalyticsEngine,
     AnalyticsReport, DashboardData, EnhancedPerformanceMonitor, ExportConfig, ExportDestination,
-    ExportFormat, LatencyDistribution, MonitoringConfig, QualityMetrics, QualityMetricsCollector,
-    QualityStatistics, QueryInfo, QueryMetricsCollector, QueryStatistics, QueryType,
-    Recommendation, RecommendationCategory, RecommendationPriority, SystemMetrics,
-    SystemMetricsCollector, SystemStatistics, TrendData, TrendDirection,
+    ExportFormat, LatencyDistribution, MonitoringConfig as EnhancedMonitoringConfig,
+    QualityMetrics as EnhancedQualityMetrics, QualityMetricsCollector, QualityStatistics,
+    QueryInfo, QueryMetricsCollector, QueryStatistics, QueryType, Recommendation,
+    RecommendationCategory, RecommendationPriority, SystemMetrics, SystemMetricsCollector,
+    SystemStatistics, TrendData, TrendDirection,
 };
 pub use faiss_compatibility::{
-    FaissCompatibility, FaissIndexType, FaissIndexMetadata, FaissMetricType, FaissParameter,
-    FaissExportConfig, FaissImportConfig, ConversionResult, ConversionMetrics, CompressionLevel,
+    CompressionLevel, ConversionMetrics, ConversionResult, FaissCompatibility, FaissExportConfig,
+    FaissImportConfig, FaissIndexMetadata, FaissIndexType, FaissMetricType, FaissParameter,
     SimpleVectorIndex,
 };
 pub use gnn_embeddings::{AggregatorType, GraphSAGE, GCN};
-pub use gpu::{GpuAccelerator, GpuBuffer, GpuConfig, GpuDevice, GpuExecutionConfig, create_default_accelerator, create_performance_accelerator, create_memory_optimized_accelerator, is_gpu_available};
+pub use gpu::{
+    create_default_accelerator, create_memory_optimized_accelerator,
+    create_performance_accelerator, is_gpu_available, GpuAccelerator, GpuBuffer, GpuConfig,
+    GpuDevice, GpuExecutionConfig,
+};
 pub use graph_indices::{
     DelaunayGraph, GraphIndex, GraphIndexConfig, GraphType, NSWGraph, ONNGGraph, PANNGGraph,
     RNGGraph,
@@ -209,16 +215,17 @@ pub use real_time_analytics::{
     AnalyticsEvent, AnalyticsReport as RealTimeAnalyticsReport,
     DashboardData as RealTimeDashboardData, ExportFormat as AnalyticsExportFormat,
     MetricsCollector, PerformanceMonitor, QueryMetrics, SystemMetrics as AnalyticsSystemMetrics,
-    VectorAnalyticsEngine,
+    VectorAnalyticsEngine as RealTimeVectorAnalyticsEngine,
 };
 pub use real_time_embedding_pipeline::{
-    RealTimeEmbeddingPipeline, RealTimeEmbeddingConfig, ContentItem, ProcessingPriority,
-    ProcessingResult, ProcessingStatus, PipelineStats, VersioningStrategy, MonitoringConfig,
-    AlertThresholds, AutoScalingConfig, CompressionConfig,
+    AlertThresholds, AutoScalingConfig, CompressionConfig, ContentItem,
+    MonitoringConfig as PipelineMonitoringConfig, PipelineStats, ProcessingPriority,
+    ProcessingResult, ProcessingStatus, RealTimeEmbeddingConfig, RealTimeEmbeddingPipeline,
+    VersioningStrategy,
 };
 pub use real_time_updates::{
-    RealTimeVectorUpdater, RealTimeVectorSearch, UpdateOperation, UpdateBatch, UpdatePriority,
-    RealTimeConfig, UpdateStats, BatchProcessor,
+    BatchProcessor, RealTimeConfig, RealTimeVectorSearch, RealTimeVectorUpdater, UpdateBatch,
+    UpdateOperation, UpdatePriority, UpdateStats,
 };
 pub use result_fusion::{
     FusedResults, FusionAlgorithm, FusionConfig, FusionQualityMetrics, FusionStats,
@@ -226,9 +233,9 @@ pub use result_fusion::{
 };
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
-    FederatedQueryResult, SparqlVectorService, VectorServiceConfig, VectorQuery, 
-    VectorQueryResult, VectorServiceArg, VectorServiceResult, PerformanceMonitor,
-    CrossLanguageProcessor, QueryExecutor, SparqlVectorFunctions,
+    CrossLanguageProcessor, FederatedQueryResult, PerformanceMonitor, QueryExecutor,
+    SparqlVectorFunctions, SparqlVectorService, VectorQuery, VectorQueryResult, VectorServiceArg,
+    VectorServiceConfig, VectorServiceResult,
 };
 pub use sparql_service_endpoint::{
     AuthenticationInfo, AuthenticationType, CustomFunctionRegistry, FederatedOperation,
@@ -1055,10 +1062,10 @@ pub struct VectorOperationResult {
     pub rank: usize,
 }
 
-/// Batch processing utilities
-pub struct BatchProcessor;
+/// Document batch processing utilities
+pub struct DocumentBatchProcessor;
 
-impl BatchProcessor {
+impl DocumentBatchProcessor {
     /// Process multiple documents in batch for efficient indexing
     pub fn batch_index(
         store: &mut VectorStore,

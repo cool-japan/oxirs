@@ -473,6 +473,54 @@ impl CompressedBitmap {
     pub fn is_empty(&self) -> bool {
         self.cardinality == 0
     }
+
+    /// Extract range of bits as a new bitmap
+    pub fn range(&self, start: usize, end: usize) -> Result<CompressedBitmap> {
+        let bits = self.decompress()?;
+        let end = end.min(bits.len());
+
+        if start >= bits.len() || start >= end {
+            return CompressedBitmap::new(&[], self.compression);
+        }
+
+        let range_bits = &bits[start..end];
+        CompressedBitmap::new(range_bits, self.compression)
+    }
+
+    /// Count set bits in a range
+    pub fn count_range(&self, start: usize, end: usize) -> Result<usize> {
+        let range_bitmap = self.range(start, end)?;
+        Ok(range_bitmap.cardinality())
+    }
+
+    /// Find the position of the nth set bit (0-indexed)
+    pub fn select(&self, n: usize) -> Result<Option<usize>> {
+        if n >= self.cardinality {
+            return Ok(None);
+        }
+
+        let bits = self.decompress()?;
+        let mut count = 0;
+
+        for (i, &bit) in bits.iter().enumerate() {
+            if bit {
+                if count == n {
+                    return Ok(Some(i));
+                }
+                count += 1;
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Count set bits up to position (exclusive)
+    pub fn rank(&self, position: usize) -> Result<usize> {
+        let bits = self.decompress()?;
+        let end = position.min(bits.len());
+
+        Ok(bits[..end].iter().filter(|&&b| b).count())
+    }
 }
 
 /// Bitmap index configuration

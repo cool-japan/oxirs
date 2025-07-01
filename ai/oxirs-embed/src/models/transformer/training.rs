@@ -45,7 +45,7 @@ impl TransformerTrainer {
 
         for epoch in 0..epochs {
             self.training_stats.epoch = epoch;
-            
+
             // Shuffle triples for each epoch
             let mut shuffled_triples = triples.to_vec();
             shuffled_triples.shuffle(&mut rand::thread_rng());
@@ -54,7 +54,7 @@ impl TransformerTrainer {
             let batch_size = 32;
             for (batch_idx, batch) in shuffled_triples.chunks(batch_size).enumerate() {
                 self.training_stats.batch_processed = batch_idx;
-                
+
                 // Process each triple in the batch
                 for triple in batch {
                     self.process_triple(triple).await?;
@@ -91,22 +91,16 @@ impl TransformerTrainer {
 
         // Initialize entity embeddings
         for (idx, entity) in entities.iter().enumerate() {
-            let embedding = Array1::from_vec(
-                (0..dimensions)
-                    .map(|_| rng.gen_range(-0.1..0.1))
-                    .collect(),
-            );
+            let embedding =
+                Array1::from_vec((0..dimensions).map(|_| rng.gen_range(-0.1..0.1)).collect());
             self.entity_embeddings.insert(entity.clone(), embedding);
             self.entity_to_idx.insert(entity.clone(), idx);
         }
 
         // Initialize relation embeddings
         for (idx, relation) in relations.iter().enumerate() {
-            let embedding = Array1::from_vec(
-                (0..dimensions)
-                    .map(|_| rng.gen_range(-0.1..0.1))
-                    .collect(),
-            );
+            let embedding =
+                Array1::from_vec((0..dimensions).map(|_| rng.gen_range(-0.1..0.1)).collect());
             self.relation_embeddings.insert(relation.clone(), embedding);
             self.relation_to_idx.insert(relation.clone(), idx);
         }
@@ -153,22 +147,22 @@ impl TransformerTrainer {
     ) -> Result<()> {
         // Gradient for subject: 2 * diff
         let subject_gradient = diff * 2.0;
-        
+
         // Gradient for predicate: 2 * diff
         let predicate_gradient = diff * 2.0;
-        
+
         // Gradient for object: -2 * diff
         let object_gradient = diff * -2.0;
 
         // Update embeddings (gradient descent)
         // Note: In practice, you'd want to track which triple corresponds to which embeddings
         // This is a simplified version for demonstration
-        
+
         // Update statistics
-        let gradient_norm = subject_gradient.mapv(|x| x * x).sum().sqrt() +
-                           predicate_gradient.mapv(|x| x * x).sum().sqrt() +
-                           object_gradient.mapv(|x| x * x).sum().sqrt();
-        
+        let gradient_norm = subject_gradient.mapv(|x| x * x).sum().sqrt()
+            + predicate_gradient.mapv(|x| x * x).sum().sqrt()
+            + object_gradient.mapv(|x| x * x).sum().sqrt();
+
         self.training_stats.gradient_norm = gradient_norm;
         self.training_stats.learning_rate = learning_rate;
 
@@ -182,7 +176,7 @@ impl TransformerTrainer {
 
         // Create a vector of entity keys for negative sampling
         let entity_keys: Vec<String> = self.entity_embeddings.keys().cloned().collect();
-        
+
         if entity_keys.len() < 2 {
             return Ok(()); // Need at least 2 entities for contrastive learning
         }
@@ -197,10 +191,10 @@ impl TransformerTrainer {
                     // Normalize embeddings for better cosine similarity
                     let norm1 = emb1.mapv(|x| x * x).sum().sqrt();
                     let norm2 = emb2.mapv(|x| x * x).sum().sqrt();
-                    
+
                     if norm1 > 0.0 && norm2 > 0.0 {
                         let norm_factor = norm1 * norm2;
-                        
+
                         // Positive sample score (cosine similarity)
                         let positive_score = (&emb1 * &emb2).sum() / (norm_factor * temperature);
 
@@ -213,7 +207,8 @@ impl TransformerTrainer {
                                         let neg_norm = neg_emb.mapv(|x| x * x).sum().sqrt();
                                         if neg_norm > 0.0 {
                                             let neg_norm_factor = norm1 * neg_norm;
-                                            let neg_score = (&emb1 * neg_emb).sum() / (neg_norm_factor * temperature);
+                                            let neg_score = (&emb1 * neg_emb).sum()
+                                                / (neg_norm_factor * temperature);
                                             negative_scores.push(neg_score);
                                         }
                                     }
@@ -262,7 +257,7 @@ impl TransformerTrainer {
         for (_, embedding) in self.entity_embeddings.iter_mut() {
             let reg_loss = embedding.mapv(|x| x * x).sum() * reg_strength;
             total_reg_loss += reg_loss;
-            
+
             // Apply regularization gradient
             *embedding = embedding.mapv(|x| x * (1.0 - reg_strength));
         }
@@ -271,7 +266,7 @@ impl TransformerTrainer {
         for (_, embedding) in self.relation_embeddings.iter_mut() {
             let reg_loss = embedding.mapv(|x| x * x).sum() * reg_strength;
             total_reg_loss += reg_loss;
-            
+
             // Apply regularization gradient
             *embedding = embedding.mapv(|x| x * (1.0 - reg_strength));
         }
@@ -382,7 +377,8 @@ impl LearningRateScheduler {
         if self.current_step < self.warmup_steps {
             self.initial_lr * (self.current_step as f32 / self.warmup_steps as f32)
         } else {
-            self.initial_lr * (1.0 - (self.current_step - self.warmup_steps) as f32 / 10000.0).max(0.1)
+            self.initial_lr
+                * (1.0 - (self.current_step - self.warmup_steps) as f32 / 10000.0).max(0.1)
         }
     }
 
@@ -423,7 +419,7 @@ mod tests {
     async fn test_trainer_initialization() {
         let config = TransformerConfig::default();
         let mut trainer = TransformerTrainer::new(config);
-        
+
         assert!(trainer.initialize_weights(1000, 768).is_ok());
         assert!(!trainer.is_trained());
     }
@@ -432,29 +428,29 @@ mod tests {
     async fn test_contrastive_learning() {
         let config = TransformerConfig::default();
         let mut trainer = TransformerTrainer::new(config);
-        
+
         // Add some test embeddings
         let emb1 = Array1::from_vec(vec![1.0, 0.0, 0.0]);
         let emb2 = Array1::from_vec(vec![0.0, 1.0, 0.0]);
-        
+
         trainer.set_entity_embedding("entity1".to_string(), emb1);
         trainer.set_entity_embedding("entity2".to_string(), emb2);
-        
+
         assert!(trainer.contrastive_learning(3).await.is_ok());
     }
 
     #[test]
     fn test_learning_rate_scheduler() {
         let mut scheduler = LearningRateScheduler::new(0.001, "linear".to_string(), 100);
-        
+
         // Test warmup phase
         let lr_start = scheduler.get_learning_rate();
         assert_eq!(lr_start, 0.0);
-        
+
         scheduler.step();
         let lr_warmup = scheduler.get_learning_rate();
         assert!(lr_warmup > 0.0 && lr_warmup < 0.001);
-        
+
         // Skip to end of warmup
         scheduler.current_step = 100;
         let lr_end_warmup = scheduler.get_learning_rate();

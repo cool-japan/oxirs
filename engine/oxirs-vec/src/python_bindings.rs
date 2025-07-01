@@ -1,29 +1,29 @@
 //! PyO3 Python Bindings for OxiRS Vector Search
-//! 
+//!
 //! This module provides comprehensive Python bindings for the OxiRS vector search engine,
 //! enabling seamless integration with the Python ML ecosystem including NumPy, pandas,
 //! Jupyter notebooks, and popular ML frameworks.
 
 use crate::{
-    VectorStore, VectorSearchParams, SearchResult,
-    embeddings::{EmbeddingStrategy, EmbeddingManager},
-    index::{VectorIndex, IndexType, VectorId},
-    similarity::{SimilarityMetric, SimilarityResult},
     advanced_analytics::{VectorAnalyticsEngine, VectorQualityAssessment},
-    compression::{CompressionStrategy, CompressionMetrics},
+    compression::{CompressionMetrics, CompressionStrategy},
+    embeddings::{EmbeddingManager, EmbeddingStrategy},
+    index::{IndexType, VectorId, VectorIndex},
+    similarity::{SimilarityMetric, SimilarityResult},
     sparql_integration::SparqlVectorSearch,
+    SearchResult, VectorSearchParams, VectorStore,
 };
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use chrono;
+use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
-use pyo3::{wrap_pyfunction, create_exception};
-use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use pyo3::{create_exception, wrap_pyfunction};
 use serde_json;
+use std::collections::HashMap;
 use std::fs;
-use chrono;
+use std::sync::{Arc, RwLock};
 
 // Custom exception types for Python
 create_exception!(oxirs_vec, VectorSearchError, pyo3::exceptions::PyException);
@@ -41,20 +41,19 @@ impl PyVectorStore {
     /// Create a new vector store with specified embedding strategy
     #[new]
     #[pyo3(signature = (embedding_strategy = "sentence_transformer", index_type = "memory", **kwargs))]
-    fn new(
-        embedding_strategy: &str,
-        index_type: &str,
-        kwargs: Option<&PyDict>,
-    ) -> PyResult<Self> {
+    fn new(embedding_strategy: &str, index_type: &str, kwargs: Option<&PyDict>) -> PyResult<Self> {
         let strategy = match embedding_strategy {
             "sentence_transformer" => EmbeddingStrategy::SentenceTransformer,
             "tf_idf" => EmbeddingStrategy::TfIdf,
             "word2vec" => EmbeddingStrategy::Word2Vec,
             "openai" => EmbeddingStrategy::OpenAI,
             "custom" => EmbeddingStrategy::Custom,
-            _ => return Err(EmbeddingError::new_err(format!(
-                "Unknown embedding strategy: {}", embedding_strategy
-            ))),
+            _ => {
+                return Err(EmbeddingError::new_err(format!(
+                    "Unknown embedding strategy: {}",
+                    embedding_strategy
+                )))
+            }
         };
 
         let index_type = match index_type {
@@ -62,9 +61,12 @@ impl PyVectorStore {
             "hnsw" => IndexType::HNSW,
             "ivf" => IndexType::IVF,
             "lsh" => IndexType::LSH,
-            _ => return Err(IndexError::new_err(format!(
-                "Unknown index type: {}", index_type
-            ))),
+            _ => {
+                return Err(IndexError::new_err(format!(
+                    "Unknown index type: {}",
+                    index_type
+                )))
+            }
         };
 
         // Parse additional configuration from kwargs
@@ -94,12 +96,15 @@ impl PyVectorStore {
         content: &str,
         metadata: Option<HashMap<String, String>>,
     ) -> PyResult<()> {
-        let mut store = self.store.write()
+        let mut store = self
+            .store
+            .write()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
-        store.index_resource_with_metadata(resource_id, content, metadata.unwrap_or_default())
+
+        store
+            .index_resource_with_metadata(resource_id, content, metadata.unwrap_or_default())
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
-        
+
         Ok(())
     }
 
@@ -112,12 +117,15 @@ impl PyVectorStore {
         metadata: Option<HashMap<String, String>>,
     ) -> PyResult<()> {
         let vector_data = vector.as_array().to_owned().into_raw_vec();
-        let mut store = self.store.write()
+        let mut store = self
+            .store
+            .write()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
-        store.index_vector_with_metadata(vector_id, vector_data, metadata.unwrap_or_default())
+
+        store
+            .index_vector_with_metadata(vector_id, vector_data, metadata.unwrap_or_default())
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
-        
+
         Ok(())
     }
 
@@ -133,21 +141,25 @@ impl PyVectorStore {
         let vectors_array = vectors.as_array();
         if vectors_array.nrows() != vector_ids.len() {
             return Err(VectorSearchError::new_err(
-                "Number of vector IDs must match number of vectors"
+                "Number of vector IDs must match number of vectors",
             ));
         }
 
-        let mut store = self.store.write()
+        let mut store = self
+            .store
+            .write()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
 
         for (i, id) in vector_ids.iter().enumerate() {
             let vector = vectors_array.row(i).to_owned().into_raw_vec();
-            let meta = metadata.as_ref()
+            let meta = metadata
+                .as_ref()
                 .and_then(|m| m.get(i))
                 .cloned()
                 .unwrap_or_default();
-            
-            store.index_vector_with_metadata(id, vector, meta)
+
+            store
+                .index_vector_with_metadata(id, vector, meta)
                 .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
         }
 
@@ -165,10 +177,12 @@ impl PyVectorStore {
         metric: &str,
     ) -> PyResult<PyObject> {
         let similarity_metric = parse_similarity_metric(metric)?;
-        
-        let store = self.store.read()
+
+        let store = self
+            .store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
+
         let params = VectorSearchParams {
             limit,
             threshold,
@@ -176,7 +190,8 @@ impl PyVectorStore {
             ..Default::default()
         };
 
-        let results = store.similarity_search_with_params(query, params)
+        let results = store
+            .similarity_search_with_params(query, params)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         // Convert results to Python format
@@ -207,10 +222,12 @@ impl PyVectorStore {
     ) -> PyResult<PyObject> {
         let query_data = query_vector.as_array().to_owned().into_raw_vec();
         let similarity_metric = parse_similarity_metric(metric)?;
-        
-        let store = self.store.read()
+
+        let store = self
+            .store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
+
         let params = VectorSearchParams {
             limit,
             threshold,
@@ -218,7 +235,8 @@ impl PyVectorStore {
             ..Default::default()
         };
 
-        let results = store.vector_search_with_params(query_data, params)
+        let results = store
+            .vector_search_with_params(query_data, params)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         // Convert results to Python format
@@ -236,11 +254,15 @@ impl PyVectorStore {
 
     /// Get vector by ID
     fn get_vector(&self, py: Python, vector_id: &str) -> PyResult<Option<PyObject>> {
-        let store = self.store.read()
+        let store = self
+            .store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
-        if let Some(vector) = store.get_vector(vector_id)
-            .map_err(|e| VectorSearchError::new_err(e.to_string()))? {
+
+        if let Some(vector) = store
+            .get_vector(vector_id)
+            .map_err(|e| VectorSearchError::new_err(e.to_string()))?
+        {
             let numpy_array = vector.into_pyarray(py);
             Ok(Some(numpy_array.into()))
         } else {
@@ -249,11 +271,18 @@ impl PyVectorStore {
     }
 
     /// Export search results to pandas DataFrame format
-    fn search_to_dataframe(&self, py: Python, query: &str, limit: Option<usize>) -> PyResult<PyObject> {
+    fn search_to_dataframe(
+        &self,
+        py: Python,
+        query: &str,
+        limit: Option<usize>,
+    ) -> PyResult<PyObject> {
         let limit = limit.unwrap_or(10);
-        let store = self.store.read()
+        let store = self
+            .store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
+
         let params = VectorSearchParams {
             limit,
             threshold: None,
@@ -261,18 +290,20 @@ impl PyVectorStore {
             ..Default::default()
         };
 
-        let results = store.similarity_search_with_params(query, params)
+        let results = store
+            .similarity_search_with_params(query, params)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         // Create DataFrame-compatible structure
         let py_data = PyDict::new(py);
-        
+
         let ids: Vec<String> = results.iter().map(|r| r.id.clone()).collect();
         let scores: Vec<f64> = results.iter().map(|r| r.score).collect();
-        let contents: Vec<String> = results.iter()
+        let contents: Vec<String> = results
+            .iter()
             .map(|r| r.content.clone().unwrap_or_default())
             .collect();
-        
+
         py_data.set_item("id", ids)?;
         py_data.set_item("score", scores)?;
         py_data.set_item("content", contents)?;
@@ -288,11 +319,14 @@ impl PyVectorStore {
         vector_column: Option<&str>,
         content_column: Option<&str>,
     ) -> PyResult<usize> {
-        let mut store = self.store.write()
+        let mut store = self
+            .store
+            .write()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
 
         // Extract data from DataFrame-like dictionary
-        let ids = data.get_item(id_column)
+        let ids = data
+            .get_item(id_column)
             .ok_or_else(|| VectorSearchError::new_err(format!("Column '{}' not found", id_column)))?
             .extract::<Vec<String>>()?;
 
@@ -300,29 +334,37 @@ impl PyVectorStore {
 
         if let Some(vector_col) = vector_column {
             // Import pre-computed vectors
-            let vectors = data.get_item(vector_col)
-                .ok_or_else(|| VectorSearchError::new_err(format!("Column '{}' not found", vector_col)))?
+            let vectors = data
+                .get_item(vector_col)
+                .ok_or_else(|| {
+                    VectorSearchError::new_err(format!("Column '{}' not found", vector_col))
+                })?
                 .extract::<Vec<Vec<f32>>>()?;
 
             for (id, vector) in ids.iter().zip(vectors.iter()) {
-                store.index_vector_with_metadata(id, vector.clone(), HashMap::new())
+                store
+                    .index_vector_with_metadata(id, vector.clone(), HashMap::new())
                     .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
                 imported_count += 1;
             }
         } else if let Some(content_col) = content_column {
             // Import content for embedding generation
-            let contents = data.get_item(content_col)
-                .ok_or_else(|| VectorSearchError::new_err(format!("Column '{}' not found", content_col)))?
+            let contents = data
+                .get_item(content_col)
+                .ok_or_else(|| {
+                    VectorSearchError::new_err(format!("Column '{}' not found", content_col))
+                })?
                 .extract::<Vec<String>>()?;
 
             for (id, content) in ids.iter().zip(contents.iter()) {
-                store.index_resource_with_metadata(id, content, HashMap::new())
+                store
+                    .index_resource_with_metadata(id, content, HashMap::new())
                     .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
                 imported_count += 1;
             }
         } else {
             return Err(VectorSearchError::new_err(
-                "Either vector_column or content_column must be specified"
+                "Either vector_column or content_column must be specified",
             ));
         }
 
@@ -332,10 +374,13 @@ impl PyVectorStore {
     /// Export all vectors to DataFrame format
     fn export_to_dataframe(&self, py: Python, include_vectors: Option<bool>) -> PyResult<PyObject> {
         let include_vectors = include_vectors.unwrap_or(false);
-        let store = self.store.read()
+        let store = self
+            .store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
 
-        let vector_ids = store.get_vector_ids()
+        let vector_ids = store
+            .get_vector_ids()
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         let py_data = PyDict::new(py);
@@ -344,8 +389,10 @@ impl PyVectorStore {
         if include_vectors {
             let mut vectors = Vec::new();
             for id in &vector_ids {
-                if let Some(vector) = store.get_vector(id)
-                    .map_err(|e| VectorSearchError::new_err(e.to_string()))? {
+                if let Some(vector) = store
+                    .get_vector(id)
+                    .map_err(|e| VectorSearchError::new_err(e.to_string()))?
+                {
                     vectors.push(vector);
                 }
             }
@@ -357,28 +404,37 @@ impl PyVectorStore {
 
     /// Get all vector IDs
     fn get_vector_ids(&self) -> PyResult<Vec<String>> {
-        let store = self.store.read()
+        let store = self
+            .store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
-        Ok(store.get_vector_ids()
+
+        Ok(store
+            .get_vector_ids()
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?)
     }
 
     /// Remove vector by ID
     fn remove_vector(&self, vector_id: &str) -> PyResult<bool> {
-        let mut store = self.store.write()
+        let mut store = self
+            .store
+            .write()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
-        Ok(store.remove_vector(vector_id)
+
+        Ok(store
+            .remove_vector(vector_id)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?)
     }
 
     /// Get store statistics
     fn get_stats(&self, py: Python) -> PyResult<PyObject> {
-        let store = self.store.read()
+        let store = self
+            .store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
-        let stats = store.get_statistics()
+
+        let stats = store
+            .get_statistics()
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         let py_stats = PyDict::new(py);
@@ -393,12 +449,15 @@ impl PyVectorStore {
 
     /// Save the vector store to disk
     fn save(&self, path: &str) -> PyResult<()> {
-        let store = self.store.read()
+        let store = self
+            .store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
-        store.save_to_disk(path)
+
+        store
+            .save_to_disk(path)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
-        
+
         Ok(())
     }
 
@@ -407,7 +466,7 @@ impl PyVectorStore {
     fn load(path: &str) -> PyResult<Self> {
         let store = VectorStore::load_from_disk(path)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
-        
+
         Ok(PyVectorStore {
             store: Arc::new(RwLock::new(store)),
         })
@@ -415,12 +474,15 @@ impl PyVectorStore {
 
     /// Optimize the index for better search performance
     fn optimize(&self) -> PyResult<()> {
-        let mut store = self.store.write()
+        let mut store = self
+            .store
+            .write()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
-        store.optimize_index()
+
+        store
+            .optimize_index()
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
-        
+
         Ok(())
     }
 }
@@ -448,12 +510,15 @@ impl PyVectorAnalytics {
         labels: Option<Vec<String>>,
     ) -> PyResult<PyObject> {
         let vectors_array = vectors.as_array();
-        let vector_data: Vec<Vec<f32>> = vectors_array.rows()
+        let vector_data: Vec<Vec<f32>> = vectors_array
+            .rows()
             .into_iter()
             .map(|row| row.to_owned().into_raw_vec())
             .collect();
 
-        let analysis = self.engine.analyze_vector_distribution(&vector_data, labels)
+        let analysis = self
+            .engine
+            .analyze_vector_distribution(&vector_data, labels)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         // Convert analysis to Python format
@@ -470,7 +535,9 @@ impl PyVectorAnalytics {
 
     /// Get optimization recommendations
     fn get_recommendations(&self, py: Python) -> PyResult<PyObject> {
-        let recommendations = self.engine.get_optimization_recommendations()
+        let recommendations = self
+            .engine
+            .get_optimization_recommendations()
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         let py_recommendations = PyList::empty(py);
@@ -506,7 +573,9 @@ impl PySparqlVectorSearch {
 
     /// Execute SPARQL query with vector extensions
     fn execute_query(&self, py: Python, query: &str) -> PyResult<PyObject> {
-        let results = self.sparql_search.execute_vector_sparql(query)
+        let results = self
+            .sparql_search
+            .execute_vector_sparql(query)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         // Convert results to Python format
@@ -519,13 +588,9 @@ impl PySparqlVectorSearch {
     }
 
     /// Register custom vector function
-    fn register_function(
-        &mut self,
-        name: &str,
-        arity: usize,
-        description: &str,
-    ) -> PyResult<()> {
-        self.sparql_search.register_custom_function(name, arity, description)
+    fn register_function(&mut self, name: &str, arity: usize, description: &str) -> PyResult<()> {
+        self.sparql_search
+            .register_custom_function(name, arity, description)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         Ok(())
@@ -545,7 +610,10 @@ impl PyRealTimeEmbeddingPipeline {
     fn new(embedding_strategy: &str, update_interval_ms: Option<u64>) -> PyResult<Self> {
         let mut config = HashMap::new();
         config.insert("strategy".to_string(), embedding_strategy.to_string());
-        config.insert("interval".to_string(), update_interval_ms.unwrap_or(1000).to_string());
+        config.insert(
+            "interval".to_string(),
+            update_interval_ms.unwrap_or(1000).to_string(),
+        );
 
         Ok(PyRealTimeEmbeddingPipeline { config })
     }
@@ -608,7 +676,7 @@ impl PyMLFrameworkIntegration {
     fn new(framework: &str, model_config: Option<HashMap<String, String>>) -> PyResult<Self> {
         let mut config = HashMap::new();
         config.insert("framework".to_string(), framework.to_string());
-        
+
         if let Some(model_config) = model_config {
             config.extend(model_config);
         }
@@ -621,20 +689,31 @@ impl PyMLFrameworkIntegration {
         match format {
             "onnx" => println!("Exporting model to ONNX format at {}", output_path),
             "torchscript" => println!("Exporting model to TorchScript format at {}", output_path),
-            "tensorflow" => println!("Exporting model to TensorFlow SavedModel at {}", output_path),
+            "tensorflow" => println!(
+                "Exporting model to TensorFlow SavedModel at {}",
+                output_path
+            ),
             "huggingface" => println!("Exporting model to HuggingFace format at {}", output_path),
-            _ => return Err(VectorSearchError::new_err(format!(
-                "Unsupported export format: {}", format
-            ))),
+            _ => {
+                return Err(VectorSearchError::new_err(format!(
+                    "Unsupported export format: {}",
+                    format
+                )))
+            }
         }
         Ok(())
     }
 
     /// Load pre-trained model from external framework
     fn load_pretrained_model(&mut self, model_path: &str, framework: &str) -> PyResult<()> {
-        self.config.insert("model_path".to_string(), model_path.to_string());
-        self.config.insert("source_framework".to_string(), framework.to_string());
-        println!("Loading pre-trained {} model from {}", framework, model_path);
+        self.config
+            .insert("model_path".to_string(), model_path.to_string());
+        self.config
+            .insert("source_framework".to_string(), framework.to_string());
+        println!(
+            "Loading pre-trained {} model from {}",
+            framework, model_path
+        );
         Ok(())
     }
 
@@ -646,8 +725,11 @@ impl PyMLFrameworkIntegration {
         epochs: Option<usize>,
     ) -> PyResult<()> {
         let data_array = training_data.as_array();
-        println!("Fine-tuning model with {} samples for {} epochs", 
-                 data_array.nrows(), epochs.unwrap_or(10));
+        println!(
+            "Fine-tuning model with {} samples for {} epochs",
+            data_array.nrows(),
+            epochs.unwrap_or(10)
+        );
         Ok(())
     }
 
@@ -673,15 +755,18 @@ impl PyMLFrameworkIntegration {
         target_format: &str,
     ) -> PyResult<PyObject> {
         let input_array = embeddings.as_array();
-        println!("Converting embeddings from {} to {} format", source_format, target_format);
-        
+        println!(
+            "Converting embeddings from {} to {} format",
+            source_format, target_format
+        );
+
         // For demonstration, return the same embeddings
         let output = input_array.to_owned().into_raw_vec();
         let (rows, cols) = input_array.dim();
         let reshaped = numpy::PyArray1::from_vec(py, output)
             .reshape([rows, cols])
             .map_err(|e| VectorSearchError::new_err(format!("Array reshape error: {}", e)))?;
-        
+
         Ok(reshaped.into())
     }
 }
@@ -700,7 +785,7 @@ impl PyJupyterVectorTools {
         let mut config = HashMap::new();
         config.insert("plot_backend".to_string(), "matplotlib".to_string());
         config.insert("max_points".to_string(), "1000".to_string());
-        
+
         Ok(PyJupyterVectorTools {
             vector_store: vector_store.store.clone(),
             config,
@@ -716,8 +801,10 @@ impl PyJupyterVectorTools {
     ) -> PyResult<PyObject> {
         let metric = metric.unwrap_or("cosine");
         let similarity_metric = parse_similarity_metric(metric)?;
-        
-        let store = self.vector_store.read()
+
+        let store = self
+            .vector_store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
 
         let mut similarity_matrix = Vec::new();
@@ -726,16 +813,22 @@ impl PyJupyterVectorTools {
         for id1 in &vector_ids {
             let mut row = Vec::new();
             labels.push(id1.clone());
-            
-            if let Some(vector1) = store.get_vector(id1)
-                .map_err(|e| VectorSearchError::new_err(e.to_string()))? {
-                
+
+            if let Some(vector1) = store
+                .get_vector(id1)
+                .map_err(|e| VectorSearchError::new_err(e.to_string()))?
+            {
                 for id2 in &vector_ids {
-                    if let Some(vector2) = store.get_vector(id2)
-                        .map_err(|e| VectorSearchError::new_err(e.to_string()))? {
-                        
-                        let similarity = crate::similarity::compute_similarity(&vector1, &vector2, similarity_metric)
-                            .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
+                    if let Some(vector2) = store
+                        .get_vector(id2)
+                        .map_err(|e| VectorSearchError::new_err(e.to_string()))?
+                    {
+                        let similarity = crate::similarity::compute_similarity(
+                            &vector1,
+                            &vector2,
+                            similarity_metric,
+                        )
+                        .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
                         row.push(similarity);
                     } else {
                         row.push(0.0);
@@ -764,20 +857,25 @@ impl PyJupyterVectorTools {
         let method = method.unwrap_or("tsne");
         let n_components = n_components.unwrap_or(2);
         let max_vectors = max_vectors.unwrap_or(1000);
-        
-        let store = self.vector_store.read()
+
+        let store = self
+            .vector_store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
 
-        let vector_ids = store.get_vector_ids()
+        let vector_ids = store
+            .get_vector_ids()
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
-        
+
         let limited_ids: Vec<String> = vector_ids.into_iter().take(max_vectors).collect();
         let mut vectors = Vec::new();
         let mut valid_ids = Vec::new();
 
         for id in limited_ids {
-            if let Some(vector) = store.get_vector(&id)
-                .map_err(|e| VectorSearchError::new_err(e.to_string()))? {
+            if let Some(vector) = store
+                .get_vector(&id)
+                .map_err(|e| VectorSearchError::new_err(e.to_string()))?
+            {
                 vectors.push(vector);
                 valid_ids.push(id);
             }
@@ -809,19 +907,22 @@ impl PyJupyterVectorTools {
     ) -> PyResult<PyObject> {
         let n_clusters = n_clusters.unwrap_or(5);
         let max_vectors = max_vectors.unwrap_or(1000);
-        
-        let store = self.vector_store.read()
+
+        let store = self
+            .vector_store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
 
-        let vector_ids = store.get_vector_ids()
+        let vector_ids = store
+            .get_vector_ids()
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
-        
+
         let limited_ids: Vec<String> = vector_ids.into_iter().take(max_vectors).collect();
-        
+
         // Generate mock clustering data (in real implementation, would use actual clustering)
         let mut cluster_assignments = Vec::new();
         let mut cluster_centers = Vec::new();
-        
+
         for (i, _) in limited_ids.iter().enumerate() {
             cluster_assignments.push(i % n_clusters);
         }
@@ -849,24 +950,34 @@ impl PyJupyterVectorTools {
     ) -> PyResult<()> {
         let include_projections = include_projections.unwrap_or(true);
         let include_clusters = include_clusters.unwrap_or(true);
-        
+
         let mut viz_data = serde_json::Map::new();
-        
+
         if include_projections {
             // Add projection data
-            viz_data.insert("projection_available".to_string(), serde_json::Value::Bool(true));
+            viz_data.insert(
+                "projection_available".to_string(),
+                serde_json::Value::Bool(true),
+            );
         }
-        
+
         if include_clusters {
             // Add cluster data
-            viz_data.insert("clustering_available".to_string(), serde_json::Value::Bool(true));
+            viz_data.insert(
+                "clustering_available".to_string(),
+                serde_json::Value::Bool(true),
+            );
         }
-        
+
         // Add metadata
-        viz_data.insert("export_timestamp".to_string(), 
-                       serde_json::Value::String(chrono::Utc::now().to_rfc3339()));
-        viz_data.insert("version".to_string(), 
-                       serde_json::Value::String(env!("CARGO_PKG_VERSION").to_string()));
+        viz_data.insert(
+            "export_timestamp".to_string(),
+            serde_json::Value::String(chrono::Utc::now().to_rfc3339()),
+        );
+        viz_data.insert(
+            "version".to_string(),
+            serde_json::Value::String(env!("CARGO_PKG_VERSION").to_string()),
+        );
 
         let json_content = serde_json::to_string_pretty(&viz_data)
             .map_err(|e| VectorSearchError::new_err(format!("JSON serialization error: {}", e)))?;
@@ -887,10 +998,12 @@ impl PyJupyterVectorTools {
     ) -> PyResult<PyObject> {
         let limit = limit.unwrap_or(10);
         let include_query = include_query_vector.unwrap_or(true);
-        
-        let store = self.vector_store.read()
+
+        let store = self
+            .vector_store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
-        
+
         let params = VectorSearchParams {
             limit,
             threshold: None,
@@ -898,7 +1011,8 @@ impl PyJupyterVectorTools {
             ..Default::default()
         };
 
-        let results = store.similarity_search_with_params(query, params)
+        let results = store
+            .similarity_search_with_params(query, params)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         let mut result_data = Vec::new();
@@ -914,7 +1028,7 @@ impl PyJupyterVectorTools {
         py_result.set_item("results", result_data)?;
         py_result.set_item("query", query)?;
         py_result.set_item("total_results", results.len())?;
-        
+
         if include_query {
             py_result.set_item("query_vector_available", true)?;
         }
@@ -924,30 +1038,33 @@ impl PyJupyterVectorTools {
 
     /// Generate performance dashboard data
     fn generate_performance_dashboard(&self, py: Python) -> PyResult<PyObject> {
-        let store = self.vector_store.read()
+        let store = self
+            .vector_store
+            .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
 
-        let stats = store.get_statistics()
+        let stats = store
+            .get_statistics()
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
         let dashboard_data = PyDict::new(py);
-        
+
         // Basic statistics
         dashboard_data.set_item("total_vectors", stats.total_vectors)?;
         dashboard_data.set_item("embedding_dimension", stats.embedding_dimension)?;
         dashboard_data.set_item("index_type", stats.index_type)?;
         dashboard_data.set_item("memory_usage_mb", stats.memory_usage_bytes / (1024 * 1024))?;
         dashboard_data.set_item("build_time_ms", stats.build_time_ms)?;
-        
+
         // Performance metrics (mock data for demonstration)
         let perf_metrics = PyDict::new(py);
         perf_metrics.set_item("avg_search_time_ms", 2.5)?;
         perf_metrics.set_item("queries_per_second", 400.0)?;
         perf_metrics.set_item("cache_hit_rate", 0.85)?;
         perf_metrics.set_item("index_efficiency", 0.92)?;
-        
+
         dashboard_data.set_item("performance_metrics", perf_metrics)?;
-        
+
         // Health status
         dashboard_data.set_item("health_status", "healthy")?;
         dashboard_data.set_item("last_updated", chrono::Utc::now().to_rfc3339())?;
@@ -963,15 +1080,18 @@ impl PyJupyterVectorTools {
         color_scheme: Option<&str>,
     ) -> PyResult<()> {
         if let Some(backend) = plot_backend {
-            self.config.insert("plot_backend".to_string(), backend.to_string());
+            self.config
+                .insert("plot_backend".to_string(), backend.to_string());
         }
-        
+
         if let Some(max_pts) = max_points {
-            self.config.insert("max_points".to_string(), max_pts.to_string());
+            self.config
+                .insert("max_points".to_string(), max_pts.to_string());
         }
-        
+
         if let Some(colors) = color_scheme {
-            self.config.insert("color_scheme".to_string(), colors.to_string());
+            self.config
+                .insert("color_scheme".to_string(), colors.to_string());
         }
 
         Ok(())
@@ -980,7 +1100,7 @@ impl PyJupyterVectorTools {
     /// Get current visualization configuration
     fn get_visualization_config(&self, py: Python) -> PyResult<PyObject> {
         let py_config = PyDict::new(py);
-        
+
         for (key, value) in &self.config {
             py_config.set_item(key, value)?;
         }
@@ -1000,11 +1120,18 @@ pub struct PyAdvancedNeuralEmbeddings {
 impl PyAdvancedNeuralEmbeddings {
     #[new]
     fn new(model_type: &str, config: Option<HashMap<String, String>>) -> PyResult<Self> {
-        let valid_models = ["gpt4", "bert_large", "roberta_large", "t5_large", "clip", "dall_e"];
-        
+        let valid_models = [
+            "gpt4",
+            "bert_large",
+            "roberta_large",
+            "t5_large",
+            "clip",
+            "dall_e",
+        ];
+
         if !valid_models.contains(&model_type) {
             return Err(EmbeddingError::new_err(format!(
-                "Unsupported model type: {}. Supported models: {:?}", 
+                "Unsupported model type: {}. Supported models: {:?}",
                 model_type, valid_models
             )));
         }
@@ -1023,8 +1150,12 @@ impl PyAdvancedNeuralEmbeddings {
         batch_size: Option<usize>,
     ) -> PyResult<PyObject> {
         let batch_size = batch_size.unwrap_or(32);
-        println!("Generating {} embeddings for {} items with batch size {}", 
-                 self.model_type, content.len(), batch_size);
+        println!(
+            "Generating {} embeddings for {} items with batch size {}",
+            self.model_type,
+            content.len(),
+            batch_size
+        );
 
         // Generate sample embeddings based on model type
         let embedding_dim = match self.model_type.as_str() {
@@ -1064,14 +1195,23 @@ impl PyAdvancedNeuralEmbeddings {
     ) -> PyResult<()> {
         let epochs = epochs.unwrap_or(3);
         let val_split = validation_split.unwrap_or(0.2);
-        
-        println!("Fine-tuning {} model on {} samples for {} epochs with {:.1}% validation split",
-                 self.model_type, training_data.len(), epochs, val_split * 100.0);
+
+        println!(
+            "Fine-tuning {} model on {} samples for {} epochs with {:.1}% validation split",
+            self.model_type,
+            training_data.len(),
+            epochs,
+            val_split * 100.0
+        );
 
         // Update config to reflect fine-tuning
-        self.config.insert("fine_tuned".to_string(), "true".to_string());
-        self.config.insert("training_samples".to_string(), training_data.len().to_string());
-        
+        self.config
+            .insert("fine_tuned".to_string(), "true".to_string());
+        self.config.insert(
+            "training_samples".to_string(),
+            training_data.len().to_string(),
+        );
+
         Ok(())
     }
 
@@ -1079,7 +1219,7 @@ impl PyAdvancedNeuralEmbeddings {
     fn get_model_info(&self, py: Python) -> PyResult<PyObject> {
         let py_info = PyDict::new(py);
         py_info.set_item("model_type", &self.model_type)?;
-        
+
         let (max_tokens, embedding_dim, multimodal) = match self.model_type.as_str() {
             "gpt4" => (8192, 1536, true),
             "bert_large" => (512, 1024, false),
@@ -1093,7 +1233,12 @@ impl PyAdvancedNeuralEmbeddings {
         py_info.set_item("max_tokens", max_tokens)?;
         py_info.set_item("embedding_dimension", embedding_dim)?;
         py_info.set_item("multimodal", multimodal)?;
-        py_info.set_item("fine_tuned", self.config.get("fine_tuned").unwrap_or(&"false".to_string()))?;
+        py_info.set_item(
+            "fine_tuned",
+            self.config
+                .get("fine_tuned")
+                .unwrap_or(&"false".to_string()),
+        )?;
 
         Ok(py_info.into())
     }
@@ -1108,7 +1253,8 @@ impl PyAdvancedNeuralEmbeddings {
     ) -> PyResult<PyObject> {
         if !["gpt4", "clip", "dall_e"].contains(&self.model_type.as_str()) {
             return Err(VectorSearchError::new_err(format!(
-                "Model {} does not support multimodal embeddings", self.model_type
+                "Model {} does not support multimodal embeddings",
+                self.model_type
             )));
         }
 
@@ -1123,13 +1269,15 @@ impl PyAdvancedNeuralEmbeddings {
             total_items += audio.len();
         }
 
-        println!("Generating multimodal embeddings for {} items using {}", 
-                 total_items, self.model_type);
+        println!(
+            "Generating multimodal embeddings for {} items using {}",
+            total_items, self.model_type
+        );
 
         // Generate unified embeddings for all modalities
         let embedding_dim = if self.model_type == "clip" { 512 } else { 1024 };
         let mut embeddings = Vec::new();
-        
+
         for _ in 0..total_items {
             let embedding: Vec<f32> = (0..embedding_dim)
                 .map(|i| (i as f32 * 0.001).cos())
@@ -1157,7 +1305,8 @@ fn parse_similarity_metric(metric: &str) -> PyResult<SimilarityMetric> {
         "pearson" => Ok(SimilarityMetric::Pearson),
         "jaccard" => Ok(SimilarityMetric::Jaccard),
         _ => Err(VectorSearchError::new_err(format!(
-            "Unknown similarity metric: {}", metric
+            "Unknown similarity metric: {}",
+            metric
         ))),
     }
 }
@@ -1205,7 +1354,7 @@ fn batch_normalize(py: Python, vectors: PyReadonlyArray2<f32>) -> PyResult<PyObj
     let rows = normalized_vectors.len();
     let cols = normalized_vectors[0].len();
     let flat: Vec<f32> = normalized_vectors.into_iter().flatten().collect();
-    
+
     // Create a proper 2D shape by reshaping the flat vector
     let array = numpy::PyArray1::from_vec(py, flat)
         .reshape([rows, cols])
@@ -1221,7 +1370,7 @@ fn oxirs_vec(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyVectorStore>()?;
     m.add_class::<PyVectorAnalytics>()?;
     m.add_class::<PySparqlVectorSearch>()?;
-    
+
     // Add enhanced classes (Version 1.1+ features)
     m.add_class::<PyRealTimeEmbeddingPipeline>()?;
     m.add_class::<PyMLFrameworkIntegration>()?;
@@ -1240,18 +1389,21 @@ fn oxirs_vec(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     // Add version info
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    
+
     // Add feature information
-    m.add("__features__", vec![
-        "real_time_embeddings",
-        "ml_framework_integration", 
-        "advanced_neural_embeddings",
-        "multimodal_processing",
-        "model_fine_tuning",
-        "format_conversion",
-        "jupyter_integration",
-        "pandas_dataframe_support"
-    ])?;
+    m.add(
+        "__features__",
+        vec![
+            "real_time_embeddings",
+            "ml_framework_integration",
+            "advanced_neural_embeddings",
+            "multimodal_processing",
+            "model_fine_tuning",
+            "format_conversion",
+            "jupyter_integration",
+            "pandas_dataframe_support",
+        ],
+    )?;
 
     Ok(())
 }

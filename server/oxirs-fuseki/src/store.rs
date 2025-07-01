@@ -6,7 +6,7 @@ use oxirs_core::model::*;
 use oxirs_core::parser::{Parser, RdfFormat as CoreRdfFormat};
 use oxirs_core::query::{QueryEngine, QueryResult as CoreQueryResult};
 use oxirs_core::serializer::Serializer;
-use oxirs_core::Store as CoreStore;
+use oxirs_core::{RdfStore, Store as CoreStore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -141,7 +141,7 @@ impl Store {
         }
 
         // Create the core store - currently will be in-memory until disk persistence is implemented
-        let default_store = CoreStore::open(path.join("default.db"))
+        let default_store = RdfStore::open(path.join("default.db"))
             .map_err(|e| FusekiError::store(format!("Failed to open core store: {}", e)))?;
 
         Ok(Store {
@@ -170,9 +170,9 @@ impl Store {
         }
 
         let store = if config.location.is_empty() {
-            CoreStore::new()
+            RdfStore::new()
         } else {
-            CoreStore::open(&config.location)
+            RdfStore::open(&config.location)
         }
         .map_err(|e| FusekiError::store(format!("Failed to create dataset store: {}", e)))?;
 

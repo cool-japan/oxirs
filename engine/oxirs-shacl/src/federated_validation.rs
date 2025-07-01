@@ -3,15 +3,16 @@
 //! This module provides advanced federated validation capabilities for SHACL,
 //! allowing validation across multiple distributed datasets and remote shape resolution.
 
-use crate::shapes::types::{Shape, NodeShape, PropertyShape};
-use crate::validation::engine::ValidationEngine;
 use crate::report::ValidationReport;
+use crate::validation::engine::ValidationEngine;
 use crate::validation::ValidationViolation;
-use anyhow::{Result, Context, Error as AnyhowError};
-use std::collections::{HashMap, BTreeMap, BTreeSet};
+use crate::{Shape, ShapeType};
+use anyhow::{Context, Error as AnyhowError, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use serde::{Serialize, Deserialize};
+#[cfg(feature = "async")]
 use tokio::time::timeout;
 use url::Url;
 
@@ -100,10 +101,10 @@ pub enum AuthConfig {
     /// Bearer token authentication
     Bearer { token: String },
     /// OAuth2 authentication
-    OAuth2 { 
-        client_id: String, 
-        client_secret: String, 
-        token_url: Url 
+    OAuth2 {
+        client_id: String,
+        client_secret: String,
+        token_url: Url,
     },
     /// Custom authentication headers
     Custom { headers: HashMap<String, String> },
@@ -504,7 +505,7 @@ impl FederatedValidationEngine {
     pub fn new(config: FederatedValidationConfig) -> Self {
         let coordination_engine = if config.enable_coordination {
             Some(Arc::new(CoordinationEngine::new(
-                CoordinationStrategy::LeaderFollower
+                CoordinationStrategy::LeaderFollower,
             )))
         } else {
             None
@@ -515,20 +516,20 @@ impl FederatedValidationEngine {
             endpoints: Arc::new(RwLock::new(HashMap::new())),
             shape_cache: Arc::new(RwLock::new(BTreeMap::new())),
             load_balancer: Arc::new(RwLock::new(LoadBalancer::new(
-                LoadBalancingStrategy::RoundRobin
+                LoadBalancingStrategy::RoundRobin,
             ))),
-            health_monitor: Arc::new(RwLock::new(HealthMonitor::new(
-                Duration::from_secs(60)
-            ))),
+            health_monitor: Arc::new(RwLock::new(HealthMonitor::new(Duration::from_secs(60)))),
             coordination_engine,
         }
     }
 
     /// Register a federated endpoint
     pub fn register_endpoint(&self, endpoint: FederatedEndpoint) -> Result<()> {
-        let mut endpoints = self.endpoints.write()
+        let mut endpoints = self
+            .endpoints
+            .write()
             .map_err(|_| AnyhowError::msg("Failed to acquire endpoints lock"))?;
-        
+
         endpoints.insert(endpoint.url.clone(), endpoint);
         Ok(())
     }
@@ -548,9 +549,11 @@ impl FederatedValidationEngine {
 
         // Perform federated validation
         let responses = if self.config.enable_coordination && selected_endpoints.len() > 1 {
-            self.validate_with_coordination(&request, &selected_endpoints).await?
+            self.validate_with_coordination(&request, &selected_endpoints)
+                .await?
         } else {
-            self.validate_without_coordination(&request, &selected_endpoints).await?
+            self.validate_without_coordination(&request, &selected_endpoints)
+                .await?
         };
 
         // Process and merge responses
@@ -562,7 +565,9 @@ impl FederatedValidationEngine {
             report: merged_report,
             metadata: ResponseMetadata {
                 processing_time,
-                endpoint: selected_endpoints.first().cloned()
+                endpoint: selected_endpoints
+                    .first()
+                    .cloned()
                     .unwrap_or_else(|| Url::parse("http://localhost").unwrap()),
                 cache_status: CacheStatus::Miss, // TODO: Implement cache logic
                 quality_metrics: QualityMetrics {
@@ -596,7 +601,9 @@ impl FederatedValidationEngine {
 
     /// Get cached shape if available and not expired
     fn get_cached_shape(&self, url: &Url) -> Result<Option<CachedShape>> {
-        let cache = self.shape_cache.read()
+        let cache = self
+            .shape_cache
+            .read()
             .map_err(|_| AnyhowError::msg("Failed to acquire shape cache lock"))?;
 
         if let Some(cached) = cache.get(url) {
@@ -612,12 +619,16 @@ impl FederatedValidationEngine {
     async fn fetch_remote_shape(&self, url: &Url) -> Result<Shape> {
         // TODO: Implement HTTP client to fetch shape from remote endpoint
         // This is a placeholder implementation
-        Err(AnyhowError::msg("Remote shape fetching not yet implemented"))
+        Err(AnyhowError::msg(
+            "Remote shape fetching not yet implemented",
+        ))
     }
 
     /// Cache a shape
     fn cache_shape(&self, url: Url, shape: Shape) -> Result<()> {
-        let mut cache = self.shape_cache.write()
+        let mut cache = self
+            .shape_cache
+            .write()
             .map_err(|_| AnyhowError::msg("Failed to acquire shape cache lock"))?;
 
         let cached_shape = CachedShape {
@@ -634,7 +645,9 @@ impl FederatedValidationEngine {
 
     /// Select optimal endpoints for validation request
     async fn select_endpoints(&self, request: &FederatedValidationRequest) -> Result<Vec<Url>> {
-        let endpoints = self.endpoints.read()
+        let endpoints = self
+            .endpoints
+            .read()
             .map_err(|_| AnyhowError::msg("Failed to acquire endpoints lock"))?;
 
         let mut suitable_endpoints = Vec::new();
@@ -650,14 +663,20 @@ impl FederatedValidationEngine {
         }
 
         // Apply load balancing
-        let load_balancer = self.load_balancer.read()
+        let load_balancer = self
+            .load_balancer
+            .read()
             .map_err(|_| AnyhowError::msg("Failed to acquire load balancer lock"))?;
 
         Ok(load_balancer.select_endpoints(&suitable_endpoints, 1))
     }
 
     /// Check if endpoint is suitable for the validation request
-    fn is_endpoint_suitable(&self, endpoint: &FederatedEndpoint, request: &FederatedValidationRequest) -> bool {
+    fn is_endpoint_suitable(
+        &self,
+        endpoint: &FederatedEndpoint,
+        request: &FederatedValidationRequest,
+    ) -> bool {
         // Check health status
         if !endpoint.health.is_healthy {
             return false;
@@ -685,7 +704,9 @@ impl FederatedValidationEngine {
         endpoints: &[Url],
     ) -> Result<HashMap<Url, ValidationReport>> {
         // TODO: Implement coordinated validation
-        Err(AnyhowError::msg("Coordinated validation not yet implemented"))
+        Err(AnyhowError::msg(
+            "Coordinated validation not yet implemented",
+        ))
     }
 
     /// Validate without coordination (simple federated validation)
@@ -752,19 +773,18 @@ impl FederatedValidationEngine {
 
     /// Get federated validation statistics
     pub fn get_statistics(&self) -> Result<FederatedValidationStatistics> {
-        let endpoints = self.endpoints.read()
+        let endpoints = self
+            .endpoints
+            .read()
             .map_err(|_| AnyhowError::msg("Failed to acquire endpoints lock"))?;
 
         let total_endpoints = endpoints.len();
-        let healthy_endpoints = endpoints.values()
-            .filter(|e| e.health.is_healthy)
-            .count();
+        let healthy_endpoints = endpoints.values().filter(|e| e.health.is_healthy).count();
 
-        let total_requests: u64 = endpoints.values()
-            .map(|e| e.metrics.total_requests)
-            .sum();
+        let total_requests: u64 = endpoints.values().map(|e| e.metrics.total_requests).sum();
 
-        let successful_requests: u64 = endpoints.values()
+        let successful_requests: u64 = endpoints
+            .values()
             .map(|e| e.metrics.successful_requests)
             .sum();
 
@@ -774,9 +794,11 @@ impl FederatedValidationEngine {
             total_requests,
             successful_requests,
             cache_hit_rate: 0.0, // TODO: Calculate actual cache hit rate
-            average_response_time: endpoints.values()
+            average_response_time: endpoints
+                .values()
                 .map(|e| e.metrics.avg_response_time)
-                .sum::<f64>() / endpoints.len() as f64,
+                .sum::<f64>()
+                / endpoints.len() as f64,
         })
     }
 }
@@ -811,12 +833,8 @@ impl LoadBalancer {
     /// Select endpoints based on load balancing strategy
     fn select_endpoints(&self, available: &[Url], count: usize) -> Vec<Url> {
         match self.strategy {
-            LoadBalancingStrategy::RoundRobin => {
-                self.select_round_robin(available, count)
-            }
-            LoadBalancingStrategy::Random => {
-                self.select_random(available, count)
-            }
+            LoadBalancingStrategy::RoundRobin => self.select_round_robin(available, count),
+            LoadBalancingStrategy::Random => self.select_random(available, count),
             _ => {
                 // For other strategies, fall back to round-robin for now
                 self.select_round_robin(available, count)
@@ -841,12 +859,15 @@ impl LoadBalancer {
     fn select_random(&self, available: &[Url], count: usize) -> Vec<Url> {
         use rand::seq::SliceRandom;
         let mut rng = rand::thread_rng();
-        
+
         if count >= available.len() {
             return available.to_vec();
         }
 
-        available.choose_multiple(&mut rng, count).cloned().collect()
+        available
+            .choose_multiple(&mut rng, count)
+            .cloned()
+            .collect()
     }
 }
 
@@ -906,7 +927,7 @@ mod tests {
     async fn test_federated_validation_engine_creation() {
         let config = FederatedValidationConfig::default();
         let engine = FederatedValidationEngine::new(config);
-        
+
         // Test basic engine creation
         assert!(engine.endpoints.read().unwrap().is_empty());
     }
@@ -957,7 +978,7 @@ mod tests {
     #[test]
     fn test_load_balancer_round_robin() {
         let load_balancer = LoadBalancer::new(LoadBalancingStrategy::RoundRobin);
-        
+
         let endpoints = vec![
             Url::parse("http://endpoint1.com").unwrap(),
             Url::parse("http://endpoint2.com").unwrap(),

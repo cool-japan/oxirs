@@ -142,7 +142,13 @@ impl OptimisticTransactionInfo {
     }
 
     /// Add write operation to transaction
-    pub fn add_write(&mut self, key: String, version: u64, old_version: Option<u64>, operation: WriteOperation) {
+    pub fn add_write(
+        &mut self,
+        key: String,
+        version: u64,
+        old_version: Option<u64>,
+        operation: WriteOperation,
+    ) {
         self.write_set.push(WriteEntry {
             key,
             version,
@@ -313,32 +319,42 @@ impl OptimisticConcurrencyController {
 
     /// Begin new transaction
     pub fn begin_transaction(&self) -> Result<u64> {
-        let mut counter = self.transaction_counter.lock()
+        let mut counter = self
+            .transaction_counter
+            .lock()
             .map_err(|_| anyhow!("Failed to acquire transaction counter lock"))?;
         *counter += 1;
         let tx_id = *counter;
 
-        let version = *self.version_counter.lock()
+        let version = *self
+            .version_counter
+            .lock()
             .map_err(|_| anyhow!("Failed to acquire version counter lock"))?;
 
         let tx_info = OptimisticTransactionInfo::new(tx_id, version);
 
         {
-            let mut active = self.active_transactions.write()
+            let mut active = self
+                .active_transactions
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
             active.insert(tx_id, tx_info);
         }
 
         // Update version vector
         {
-            let mut vv = self.version_vector.lock()
+            let mut vv = self
+                .version_vector
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire version vector lock"))?;
             vv.increment(self.node_id);
         }
 
         // Update stats
         {
-            let mut stats = self.stats.lock()
+            let mut stats = self
+                .stats
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
             stats.total_transactions += 1;
             stats.current_active_transactions += 1;
@@ -348,10 +364,18 @@ impl OptimisticConcurrencyController {
     }
 
     /// Record read operation
-    pub fn record_read(&self, tx_id: u64, key: String, version: u64, predicate: Option<String>) -> Result<()> {
-        let mut active = self.active_transactions.write()
+    pub fn record_read(
+        &self,
+        tx_id: u64,
+        key: String,
+        version: u64,
+        predicate: Option<String>,
+    ) -> Result<()> {
+        let mut active = self
+            .active_transactions
+            .write()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
-        
+
         if let Some(tx_info) = active.get_mut(&tx_id) {
             tx_info.add_read(key, version, predicate);
             Ok(())
@@ -361,10 +385,19 @@ impl OptimisticConcurrencyController {
     }
 
     /// Record write operation
-    pub fn record_write(&self, tx_id: u64, key: String, version: u64, old_version: Option<u64>, operation: WriteOperation) -> Result<()> {
-        let mut active = self.active_transactions.write()
+    pub fn record_write(
+        &self,
+        tx_id: u64,
+        key: String,
+        version: u64,
+        old_version: Option<u64>,
+        operation: WriteOperation,
+    ) -> Result<()> {
+        let mut active = self
+            .active_transactions
+            .write()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
-        
+
         if let Some(tx_info) = active.get_mut(&tx_id) {
             tx_info.add_write(key, version, old_version, operation);
             Ok(())
@@ -379,7 +412,9 @@ impl OptimisticConcurrencyController {
 
         // Update transaction phase
         {
-            let mut active = self.active_transactions.write()
+            let mut active = self
+                .active_transactions
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
             if let Some(tx_info) = active.get_mut(&tx_id) {
                 tx_info.phase = TransactionPhase::Validating;
@@ -387,9 +422,15 @@ impl OptimisticConcurrencyController {
 
                 // Update stats
                 {
-                    let active_count = active.values().filter(|tx| tx.phase == TransactionPhase::Active).count();
-                    let validating_count = active.values().filter(|tx| tx.phase == TransactionPhase::Validating).count();
-                    
+                    let active_count = active
+                        .values()
+                        .filter(|tx| tx.phase == TransactionPhase::Active)
+                        .count();
+                    let validating_count = active
+                        .values()
+                        .filter(|tx| tx.phase == TransactionPhase::Validating)
+                        .count();
+
                     if let Ok(mut stats) = self.stats.lock() {
                         stats.current_active_transactions = active_count;
                         stats.current_validating_transactions = validating_count;
@@ -409,11 +450,14 @@ impl OptimisticConcurrencyController {
             if let Ok(mut stats) = self.stats.lock() {
                 let validation_ms = validation_time.as_millis() as u64;
                 stats.max_validation_time_ms = stats.max_validation_time_ms.max(validation_ms);
-                
+
                 // Update average validation time
                 let total_validations = stats.validation_failures + stats.committed_transactions;
                 if total_validations > 0 {
-                    stats.avg_validation_time_ms = (stats.avg_validation_time_ms * (total_validations - 1) as f64 + validation_ms as f64) / total_validations as f64;
+                    stats.avg_validation_time_ms = (stats.avg_validation_time_ms
+                        * (total_validations - 1) as f64
+                        + validation_ms as f64)
+                        / total_validations as f64;
                 }
 
                 // Update conflict statistics
@@ -463,12 +507,17 @@ impl OptimisticConcurrencyController {
 
     /// Detect basic read-write and write-write conflicts
     fn detect_basic_conflicts(&self, tx_id: u64) -> Result<Option<ValidationResult>> {
-        let active = self.active_transactions.read()
+        let active = self
+            .active_transactions
+            .read()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
-        let history = self.commit_history.read()
+        let history = self
+            .commit_history
+            .read()
             .map_err(|_| anyhow!("Failed to acquire commit history lock"))?;
 
-        let tx_info = active.get(&tx_id)
+        let tx_info = active
+            .get(&tx_id)
             .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
 
         // Check conflicts with committed transactions
@@ -497,8 +546,10 @@ impl OptimisticConcurrencyController {
                                 conflict_type: ConflictType::WriteWrite,
                                 conflicting_transaction: committed_tx.id,
                                 conflicting_key: write_entry.key.clone(),
-                                reason: format!("Write key '{}' conflicts with committed transaction {}", 
-                                    write_entry.key, committed_tx.id),
+                                reason: format!(
+                                    "Write key '{}' conflicts with committed transaction {}",
+                                    write_entry.key, committed_tx.id
+                                ),
                             }));
                         }
                     }
@@ -511,10 +562,13 @@ impl OptimisticConcurrencyController {
 
     /// Detect advanced conflicts using dependency analysis
     fn detect_advanced_conflicts(&self, tx_id: u64) -> Result<Option<ValidationResult>> {
-        let active = self.active_transactions.read()
+        let active = self
+            .active_transactions
+            .read()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
 
-        let tx_info = active.get(&tx_id)
+        let tx_info = active
+            .get(&tx_id)
             .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
 
         // Check for conflicts with other active transactions
@@ -529,14 +583,20 @@ impl OptimisticConcurrencyController {
                     // Check if there's any overlap in accessed keys
                     let tx_keys = tx_info.get_accessed_keys();
                     let other_keys = other_tx.get_accessed_keys();
-                    
+
                     if !tx_keys.is_disjoint(&other_keys) {
                         return Ok(Some(ValidationResult::Conflict {
                             conflict_type: ConflictType::SerializabilityViolation,
                             conflicting_transaction: *other_tx_id,
-                            conflicting_key: tx_keys.intersection(&other_keys).next().unwrap().clone(),
-                            reason: format!("Priority conflict with transaction {} (priority {} vs {})", 
-                                other_tx_id, tx_info.priority, other_tx.priority),
+                            conflicting_key: tx_keys
+                                .intersection(&other_keys)
+                                .next()
+                                .unwrap()
+                                .clone(),
+                            reason: format!(
+                                "Priority conflict with transaction {} (priority {} vs {})",
+                                other_tx_id, tx_info.priority, other_tx.priority
+                            ),
                         }));
                     }
                 }
@@ -548,12 +608,17 @@ impl OptimisticConcurrencyController {
 
     /// Detect phantom reads using predicate analysis
     fn detect_phantom_reads(&self, tx_id: u64) -> Result<Option<ValidationResult>> {
-        let active = self.active_transactions.read()
+        let active = self
+            .active_transactions
+            .read()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
-        let history = self.commit_history.read()
+        let history = self
+            .commit_history
+            .read()
             .map_err(|_| anyhow!("Failed to acquire commit history lock"))?;
 
-        let tx_info = active.get(&tx_id)
+        let tx_info = active
+            .get(&tx_id)
             .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
 
         // Check for phantom reads with committed transactions
@@ -591,18 +656,23 @@ impl OptimisticConcurrencyController {
     fn validate_serializability(&self, tx_id: u64) -> Result<Option<ValidationResult>> {
         // This is a simplified serializability check
         // A full implementation would build and analyze the conflict graph
-        
-        let active = self.active_transactions.read()
+
+        let active = self
+            .active_transactions
+            .read()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
-        let history = self.commit_history.read()
+        let history = self
+            .commit_history
+            .read()
             .map_err(|_| anyhow!("Failed to acquire commit history lock"))?;
 
-        let tx_info = active.get(&tx_id)
+        let tx_info = active
+            .get(&tx_id)
             .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
 
         // Simple cycle detection in dependency graph
         let mut dependencies = HashMap::new();
-        
+
         for committed_tx in history.iter() {
             if committed_tx.start_time > tx_info.start_time {
                 // Build dependency relationships
@@ -631,14 +701,19 @@ impl OptimisticConcurrencyController {
 
     /// Validate timestamp ordering
     fn validate_timestamp_ordering(&self, tx_id: u64) -> Result<Option<ValidationResult>> {
-        let active = self.active_transactions.read()
+        let active = self
+            .active_transactions
+            .read()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
 
-        let tx_info = active.get(&tx_id)
+        let tx_info = active
+            .get(&tx_id)
             .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
 
         // Check timestamp ordering constraints
-        let current_version = *self.version_counter.lock()
+        let current_version = *self
+            .version_counter
+            .lock()
             .map_err(|_| anyhow!("Failed to acquire version counter lock"))?;
 
         if tx_info.start_version > current_version {
@@ -646,8 +721,10 @@ impl OptimisticConcurrencyController {
                 conflict_type: ConflictType::TimestampViolation,
                 conflicting_transaction: 0,
                 conflicting_key: "timestamp".to_string(),
-                reason: format!("Timestamp ordering violation: start version {} > current version {}", 
-                    tx_info.start_version, current_version),
+                reason: format!(
+                    "Timestamp ordering violation: start version {} > current version {}",
+                    tx_info.start_version, current_version
+                ),
             }));
         }
 
@@ -656,16 +733,21 @@ impl OptimisticConcurrencyController {
 
     /// Commit validated transaction
     pub fn commit_transaction(&self, tx_id: u64) -> Result<u64> {
-        let mut version_counter = self.version_counter.lock()
+        let mut version_counter = self
+            .version_counter
+            .lock()
             .map_err(|_| anyhow!("Failed to acquire version counter lock"))?;
         *version_counter += 1;
         let commit_version = *version_counter;
 
         // Move transaction from active to history
         let tx_info = {
-            let mut active = self.active_transactions.write()
+            let mut active = self
+                .active_transactions
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
-            let mut tx_info = active.remove(&tx_id)
+            let mut tx_info = active
+                .remove(&tx_id)
                 .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
             tx_info.phase = TransactionPhase::Committed;
             tx_info
@@ -673,7 +755,9 @@ impl OptimisticConcurrencyController {
 
         // Add to commit history
         {
-            let mut history = self.commit_history.write()
+            let mut history = self
+                .commit_history
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire commit history lock"))?;
             history.push_back(tx_info);
 
@@ -685,14 +769,18 @@ impl OptimisticConcurrencyController {
 
         // Update version vector
         {
-            let mut vv = self.version_vector.lock()
+            let mut vv = self
+                .version_vector
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire version vector lock"))?;
             vv.increment(self.node_id);
         }
 
         // Update stats
         {
-            let mut stats = self.stats.lock()
+            let mut stats = self
+                .stats
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
             stats.committed_transactions += 1;
             stats.current_active_transactions = stats.current_active_transactions.saturating_sub(1);
@@ -703,18 +791,23 @@ impl OptimisticConcurrencyController {
 
     /// Abort transaction
     pub fn abort_transaction(&self, tx_id: u64) -> Result<()> {
-        let mut active = self.active_transactions.write()
+        let mut active = self
+            .active_transactions
+            .write()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
-        
+
         if let Some(mut tx_info) = active.remove(&tx_id) {
             tx_info.phase = TransactionPhase::Aborted;
 
             // Update stats
             {
-                let mut stats = self.stats.lock()
+                let mut stats = self
+                    .stats
+                    .lock()
                     .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
                 stats.aborted_transactions += 1;
-                stats.current_active_transactions = stats.current_active_transactions.saturating_sub(1);
+                stats.current_active_transactions =
+                    stats.current_active_transactions.saturating_sub(1);
             }
         }
 
@@ -735,7 +828,11 @@ impl OptimisticConcurrencyController {
                 Err(e) => {
                     attempts += 1;
                     if attempts >= self.config.max_retries {
-                        return Err(anyhow!("Transaction failed after {} attempts: {}", attempts, e));
+                        return Err(anyhow!(
+                            "Transaction failed after {} attempts: {}",
+                            attempts,
+                            e
+                        ));
                     }
 
                     // Update retry stats
@@ -758,21 +855,27 @@ impl OptimisticConcurrencyController {
 
     /// Get current statistics
     pub fn get_stats(&self) -> Result<OptimisticStats> {
-        let stats = self.stats.lock()
+        let stats = self
+            .stats
+            .lock()
             .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
         Ok(stats.clone())
     }
 
     /// Get transaction information
     pub fn get_transaction_info(&self, tx_id: u64) -> Result<Option<OptimisticTransactionInfo>> {
-        let active = self.active_transactions.read()
+        let active = self
+            .active_transactions
+            .read()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
         Ok(active.get(&tx_id).cloned())
     }
 
     /// Get all active transaction IDs
     pub fn get_active_transactions(&self) -> Result<Vec<u64>> {
-        let active = self.active_transactions.read()
+        let active = self
+            .active_transactions
+            .read()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
         Ok(active.keys().copied().collect())
     }
@@ -780,19 +883,25 @@ impl OptimisticConcurrencyController {
     /// Clear all transactions (for testing/cleanup)
     pub fn clear(&self) -> Result<()> {
         {
-            let mut active = self.active_transactions.write()
+            let mut active = self
+                .active_transactions
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
             active.clear();
         }
 
         {
-            let mut history = self.commit_history.write()
+            let mut history = self
+                .commit_history
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire commit history lock"))?;
             history.clear();
         }
 
         {
-            let mut stats = self.stats.lock()
+            let mut stats = self
+                .stats
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
             *stats = OptimisticStats::default();
         }
@@ -808,14 +917,24 @@ mod tests {
     #[test]
     fn test_transaction_lifecycle() {
         let controller = OptimisticConcurrencyController::new(1);
-        
+
         // Begin transaction
         let tx_id = controller.begin_transaction().unwrap();
         assert!(tx_id > 0);
 
         // Record operations
-        controller.record_read(tx_id, "key1".to_string(), 1, None).unwrap();
-        controller.record_write(tx_id, "key2".to_string(), 2, Some(1), WriteOperation::Update).unwrap();
+        controller
+            .record_read(tx_id, "key1".to_string(), 1, None)
+            .unwrap();
+        controller
+            .record_write(
+                tx_id,
+                "key2".to_string(),
+                2,
+                Some(1),
+                WriteOperation::Update,
+            )
+            .unwrap();
 
         // Validate transaction
         let result = controller.validate_transaction(tx_id).unwrap();
@@ -834,17 +953,21 @@ mod tests {
     #[test]
     fn test_write_write_conflict() {
         let controller = OptimisticConcurrencyController::new(1);
-        
+
         // First transaction
         let tx1 = controller.begin_transaction().unwrap();
-        controller.record_write(tx1, "key1".to_string(), 1, None, WriteOperation::Insert).unwrap();
+        controller
+            .record_write(tx1, "key1".to_string(), 1, None, WriteOperation::Insert)
+            .unwrap();
         controller.validate_transaction(tx1).unwrap();
         controller.commit_transaction(tx1).unwrap();
 
         // Second transaction with conflicting write
         let tx2 = controller.begin_transaction().unwrap();
-        controller.record_write(tx2, "key1".to_string(), 2, Some(1), WriteOperation::Update).unwrap();
-        
+        controller
+            .record_write(tx2, "key1".to_string(), 2, Some(1), WriteOperation::Update)
+            .unwrap();
+
         let result = controller.validate_transaction(tx2).unwrap();
         match result {
             ValidationResult::Conflict { conflict_type, .. } => {
@@ -857,14 +980,29 @@ mod tests {
     #[test]
     fn test_phantom_read_detection() {
         let controller = OptimisticConcurrencyController::new(1);
-        
+
         // Transaction with predicate read
         let tx1 = controller.begin_transaction().unwrap();
-        controller.record_read(tx1, "range_query".to_string(), 1, Some("name=John".to_string())).unwrap();
+        controller
+            .record_read(
+                tx1,
+                "range_query".to_string(),
+                1,
+                Some("name=John".to_string()),
+            )
+            .unwrap();
 
         // Concurrent transaction inserts matching record
         let tx2 = controller.begin_transaction().unwrap();
-        controller.record_write(tx2, "name=John_Smith".to_string(), 2, None, WriteOperation::Insert).unwrap();
+        controller
+            .record_write(
+                tx2,
+                "name=John_Smith".to_string(),
+                2,
+                None,
+                WriteOperation::Insert,
+            )
+            .unwrap();
         controller.validate_transaction(tx2).unwrap();
         controller.commit_transaction(tx2).unwrap();
 
@@ -881,11 +1019,13 @@ mod tests {
     #[test]
     fn test_statistics_collection() {
         let controller = OptimisticConcurrencyController::new(1);
-        
+
         // Execute multiple transactions
         for i in 0..5 {
             let tx = controller.begin_transaction().unwrap();
-            controller.record_write(tx, format!("key{}", i), i + 1, None, WriteOperation::Insert).unwrap();
+            controller
+                .record_write(tx, format!("key{}", i), i + 1, None, WriteOperation::Insert)
+                .unwrap();
             controller.validate_transaction(tx).unwrap();
             controller.commit_transaction(tx).unwrap();
         }

@@ -1,7 +1,7 @@
 //\! Report generation utilities and high-level interface
 
+use super::{ReportConfig, ReportFormat, ValidationReport};
 use crate::{Result, ShaclError};
-use super::{ValidationReport, ReportFormat, ReportConfig};
 
 /// High-level report generator
 #[derive(Debug, Clone)]
@@ -70,36 +70,43 @@ impl ReportGenerator {
     }
 
     /// Generate multiple formats at once
-    pub fn generate_multiple(&self, report: &ValidationReport, formats: &[ReportFormat]) -> Result<Vec<(ReportFormat, String)>> {
+    pub fn generate_multiple(
+        &self,
+        report: &ValidationReport,
+        formats: &[ReportFormat],
+    ) -> Result<Vec<(ReportFormat, String)>> {
         let mut results = Vec::new();
-        
+
         for format in formats {
             let mut generator = self.clone();
             generator.config.format = *format;
             let content = generator.generate(report)?;
             results.push((*format, content));
         }
-        
+
         Ok(results)
     }
 
     fn generate_jsonld(&self, report: &ValidationReport) -> Result<String> {
         // For now, delegate to JSON and add JSON-LD context
         let json_content = report.to_json_with_config(&self.config)?;
-        
+
         // Parse and add @context
         let mut json_value: serde_json::Value = serde_json::from_str(&json_content)
             .map_err(|e| ShaclError::ReportError(format!("JSON parsing failed: {}", e)))?;
-        
+
         if let serde_json::Value::Object(ref mut obj) = json_value {
-            obj.insert("@context".to_string(), serde_json::json!({
-                "sh": "http://www.w3.org/ns/shacl#",
-                "xsd": "http://www.w3.org/2001/XMLSchema#",
-                "conforms": "sh:conforms",
-                "result": "sh:result"
-            }));
+            obj.insert(
+                "@context".to_string(),
+                serde_json::json!({
+                    "sh": "http://www.w3.org/ns/shacl#",
+                    "xsd": "http://www.w3.org/2001/XMLSchema#",
+                    "conforms": "sh:conforms",
+                    "result": "sh:result"
+                }),
+            );
         }
-        
+
         if self.config.pretty_print {
             serde_json::to_string_pretty(&json_value)
         } else {
@@ -111,7 +118,7 @@ impl ReportGenerator {
     fn generate_rdfxml(&self, report: &ValidationReport) -> Result<String> {
         // Convert to RDF/XML format
         let turtle = report.to_turtle_with_config(&self.config)?;
-        
+
         // Simple conversion (in practice, would use a proper RDF library)
         let rdfxml = format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -124,20 +131,20 @@ impl ReportGenerator {
 </rdf:RDF>"#,
             report.conforms
         );
-        
+
         Ok(rdfxml)
     }
 
     fn generate_ntriples(&self, report: &ValidationReport) -> Result<String> {
         // Convert to N-Triples format
         let mut ntriples = Vec::new();
-        
+
         // Basic conformance triple
         ntriples.push(format!(
             "<urn:report> <http://www.w3.org/ns/shacl#conforms> \"{}\"^^<http://www.w3.org/2001/XMLSchema#boolean> .",
             report.conforms
         ));
-        
+
         // Add violation triples (simplified)
         for (i, violation) in report.violations.iter().enumerate() {
             let violation_uri = format!("<urn:violation{}>", i);
@@ -150,7 +157,7 @@ impl ReportGenerator {
                 violation_uri, violation.focus_node
             ));
         }
-        
+
         Ok(ntriples.join("\n"))
     }
 }
@@ -162,7 +169,10 @@ impl Default for ReportGenerator {
 }
 
 /// Convenient function to generate a report in a specific format
-pub fn generate_report(validation_report: &ValidationReport, format: &ReportFormat) -> Result<String> {
+pub fn generate_report(
+    validation_report: &ValidationReport,
+    format: &ReportFormat,
+) -> Result<String> {
     let config = ReportConfig::default().with_format(*format);
     let generator = ReportGenerator::with_config(config);
     generator.generate(validation_report)
@@ -193,7 +203,7 @@ pub fn generate_reports_to_files(
     formats: &[ReportFormat],
 ) -> Result<Vec<String>> {
     let mut file_paths = Vec::new();
-    
+
     for format in formats {
         let file_path = format!("{}.{}", base_path, format.file_extension());
         let config = ReportConfig::default().with_format(*format);
@@ -201,7 +211,7 @@ pub fn generate_reports_to_files(
         generator.generate_to_file(validation_report, &file_path)?;
         file_paths.push(file_path);
     }
-    
+
     Ok(file_paths)
 }
 
@@ -214,7 +224,7 @@ pub fn generate_summary_report(validation_report: &ValidationReport) -> Result<S
         include_metadata: true,
         ..ReportConfig::default()
     };
-    
+
     generate_report_with_config(validation_report, &config)
 }
 
@@ -234,10 +244,10 @@ mod tests {
     fn test_basic_report_generation() {
         let report = ValidationReport::new();
         let generator = ReportGenerator::new();
-        
+
         let json_result = generator.generate(&report);
         assert!(json_result.is_ok());
-        
+
         let html_generator = generator.with_format(ReportFormat::Html);
         let html_result = html_generator.generate(&report);
         assert!(html_result.is_ok());
@@ -247,10 +257,10 @@ mod tests {
     fn test_multiple_formats() {
         let report = ValidationReport::new();
         let generator = ReportGenerator::new();
-        
+
         let formats = vec![ReportFormat::Json, ReportFormat::Html, ReportFormat::Text];
         let results = generator.generate_multiple(&report, &formats);
-        
+
         assert!(results.is_ok());
         let results = results.unwrap();
         assert_eq!(results.len(), 3);
@@ -259,13 +269,13 @@ mod tests {
     #[test]
     fn test_convenience_functions() {
         let report = ValidationReport::new();
-        
+
         let json_result = generate_report(&report, &ReportFormat::Json);
         assert!(json_result.is_ok());
-        
+
         let summary_result = generate_summary_report(&report);
         assert!(summary_result.is_ok());
-        
+
         let detailed_result = generate_detailed_report(&report);
         assert!(detailed_result.is_ok());
     }

@@ -29,7 +29,7 @@ impl SessionManager {
     pub async fn create_session(&self, user: User) -> FusekiResult<String> {
         let session_id = Uuid::new_v4().to_string();
         let now = Utc::now();
-        
+
         let session = UserSession {
             user: user.clone(),
             created_at: now,
@@ -39,7 +39,7 @@ impl SessionManager {
 
         let mut sessions = self.sessions.write().await;
         sessions.insert(session_id.clone(), session);
-        
+
         info!("Created session for user: {}", user.username);
         Ok(session_id)
     }
@@ -96,7 +96,7 @@ impl SessionManager {
         let initial_count = sessions.len();
 
         sessions.retain(|_, session| now - session.last_accessed <= timeout);
-        
+
         let removed_count = initial_count - sessions.len();
         if removed_count > 0 {
             debug!("Cleaned up {} expired sessions", removed_count);

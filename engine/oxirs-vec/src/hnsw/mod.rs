@@ -4,18 +4,18 @@
 //! for approximate nearest neighbor search with optional GPU acceleration.
 
 pub mod config;
-pub mod types;
-pub mod stats;
-pub mod index;
-pub mod search;
 pub mod construction;
+pub mod index;
 pub mod optimization;
+pub mod search;
+pub mod stats;
+pub mod types;
 
 #[cfg(feature = "gpu")]
 pub mod gpu;
 
 // Re-export main types for convenience
 pub use config::*;
-pub use types::*;
-pub use stats::*;
 pub use index::*;
+pub use stats::*;
+pub use types::*;

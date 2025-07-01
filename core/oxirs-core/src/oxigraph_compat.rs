@@ -4,8 +4,11 @@
 //! allowing OxiRS to be used as a drop-in replacement for Oxigraph.
 
 use crate::{
-    model::*, parser::RdfFormat, rdf_store::{OxirsQueryResults, RdfStore}, serializer::Serializer, OxirsError,
-    Result, Store as OxirsStoreTrait,
+    model::*,
+    parser::RdfFormat,
+    rdf_store::{OxirsQueryResults, RdfStore},
+    serializer::Serializer,
+    OxirsError, Result, Store as OxirsStoreTrait,
 };
 use std::io::{BufRead, Write};
 use std::path::Path;

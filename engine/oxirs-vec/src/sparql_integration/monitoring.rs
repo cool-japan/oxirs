@@ -221,7 +221,8 @@ impl PerformanceReport {
             self.cache_stats.cache_size,
             self.cache_stats.cache_capacity,
             if self.cache_stats.cache_capacity > 0 {
-                (self.cache_stats.cache_size as f64 / self.cache_stats.cache_capacity as f64) * 100.0
+                (self.cache_stats.cache_size as f64 / self.cache_stats.cache_capacity as f64)
+                    * 100.0
             } else {
                 0.0
             },
@@ -274,7 +275,7 @@ mod tests {
 
         let report = monitor.generate_report();
         assert_eq!(report.operation_summaries.len(), 2);
-        
+
         let search_summary = report.operation_summaries.get("search").unwrap();
         assert_eq!(search_summary.count, 2);
         assert_eq!(search_summary.avg_time, Duration::from_millis(150));

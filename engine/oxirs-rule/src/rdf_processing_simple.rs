@@ -38,13 +38,13 @@ pub enum RdfFormat {
 
 /// Simple RDF processor
 pub struct SimpleRdfProcessor {
-    store: Arc<Store>,
+    store: Arc<dyn Store>,
     namespaces: NamespaceManager,
 }
 
 impl SimpleRdfProcessor {
     /// Create a new processor
-    pub fn new(store: Arc<Store>) -> Self {
+    pub fn new(store: Arc<dyn Store>) -> Self {
         Self {
             store,
             namespaces: NamespaceManager::new(),

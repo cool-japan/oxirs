@@ -90,9 +90,9 @@ impl ConsciousnessNeuralNetwork {
         for (i, &hidden_size) in hidden_sizes.iter().enumerate() {
             let layer = NeuralLayer {
                 weights: (0..hidden_size)
-                    .map(|_| (0..prev_size).map(|_| rand::random::<f64>() - 0.5).collect())
+                    .map(|_| (0..prev_size).map(|_| rand::thread_rng().gen::<f64>() - 0.5).collect())
                     .collect(),
-                biases: (0..hidden_size).map(|_| rand::random::<f64>() - 0.5).collect(),
+                biases: (0..hidden_size).map(|_| rand::thread_rng().gen::<f64>() - 0.5).collect(),
                 activation: ActivationFunction::Consciousness,
                 name: format!("consciousness_layer_{}", i),
             };
@@ -105,7 +105,7 @@ impl ConsciousnessNeuralNetwork {
             weights: (0..output_size)
                 .map(|_| (0..prev_size).map(|_| rand::random::<f64>() - 0.5).collect())
                 .collect(),
-            biases: (0..output_size).map(|_| rand::random::<f64>() - 0.5).collect(),
+            biases: (0..output_size).map(|_| rand::thread_rng().gen::<f64>() - 0.5).collect(),
             activation: ActivationFunction::Enlightenment,
             name: "enlightenment_output".to_string(),
         };
@@ -760,7 +760,7 @@ impl IntuitiveEngine {
             .get(&event_signature)
             .copied()
             .unwrap_or(0.5);
-        let intuitive_adjustment = (rand::random::<f64>() - 0.5) * 0.3; // Intuitive noise
+        let intuitive_adjustment = (rand::thread_rng().gen::<f64>() - 0.5) * 0.3; // Intuitive noise
         let gut_feeling = (base_feeling + intuitive_adjustment).clamp(0.0, 1.0);
 
         self.gut_feelings
@@ -840,7 +840,7 @@ impl IntuitiveEngine {
         }
 
         // Intuitive component (creative randomness)
-        connection += (rand::random::<f64>() * 0.4) - 0.2;
+        connection += (rand::thread_rng().gen::<f64>() * 0.4) - 0.2;
 
         connection.clamp(0.0, 1.0)
     }
@@ -1422,7 +1422,7 @@ impl ConsciousnessStreamProcessor {
                 network.get_consciousness()
             },
             // Random consciousness factor for creativity
-            rand::random::<f64>(),
+            rand::thread_rng().gen::<f64>(),
         ]
     }
     

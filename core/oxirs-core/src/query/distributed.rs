@@ -851,22 +851,25 @@ impl QueryRouter {
     }
 
     /// Convert AlgebraTriplePattern to model TriplePattern
-    fn convert_algebra_to_model_pattern(&self, algebra_pattern: &AlgebraTriplePattern) -> Option<algebra::TriplePattern> {
-        use crate::model::pattern::{SubjectPattern, PredicatePattern, ObjectPattern};
-        
+    fn convert_algebra_to_model_pattern(
+        &self,
+        algebra_pattern: &AlgebraTriplePattern,
+    ) -> Option<algebra::TriplePattern> {
+        use crate::model::pattern::{ObjectPattern, PredicatePattern, SubjectPattern};
+
         let subject = match &algebra_pattern.subject {
             algebra::TermPattern::NamedNode(n) => Some(SubjectPattern::NamedNode(n.clone())),
             algebra::TermPattern::BlankNode(b) => Some(SubjectPattern::BlankNode(b.clone())),
             algebra::TermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
             _ => None,
         };
-        
+
         let predicate = match &algebra_pattern.predicate {
             algebra::TermPattern::NamedNode(n) => Some(PredicatePattern::NamedNode(n.clone())),
             algebra::TermPattern::Variable(v) => Some(PredicatePattern::Variable(v.clone())),
             _ => None,
         };
-        
+
         let object = match &algebra_pattern.object {
             algebra::TermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
             algebra::TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
@@ -874,7 +877,7 @@ impl QueryRouter {
             algebra::TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
             _ => None,
         };
-        
+
         Some(algebra::TriplePattern::new(subject, predicate, object))
     }
 

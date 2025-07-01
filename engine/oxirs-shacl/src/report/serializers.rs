@@ -1,7 +1,7 @@
 //\! Report serializers for different output formats
 
-use crate::{Result, ShaclError, PropertyPath};
-use super::{ValidationReport, ReportConfig};
+use super::{ReportConfig, ValidationReport};
+use crate::{PropertyPath, Result, ShaclError};
 
 /// HTML serializer for validation reports
 pub struct HtmlSerializer {
@@ -15,10 +15,10 @@ impl HtmlSerializer {
 
     pub fn serialize(&self, report: &ValidationReport) -> Result<String> {
         let mut html = String::new();
-        
+
         // HTML header with styling
         html.push_str(&self.html_header());
-        
+
         // Report header
         html.push_str(&format!(
             r#"<div class="report-header">
@@ -30,7 +30,11 @@ impl HtmlSerializer {
                 </div>
             </div>"#,
             if report.conforms { "success" } else { "error" },
-            if report.conforms { "✅ Validation Passed" } else { "❌ Validation Failed" },
+            if report.conforms {
+                "✅ Validation Passed"
+            } else {
+                "❌ Validation Failed"
+            },
             report.metadata.formatted_timestamp(),
             report.violation_count()
         ));
@@ -82,7 +86,8 @@ impl HtmlSerializer {
         .metadata-section { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ccc; }
     </style>
 </head>
-<body>"#.to_string()
+<body>"#
+            .to_string()
     }
 
     fn format_summary(&self, summary: &super::ValidationSummary) -> String {
@@ -105,7 +110,7 @@ impl HtmlSerializer {
 
     fn format_violations(&self, report: &ValidationReport) -> String {
         let mut html = String::from(r#"<div class="violations"><h2>Violations</h2>"#);
-        
+
         let violations = if let Some(max) = self.config.max_violations {
             &report.violations[..report.violations.len().min(max)]
         } else {
@@ -139,19 +144,31 @@ impl HtmlSerializer {
             ));
 
             if let Some(component) = &violation.source_constraint_component {
-                html.push_str(&format!("<p><strong>Constraint:</strong> <code>{}</code></p>", component));
+                html.push_str(&format!(
+                    "<p><strong>Constraint:</strong> <code>{}</code></p>",
+                    component
+                ));
             }
 
             if let Some(path) = &violation.result_path {
-                html.push_str(&format!("<p><strong>Path:</strong> <code>{}</code></p>", self.format_path_for_html(path)));
+                html.push_str(&format!(
+                    "<p><strong>Path:</strong> <code>{}</code></p>",
+                    self.format_path_for_html(path)
+                ));
             }
 
             if let Some(value) = &violation.value {
-                html.push_str(&format!("<p><strong>Value:</strong> <code>{}</code></p>", value));
+                html.push_str(&format!(
+                    "<p><strong>Value:</strong> <code>{}</code></p>",
+                    value
+                ));
             }
 
             if let Some(message) = &violation.result_message {
-                html.push_str(&format!("<div class=\"violation-message\">{}</div>", message));
+                html.push_str(&format!(
+                    "<div class=\"violation-message\">{}</div>",
+                    message
+                ));
             }
 
             html.push_str("</div>");
@@ -173,16 +190,28 @@ impl HtmlSerializer {
 
     fn format_metadata(&self, metadata: &super::ReportMetadata) -> String {
         let mut html = String::from(r#"<div class="metadata-section"><h2>Metadata</h2>"#);
-        
-        html.push_str(&format!("<p><strong>SHACL Version:</strong> {}</p>", metadata.shacl_version));
-        html.push_str(&format!("<p><strong>Validator Version:</strong> {}</p>", metadata.validator_version));
-        
+
+        html.push_str(&format!(
+            "<p><strong>SHACL Version:</strong> {}</p>",
+            metadata.shacl_version
+        ));
+        html.push_str(&format!(
+            "<p><strong>Validator Version:</strong> {}</p>",
+            metadata.validator_version
+        ));
+
         if let Some(duration) = metadata.validation_duration {
-            html.push_str(&format!("<p><strong>Validation Duration:</strong> {:.2?}</p>", duration));
+            html.push_str(&format!(
+                "<p><strong>Validation Duration:</strong> {:.2?}</p>",
+                duration
+            ));
         }
 
         if metadata.has_performance_data() {
-            html.push_str(&format!("<p><strong>Performance:</strong> {}</p>", metadata.performance_summary()));
+            html.push_str(&format!(
+                "<p><strong>Performance:</strong> {}</p>",
+                metadata.performance_summary()
+            ));
         }
 
         html.push_str("</div>");
@@ -207,10 +236,10 @@ impl CsvSerializer {
 
     pub fn serialize(&self, report: &ValidationReport) -> Result<String> {
         let mut csv = String::new();
-        
+
         // CSV header
         csv.push_str("Index,Severity,Focus Node,Shape,Constraint,Path,Value,Message\n");
-        
+
         let violations = if let Some(max) = self.config.max_violations {
             &report.violations[..report.violations.len().min(max)]
         } else {
@@ -225,24 +254,29 @@ impl CsvSerializer {
                 self.escape_csv_field(&violation.result_severity.to_string()),
                 self.escape_csv_field(&violation.focus_node.to_string()),
                 self.escape_csv_field(&violation.source_shape.to_string()),
-                self.escape_csv_field(&violation.source_constraint_component
-                    .as_ref()
-                    .map(|c| c.to_string())
-                    .unwrap_or_else(|| "".to_string())
+                self.escape_csv_field(
+                    &violation
+                        .source_constraint_component
+                        .as_ref()
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "".to_string())
                 ),
-                self.escape_csv_field(&violation.result_path
-                    .as_ref()
-                    .map(|p| self.format_path_for_csv(p).unwrap_or_default())
-                    .unwrap_or_else(|| "".to_string())
+                self.escape_csv_field(
+                    &violation
+                        .result_path
+                        .as_ref()
+                        .map(|p| self.format_path_for_csv(p).unwrap_or_default())
+                        .unwrap_or_else(|| "".to_string())
                 ),
-                self.escape_csv_field(&violation.value
-                    .as_ref()
-                    .map(|v| v.to_string())
-                    .unwrap_or_else(|| "".to_string())
+                self.escape_csv_field(
+                    &violation
+                        .value
+                        .as_ref()
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "".to_string())
                 ),
-                self.escape_csv_field(&violation.result_message
-                    .as_ref()
-                    .unwrap_or(&"".to_string())
+                self.escape_csv_field(
+                    &violation.result_message.as_ref().unwrap_or(&"".to_string())
                 )
             ));
         }
@@ -280,14 +314,14 @@ impl TurtleSerializer {
 
     pub fn serialize(&self, report: &ValidationReport) -> Result<String> {
         let mut turtle = String::new();
-        
+
         // Prefixes
         turtle.push_str(&self.turtle_prefixes());
-        
+
         // Report
         turtle.push_str("[] a sh:ValidationReport ;\n");
         turtle.push_str(&format!("   sh:conforms {} ;\n", report.conforms));
-        
+
         let violations = if let Some(max) = self.config.max_violations {
             &report.violations[..report.violations.len().min(max)]
         } else {
@@ -298,25 +332,37 @@ impl TurtleSerializer {
             turtle.push_str("   sh:result\n");
             for (i, violation) in violations.iter().enumerate() {
                 turtle.push_str(&format!("      [ a sh:ValidationResult ;\n"));
-                turtle.push_str(&format!("        sh:resultSeverity sh:{} ;\n", 
+                turtle.push_str(&format!(
+                    "        sh:resultSeverity sh:{} ;\n",
                     match violation.result_severity {
                         crate::Severity::Violation => "Violation",
-                        crate::Severity::Warning => "Warning", 
+                        crate::Severity::Warning => "Warning",
                         crate::Severity::Info => "Info",
                     }
                 ));
-                turtle.push_str(&format!("        sh:focusNode <{}> ;\n", violation.focus_node));
-                turtle.push_str(&format!("        sh:sourceShape <{}> ;\n", violation.source_shape));
-                
+                turtle.push_str(&format!(
+                    "        sh:focusNode <{}> ;\n",
+                    violation.focus_node
+                ));
+                turtle.push_str(&format!(
+                    "        sh:sourceShape <{}> ;\n",
+                    violation.source_shape
+                ));
+
                 if let Some(component) = &violation.source_constraint_component {
-                    turtle.push_str(&format!("        sh:sourceConstraintComponent sh:{} ;\n", component));
+                    turtle.push_str(&format!(
+                        "        sh:sourceConstraintComponent sh:{} ;\n",
+                        component
+                    ));
                 }
-                
+
                 if let Some(message) = &violation.result_message {
-                    turtle.push_str(&format!("        sh:resultMessage \"{}\" ;\n", 
-                        message.replace('\\', "\\\\").replace('"', "\\\"")));
+                    turtle.push_str(&format!(
+                        "        sh:resultMessage \"{}\" ;\n",
+                        message.replace('\\', "\\\\").replace('"', "\\\"")
+                    ));
                 }
-                
+
                 turtle.push_str("      ]");
                 if i < violations.len() - 1 {
                     turtle.push_str(" ,\n");
@@ -337,7 +383,8 @@ impl TurtleSerializer {
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-"#.to_string()
+"#
+        .to_string()
     }
 }
 
@@ -352,7 +399,7 @@ mod tests {
         let report = ValidationReport::new();
         let config = ReportConfig::default();
         let serializer = HtmlSerializer::new(config);
-        
+
         let result = serializer.serialize(&report);
         assert!(result.is_ok());
         let html = result.unwrap();
@@ -365,7 +412,7 @@ mod tests {
         let report = ValidationReport::new();
         let config = ReportConfig::default();
         let serializer = CsvSerializer::new(config);
-        
+
         let result = serializer.serialize(&report);
         assert!(result.is_ok());
         let csv = result.unwrap();
@@ -377,7 +424,7 @@ mod tests {
         let report = ValidationReport::new();
         let config = ReportConfig::default();
         let serializer = TurtleSerializer::new(config);
-        
+
         let result = serializer.serialize(&report);
         assert!(result.is_ok());
         let turtle = result.unwrap();

@@ -1,33 +1,33 @@
 //\! Validation summary statistics and analysis
 
+use crate::{validation::ValidationViolation, ConstraintComponentId, Severity, ShapeId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::{validation::ValidationViolation, Severity, ShapeId, ConstraintComponentId};
 
 /// Summary statistics for validation results
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationSummary {
     /// Total number of violations by severity
     pub violations_by_severity: HashMap<Severity, usize>,
-    
+
     /// Violations grouped by shape
     pub violations_by_shape: HashMap<ShapeId, usize>,
-    
+
     /// Violations grouped by constraint component
     pub violations_by_component: HashMap<ConstraintComponentId, usize>,
-    
+
     /// Total number of nodes validated
     pub nodes_validated: usize,
-    
+
     /// Total number of shapes validated
     pub shapes_validated: usize,
-    
+
     /// Success rate (0.0 to 1.0)
     pub success_rate: f64,
-    
+
     /// Most common violation types
     pub top_violation_types: Vec<(ConstraintComponentId, usize)>,
-    
+
     /// Most problematic shapes
     pub top_problematic_shapes: Vec<(ShapeId, usize)>,
 }
@@ -66,25 +66,29 @@ impl ValidationSummary {
         // Count violations by different categories
         for violation in violations {
             // By severity
-            *self.violations_by_severity
+            *self
+                .violations_by_severity
                 .entry(violation.result_severity)
                 .or_insert(0) += 1;
 
             // By shape
-            *self.violations_by_shape
+            *self
+                .violations_by_shape
                 .entry(violation.source_shape.clone())
                 .or_insert(0) += 1;
 
             // By constraint component
             if let Some(component) = &violation.source_constraint_component {
-                *self.violations_by_component
+                *self
+                    .violations_by_component
                     .entry(component.clone())
                     .or_insert(0) += 1;
             }
         }
 
         // Calculate top violation types
-        let mut component_counts: Vec<_> = self.violations_by_component
+        let mut component_counts: Vec<_> = self
+            .violations_by_component
             .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
@@ -92,7 +96,8 @@ impl ValidationSummary {
         self.top_violation_types = component_counts.into_iter().take(5).collect();
 
         // Calculate top problematic shapes
-        let mut shape_counts: Vec<_> = self.violations_by_shape
+        let mut shape_counts: Vec<_> = self
+            .violations_by_shape
             .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
@@ -129,7 +134,10 @@ impl ValidationSummary {
 
     /// Get violation count for a specific severity
     pub fn violations_for_severity(&self, severity: Severity) -> usize {
-        self.violations_by_severity.get(&severity).copied().unwrap_or(0)
+        self.violations_by_severity
+            .get(&severity)
+            .copied()
+            .unwrap_or(0)
     }
 
     /// Get error count
@@ -164,15 +172,17 @@ impl ValidationSummary {
 
     /// Get the most common violation type
     pub fn most_common_violation_type(&self) -> Option<&ConstraintComponentId> {
-        self.top_violation_types.first().map(|(component, _)| component)
+        self.top_violation_types
+            .first()
+            .map(|(component, _)| component)
     }
 
     /// Generate a text summary
     pub fn text_summary(&self) -> String {
         let mut summary = Vec::new();
-        
+
         summary.push(format!("Total violations: {}", self.total_violations()));
-        
+
         if self.has_violations() {
             summary.push(format!(
                 "Errors: {}, Warnings: {}, Info: {}",
@@ -186,12 +196,18 @@ impl ValidationSummary {
 
         if let Some(shape) = self.most_problematic_shape() {
             let count = self.violations_by_shape.get(shape).unwrap_or(&0);
-            summary.push(format!("Most problematic shape: {} ({} violations)", shape, count));
+            summary.push(format!(
+                "Most problematic shape: {} ({} violations)",
+                shape, count
+            ));
         }
 
         if let Some(component) = self.most_common_violation_type() {
             let count = self.violations_by_component.get(component).unwrap_or(&0);
-            summary.push(format!("Most common violation: {} ({} occurrences)", component, count));
+            summary.push(format!(
+                "Most common violation: {} ({} occurrences)",
+                component, count
+            ));
         }
 
         summary.join("\n")
@@ -222,9 +238,10 @@ impl ValidationSummary {
         }
 
         // Weight errors more heavily than warnings
-        let weighted_score = 1.0 - ((errors * 1.0 + warnings * 0.5) / 
-                                    (self.nodes_validated as f64).max(total_violations));
-        
+        let weighted_score = 1.0
+            - ((errors * 1.0 + warnings * 0.5)
+                / (self.nodes_validated as f64).max(total_violations));
+
         weighted_score.max(0.0).min(1.0)
     }
 
@@ -256,13 +273,13 @@ impl Default for ValidationSummary {
 pub struct ValidationAnalysis {
     /// Basic summary
     pub summary: ValidationSummary,
-    
+
     /// Data quality insights
     pub quality_insights: Vec<QualityInsight>,
-    
+
     /// Recommendations for improvement
     pub recommendations: Vec<String>,
-    
+
     /// Trends analysis (if historical data available)
     pub trends: Option<TrendAnalysis>,
 }
@@ -335,7 +352,8 @@ impl ValidationAnalysis {
         let mut recommendations = Vec::new();
 
         if summary.error_count() > 0 {
-            recommendations.push("Address all error-level violations before deployment".to_string());
+            recommendations
+                .push("Address all error-level violations before deployment".to_string());
         }
 
         if summary.quality_score() < 0.8 {
@@ -343,11 +361,13 @@ impl ValidationAnalysis {
         }
 
         if summary.top_problematic_shapes.len() > 1 {
-            recommendations.push("Review the most problematic shapes for possible refinement".to_string());
+            recommendations
+                .push("Review the most problematic shapes for possible refinement".to_string());
         }
 
         if recommendations.is_empty() {
-            recommendations.push("Data quality looks good! Consider periodic re-validation".to_string());
+            recommendations
+                .push("Data quality looks good! Consider periodic re-validation".to_string());
         }
 
         recommendations

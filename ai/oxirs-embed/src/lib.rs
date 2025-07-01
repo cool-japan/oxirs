@@ -160,8 +160,8 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use uuid::Uuid;
 use std::ops::{Add, Sub};
+use uuid::Uuid;
 
 /// Compatibility wrapper for Vector that provides the old interface
 /// while using the sophisticated oxirs-vec Vector internally
@@ -196,7 +196,7 @@ impl Vector {
 
     /// Convert to ndarray Array1
     pub fn to_array1(&self) -> ndarray::Array1<f32> {
-        ndarray::Array1::from_vec(self.values())
+        ndarray::Array1::from_vec(self.values.clone())
     }
 
     /// Element-wise mapping
@@ -204,12 +204,12 @@ impl Vector {
     where
         F: Fn(f32) -> f32,
     {
-        Self::new(self.values().iter().map(|&x| f(x)).collect())
+        Self::new(self.values.iter().map(|&x| f(x)).collect())
     }
 
     /// Sum of all elements
     pub fn sum(&self) -> f32 {
-        self.values().iter().sum()
+        self.values.iter().sum()
     }
 
     /// Square root of the sum
@@ -229,7 +229,13 @@ impl Vector {
 
     /// Create from VecVector
     pub fn from_vec_vector(vec_vector: VecVector) -> Self {
-        Self { inner: vec_vector }
+        let values = vec_vector.as_f32();
+        let dimensions = values.len();
+        Self {
+            values,
+            dimensions,
+            inner: vec_vector,
+        }
     }
 }
 
@@ -243,12 +249,15 @@ impl Add for &Vector {
             Vector::from_vec_vector(result)
         } else {
             // Fallback to element-wise addition for compatibility
-            let values = self.values();
-            let other_values = other.values();
-            assert_eq!(values.len(), other_values.len(), "Vector dimensions must match");
-            let result_values: Vec<f32> = values
+            assert_eq!(
+                self.values.len(),
+                other.values.len(),
+                "Vector dimensions must match"
+            );
+            let result_values: Vec<f32> = self
+                .values
                 .iter()
-                .zip(other_values.iter())
+                .zip(other.values.iter())
                 .map(|(a, b)| a + b)
                 .collect();
             Vector::new(result_values)
@@ -265,12 +274,15 @@ impl Sub for &Vector {
             Vector::from_vec_vector(result)
         } else {
             // Fallback to element-wise subtraction for compatibility
-            let values = self.values();
-            let other_values = other.values();
-            assert_eq!(values.len(), other_values.len(), "Vector dimensions must match");
-            let result_values: Vec<f32> = values
+            assert_eq!(
+                self.values.len(),
+                other.values.len(),
+                "Vector dimensions must match"
+            );
+            let result_values: Vec<f32> = self
+                .values
                 .iter()
-                .zip(other_values.iter())
+                .zip(other.values.iter())
                 .map(|(a, b)| a - b)
                 .collect();
             Vector::new(result_values)
@@ -582,9 +594,9 @@ pub use neural_symbolic_integration::{
     RuleBasedConfig, SymbolicReasoningConfig,
 };
 pub use novel_architectures::{
-    ActivationType, ArchitectureParams, ArchitectureState, ArchitectureType,
-    CurvatureComputation, CurvatureMethod, CurvatureType, DynamicsConfig, EntanglementStructure,
-    EquivarianceGroup, FlowType, GeometricConfig, GeometricParams, GeometricSpace, GeometricState,
+    ActivationType, ArchitectureParams, ArchitectureState, ArchitectureType, CurvatureComputation,
+    CurvatureMethod, CurvatureType, DynamicsConfig, EntanglementStructure, EquivarianceGroup,
+    FlowType, GeometricConfig, GeometricParams, GeometricSpace, GeometricState,
     GraphTransformerParams, GraphTransformerState, HyperbolicDistance, HyperbolicInit,
     HyperbolicManifold, HyperbolicParams, HyperbolicState, IntegrationScheme, IntegrationStats,
     ManifoldLearning, ManifoldMethod, ManifoldOptimizer, NeuralODEParams, NeuralODEState,

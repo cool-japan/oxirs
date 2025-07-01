@@ -236,9 +236,9 @@ mod triple_serde {
     {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("Triple", 3)?;
-        state.serialize_field("subject", &format!("{}", triple.subject))?;
-        state.serialize_field("predicate", &format!("{}", triple.predicate))?;
-        state.serialize_field("object", &format!("{}", triple.object))?;
+        state.serialize_field("subject", &format!("{}", triple.subject()))?;
+        state.serialize_field("predicate", &format!("{}", triple.predicate()))?;
+        state.serialize_field("object", &format!("{}", triple.object()))?;
         state.end()
     }
 
@@ -246,9 +246,9 @@ mod triple_serde {
     where
         D: Deserializer<'de>,
     {
+        use oxirs_core::{BlankNode, Literal, NamedNode, Subject, Term};
         use serde::de::{self, MapAccess, Visitor};
         use std::fmt;
-        use oxirs_core::{NamedNode, BlankNode, Literal, Subject, Term};
 
         #[derive(Deserialize)]
         struct TripleHelper {
@@ -306,10 +306,16 @@ mod triple_serde {
 
                 // Parse subject
                 let subject = if subject.starts_with("_:") {
-                    Subject::BlankNode(BlankNode::new(&subject[2..]).map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?)
+                    Subject::BlankNode(
+                        BlankNode::new(&subject[2..])
+                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?,
+                    )
                 } else if subject.starts_with('<') && subject.ends_with('>') {
                     let iri = &subject[1..subject.len() - 1];
-                    Subject::NamedNode(NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?)
+                    Subject::NamedNode(
+                        NamedNode::new(iri)
+                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?,
+                    )
                 } else {
                     return Err(de::Error::custom("Invalid subject format"));
                 };
@@ -317,17 +323,24 @@ mod triple_serde {
                 // Parse predicate
                 let predicate = if predicate.starts_with('<') && predicate.ends_with('>') {
                     let iri = &predicate[1..predicate.len() - 1];
-                    NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid predicate IRI: {}", e)))?
+                    NamedNode::new(iri)
+                        .map_err(|e| de::Error::custom(format!("Invalid predicate IRI: {}", e)))?
                 } else {
                     return Err(de::Error::custom("Invalid predicate format"));
                 };
 
                 // Parse object
                 let object = if object.starts_with("_:") {
-                    Term::BlankNode(BlankNode::new(&object[2..]).map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?)
+                    Term::BlankNode(
+                        BlankNode::new(&object[2..])
+                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?,
+                    )
                 } else if object.starts_with('<') && object.ends_with('>') {
                     let iri = &object[1..object.len() - 1];
-                    Term::NamedNode(NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?)
+                    Term::NamedNode(
+                        NamedNode::new(iri)
+                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?,
+                    )
                 } else if object.starts_with('"') {
                     // Parse literal (simplified - just treat as string for now)
                     let literal_value = &object[1..object.len() - 1];
@@ -340,7 +353,11 @@ mod triple_serde {
             }
         }
 
-        deserializer.deserialize_struct("Triple", &["subject", "predicate", "object"], TripleVisitor)
+        deserializer.deserialize_struct(
+            "Triple",
+            &["subject", "predicate", "object"],
+            TripleVisitor,
+        )
     }
 }
 
@@ -354,10 +371,10 @@ mod quad_serde {
     {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("Quad", 4)?;
-        state.serialize_field("subject", &format!("{}", quad.subject))?;
-        state.serialize_field("predicate", &format!("{}", quad.predicate))?;
-        state.serialize_field("object", &format!("{}", quad.object))?;
-        state.serialize_field("graph_name", &format!("{}", quad.graph_name))?;
+        state.serialize_field("subject", &format!("{}", quad.subject()))?;
+        state.serialize_field("predicate", &format!("{}", quad.predicate()))?;
+        state.serialize_field("object", &format!("{}", quad.object()))?;
+        state.serialize_field("graph_name", &format!("{}", quad.graph_name()))?;
         state.end()
     }
 
@@ -365,9 +382,9 @@ mod quad_serde {
     where
         D: Deserializer<'de>,
     {
+        use oxirs_core::{BlankNode, GraphName, Literal, NamedNode, Subject, Term};
         use serde::de::{self, MapAccess, Visitor};
         use std::fmt;
-        use oxirs_core::{NamedNode, BlankNode, Literal, Subject, Term, GraphName};
 
         struct QuadVisitor;
 
@@ -422,14 +439,21 @@ mod quad_serde {
                 let subject = subject.ok_or_else(|| de::Error::missing_field("subject"))?;
                 let predicate = predicate.ok_or_else(|| de::Error::missing_field("predicate"))?;
                 let object = object.ok_or_else(|| de::Error::missing_field("object"))?;
-                let graph_name = graph_name.ok_or_else(|| de::Error::missing_field("graph_name"))?;
+                let graph_name =
+                    graph_name.ok_or_else(|| de::Error::missing_field("graph_name"))?;
 
                 // Parse subject
                 let subject = if subject.starts_with("_:") {
-                    Subject::BlankNode(BlankNode::new(&subject[2..]).map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?)
+                    Subject::BlankNode(
+                        BlankNode::new(&subject[2..])
+                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?,
+                    )
                 } else if subject.starts_with('<') && subject.ends_with('>') {
                     let iri = &subject[1..subject.len() - 1];
-                    Subject::NamedNode(NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?)
+                    Subject::NamedNode(
+                        NamedNode::new(iri)
+                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?,
+                    )
                 } else {
                     return Err(de::Error::custom("Invalid subject format"));
                 };
@@ -437,17 +461,24 @@ mod quad_serde {
                 // Parse predicate
                 let predicate = if predicate.starts_with('<') && predicate.ends_with('>') {
                     let iri = &predicate[1..predicate.len() - 1];
-                    NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid predicate IRI: {}", e)))?
+                    NamedNode::new(iri)
+                        .map_err(|e| de::Error::custom(format!("Invalid predicate IRI: {}", e)))?
                 } else {
                     return Err(de::Error::custom("Invalid predicate format"));
                 };
 
                 // Parse object
                 let object = if object.starts_with("_:") {
-                    Term::BlankNode(BlankNode::new(&object[2..]).map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?)
+                    Term::BlankNode(
+                        BlankNode::new(&object[2..])
+                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?,
+                    )
                 } else if object.starts_with('<') && object.ends_with('>') {
                     let iri = &object[1..object.len() - 1];
-                    Term::NamedNode(NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?)
+                    Term::NamedNode(
+                        NamedNode::new(iri)
+                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?,
+                    )
                 } else if object.starts_with('"') {
                     // Parse literal (simplified - just treat as string for now)
                     let literal_value = &object[1..object.len() - 1];
@@ -459,9 +490,15 @@ mod quad_serde {
                 // Parse graph name
                 let graph_name = if graph_name.starts_with('<') && graph_name.ends_with('>') {
                     let iri = &graph_name[1..graph_name.len() - 1];
-                    GraphName::NamedNode(NamedNode::new(iri).map_err(|e| de::Error::custom(format!("Invalid graph IRI: {}", e)))?)
+                    GraphName::NamedNode(
+                        NamedNode::new(iri)
+                            .map_err(|e| de::Error::custom(format!("Invalid graph IRI: {}", e)))?,
+                    )
                 } else if graph_name.starts_with("_:") {
-                    GraphName::BlankNode(BlankNode::new(&graph_name[2..]).map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?)
+                    GraphName::BlankNode(
+                        BlankNode::new(&graph_name[2..])
+                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?,
+                    )
                 } else {
                     return Err(de::Error::custom("Invalid graph name format"));
                 };
@@ -470,7 +507,11 @@ mod quad_serde {
             }
         }
 
-        deserializer.deserialize_struct("Quad", &["subject", "predicate", "object", "graph_name"], QuadVisitor)
+        deserializer.deserialize_struct(
+            "Quad",
+            &["subject", "predicate", "object", "graph_name"],
+            QuadVisitor,
+        )
     }
 }
 

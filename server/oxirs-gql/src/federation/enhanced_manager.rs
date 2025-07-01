@@ -6,7 +6,9 @@
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
@@ -265,6 +267,209 @@ pub struct FederationContext {
     pub operation_name: Option<String>,
 }
 
+/// Query performance analytics tracker
+#[derive(Debug, Clone)]
+pub struct QueryAnalytics {
+    pub query_patterns: HashMap<String, QueryPatternStats>,
+    pub service_performance: HashMap<String, ServicePerformanceStats>,
+    pub recent_queries: Vec<QueryExecutionStats>,
+    pub max_history: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueryPatternStats {
+    pub pattern_hash: String,
+    pub execution_count: u64,
+    pub average_duration: Duration,
+    pub success_rate: f64,
+    pub preferred_services: Vec<String>,
+    pub complexity_score: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ServicePerformanceStats {
+    pub service_id: String,
+    pub total_requests: u64,
+    pub successful_requests: u64,
+    pub average_response_time: Duration,
+    pub error_rate: f64,
+    pub query_type_performance: HashMap<String, Duration>,
+    pub last_updated: Instant,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueryExecutionStats {
+    pub query_hash: String,
+    pub service_id: String,
+    pub duration: Duration,
+    pub success: bool,
+    pub timestamp: Instant,
+    pub complexity: f64,
+    pub cache_hit: bool,
+}
+
+impl QueryAnalytics {
+    pub fn new() -> Self {
+        Self {
+            query_patterns: HashMap::new(),
+            service_performance: HashMap::new(),
+            recent_queries: Vec::new(),
+            max_history: 10000,
+        }
+    }
+
+    /// Record a query execution
+    pub fn record_execution(&mut self, stats: QueryExecutionStats) {
+        // Update query pattern statistics
+        let pattern_stats = self
+            .query_patterns
+            .entry(stats.query_hash.clone())
+            .or_insert_with(|| QueryPatternStats {
+                pattern_hash: stats.query_hash.clone(),
+                execution_count: 0,
+                average_duration: Duration::from_millis(0),
+                success_rate: 1.0,
+                preferred_services: Vec::new(),
+                complexity_score: stats.complexity,
+            });
+
+        pattern_stats.execution_count += 1;
+        pattern_stats.average_duration = Duration::from_nanos(
+            ((pattern_stats.average_duration.as_nanos() as u64
+                * (pattern_stats.execution_count - 1))
+                + stats.duration.as_nanos() as u64)
+                / pattern_stats.execution_count,
+        );
+
+        if stats.success {
+            pattern_stats.success_rate =
+                (pattern_stats.success_rate * (pattern_stats.execution_count - 1) as f64 + 1.0)
+                    / pattern_stats.execution_count as f64;
+        } else {
+            pattern_stats.success_rate = (pattern_stats.success_rate
+                * (pattern_stats.execution_count - 1) as f64)
+                / pattern_stats.execution_count as f64;
+        }
+
+        // Update service performance statistics
+        let service_stats = self
+            .service_performance
+            .entry(stats.service_id.clone())
+            .or_insert_with(|| ServicePerformanceStats {
+                service_id: stats.service_id.clone(),
+                total_requests: 0,
+                successful_requests: 0,
+                average_response_time: Duration::from_millis(0),
+                error_rate: 0.0,
+                query_type_performance: HashMap::new(),
+                last_updated: Instant::now(),
+            });
+
+        service_stats.total_requests += 1;
+        if stats.success {
+            service_stats.successful_requests += 1;
+        }
+
+        service_stats.average_response_time = Duration::from_nanos(
+            ((service_stats.average_response_time.as_nanos() as u64
+                * (service_stats.total_requests - 1))
+                + stats.duration.as_nanos() as u64)
+                / service_stats.total_requests,
+        );
+
+        service_stats.error_rate =
+            1.0 - (service_stats.successful_requests as f64 / service_stats.total_requests as f64);
+        service_stats.last_updated = Instant::now();
+
+        // Add to recent queries history
+        self.recent_queries.push(stats);
+        if self.recent_queries.len() > self.max_history {
+            self.recent_queries
+                .drain(0..self.recent_queries.len() - self.max_history);
+        }
+    }
+
+    /// Get recommended service for a query pattern
+    pub fn get_recommended_service(&self, query_hash: &str) -> Option<String> {
+        if let Some(pattern_stats) = self.query_patterns.get(query_hash) {
+            // Find the service with best performance for this pattern
+            let mut best_service = None;
+            let mut best_score = f64::NEG_INFINITY;
+
+            for (service_id, service_stats) in &self.service_performance {
+                // Calculate a composite score based on success rate, response time, and error rate
+                let success_weight = 0.4;
+                let response_time_weight = 0.4;
+                let error_rate_weight = 0.2;
+
+                let success_score = service_stats.successful_requests as f64
+                    / service_stats.total_requests.max(1) as f64;
+                let response_time_score =
+                    1.0 / (service_stats.average_response_time.as_millis().max(1) as f64);
+                let error_score = 1.0 - service_stats.error_rate;
+
+                let composite_score = (success_score * success_weight)
+                    + (response_time_score * response_time_weight)
+                    + (error_score * error_rate_weight);
+
+                if composite_score > best_score {
+                    best_score = composite_score;
+                    best_service = Some(service_id.clone());
+                }
+            }
+
+            best_service
+        } else {
+            None
+        }
+    }
+
+    /// Get performance insights
+    pub fn get_performance_insights(&self) -> HashMap<String, serde_json::Value> {
+        let mut insights = HashMap::new();
+
+        insights.insert(
+            "total_query_patterns".to_string(),
+            serde_json::Value::Number(self.query_patterns.len().into()),
+        );
+
+        insights.insert(
+            "total_services".to_string(),
+            serde_json::Value::Number(self.service_performance.len().into()),
+        );
+
+        insights.insert(
+            "recent_queries_count".to_string(),
+            serde_json::Value::Number(self.recent_queries.len().into()),
+        );
+
+        // Calculate overall system performance
+        let total_requests: u64 = self
+            .service_performance
+            .values()
+            .map(|s| s.total_requests)
+            .sum();
+
+        let total_successful: u64 = self
+            .service_performance
+            .values()
+            .map(|s| s.successful_requests)
+            .sum();
+
+        if total_requests > 0 {
+            insights.insert(
+                "overall_success_rate".to_string(),
+                serde_json::Value::Number(
+                    serde_json::Number::from_f64(total_successful as f64 / total_requests as f64)
+                        .unwrap_or_else(|| serde_json::Number::from(0)),
+                ),
+            );
+        }
+
+        insights
+    }
+}
+
 /// Query execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationResult {
@@ -298,6 +503,7 @@ pub struct EnhancedFederationManager {
     load_balancer: Arc<Mutex<LoadBalancer>>,
     merged_schema: Arc<RwLock<Option<Schema>>>,
     schema_synchronizer: Arc<RealTimeSchemaSynchronizer>,
+    query_analytics: Arc<Mutex<QueryAnalytics>>,
     http_client: reqwest::Client,
 }
 
@@ -308,6 +514,8 @@ pub struct LoadBalancer {
     round_robin_counter: usize,
     request_counts: HashMap<String, usize>,
     config: LoadBalancingConfig,
+    hash_ring: BTreeMap<u64, String>,
+    virtual_nodes_per_service: usize,
 }
 
 impl LoadBalancer {
@@ -317,7 +525,30 @@ impl LoadBalancer {
             round_robin_counter: 0,
             request_counts: HashMap::new(),
             config,
+            hash_ring: BTreeMap::new(),
+            virtual_nodes_per_service: 150, // Standard for consistent hashing
         }
+    }
+
+    /// Update the hash ring with available services
+    pub fn update_hash_ring(&mut self, services: &[ServiceInfo]) {
+        self.hash_ring.clear();
+
+        for service in services {
+            // Create virtual nodes for better distribution
+            for i in 0..self.virtual_nodes_per_service {
+                let virtual_key = format!("{}:{}", service.id, i);
+                let hash = self.hash_string(&virtual_key);
+                self.hash_ring.insert(hash, service.id.clone());
+            }
+        }
+    }
+
+    /// Hash a string to u64
+    fn hash_string(&self, s: &str) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        s.hash(&mut hasher);
+        hasher.finish()
     }
 
     /// Select the best service for a request
@@ -356,7 +587,11 @@ impl LoadBalancer {
             }
             LoadBalancingAlgorithm::Adaptive => self.select_adaptive(&healthy_services),
             LoadBalancingAlgorithm::ConsistentHashing => {
-                // For consistent hashing, we'd use the query_hash
+                // Update hash ring with current healthy services
+                let healthy_service_infos: Vec<_> =
+                    healthy_services.iter().map(|&s| s.clone()).collect();
+                self.update_hash_ring(&healthy_service_infos);
+                // Use the query_hash for consistent routing
                 self.select_consistent_hash(&healthy_services, _query_hash.unwrap_or(0))
             }
         }
@@ -419,13 +654,20 @@ impl LoadBalancer {
         self.select_weighted_round_robin(services)
     }
 
-    fn select_consistent_hash(&self, services: &[&ServiceInfo], hash: u64) -> Option<String> {
-        if services.is_empty() {
+    fn select_consistent_hash(&self, _services: &[&ServiceInfo], hash: u64) -> Option<String> {
+        if self.hash_ring.is_empty() {
             return None;
         }
 
-        let index = (hash as usize) % services.len();
-        Some(services[index].id.clone())
+        // Find the first node in the ring that is >= hash
+        if let Some((_, service_id)) = self.hash_ring.range(hash..).next() {
+            Some(service_id.clone())
+        } else {
+            // Wrap around to the first node in the ring
+            self.hash_ring
+                .first_key_value()
+                .map(|(_, service_id)| service_id.clone())
+        }
     }
 
     pub fn record_completion(&mut self, service_id: &str) {
@@ -469,6 +711,7 @@ impl EnhancedFederationManager {
             load_balancer,
             merged_schema: Arc::new(RwLock::new(None)),
             schema_synchronizer,
+            query_analytics: Arc::new(Mutex::new(QueryAnalytics::new())),
             http_client,
         };
 
@@ -505,6 +748,15 @@ impl EnhancedFederationManager {
 
         debug!("Executing federated query: {}", context.request_id);
 
+        // Generate query hash for analytics
+        let query_hash = self.generate_query_hash(document, &variables);
+
+        // Check analytics for recommended service
+        let recommended_service = {
+            let analytics = self.query_analytics.lock().await;
+            analytics.get_recommended_service(&query_hash)
+        };
+
         // Get current schema
         let schema = {
             let schema_guard = self.merged_schema.read().await;
@@ -520,16 +772,145 @@ impl EnhancedFederationManager {
             .await
             .context("Failed to plan federated query")?;
 
-        // Execute the plan
-        let result = self.execute_query_plan(&query_plan, &context).await?;
+        // Execute the plan with analytics-aware service selection
+        let result = self
+            .execute_query_plan_with_analytics(
+                &query_plan,
+                &context,
+                &query_hash,
+                recommended_service,
+            )
+            .await;
 
         let execution_time = start_time.elapsed();
+        let success = result.is_ok();
+
+        // Record execution statistics
+        if let Ok(ref plan_result) = result {
+            // Record analytics for each service used
+            for service_id in &query_plan.services {
+                let stats = QueryExecutionStats {
+                    query_hash: query_hash.clone(),
+                    service_id: service_id.clone(),
+                    duration: execution_time,
+                    success,
+                    timestamp: start_time,
+                    complexity: self.calculate_query_complexity(document),
+                    cache_hit: false, // This would be determined by cache layer
+                };
+
+                let mut analytics = self.query_analytics.lock().await;
+                analytics.record_execution(stats);
+            }
+        }
+
         debug!(
-            "Query executed in {:?}: {}",
-            execution_time, context.request_id
+            "Query executed in {:?}: {} (success: {})",
+            execution_time, context.request_id, success
         );
 
-        Ok(result)
+        result
+    }
+
+    /// Generate a hash for the query for analytics tracking
+    fn generate_query_hash(
+        &self,
+        document: &Document,
+        variables: &HashMap<String, Value>,
+    ) -> String {
+        let mut hasher = DefaultHasher::new();
+
+        // Create a simplified representation of the query for hashing
+        let query_str = format!("{:?}", document);
+        query_str.hash(&mut hasher);
+
+        // Include variables in the hash if they significantly affect query characteristics
+        let variables_str = format!("{:?}", variables);
+        variables_str.hash(&mut hasher);
+
+        format!("{:x}", hasher.finish())
+    }
+
+    /// Calculate query complexity score
+    fn calculate_query_complexity(&self, document: &Document) -> f64 {
+        let mut complexity = 0.0;
+
+        // Basic complexity calculation based on operation type and depth
+        for definition in &document.definitions {
+            match definition {
+                crate::ast::Definition::Operation(op) => {
+                    complexity += match op.operation_type {
+                        OperationType::Query => 1.0,
+                        OperationType::Mutation => 2.0,
+                        OperationType::Subscription => 1.5,
+                    };
+
+                    // Add complexity based on selection depth
+                    complexity += self.calculate_selection_complexity(&op.selection_set, 0) as f64;
+                }
+                crate::ast::Definition::Fragment(_) => {
+                    complexity += 0.5; // Fragments add some complexity
+                }
+            }
+        }
+
+        complexity
+    }
+
+    /// Calculate complexity of a selection set recursively
+    fn calculate_selection_complexity(
+        &self,
+        selection_set: &crate::ast::SelectionSet,
+        depth: usize,
+    ) -> usize {
+        let mut complexity = depth * 2; // Depth multiplier
+
+        for selection in &selection_set.selections {
+            match selection {
+                crate::ast::Selection::Field(field) => {
+                    complexity += 1;
+                    if let Some(ref selection_set) = field.selection_set {
+                        complexity += self.calculate_selection_complexity(selection_set, depth + 1);
+                    }
+                    // Add complexity for arguments
+                    complexity += field.arguments.len();
+                }
+                crate::ast::Selection::InlineFragment(fragment) => {
+                    complexity +=
+                        self.calculate_selection_complexity(&fragment.selection_set, depth + 1);
+                }
+                crate::ast::Selection::FragmentSpread(_) => {
+                    complexity += 2; // Fragment spreads add complexity
+                }
+            }
+        }
+
+        complexity
+    }
+
+    /// Execute query plan with analytics-aware service selection
+    async fn execute_query_plan_with_analytics(
+        &self,
+        query_plan: &QueryPlan,
+        context: &FederationContext,
+        query_hash: &str,
+        recommended_service: Option<String>,
+    ) -> Result<FederationResult> {
+        // If we have a recommended service from analytics, try to use it
+        if let Some(service_id) = recommended_service {
+            debug!("Using analytics-recommended service: {}", service_id);
+        }
+
+        // For now, delegate to the original query plan execution
+        // In a full implementation, this would integrate the recommended service
+        // into the service selection logic
+        self.execute_query_plan(query_plan, context).await
+    }
+
+    /// Get performance analytics insights
+    pub async fn get_analytics_insights(&self) -> HashMap<String, serde_json::Value> {
+        let analytics = self.query_analytics.lock().await;
+        analytics.get_performance_insights()
     }
 
     /// Get the current merged schema

@@ -18,7 +18,7 @@ pub struct RuleIntegration {
     /// Core rule engine
     pub rule_engine: RuleEngine,
     /// Core RDF store
-    pub store: Store,
+    pub store: Box<dyn Store>,
 }
 
 impl Default for RuleIntegration {
@@ -32,15 +32,15 @@ impl RuleIntegration {
     pub fn new() -> Self {
         Self {
             rule_engine: RuleEngine::new(),
-            store: Store::new().unwrap(),
+            store: Box::new(oxirs_core::RdfStore::new().unwrap()),
         }
     }
 
     /// Create integration with an existing store
-    pub fn with_store(store: Store) -> Self {
+    pub fn with_store(store: impl Store + 'static) -> Self {
         Self {
             rule_engine: RuleEngine::new(),
-            store,
+            store: Box::new(store),
         }
     }
 

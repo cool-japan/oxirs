@@ -147,7 +147,11 @@ pub enum QuadIndexType {
 impl QuadIndexType {
     /// Get all standard quad index types
     pub fn all_standard() -> &'static [QuadIndexType] {
-        &[QuadIndexType::SPOG, QuadIndexType::POSG, QuadIndexType::OSPG]
+        &[
+            QuadIndexType::SPOG,
+            QuadIndexType::POSG,
+            QuadIndexType::OSPG,
+        ]
     }
 
     /// Get all possible quad index types
@@ -263,7 +267,11 @@ impl QuadKey {
 
 impl Display for QuadKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({}, {}, {}, {})", self.first, self.second, self.third, self.fourth)
+        write!(
+            f,
+            "({}, {}, {}, {})",
+            self.first, self.second, self.third, self.fourth
+        )
     }
 }
 
@@ -927,12 +935,7 @@ impl TripleStore {
             // One or more unbound - use general scan
             _ => {
                 results.extend(self.scan_for_quad_pattern_tx(
-                    tx_id,
-                    best_index,
-                    subject,
-                    predicate,
-                    object,
-                    graph,
+                    tx_id, best_index, subject, predicate, object, graph,
                 )?);
             }
         }

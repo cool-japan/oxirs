@@ -20,7 +20,7 @@ impl EnhancedAggregationProcessor {
             functions: HashMap::new(),
             optimization_cache: HashMap::new(),
         };
-        
+
         processor.register_builtin_functions();
         processor
     }
@@ -78,12 +78,17 @@ impl EnhancedAggregationProcessor {
     /// Process aggregation functions in a query
     pub fn process_aggregations(&mut self, query: &str) -> FusekiResult<String> {
         let mut processed = query.to_string();
-        
+
         // Find and process each aggregation function
-        for (name, function) in &self.functions {
-            processed = self.process_function(&processed, name, function)?;
+        let functions: Vec<(String, AggregationFunction)> = self
+            .functions
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (name, function) in functions {
+            processed = self.process_function(&processed, &name, &function)?;
         }
-        
+
         Ok(processed)
     }
 
@@ -96,7 +101,7 @@ impl EnhancedAggregationProcessor {
     ) -> FusekiResult<String> {
         let pattern = format!("{}(", function_name);
         let mut result = query.to_string();
-        
+
         while let Some(pos) = result.find(&pattern) {
             if let Some(func_call) = self.extract_function_call(&result[pos..]) {
                 let optimized = self.optimize_function_call(&func_call, function)?;
@@ -105,7 +110,7 @@ impl EnhancedAggregationProcessor {
                 break;
             }
         }
-        
+
         Ok(result)
     }
 
@@ -114,13 +119,13 @@ impl EnhancedAggregationProcessor {
         let mut paren_count = 0;
         let mut in_string = false;
         let mut escape_next = false;
-        
+
         for (i, ch) in text.char_indices() {
             if escape_next {
                 escape_next = false;
                 continue;
             }
-            
+
             match ch {
                 '\\' => escape_next = true,
                 '"' | '\'' => in_string = !in_string,
@@ -134,7 +139,7 @@ impl EnhancedAggregationProcessor {
                 _ => {}
             }
         }
-        
+
         None
     }
 
@@ -158,8 +163,9 @@ impl EnhancedAggregationProcessor {
         };
 
         // Cache the optimization
-        self.optimization_cache.insert(func_call.to_string(), optimized.clone());
-        
+        self.optimization_cache
+            .insert(func_call.to_string(), optimized.clone());
+
         Ok(optimized)
     }
 
@@ -167,7 +173,7 @@ impl EnhancedAggregationProcessor {
     fn optimize_group_concat(&self, func_call: &str) -> FusekiResult<String> {
         // Parse arguments
         let args = self.parse_function_args(func_call)?;
-        
+
         if args.is_empty() {
             return Ok(func_call.to_string());
         }
@@ -188,8 +194,10 @@ impl EnhancedAggregationProcessor {
     fn optimize_sample(&self, func_call: &str) -> FusekiResult<String> {
         // Make SAMPLE deterministic for better caching
         if func_call.contains("DISTINCT") {
-            Ok(format!("DETERMINISTIC_SAMPLE({})", 
-                &func_call[7..func_call.len()-1])) // Remove SAMPLE( and )
+            Ok(format!(
+                "DETERMINISTIC_SAMPLE({})",
+                &func_call[7..func_call.len() - 1]
+            )) // Remove SAMPLE( and )
         } else {
             Ok(func_call.to_string())
         }
@@ -210,13 +218,13 @@ impl EnhancedAggregationProcessor {
     /// Parse function arguments
     fn parse_function_args(&self, func_call: &str) -> FusekiResult<Vec<String>> {
         // Find the opening parenthesis
-        let open_paren = func_call.find('(').ok_or_else(|| {
-            crate::error::FusekiError::query_parsing("Invalid function call")
-        })?;
-        
+        let open_paren = func_call
+            .find('(')
+            .ok_or_else(|| crate::error::FusekiError::query_parsing("Invalid function call"))?;
+
         // Extract arguments between parentheses
         let args_str = &func_call[open_paren + 1..func_call.len() - 1];
-        
+
         if args_str.trim().is_empty() {
             return Ok(Vec::new());
         }
@@ -226,7 +234,7 @@ impl EnhancedAggregationProcessor {
             .split(',')
             .map(|arg| arg.trim().to_string())
             .collect();
-        
+
         Ok(args)
     }
 
@@ -258,14 +266,15 @@ mod tests {
     #[test]
     fn test_group_concat_optimization() {
         let mut processor = EnhancedAggregationProcessor::new();
-        
+
         // Test simple GROUP_CONCAT
         let query = "SELECT (GROUP_CONCAT(?name) as ?names) WHERE { ?s foaf:name ?name }";
         let result = processor.process_aggregations(query).unwrap();
         assert!(result.contains("SEPARATOR"));
-        
+
         // Test GROUP_CONCAT with DISTINCT
-        let query_distinct = "SELECT (GROUP_CONCAT(DISTINCT ?name) as ?names) WHERE { ?s foaf:name ?name }";
+        let query_distinct =
+            "SELECT (GROUP_CONCAT(DISTINCT ?name) as ?names) WHERE { ?s foaf:name ?name }";
         let result_distinct = processor.process_aggregations(query_distinct).unwrap();
         assert!(result_distinct.contains("OPTIMIZED"));
     }
@@ -273,7 +282,7 @@ mod tests {
     #[test]
     fn test_sample_optimization() {
         let mut processor = EnhancedAggregationProcessor::new();
-        
+
         let query = "SELECT (SAMPLE(?value) as ?sample) WHERE { ?s ?p ?value }";
         let result = processor.process_aggregations(query).unwrap();
         // Should remain unchanged for simple SAMPLE
@@ -283,7 +292,7 @@ mod tests {
     #[test]
     fn test_function_detection() {
         let processor = EnhancedAggregationProcessor::new();
-        
+
         assert!(processor.is_supported("GROUP_CONCAT"));
         assert!(processor.is_supported("SAMPLE"));
         assert!(processor.is_supported("MEDIAN"));
@@ -294,13 +303,15 @@ mod tests {
     #[test]
     fn test_argument_parsing() {
         let processor = EnhancedAggregationProcessor::new();
-        
+
         let args = processor.parse_function_args("COUNT(?x)").unwrap();
         assert_eq!(args, vec!["?x"]);
-        
-        let args = processor.parse_function_args("GROUP_CONCAT(?name, ',')").unwrap();
+
+        let args = processor
+            .parse_function_args("GROUP_CONCAT(?name, ',')")
+            .unwrap();
         assert_eq!(args, vec!["?name", "','"]);
-        
+
         let args = processor.parse_function_args("SUM()").unwrap();
         assert!(args.is_empty());
     }

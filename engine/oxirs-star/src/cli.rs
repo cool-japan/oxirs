@@ -836,7 +836,7 @@ impl StarCli {
 
         info!("Executing SPARQL-star query on {} triples", store.len());
 
-        // Execute query using the query executor  
+        // Execute query using the query executor
         // For now, we'll just demonstrate the setup since we need a proper Store instance
         let start_time = Instant::now();
 
@@ -1344,7 +1344,10 @@ impl StarCli {
         let iterations: usize = matches.get_one::<String>("iterations").unwrap().parse()?;
         let report_path = matches.get_one::<String>("output");
 
-        info!("Profiling RDF-star file: {} (operations: {}, iterations: {})", input_path, operations, iterations);
+        info!(
+            "Profiling RDF-star file: {} (operations: {}, iterations: {})",
+            input_path, operations, iterations
+        );
 
         let mut profiler = StarProfiler::with_config(ProfilingConfig {
             track_memory: true,
@@ -1385,7 +1388,11 @@ impl StarCli {
                     info!("Profiling serialization iteration {}/{}", i + 1, iterations);
                     profiler.profile_serialization(format, triple_count, || {
                         let serializer = StarSerializer::new();
-                        let _ = serializer.serialize_graph(&graph, format, &SerializationOptions::default());
+                        let _ = serializer.serialize_graph(
+                            &graph,
+                            format,
+                            &SerializationOptions::default(),
+                        );
                     });
                 }
             }
@@ -1396,7 +1403,7 @@ impl StarCli {
 
         // Generate and display report
         let report = profiler.generate_report();
-        
+
         if !self.quiet {
             self.display_profiling_summary(&report);
         }
@@ -1423,9 +1430,10 @@ impl StarCli {
         // Load profiling data
         let data_content = fs::read_to_string(data_path)
             .with_context(|| format!("Failed to read profiling data: {}", data_path))?;
-        
+
         let mut profiler = StarProfiler::new();
-        profiler.import_json(&data_content)
+        profiler
+            .import_json(&data_content)
             .with_context(|| "Failed to parse profiling data")?;
 
         let report = profiler.generate_report();
@@ -1440,7 +1448,7 @@ impl StarCli {
                 } else {
                     println!("{}", report_json);
                 }
-            },
+            }
             "html" => {
                 let html_report = self.generate_html_report(&report)?;
                 if let Some(output_path) = output_path {
@@ -1450,7 +1458,7 @@ impl StarCli {
                 } else {
                     println!("{}", html_report);
                 }
-            },
+            }
             "text" | _ => {
                 let text_report = self.generate_text_report(&report)?;
                 if let Some(output_path) = output_path {
@@ -1471,7 +1479,7 @@ impl StarCli {
         println!("\n=== Profiling Summary ===");
         println!("Total Duration: {:?}", report.total_duration);
         println!("Total Samples: {}", report.total_samples);
-        
+
         println!("\n=== Operation Statistics ===");
         for (operation, stats) in &report.operation_stats {
             println!("{}:", operation);
@@ -1488,7 +1496,10 @@ impl StarCli {
         if !report.bottlenecks.is_empty() {
             println!("\n=== Performance Bottlenecks ===");
             for bottleneck in &report.bottlenecks {
-                println!("{}: {:.1}% - {}", bottleneck.operation, bottleneck.time_percentage, bottleneck.description);
+                println!(
+                    "{}: {:.1}% - {}",
+                    bottleneck.operation, bottleneck.time_percentage, bottleneck.description
+                );
                 for suggestion in &bottleneck.suggestions {
                     println!("  → {}", suggestion);
                 }
@@ -1497,8 +1508,14 @@ impl StarCli {
 
         if let Some(memory) = &report.memory_patterns {
             println!("\n=== Memory Analysis ===");
-            println!("Peak Memory: {:.2} MB", memory.peak_memory as f64 / 1_000_000.0);
-            println!("Average Memory: {:.2} MB", memory.average_memory as f64 / 1_000_000.0);
+            println!(
+                "Peak Memory: {:.2} MB",
+                memory.peak_memory as f64 / 1_000_000.0
+            );
+            println!(
+                "Average Memory: {:.2} MB",
+                memory.average_memory as f64 / 1_000_000.0
+            );
             println!("Efficiency Ratio: {:.2}", memory.efficiency_ratio);
             if !memory.potential_leaks.is_empty() {
                 println!("Potential Issues:");
@@ -1512,12 +1529,20 @@ impl StarCli {
     /// Generate HTML profiling report
     fn generate_html_report(&self, report: &crate::profiling::ProfilingReport) -> Result<String> {
         let mut html = String::new();
-        html.push_str("<!DOCTYPE html><html><head><title>RDF-star Profiling Report</title></head><body>");
+        html.push_str(
+            "<!DOCTYPE html><html><head><title>RDF-star Profiling Report</title></head><body>",
+        );
         html.push_str("<h1>RDF-star Profiling Report</h1>");
-        html.push_str(&format!("<p>Generated: {}</p>", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
-        html.push_str(&format!("<p>Total Duration: {:?}</p>", report.total_duration));
+        html.push_str(&format!(
+            "<p>Generated: {}</p>",
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        ));
+        html.push_str(&format!(
+            "<p>Total Duration: {:?}</p>",
+            report.total_duration
+        ));
         html.push_str(&format!("<p>Total Samples: {}</p>", report.total_samples));
-        
+
         html.push_str("<h2>Operation Statistics</h2><table border='1'>");
         html.push_str("<tr><th>Operation</th><th>Count</th><th>Average</th><th>Min</th><th>Max</th><th>Ops/sec</th></tr>");
         for (operation, stats) in &report.operation_stats {
@@ -1536,10 +1561,13 @@ impl StarCli {
         let mut text = String::new();
         text.push_str("RDF-star Profiling Report\n");
         text.push_str("========================\n\n");
-        text.push_str(&format!("Generated: {}\n", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+        text.push_str(&format!(
+            "Generated: {}\n",
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        ));
         text.push_str(&format!("Total Duration: {:?}\n", report.total_duration));
         text.push_str(&format!("Total Samples: {}\n\n", report.total_samples));
-        
+
         text.push_str("Operation Statistics\n");
         text.push_str("-------------------\n");
         for (operation, stats) in &report.operation_stats {
@@ -1550,19 +1578,22 @@ impl StarCli {
             text.push_str(&format!("  Max: {:?}\n", stats.max_duration));
             text.push_str(&format!("  Ops/sec: {:.2}\n\n", stats.ops_per_second));
         }
-        
+
         if !report.bottlenecks.is_empty() {
             text.push_str("Performance Bottlenecks\n");
             text.push_str("----------------------\n");
             for bottleneck in &report.bottlenecks {
-                text.push_str(&format!("{}: {:.1}% - {}\n", bottleneck.operation, bottleneck.time_percentage, bottleneck.description));
+                text.push_str(&format!(
+                    "{}: {:.1}% - {}\n",
+                    bottleneck.operation, bottleneck.time_percentage, bottleneck.description
+                ));
                 for suggestion in &bottleneck.suggestions {
                     text.push_str(&format!("  → {}\n", suggestion));
                 }
                 text.push_str("\n");
             }
         }
-        
+
         Ok(text)
     }
 }

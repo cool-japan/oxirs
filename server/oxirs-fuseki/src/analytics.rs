@@ -48,7 +48,7 @@ impl Default for AnalyticsConfig {
     fn default() -> Self {
         Self {
             columnar_storage: true,
-            max_time_window_hours: 24 * 30, // 30 days
+            max_time_window_hours: 24 * 30,   // 30 days
             default_window_size_seconds: 300, // 5 minutes
             streaming_enabled: true,
             max_concurrent_queries: 10,
@@ -275,7 +275,7 @@ impl AnalyticsEngine {
         // Execute query
         let data_points = self.fetch_time_series_data(&query).await?;
         let aggregated_points = self.apply_aggregation(&data_points, &query).await?;
-        
+
         // Compute statistics if enabled
         let statistics = if self.config.advanced_stats_enabled {
             Some(self.compute_statistics(&aggregated_points))
@@ -296,30 +296,34 @@ impl AnalyticsEngine {
         self.cache_result(cache_key, result.clone()).await;
 
         // Update metrics
-        self.update_metrics(execution_time.as_millis() as u64, data_points.len()).await;
+        self.update_metrics(execution_time.as_millis() as u64, data_points.len())
+            .await;
 
         Ok(result)
     }
 
     /// Fetch raw time-series data from store
-    async fn fetch_time_series_data(&self, query: &TimeSeriesQuery) -> FusekiResult<Vec<TimeSeriesPoint>> {
+    async fn fetch_time_series_data(
+        &self,
+        query: &TimeSeriesQuery,
+    ) -> FusekiResult<Vec<TimeSeriesPoint>> {
         // This is a simplified implementation - in practice, you'd query the actual store
         debug!("Fetching time-series data for metric: {}", query.metric);
-        
+
         // Generate sample data for demonstration
         let mut data_points = Vec::new();
         let mut current_time = query.start_time;
         let interval = Duration::seconds(60); // 1-minute intervals
-        
+
         while current_time <= query.end_time {
             // Generate sample data with some pattern and noise
             let base_value = 100.0;
             let trend = (current_time - query.start_time).num_hours() as f64 * 0.1;
             let noise = (rand::random::<f64>() - 0.5) * 20.0;
             let seasonal = 10.0 * (current_time.hour() as f64 * std::f64::consts::PI / 12.0).sin();
-            
+
             let value = base_value + trend + seasonal + noise;
-            
+
             data_points.push(TimeSeriesPoint {
                 timestamp: current_time,
                 metric: query.metric.clone(),
@@ -327,9 +331,9 @@ impl AnalyticsEngine {
                 tags: HashMap::new(),
                 metadata: None,
             });
-            
+
             current_time = current_time + interval;
-            
+
             // Respect limit
             if let Some(limit) = query.limit {
                 if data_points.len() >= limit {
@@ -337,7 +341,7 @@ impl AnalyticsEngine {
                 }
             }
         }
-        
+
         Ok(data_points)
     }
 
@@ -348,7 +352,8 @@ impl AnalyticsEngine {
         query: &TimeSeriesQuery,
     ) -> FusekiResult<Vec<TimeSeriesPoint>> {
         if let Some(window_size) = query.window_size {
-            self.windowed_aggregation(data_points, &query.aggregation, window_size).await
+            self.windowed_aggregation(data_points, &query.aggregation, window_size)
+                .await
         } else {
             // No windowing, apply aggregation to entire dataset
             let values: Vec<f64> = data_points.iter().map(|p| p.value).collect();
@@ -374,17 +379,25 @@ impl AnalyticsEngine {
         window_size: Duration,
     ) -> FusekiResult<Vec<TimeSeriesPoint>> {
         let mut result = Vec::new();
-        let mut window_start = data_points.first().map(|p| p.timestamp).unwrap_or_else(Utc::now);
-        
-        while window_start < data_points.last().map(|p| p.timestamp).unwrap_or_else(Utc::now) {
+        let mut window_start = data_points
+            .first()
+            .map(|p| p.timestamp)
+            .unwrap_or_else(Utc::now);
+
+        while window_start
+            < data_points
+                .last()
+                .map(|p| p.timestamp)
+                .unwrap_or_else(Utc::now)
+        {
             let window_end = window_start + window_size;
-            
+
             // Collect points in this window
             let window_points: Vec<&TimeSeriesPoint> = data_points
                 .iter()
                 .filter(|p| p.timestamp >= window_start && p.timestamp < window_end)
                 .collect();
-            
+
             if !window_points.is_empty() {
                 let values: Vec<f64> = window_points.iter().map(|p| p.value).collect();
                 if let Some(aggregated_value) = compute_aggregation(&values, function) {
@@ -397,10 +410,10 @@ impl AnalyticsEngine {
                     });
                 }
             }
-            
+
             window_start = window_end;
         }
-        
+
         Ok(result)
     }
 
@@ -414,13 +427,13 @@ impl AnalyticsEngine {
     fn generate_cache_key(&self, query: &TimeSeriesQuery) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         query.metric.hash(&mut hasher);
         query.start_time.hash(&mut hasher);
         query.end_time.hash(&mut hasher);
         format!("{:?}", query.aggregation).hash(&mut hasher);
-        
+
         format!("analytics_{:x}", hasher.finish())
     }
 
@@ -434,7 +447,7 @@ impl AnalyticsEngine {
     async fn cache_result(&self, cache_key: String, result: TimeSeriesResult) {
         let mut cache = self.query_cache.write().await;
         cache.insert(cache_key, result);
-        
+
         // Implement cache eviction if needed
         if cache.len() > 1000 {
             // Simple LRU-style eviction - remove oldest entries
@@ -450,14 +463,14 @@ impl AnalyticsEngine {
         let mut metrics = self.metrics.lock().await;
         metrics.total_queries += 1;
         metrics.total_data_points += data_points_processed as u64;
-        
+
         // Update rolling average
         if metrics.total_queries == 1 {
             metrics.avg_execution_time_ms = execution_time_ms as f64;
         } else {
             let alpha = 0.1; // Smoothing factor
-            metrics.avg_execution_time_ms = alpha * execution_time_ms as f64 + 
-                (1.0 - alpha) * metrics.avg_execution_time_ms;
+            metrics.avg_execution_time_ms =
+                alpha * execution_time_ms as f64 + (1.0 - alpha) * metrics.avg_execution_time_ms;
         }
     }
 
@@ -496,11 +509,11 @@ impl AnalyticsEngine {
     pub async fn get_metrics(&self) -> AnalyticsMetrics {
         let metrics = self.metrics.lock().await;
         let mut result = metrics.clone();
-        
+
         // Update active streams count
         let windows = self.streaming_windows.lock().await;
         result.active_streams = windows.len();
-        
+
         result
     }
 }
@@ -515,11 +528,15 @@ fn compute_aggregation(values: &[f64], function: &AggregationFunction) -> Option
         AggregationFunction::Avg => Some(values.iter().sum::<f64>() / values.len() as f64),
         AggregationFunction::Sum => Some(values.iter().sum()),
         AggregationFunction::Min => values.iter().fold(f64::INFINITY, |a, &b| a.min(b)).into(),
-        AggregationFunction::Max => values.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b)).into(),
+        AggregationFunction::Max => values
+            .iter()
+            .fold(f64::NEG_INFINITY, |a, &b| a.max(b))
+            .into(),
         AggregationFunction::Count => Some(values.len() as f64),
         AggregationFunction::StdDev => {
             let mean = values.iter().sum::<f64>() / values.len() as f64;
-            let variance = values.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / values.len() as f64;
+            let variance =
+                values.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / values.len() as f64;
             Some(variance.sqrt())
         }
         AggregationFunction::Variance => {
@@ -597,36 +614,45 @@ fn compute_statistics(values: &[f64]) -> StatisticalSummary {
 
     let count = values.len();
     let mean = values.iter().sum::<f64>() / count as f64;
-    
+
     let variance = values.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / count as f64;
     let std_dev = variance.sqrt();
-    
+
     let mut sorted = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    
+
     let min = sorted[0];
     let max = sorted[count - 1];
-    
+
     let median = if count % 2 == 0 {
         (sorted[count / 2 - 1] + sorted[count / 2]) / 2.0
     } else {
         sorted[count / 2]
     };
-    
+
     let p25_idx = (0.25 * (count - 1) as f64).round() as usize;
     let p75_idx = (0.75 * (count - 1) as f64).round() as usize;
     let p25 = sorted[p25_idx];
     let p75 = sorted[p75_idx];
-    
+
     // Compute skewness and kurtosis
     let skewness = if std_dev > 0.0 {
-        values.iter().map(|&x| ((x - mean) / std_dev).powi(3)).sum::<f64>() / count as f64
+        values
+            .iter()
+            .map(|&x| ((x - mean) / std_dev).powi(3))
+            .sum::<f64>()
+            / count as f64
     } else {
         0.0
     };
-    
+
     let kurtosis = if std_dev > 0.0 {
-        values.iter().map(|&x| ((x - mean) / std_dev).powi(4)).sum::<f64>() / count as f64 - 3.0
+        values
+            .iter()
+            .map(|&x| ((x - mean) / std_dev).powi(4))
+            .sum::<f64>()
+            / count as f64
+            - 3.0
     } else {
         0.0
     };
@@ -653,20 +679,38 @@ mod tests {
     #[test]
     fn test_aggregation_functions() {
         let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-        
-        assert_eq!(compute_aggregation(&values, &AggregationFunction::Avg), Some(3.0));
-        assert_eq!(compute_aggregation(&values, &AggregationFunction::Sum), Some(15.0));
-        assert_eq!(compute_aggregation(&values, &AggregationFunction::Min), Some(1.0));
-        assert_eq!(compute_aggregation(&values, &AggregationFunction::Max), Some(5.0));
-        assert_eq!(compute_aggregation(&values, &AggregationFunction::Count), Some(5.0));
-        assert_eq!(compute_aggregation(&values, &AggregationFunction::Median), Some(3.0));
+
+        assert_eq!(
+            compute_aggregation(&values, &AggregationFunction::Avg),
+            Some(3.0)
+        );
+        assert_eq!(
+            compute_aggregation(&values, &AggregationFunction::Sum),
+            Some(15.0)
+        );
+        assert_eq!(
+            compute_aggregation(&values, &AggregationFunction::Min),
+            Some(1.0)
+        );
+        assert_eq!(
+            compute_aggregation(&values, &AggregationFunction::Max),
+            Some(5.0)
+        );
+        assert_eq!(
+            compute_aggregation(&values, &AggregationFunction::Count),
+            Some(5.0)
+        );
+        assert_eq!(
+            compute_aggregation(&values, &AggregationFunction::Median),
+            Some(3.0)
+        );
     }
 
     #[test]
     fn test_statistics_computation() {
         let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let stats = compute_statistics(&values);
-        
+
         assert_eq!(stats.mean, 3.0);
         assert_eq!(stats.min, 1.0);
         assert_eq!(stats.max, 5.0);
@@ -677,7 +721,7 @@ mod tests {
     #[tokio::test]
     async fn test_streaming_window() {
         let mut window = StreamingWindow::new(Duration::seconds(60));
-        
+
         let point = TimeSeriesPoint {
             timestamp: Utc::now(),
             metric: "test_metric".to_string(),
@@ -685,492 +729,554 @@ mod tests {
             tags: HashMap::new(),
             metadata: None,
         };
-        
+
         window.add_point(point);
         let avg = window.compute_aggregation(&AggregationFunction::Avg);
         assert_eq!(avg, Some(42.0));
     }
 
-/// Advanced anomaly detection system
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnomalyDetector {
-    /// Sensitivity level for anomaly detection (0.0 to 1.0)
-    pub sensitivity: f64,
-    /// Historical window size for baseline calculation
-    pub baseline_window_hours: u32,
-    /// Statistical methods to use for detection
-    pub detection_methods: Vec<AnomalyDetectionMethod>,
-    /// Confidence threshold for anomaly alerts
-    pub confidence_threshold: f64,
-}
+    /// Advanced anomaly detection system
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct AnomalyDetector {
+        /// Sensitivity level for anomaly detection (0.0 to 1.0)
+        pub sensitivity: f64,
+        /// Historical window size for baseline calculation
+        pub baseline_window_hours: u32,
+        /// Statistical methods to use for detection
+        pub detection_methods: Vec<AnomalyDetectionMethod>,
+        /// Confidence threshold for anomaly alerts
+        pub confidence_threshold: f64,
+    }
 
-impl Default for AnomalyDetector {
-    fn default() -> Self {
-        Self {
-            sensitivity: 0.95,
-            baseline_window_hours: 24 * 7, // 1 week
-            detection_methods: vec![
-                AnomalyDetectionMethod::StatisticalOutlier,
-                AnomalyDetectionMethod::IsolationForest,
-                AnomalyDetectionMethod::SeasonalDecomposition,
-            ],
-            confidence_threshold: 0.8,
+    impl Default for AnomalyDetector {
+        fn default() -> Self {
+            Self {
+                sensitivity: 0.95,
+                baseline_window_hours: 24 * 7, // 1 week
+                detection_methods: vec![
+                    AnomalyDetectionMethod::StatisticalOutlier,
+                    AnomalyDetectionMethod::IsolationForest,
+                    AnomalyDetectionMethod::SeasonalDecomposition,
+                ],
+                confidence_threshold: 0.8,
+            }
         }
     }
-}
 
-/// Anomaly detection methods
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AnomalyDetectionMethod {
-    /// Statistical outlier detection using Z-score
-    StatisticalOutlier,
-    /// Isolation Forest algorithm
-    IsolationForest,
-    /// Seasonal decomposition and trend analysis
-    SeasonalDecomposition,
-    /// LSTM-based time series anomaly detection
-    LstmTimeSeriesAnomaly,
-    /// Multi-variate anomaly detection
-    MultivariateAnomaly,
-}
+    /// Anomaly detection methods
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub enum AnomalyDetectionMethod {
+        /// Statistical outlier detection using Z-score
+        StatisticalOutlier,
+        /// Isolation Forest algorithm
+        IsolationForest,
+        /// Seasonal decomposition and trend analysis
+        SeasonalDecomposition,
+        /// LSTM-based time series anomaly detection
+        LstmTimeSeriesAnomaly,
+        /// Multi-variate anomaly detection
+        MultivariateAnomaly,
+    }
 
-/// Anomaly detection result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnomalyResult {
-    /// Timestamp of the anomaly
-    pub timestamp: DateTime<Utc>,
-    /// Metric name
-    pub metric: String,
-    /// Observed value
-    pub observed_value: f64,
-    /// Expected value based on baseline
-    pub expected_value: f64,
-    /// Confidence score (0.0 to 1.0)
-    pub confidence_score: f64,
-    /// Anomaly type
-    pub anomaly_type: AnomalyType,
-    /// Severity level
-    pub severity: AnomalySeverity,
-    /// Detection method used
-    pub detection_method: AnomalyDetectionMethod,
-    /// Additional context and metadata
-    pub context: HashMap<String, serde_json::Value>,
-}
+    /// Anomaly detection result
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct AnomalyResult {
+        /// Timestamp of the anomaly
+        pub timestamp: DateTime<Utc>,
+        /// Metric name
+        pub metric: String,
+        /// Observed value
+        pub observed_value: f64,
+        /// Expected value based on baseline
+        pub expected_value: f64,
+        /// Confidence score (0.0 to 1.0)
+        pub confidence_score: f64,
+        /// Anomaly type
+        pub anomaly_type: AnomalyType,
+        /// Severity level
+        pub severity: AnomalySeverity,
+        /// Detection method used
+        pub detection_method: AnomalyDetectionMethod,
+        /// Additional context and metadata
+        pub context: HashMap<String, serde_json::Value>,
+    }
 
-/// Types of anomalies
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AnomalyType {
-    /// Point anomaly (single data point)
-    PointAnomaly,
-    /// Contextual anomaly (considering time context)
-    ContextualAnomaly,
-    /// Collective anomaly (sequence of points)
-    CollectiveAnomaly,
-    /// Trend anomaly (unusual trend change)
-    TrendAnomaly,
-    /// Seasonal anomaly (unusual seasonal pattern)
-    SeasonalAnomaly,
-}
+    /// Types of anomalies
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub enum AnomalyType {
+        /// Point anomaly (single data point)
+        PointAnomaly,
+        /// Contextual anomaly (considering time context)
+        ContextualAnomaly,
+        /// Collective anomaly (sequence of points)
+        CollectiveAnomaly,
+        /// Trend anomaly (unusual trend change)
+        TrendAnomaly,
+        /// Seasonal anomaly (unusual seasonal pattern)
+        SeasonalAnomaly,
+    }
 
-/// Anomaly severity levels
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AnomalySeverity {
-    Low,
-    Medium,
-    High,
-    Critical,
-}
+    /// Anomaly severity levels
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub enum AnomalySeverity {
+        Low,
+        Medium,
+        High,
+        Critical,
+    }
 
-/// Predictive analytics engine for time series forecasting
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PredictiveAnalytics {
-    /// Forecasting algorithms to use
-    pub forecasting_methods: Vec<ForecastingMethod>,
-    /// Prediction horizon (hours into the future)
-    pub prediction_horizon_hours: u32,
-    /// Confidence intervals to calculate
-    pub confidence_intervals: Vec<f64>,
-    /// Ensemble model weights
-    pub ensemble_weights: HashMap<String, f64>,
-}
+    /// Predictive analytics engine for time series forecasting
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct PredictiveAnalytics {
+        /// Forecasting algorithms to use
+        pub forecasting_methods: Vec<ForecastingMethod>,
+        /// Prediction horizon (hours into the future)
+        pub prediction_horizon_hours: u32,
+        /// Confidence intervals to calculate
+        pub confidence_intervals: Vec<f64>,
+        /// Ensemble model weights
+        pub ensemble_weights: HashMap<String, f64>,
+    }
 
-impl Default for PredictiveAnalytics {
-    fn default() -> Self {
-        Self {
-            forecasting_methods: vec![
-                ForecastingMethod::LinearRegression,
-                ForecastingMethod::ExponentialSmoothing,
-                ForecastingMethod::Arima,
-                ForecastingMethod::SeasonalDecomposition,
-            ],
-            prediction_horizon_hours: 24,
-            confidence_intervals: vec![0.8, 0.9, 0.95],
-            ensemble_weights: HashMap::new(),
+    impl Default for PredictiveAnalytics {
+        fn default() -> Self {
+            Self {
+                forecasting_methods: vec![
+                    ForecastingMethod::LinearRegression,
+                    ForecastingMethod::ExponentialSmoothing,
+                    ForecastingMethod::Arima,
+                    ForecastingMethod::SeasonalDecomposition,
+                ],
+                prediction_horizon_hours: 24,
+                confidence_intervals: vec![0.8, 0.9, 0.95],
+                ensemble_weights: HashMap::new(),
+            }
         }
     }
-}
 
-/// Forecasting methods for time series prediction
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ForecastingMethod {
-    /// Simple linear regression
-    LinearRegression,
-    /// Exponential smoothing (Holt-Winters)
-    ExponentialSmoothing,
-    /// ARIMA (AutoRegressive Integrated Moving Average)
-    Arima,
-    /// Seasonal decomposition forecasting
-    SeasonalDecomposition,
-    /// LSTM neural network forecasting
-    LstmForecasting,
-    /// Prophet algorithm for time series forecasting
-    Prophet,
-    /// Ensemble of multiple methods
-    EnsembleForecasting,
-}
+    /// Forecasting methods for time series prediction
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub enum ForecastingMethod {
+        /// Simple linear regression
+        LinearRegression,
+        /// Exponential smoothing (Holt-Winters)
+        ExponentialSmoothing,
+        /// ARIMA (AutoRegressive Integrated Moving Average)
+        Arima,
+        /// Seasonal decomposition forecasting
+        SeasonalDecomposition,
+        /// LSTM neural network forecasting
+        LstmForecasting,
+        /// Prophet algorithm for time series forecasting
+        Prophet,
+        /// Ensemble of multiple methods
+        EnsembleForecasting,
+    }
 
-/// Forecast result with confidence intervals
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ForecastResult {
-    /// Forecast timestamps
-    pub timestamps: Vec<DateTime<Utc>>,
-    /// Predicted values
-    pub predicted_values: Vec<f64>,
-    /// Confidence intervals
-    pub confidence_intervals: HashMap<String, (Vec<f64>, Vec<f64>)>, // (lower, upper)
-    /// Model accuracy metrics
-    pub accuracy_metrics: AccuracyMetrics,
-    /// Forecasting method used
-    pub method: ForecastingMethod,
-    /// Computation time
-    pub computation_time_ms: u64,
-}
+    /// Forecast result with confidence intervals
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct ForecastResult {
+        /// Forecast timestamps
+        pub timestamps: Vec<DateTime<Utc>>,
+        /// Predicted values
+        pub predicted_values: Vec<f64>,
+        /// Confidence intervals
+        pub confidence_intervals: HashMap<String, (Vec<f64>, Vec<f64>)>, // (lower, upper)
+        /// Model accuracy metrics
+        pub accuracy_metrics: AccuracyMetrics,
+        /// Forecasting method used
+        pub method: ForecastingMethod,
+        /// Computation time
+        pub computation_time_ms: u64,
+    }
 
-/// Accuracy metrics for forecasting models
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccuracyMetrics {
-    /// Mean Absolute Error
-    pub mae: f64,
-    /// Mean Squared Error
-    pub mse: f64,
-    /// Root Mean Squared Error
-    pub rmse: f64,
-    /// Mean Absolute Percentage Error
-    pub mape: f64,
-    /// R-squared coefficient of determination
-    pub r_squared: f64,
-}
+    /// Accuracy metrics for forecasting models
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct AccuracyMetrics {
+        /// Mean Absolute Error
+        pub mae: f64,
+        /// Mean Squared Error
+        pub mse: f64,
+        /// Root Mean Squared Error
+        pub rmse: f64,
+        /// Mean Absolute Percentage Error
+        pub mape: f64,
+        /// R-squared coefficient of determination
+        pub r_squared: f64,
+    }
 
-impl AnalyticsEngine {
-    /// Detect anomalies in time series data
-    pub async fn detect_anomalies(
-        &self,
-        data_points: &[TimeSeriesPoint],
-        detector: &AnomalyDetector,
-    ) -> FusekiResult<Vec<AnomalyResult>> {
-        let mut anomalies = Vec::new();
-        
-        for method in &detector.detection_methods {
-            let method_anomalies = match method {
-                AnomalyDetectionMethod::StatisticalOutlier => {
-                    self.detect_statistical_outliers(data_points, detector).await?
+    impl AnalyticsEngine {
+        /// Detect anomalies in time series data
+        pub async fn detect_anomalies(
+            &self,
+            data_points: &[TimeSeriesPoint],
+            detector: &AnomalyDetector,
+        ) -> FusekiResult<Vec<AnomalyResult>> {
+            let mut anomalies = Vec::new();
+
+            for method in &detector.detection_methods {
+                let method_anomalies = match method {
+                    AnomalyDetectionMethod::StatisticalOutlier => {
+                        self.detect_statistical_outliers(data_points, detector)
+                            .await?
+                    }
+                    AnomalyDetectionMethod::IsolationForest => {
+                        self.detect_isolation_forest_anomalies(data_points, detector)
+                            .await?
+                    }
+                    AnomalyDetectionMethod::SeasonalDecomposition => {
+                        self.detect_seasonal_anomalies(data_points, detector)
+                            .await?
+                    }
+                    AnomalyDetectionMethod::LstmTimeSeriesAnomaly => {
+                        self.detect_lstm_anomalies(data_points, detector).await?
+                    }
+                    AnomalyDetectionMethod::MultivariateAnomaly => {
+                        self.detect_multivariate_anomalies(data_points, detector)
+                            .await?
+                    }
+                };
+                anomalies.extend(method_anomalies);
+            }
+
+            // Deduplicate and rank anomalies by confidence
+            anomalies.sort_by(|a, b| b.confidence_score.partial_cmp(&a.confidence_score).unwrap());
+            anomalies.dedup_by(|a, b| a.timestamp == b.timestamp && a.metric == b.metric);
+
+            Ok(anomalies)
+        }
+
+        /// Statistical outlier detection using Z-score
+        async fn detect_statistical_outliers(
+            &self,
+            data_points: &[TimeSeriesPoint],
+            detector: &AnomalyDetector,
+        ) -> FusekiResult<Vec<AnomalyResult>> {
+            let values: Vec<f64> = data_points.iter().map(|p| p.value).collect();
+            let stats = compute_statistics(&values);
+            let threshold = 2.5 * detector.sensitivity; // Z-score threshold
+
+            let mut anomalies = Vec::new();
+
+            for point in data_points {
+                let z_score = if stats.std_dev > 0.0 {
+                    (point.value - stats.mean).abs() / stats.std_dev
+                } else {
+                    0.0
+                };
+
+                if z_score > threshold {
+                    let confidence = (z_score / (threshold * 2.0)).min(1.0);
+                    let severity = match z_score {
+                        z if z > threshold * 2.0 => AnomalySeverity::Critical,
+                        z if z > threshold * 1.5 => AnomalySeverity::High,
+                        z if z > threshold * 1.2 => AnomalySeverity::Medium,
+                        _ => AnomalySeverity::Low,
+                    };
+
+                    anomalies.push(AnomalyResult {
+                        timestamp: point.timestamp,
+                        metric: point.metric.clone(),
+                        observed_value: point.value,
+                        expected_value: stats.mean,
+                        confidence_score: confidence,
+                        anomaly_type: AnomalyType::PointAnomaly,
+                        severity,
+                        detection_method: AnomalyDetectionMethod::StatisticalOutlier,
+                        context: HashMap::from([
+                            (
+                                "z_score".to_string(),
+                                serde_json::Value::Number(
+                                    serde_json::Number::from_f64(z_score).unwrap(),
+                                ),
+                            ),
+                            (
+                                "threshold".to_string(),
+                                serde_json::Value::Number(
+                                    serde_json::Number::from_f64(threshold).unwrap(),
+                                ),
+                            ),
+                        ]),
+                    });
                 }
-                AnomalyDetectionMethod::IsolationForest => {
-                    self.detect_isolation_forest_anomalies(data_points, detector).await?
+            }
+
+            Ok(anomalies)
+        }
+
+        /// Generate time series forecast
+        pub async fn generate_forecast(
+            &self,
+            data_points: &[TimeSeriesPoint],
+            config: &PredictiveAnalytics,
+        ) -> FusekiResult<ForecastResult> {
+            let start_time = std::time::Instant::now();
+
+            // Use the first method for simplicity in this implementation
+            let method = config
+                .forecasting_methods
+                .first()
+                .unwrap_or(&ForecastingMethod::LinearRegression);
+
+            let forecast = match method {
+                ForecastingMethod::LinearRegression => {
+                    self.linear_regression_forecast(data_points, config).await?
                 }
-                AnomalyDetectionMethod::SeasonalDecomposition => {
-                    self.detect_seasonal_anomalies(data_points, detector).await?
-                }
-                AnomalyDetectionMethod::LstmTimeSeriesAnomaly => {
-                    self.detect_lstm_anomalies(data_points, detector).await?
-                }
-                AnomalyDetectionMethod::MultivariateAnomaly => {
-                    self.detect_multivariate_anomalies(data_points, detector).await?
+                _ => {
+                    // Simplified implementation for other methods
+                    self.linear_regression_forecast(data_points, config).await?
                 }
             };
-            anomalies.extend(method_anomalies);
+
+            let computation_time = start_time.elapsed().as_millis() as u64;
+
+            Ok(ForecastResult {
+                timestamps: forecast.0,
+                predicted_values: forecast.1,
+                confidence_intervals: forecast.2,
+                accuracy_metrics: forecast.3,
+                method: method.clone(),
+                computation_time_ms: computation_time,
+            })
         }
-        
-        // Deduplicate and rank anomalies by confidence
-        anomalies.sort_by(|a, b| b.confidence_score.partial_cmp(&a.confidence_score).unwrap());
-        anomalies.dedup_by(|a, b| {
-            a.timestamp == b.timestamp && a.metric == b.metric
-        });
-        
-        Ok(anomalies)
-    }
-    
-    /// Statistical outlier detection using Z-score
-    async fn detect_statistical_outliers(
-        &self,
-        data_points: &[TimeSeriesPoint],
-        detector: &AnomalyDetector,
-    ) -> FusekiResult<Vec<AnomalyResult>> {
-        let values: Vec<f64> = data_points.iter().map(|p| p.value).collect();
-        let stats = compute_statistics(&values);
-        let threshold = 2.5 * detector.sensitivity; // Z-score threshold
-        
-        let mut anomalies = Vec::new();
-        
-        for point in data_points {
-            let z_score = if stats.std_dev > 0.0 {
-                (point.value - stats.mean).abs() / stats.std_dev
+
+        /// Linear regression forecasting
+        async fn linear_regression_forecast(
+            &self,
+            data_points: &[TimeSeriesPoint],
+            config: &PredictiveAnalytics,
+        ) -> FusekiResult<(
+            Vec<DateTime<Utc>>,
+            Vec<f64>,
+            HashMap<String, (Vec<f64>, Vec<f64>)>,
+            AccuracyMetrics,
+        )> {
+            if data_points.len() < 2 {
+                return Err(FusekiError::InvalidRequest(
+                    "Insufficient data for forecasting".to_string(),
+                ));
+            }
+
+            // Convert timestamps to numeric values for regression
+            let base_time = data_points[0].timestamp.timestamp() as f64;
+            let x_values: Vec<f64> = data_points
+                .iter()
+                .map(|p| (p.timestamp.timestamp() as f64 - base_time) / 3600.0) // Hours from start
+                .collect();
+            let y_values: Vec<f64> = data_points.iter().map(|p| p.value).collect();
+
+            // Simple linear regression: y = ax + b
+            let n = x_values.len() as f64;
+            let sum_x: f64 = x_values.iter().sum();
+            let sum_y: f64 = y_values.iter().sum();
+            let sum_xy: f64 = x_values.iter().zip(&y_values).map(|(x, y)| x * y).sum();
+            let sum_x2: f64 = x_values.iter().map(|x| x * x).sum();
+
+            let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x);
+            let intercept = (sum_y - slope * sum_x) / n;
+
+            // Generate forecast timestamps
+            let last_time = data_points.last().unwrap().timestamp;
+            let forecast_hours = config.prediction_horizon_hours as i64;
+            let mut forecast_timestamps = Vec::new();
+            let mut predicted_values = Vec::new();
+
+            for hour in 1..=forecast_hours {
+                let forecast_time = last_time + Duration::hours(hour);
+                let x_forecast = (forecast_time.timestamp() as f64 - base_time) / 3600.0;
+                let y_forecast = slope * x_forecast + intercept;
+
+                forecast_timestamps.push(forecast_time);
+                predicted_values.push(y_forecast);
+            }
+
+            // Calculate confidence intervals
+            let mut confidence_intervals = HashMap::new();
+            for &confidence_level in &config.confidence_intervals {
+                let z_score = match confidence_level {
+                    0.8 => 1.28,
+                    0.9 => 1.645,
+                    0.95 => 1.96,
+                    0.99 => 2.576,
+                    _ => 1.96, // Default to 95%
+                };
+
+                // Calculate standard error
+                let residuals: Vec<f64> = x_values
+                    .iter()
+                    .zip(&y_values)
+                    .map(|(x, y)| y - (slope * x + intercept))
+                    .collect();
+                let mse = residuals.iter().map(|r| r * r).sum::<f64>() / (n - 2.0);
+                let std_error = mse.sqrt();
+
+                let lower_bounds: Vec<f64> = predicted_values
+                    .iter()
+                    .map(|y| y - z_score * std_error)
+                    .collect();
+                let upper_bounds: Vec<f64> = predicted_values
+                    .iter()
+                    .map(|y| y + z_score * std_error)
+                    .collect();
+
+                confidence_intervals.insert(
+                    format!("{}%", (confidence_level * 100.0) as u32),
+                    (lower_bounds, upper_bounds),
+                );
+            }
+
+            // Calculate accuracy metrics
+            let predictions: Vec<f64> = x_values.iter().map(|x| slope * x + intercept).collect();
+            let accuracy_metrics = self.calculate_accuracy_metrics(&y_values, &predictions);
+
+            Ok((
+                forecast_timestamps,
+                predicted_values,
+                confidence_intervals,
+                accuracy_metrics,
+            ))
+        }
+
+        /// Calculate accuracy metrics for forecasting models
+        fn calculate_accuracy_metrics(&self, actual: &[f64], predicted: &[f64]) -> AccuracyMetrics {
+            if actual.len() != predicted.len() || actual.is_empty() {
+                return AccuracyMetrics {
+                    mae: 0.0,
+                    mse: 0.0,
+                    rmse: 0.0,
+                    mape: 0.0,
+                    r_squared: 0.0,
+                };
+            }
+
+            let n = actual.len() as f64;
+
+            // Mean Absolute Error
+            let mae = actual
+                .iter()
+                .zip(predicted)
+                .map(|(a, p)| (a - p).abs())
+                .sum::<f64>()
+                / n;
+
+            // Mean Squared Error
+            let mse = actual
+                .iter()
+                .zip(predicted)
+                .map(|(a, p)| (a - p).powi(2))
+                .sum::<f64>()
+                / n;
+
+            // Root Mean Squared Error
+            let rmse = mse.sqrt();
+
+            // Mean Absolute Percentage Error
+            let mape = actual
+                .iter()
+                .zip(predicted)
+                .filter(|(a, _)| **a != 0.0)
+                .map(|(a, p)| ((a - p) / a).abs())
+                .sum::<f64>()
+                / n
+                * 100.0;
+
+            // R-squared
+            let actual_mean = actual.iter().sum::<f64>() / n;
+            let ss_tot = actual
+                .iter()
+                .map(|a| (a - actual_mean).powi(2))
+                .sum::<f64>();
+            let ss_res = actual
+                .iter()
+                .zip(predicted)
+                .map(|(a, p)| (a - p).powi(2))
+                .sum::<f64>();
+            let r_squared = if ss_tot != 0.0 {
+                1.0 - ss_res / ss_tot
             } else {
                 0.0
             };
-            
-            if z_score > threshold {
-                let confidence = (z_score / (threshold * 2.0)).min(1.0);
-                let severity = match z_score {
-                    z if z > threshold * 2.0 => AnomalySeverity::Critical,
-                    z if z > threshold * 1.5 => AnomalySeverity::High,
-                    z if z > threshold * 1.2 => AnomalySeverity::Medium,
-                    _ => AnomalySeverity::Low,
-                };
-                
-                anomalies.push(AnomalyResult {
-                    timestamp: point.timestamp,
-                    metric: point.metric.clone(),
-                    observed_value: point.value,
-                    expected_value: stats.mean,
-                    confidence_score: confidence,
-                    anomaly_type: AnomalyType::PointAnomaly,
-                    severity,
-                    detection_method: AnomalyDetectionMethod::StatisticalOutlier,
-                    context: HashMap::from([
-                        ("z_score".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(z_score).unwrap())),
-                        ("threshold".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(threshold).unwrap())),
-                    ]),
+
+            AccuracyMetrics {
+                mae,
+                mse,
+                rmse,
+                mape,
+                r_squared,
+            }
+        }
+    }
+
+    /// Additional test cases for the enhanced analytics engine
+    #[cfg(test)]
+    mod advanced_tests {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_anomaly_detection() {
+            let mut data_points = Vec::new();
+            let base_time = Utc::now();
+
+            // Generate normal data with one anomaly
+            for i in 0..100 {
+                let value = if i == 50 {
+                    1000.0
+                } else {
+                    100.0 + (i as f64 * 0.1)
+                }; // Anomaly at index 50
+                data_points.push(TimeSeriesPoint {
+                    timestamp: base_time + Duration::hours(i),
+                    metric: "test_metric".to_string(),
+                    value,
+                    tags: HashMap::new(),
+                    metadata: None,
                 });
             }
-        }
-        
-        Ok(anomalies)
-    }
-    
-    /// Generate time series forecast
-    pub async fn generate_forecast(
-        &self,
-        data_points: &[TimeSeriesPoint],
-        config: &PredictiveAnalytics,
-    ) -> FusekiResult<ForecastResult> {
-        let start_time = std::time::Instant::now();
-        
-        // Use the first method for simplicity in this implementation
-        let method = config.forecasting_methods.first()
-            .unwrap_or(&ForecastingMethod::LinearRegression);
-        
-        let forecast = match method {
-            ForecastingMethod::LinearRegression => {
-                self.linear_regression_forecast(data_points, config).await?
-            }
-            _ => {
-                // Simplified implementation for other methods
-                self.linear_regression_forecast(data_points, config).await?
-            }
-        };
-        
-        let computation_time = start_time.elapsed().as_millis() as u64;
-        
-        Ok(ForecastResult {
-            timestamps: forecast.0,
-            predicted_values: forecast.1,
-            confidence_intervals: forecast.2,
-            accuracy_metrics: forecast.3,
-            method: method.clone(),
-            computation_time_ms: computation_time,
-        })
-    }
-    
-    /// Linear regression forecasting
-    async fn linear_regression_forecast(
-        &self,
-        data_points: &[TimeSeriesPoint],
-        config: &PredictiveAnalytics,
-    ) -> FusekiResult<(Vec<DateTime<Utc>>, Vec<f64>, HashMap<String, (Vec<f64>, Vec<f64>)>, AccuracyMetrics)> {
-        if data_points.len() < 2 {
-            return Err(FusekiError::InvalidRequest("Insufficient data for forecasting".to_string()));
-        }
-        
-        // Convert timestamps to numeric values for regression
-        let base_time = data_points[0].timestamp.timestamp() as f64;
-        let x_values: Vec<f64> = data_points.iter()
-            .map(|p| (p.timestamp.timestamp() as f64 - base_time) / 3600.0) // Hours from start
-            .collect();
-        let y_values: Vec<f64> = data_points.iter().map(|p| p.value).collect();
-        
-        // Simple linear regression: y = ax + b
-        let n = x_values.len() as f64;
-        let sum_x: f64 = x_values.iter().sum();
-        let sum_y: f64 = y_values.iter().sum();
-        let sum_xy: f64 = x_values.iter().zip(&y_values).map(|(x, y)| x * y).sum();
-        let sum_x2: f64 = x_values.iter().map(|x| x * x).sum();
-        
-        let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x);
-        let intercept = (sum_y - slope * sum_x) / n;
-        
-        // Generate forecast timestamps
-        let last_time = data_points.last().unwrap().timestamp;
-        let forecast_hours = config.prediction_horizon_hours as i64;
-        let mut forecast_timestamps = Vec::new();
-        let mut predicted_values = Vec::new();
-        
-        for hour in 1..=forecast_hours {
-            let forecast_time = last_time + Duration::hours(hour);
-            let x_forecast = (forecast_time.timestamp() as f64 - base_time) / 3600.0;
-            let y_forecast = slope * x_forecast + intercept;
-            
-            forecast_timestamps.push(forecast_time);
-            predicted_values.push(y_forecast);
-        }
-        
-        // Calculate confidence intervals
-        let mut confidence_intervals = HashMap::new();
-        for &confidence_level in &config.confidence_intervals {
-            let z_score = match confidence_level {
-                0.8 => 1.28,
-                0.9 => 1.645,
-                0.95 => 1.96,
-                0.99 => 2.576,
-                _ => 1.96, // Default to 95%
-            };
-            
-            // Calculate standard error
-            let residuals: Vec<f64> = x_values.iter().zip(&y_values)
-                .map(|(x, y)| y - (slope * x + intercept))
-                .collect();
-            let mse = residuals.iter().map(|r| r * r).sum::<f64>() / (n - 2.0);
-            let std_error = mse.sqrt();
-            
-            let lower_bounds: Vec<f64> = predicted_values.iter()
-                .map(|y| y - z_score * std_error)
-                .collect();
-            let upper_bounds: Vec<f64> = predicted_values.iter()
-                .map(|y| y + z_score * std_error)
-                .collect();
-            
-            confidence_intervals.insert(
-                format!("{}%", (confidence_level * 100.0) as u32),
-                (lower_bounds, upper_bounds)
-            );
-        }
-        
-        // Calculate accuracy metrics
-        let predictions: Vec<f64> = x_values.iter()
-            .map(|x| slope * x + intercept)
-            .collect();
-        let accuracy_metrics = self.calculate_accuracy_metrics(&y_values, &predictions);
-        
-        Ok((forecast_timestamps, predicted_values, confidence_intervals, accuracy_metrics))
-    }
-    
-    /// Calculate accuracy metrics for forecasting models
-    fn calculate_accuracy_metrics(&self, actual: &[f64], predicted: &[f64]) -> AccuracyMetrics {
-        if actual.len() != predicted.len() || actual.is_empty() {
-            return AccuracyMetrics {
-                mae: 0.0,
-                mse: 0.0,
-                rmse: 0.0,
-                mape: 0.0,
-                r_squared: 0.0,
-            };
-        }
-        
-        let n = actual.len() as f64;
-        
-        // Mean Absolute Error
-        let mae = actual.iter().zip(predicted)
-            .map(|(a, p)| (a - p).abs())
-            .sum::<f64>() / n;
-        
-        // Mean Squared Error
-        let mse = actual.iter().zip(predicted)
-            .map(|(a, p)| (a - p).powi(2))
-            .sum::<f64>() / n;
-        
-        // Root Mean Squared Error
-        let rmse = mse.sqrt();
-        
-        // Mean Absolute Percentage Error
-        let mape = actual.iter().zip(predicted)
-            .filter(|(a, _)| **a != 0.0)
-            .map(|(a, p)| ((a - p) / a).abs())
-            .sum::<f64>() / n * 100.0;
-        
-        // R-squared
-        let actual_mean = actual.iter().sum::<f64>() / n;
-        let ss_tot = actual.iter().map(|a| (a - actual_mean).powi(2)).sum::<f64>();
-        let ss_res = actual.iter().zip(predicted).map(|(a, p)| (a - p).powi(2)).sum::<f64>();
-        let r_squared = if ss_tot != 0.0 { 1.0 - ss_res / ss_tot } else { 0.0 };
-        
-        AccuracyMetrics {
-            mae,
-            mse,
-            rmse,
-            mape,
-            r_squared,
-        }
-    }
-}
 
-/// Additional test cases for the enhanced analytics engine
-#[cfg(test)]
-mod advanced_tests {
-    use super::*;
-    
-    #[tokio::test]
-    async fn test_anomaly_detection() {
-        let mut data_points = Vec::new();
-        let base_time = Utc::now();
-        
-        // Generate normal data with one anomaly
-        for i in 0..100 {
-            let value = if i == 50 { 1000.0 } else { 100.0 + (i as f64 * 0.1) }; // Anomaly at index 50
-            data_points.push(TimeSeriesPoint {
-                timestamp: base_time + Duration::hours(i),
-                metric: "test_metric".to_string(),
-                value,
-                tags: HashMap::new(),
-                metadata: None,
-            });
+            let detector = AnomalyDetector::default();
+            let engine =
+                AnalyticsEngine::new(AnalyticsConfig::default(), Arc::new(Store::new().unwrap()));
+
+            let anomalies = engine
+                .detect_anomalies(&data_points, &detector)
+                .await
+                .unwrap();
+            assert!(!anomalies.is_empty());
+
+            // Should detect the anomaly at index 50
+            let anomaly = &anomalies[0];
+            assert_eq!(anomaly.observed_value, 1000.0);
+            assert!(anomaly.confidence_score > 0.5);
         }
-        
-        let detector = AnomalyDetector::default();
-        let engine = AnalyticsEngine::new(AnalyticsConfig::default(), Arc::new(Store::new().unwrap()));
-        
-        let anomalies = engine.detect_anomalies(&data_points, &detector).await.unwrap();
-        assert!(!anomalies.is_empty());
-        
-        // Should detect the anomaly at index 50
-        let anomaly = &anomalies[0];
-        assert_eq!(anomaly.observed_value, 1000.0);
-        assert!(anomaly.confidence_score > 0.5);
-    }
-    
-    #[tokio::test]
-    async fn test_linear_regression_forecast() {
-        let mut data_points = Vec::new();
-        let base_time = Utc::now();
-        
-        // Generate trending data
-        for i in 0..48 {
-            data_points.push(TimeSeriesPoint {
-                timestamp: base_time + Duration::hours(i),
-                metric: "test_metric".to_string(),
-                value: 100.0 + i as f64 * 2.0, // Linear trend
-                tags: HashMap::new(),
-                metadata: None,
-            });
+
+        #[tokio::test]
+        async fn test_linear_regression_forecast() {
+            let mut data_points = Vec::new();
+            let base_time = Utc::now();
+
+            // Generate trending data
+            for i in 0..48 {
+                data_points.push(TimeSeriesPoint {
+                    timestamp: base_time + Duration::hours(i),
+                    metric: "test_metric".to_string(),
+                    value: 100.0 + i as f64 * 2.0, // Linear trend
+                    tags: HashMap::new(),
+                    metadata: None,
+                });
+            }
+
+            let config = PredictiveAnalytics::default();
+            let engine =
+                AnalyticsEngine::new(AnalyticsConfig::default(), Arc::new(Store::new().unwrap()));
+
+            let forecast = engine
+                .generate_forecast(&data_points, &config)
+                .await
+                .unwrap();
+
+            assert_eq!(forecast.predicted_values.len(), 24); // 24-hour forecast
+            assert!(!forecast.confidence_intervals.is_empty());
+            assert!(forecast.accuracy_metrics.r_squared > 0.8); // Should have good fit for linear data
         }
-        
-        let config = PredictiveAnalytics::default();
-        let engine = AnalyticsEngine::new(AnalyticsConfig::default(), Arc::new(Store::new().unwrap()));
-        
-        let forecast = engine.generate_forecast(&data_points, &config).await.unwrap();
-        
-        assert_eq!(forecast.predicted_values.len(), 24); // 24-hour forecast
-        assert!(!forecast.confidence_intervals.is_empty());
-        assert!(forecast.accuracy_metrics.r_squared > 0.8); // Should have good fit for linear data
     }
-}
 }

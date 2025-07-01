@@ -565,7 +565,7 @@ impl ContinualLearningModel {
     pub fn new(config: ContinualLearningConfig) -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        
+
         let model_id = Uuid::new_v4();
         let dimensions = config.base_config.dimensions;
 
@@ -591,15 +591,11 @@ impl ContinualLearningModel {
             lateral_connections: Vec::new(),
             generator: Some({
                 let mut rng = rand::thread_rng();
-                Array2::from_shape_fn((dimensions, dimensions), |_| {
-                    rng.gen::<f32>() * 0.1
-                })
+                Array2::from_shape_fn((dimensions, dimensions), |_| rng.gen::<f32>() * 0.1)
             }),
             discriminator: Some({
                 let mut rng = rand::thread_rng();
-                Array2::from_shape_fn((dimensions, dimensions), |_| {
-                    rng.gen::<f32>() * 0.1
-                })
+                Array2::from_shape_fn((dimensions, dimensions), |_| rng.gen::<f32>() * 0.1)
             }),
             entities: HashMap::new(),
             relations: HashMap::new(),
@@ -667,7 +663,8 @@ impl ContinualLearningModel {
         if matches!(
             self.config.task_config.detection_method,
             TaskDetection::Automatic
-        ) && self.detect_task_boundary(&data)? {
+        ) && self.detect_task_boundary(&data)?
+        {
             let new_task_id = format!("task_{}", self.task_history.len() + 1);
             self.start_task(new_task_id.clone(), "automatic".to_string())?;
         }
@@ -1667,7 +1664,9 @@ mod tests {
         let mut model = ContinualLearningModel::new(config);
 
         // Initialize the model's networks properly before training
-        model.start_task("initial_task".to_string(), "training".to_string()).unwrap();
+        model
+            .start_task("initial_task".to_string(), "training".to_string())
+            .unwrap();
 
         let stats = model.train(Some(10)).await.unwrap();
         assert_eq!(stats.epochs_completed, 10);

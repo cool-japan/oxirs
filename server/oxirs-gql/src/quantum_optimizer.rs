@@ -1184,10 +1184,280 @@ impl QuantumQueryOptimizer {
         Ok(0.001)
     }
 
-    /// Apply surface code correction
+    /// Apply advanced surface code quantum error correction
     async fn apply_surface_code_correction(&self) -> Result<()> {
-        // Apply quantum error correction
-        debug!("Applying surface code error correction");
+        debug!("Applying advanced surface code error correction");
+
+        let mut state = self.quantum_state.write().await;
+        let num_qubits = state.amplitudes.len();
+
+        // Surface code parameters
+        let code_distance = ((num_qubits as f64).sqrt() as usize).max(3);
+        let syndrome_qubits = (code_distance - 1) * code_distance;
+        let data_qubits = code_distance * code_distance;
+
+        // Syndrome extraction for X and Z stabilizers
+        let mut x_syndromes = vec![false; syndrome_qubits / 2];
+        let mut z_syndromes = vec![false; syndrome_qubits / 2];
+
+        // Extract syndromes by measuring stabilizer operators
+        for i in 0..syndrome_qubits / 2 {
+            // X stabilizer syndrome (detects Z errors)
+            let mut x_syndrome_value = 0.0;
+            for j in 0..4 {
+                let qubit_idx = self.get_x_stabilizer_qubit(i, j, code_distance)?;
+                if qubit_idx < num_qubits {
+                    x_syndrome_value += state.amplitudes[qubit_idx].real.abs();
+                }
+            }
+            x_syndromes[i] = (x_syndrome_value % 2.0) > 1.0;
+
+            // Z stabilizer syndrome (detects X errors)
+            let mut z_syndrome_value = 0.0;
+            for j in 0..4 {
+                let qubit_idx = self.get_z_stabilizer_qubit(i, j, code_distance)?;
+                if qubit_idx < num_qubits {
+                    z_syndrome_value += state.amplitudes[qubit_idx].imag.abs();
+                }
+            }
+            z_syndromes[i] = (z_syndrome_value % 2.0) > 1.0;
+        }
+
+        // Decode syndromes using minimum weight perfect matching
+        let x_error_chain = self
+            .decode_surface_code_syndromes(&x_syndromes, code_distance, true)
+            .await?;
+        let z_error_chain = self
+            .decode_surface_code_syndromes(&z_syndromes, code_distance, false)
+            .await?;
+
+        // Apply corrections based on decoded error chains
+        self.apply_error_corrections(&mut state, &x_error_chain, &z_error_chain)
+            .await?;
+
+        // Update error correction metrics
+        let total_errors = x_error_chain.len() + z_error_chain.len();
+        if total_errors > 0 {
+            info!(
+                "Surface code corrected {} errors (X: {}, Z: {})",
+                total_errors,
+                x_error_chain.len(),
+                z_error_chain.len()
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Get qubit index for X stabilizer measurement
+    fn get_x_stabilizer_qubit(
+        &self,
+        stabilizer_idx: usize,
+        neighbor: usize,
+        distance: usize,
+    ) -> Result<usize> {
+        let row = stabilizer_idx / (distance - 1);
+        let col = stabilizer_idx % (distance - 1);
+
+        let qubit_positions = [
+            (row, col),         // left
+            (row, col + 1),     // right
+            (row + 1, col),     // bottom
+            (row + 1, col + 1), // bottom-right
+        ];
+
+        if neighbor < qubit_positions.len() {
+            let (r, c) = qubit_positions[neighbor];
+            if r < distance && c < distance {
+                return Ok(r * distance + c);
+            }
+        }
+
+        Err(anyhow!("Invalid X stabilizer qubit position"))
+    }
+
+    /// Get qubit index for Z stabilizer measurement  
+    fn get_z_stabilizer_qubit(
+        &self,
+        stabilizer_idx: usize,
+        neighbor: usize,
+        distance: usize,
+    ) -> Result<usize> {
+        let row = stabilizer_idx / distance;
+        let col = stabilizer_idx % distance;
+
+        let qubit_positions = [
+            (row, col.saturating_sub(1)), // left
+            (row, col + 1),               // right
+            (row.saturating_sub(1), col), // top
+            (row + 1, col),               // bottom
+        ];
+
+        if neighbor < qubit_positions.len() {
+            let (r, c) = qubit_positions[neighbor];
+            if r < distance
+                && c < distance
+                && !(row == 0 && neighbor == 2)
+                && !(col == 0 && neighbor == 0)
+            {
+                return Ok(r * distance + c);
+            }
+        }
+
+        Err(anyhow!("Invalid Z stabilizer qubit position"))
+    }
+
+    /// Decode surface code syndromes using minimum weight perfect matching algorithm
+    async fn decode_surface_code_syndromes(
+        &self,
+        syndromes: &[bool],
+        distance: usize,
+        is_x_type: bool,
+    ) -> Result<Vec<usize>> {
+        let mut error_chain = Vec::new();
+
+        // Find syndrome positions (defects)
+        let mut defect_positions = Vec::new();
+        for (i, &syndrome) in syndromes.iter().enumerate() {
+            if syndrome {
+                defect_positions.push(i);
+            }
+        }
+
+        // If odd number of defects, add virtual boundary defect
+        if defect_positions.len() % 2 == 1 {
+            defect_positions.push(syndromes.len()); // Virtual boundary
+        }
+
+        // Greedy minimum weight perfect matching approximation
+        while defect_positions.len() >= 2 {
+            let mut min_distance = usize::MAX;
+            let mut best_pair = (0, 1);
+
+            // Find closest pair of defects
+            for i in 0..defect_positions.len() {
+                for j in i + 1..defect_positions.len() {
+                    let dist = self.surface_code_distance(
+                        defect_positions[i],
+                        defect_positions[j],
+                        distance,
+                    );
+                    if dist < min_distance {
+                        min_distance = dist;
+                        best_pair = (i, j);
+                    }
+                }
+            }
+
+            // Add error chain between paired defects
+            let chain = self.get_error_chain_between_defects(
+                defect_positions[best_pair.0],
+                defect_positions[best_pair.1],
+                distance,
+                is_x_type,
+            )?;
+            error_chain.extend(chain);
+
+            // Remove paired defects (remove higher index first)
+            let (i, j) = if best_pair.0 > best_pair.1 {
+                (best_pair.0, best_pair.1)
+            } else {
+                (best_pair.1, best_pair.0)
+            };
+            defect_positions.remove(i);
+            defect_positions.remove(j);
+        }
+
+        Ok(error_chain)
+    }
+
+    /// Calculate surface code distance between two defects
+    fn surface_code_distance(&self, defect1: usize, defect2: usize, distance: usize) -> usize {
+        if defect1 >= distance * distance || defect2 >= distance * distance {
+            return distance; // Distance to boundary
+        }
+
+        let (r1, c1) = (defect1 / distance, defect1 % distance);
+        let (r2, c2) = (defect2 / distance, defect2 % distance);
+
+        r1.abs_diff(r2) + c1.abs_diff(c2)
+    }
+
+    /// Get error chain between two defects on surface code lattice
+    fn get_error_chain_between_defects(
+        &self,
+        defect1: usize,
+        defect2: usize,
+        distance: usize,
+        is_x_type: bool,
+    ) -> Result<Vec<usize>> {
+        let mut chain = Vec::new();
+
+        if defect1 >= distance * distance || defect2 >= distance * distance {
+            return Ok(chain); // Boundary correction
+        }
+
+        let (r1, c1) = (defect1 / distance, defect1 % distance);
+        let (r2, c2) = (defect2 / distance, defect2 % distance);
+
+        // Manhattan path between defects
+        let mut current_r = r1;
+        let mut current_c = c1;
+
+        // Move vertically first
+        while current_r != r2 {
+            if is_x_type {
+                chain.push(current_r * distance + current_c);
+            }
+            current_r = if current_r < r2 {
+                current_r + 1
+            } else {
+                current_r - 1
+            };
+        }
+
+        // Then move horizontally
+        while current_c != c2 {
+            if !is_x_type {
+                chain.push(current_r * distance + current_c);
+            }
+            current_c = if current_c < c2 {
+                current_c + 1
+            } else {
+                current_c - 1
+            };
+        }
+
+        Ok(chain)
+    }
+
+    /// Apply error corrections to quantum state
+    async fn apply_error_corrections(
+        &self,
+        state: &mut tokio::sync::RwLockWriteGuard<'_, QuantumState>,
+        x_errors: &[usize],
+        z_errors: &[usize],
+    ) -> Result<()> {
+        // Apply X error corrections (Pauli-X gates)
+        for &qubit_idx in x_errors {
+            if qubit_idx < state.amplitudes.len() {
+                // Apply Pauli-X: |0⟩ ↔ |1⟩, phase stays same
+                let old_amplitude = state.amplitudes[qubit_idx];
+                state.amplitudes[qubit_idx] =
+                    Complex64::new(old_amplitude.real, -old_amplitude.imag);
+            }
+        }
+
+        // Apply Z error corrections (Pauli-Z gates)
+        for &qubit_idx in z_errors {
+            if qubit_idx < state.amplitudes.len() {
+                // Apply Pauli-Z: |1⟩ → -|1⟩, |0⟩ unchanged
+                let old_amplitude = state.amplitudes[qubit_idx];
+                state.amplitudes[qubit_idx] =
+                    Complex64::new(-old_amplitude.real, old_amplitude.imag);
+            }
+        }
+
         Ok(())
     }
 

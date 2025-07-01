@@ -162,9 +162,13 @@ impl QueryExecutor {
         };
 
         // Get vectors for both resources
-        let vector1 = self.vector_store.get_vector(resource1)
+        let vector1 = self
+            .vector_store
+            .get_vector(resource1)
             .ok_or_else(|| anyhow!("Vector not found for resource: {}", resource1))?;
-        let vector2 = self.vector_store.get_vector(resource2)
+        let vector2 = self
+            .vector_store
+            .get_vector(resource2)
             .ok_or_else(|| anyhow!("Vector not found for resource: {}", resource2))?;
 
         // Calculate similarity
@@ -204,13 +208,16 @@ impl QueryExecutor {
         };
 
         // Get vector for the resource
-        let query_vector = self.vector_store.get_vector(resource)
+        let query_vector = self
+            .vector_store
+            .get_vector(resource)
             .ok_or_else(|| anyhow!("Vector not found for resource: {}", resource))?;
 
         // Perform similarity search
         let results = self.vector_store.search(&query_vector, limit, threshold)?;
-        
-        Ok(results.into_iter()
+
+        Ok(results
+            .into_iter()
             .filter(|(id, _)| id != resource) // Exclude the query resource itself
             .collect())
     }
@@ -274,7 +281,12 @@ impl QueryExecutor {
     }
 
     /// Execute simple text search
-    fn execute_simple_text_search(&self, query_text: &str, limit: usize, threshold: f32) -> Result<Vec<(String, f32)>> {
+    fn execute_simple_text_search(
+        &self,
+        query_text: &str,
+        limit: usize,
+        threshold: f32,
+    ) -> Result<Vec<(String, f32)>> {
         // Generate embedding for the query text
         let content = EmbeddableContent::Text {
             text: query_text.to_string(),
@@ -296,7 +308,8 @@ impl QueryExecutor {
         target_languages: &[String],
     ) -> Result<Vec<(String, f32)>> {
         // Process query with cross-language variations
-        let query_variations = self.cross_language_processor
+        let query_variations = self
+            .cross_language_processor
             .process_cross_language_query(query_text, target_languages);
 
         let mut all_results = Vec::new();
@@ -376,7 +389,7 @@ impl QueryExecutor {
 
         if let Some(ref graph_search) = self.graph_aware_search {
             let context = GraphContext::new(graph_iri.clone(), scope);
-            
+
             // Generate embedding for query text
             let content = EmbeddableContent::Text {
                 text: query_text.to_string(),
@@ -415,7 +428,7 @@ impl QueryExecutor {
         };
 
         let vector = self.embedding_manager.embed_content(&content)?;
-        
+
         // Store the vector with a generated ID
         let id = format!("embedded_{}", hash_string(text));
         self.vector_store.insert(&id, vector)?;
@@ -424,7 +437,11 @@ impl QueryExecutor {
     }
 
     /// Merge and deduplicate search results
-    fn merge_search_results(&self, results: Vec<(String, f32)>, limit: usize) -> Vec<(String, f32)> {
+    fn merge_search_results(
+        &self,
+        results: Vec<(String, f32)>,
+        limit: usize,
+    ) -> Vec<(String, f32)> {
         let mut result_map: HashMap<String, f32> = HashMap::new();
 
         // Aggregate scores for duplicate IDs (take maximum score)
@@ -484,7 +501,7 @@ impl QueryExecutor {
 fn hash_string(s: &str) -> u64 {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    
+
     let mut hasher = DefaultHasher::new();
     s.hash(&mut hasher);
     hasher.finish()
@@ -500,14 +517,8 @@ mod tests {
         let vector_store = VectorStore::new();
         let embedding_manager = EmbeddingManager::new(EmbeddingStrategy::TfIdf, 100).unwrap();
         let optimizer = VectorQueryOptimizer::default();
-        
-        let executor = QueryExecutor::new(
-            vector_store,
-            embedding_manager,
-            optimizer,
-            None,
-            None,
-        );
+
+        let executor = QueryExecutor::new(vector_store, embedding_manager, optimizer, None, None);
 
         let query = VectorQuery::new(
             "similarity_search".to_string(),
@@ -527,7 +538,7 @@ mod tests {
             "search".to_string(),
             vec![VectorServiceArg::String("test".to_string())],
         );
-        
+
         let query2 = VectorQuery::new(
             "search".to_string(),
             vec![VectorServiceArg::String("test".to_string())],
@@ -541,14 +552,8 @@ mod tests {
         let vector_store = VectorStore::new();
         let embedding_manager = EmbeddingManager::new(EmbeddingStrategy::TfIdf, 100).unwrap();
         let optimizer = VectorQueryOptimizer::default();
-        
-        let executor = QueryExecutor::new(
-            vector_store,
-            embedding_manager,
-            optimizer,
-            None,
-            None,
-        );
+
+        let executor = QueryExecutor::new(vector_store, embedding_manager, optimizer, None, None);
 
         let results = vec![
             ("doc1".to_string(), 0.8),
@@ -558,7 +563,7 @@ mod tests {
         ];
 
         let merged = executor.merge_search_results(results, 10);
-        
+
         assert_eq!(merged.len(), 3);
         assert_eq!(merged[0].0, "doc2"); // Highest score first
         assert_eq!(merged[1].1, 0.8); // doc1 should have max score of 0.8

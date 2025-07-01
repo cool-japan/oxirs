@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::nodes::NodeId;
-use crate::triple_store::{Triple, Quad};
+use crate::triple_store::{Quad, Triple};
 
 /// Compact encoding schemes for different data types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,10 +60,14 @@ impl EncodingStats {
             (self.varint_usage, CompactEncodingScheme::VarInt),
             (self.delta_usage, CompactEncodingScheme::Delta),
             (self.bitpack_usage, CompactEncodingScheme::BitPacked),
-            (self.frame_ref_usage, CompactEncodingScheme::FrameOfReference),
+            (
+                self.frame_ref_usage,
+                CompactEncodingScheme::FrameOfReference,
+            ),
         ];
-        
-        schemes.iter()
+
+        schemes
+            .iter()
             .max_by_key(|(usage, _)| *usage)
             .map(|(_, scheme)| *scheme)
             .unwrap_or(CompactEncodingScheme::VarInt)
@@ -147,44 +151,44 @@ impl CompactEncoder {
     /// Encode a triple with compact representation
     pub fn encode_triple(&mut self, triple: &Triple) -> Vec<u8> {
         let mut result = Vec::new();
-        
+
         // Encode each component
         let subject_bytes = self.encode_node_id(triple.subject);
         let predicate_bytes = self.encode_node_id(triple.predicate);
         let object_bytes = self.encode_node_id(triple.object);
-        
+
         // Pack into result with length prefixes for each component
         self.encode_varint_to_vec(&mut result, subject_bytes.len() as u64);
         result.extend_from_slice(&subject_bytes);
-        
+
         self.encode_varint_to_vec(&mut result, predicate_bytes.len() as u64);
         result.extend_from_slice(&predicate_bytes);
-        
+
         self.encode_varint_to_vec(&mut result, object_bytes.len() as u64);
         result.extend_from_slice(&object_bytes);
-        
+
         result
     }
 
     /// Encode a quad with compact representation
     pub fn encode_quad(&mut self, quad: &Quad) -> Vec<u8> {
         let mut result = Vec::new();
-        
+
         // Encode each component
         let subject_bytes = self.encode_node_id(quad.subject);
         let predicate_bytes = self.encode_node_id(quad.predicate);
         let object_bytes = self.encode_node_id(quad.object);
-        
+
         // Pack into result with length prefixes
         self.encode_varint_to_vec(&mut result, subject_bytes.len() as u64);
         result.extend_from_slice(&subject_bytes);
-        
+
         self.encode_varint_to_vec(&mut result, predicate_bytes.len() as u64);
         result.extend_from_slice(&predicate_bytes);
-        
+
         self.encode_varint_to_vec(&mut result, object_bytes.len() as u64);
         result.extend_from_slice(&object_bytes);
-        
+
         // Encode optional graph (None is encoded as 0, Some as non-zero)
         match quad.graph {
             Some(graph_id) => {
@@ -196,7 +200,7 @@ impl CompactEncoder {
                 self.encode_varint_to_vec(&mut result, 0);
             }
         }
-        
+
         result
     }
 
@@ -218,51 +222,51 @@ impl CompactEncoder {
     /// Encode Node IDs using variable-length encoding
     fn encode_node_ids_varint(&self, node_ids: &[NodeId]) -> Vec<u8> {
         let mut result = Vec::new();
-        
+
         // Encode count first
         self.encode_varint_to_vec(&mut result, node_ids.len() as u64);
-        
+
         // Encode each ID
         for &id in node_ids {
             self.encode_varint_to_vec(&mut result, id);
         }
-        
+
         result
     }
 
     /// Encode Node IDs using delta compression
     fn encode_node_ids_delta(&self, node_ids: &[NodeId]) -> Vec<u8> {
         let mut result = Vec::new();
-        
+
         // Encode count and encoding scheme
         result.push(1u8); // Delta encoding marker
         self.encode_varint_to_vec(&mut result, node_ids.len() as u64);
-        
+
         if node_ids.is_empty() {
             return result;
         }
-        
+
         // Encode first value as-is
         self.encode_varint_to_vec(&mut result, node_ids[0]);
-        
+
         // Encode deltas
         for i in 1..node_ids.len() {
-            let delta = if node_ids[i] >= node_ids[i-1] {
-                node_ids[i] - node_ids[i-1]
+            let delta = if node_ids[i] >= node_ids[i - 1] {
+                node_ids[i] - node_ids[i - 1]
             } else {
                 // Handle decreasing sequences (shouldn't be common for Node IDs)
                 node_ids[i]
             };
             self.encode_varint_to_vec(&mut result, delta);
         }
-        
+
         result
     }
 
     /// Encode Node IDs using bit packing for small values
     fn encode_node_ids_bitpacked(&self, node_ids: &[NodeId]) -> Vec<u8> {
         let mut result = Vec::new();
-        
+
         // Analyze the data to determine optimal bit width
         let max_value = node_ids.iter().copied().max().unwrap_or(0);
         let bits_per_value = if max_value == 0 {
@@ -270,55 +274,55 @@ impl CompactEncoder {
         } else {
             64 - max_value.leading_zeros()
         };
-        
+
         result.push(2u8); // Bit-packed encoding marker
         self.encode_varint_to_vec(&mut result, node_ids.len() as u64);
         result.push(bits_per_value as u8);
-        
+
         // Pack values into bits
         let mut bit_buffer = 0u64;
         let mut bits_in_buffer = 0u8;
-        
+
         for &value in node_ids {
             bit_buffer |= (value & ((1u64 << bits_per_value) - 1)) << bits_in_buffer;
             bits_in_buffer += bits_per_value as u8;
-            
+
             while bits_in_buffer >= 8 {
                 result.push(bit_buffer as u8);
                 bit_buffer >>= 8;
                 bits_in_buffer -= 8;
             }
         }
-        
+
         // Handle remaining bits
         if bits_in_buffer > 0 {
             result.push(bit_buffer as u8);
         }
-        
+
         result
     }
 
     /// Encode Node IDs using frame of reference compression
     fn encode_node_ids_frame_of_reference(&self, node_ids: &[NodeId]) -> Vec<u8> {
         let mut result = Vec::new();
-        
+
         result.push(3u8); // Frame of reference encoding marker
         self.encode_varint_to_vec(&mut result, node_ids.len() as u64);
-        
+
         if node_ids.is_empty() {
             return result;
         }
-        
+
         // Use the minimum value as the frame of reference
         let min_value = node_ids.iter().copied().min().unwrap();
         self.encode_varint_to_vec(&mut result, min_value);
-        
+
         // Encode deltas from the frame of reference
         for &value in node_ids {
             let delta = value - min_value;
             self.encode_varint_to_vec(&mut result, delta);
         }
-        
+
         result
     }
 
@@ -328,13 +332,13 @@ impl CompactEncoder {
             // For small sequences, use simple varint
             return self.encode_node_ids_varint(node_ids);
         }
-        
+
         // Try different encodings and pick the smallest
         let varint_encoded = self.encode_node_ids_varint(node_ids);
         let delta_encoded = self.encode_node_ids_delta(node_ids);
         let bitpacked_encoded = self.encode_node_ids_bitpacked(node_ids);
         let frame_ref_encoded = self.encode_node_ids_frame_of_reference(node_ids);
-        
+
         // Return the smallest encoding
         vec![
             (varint_encoded.len(), varint_encoded),
@@ -376,12 +380,12 @@ impl CompactDecoder {
         }
 
         let mut offset = 0;
-        
+
         // Check if this has an encoding scheme marker
         if data[0] <= 3 {
             let scheme_marker = data[0];
             offset = 1;
-            
+
             match scheme_marker {
                 1 => self.decode_node_ids_delta(data, &mut offset),
                 2 => self.decode_node_ids_bitpacked(data, &mut offset),
@@ -397,49 +401,49 @@ impl CompactDecoder {
     /// Decode a triple
     pub fn decode_triple(&self, data: &[u8]) -> Result<Triple> {
         let mut offset = 0;
-        
+
         // Decode subject
         let subject_len = self.decode_varint(data, &mut offset)? as usize;
         let subject_bytes = &data[offset..offset + subject_len];
         let subject = self.decode_node_id(subject_bytes)?;
         offset += subject_len;
-        
+
         // Decode predicate
         let predicate_len = self.decode_varint(data, &mut offset)? as usize;
         let predicate_bytes = &data[offset..offset + predicate_len];
         let predicate = self.decode_node_id(predicate_bytes)?;
         offset += predicate_len;
-        
+
         // Decode object
         let object_len = self.decode_varint(data, &mut offset)? as usize;
         let object_bytes = &data[offset..offset + object_len];
         let object = self.decode_node_id(object_bytes)?;
-        
+
         Ok(Triple::new(subject, predicate, object))
     }
 
     /// Decode a quad
     pub fn decode_quad(&self, data: &[u8]) -> Result<Quad> {
         let mut offset = 0;
-        
+
         // Decode subject
         let subject_len = self.decode_varint(data, &mut offset)? as usize;
         let subject_bytes = &data[offset..offset + subject_len];
         let subject = self.decode_node_id(subject_bytes)?;
         offset += subject_len;
-        
+
         // Decode predicate
         let predicate_len = self.decode_varint(data, &mut offset)? as usize;
         let predicate_bytes = &data[offset..offset + predicate_len];
         let predicate = self.decode_node_id(predicate_bytes)?;
         offset += predicate_len;
-        
+
         // Decode object
         let object_len = self.decode_varint(data, &mut offset)? as usize;
         let object_bytes = &data[offset..offset + object_len];
         let object = self.decode_node_id(object_bytes)?;
         offset += object_len;
-        
+
         // Decode optional graph
         let graph_len = self.decode_varint(data, &mut offset)? as usize;
         let graph = if graph_len == 0 {
@@ -448,7 +452,7 @@ impl CompactDecoder {
             let graph_bytes = &data[offset..offset + graph_len];
             Some(self.decode_node_id(graph_bytes)?)
         };
-        
+
         Ok(Quad::new(subject, predicate, object, graph))
     }
 
@@ -456,23 +460,23 @@ impl CompactDecoder {
     fn decode_varint(&self, data: &[u8], offset: &mut usize) -> Result<u64> {
         let mut result = 0u64;
         let mut shift = 0;
-        
+
         while *offset < data.len() {
             let byte = data[*offset];
             *offset += 1;
-            
+
             result |= ((byte & 0x7F) as u64) << shift;
-            
+
             if (byte & 0x80) == 0 {
                 return Ok(result);
             }
-            
+
             shift += 7;
             if shift >= 64 {
                 return Err(anyhow!("Variable integer too large"));
             }
         }
-        
+
         Err(anyhow!("Incomplete variable integer"))
     }
 
@@ -480,28 +484,28 @@ impl CompactDecoder {
     fn decode_node_ids_varint(&self, data: &[u8], offset: &mut usize) -> Result<Vec<NodeId>> {
         let count = self.decode_varint(data, offset)? as usize;
         let mut result = Vec::with_capacity(count);
-        
+
         for _ in 0..count {
             result.push(self.decode_varint(data, offset)?);
         }
-        
+
         Ok(result)
     }
 
     /// Decode delta-encoded Node IDs
     fn decode_node_ids_delta(&self, data: &[u8], offset: &mut usize) -> Result<Vec<NodeId>> {
         let count = self.decode_varint(data, offset)? as usize;
-        
+
         if count == 0 {
             return Ok(Vec::new());
         }
-        
+
         let mut result = Vec::with_capacity(count);
-        
+
         // Decode first value
         let first_value = self.decode_varint(data, offset)?;
         result.push(first_value);
-        
+
         // Decode deltas and reconstruct values
         let mut current_value = first_value;
         for _ in 1..count {
@@ -509,32 +513,32 @@ impl CompactDecoder {
             current_value += delta;
             result.push(current_value);
         }
-        
+
         Ok(result)
     }
 
     /// Decode bit-packed Node IDs
     fn decode_node_ids_bitpacked(&self, data: &[u8], offset: &mut usize) -> Result<Vec<NodeId>> {
         let count = self.decode_varint(data, offset)? as usize;
-        
+
         if count == 0 {
             return Ok(Vec::new());
         }
-        
+
         if *offset >= data.len() {
             return Err(anyhow!("Missing bits per value"));
         }
-        
+
         let bits_per_value = data[*offset] as u32;
         *offset += 1;
-        
+
         let mut result = Vec::with_capacity(count);
         let mask = (1u64 << bits_per_value) - 1;
-        
+
         let mut bit_buffer = 0u64;
         let mut bits_in_buffer = 0u8;
         let mut byte_offset = *offset;
-        
+
         for _ in 0..count {
             // Ensure we have enough bits in the buffer
             while bits_in_buffer < bits_per_value as u8 && byte_offset < data.len() {
@@ -542,40 +546,44 @@ impl CompactDecoder {
                 bits_in_buffer += 8;
                 byte_offset += 1;
             }
-            
+
             if bits_in_buffer < bits_per_value as u8 {
                 return Err(anyhow!("Insufficient data for bit-packed values"));
             }
-            
+
             // Extract the value
             let value = bit_buffer & mask;
             result.push(value);
-            
+
             // Remove the extracted bits
             bit_buffer >>= bits_per_value;
             bits_in_buffer -= bits_per_value as u8;
         }
-        
+
         *offset = byte_offset;
         Ok(result)
     }
 
     /// Decode frame-of-reference encoded Node IDs
-    fn decode_node_ids_frame_of_reference(&self, data: &[u8], offset: &mut usize) -> Result<Vec<NodeId>> {
+    fn decode_node_ids_frame_of_reference(
+        &self,
+        data: &[u8],
+        offset: &mut usize,
+    ) -> Result<Vec<NodeId>> {
         let count = self.decode_varint(data, offset)? as usize;
-        
+
         if count == 0 {
             return Ok(Vec::new());
         }
-        
+
         let frame_of_reference = self.decode_varint(data, offset)?;
         let mut result = Vec::with_capacity(count);
-        
+
         for _ in 0..count {
             let delta = self.decode_varint(data, offset)?;
             result.push(frame_of_reference + delta);
         }
-        
+
         Ok(result)
     }
 }
@@ -667,13 +675,13 @@ mod tests {
     #[test]
     fn test_compression_ratio() {
         let mut encoder = CompactEncoder::new(CompactEncodingScheme::VarInt);
-        
+
         // Encode some data to generate statistics
         let node_ids = (1..1000).collect::<Vec<_>>();
         let _encoded = encoder.encode_node_id_sequence(&node_ids);
-        
+
         let stats = encoder.get_stats();
-        
+
         // Should have some compression
         assert!(stats.compression_ratio() < 1.0);
         assert!(stats.total_encoded > 0);

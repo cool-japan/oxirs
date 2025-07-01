@@ -4,13 +4,13 @@
 //! pattern discovery, and creative insight generation during system idle periods.
 
 use super::{EmotionalState, PatternCharacteristic, QueryContext};
-use crate::query::algebra::AlgebraTriplePattern;
 use crate::model::Triple;
+use crate::query::algebra::AlgebraTriplePattern;
 use crate::OxirsError;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime, Instant};
-use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant, SystemTime};
 
 /// Dream state processor for memory consolidation and creative insights
 #[derive(Debug)]
@@ -158,12 +158,12 @@ pub struct MetaMemory {
 /// Memory types for classification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MemoryType {
-    Episodic,    // Specific experiences
-    Semantic,    // General knowledge
-    Procedural,  // Skills and procedures
-    Emotional,   // Emotional experiences
-    Creative,    // Creative insights
-    Meta,        // Meta-cognitive knowledge
+    Episodic,   // Specific experiences
+    Semantic,   // General knowledge
+    Procedural, // Skills and procedures
+    Emotional,  // Emotional experiences
+    Creative,   // Creative insights
+    Meta,       // Meta-cognitive knowledge
 }
 
 /// Validation status for insights
@@ -189,10 +189,10 @@ pub struct RehearsalItem {
 /// Types of memory rehearsal
 #[derive(Debug, Clone)]
 pub enum RehearsalType {
-    Maintenance,  // Keep memory active
-    Elaborative,  // Add associations
-    Distributed,  // Spaced repetition
-    Interleaved,  // Mixed practice
+    Maintenance, // Keep memory active
+    Elaborative, // Add associations
+    Distributed, // Spaced repetition
+    Interleaved, // Mixed practice
 }
 
 /// Memory consolidation task
@@ -316,12 +316,12 @@ pub struct PatternTemplate {
 /// Types of patterns to discover
 #[derive(Debug, Clone)]
 pub enum PatternType {
-    Behavioral,     // Query execution patterns
-    Structural,     // Graph structure patterns
-    Temporal,       // Time-based patterns
-    Contextual,     // Context-dependent patterns
-    Optimization,   // Performance patterns
-    Creative,       // Novel combinations
+    Behavioral,   // Query execution patterns
+    Structural,   // Graph structure patterns
+    Temporal,     // Time-based patterns
+    Contextual,   // Context-dependent patterns
+    Optimization, // Performance patterns
+    Creative,     // Novel combinations
 }
 
 /// Criteria for pattern matching
@@ -430,11 +430,11 @@ pub struct SleepCycleController {
 /// Sleep stages
 #[derive(Debug, Clone)]
 pub enum SleepStage {
-    Stage1,  // Light sleep transition
-    Stage2,  // Light sleep
-    Stage3,  // Deep sleep
-    REM,     // REM sleep
-    Awake,   // Fully awake
+    Stage1, // Light sleep transition
+    Stage2, // Light sleep
+    Stage3, // Deep sleep
+    REM,    // REM sleep
+    Awake,  // Fully awake
 }
 
 /// Dream analytics for performance monitoring
@@ -463,11 +463,11 @@ impl DreamProcessor {
             dream_analytics: DreamAnalytics::new(),
         }
     }
-    
+
     /// Enter dream state for processing
     pub fn enter_dream_state(&mut self, target_state: DreamState) -> Result<(), OxirsError> {
         self.dream_state = target_state.clone();
-        
+
         match target_state {
             DreamState::LightSleep => {
                 self.initiate_light_sleep_processing()?;
@@ -486,15 +486,20 @@ impl DreamProcessor {
             }
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     /// Initiate light sleep processing
     fn initiate_light_sleep_processing(&mut self) -> Result<(), OxirsError> {
         // Focus on recent memory organization
         let sequence = DreamSequence {
-            sequence_id: format!("light_sleep_{}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?.as_secs()),
+            sequence_id: format!(
+                "light_sleep_{}",
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)?
+                    .as_secs()
+            ),
             sequence_type: SequenceType::MemoryConsolidation,
             start_time: SystemTime::now(),
             estimated_duration: Duration::from_secs(300), // 5 minutes
@@ -519,16 +524,21 @@ impl DreamProcessor {
             current_step: 0,
             sequence_state: SequenceState::Active,
         };
-        
+
         self.sequence_manager.current_sequence = Some(sequence);
         Ok(())
     }
-    
+
     /// Initiate deep sleep processing
     fn initiate_deep_sleep_processing(&mut self) -> Result<(), OxirsError> {
         // Focus on memory consolidation and integration
         let sequence = DreamSequence {
-            sequence_id: format!("deep_sleep_{}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?.as_secs()),
+            sequence_id: format!(
+                "deep_sleep_{}",
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)?
+                    .as_secs()
+            ),
             sequence_type: SequenceType::MemoryConsolidation,
             start_time: SystemTime::now(),
             estimated_duration: Duration::from_secs(1800), // 30 minutes
@@ -553,16 +563,21 @@ impl DreamProcessor {
             current_step: 0,
             sequence_state: SequenceState::Active,
         };
-        
+
         self.sequence_manager.current_sequence = Some(sequence);
         Ok(())
     }
-    
+
     /// Initiate REM processing
     fn initiate_rem_processing(&mut self) -> Result<(), OxirsError> {
         // Focus on creative recombination and insight generation
         let sequence = DreamSequence {
-            sequence_id: format!("rem_{}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?.as_secs()),
+            sequence_id: format!(
+                "rem_{}",
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)?
+                    .as_secs()
+            ),
             sequence_type: SequenceType::CreativeExploration,
             start_time: SystemTime::now(),
             estimated_duration: Duration::from_secs(900), // 15 minutes
@@ -587,25 +602,25 @@ impl DreamProcessor {
             current_step: 0,
             sequence_state: SequenceState::Active,
         };
-        
+
         self.sequence_manager.current_sequence = Some(sequence);
         Ok(())
     }
-    
+
     /// Initiate creative dreaming
     fn initiate_creative_dreaming(&mut self) -> Result<(), OxirsError> {
         // Enhanced creative processing
         self.insight_generator.generate_creative_insights()?;
         Ok(())
     }
-    
+
     /// Initiate lucid dreaming
     fn initiate_lucid_dreaming(&mut self) -> Result<(), OxirsError> {
         // Controlled exploration of memory space
         self.pattern_discoverer.discover_novel_patterns()?;
         Ok(())
     }
-    
+
     /// Process current dream sequence step
     pub fn process_dream_step(&mut self) -> Result<StepResult, OxirsError> {
         // First, extract the step and update the sequence state
@@ -618,7 +633,11 @@ impl DreamProcessor {
                     if should_complete {
                         sequence.sequence_state = SequenceState::Completed;
                     }
-                    (Some(current_step), sequence.sequence_id.clone(), should_complete)
+                    (
+                        Some(current_step),
+                        sequence.sequence_id.clone(),
+                        should_complete,
+                    )
                 } else {
                     return Ok(StepResult::NoMoreSteps);
                 }
@@ -626,11 +645,11 @@ impl DreamProcessor {
                 return Ok(StepResult::NoActiveSequence);
             }
         };
-        
+
         // Now execute the step without holding the sequence reference
         if let Some(step) = current_step {
             let result = self.execute_processing_step(&step)?;
-            
+
             if should_complete {
                 Ok(StepResult::SequenceComplete(sequence_id))
             } else {
@@ -640,7 +659,7 @@ impl DreamProcessor {
             Ok(StepResult::NoActiveSequence)
         }
     }
-    
+
     /// Execute individual processing step
     fn execute_processing_step(&mut self, step: &ProcessingStep) -> Result<StepResult, OxirsError> {
         match step.step_type {
@@ -648,17 +667,17 @@ impl DreamProcessor {
                 // Prepare data for processing
                 Ok(StepResult::PreparationComplete)
             }
-            StepType::Processing => {
-                match step.processing_algorithm.as_str() {
-                    "temporal_organization" => self.organize_temporal_memories(),
-                    "importance_weighting" => self.weight_memory_importance(),
-                    "schema_integration" => self.integrate_memory_schemas(),
-                    "connection_strengthening" => self.strengthen_memory_connections(),
-                    "creative_synthesis" => self.synthesize_creative_combinations(),
-                    "insight_synthesis" => self.synthesize_insights(),
-                    _ => Ok(StepResult::ProcessingComplete("unknown_algorithm".to_string())),
-                }
-            }
+            StepType::Processing => match step.processing_algorithm.as_str() {
+                "temporal_organization" => self.organize_temporal_memories(),
+                "importance_weighting" => self.weight_memory_importance(),
+                "schema_integration" => self.integrate_memory_schemas(),
+                "connection_strengthening" => self.strengthen_memory_connections(),
+                "creative_synthesis" => self.synthesize_creative_combinations(),
+                "insight_synthesis" => self.synthesize_insights(),
+                _ => Ok(StepResult::ProcessingComplete(
+                    "unknown_algorithm".to_string(),
+                )),
+            },
             StepType::Integration => {
                 // Integrate results
                 Ok(StepResult::IntegrationComplete)
@@ -673,87 +692,114 @@ impl DreamProcessor {
             }
         }
     }
-    
+
     /// Organize memories by temporal relationships
     fn organize_temporal_memories(&mut self) -> Result<StepResult, OxirsError> {
         if let Ok(mut working_memory) = self.memory_consolidator.working_memory.write() {
             // Sort recent experiences by time
-            working_memory.recent_experiences.make_contiguous().sort_by(|a, b| {
-                a.last_access.cmp(&b.last_access)
-            });
-            
+            working_memory
+                .recent_experiences
+                .make_contiguous()
+                .sort_by(|a, b| a.last_access.cmp(&b.last_access));
+
             // Create temporal associations
             for i in 0..working_memory.recent_experiences.len().saturating_sub(1) {
                 let trace_a_id = working_memory.recent_experiences[i].trace_id.clone();
                 let trace_b_id = working_memory.recent_experiences[i + 1].trace_id.clone();
-                
-                working_memory.temporary_associations
+
+                working_memory
+                    .temporary_associations
                     .entry(trace_a_id)
                     .or_insert_with(Vec::new)
                     .push(trace_b_id);
             }
         }
-        
-        Ok(StepResult::ProcessingComplete("temporal_organization".to_string()))
+
+        Ok(StepResult::ProcessingComplete(
+            "temporal_organization".to_string(),
+        ))
     }
-    
+
     /// Weight memories by importance
     fn weight_memory_importance(&mut self) -> Result<StepResult, OxirsError> {
         if let Ok(mut working_memory) = self.memory_consolidator.working_memory.write() {
             for trace in working_memory.recent_experiences.iter_mut() {
                 // Calculate importance based on multiple factors
-                let importance = trace.emotional_significance * 0.4 +
-                    (trace.retrieval_frequency as f64 / 10.0).min(1.0) * 0.3 +
-                    trace.encoding_strength * 0.3;
-                
+                let importance = trace.emotional_significance * 0.4
+                    + (trace.retrieval_frequency as f64 / 10.0).min(1.0) * 0.3
+                    + trace.encoding_strength * 0.3;
+
                 trace.encoding_strength = trace.encoding_strength * 0.8 + importance * 0.2;
             }
         }
-        
-        Ok(StepResult::ProcessingComplete("importance_weighting".to_string()))
+
+        Ok(StepResult::ProcessingComplete(
+            "importance_weighting".to_string(),
+        ))
     }
-    
+
     /// Integrate memory schemas
     fn integrate_memory_schemas(&mut self) -> Result<StepResult, OxirsError> {
         // Simplified schema integration
-        let integration_count = self.memory_consolidator.long_term_integration
-            .semantic_network.concepts.len();
-        
-        Ok(StepResult::ProcessingComplete(format!("integrated_{}_schemas", integration_count)))
+        let integration_count = self
+            .memory_consolidator
+            .long_term_integration
+            .semantic_network
+            .concepts
+            .len();
+
+        Ok(StepResult::ProcessingComplete(format!(
+            "integrated_{}_schemas",
+            integration_count
+        )))
     }
-    
+
     /// Strengthen memory connections
     fn strengthen_memory_connections(&mut self) -> Result<StepResult, OxirsError> {
         // Strengthen frequently used connections
-        let connection_count = self.memory_consolidator.long_term_integration
-            .semantic_network.relationships.len();
-        
-        Ok(StepResult::ProcessingComplete(format!("strengthened_{}_connections", connection_count)))
+        let connection_count = self
+            .memory_consolidator
+            .long_term_integration
+            .semantic_network
+            .relationships
+            .len();
+
+        Ok(StepResult::ProcessingComplete(format!(
+            "strengthened_{}_connections",
+            connection_count
+        )))
     }
-    
+
     /// Synthesize creative combinations
     fn synthesize_creative_combinations(&mut self) -> Result<StepResult, OxirsError> {
         // Generate novel combinations of existing memories
         let combinations_generated = fastrand::usize(5..15);
-        
-        Ok(StepResult::ProcessingComplete(format!("generated_{}_combinations", combinations_generated)))
+
+        Ok(StepResult::ProcessingComplete(format!(
+            "generated_{}_combinations",
+            combinations_generated
+        )))
     }
-    
+
     /// Synthesize insights from combinations
     fn synthesize_insights(&mut self) -> Result<StepResult, OxirsError> {
         // Generate insights from creative combinations
         let insights_generated = fastrand::usize(1..5);
-        
-        Ok(StepResult::ProcessingComplete(format!("generated_{}_insights", insights_generated)))
+
+        Ok(StepResult::ProcessingComplete(format!(
+            "generated_{}_insights",
+            insights_generated
+        )))
     }
-    
+
     /// Wake up from dream state
     pub fn wake_up(&mut self) -> Result<WakeupReport, OxirsError> {
         let previous_state = self.dream_state.clone();
         self.dream_state = DreamState::Awake;
-        
+
         // Generate wake-up report
-        let processing_summary = if let Some(ref sequence) = self.sequence_manager.current_sequence {
+        let processing_summary = if let Some(ref sequence) = self.sequence_manager.current_sequence
+        {
             ProcessingSummary {
                 sequence_type: sequence.sequence_type.clone(),
                 steps_completed: sequence.current_step,
@@ -765,7 +811,7 @@ impl DreamProcessor {
         } else {
             ProcessingSummary::default()
         };
-        
+
         Ok(WakeupReport {
             previous_dream_state: previous_state,
             processing_summary,
@@ -774,19 +820,19 @@ impl DreamProcessor {
             recommendations: self.generate_wake_up_recommendations(),
         })
     }
-    
+
     /// Count insights generated during dream
     fn count_insights_generated(&self) -> usize {
         // Simplified counting
         fastrand::usize(0..10)
     }
-    
+
     /// Count patterns discovered
     fn count_patterns_discovered(&self) -> usize {
         // Simplified counting
         fastrand::usize(0..5)
     }
-    
+
     /// Count memories consolidated
     fn count_memories_consolidated(&self) -> usize {
         if let Ok(working_memory) = self.memory_consolidator.working_memory.read() {
@@ -795,7 +841,7 @@ impl DreamProcessor {
             0
         }
     }
-    
+
     /// Assess dream quality
     fn assess_dream_quality(&self) -> DreamQuality {
         DreamQuality {
@@ -806,7 +852,7 @@ impl DreamProcessor {
             creative_synthesis: 0.65 + fastrand::f64() * 0.35,
         }
     }
-    
+
     /// Generate wake-up recommendations
     fn generate_wake_up_recommendations(&self) -> Vec<String> {
         vec![
@@ -914,7 +960,7 @@ impl PatternDiscoverer {
             novelty_detector: NoveltyDetector::new(),
         }
     }
-    
+
     fn discover_novel_patterns(&mut self) -> Result<(), OxirsError> {
         // Simplified pattern discovery
         Ok(())
@@ -930,7 +976,7 @@ impl CreativeInsightGenerator {
             insight_validator: InsightValidator::new(),
         }
     }
-    
+
     fn generate_creative_insights(&mut self) -> Result<(), OxirsError> {
         // Simplified insight generation
         Ok(())
@@ -971,34 +1017,59 @@ impl DreamAnalytics {
 }
 
 // Additional placeholder structs (simplified implementations)
-#[derive(Debug)] pub struct MemoryStrengthCalculator;
-#[derive(Debug)] pub struct ForgettingCurve;
-#[derive(Debug)] pub struct InterferenceDetector;
-#[derive(Debug)] pub struct SchemaIntegrator;
-#[derive(Debug)] pub struct AbstractionBuilder;
-#[derive(Debug)] pub struct ConnectionStrengthener;
-#[derive(Debug)] pub struct ActivationSpreader;
-#[derive(Debug)] pub struct NetworkMetrics;
-#[derive(Debug)] pub struct DiscoveryAlgorithm;
-#[derive(Debug)] pub struct PatternValidator;
-#[derive(Debug)] pub struct NoveltyDetector;
-#[derive(Debug)] pub struct InsightSynthesisEngine;
-#[derive(Debug)] pub struct AnalogicalReasoner;
-#[derive(Debug)] pub struct CreativeRecombiner;
-#[derive(Debug)] pub struct InsightValidator;
-#[derive(Debug)] pub struct SequenceTemplate;
-#[derive(Debug)] pub struct ProgressionLogic;
-#[derive(Debug)] pub struct SequenceOutcome;
-#[derive(Debug)] pub struct StageTransitionLogic;
-#[derive(Debug)] pub struct SleepQualityMetrics;
-#[derive(Debug)] pub struct WakeTrigger;
-#[derive(Debug)] pub struct ProcessingStatistics;
-#[derive(Debug)] pub struct InsightMetrics;
-#[derive(Debug)] pub struct ConsolidationEffectiveness;
-#[derive(Debug)] pub struct DreamQualityAssessment;
+#[derive(Debug)]
+pub struct MemoryStrengthCalculator;
+#[derive(Debug)]
+pub struct ForgettingCurve;
+#[derive(Debug)]
+pub struct InterferenceDetector;
+#[derive(Debug)]
+pub struct SchemaIntegrator;
+#[derive(Debug)]
+pub struct AbstractionBuilder;
+#[derive(Debug)]
+pub struct ConnectionStrengthener;
+#[derive(Debug)]
+pub struct ActivationSpreader;
+#[derive(Debug)]
+pub struct NetworkMetrics;
+#[derive(Debug)]
+pub struct DiscoveryAlgorithm;
+#[derive(Debug)]
+pub struct PatternValidator;
+#[derive(Debug)]
+pub struct NoveltyDetector;
+#[derive(Debug)]
+pub struct InsightSynthesisEngine;
+#[derive(Debug)]
+pub struct AnalogicalReasoner;
+#[derive(Debug)]
+pub struct CreativeRecombiner;
+#[derive(Debug)]
+pub struct InsightValidator;
+#[derive(Debug)]
+pub struct SequenceTemplate;
+#[derive(Debug)]
+pub struct ProgressionLogic;
+#[derive(Debug)]
+pub struct SequenceOutcome;
+#[derive(Debug)]
+pub struct StageTransitionLogic;
+#[derive(Debug)]
+pub struct SleepQualityMetrics;
+#[derive(Debug)]
+pub struct WakeTrigger;
+#[derive(Debug)]
+pub struct ProcessingStatistics;
+#[derive(Debug)]
+pub struct InsightMetrics;
+#[derive(Debug)]
+pub struct ConsolidationEffectiveness;
+#[derive(Debug)]
+pub struct DreamQualityAssessment;
 
 impl LongTermIntegration {
-    fn new() -> Self { 
+    fn new() -> Self {
         Self {
             semantic_network: SemanticNetwork::new(),
             schema_integrator: SchemaIntegrator,
@@ -1009,67 +1080,99 @@ impl LongTermIntegration {
 }
 
 impl MemoryStrengthCalculator {
-    fn new() -> Self { MemoryStrengthCalculator }
+    fn new() -> Self {
+        MemoryStrengthCalculator
+    }
 }
 
 impl ForgettingCurve {
-    fn new() -> Self { ForgettingCurve }
+    fn new() -> Self {
+        ForgettingCurve
+    }
 }
 
 impl InterferenceDetector {
-    fn new() -> Self { InterferenceDetector }
+    fn new() -> Self {
+        InterferenceDetector
+    }
 }
 
 impl PatternValidator {
-    fn new() -> Self { PatternValidator }
+    fn new() -> Self {
+        PatternValidator
+    }
 }
 
 impl NoveltyDetector {
-    fn new() -> Self { NoveltyDetector }
+    fn new() -> Self {
+        NoveltyDetector
+    }
 }
 
 impl InsightSynthesisEngine {
-    fn new() -> Self { InsightSynthesisEngine }
+    fn new() -> Self {
+        InsightSynthesisEngine
+    }
 }
 
 impl AnalogicalReasoner {
-    fn new() -> Self { AnalogicalReasoner }
+    fn new() -> Self {
+        AnalogicalReasoner
+    }
 }
 
 impl CreativeRecombiner {
-    fn new() -> Self { CreativeRecombiner }
+    fn new() -> Self {
+        CreativeRecombiner
+    }
 }
 
 impl InsightValidator {
-    fn new() -> Self { InsightValidator }
+    fn new() -> Self {
+        InsightValidator
+    }
 }
 
 impl ProgressionLogic {
-    fn new() -> Self { ProgressionLogic }
+    fn new() -> Self {
+        ProgressionLogic
+    }
 }
 
 impl StageTransitionLogic {
-    fn new() -> Self { StageTransitionLogic }
+    fn new() -> Self {
+        StageTransitionLogic
+    }
 }
 
 impl SleepQualityMetrics {
-    fn new() -> Self { SleepQualityMetrics }
+    fn new() -> Self {
+        SleepQualityMetrics
+    }
 }
 
 impl ProcessingStatistics {
-    fn new() -> Self { ProcessingStatistics }
+    fn new() -> Self {
+        ProcessingStatistics
+    }
 }
 
 impl InsightMetrics {
-    fn new() -> Self { InsightMetrics }
+    fn new() -> Self {
+        InsightMetrics
+    }
 }
 
 impl ConsolidationEffectiveness {
-    fn new() -> Self { ConsolidationEffectiveness }
+    fn new() -> Self {
+        ConsolidationEffectiveness
+    }
 }
 
 impl DreamQualityAssessment {
-    fn new() -> Self { DreamQualityAssessment }
+    fn new() -> Self {
+        DreamQualityAssessment
+    }
 }
 
 impl SemanticNetwork {
@@ -1105,7 +1208,7 @@ mod tests {
     fn test_process_dream_step() {
         let mut processor = DreamProcessor::new();
         processor.enter_dream_state(DreamState::DeepSleep).unwrap();
-        
+
         let result = processor.process_dream_step();
         assert!(result.is_ok());
     }
@@ -1114,10 +1217,10 @@ mod tests {
     fn test_wake_up() {
         let mut processor = DreamProcessor::new();
         processor.enter_dream_state(DreamState::REM).unwrap();
-        
+
         let wake_report = processor.wake_up();
         assert!(wake_report.is_ok());
-        
+
         let report = wake_report.unwrap();
         assert!(matches!(report.previous_dream_state, DreamState::REM));
         assert!(matches!(processor.dream_state, DreamState::Awake));

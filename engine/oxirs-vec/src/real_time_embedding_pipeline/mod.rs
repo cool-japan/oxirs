@@ -1,5 +1,5 @@
 //! Real-time embedding pipeline module
-//! 
+//!
 //! This module provides a comprehensive real-time embedding update system that can handle
 //! high-throughput streaming data with low-latency updates while maintaining consistency
 //! and performance guarantees.
@@ -38,10 +38,10 @@
 //! ```
 
 pub mod config;
-pub mod traits;
-pub mod types;
 pub mod pipeline;
 pub mod streaming;
+pub mod traits;
+pub mod types;
 // TODO: Implement these modules
 // pub mod coordination;
 // pub mod monitoring;
@@ -50,28 +50,26 @@ pub mod streaming;
 
 // Re-export commonly used types
 pub use config::{
-    PipelineConfig, ConsistencyLevel, BackpressureStrategy, RetryConfig,
-    MonitoringConfig, AlertThresholds, VersionControlConfig, QualityAssuranceConfig,
-    AutoScalingConfig, CompressionConfig, CompressionMethod,
+    AlertThresholds, AutoScalingConfig, BackpressureStrategy, CompressionConfig, CompressionMethod,
+    ConsistencyLevel, MonitoringConfig, PipelineConfig, QualityAssuranceConfig, RetryConfig,
+    VersionControlConfig,
 };
 
 pub use traits::{
-    EmbeddingGenerator, IncrementalVectorIndex, AlertHandler, MetricsStorage,
-    VersionStorage, ConflictResolutionFunction, TransactionLog,
-    InconsistencyDetectionAlgorithm, ConsistencyRepairStrategy,
-    ContentItem, ProcessingPriority, ProcessingStatus, ProcessingResult,
-    GeneratorStatistics, IndexStatistics, HealthStatus, Alert, AlertSeverity,
-    AlertCategory, AlertConfig, AlertThrottling, MetricPoint, Version,
-    Transaction, TransactionType, TransactionStatus, Inconsistency,
-    InconsistencyType, InconsistencySeverity, RepairResult, RepairStatus,
+    Alert, AlertCategory, AlertConfig, AlertHandler, AlertSeverity, AlertThrottling,
+    ConflictResolutionFunction, ConsistencyRepairStrategy, ContentItem, EmbeddingGenerator,
+    GeneratorStatistics, HealthStatus, Inconsistency, InconsistencyDetectionAlgorithm,
+    InconsistencySeverity, InconsistencyType, IncrementalVectorIndex, IndexStatistics, MetricPoint,
+    MetricsStorage, ProcessingPriority, ProcessingResult, ProcessingStatus, RepairResult,
+    RepairStatus, Transaction, TransactionLog, TransactionStatus, TransactionType, Version,
+    VersionStorage,
 };
 
 pub use types::{
-    PipelineStatistics, VersioningStrategy, UpdateOperation, UpdateBatch,
-    UpdatePriority, RealTimeConfig, UpdateStats, StreamState, StreamStatus,
-    CoordinationState, NodeStatus, PerformanceMetrics, QualityMetrics,
-    BackpressureState, CircuitBreakerState, CircuitBreakerConfig,
-    ResourceUtilization, HealthCheckResult,
+    BackpressureState, CircuitBreakerConfig, CircuitBreakerState, CoordinationState,
+    HealthCheckResult, NodeStatus, PerformanceMetrics, PipelineStatistics, QualityMetrics,
+    RealTimeConfig, ResourceUtilization, StreamState, StreamStatus, UpdateBatch, UpdateOperation,
+    UpdatePriority, UpdateStats, VersioningStrategy,
 };
 
 pub use pipeline::RealTimeEmbeddingPipeline;
@@ -86,50 +84,50 @@ pub use streaming::{StreamProcessor, StreamProcessorConfig};
 // pub use consistency::{ConsistencyManager, ConsistencyConfig};
 
 // Re-export error types
-pub use anyhow::{Result, Error, Context};
+pub use anyhow::{Context, Error, Result};
 
 // Pipeline-specific error types
 #[derive(Debug, thiserror::Error)]
 pub enum PipelineError {
     #[error("Pipeline not initialized")]
     NotInitialized,
-    
+
     #[error("Pipeline already running")]
     AlreadyRunning,
-    
+
     #[error("Pipeline not running")]
     NotRunning,
-    
+
     #[error("Configuration error: {message}")]
     ConfigurationError { message: String },
-    
+
     #[error("Stream processing error: {message}")]
     StreamProcessingError { message: String },
-    
+
     #[error("Coordination error: {message}")]
     CoordinationError { message: String },
-    
+
     #[error("Consistency error: {message}")]
     ConsistencyError { message: String },
-    
+
     #[error("Monitoring error: {message}")]
     MonitoringError { message: String },
-    
+
     #[error("Version management error: {message}")]
     VersionError { message: String },
-    
+
     #[error("Resource exhausted: {resource}")]
     ResourceExhausted { resource: String },
-    
+
     #[error("Timeout error: {operation}")]
     Timeout { operation: String },
-    
+
     #[error("Backpressure limit exceeded")]
     BackpressureExceeded,
-    
+
     #[error("Quality check failed: {reason}")]
     QualityCheckFailed { reason: String },
-    
+
     #[error("Circuit breaker open for: {component}")]
     CircuitBreakerOpen { component: String },
 }

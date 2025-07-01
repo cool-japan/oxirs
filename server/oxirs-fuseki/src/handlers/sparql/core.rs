@@ -129,7 +129,7 @@ pub async fn sparql_query(
     user: Option<AuthUser>,
 ) -> impl IntoResponse {
     let start_time = Instant::now();
-    
+
     // Extract query from parameters
     let query_string = match params.query {
         Some(q) => q,
@@ -139,8 +139,9 @@ pub async fn sparql_query(
                 Json(serde_json::json!({
                     "error": "missing_query",
                     "message": "Query parameter 'query' is required"
-                }))
-            ).into_response();
+                })),
+            )
+                .into_response();
         }
     };
 
@@ -155,12 +156,13 @@ pub async fn sparql_query(
     match execute_sparql_query(&query_string, context, &state).await {
         Ok(result) => {
             let execution_time = start_time.elapsed().as_millis() as u64;
-            
+
             // Update metrics
             state.metrics.record_query_execution(execution_time, true);
-            
+
             // Determine response format based on Accept header
-            let accept_header = headers.get(ACCEPT)
+            let accept_header = headers
+                .get(ACCEPT)
                 .and_then(|h| h.to_str().ok())
                 .unwrap_or("application/sparql-results+json");
 
@@ -169,15 +171,16 @@ pub async fn sparql_query(
         Err(e) => {
             let execution_time = start_time.elapsed().as_millis() as u64;
             state.metrics.record_query_execution(execution_time, false);
-            
+
             error!("SPARQL query execution failed: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                     "error": "query_execution_failed",
                     "message": e.to_string()
-                }))
-            ).into_response()
+                })),
+            )
+                .into_response()
         }
     }
 }
@@ -191,7 +194,7 @@ pub async fn sparql_update(
     user: Option<AuthUser>,
 ) -> impl IntoResponse {
     let start_time = Instant::now();
-    
+
     // Check permissions
     if let Some(ref user) = user {
         if !user.0.permissions.contains(&Permission::SparqlUpdate) {
@@ -200,8 +203,9 @@ pub async fn sparql_update(
                 Json(serde_json::json!({
                     "error": "insufficient_permissions",
                     "message": "SPARQL update permission required"
-                }))
-            ).into_response();
+                })),
+            )
+                .into_response();
         }
     } else {
         return (
@@ -209,8 +213,9 @@ pub async fn sparql_update(
             Json(serde_json::json!({
                 "error": "authentication_required",
                 "message": "Authentication required for SPARQL updates"
-            }))
-        ).into_response();
+            })),
+        )
+            .into_response();
     }
 
     // Create update context
@@ -222,21 +227,22 @@ pub async fn sparql_update(
         Ok(result) => {
             let execution_time = start_time.elapsed().as_millis() as u64;
             state.metrics.record_update_execution(execution_time, true);
-            
+
             Json(result).into_response()
         }
         Err(e) => {
             let execution_time = start_time.elapsed().as_millis() as u64;
             state.metrics.record_update_execution(execution_time, false);
-            
+
             error!("SPARQL update execution failed: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                     "error": "update_execution_failed",
                     "message": e.to_string()
-                }))
-            ).into_response()
+                })),
+            )
+                .into_response()
         }
     }
 }
@@ -249,7 +255,7 @@ async fn execute_sparql_query(
 ) -> FusekiResult<QueryResult> {
     // Validate query
     validate_sparql_query(query)?;
-    
+
     // Parse query for optimization
     let parsed_query = parse_query(query)
         .map_err(|e| FusekiError::query_parsing(format!("Query parsing failed: {}", e)))?;
@@ -262,8 +268,11 @@ async fn execute_sparql_query(
     };
 
     // Execute through store
-    let result = state.store.execute_query(&optimized_query, &context).await?;
-    
+    let result = state
+        .store
+        .execute_query(&optimized_query, &context)
+        .await?;
+
     Ok(result)
 }
 
@@ -275,10 +284,10 @@ async fn execute_sparql_update(
 ) -> FusekiResult<UpdateResult> {
     // Validate update
     validate_sparql_update(update)?;
-    
+
     // Execute through store
     let result = state.store.execute_update(update, &context).await?;
-    
+
     Ok(result)
 }
 
@@ -289,7 +298,7 @@ async fn apply_query_optimizations(
     state: &Arc<AppState>,
 ) -> FusekiResult<String> {
     let mut optimized_query = query.to_string();
-    
+
     // Apply federation optimization if enabled
     if context.enable_federation {
         let federation_optimizer = FederatedQueryOptimizer::new();
@@ -297,18 +306,16 @@ async fn apply_query_optimizations(
             optimized_query = federated_plan.optimized_query;
         }
     }
-    
+
     // Apply other optimizations...
-    
+
     Ok(optimized_query)
 }
 
 /// Format query response based on content type
 fn format_query_response(result: QueryResult, content_type: &str) -> Response {
     match content_type {
-        "application/sparql-results+json" | "application/json" => {
-            Json(result).into_response()
-        }
+        "application/sparql-results+json" | "application/json" => Json(result).into_response(),
         "application/sparql-results+xml" => {
             // TODO: Implement XML formatting
             Html(format!("<result>{:?}</result>", result)).into_response()
@@ -326,17 +333,18 @@ pub fn validate_sparql_query(query: &str) -> FusekiResult<()> {
     if query.trim().is_empty() {
         return Err(FusekiError::query_parsing("Empty query"));
     }
-    
+
     // Basic syntax validation
-    if !query.to_uppercase().contains("SELECT") 
+    if !query.to_uppercase().contains("SELECT")
         && !query.to_uppercase().contains("CONSTRUCT")
         && !query.to_uppercase().contains("ASK")
-        && !query.to_uppercase().contains("DESCRIBE") {
+        && !query.to_uppercase().contains("DESCRIBE")
+    {
         return Err(FusekiError::query_parsing(
-            "Query must contain SELECT, CONSTRUCT, ASK, or DESCRIBE"
+            "Query must contain SELECT, CONSTRUCT, ASK, or DESCRIBE",
         ));
     }
-    
+
     Ok(())
 }
 
@@ -345,17 +353,18 @@ fn validate_sparql_update(update: &str) -> FusekiResult<()> {
     if update.trim().is_empty() {
         return Err(FusekiError::query_parsing("Empty update"));
     }
-    
+
     // Basic syntax validation
     let upper_update = update.to_uppercase();
-    if !upper_update.contains("INSERT") 
+    if !upper_update.contains("INSERT")
         && !upper_update.contains("DELETE")
         && !upper_update.contains("LOAD")
-        && !upper_update.contains("CLEAR") {
+        && !upper_update.contains("CLEAR")
+    {
         return Err(FusekiError::query_parsing(
-            "Update must contain INSERT, DELETE, LOAD, or CLEAR"
+            "Update must contain INSERT, DELETE, LOAD, or CLEAR",
         ));
     }
-    
+
     Ok(())
 }

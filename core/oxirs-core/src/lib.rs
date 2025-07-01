@@ -58,7 +58,7 @@ pub mod simd;
 
 // Re-export core types for convenience
 pub use model::*;
-pub use rdf_store::{Store, RdfStore, ConcreteStore};
+pub use rdf_store::{ConcreteStore, RdfStore, Store};
 
 /// Core error type for OxiRS operations
 #[derive(Debug, Clone, thiserror::Error)]
@@ -81,6 +81,8 @@ pub enum OxirsError {
     MolecularError(String),
     #[error("Neural-symbolic fusion error: {0}")]
     NeuralSymbolicError(String),
+    #[error("Operation not supported: {0}")]
+    NotSupported(String),
 }
 
 impl From<std::io::Error> for OxirsError {

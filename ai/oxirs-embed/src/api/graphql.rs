@@ -3,9 +3,11 @@
 //! This module provides GraphQL schema and resolvers for embedding services.
 
 #[cfg(feature = "graphql")]
-use async_graphql::{Schema, EmptyMutation, EmptySubscription, Object, Context, Result as GraphQLResult};
-#[cfg(feature = "graphql")]
 use super::ApiState;
+#[cfg(feature = "graphql")]
+use async_graphql::{
+    Context, EmptyMutation, EmptySubscription, Object, Result as GraphQLResult, Schema,
+};
 
 /// GraphQL Query root
 #[cfg(feature = "graphql")]
@@ -44,5 +46,9 @@ pub async fn graphql_handler(
 /// GraphiQL playground handler
 #[cfg(all(feature = "graphql", feature = "api-server"))]
 pub async fn graphiql() -> impl axum::response::IntoResponse {
-    axum::response::Html(async_graphql::http::GraphiQLSource::build().endpoint("/graphql").finish())
+    axum::response::Html(
+        async_graphql::http::GraphiQLSource::build()
+            .endpoint("/graphql")
+            .finish(),
+    )
 }

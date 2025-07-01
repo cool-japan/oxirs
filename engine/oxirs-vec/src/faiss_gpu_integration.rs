@@ -12,19 +12,22 @@
 //! - GPU performance monitoring and tuning
 
 use crate::{
-    faiss_integration::{FaissConfig, FaissSearchParams, FaissIndex},
+    faiss_integration::{FaissConfig, FaissIndex, FaissSearchParams},
     faiss_native_integration::{NativeFaissConfig, NativeFaissIndex},
-    gpu::{GpuConfig, GpuAccelerator, GpuBuffer},
+    gpu::{GpuAccelerator, GpuBuffer, GpuConfig, GpuMemoryPool},
     similarity::SimilarityMetric,
     Vector, VectorPrecision,
 };
-use anyhow::{Result, Context, Error as AnyhowError};
-use std::collections::{HashMap, BTreeMap, VecDeque};
-use std::sync::{Arc, RwLock, Mutex, atomic::{AtomicUsize, AtomicBool, Ordering}};
-use std::time::{Instant, Duration};
-use serde::{Serialize, Deserialize};
-use tracing::{debug, info, warn, error, span, Level};
+use anyhow::{Context, Error as AnyhowError, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc, Mutex, RwLock,
+};
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot, Semaphore};
+use tracing::{debug, error, info, span, warn, Level};
 
 /// GPU configuration for FAISS integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,9 +323,7 @@ pub enum GpuOperationType {
         ids: Vec<String>,
     },
     /// Index training operation
-    Train {
-        training_vectors: Vec<Vec<f32>>,
-    },
+    Train { training_vectors: Vec<Vec<f32>> },
     /// Index optimization operation
     Optimize,
     /// Memory transfer operation
@@ -603,15 +604,12 @@ pub struct PerformanceSnapshot {
 
 impl FaissGpuIndex {
     /// Create a new GPU-accelerated FAISS index
-    pub async fn new(
-        faiss_config: FaissConfig,
-        gpu_config: FaissGpuConfig,
-    ) -> Result<Self> {
+    pub async fn new(faiss_config: FaissConfig, gpu_config: FaissGpuConfig) -> Result<Self> {
         let span = span!(Level::INFO, "faiss_gpu_index_new");
         let _enter = span.enter();
 
         // Initialize GPU runtime
-        let gpu_runtime = Arc::new(GpuRuntime::new()?);
+        let gpu_runtime = Arc::new(GpuAccelerator::new(gpu_config.clone())?);
 
         // Initialize memory pools for each device
         let mut memory_pools = HashMap::new();
@@ -628,7 +626,8 @@ impl FaissGpuIndex {
         }
 
         // Initialize load balancer
-        let load_balancer = GpuLoadBalancer::new(&gpu_config.device_ids, LoadBalancingStrategy::Hybrid);
+        let load_balancer =
+            GpuLoadBalancer::new(&gpu_config.device_ids, LoadBalancingStrategy::Hybrid);
 
         let index = Self {
             faiss_config,
@@ -645,7 +644,10 @@ impl FaissGpuIndex {
         // Start background worker tasks
         index.start_background_workers().await?;
 
-        info!("Created GPU-accelerated FAISS index with {} devices", gpu_config.device_ids.len());
+        info!(
+            "Created GPU-accelerated FAISS index with {} devices",
+            gpu_config.device_ids.len()
+        );
         Ok(index)
     }
 
@@ -655,11 +657,14 @@ impl FaissGpuIndex {
         stream_config: &GpuStreamConfig,
     ) -> Result<Vec<GpuComputeStream>> {
         let mut streams = Vec::new();
-        
+
         for i in 0..stream_config.streams_per_device {
-            let priority = stream_config.priority_levels.get(i % stream_config.priority_levels.len())
-                .copied().unwrap_or(0);
-            
+            let priority = stream_config
+                .priority_levels
+                .get(i % stream_config.priority_levels.len())
+                .copied()
+                .unwrap_or(0);
+
             let stream = GpuComputeStream {
                 stream_id: i,
                 device_id,
@@ -669,10 +674,10 @@ impl FaissGpuIndex {
                 operation_history: Arc::new(RwLock::new(VecDeque::new())),
                 utilization: Arc::new(RwLock::new(StreamUtilization::default())),
             };
-            
+
             streams.push(stream);
         }
-        
+
         Ok(streams)
     }
 
@@ -683,13 +688,13 @@ impl FaissGpuIndex {
 
         // Start operation processor
         self.start_operation_processor().await?;
-        
+
         // Start performance monitor
         self.start_performance_monitor().await?;
-        
+
         // Start memory manager
         self.start_memory_manager().await?;
-        
+
         // Start load balancer
         if self.gpu_config.enable_multi_gpu {
             self.start_load_balancer().await?;
@@ -718,7 +723,9 @@ impl FaissGpuIndex {
                         &compute_streams,
                         &stats,
                         &gpu_config,
-                    ).await {
+                    )
+                    .await
+                    {
                         error!("Failed to process GPU operation: {}", e);
                     }
                 }
@@ -739,26 +746,24 @@ impl FaissGpuIndex {
         gpu_config: &FaissGpuConfig,
     ) -> Result<()> {
         let start_time = Instant::now();
-        
+
         // Select optimal device and stream
-        let (device_id, stream_id) = Self::select_optimal_stream(compute_streams, &operation).await?;
-        
+        let (device_id, stream_id) =
+            Self::select_optimal_stream(compute_streams, &operation).await?;
+
         // Execute operation
-        let result = Self::execute_operation_on_device(
-            operation.clone(),
-            device_id,
-            stream_id,
-            gpu_config,
-        ).await?;
-        
+        let result =
+            Self::execute_operation_on_device(operation.clone(), device_id, stream_id, gpu_config)
+                .await?;
+
         // Send result back if callback provided
         if let Some(sender) = operation.result_sender {
             let _ = sender.send(result.clone());
         }
-        
+
         // Update statistics
         Self::update_operation_stats(stats, &operation, &result, start_time.elapsed()).await?;
-        
+
         Ok(())
     }
 
@@ -768,12 +773,12 @@ impl FaissGpuIndex {
         operation: &GpuOperation,
     ) -> Result<(i32, usize)> {
         let streams = compute_streams.read().unwrap();
-        
+
         // Simple strategy: find device with lowest utilization
         let mut best_device = 0;
         let mut best_stream = 0;
         let mut lowest_utilization = f32::MAX;
-        
+
         for (&device_id, device_streams) in streams.iter() {
             for (stream_id, stream) in device_streams.iter().enumerate() {
                 let utilization = stream.utilization.read().unwrap().utilization_percentage;
@@ -784,7 +789,7 @@ impl FaissGpuIndex {
                 }
             }
         }
-        
+
         Ok((best_device, best_stream))
     }
 
@@ -796,13 +801,15 @@ impl FaissGpuIndex {
         gpu_config: &FaissGpuConfig,
     ) -> Result<GpuOperationResult> {
         let start_time = Instant::now();
-        
+
         // Simulate GPU operation execution
         let result_data = match &operation.operation_type {
-            GpuOperationType::Search { query_vectors, k, .. } => {
+            GpuOperationType::Search {
+                query_vectors, k, ..
+            } => {
                 // Simulate GPU-accelerated search
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-                
+
                 let mut results = Vec::new();
                 for _query in query_vectors {
                     let mut query_results = Vec::new();
@@ -811,7 +818,7 @@ impl FaissGpuIndex {
                     }
                     results.push(query_results);
                 }
-                
+
                 GpuResultData::SearchResults(results)
             }
             GpuOperationType::Add { vectors, .. } => {
@@ -839,7 +846,7 @@ impl FaissGpuIndex {
                 GpuResultData::TransferComplete
             }
         };
-        
+
         Ok(GpuOperationResult {
             operation_id: operation.id,
             success: true,
@@ -858,15 +865,15 @@ impl FaissGpuIndex {
         execution_time: Duration,
     ) -> Result<()> {
         let mut stats = stats.write().unwrap();
-        
+
         // Update throughput metrics
         stats.throughput.operations_per_second += 1.0 / execution_time.as_secs_f64();
-        
+
         // Update error statistics if needed
         if !result.success {
             stats.error_stats.total_errors += 1;
         }
-        
+
         Ok(())
     }
 
@@ -877,10 +884,10 @@ impl FaissGpuIndex {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Collect performance metrics from all devices
                 if let Err(e) = Self::collect_performance_metrics(&stats, &device_ids).await {
                     warn!("Failed to collect performance metrics: {}", e);
@@ -897,7 +904,7 @@ impl FaissGpuIndex {
         device_ids: &[i32],
     ) -> Result<()> {
         let mut stats = stats.write().unwrap();
-        
+
         for &device_id in device_ids {
             // Simulate GPU metrics collection
             let device_stats = DeviceStats {
@@ -918,15 +925,18 @@ impl FaissGpuIndex {
                 power_consumption: 250.0, // Watts
                 temperature: 70.0,        // Celsius
             };
-            
+
             stats.device_stats.insert(device_id, device_stats);
         }
-        
+
         // Calculate overall utilization
-        stats.overall_utilization = stats.device_stats.values()
+        stats.overall_utilization = stats
+            .device_stats
+            .values()
             .map(|s| s.utilization)
-            .sum::<f32>() / stats.device_stats.len() as f32;
-        
+            .sum::<f32>()
+            / stats.device_stats.len() as f32;
+
         Ok(())
     }
 
@@ -937,10 +947,10 @@ impl FaissGpuIndex {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Perform memory cleanup and optimization
                 if let Err(e) = Self::manage_gpu_memory(&memory_pools, &gpu_config).await {
                     warn!("Failed to manage GPU memory: {}", e);
@@ -957,26 +967,32 @@ impl FaissGpuIndex {
         gpu_config: &FaissGpuConfig,
     ) -> Result<()> {
         let pools = memory_pools.read().unwrap();
-        
+
         for (device_id, pool) in pools.iter() {
             // Check for memory fragmentation
             let fragmentation = pool.calculate_fragmentation();
             if fragmentation > 20.0 {
-                debug!("High fragmentation detected on device {}: {:.1}%", device_id, fragmentation);
+                debug!(
+                    "High fragmentation detected on device {}: {:.1}%",
+                    device_id, fragmentation
+                );
                 // Trigger defragmentation if needed
             }
-            
+
             // Check for memory leaks
             let allocated_blocks = pool.allocated_blocks.read().unwrap();
             let now = Instant::now();
             for (_, block) in allocated_blocks.iter() {
                 if now.duration_since(block.allocated_at) > Duration::from_secs(3600) {
-                    warn!("Potential memory leak detected on device {}: block allocated {} ago", 
-                          device_id, humantime::format_duration(now.duration_since(block.allocated_at)));
+                    warn!(
+                        "Potential memory leak detected on device {}: block allocated {} ago",
+                        device_id,
+                        humantime::format_duration(now.duration_since(block.allocated_at))
+                    );
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -987,10 +1003,10 @@ impl FaissGpuIndex {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Update load balancing decisions
                 if let Err(e) = Self::update_load_balancing(&load_balancer, &stats).await {
                     warn!("Failed to update load balancing: {}", e);
@@ -1008,31 +1024,40 @@ impl FaissGpuIndex {
     ) -> Result<()> {
         let stats = stats.read().unwrap();
         let mut balancer = load_balancer.write().unwrap();
-        
+
         // Update device utilization from stats
         for (&device_id, device_stats) in &stats.device_stats {
-            balancer.device_utilization.insert(device_id, device_stats.utilization);
-            
+            balancer
+                .device_utilization
+                .insert(device_id, device_stats.utilization);
+
             // Add performance snapshot
             let snapshot = PerformanceSnapshot {
                 timestamp: Instant::now(),
                 utilization: device_stats.utilization,
-                memory_usage: device_stats.memory_usage.used_memory as f32 / device_stats.memory_usage.total_memory as f32 * 100.0,
+                memory_usage: device_stats.memory_usage.used_memory as f32
+                    / device_stats.memory_usage.total_memory as f32
+                    * 100.0,
                 ops_per_second: 1000.0, // Simulated
                 avg_latency: Duration::from_micros(250),
             };
-            
-            balancer.performance_history
+
+            balancer
+                .performance_history
                 .entry(device_id)
                 .or_insert_with(VecDeque::new)
                 .push_back(snapshot);
-            
+
             // Keep only recent history
             if balancer.performance_history[&device_id].len() > 100 {
-                balancer.performance_history.get_mut(&device_id).unwrap().pop_front();
+                balancer
+                    .performance_history
+                    .get_mut(&device_id)
+                    .unwrap()
+                    .pop_front();
             }
         }
-        
+
         Ok(())
     }
 
@@ -1069,12 +1094,15 @@ impl FaissGpuIndex {
         }
 
         // Wait for result
-        let result = result_receiver.await
+        let result = result_receiver
+            .await
             .map_err(|_| AnyhowError::msg("GPU operation timeout"))?;
 
         if !result.success {
             return Err(AnyhowError::msg(
-                result.error_message.unwrap_or_else(|| "GPU operation failed".to_string())
+                result
+                    .error_message
+                    .unwrap_or_else(|| "GPU operation failed".to_string()),
             ));
         }
 
@@ -1085,11 +1113,7 @@ impl FaissGpuIndex {
     }
 
     /// Add vectors with GPU acceleration
-    pub async fn add_vectors_gpu(
-        &self,
-        vectors: Vec<Vec<f32>>,
-        ids: Vec<String>,
-    ) -> Result<()> {
+    pub async fn add_vectors_gpu(&self, vectors: Vec<Vec<f32>>, ids: Vec<String>) -> Result<()> {
         let span = span!(Level::DEBUG, "add_vectors_gpu");
         let _enter = span.enter();
 
@@ -1112,12 +1136,15 @@ impl FaissGpuIndex {
             queue.push_back(operation);
         }
 
-        let result = result_receiver.await
+        let result = result_receiver
+            .await
             .map_err(|_| AnyhowError::msg("GPU operation timeout"))?;
 
         if !result.success {
             return Err(AnyhowError::msg(
-                result.error_message.unwrap_or_else(|| "GPU operation failed".to_string())
+                result
+                    .error_message
+                    .unwrap_or_else(|| "GPU operation failed".to_string()),
             ));
         }
 
@@ -1151,7 +1178,8 @@ impl FaissGpuIndex {
             queue.push_back(operation);
         }
 
-        let result = result_receiver.await
+        let result = result_receiver
+            .await
             .map_err(|_| AnyhowError::msg("GPU optimization timeout"))?;
 
         if !result.success {
@@ -1181,7 +1209,7 @@ impl GpuMemoryPool {
     /// Allocate memory block
     pub fn allocate(&self, size: usize, block_type: MemoryBlockType) -> Result<GpuMemoryBlock> {
         let aligned_size = (size + 255) & !255; // 256-byte alignment
-        
+
         if self.allocated_size.load(Ordering::Relaxed) + aligned_size > self.total_size {
             return Err(AnyhowError::msg("Out of GPU memory"));
         }
@@ -1194,8 +1222,9 @@ impl GpuMemoryPool {
             block_type,
         };
 
-        self.allocated_size.fetch_add(aligned_size, Ordering::Relaxed);
-        
+        self.allocated_size
+            .fetch_add(aligned_size, Ordering::Relaxed);
+
         // Update statistics
         {
             let mut stats = self.allocation_stats.write().unwrap();
@@ -1212,7 +1241,7 @@ impl GpuMemoryPool {
     /// Deallocate memory block
     pub fn deallocate(&self, block: &GpuMemoryBlock) -> Result<()> {
         self.allocated_size.fetch_sub(block.size, Ordering::Relaxed);
-        
+
         {
             let mut stats = self.allocation_stats.write().unwrap();
             stats.total_deallocations += 1;
@@ -1227,11 +1256,11 @@ impl GpuMemoryPool {
         let allocated = self.allocated_size.load(Ordering::Relaxed);
         let free_blocks = self.free_blocks.lock().unwrap();
         let num_free_blocks = free_blocks.len();
-        
+
         if allocated == 0 {
             return 0.0;
         }
-        
+
         (num_free_blocks as f32 / (allocated / 1024) as f32) * 100.0
     }
 }
@@ -1242,13 +1271,13 @@ impl GpuLoadBalancer {
         let mut device_utilization = HashMap::new();
         let mut workload_distribution = HashMap::new();
         let mut performance_history = HashMap::new();
-        
+
         for &device_id in device_ids {
             device_utilization.insert(device_id, 0.0);
             workload_distribution.insert(device_id, 0);
             performance_history.insert(device_id, VecDeque::new());
         }
-        
+
         Self {
             device_utilization,
             workload_distribution,
@@ -1260,21 +1289,11 @@ impl GpuLoadBalancer {
     /// Select optimal device for operation
     pub fn select_device(&self, operation: &GpuOperation) -> i32 {
         match self.strategy {
-            LoadBalancingStrategy::RoundRobin => {
-                self.select_round_robin()
-            }
-            LoadBalancingStrategy::LoadBased => {
-                self.select_load_based()
-            }
-            LoadBalancingStrategy::PerformanceBased => {
-                self.select_performance_based()
-            }
-            LoadBalancingStrategy::MemoryAware => {
-                self.select_memory_aware()
-            }
-            LoadBalancingStrategy::Hybrid => {
-                self.select_hybrid(operation)
-            }
+            LoadBalancingStrategy::RoundRobin => self.select_round_robin(),
+            LoadBalancingStrategy::LoadBased => self.select_load_based(),
+            LoadBalancingStrategy::PerformanceBased => self.select_performance_based(),
+            LoadBalancingStrategy::MemoryAware => self.select_memory_aware(),
+            LoadBalancingStrategy::Hybrid => self.select_hybrid(operation),
         }
     }
 
@@ -1283,13 +1302,18 @@ impl GpuLoadBalancer {
         let total_workload: usize = self.workload_distribution.values().sum();
         let device_count = self.device_utilization.len();
         let target_device_index = total_workload % device_count;
-        
-        *self.device_utilization.keys().nth(target_device_index).unwrap_or(&0)
+
+        *self
+            .device_utilization
+            .keys()
+            .nth(target_device_index)
+            .unwrap_or(&0)
     }
 
     fn select_load_based(&self) -> i32 {
         // Select device with lowest utilization
-        self.device_utilization.iter()
+        self.device_utilization
+            .iter()
             .min_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(&device_id, _)| device_id)
             .unwrap_or(0)
@@ -1299,23 +1323,25 @@ impl GpuLoadBalancer {
         // Select device with best recent performance
         let mut best_device = 0;
         let mut best_score = f64::MIN;
-        
+
         for (&device_id, history) in &self.performance_history {
             if let Some(recent_snapshot) = history.back() {
-                let score = recent_snapshot.ops_per_second / (recent_snapshot.avg_latency.as_secs_f64() + 1e-6);
+                let score = recent_snapshot.ops_per_second
+                    / (recent_snapshot.avg_latency.as_secs_f64() + 1e-6);
                 if score > best_score {
                     best_score = score;
                     best_device = device_id;
                 }
             }
         }
-        
+
         best_device
     }
 
     fn select_memory_aware(&self) -> i32 {
         // Select device with most available memory (simplified)
-        self.device_utilization.iter()
+        self.device_utilization
+            .iter()
             .min_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(&device_id, _)| device_id)
             .unwrap_or(0)
@@ -1340,7 +1366,7 @@ mod tests {
     async fn test_faiss_gpu_index_creation() {
         let faiss_config = FaissConfig::default();
         let gpu_config = FaissGpuConfig::default();
-        
+
         let result = FaissGpuIndex::new(faiss_config, gpu_config).await;
         assert!(result.is_ok());
     }
@@ -1348,10 +1374,10 @@ mod tests {
     #[test]
     fn test_gpu_memory_pool() {
         let pool = GpuMemoryPool::new(0, 1024 * 1024).unwrap(); // 1MB pool
-        
+
         let block = pool.allocate(1024, MemoryBlockType::Vectors).unwrap();
         assert_eq!(block.size, 1024);
-        
+
         pool.deallocate(&block).unwrap();
         assert_eq!(pool.allocated_size.load(Ordering::Relaxed), 0);
     }
@@ -1360,9 +1386,9 @@ mod tests {
     fn test_gpu_load_balancer() {
         let device_ids = vec![0, 1, 2];
         let balancer = GpuLoadBalancer::new(&device_ids, LoadBalancingStrategy::RoundRobin);
-        
+
         assert_eq!(balancer.device_utilization.len(), 3);
-        
+
         let operation = GpuOperation {
             id: "test".to_string(),
             operation_type: GpuOperationType::Optimize,
@@ -1372,7 +1398,7 @@ mod tests {
             timeout: None,
             result_sender: None,
         };
-        
+
         let selected_device = balancer.select_device(&operation);
         assert!(device_ids.contains(&selected_device));
     }

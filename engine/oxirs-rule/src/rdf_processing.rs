@@ -82,7 +82,7 @@ impl RdfFormat {
 
 /// RDF data processor for loading and parsing RDF data
 pub struct RdfProcessor {
-    store: Arc<Store>,
+    store: Arc<dyn Store>,
     namespaces: NamespaceManager,
     /// Configuration for processing
     config: ProcessingConfig,
@@ -136,7 +136,7 @@ pub struct ProcessingStats {
 
 impl RdfProcessor {
     /// Create a new RDF processor
-    pub fn new(store: Arc<Store>) -> Self {
+    pub fn new(store: Arc<dyn Store>) -> Self {
         Self {
             store,
             namespaces: NamespaceManager::new(),
@@ -145,7 +145,7 @@ impl RdfProcessor {
     }
 
     /// Create with custom configuration
-    pub fn with_config(store: Arc<Store>, config: ProcessingConfig) -> Self {
+    pub fn with_config(store: Arc<dyn Store>, config: ProcessingConfig) -> Self {
         let mut namespaces = NamespaceManager::new();
         if let Some(base) = &config.base_iri {
             namespaces.set_base(base.clone());
@@ -414,17 +414,18 @@ impl RdfProcessor {
     pub fn to_rule_atoms(&self) -> Result<Vec<RuleAtom>> {
         let mut atoms = Vec::new();
         
-        for quad in self.store.iter() {
-            let atom = if quad.graph_name.is_some() {
+        // Use query_quads instead of iter() which might not exist
+        for quad in self.store.query_quads(None, None, None, None)? {
+            if quad.graph_name() != &oxirs_core::model::GraphName::DefaultGraph {
                 // For now, skip quads with named graphs
                 // In the future, we could represent these as 4-ary predicates
                 continue;
-            } else {
-                RuleAtom::Triple {
-                    subject: self.term_to_rule_term(&quad.subject.into())?,
-                    predicate: self.term_to_rule_term(&quad.predicate.into())?,
-                    object: self.term_to_rule_term(&quad.object)?,
-                }
+            }
+            
+            let atom = RuleAtom::Triple {
+                subject: self.term_to_rule_term(&quad.subject().clone().into())?,
+                predicate: self.term_to_rule_term(&quad.predicate().clone().into())?,
+                object: self.term_to_rule_term(&quad.object().clone().into())?,
             };
             
             atoms.push(atom);
@@ -443,10 +444,13 @@ impl RdfProcessor {
             Term::Literal(l) => {
                 if let Some(lang) = l.language() {
                     Ok(RuleTerm::Literal(format!("{}@{}", l.value(), lang)))
-                } else if let Some(dt) = l.datatype() {
-                    Ok(RuleTerm::Literal(format!("{}^^{}", l.value(), self.namespaces.compact(dt.as_str()))))
                 } else {
-                    Ok(RuleTerm::Literal(l.value().to_string()))
+                    let dt = l.datatype();
+                    if dt.as_str() != "http://www.w3.org/2001/XMLSchema#string" {
+                        Ok(RuleTerm::Literal(format!("{}^^{}", l.value(), self.namespaces.compact(dt.as_str()))))
+                    } else {
+                        Ok(RuleTerm::Literal(l.value().to_string()))
+                    }
                 }
             }
             Term::Variable(v) => Ok(RuleTerm::Variable(v.name().to_string())),
@@ -460,7 +464,7 @@ impl RdfProcessor {
     }
 
     /// Get the underlying store
-    pub fn store(&self) -> &Arc<Store> {
+    pub fn store(&self) -> &Arc<dyn Store> {
         &self.store
     }
 }

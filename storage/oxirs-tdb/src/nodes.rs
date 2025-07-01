@@ -1001,25 +1001,33 @@ impl NodeTable {
     /// Compact binary encoding for terms - more space efficient than bincode
     fn encode_term_compact(&self, term: &Term) -> Result<Vec<u8>> {
         let mut data = Vec::new();
-        
+
         match term {
             Term::Iri(iri) => {
                 data.push(1u8); // Type discriminator
                 self.encode_string_compact(&mut data, iri)?;
             }
-            Term::Literal { value, datatype, language } => {
+            Term::Literal {
+                value,
+                datatype,
+                language,
+            } => {
                 data.push(2u8); // Type discriminator
-                
+
                 // Encode value
                 self.encode_string_compact(&mut data, value)?;
-                
+
                 // Encode optional datatype (bit 0 in flags)
                 // Encode optional language (bit 1 in flags)
                 let mut flags = 0u8;
-                if datatype.is_some() { flags |= 0x01; }
-                if language.is_some() { flags |= 0x02; }
+                if datatype.is_some() {
+                    flags |= 0x01;
+                }
+                if language.is_some() {
+                    flags |= 0x02;
+                }
                 data.push(flags);
-                
+
                 if let Some(dt) = datatype {
                     self.encode_string_compact(&mut data, dt)?;
                 }
@@ -1036,18 +1044,18 @@ impl NodeTable {
                 self.encode_string_compact(&mut data, name)?;
             }
         }
-        
+
         Ok(data)
     }
 
     /// Encode string with variable-length encoding
     fn encode_string_compact(&self, data: &mut Vec<u8>, s: &str) -> Result<()> {
         let bytes = s.as_bytes();
-        
+
         // Use variable-length encoding for length (more efficient for small strings)
         self.encode_varint(data, bytes.len() as u64);
         data.extend_from_slice(bytes);
-        
+
         Ok(())
     }
 
@@ -1064,37 +1072,37 @@ impl NodeTable {
     fn decode_varint(&self, data: &[u8], offset: &mut usize) -> Result<u64> {
         let mut result = 0u64;
         let mut shift = 0;
-        
+
         while *offset < data.len() {
             let byte = data[*offset];
             *offset += 1;
-            
+
             result |= ((byte & 0x7F) as u64) << shift;
-            
+
             if (byte & 0x80) == 0 {
                 return Ok(result);
             }
-            
+
             shift += 7;
             if shift >= 64 {
                 return Err(anyhow!("Variable integer too large"));
             }
         }
-        
+
         Err(anyhow!("Incomplete variable integer"))
     }
 
     /// Decode compact string
     fn decode_string_compact(&self, data: &[u8], offset: &mut usize) -> Result<String> {
         let len = self.decode_varint(data, offset)? as usize;
-        
+
         if *offset + len > data.len() {
             return Err(anyhow!("String length exceeds data bounds"));
         }
-        
+
         let string_bytes = &data[*offset..*offset + len];
         *offset += len;
-        
+
         String::from_utf8(string_bytes.to_vec())
             .map_err(|e| anyhow!("Invalid UTF-8 in encoded string: {}", e))
     }
@@ -1119,11 +1127,11 @@ impl NodeTable {
         if data.is_empty() {
             return Err(anyhow!("Empty data for term decoding"));
         }
-        
+
         let mut offset = 0;
         let term_type = data[offset];
         offset += 1;
-        
+
         match term_type {
             1 => {
                 // IRI
@@ -1133,26 +1141,26 @@ impl NodeTable {
             2 => {
                 // Literal
                 let value = self.decode_string_compact(data, &mut offset)?;
-                
+
                 if offset >= data.len() {
                     return Err(anyhow!("Missing flags byte in literal"));
                 }
-                
+
                 let flags = data[offset];
                 offset += 1;
-                
+
                 let datatype = if (flags & 0x01) != 0 {
                     Some(self.decode_string_compact(data, &mut offset)?)
                 } else {
                     None
                 };
-                
+
                 let language = if (flags & 0x02) != 0 {
                     Some(self.decode_string_compact(data, &mut offset)?)
                 } else {
                     None
                 };
-                
+
                 Ok(Term::Literal {
                     value,
                     datatype,

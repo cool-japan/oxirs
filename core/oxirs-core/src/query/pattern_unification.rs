@@ -5,7 +5,7 @@
 //! enabling seamless interoperability.
 
 use crate::model::*;
-use crate::query::algebra::{TermPattern as AlgebraTermPattern, AlgebraTriplePattern};
+use crate::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
 use crate::OxirsError;
 use std::collections::HashSet;
 
@@ -277,9 +277,7 @@ impl PatternConverter {
     }
 
     /// Extract all variables from a set of algebra patterns
-    pub fn extract_variables_from_algebra(
-        patterns: &[AlgebraTriplePattern],
-    ) -> HashSet<Variable> {
+    pub fn extract_variables_from_algebra(patterns: &[AlgebraTriplePattern]) -> HashSet<Variable> {
         patterns
             .iter()
             .flat_map(|p| UnifiedTriplePattern::from_algebra_pattern(p).extract_variables())
@@ -387,10 +385,8 @@ mod tests {
         // Create an algebra pattern
         let algebra_pattern = AlgebraTriplePattern::new(
             AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-            AlgebraTermPattern::NamedNode(
-                NamedNode::new("http://example.org/pred").unwrap(),
-            ),
-            AlgebraTermPattern::Literal(Literal::new("test"))
+            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/pred").unwrap()),
+            AlgebraTermPattern::Literal(Literal::new("test")),
         );
 
         // Convert to unified pattern

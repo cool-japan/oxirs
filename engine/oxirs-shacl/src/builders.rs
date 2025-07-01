@@ -15,16 +15,16 @@
 //! - **Performance Optimization**: Built-in caching, parallel processing, and adaptive optimization
 //! - **Enterprise Features**: Memory management, timeout handling, and error recovery
 
+#[cfg(feature = "async")]
+use futures::future::try_join_all;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 #[cfg(feature = "async")]
-use futures::future::try_join_all;
-#[cfg(feature = "async")]
 use tokio::time::timeout;
 
-use oxirs_core::{Store, model::NamedNode};
+use oxirs_core::{model::NamedNode, Store};
 
 use crate::{
     constraints::*,
@@ -125,9 +125,19 @@ pub struct ShapeLoaderBuilder {
 
 #[derive(Debug)]
 enum ShapeSource {
-    RdfData { data: String, format: String, base_iri: Option<String> },
-    Store { store: Arc<Store>, graph_name: Option<String> },
-    File { path: String, format: Option<String> },
+    RdfData {
+        data: String,
+        format: String,
+        base_iri: Option<String>,
+    },
+    Store {
+        store: Arc<Store>,
+        graph_name: Option<String>,
+    },
+    File {
+        path: String,
+        format: Option<String>,
+    },
 }
 
 impl ShapeLoaderBuilder {
@@ -141,7 +151,11 @@ impl ShapeLoaderBuilder {
 
     /// Add RDF data to parse shapes from
     pub fn from_rdf_data(mut self, data: String, format: String, base_iri: Option<String>) -> Self {
-        self.sources.push(ShapeSource::RdfData { data, format, base_iri });
+        self.sources.push(ShapeSource::RdfData {
+            data,
+            format,
+            base_iri,
+        });
         self
     }
 
@@ -212,8 +226,13 @@ impl ShapeLoaderBuilder {
 
         for source in self.sources {
             match source {
-                ShapeSource::RdfData { data, format, base_iri } => {
-                    let shapes = parser.parse_shapes_from_rdf(&data, &format, base_iri.as_deref())?;
+                ShapeSource::RdfData {
+                    data,
+                    format,
+                    base_iri,
+                } => {
+                    let shapes =
+                        parser.parse_shapes_from_rdf(&data, &format, base_iri.as_deref())?;
                     all_shapes.extend(shapes);
                 }
                 ShapeSource::Store { store, graph_name } => {
@@ -221,9 +240,10 @@ impl ShapeLoaderBuilder {
                     all_shapes.extend(shapes);
                 }
                 ShapeSource::File { path, format } => {
-                    let content = tokio::fs::read_to_string(&path).await
+                    let content = tokio::fs::read_to_string(&path)
+                        .await
                         .map_err(|e| ShaclError::Io(e))?;
-                    
+
                     let format = format.unwrap_or_else(|| {
                         Path::new(&path)
                             .extension()
@@ -254,8 +274,13 @@ impl ShapeLoaderBuilder {
 
         for source in self.sources {
             match source {
-                ShapeSource::RdfData { data, format, base_iri } => {
-                    let shapes = parser.parse_shapes_from_rdf(&data, &format, base_iri.as_deref())?;
+                ShapeSource::RdfData {
+                    data,
+                    format,
+                    base_iri,
+                } => {
+                    let shapes =
+                        parser.parse_shapes_from_rdf(&data, &format, base_iri.as_deref())?;
                     all_shapes.extend(shapes);
                 }
                 ShapeSource::Store { store, graph_name } => {
@@ -263,9 +288,8 @@ impl ShapeLoaderBuilder {
                     all_shapes.extend(shapes);
                 }
                 ShapeSource::File { path, format } => {
-                    let content = std::fs::read_to_string(&path)
-                        .map_err(|e| ShaclError::Io(e))?;
-                    
+                    let content = std::fs::read_to_string(&path).map_err(|e| ShaclError::Io(e))?;
+
                     let format = format.unwrap_or_else(|| {
                         Path::new(&path)
                             .extension()
@@ -354,7 +378,9 @@ impl ShapeBuilder {
     pub fn datatype_constraint(mut self, datatype_iri: NamedNode) -> Self {
         self.shape.add_constraint(
             ConstraintComponentId::new("sh:DatatypeConstraintComponent"),
-            Constraint::Datatype(crate::constraints::value_constraints::DatatypeConstraint { datatype_iri }),
+            Constraint::Datatype(crate::constraints::value_constraints::DatatypeConstraint {
+                datatype_iri,
+            }),
         );
         self
     }
@@ -364,17 +390,21 @@ impl ShapeBuilder {
         if let Some(min) = min_count {
             self.shape.add_constraint(
                 ConstraintComponentId::new("sh:MinCountConstraintComponent"),
-                Constraint::MinCount(crate::constraints::cardinality_constraints::MinCountConstraint {
-                    min_count: min,
-                }),
+                Constraint::MinCount(
+                    crate::constraints::cardinality_constraints::MinCountConstraint {
+                        min_count: min,
+                    },
+                ),
             );
         }
         if let Some(max) = max_count {
             self.shape.add_constraint(
                 ConstraintComponentId::new("sh:MaxCountConstraintComponent"),
-                Constraint::MaxCount(crate::constraints::cardinality_constraints::MaxCountConstraint {
-                    max_count: max,
-                }),
+                Constraint::MaxCount(
+                    crate::constraints::cardinality_constraints::MaxCountConstraint {
+                        max_count: max,
+                    },
+                ),
             );
         }
         self
@@ -385,17 +415,17 @@ impl ShapeBuilder {
         if let Some(min) = min_length {
             self.shape.add_constraint(
                 ConstraintComponentId::new("sh:MinLengthConstraintComponent"),
-                Constraint::MinLength(crate::constraints::string_constraints::MinLengthConstraint {
-                    min_length: min,
-                }),
+                Constraint::MinLength(
+                    crate::constraints::string_constraints::MinLengthConstraint { min_length: min },
+                ),
             );
         }
         if let Some(max) = max_length {
             self.shape.add_constraint(
                 ConstraintComponentId::new("sh:MaxLengthConstraintComponent"),
-                Constraint::MaxLength(crate::constraints::string_constraints::MaxLengthConstraint {
-                    max_length: max,
-                }),
+                Constraint::MaxLength(
+                    crate::constraints::string_constraints::MaxLengthConstraint { max_length: max },
+                ),
             );
         }
         self
@@ -520,7 +550,8 @@ impl ValidationBuilder {
         nodes: &[oxirs_core::model::Term],
     ) -> Result<ValidationReport> {
         // For now, delegate to sync implementation
-        self.validator.validate_nodes(store, shape_id, nodes, Some(self.config))
+        self.validator
+            .validate_nodes(store, shape_id, nodes, Some(self.config))
     }
 
     /// Validate specific nodes against a shape (synchronous)
@@ -530,7 +561,8 @@ impl ValidationBuilder {
         shape_id: &ShapeId,
         nodes: &[oxirs_core::model::Term],
     ) -> Result<ValidationReport> {
-        self.validator.validate_nodes(store, shape_id, nodes, Some(self.config))
+        self.validator
+            .validate_nodes(store, shape_id, nodes, Some(self.config))
     }
 }
 
@@ -826,7 +858,7 @@ impl EnhancedValidatorBuilder {
         // Apply timeout to the entire build process
         timeout(
             self.async_config.default_timeout,
-            self.build_async_internal()
+            self.build_async_internal(),
         )
         .await
         .map_err(|_| ShaclError::Timeout("Validator build timed out".to_string()))?
@@ -847,12 +879,12 @@ impl EnhancedValidatorBuilder {
         // Create validator with enhanced configuration
         let mut enhanced_config = self.config.clone();
         enhanced_config.parallel = matches!(
-            self.strategy, 
+            self.strategy,
             ValidationStrategy::Parallel | ValidationStrategy::Optimized
         );
-        
+
         let mut validator = Validator::with_config(enhanced_config);
-        
+
         // Add shapes with progress monitoring
         if self.shapes.len() > 1000 {
             self.add_shapes_batched(&mut validator).await?
@@ -870,41 +902,41 @@ impl EnhancedValidatorBuilder {
         // For large datasets, process shapes in streaming batches
         let batch_size = self.async_config.batch_size;
         let mut all_shapes = Vec::new();
-        
+
         // Load in batches to avoid memory pressure
         let shapes = loader.build_async().await?;
-        
+
         for chunk in shapes.chunks(batch_size) {
             all_shapes.extend_from_slice(chunk);
-            
+
             // Yield control to allow other tasks to run
             tokio::task::yield_now().await;
-            
+
             // Check memory pressure
             if self.memory_config.enable_monitoring {
                 self.check_memory_pressure().await?;
             }
         }
-        
+
         Ok(all_shapes)
     }
-    
+
     /// Add shapes in batches for large datasets
     async fn add_shapes_batched(self, validator: &mut Validator) -> Result<()> {
         let batch_size = self.async_config.batch_size;
-        
+
         for chunk in self.shapes.chunks(batch_size) {
             for shape in chunk {
                 validator.add_shape(shape.clone())?;
             }
-            
+
             // Yield control between batches
             tokio::task::yield_now().await;
         }
-        
+
         Ok(())
     }
-    
+
     /// Check memory pressure and take corrective action if needed
     async fn check_memory_pressure(self) -> Result<()> {
         // This would integrate with system memory monitoring

@@ -3,24 +3,24 @@
 //! This module provides a complete HTTP server implementation using Juniper
 //! for GraphQL processing and Hyper for HTTP handling.
 
-use crate::juniper_schema::{Schema, GraphQLContext, create_schema};
+use crate::juniper_schema::{create_schema, GraphQLContext, Schema};
 use crate::RdfStore;
-use std::sync::Arc;
-use std::convert::Infallible;
-use std::net::SocketAddr;
-use juniper_hyper::playground;
-use anyhow::{Result, anyhow};
-use juniper_hyper::{graphql, graphiql};
-use hyper::{Method, Request, Response, StatusCode, body::Incoming};
+use anyhow::{anyhow, Result};
+use chrono;
 use hyper::body::Bytes;
 use hyper::service::service_fn;
-use hyper_util::rt::{TokioIo, TokioExecutor};
+use hyper::{body::Incoming, Method, Request, Response, StatusCode};
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
-use tokio::net::TcpListener;
-use tracing::{info, warn, error, debug};
-use serde_json;
 use juniper::{execute, EmptyMutation, EmptySubscription};
-use chrono;
+use juniper_hyper::playground;
+use juniper_hyper::{graphiql, graphql};
+use serde_json;
+use std::convert::Infallible;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tracing::{debug, error, info, warn};
 
 /// Configuration for the GraphQL server
 #[derive(Debug, Clone)]
@@ -68,7 +68,7 @@ impl JuniperGraphQLServer {
         let schema = Arc::new(create_schema());
         let context = GraphQLContext { store };
         let config = GraphQLServerConfig::default();
-        
+
         Self {
             schema,
             context,
@@ -80,7 +80,7 @@ impl JuniperGraphQLServer {
     pub fn with_config(store: Arc<RdfStore>, config: GraphQLServerConfig) -> Self {
         let schema = Arc::new(create_schema());
         let context = GraphQLContext { store };
-        
+
         Self {
             schema,
             context,
@@ -91,18 +91,18 @@ impl JuniperGraphQLServer {
     /// Start the GraphQL server on the specified address
     pub async fn start(&self, addr: SocketAddr) -> Result<()> {
         info!("Starting Juniper GraphQL server on {}", addr);
-        
+
         // Create the service with proper cloning for the closure
         let schema = self.schema.clone();
         let context = self.context.clone();
         let config = self.config.clone();
-        
+
         // Create TCP listener
         let listener = TcpListener::bind(addr).await?;
-        
+
         info!("GraphQL server running on http://{}", addr);
         info!("GraphQL endpoint: http://{}/graphql", addr);
-        
+
         // Accept connections in a loop
         loop {
             let (stream, _) = match listener.accept().await {
@@ -112,20 +112,25 @@ impl JuniperGraphQLServer {
                     continue;
                 }
             };
-            
+
             let schema_clone = schema.clone();
             let context_clone = context.clone();
             let config_clone = config.clone();
-            
+
             // Handle each connection in a separate task
             tokio::spawn(async move {
                 let io = TokioIo::new(stream);
                 let builder = Builder::new(TokioExecutor::new());
-                
+
                 let service = service_fn(move |req| {
-                    Self::handle_request(req, (*schema_clone).clone(), context_clone.clone(), config_clone.clone())
+                    Self::handle_request(
+                        req,
+                        (*schema_clone).clone(),
+                        context_clone.clone(),
+                        config_clone.clone(),
+                    )
                 });
-                
+
                 if let Err(e) = builder.serve_connection(io, service).await {
                     error!("Connection error: {}", e);
                 }
@@ -167,7 +172,7 @@ impl JuniperGraphQLServer {
     ) -> Result<Response<String>> {
         let method = req.method();
         let path = req.uri().path();
-        
+
         debug!("Handling {} request to {}", method, path);
 
         // Apply CORS headers if enabled
@@ -176,7 +181,10 @@ impl JuniperGraphQLServer {
             response_builder = response_builder
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-                .header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+                .header(
+                    "Access-Control-Allow-Headers",
+                    "Content-Type, Authorization",
+                );
         }
 
         // Handle CORS preflight requests
@@ -191,15 +199,21 @@ impl JuniperGraphQLServer {
             (&Method::GET, "/graphql") | (&Method::POST, "/graphql") => {
                 debug!("Processing GraphQL request");
                 let response = graphql(schema, context, req).await;
-                
+
                 // Add CORS headers to GraphQL response
                 if config.cors_enabled {
                     let (parts, body) = response.into_parts();
                     let mut response = Response::from_parts(parts, body);
                     let headers = response.headers_mut();
                     headers.insert("Access-Control-Allow-Origin", "*".parse().unwrap());
-                    headers.insert("Access-Control-Allow-Methods", "GET, POST, OPTIONS".parse().unwrap());
-                    headers.insert("Access-Control-Allow-Headers", "Content-Type, Authorization".parse().unwrap());
+                    headers.insert(
+                        "Access-Control-Allow-Methods",
+                        "GET, POST, OPTIONS".parse().unwrap(),
+                    );
+                    headers.insert(
+                        "Access-Control-Allow-Headers",
+                        "Content-Type, Authorization".parse().unwrap(),
+                    );
                     Ok(response)
                 } else {
                     Ok(response)
@@ -244,7 +258,7 @@ impl JuniperGraphQLServer {
             // Schema introspection endpoint (SDL)
             (&Method::GET, "/schema") if config.enable_introspection => {
                 debug!("Schema introspection request");
-                
+
                 // For now, return a placeholder SDL - in production, generate from Juniper schema
                 let sdl = r#"
                     """
@@ -440,14 +454,14 @@ pub async fn start_graphql_server_with_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{sleep, Duration};
     use std::net::{IpAddr, Ipv4Addr};
+    use tokio::time::{sleep, Duration};
 
     #[tokio::test]
     async fn test_server_creation() {
         let store = Arc::new(RdfStore::new().expect("Failed to create store"));
         let server = JuniperGraphQLServer::new(store);
-        
+
         // Just test that we can create the server
         assert!(server.config.enable_graphiql);
         assert!(server.config.enable_playground);
@@ -457,7 +471,7 @@ mod tests {
     #[tokio::test]
     async fn test_server_builder() {
         let store = Arc::new(RdfStore::new().expect("Failed to create store"));
-        
+
         let server = GraphQLServerBuilder::new()
             .enable_graphiql(false)
             .enable_playground(true)
@@ -465,7 +479,7 @@ mod tests {
             .max_query_depth(Some(10))
             .cors_enabled(true)
             .build(store);
-        
+
         assert!(!server.config.enable_graphiql);
         assert!(server.config.enable_playground);
         assert!(!server.config.enable_introspection);
@@ -479,7 +493,7 @@ mod tests {
         // For now, just test the builder functionality
         let store = Arc::new(RdfStore::new().expect("Failed to create store"));
         let _server = JuniperGraphQLServer::new(store);
-        
+
         // In a real test, we would:
         // 1. Start the server on a random port
         // 2. Make HTTP requests to test endpoints

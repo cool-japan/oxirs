@@ -76,19 +76,19 @@ pub struct ProcessingResult {
 pub trait EmbeddingGenerator: Send + Sync {
     /// Generate embedding vector from content
     fn generate_embedding(&self, content: &ContentItem) -> Result<Vector>;
-    
+
     /// Generate embeddings for a batch of content items
     fn generate_batch_embeddings(&self, content: &[ContentItem]) -> Result<Vec<ProcessingResult>>;
-    
+
     /// Get the embedding dimensions
     fn embedding_dimensions(&self) -> usize;
-    
+
     /// Get generator configuration
     fn get_config(&self) -> serde_json::Value;
-    
+
     /// Check if the generator is ready
     fn is_ready(&self) -> bool;
-    
+
     /// Get generator statistics
     fn get_statistics(&self) -> GeneratorStatistics;
 }
@@ -112,19 +112,19 @@ pub struct GeneratorStatistics {
 pub trait IncrementalVectorIndex: Send + Sync {
     /// Insert or update a vector
     fn upsert_vector(&mut self, id: String, vector: Vector) -> Result<()>;
-    
+
     /// Remove a vector
     fn remove_vector(&mut self, id: &str) -> Result<bool>;
-    
+
     /// Batch upsert vectors
     fn batch_upsert(&mut self, vectors: Vec<(String, Vector)>) -> Result<Vec<Result<()>>>;
-    
+
     /// Get index statistics
     fn get_statistics(&self) -> IndexStatistics;
-    
+
     /// Optimize index structure
     fn optimize(&mut self) -> Result<()>;
-    
+
     /// Check index health
     fn health_check(&self) -> Result<HealthStatus>;
 }
@@ -161,10 +161,10 @@ pub enum HealthStatus {
 pub trait AlertHandler: Send + Sync {
     /// Handle an alert
     fn handle_alert(&self, alert: &Alert) -> Result<()>;
-    
+
     /// Get alert configuration
     fn get_config(&self) -> AlertConfig;
-    
+
     /// Check if handler is enabled
     fn is_enabled(&self) -> bool;
 }
@@ -241,14 +241,25 @@ pub struct AlertThrottling {
 /// Trait for storing metrics
 pub trait MetricsStorage: Send + Sync {
     /// Store a metric value
-    fn store_metric(&mut self, name: &str, value: f64, timestamp: SystemTime, tags: HashMap<String, String>) -> Result<()>;
-    
+    fn store_metric(
+        &mut self,
+        name: &str,
+        value: f64,
+        timestamp: SystemTime,
+        tags: HashMap<String, String>,
+    ) -> Result<()>;
+
     /// Get metric values within a time range
-    fn get_metrics(&self, name: &str, start: SystemTime, end: SystemTime) -> Result<Vec<MetricPoint>>;
-    
+    fn get_metrics(
+        &self,
+        name: &str,
+        start: SystemTime,
+        end: SystemTime,
+    ) -> Result<Vec<MetricPoint>>;
+
     /// Get available metric names
     fn get_metric_names(&self) -> Result<Vec<String>>;
-    
+
     /// Delete old metrics
     fn cleanup_old_metrics(&mut self, cutoff: SystemTime) -> Result<usize>;
 }
@@ -268,13 +279,13 @@ pub struct MetricPoint {
 pub trait VersionStorage: Send + Sync {
     /// Store a new version
     fn store_version(&mut self, id: &str, version: &Version) -> Result<()>;
-    
+
     /// Get a specific version
     fn get_version(&self, id: &str, version_number: u64) -> Result<Option<Version>>;
-    
+
     /// Get all versions for an ID
     fn get_all_versions(&self, id: &str) -> Result<Vec<Version>>;
-    
+
     /// Delete old versions
     fn cleanup_old_versions(&mut self, id: &str, keep_count: usize) -> Result<usize>;
 }
@@ -298,7 +309,7 @@ pub struct Version {
 pub trait ConflictResolutionFunction: Send + Sync {
     /// Resolve conflicts between versions
     fn resolve_conflict(&self, versions: &[Version]) -> Result<Vector>;
-    
+
     /// Get resolution strategy name
     fn get_strategy_name(&self) -> &str;
 }
@@ -307,10 +318,10 @@ pub trait ConflictResolutionFunction: Send + Sync {
 pub trait TransactionLog: Send + Sync {
     /// Log a transaction
     fn log_transaction(&mut self, transaction: &Transaction) -> Result<()>;
-    
+
     /// Get transactions within a time range
     fn get_transactions(&self, start: SystemTime, end: SystemTime) -> Result<Vec<Transaction>>;
-    
+
     /// Replay transactions from a specific point
     fn replay_from(&self, checkpoint: SystemTime) -> Result<Vec<Transaction>>;
 }
@@ -362,7 +373,7 @@ pub enum TransactionStatus {
 pub trait InconsistencyDetectionAlgorithm: Send + Sync {
     /// Detect inconsistencies in the system
     fn detect_inconsistencies(&self) -> Result<Vec<Inconsistency>>;
-    
+
     /// Get detection algorithm name
     fn get_algorithm_name(&self) -> &str;
 }
@@ -413,8 +424,11 @@ pub enum InconsistencySeverity {
 /// Trait for consistency repair strategies
 pub trait ConsistencyRepairStrategy: Send + Sync {
     /// Repair inconsistencies
-    fn repair_inconsistencies(&self, inconsistencies: &[Inconsistency]) -> Result<Vec<RepairResult>>;
-    
+    fn repair_inconsistencies(
+        &self,
+        inconsistencies: &[Inconsistency],
+    ) -> Result<Vec<RepairResult>>;
+
     /// Get repair strategy name
     fn get_strategy_name(&self) -> &str;
 }

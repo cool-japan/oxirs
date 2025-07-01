@@ -1569,7 +1569,6 @@ impl StarParser {
         Ok(())
     }
 
-
     /// Get parsing errors (placeholder implementation)
     /// Parse JSON-LD-star format with RDF-star extension
     pub fn parse_jsonld_star<R: Read>(&self, reader: R) -> StarResult<StarGraph> {
@@ -1878,7 +1877,6 @@ impl StarParser {
             _ => Err(StarError::parse_error("Invalid term value".to_string())),
         }
     }
-
 }
 
 impl Default for StarParser {

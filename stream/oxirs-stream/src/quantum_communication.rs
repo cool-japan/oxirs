@@ -5,6 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -403,7 +404,7 @@ impl QuantumCommSystem {
 
         // Simulate measurement outcomes based on quantum state
         let prob_00 = source_qubit.state.alpha.real.powi(2) + source_qubit.state.alpha.imag.powi(2);
-        let random_value = rand::random::<f64>();
+        let random_value = rand::thread_rng().gen::<f64>();
 
         if random_value < prob_00 {
             classical_bits.push(0);
@@ -555,8 +556,8 @@ impl QuantumCommSystem {
         
         for &byte in data {
             // Generate random basis and bit
-            let basis = if rand::random::<bool>() { MeasurementBasis::Computational } else { MeasurementBasis::Diagonal };
-            let key_bit = rand::random::<u8>() & 1;
+            let basis = if rand::thread_rng().gen::<bool>() { MeasurementBasis::Computational } else { MeasurementBasis::Diagonal };
+            let key_bit = rand::thread_rng().gen::<u8>() & 1;
             
             // XOR encrypt with quantum key
             let encrypted_byte = byte ^ key_bit;

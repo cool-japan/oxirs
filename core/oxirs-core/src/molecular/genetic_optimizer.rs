@@ -5,13 +5,13 @@
 
 use super::dna_structures::DnaDataStructure;
 use super::types::*;
-use crate::model::{Triple, Term};
+use crate::model::{Term, Triple};
 use crate::query::algebra::AlgebraTriplePattern;
 use crate::OxirsError;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
 
 /// Genetic algorithm for optimizing graph structures
 pub struct GeneticGraphOptimizer {
@@ -233,15 +233,9 @@ pub enum MutationType {
         modification: String,
     },
     /// Gene deletion
-    GeneDeletion {
-        gene_type: String,
-        gene_id: String,
-    },
+    GeneDeletion { gene_type: String, gene_id: String },
     /// Gene duplication
-    GeneDuplication {
-        gene_type: String,
-        gene_id: String,
-    },
+    GeneDuplication { gene_type: String, gene_id: String },
     /// Chromosomal rearrangement
     ChromosomalRearrangement {
         old_order: Vec<String>,
@@ -289,45 +283,49 @@ impl GeneticGraphOptimizer {
             evolution_history: Vec::new(),
         }
     }
-    
+
     /// Set evolution parameters
     pub fn set_parameters(&mut self, mutation_rate: f64, crossover_rate: f64, generations: usize) {
         self.mutation_rate = mutation_rate;
         self.crossover_rate = crossover_rate;
         self.generations = generations;
     }
-    
+
     /// Initialize random population
     pub fn initialize_population(&mut self, base_triples: &[Triple]) -> Result<(), OxirsError> {
         self.population.clear();
-        
+
         for _ in 0..self.population_size {
             let mut structure = self.create_random_structure(base_triples)?;
             structure.fitness = (self.fitness_function)(&structure);
             self.population.push(structure);
         }
-        
+
         // Sort by fitness (highest first)
-        self.population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+        self.population
+            .sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
         self.best_fitness = self.population[0].fitness;
-        
+
         Ok(())
     }
-    
+
     /// Create a random graph structure
-    fn create_random_structure(&self, base_triples: &[Triple]) -> Result<GraphStructure, OxirsError> {
+    fn create_random_structure(
+        &self,
+        base_triples: &[Triple],
+    ) -> Result<GraphStructure, OxirsError> {
         let mut dna = DnaDataStructure::new();
-        
+
         // Encode base triples into DNA
         for triple in base_triples {
             dna.encode_triple(triple)?;
         }
-        
+
         // Generate random genes
         let indexing_genes = self.generate_random_indexing_genes();
         let storage_genes = self.generate_random_storage_genes();
         let access_genes = self.generate_random_access_genes();
-        
+
         Ok(GraphStructure {
             dna,
             indexing_genes,
@@ -338,7 +336,7 @@ impl GeneticGraphOptimizer {
             mutations: Vec::new(),
         })
     }
-    
+
     /// Generate random indexing genes
     fn generate_random_indexing_genes(&self) -> IndexingGenes {
         IndexingGenes {
@@ -368,17 +366,15 @@ impl GeneticGraphOptimizer {
                 block_size: 4096 * fastrand::u32(1..17),
                 dictionary_size: 1024 * fastrand::u32(1..65),
             },
-            adaptive_triggers: vec![
-                AdaptiveTrigger {
-                    condition: "high_load".to_string(),
-                    threshold: 0.8 + fastrand::f64() * 0.2,
-                    action: "create_index".to_string(),
-                    cooldown_seconds: 60 + fastrand::u32(..300),
-                },
-            ],
+            adaptive_triggers: vec![AdaptiveTrigger {
+                condition: "high_load".to_string(),
+                threshold: 0.8 + fastrand::f64() * 0.2,
+                action: "create_index".to_string(),
+                cooldown_seconds: 60 + fastrand::u32(..300),
+            }],
         }
     }
-    
+
     /// Generate random storage genes
     fn generate_random_storage_genes(&self) -> StorageGenes {
         StorageGenes {
@@ -403,7 +399,7 @@ impl GeneticGraphOptimizer {
             },
         }
     }
-    
+
     /// Generate random access genes
     fn generate_random_access_genes(&self) -> AccessGenes {
         AccessGenes {
@@ -421,14 +417,12 @@ impl GeneticGraphOptimizer {
                     buffer_size: 512 + fastrand::u32(..3584),
                 },
             ],
-            write_patterns: vec![
-                AccessPattern {
-                    pattern_id: "batch".to_string(),
-                    frequency: fastrand::f64(),
-                    optimization: "buffer".to_string(),
-                    buffer_size: 2048 + fastrand::u32(..14336),
-                },
-            ],
+            write_patterns: vec![AccessPattern {
+                pattern_id: "batch".to_string(),
+                frequency: fastrand::f64(),
+                optimization: "buffer".to_string(),
+                buffer_size: 2048 + fastrand::u32(..14336),
+            }],
             query_preferences: QueryPreferences {
                 join_algorithm: "hash_join".to_string(),
                 index_selection: "cost_based".to_string(),
@@ -443,29 +437,29 @@ impl GeneticGraphOptimizer {
             },
         }
     }
-    
+
     /// Evolve the population for one generation
     pub fn evolve_generation(&mut self) -> Result<GenerationStats, OxirsError> {
         let start_time = Instant::now();
         let mut mutations = 0;
         let mut crossovers = 0;
-        
+
         // Create new generation
         let mut new_population = Vec::new();
-        
+
         // Keep elite individuals
         for i in 0..self.elite_size {
             let mut elite = self.population[i].clone();
             elite.age += 1;
             new_population.push(elite);
         }
-        
+
         // Generate offspring through crossover and mutation
         while new_population.len() < self.population_size {
             // Selection
             let parent1 = self.tournament_selection();
             let parent2 = self.tournament_selection();
-            
+
             // Crossover
             let mut offspring = if fastrand::f64() < self.crossover_rate {
                 crossovers += 1;
@@ -473,55 +467,57 @@ impl GeneticGraphOptimizer {
             } else {
                 parent1.clone()
             };
-            
+
             // Mutation
             if fastrand::f64() < self.mutation_rate {
                 mutations += 1;
                 self.mutate(&mut offspring)?;
             }
-            
+
             // Evaluate fitness
             offspring.fitness = (self.fitness_function)(&offspring);
             offspring.age = 0;
-            
+
             new_population.push(offspring);
         }
-        
+
         // Replace population
         self.population = new_population;
-        
+
         // Sort by fitness
-        self.population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
-        
+        self.population
+            .sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+
         // Update best fitness
         if self.population[0].fitness > self.best_fitness {
             self.best_fitness = self.population[0].fitness;
         }
-        
+
         // Calculate statistics
         let stats = GenerationStats {
             generation: self.current_generation,
             best_fitness: self.population[0].fitness,
-            average_fitness: self.population.iter().map(|s| s.fitness).sum::<f64>() / self.population.len() as f64,
+            average_fitness: self.population.iter().map(|s| s.fitness).sum::<f64>()
+                / self.population.len() as f64,
             worst_fitness: self.population.last().unwrap().fitness,
             diversity: self.calculate_diversity(),
             mutations,
             crossovers,
             evolution_time: start_time.elapsed(),
         };
-        
+
         self.evolution_history.push(stats.clone());
         self.current_generation += 1;
-        
+
         Ok(stats)
     }
-    
+
     /// Tournament selection for parent selection
     fn tournament_selection(&self) -> GraphStructure {
         let tournament_size = 3;
         let mut best_fitness = -1.0;
         let mut best_individual = self.population[0].clone();
-        
+
         for _ in 0..tournament_size {
             let candidate = &self.population[fastrand::usize(..self.population.len())];
             if candidate.fitness > best_fitness {
@@ -529,40 +525,46 @@ impl GeneticGraphOptimizer {
                 best_individual = candidate.clone();
             }
         }
-        
+
         best_individual
     }
-    
+
     /// Crossover two parent structures
-    fn crossover(&self, parent1: &GraphStructure, parent2: &GraphStructure) -> Result<GraphStructure, OxirsError> {
+    fn crossover(
+        &self,
+        parent1: &GraphStructure,
+        parent2: &GraphStructure,
+    ) -> Result<GraphStructure, OxirsError> {
         let mut offspring = parent1.clone();
-        
+
         // Crossover indexing genes
         if fastrand::bool() {
             offspring.indexing_genes.compression = parent2.indexing_genes.compression.clone();
         }
-        
+
         if fastrand::bool() {
-            offspring.indexing_genes.secondary_indexes = parent2.indexing_genes.secondary_indexes.clone();
+            offspring.indexing_genes.secondary_indexes =
+                parent2.indexing_genes.secondary_indexes.clone();
         }
-        
+
         // Crossover storage genes
         if fastrand::bool() {
             offspring.storage_genes.clustering = parent2.storage_genes.clustering.clone();
         }
-        
+
         if fastrand::bool() {
             offspring.storage_genes.caching = parent2.storage_genes.caching.clone();
         }
-        
+
         // Crossover access genes
         if fastrand::bool() {
-            offspring.access_genes.query_preferences = parent2.access_genes.query_preferences.clone();
+            offspring.access_genes.query_preferences =
+                parent2.access_genes.query_preferences.clone();
         }
-        
+
         Ok(offspring)
     }
-    
+
     /// Mutate a structure
     fn mutate(&self, structure: &mut GraphStructure) -> Result<(), OxirsError> {
         let mutation_types = vec![
@@ -572,28 +574,37 @@ impl GeneticGraphOptimizer {
             "compression_level",
             "cache_size",
         ];
-        
+
         let mutation_type = &mutation_types[fastrand::usize(..mutation_types.len())];
-        
+
         match *mutation_type {
             "index_parameter" => {
                 if !structure.indexing_genes.secondary_indexes.is_empty() {
-                    let index_idx = fastrand::usize(..structure.indexing_genes.secondary_indexes.len());
-                    let param_idx = fastrand::usize(..structure.indexing_genes.secondary_indexes[index_idx].parameters.len());
-                    let old_value = structure.indexing_genes.secondary_indexes[index_idx].parameters[param_idx];
-                    structure.indexing_genes.secondary_indexes[index_idx].parameters[param_idx] = fastrand::f64();
-                    
+                    let index_idx =
+                        fastrand::usize(..structure.indexing_genes.secondary_indexes.len());
+                    let param_idx = fastrand::usize(
+                        ..structure.indexing_genes.secondary_indexes[index_idx]
+                            .parameters
+                            .len(),
+                    );
+                    let old_value =
+                        structure.indexing_genes.secondary_indexes[index_idx].parameters[param_idx];
+                    structure.indexing_genes.secondary_indexes[index_idx].parameters[param_idx] =
+                        fastrand::f64();
+
                     structure.mutations.push(MutationType::IndexMutation {
                         index_id: format!("secondary_{}", index_idx),
                         old_value: old_value.to_string(),
-                        new_value: structure.indexing_genes.secondary_indexes[index_idx].parameters[param_idx].to_string(),
+                        new_value: structure.indexing_genes.secondary_indexes[index_idx].parameters
+                            [param_idx]
+                            .to_string(),
                     });
                 }
             }
             "storage_parameter" => {
                 let old_value = structure.storage_genes.block_size as f64;
                 structure.storage_genes.block_size = 4096 * fastrand::u32(1..33);
-                
+
                 structure.mutations.push(MutationType::StorageMutation {
                     parameter: "block_size".to_string(),
                     old_value,
@@ -603,7 +614,7 @@ impl GeneticGraphOptimizer {
             "compression_level" => {
                 let old_level = structure.indexing_genes.compression.level;
                 structure.indexing_genes.compression.level = fastrand::u8(1..10);
-                
+
                 structure.mutations.push(MutationType::StorageMutation {
                     parameter: "compression_level".to_string(),
                     old_value: old_level as f64,
@@ -613,7 +624,7 @@ impl GeneticGraphOptimizer {
             "cache_size" => {
                 let old_size = structure.storage_genes.caching.cache_size_mb;
                 structure.storage_genes.caching.cache_size_mb = 64 + fastrand::u32(..1936);
-                
+
                 structure.mutations.push(MutationType::StorageMutation {
                     parameter: "cache_size_mb".to_string(),
                     old_value: old_size as f64,
@@ -622,55 +633,63 @@ impl GeneticGraphOptimizer {
             }
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     /// Calculate genetic diversity of population
     fn calculate_diversity(&self) -> f64 {
         // Simple diversity measure based on fitness variance
-        let avg_fitness = self.population.iter().map(|s| s.fitness).sum::<f64>() / self.population.len() as f64;
-        let variance = self.population.iter()
+        let avg_fitness =
+            self.population.iter().map(|s| s.fitness).sum::<f64>() / self.population.len() as f64;
+        let variance = self
+            .population
+            .iter()
             .map(|s| (s.fitness - avg_fitness).powi(2))
-            .sum::<f64>() / self.population.len() as f64;
-        
+            .sum::<f64>()
+            / self.population.len() as f64;
+
         variance.sqrt()
     }
-    
+
     /// Run complete evolution process
     pub fn evolve(&mut self) -> Result<GraphStructure, OxirsError> {
         for generation in 0..self.generations {
             let stats = self.evolve_generation()?;
-            
+
             // Print progress every 10 generations
             if generation % 10 == 0 {
-                println!("Generation {}: Best={:.4}, Avg={:.4}, Diversity={:.4}", 
-                        stats.generation, stats.best_fitness, stats.average_fitness, stats.diversity);
+                println!(
+                    "Generation {}: Best={:.4}, Avg={:.4}, Diversity={:.4}",
+                    stats.generation, stats.best_fitness, stats.average_fitness, stats.diversity
+                );
             }
-            
+
             // Early termination if no improvement for many generations
             if generation > 50 && self.evolution_history.len() >= 20 {
-                let recent_best = self.evolution_history.iter()
+                let recent_best = self
+                    .evolution_history
+                    .iter()
                     .rev()
                     .take(20)
                     .map(|s| s.best_fitness)
                     .fold(0.0, f64::max);
-                
+
                 if (recent_best - self.best_fitness).abs() < 0.001 {
                     println!("Early termination: No improvement in 20 generations");
                     break;
                 }
             }
         }
-        
+
         Ok(self.population[0].clone())
     }
-    
+
     /// Get the best structure from current population
     pub fn get_best_structure(&self) -> Option<&GraphStructure> {
         self.population.first()
     }
-    
+
     /// Get evolution history
     pub fn get_evolution_history(&self) -> &[GenerationStats] {
         &self.evolution_history
@@ -680,43 +699,59 @@ impl GeneticGraphOptimizer {
 /// Default fitness function for graph structures
 pub fn default_fitness_function(structure: &GraphStructure) -> f64 {
     let mut fitness = 0.0;
-    
+
     // Reward efficient indexing
     fitness += structure.indexing_genes.secondary_indexes.len() as f64 * 0.1;
-    
+
     // Reward optimal cache size (not too small, not too large)
     let cache_mb = structure.storage_genes.caching.cache_size_mb as f64;
-    fitness += if cache_mb >= 128.0 && cache_mb <= 512.0 { 0.2 } else { 0.0 };
-    
+    fitness += if cache_mb >= 128.0 && cache_mb <= 512.0 {
+        0.2
+    } else {
+        0.0
+    };
+
     // Reward balanced concurrency settings
     let readers = structure.access_genes.concurrency.max_readers as f64;
     let writers = structure.access_genes.concurrency.max_writers as f64;
-    fitness += if readers >= 10.0 && writers >= 2.0 && readers / writers <= 50.0 { 0.2 } else { 0.0 };
-    
+    fitness += if readers >= 10.0 && writers >= 2.0 && readers / writers <= 50.0 {
+        0.2
+    } else {
+        0.0
+    };
+
     // Reward good compression settings
     let compression_level = structure.indexing_genes.compression.level as f64;
-    fitness += if compression_level >= 3.0 && compression_level <= 7.0 { 0.1 } else { 0.0 };
-    
+    fitness += if compression_level >= 3.0 && compression_level <= 7.0 {
+        0.1
+    } else {
+        0.0
+    };
+
     // Reward reasonable block sizes
     let block_size = structure.storage_genes.block_size as f64;
-    fitness += if block_size >= 8192.0 && block_size <= 65536.0 { 0.1 } else { 0.0 };
-    
+    fitness += if block_size >= 8192.0 && block_size <= 65536.0 {
+        0.1
+    } else {
+        0.0
+    };
+
     // Add some randomness to encourage exploration
     fitness += fastrand::f64() * 0.1;
-    
+
     fitness
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, Literal};
+    use crate::model::{Literal, NamedNode};
 
     #[test]
     fn test_genetic_optimizer_creation() {
         let fitness_fn = Box::new(default_fitness_function);
         let optimizer = GeneticGraphOptimizer::new(20, fitness_fn);
-        
+
         assert_eq!(optimizer.population_size, 20);
         assert_eq!(optimizer.elite_size, 2);
     }
@@ -725,18 +760,16 @@ mod tests {
     fn test_random_structure_generation() {
         let fitness_fn = Box::new(default_fitness_function);
         let optimizer = GeneticGraphOptimizer::new(10, fitness_fn);
-        
-        let triples = vec![
-            Triple::new(
-                NamedNode::new("http://example.org/subject").unwrap(),
-                NamedNode::new("http://example.org/predicate").unwrap(),
-                Literal::new("object"),
-            ),
-        ];
-        
+
+        let triples = vec![Triple::new(
+            NamedNode::new("http://example.org/subject").unwrap(),
+            NamedNode::new("http://example.org/predicate").unwrap(),
+            Literal::new("object"),
+        )];
+
         let structure = optimizer.create_random_structure(&triples);
         assert!(structure.is_ok());
-        
+
         let structure = structure.unwrap();
         assert!(structure.fitness >= 0.0);
         assert!(!structure.indexing_genes.secondary_indexes.is_empty());
@@ -746,20 +779,18 @@ mod tests {
     fn test_mutation() {
         let fitness_fn = Box::new(default_fitness_function);
         let optimizer = GeneticGraphOptimizer::new(10, fitness_fn);
-        
-        let triples = vec![
-            Triple::new(
-                NamedNode::new("http://example.org/subject").unwrap(),
-                NamedNode::new("http://example.org/predicate").unwrap(),
-                Literal::new("object"),
-            ),
-        ];
-        
+
+        let triples = vec![Triple::new(
+            NamedNode::new("http://example.org/subject").unwrap(),
+            NamedNode::new("http://example.org/predicate").unwrap(),
+            Literal::new("object"),
+        )];
+
         let mut structure = optimizer.create_random_structure(&triples).unwrap();
         let old_block_size = structure.storage_genes.block_size;
-        
+
         optimizer.mutate(&mut structure).unwrap();
-        
+
         // Structure should have some changes
         assert!(!structure.mutations.is_empty());
     }
@@ -768,18 +799,16 @@ mod tests {
     fn test_fitness_function() {
         let fitness_fn = Box::new(default_fitness_function);
         let optimizer = GeneticGraphOptimizer::new(10, fitness_fn);
-        
-        let triples = vec![
-            Triple::new(
-                NamedNode::new("http://example.org/subject").unwrap(),
-                NamedNode::new("http://example.org/predicate").unwrap(),
-                Literal::new("object"),
-            ),
-        ];
-        
+
+        let triples = vec![Triple::new(
+            NamedNode::new("http://example.org/subject").unwrap(),
+            NamedNode::new("http://example.org/predicate").unwrap(),
+            Literal::new("object"),
+        )];
+
         let structure = optimizer.create_random_structure(&triples).unwrap();
         let fitness = default_fitness_function(&structure);
-        
+
         assert!(fitness >= 0.0);
         assert!(fitness <= 1.0); // Should be roughly in this range for default function
     }

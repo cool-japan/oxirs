@@ -206,7 +206,7 @@ impl TransformerEmbedding {
     pub fn new(config: TransformerConfig) -> Self {
         let vocab_size = 10000; // Default vocabulary size
         let weights = ModelWeights::new(vocab_size, config.base_config.dimensions);
-        
+
         Self {
             config,
             weights,
@@ -218,8 +218,9 @@ impl TransformerEmbedding {
     /// Create a transformer embedding with attention
     pub fn with_attention(config: TransformerConfig, num_heads: usize) -> Self {
         let vocab_size = 10000; // Default vocabulary size
-        let weights = ModelWeights::with_attention(vocab_size, config.base_config.dimensions, num_heads);
-        
+        let weights =
+            ModelWeights::with_attention(vocab_size, config.base_config.dimensions, num_heads);
+
         Self {
             config,
             weights,
@@ -238,29 +239,29 @@ impl TransformerEmbedding {
         // Simple tokenization and embedding lookup
         let tokens = text.split_whitespace().collect::<Vec<_>>();
         let mut embeddings = Vec::new();
-        
+
         for (i, _token) in tokens.iter().enumerate() {
             if i < self.weights.embeddings.nrows() {
                 let embedding = self.weights.embeddings.row(i).to_owned();
                 embeddings.push(embedding);
             }
         }
-        
+
         if embeddings.is_empty() {
             return Err(anyhow::anyhow!("No embeddings generated"));
         }
-        
+
         // Stack embeddings into matrix
         let num_tokens = embeddings.len();
         let embedding_dim = embeddings[0].len();
         let mut result = Array2::zeros((num_tokens, embedding_dim));
-        
+
         for (i, embedding) in embeddings.iter().enumerate() {
             for (j, &value) in embedding.iter().enumerate() {
                 result[[i, j]] = value;
             }
         }
-        
+
         Ok(result)
     }
 }
@@ -289,7 +290,10 @@ impl DomainPreprocessingRules {
             abbreviation_expansions: abbreviations,
             domain_specific_patterns: vec![
                 (r"(\d+)°C".to_string(), "$1 degrees celsius".to_string()),
-                (r"(\d+)mg/ml".to_string(), "$1 milligrams per milliliter".to_string()),
+                (
+                    r"(\d+)mg/ml".to_string(),
+                    "$1 milligrams per milliliter".to_string(),
+                ),
                 (r"pH(\d+)".to_string(), "pH level $1".to_string()),
             ],
             tokenization_rules: vec!["preserve_chemical_formulas".to_string()],
@@ -301,7 +305,10 @@ impl DomainPreprocessingRules {
         abbreviations.insert("p53".to_string(), "tumor protein p53".to_string());
         abbreviations.insert("BRCA1".to_string(), "breast cancer gene 1".to_string());
         abbreviations.insert("BRCA2".to_string(), "breast cancer gene 2".to_string());
-        abbreviations.insert("TNF-α".to_string(), "tumor necrosis factor alpha".to_string());
+        abbreviations.insert(
+            "TNF-α".to_string(),
+            "tumor necrosis factor alpha".to_string(),
+        );
         abbreviations.insert("mRNA".to_string(), "messenger ribonucleic acid".to_string());
         abbreviations.insert("tRNA".to_string(), "transfer ribonucleic acid".to_string());
         abbreviations.insert("CNS".to_string(), "central nervous system".to_string());
@@ -311,7 +318,10 @@ impl DomainPreprocessingRules {
             abbreviation_expansions: abbreviations,
             domain_specific_patterns: vec![
                 (r"([A-Z]+)\d+".to_string(), "$1 protein".to_string()),
-                (r"(\w+)-mutation".to_string(), "$1 genetic mutation".to_string()),
+                (
+                    r"(\w+)-mutation".to_string(),
+                    "$1 genetic mutation".to_string(),
+                ),
             ],
             tokenization_rules: vec!["preserve_gene_names".to_string()],
         }
@@ -321,7 +331,10 @@ impl DomainPreprocessingRules {
         let mut abbreviations = HashMap::new();
         abbreviations.insert("USC".to_string(), "United States Code".to_string());
         abbreviations.insert("CFR".to_string(), "Code of Federal Regulations".to_string());
-        abbreviations.insert("plaintiff".to_string(), "party bringing lawsuit".to_string());
+        abbreviations.insert(
+            "plaintiff".to_string(),
+            "party bringing lawsuit".to_string(),
+        );
         abbreviations.insert("defendant".to_string(), "party being sued".to_string());
         abbreviations.insert("tort".to_string(), "civil wrong".to_string());
         abbreviations.insert("v.".to_string(), "versus".to_string());
@@ -330,7 +343,10 @@ impl DomainPreprocessingRules {
             abbreviation_expansions: abbreviations,
             domain_specific_patterns: vec![
                 (r"§(\d+)".to_string(), "section $1".to_string()),
-                (r"(\w+)\s+v\.\s+(\w+)".to_string(), "$1 versus $2".to_string()),
+                (
+                    r"(\w+)\s+v\.\s+(\w+)".to_string(),
+                    "$1 versus $2".to_string(),
+                ),
             ],
             tokenization_rules: vec!["preserve_case_citations".to_string()],
         }
@@ -341,7 +357,10 @@ impl DomainPreprocessingRules {
         abbreviations.insert("CEO".to_string(), "chief executive officer".to_string());
         abbreviations.insert("CFO".to_string(), "chief financial officer".to_string());
         abbreviations.insert("IPO".to_string(), "initial public offering".to_string());
-        abbreviations.insert("SEC".to_string(), "Securities and Exchange Commission".to_string());
+        abbreviations.insert(
+            "SEC".to_string(),
+            "Securities and Exchange Commission".to_string(),
+        );
         abbreviations.insert("GDP".to_string(), "gross domestic product".to_string());
         abbreviations.insert("CPI".to_string(), "consumer price index".to_string());
 
@@ -375,7 +394,10 @@ impl DomainPreprocessingRules {
                 (r":D".to_string(), "very happy".to_string()),
                 (r";\)".to_string(), "winking".to_string()),
             ],
-            tokenization_rules: vec!["preserve_hashtags".to_string(), "preserve_mentions".to_string()],
+            tokenization_rules: vec![
+                "preserve_hashtags".to_string(),
+                "preserve_mentions".to_string(),
+            ],
         }
     }
 }

@@ -77,19 +77,16 @@ impl DnaDataStructure {
             .push(NucleotideData::Cytosine(SpecialMarker::StartCodon));
 
         // Encode subject as Adenine
-        self.primary_strand.push(NucleotideData::Adenine(
-            triple.subject().clone().into(),
-        ));
+        self.primary_strand
+            .push(NucleotideData::Adenine(triple.subject().clone().into()));
 
         // Encode predicate as Thymine
-        self.primary_strand.push(NucleotideData::Thymine(
-            triple.predicate().clone().into(),
-        ));
+        self.primary_strand
+            .push(NucleotideData::Thymine(triple.predicate().clone().into()));
 
         // Encode object as Guanine
-        self.primary_strand.push(NucleotideData::Guanine(
-            triple.object().clone().into(),
-        ));
+        self.primary_strand
+            .push(NucleotideData::Guanine(triple.object().clone().into()));
 
         // Add stop codon
         self.primary_strand
@@ -112,12 +109,10 @@ impl DnaDataStructure {
                 NucleotideData::Guanine(term) => {
                     NucleotideData::Cytosine(SpecialMarker::Enhancer(term.to_string()))
                 }
-                NucleotideData::Cytosine(marker) => {
-                    NucleotideData::Guanine(Term::NamedNode(
-                        crate::model::NamedNode::new(&format!("marker:{}", marker.type_name()))
-                            .unwrap(),
-                    ))
-                }
+                NucleotideData::Cytosine(marker) => NucleotideData::Guanine(Term::NamedNode(
+                    crate::model::NamedNode::new(&format!("marker:{}", marker.type_name()))
+                        .unwrap(),
+                )),
             };
             self.complementary_strand.push(complement);
         }

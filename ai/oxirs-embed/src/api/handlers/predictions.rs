@@ -5,11 +5,7 @@
 #[cfg(feature = "api-server")]
 use super::super::{ApiState, PredictionRequest, PredictionResponse};
 #[cfg(feature = "api-server")]
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-};
+use axum::{extract::State, http::StatusCode, response::Json};
 
 /// Predict entities/relations
 #[cfg(feature = "api-server")]

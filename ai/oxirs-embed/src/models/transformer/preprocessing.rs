@@ -239,7 +239,10 @@ impl TransformerPreprocessor {
             ("GDP", "gross domestic product"),
             ("CPI", "consumer price index"),
             ("NYSE", "New York Stock Exchange"),
-            ("NASDAQ", "National Association of Securities Dealers Automated Quotations"),
+            (
+                "NASDAQ",
+                "National Association of Securities Dealers Automated Quotations",
+            ),
         ]);
 
         for (abbrev, expansion) in news_abbrevs {
@@ -408,7 +411,10 @@ mod tests {
         let preprocessor = TransformerPreprocessor::new(config);
 
         assert_eq!(preprocessor.expand_camel_case("MyClass"), "my class");
-        assert_eq!(preprocessor.expand_camel_case("calculateValue"), "calculate value");
+        assert_eq!(
+            preprocessor.expand_camel_case("calculateValue"),
+            "calculate value"
+        );
         assert_eq!(
             preprocessor.expand_camel_case("getUserNameFromAPI"),
             "get user name from a p i"

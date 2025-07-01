@@ -509,13 +509,23 @@ impl HealthChecker {
     /// Assess system health based on current metrics trends
     async fn assess_system_health(&self, metrics: &StreamingMetrics) {
         let mut health_alerts = Vec::new();
+        let now = Utc::now();
+        let mut alert_id = 1;
         
         // Producer health assessment
         if metrics.producer_events_failed > 0 {
             let failure_rate = metrics.producer_events_failed as f64 / 
                 (metrics.producer_events_published + metrics.producer_events_failed) as f64;
             if failure_rate > 0.05 {
-                health_alerts.push(format!("High producer failure rate: {:.2}%", failure_rate * 100.0));
+                health_alerts.push(HealthAlert {
+                    id: format!("producer_failure_{}", alert_id),
+                    component: "producer".to_string(),
+                    severity: AlertSeverity::Warning,
+                    message: format!("High producer failure rate: {:.2}%", failure_rate * 100.0),
+                    timestamp: now,
+                    resolved: false,
+                });
+                alert_id += 1;
             }
         }
         
@@ -524,17 +534,40 @@ impl HealthChecker {
             let failure_rate = metrics.consumer_events_failed as f64 / 
                 metrics.consumer_events_consumed as f64;
             if failure_rate > 0.05 {
-                health_alerts.push(format!("High consumer failure rate: {:.2}%", failure_rate * 100.0));
+                health_alerts.push(HealthAlert {
+                    id: format!("consumer_failure_{}", alert_id),
+                    component: "consumer".to_string(),
+                    severity: AlertSeverity::Warning,
+                    message: format!("High consumer failure rate: {:.2}%", failure_rate * 100.0),
+                    timestamp: now,
+                    resolved: false,
+                });
+                alert_id += 1;
             }
         }
         
         // Performance health assessment
         if metrics.producer_average_latency_ms > 1000.0 {
-            health_alerts.push(format!("High producer latency: {:.2}ms", metrics.producer_average_latency_ms));
+            health_alerts.push(HealthAlert {
+                id: format!("producer_latency_{}", alert_id),
+                component: "producer".to_string(),
+                severity: AlertSeverity::Critical,
+                message: format!("High producer latency: {:.2}ms", metrics.producer_average_latency_ms),
+                timestamp: now,
+                resolved: false,
+            });
+            alert_id += 1;
         }
         
         if metrics.consumer_average_processing_time_ms > 500.0 {
-            health_alerts.push(format!("High consumer processing time: {:.2}ms", metrics.consumer_average_processing_time_ms));
+            health_alerts.push(HealthAlert {
+                id: format!("consumer_processing_{}", alert_id),
+                component: "consumer".to_string(),
+                severity: AlertSeverity::Critical,
+                message: format!("High consumer processing time: {:.2}ms", metrics.consumer_average_processing_time_ms),
+                timestamp: now,
+                resolved: false,
+            });
         }
         
         // Update health status based on assessments
@@ -548,18 +581,18 @@ impl HealthChecker {
         
         if !health_alerts.is_empty() {
             warn!("System health alerts: {:?}", health_alerts);
-            
-            // Update health status
-            let system_health = SystemHealth {
-                overall_status: health_status,
-                component_health: HashMap::new(),
-                last_check: Utc::now(),
-                uptime: Duration::hours(0), // Default uptime
-                alerts: health_alerts,
-            };
-            
-            *self.health_status.write().await = system_health;
         }
+        
+        // Update health status
+        let system_health = SystemHealth {
+            overall_status: health_status,
+            component_health: HashMap::new(),
+            last_check: now,
+            uptime: Duration::from_secs(0), // Default uptime
+            alerts: health_alerts,
+        };
+        
+        *self.health_status.write().await = system_health;
     }
 }
 

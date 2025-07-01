@@ -503,7 +503,7 @@ impl AdvancedSecuritySystem {
     async fn analyze_query(&self, query: &str) -> Result<QueryAnalysisResult> {
         // This is a simplified implementation
         // In practice, you'd use a full GraphQL parser
-        
+
         let depth = self.calculate_query_depth(query);
         let complexity = self.calculate_query_complexity(query);
         let field_count = self.count_fields(query);
@@ -556,13 +556,15 @@ impl AdvancedSecuritySystem {
     async fn check_rate_limiting(&self, client_ip: &IpAddr) -> Result<Option<SecurityViolation>> {
         let mut rate_limits = self.rate_limits.lock().await;
         let now = Instant::now();
-        
-        let rate_limit_state = rate_limits.entry(*client_ip).or_insert_with(|| RateLimitState {
-            requests: VecDeque::new(),
-            blocked_until: None,
-            total_requests: 0,
-            first_request: now,
-        });
+
+        let rate_limit_state = rate_limits
+            .entry(*client_ip)
+            .or_insert_with(|| RateLimitState {
+                requests: VecDeque::new(),
+                blocked_until: None,
+                total_requests: 0,
+                first_request: now,
+            });
 
         // Check if client is currently blocked
         if let Some(blocked_until) = rate_limit_state.blocked_until {
@@ -653,45 +655,64 @@ impl AdvancedSecuritySystem {
                 pattern_type: AttackPatternType::QueryComplexityAttack,
                 signature: "excessive_depth".to_string(),
                 severity: ThreatSeverity::High,
-                detection_rules: vec![
-                    DetectionRule {
-                        rule_type: DetectionRuleType::QueryComplexity,
-                        threshold: 1000.0,
-                        time_window: Duration::from_secs(60),
-                    }
-                ],
+                detection_rules: vec![DetectionRule {
+                    rule_type: DetectionRuleType::QueryComplexity,
+                    threshold: 1000.0,
+                    time_window: Duration::from_secs(60),
+                }],
             },
             AttackPattern {
                 name: "Introspection Abuse".to_string(),
                 pattern_type: AttackPatternType::IntrospectionAbuse,
                 signature: "introspection_query".to_string(),
                 severity: ThreatSeverity::Medium,
-                detection_rules: vec![
-                    DetectionRule {
-                        rule_type: DetectionRuleType::FieldAccessPattern,
-                        threshold: 5.0,
-                        time_window: Duration::from_secs(300),
-                    }
-                ],
+                detection_rules: vec![DetectionRule {
+                    rule_type: DetectionRuleType::FieldAccessPattern,
+                    threshold: 5.0,
+                    time_window: Duration::from_secs(300),
+                }],
             },
             // Additional patterns would be defined here...
         ]
     }
 
     // Helper methods (simplified implementations)
-    fn calculate_query_depth(&self, _query: &str) -> usize { 5 }
-    fn calculate_query_complexity(&self, _query: &str) -> usize { 100 }
-    fn count_fields(&self, _query: &str) -> usize { 10 }
-    fn count_aliases(&self, _query: &str) -> usize { 2 }
-    fn count_selection_sets(&self, _query: &str) -> usize { 3 }
-    fn extract_mutations(&self, _query: &str) -> Vec<String> { Vec::new() }
-    fn extract_subscriptions(&self, _query: &str) -> Vec<String> { Vec::new() }
-    async fn extract_required_permissions(&self, _query: &str) -> Result<HashSet<String>> { Ok(HashSet::new()) }
+    fn calculate_query_depth(&self, _query: &str) -> usize {
+        5
+    }
+    fn calculate_query_complexity(&self, _query: &str) -> usize {
+        100
+    }
+    fn count_fields(&self, _query: &str) -> usize {
+        10
+    }
+    fn count_aliases(&self, _query: &str) -> usize {
+        2
+    }
+    fn count_selection_sets(&self, _query: &str) -> usize {
+        3
+    }
+    fn extract_mutations(&self, _query: &str) -> Vec<String> {
+        Vec::new()
+    }
+    fn extract_subscriptions(&self, _query: &str) -> Vec<String> {
+        Vec::new()
+    }
+    async fn extract_required_permissions(&self, _query: &str) -> Result<HashSet<String>> {
+        Ok(HashSet::new())
+    }
     fn generate_query_signature(&self, query: &str) -> String {
         format!("sig_{}", query.len()) // Simplified signature
     }
-    fn ip_in_range(&self, _ip: &IpAddr, _range: &IpRange) -> bool { true }
-    async fn check_authentication(&self, _context: &SecurityContext) -> Result<Option<SecurityViolation>> { Ok(None) }
+    fn ip_in_range(&self, _ip: &IpAddr, _range: &IpRange) -> bool {
+        true
+    }
+    async fn check_authentication(
+        &self,
+        _context: &SecurityContext,
+    ) -> Result<Option<SecurityViolation>> {
+        Ok(None)
+    }
     fn check_query_depth(&self, analysis: &QueryAnalysisResult) -> Option<SecurityViolation> {
         if analysis.depth > self.config.max_query_depth {
             Some(SecurityViolation::QueryDepthExceeded {
@@ -712,11 +733,40 @@ impl AdvancedSecuritySystem {
             None
         }
     }
-    async fn check_query_whitelist(&self, _analysis: &QueryAnalysisResult) -> Result<Option<SecurityViolation>> { Ok(None) }
-    async fn check_field_authorization(&self, _context: &SecurityContext, _analysis: &QueryAnalysisResult) -> Result<Vec<SecurityViolation>> { Ok(Vec::new()) }
-    async fn is_mutation_allowed(&self, _context: &SecurityContext, _mutation: &str) -> Result<bool> { Ok(true) }
-    async fn is_subscription_allowed(&self, _context: &SecurityContext, _subscription: &str) -> Result<bool> { Ok(true) }
-    async fn detect_threats(&self, _context: &SecurityContext, _analysis: &QueryAnalysisResult) -> Result<Option<SecurityViolation>> { Ok(None) }
+    async fn check_query_whitelist(
+        &self,
+        _analysis: &QueryAnalysisResult,
+    ) -> Result<Option<SecurityViolation>> {
+        Ok(None)
+    }
+    async fn check_field_authorization(
+        &self,
+        _context: &SecurityContext,
+        _analysis: &QueryAnalysisResult,
+    ) -> Result<Vec<SecurityViolation>> {
+        Ok(Vec::new())
+    }
+    async fn is_mutation_allowed(
+        &self,
+        _context: &SecurityContext,
+        _mutation: &str,
+    ) -> Result<bool> {
+        Ok(true)
+    }
+    async fn is_subscription_allowed(
+        &self,
+        _context: &SecurityContext,
+        _subscription: &str,
+    ) -> Result<bool> {
+        Ok(true)
+    }
+    async fn detect_threats(
+        &self,
+        _context: &SecurityContext,
+        _analysis: &QueryAnalysisResult,
+    ) -> Result<Option<SecurityViolation>> {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
@@ -728,7 +778,7 @@ mod tests {
     async fn test_security_system_creation() {
         let config = SecurityConfig::default();
         let security_system = AdvancedSecuritySystem::new(config);
-        
+
         assert!(security_system.config.enable_rate_limiting);
         assert!(security_system.config.enable_query_depth_analysis);
     }
@@ -738,22 +788,26 @@ mod tests {
         let mut config = SecurityConfig::default();
         config.rate_limit_requests_per_minute = 2;
         let security_system = AdvancedSecuritySystem::new(config);
-        
+
         let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-        
+
         // First request should pass
         let violation1 = security_system.check_rate_limiting(&ip).await.unwrap();
         assert!(violation1.is_none());
-        
+
         // Second request should pass
         let violation2 = security_system.check_rate_limiting(&ip).await.unwrap();
         assert!(violation2.is_none());
-        
+
         // Third request should be rate limited
         let violation3 = security_system.check_rate_limiting(&ip).await.unwrap();
         assert!(violation3.is_some());
-        
-        if let Some(SecurityViolation::RateLimitExceeded { requests_per_minute, limit }) = violation3 {
+
+        if let Some(SecurityViolation::RateLimitExceeded {
+            requests_per_minute,
+            limit,
+        }) = violation3
+        {
             assert_eq!(requests_per_minute, 2);
             assert_eq!(limit, 2);
         } else {
@@ -765,10 +819,10 @@ mod tests {
     async fn test_query_analysis() {
         let config = SecurityConfig::default();
         let security_system = AdvancedSecuritySystem::new(config);
-        
+
         let query = "query { user { name email } }";
         let analysis = security_system.analyze_query(query).await.unwrap();
-        
+
         assert!(analysis.depth > 0);
         assert!(analysis.complexity > 0);
         assert!(analysis.field_count > 0);

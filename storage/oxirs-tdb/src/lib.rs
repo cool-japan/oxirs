@@ -81,7 +81,7 @@ pub mod wal;
 pub use config::{TdbConfig as TdbAdvancedConfig, WorkloadType};
 
 use anyhow::{anyhow, Result};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 // Re-export main types for convenience
@@ -100,9 +100,7 @@ pub use checkpoint::{
     CheckpointConfig, CheckpointManagerStats, CheckpointMetadata, CheckpointType, DirtyPageStats,
     DirtyPageTracker, OnlineCheckpointManager, PageModificationInfo,
 };
-pub use compact_encoding::{
-    CompactDecoder, CompactEncoder, CompactEncodingScheme, EncodingStats,
-};
+pub use compact_encoding::{CompactDecoder, CompactEncoder, CompactEncodingScheme, EncodingStats};
 pub use compression::{
     AdaptiveCompressor, AdvancedCompressionType, ColumnStoreCompressor, CompressedData,
     CompressionMetadata,
@@ -118,6 +116,10 @@ pub use lock_manager::{
     LockGrant, LockManager, LockManagerConfig, LockManagerError, LockManagerStats, LockMode,
     LockRequest,
 };
+pub use metrics::{
+    ComprehensiveMetrics, ErrorMetrics, MetricsCollector, MetricsReport, MetricsStatistics,
+    QueryMetrics, StorageMetrics, SystemMetrics, TimeSeriesMetrics,
+};
 pub use mvcc::{TransactionId, Version};
 pub use nodes::{NodeId, NodeTable, Term};
 pub use optimistic_concurrency::{
@@ -127,17 +129,13 @@ pub use optimistic_concurrency::{
 pub use production_hardening::{
     CircuitBreaker, EdgeCaseValidator, HealthMetrics, HealthMonitor, ResourceLimits,
 };
-pub use timestamp_ordering::{
-    CausalRelation, ClockSyncManager, HybridLogicalClock, LamportTimestamp,
-    NodeId as TimestampNodeId, TimestampBundle, TimestampManager, TimestampStats, VectorClock,
-};
 pub use query_optimizer::{
     IndexType, OptimizationRecommendation, PatternType, QueryCostModel, QueryOptimizer,
     QueryPattern, QueryStatisticsSummary, QueryStats,
 };
-pub use metrics::{
-    ComprehensiveMetrics, ErrorMetrics, MetricsCollector, MetricsReport, MetricsStatistics,
-    QueryMetrics, StorageMetrics, SystemMetrics, TimeSeriesMetrics,
+pub use timestamp_ordering::{
+    CausalRelation, ClockSyncManager, HybridLogicalClock, LamportTimestamp,
+    NodeId as TimestampNodeId, TimestampBundle, TimestampManager, TimestampStats, VectorClock,
 };
 pub use triple_store::{Quad, Triple, TripleStore, TripleStoreConfig, TripleStoreStats};
 
@@ -767,7 +765,8 @@ impl TdbStore {
     ) -> Result<OptimizationRecommendation> {
         let pattern = QueryPattern::new(subject, predicate, object);
         let store_stats = self.get_stats()?;
-        self.query_optimizer.recommend_optimization(&pattern, &store_stats)
+        self.query_optimizer
+            .recommend_optimization(&pattern, &store_stats)
     }
 
     /// Get query execution statistics summary
@@ -832,11 +831,15 @@ impl TdbStore {
 
         // Record for metrics collector
         let mut labels = std::collections::HashMap::new();
-        labels.insert("pattern_type".to_string(), format!("{:?}", pattern.pattern_type()));
+        labels.insert(
+            "pattern_type".to_string(),
+            format!("{:?}", pattern.pattern_type()),
+        );
         labels.insert("index_used".to_string(), format!("{:?}", index_used));
         labels.insert("result_count".to_string(), result_count.to_string());
 
-        self.metrics_collector.record_query_time(execution_time, labels)?;
+        self.metrics_collector
+            .record_query_time(execution_time, labels)?;
 
         Ok(())
     }
@@ -852,7 +855,10 @@ impl TdbStore {
     }
 
     /// Get performance statistics for various metrics
-    pub fn get_performance_stats(&self, duration: std::time::Duration) -> Result<PerformanceStatsSummary> {
+    pub fn get_performance_stats(
+        &self,
+        duration: std::time::Duration,
+    ) -> Result<PerformanceStatsSummary> {
         let query_stats = self.metrics_collector.get_query_stats(duration)?;
         let error_stats = self.metrics_collector.get_error_stats(duration)?;
         let memory_stats = self.metrics_collector.get_memory_stats(duration)?;
@@ -894,27 +900,29 @@ impl TdbStore {
             let storage_metrics = StorageMetrics {
                 total_triples: stats.total_triples,
                 database_size_bytes: stats.total_triples * 100, // Estimated bytes per triple
-                index_size_bytes: stats.total_triples * 50, // Estimated index size
-                compression_ratio: 0.8, // Estimated compression ratio
+                index_size_bytes: stats.total_triples * 50,     // Estimated index size
+                compression_ratio: 0.8,                         // Estimated compression ratio
                 active_transactions: 0, // Would need actual transaction count
                 completed_transactions: 0, // Would need actual transaction count
                 failed_transactions: 0, // Would need actual error count
-                wal_size_bytes: 0, // Would need actual WAL size
-                checkpoint_count: 0, // Would need actual checkpoint count
+                wal_size_bytes: 0,      // Would need actual WAL size
+                checkpoint_count: 0,    // Would need actual checkpoint count
                 avg_checkpoint_duration_ms: 0.0,
                 buffer_pool_hit_rate: 0.95, // Estimated buffer pool hit rate
-                dirty_pages: 0, // Would need actual dirty page count
+                dirty_pages: 0,             // Would need actual dirty page count
             };
 
             // Create basic system metrics (in production, these would come from system monitoring)
             let system_metrics = SystemMetrics {
-                cpu_usage: 0.0, // Would be collected from system
-                memory_usage: 0, // Would be collected from system
+                cpu_usage: 0.0,      // Would be collected from system
+                memory_usage: 0,     // Would be collected from system
                 memory_available: 0, // Would be collected from system
                 disk_read_rate: 0,
                 disk_write_rate: 0,
                 network_io_rate: 0,
-                active_threads: std::thread::available_parallelism().map(|p| p.get() as u32).unwrap_or(1),
+                active_threads: std::thread::available_parallelism()
+                    .map(|p| p.get() as u32)
+                    .unwrap_or(1),
                 timestamp: std::time::SystemTime::now(),
             };
 

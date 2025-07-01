@@ -4,15 +4,15 @@
 //! Based on W3C SPARQL 1.1 Query specification:
 //! https://www.w3.org/TR/sparql11-query/
 
-use super::sparql_algebra::{
-    GraphPattern, TriplePattern, TermPattern,
-};
+use super::sparql_algebra::{GraphPattern, TermPattern, TriplePattern};
 use crate::model::{NamedNode, Variable};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/).
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Query {
     /// [SELECT](https://www.w3.org/TR/sparql11-query/#select).
     Select {
@@ -377,7 +377,8 @@ impl fmt::Display for Query {
 }
 
 /// A SPARQL query [dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct QueryDataset {
     /// Default graphs (FROM clauses)
     pub default: Vec<NamedNode>,

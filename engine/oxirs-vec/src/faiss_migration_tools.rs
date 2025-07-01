@@ -12,23 +12,25 @@
 //! - Automatic format detection and conversion
 
 use crate::{
-    faiss_compatibility::{FaissIndexType, FaissMetricType, FaissIndexMetadata, FaissCompatibility},
+    faiss_compatibility::{
+        FaissCompatibility, FaissIndexMetadata, FaissIndexType, FaissMetricType,
+    },
     faiss_integration::{FaissConfig, FaissIndex},
-    faiss_native_integration::{NativeFaissIndex, NativeFaissConfig},
-    index::{VectorIndex, IndexConfig},
+    faiss_native_integration::{NativeFaissConfig, NativeFaissIndex},
+    hnsw::{HnswConfig, HnswIndex},
+    index::{IndexConfig, VectorIndex},
+    ivf::{IvfConfig, IvfIndex},
     similarity::SimilarityMetric,
-    hnsw::{HnswIndex, HnswConfig},
-    ivf::{IvfIndex, IvfConfig},
     Vector, VectorPrecision,
 };
-use anyhow::{Result, Context, Error as AnyhowError};
-use std::collections::{HashMap, BTreeMap};
-use std::sync::{Arc, RwLock, Mutex};
+use anyhow::{Context, Error as AnyhowError, Result};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::time::{Instant, Duration};
-use serde::{Serialize, Deserialize};
-use tracing::{debug, info, warn, error, span, Level};
-use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
+use tracing::{debug, error, info, span, warn, Level};
 
 /// Migration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -486,11 +488,7 @@ impl FaissMigrationTool {
     }
 
     /// Execute migration from source to target
-    pub async fn migrate(
-        &self,
-        source_path: &Path,
-        target_path: &Path,
-    ) -> Result<MigrationResult> {
+    pub async fn migrate(&self, source_path: &Path, target_path: &Path) -> Result<MigrationResult> {
         let span = span!(Level::INFO, "faiss_migration");
         let _enter = span.enter();
 
@@ -507,9 +505,13 @@ impl FaissMigrationTool {
 
         // Validate source data
         self.update_phase(MigrationPhase::DataValidation)?;
-        let source_metadata = self.validate_source_data(source_path, &detected_source_format).await?;
-        info!("Source validation completed: {} vectors, {} dimensions", 
-              source_metadata.vector_count, source_metadata.dimension);
+        let source_metadata = self
+            .validate_source_data(source_path, &detected_source_format)
+            .await?;
+        info!(
+            "Source validation completed: {} vectors, {} dimensions",
+            source_metadata.vector_count, source_metadata.dimension
+        );
 
         // Create target index
         self.update_phase(MigrationPhase::IndexCreation)?;
@@ -517,11 +519,19 @@ impl FaissMigrationTool {
 
         // Perform data transfer
         self.update_phase(MigrationPhase::DataTransfer)?;
-        self.transfer_data(source_path, &detected_source_format, target_index, target_path).await?;
+        self.transfer_data(
+            source_path,
+            &detected_source_format,
+            target_index,
+            target_path,
+        )
+        .await?;
 
         // Quality assurance
         self.update_phase(MigrationPhase::QualityAssurance)?;
-        let qa_results = self.perform_quality_assurance(source_path, target_path).await?;
+        let qa_results = self
+            .perform_quality_assurance(source_path, target_path)
+            .await?;
 
         // Optimization
         self.update_phase(MigrationPhase::Optimization)?;
@@ -534,7 +544,9 @@ impl FaissMigrationTool {
         self.update_phase(MigrationPhase::Completed)?;
 
         let final_state = {
-            let mut state = self.state.write()
+            let mut state = self
+                .state
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire state lock"))?;
             state.statistics.total_time = start_time.elapsed();
             state.clone()
@@ -549,7 +561,10 @@ impl FaissMigrationTool {
             recommendations: self.generate_recommendations()?,
         };
 
-        info!("Migration completed successfully in {:?}", start_time.elapsed());
+        info!(
+            "Migration completed successfully in {:?}",
+            start_time.elapsed()
+        );
         Ok(result)
     }
 
@@ -560,12 +575,19 @@ impl FaissMigrationTool {
 
         // Read file header to detect format
         if !source_path.exists() {
-            return Err(AnyhowError::msg(format!("Source path does not exist: {:?}", source_path)));
+            return Err(AnyhowError::msg(format!(
+                "Source path does not exist: {:?}",
+                source_path
+            )));
         }
 
         // Check for FAISS magic number
-        let file_content = std::fs::read(source_path.join("header").unwrap_or(source_path.to_path_buf()))?;
-        
+        let file_content = std::fs::read(
+            source_path
+                .join("header")
+                .unwrap_or(source_path.to_path_buf()),
+        )?;
+
         if file_content.len() >= 5 && &file_content[0..5] == b"FAISS" {
             debug!("Detected FAISS native format");
             return Ok(MigrationFormat::FaissNative {
@@ -578,10 +600,14 @@ impl FaissMigrationTool {
         if source_path.is_dir() {
             let entries: Vec<_> = std::fs::read_dir(source_path)?.collect();
             let has_vectors = entries.iter().any(|e| {
-                e.as_ref().map(|entry| entry.file_name().to_string_lossy().contains("vectors")).unwrap_or(false)
+                e.as_ref()
+                    .map(|entry| entry.file_name().to_string_lossy().contains("vectors"))
+                    .unwrap_or(false)
             });
             let has_metadata = entries.iter().any(|e| {
-                e.as_ref().map(|entry| entry.file_name().to_string_lossy().contains("metadata")).unwrap_or(false)
+                e.as_ref()
+                    .map(|entry| entry.file_name().to_string_lossy().contains("metadata"))
+                    .unwrap_or(false)
             });
 
             if has_vectors && has_metadata {
@@ -621,7 +647,8 @@ impl FaissMigrationTool {
         };
 
         if self.config.quality_assurance.enable_checksums {
-            self.verify_checksum(source_path, &metadata.checksum).await?;
+            self.verify_checksum(source_path, &metadata.checksum)
+                .await?;
         }
 
         Ok(metadata)
@@ -633,12 +660,15 @@ impl FaissMigrationTool {
         let _enter = span.enter();
 
         match &self.config.target_format {
-            MigrationFormat::FaissNative { index_type, gpu_enabled } => {
+            MigrationFormat::FaissNative {
+                index_type,
+                gpu_enabled,
+            } => {
                 let config = NativeFaissConfig {
                     enable_gpu: *gpu_enabled,
                     ..Default::default()
                 };
-                
+
                 // Create appropriate FAISS index
                 debug!("Creating FAISS native index: {:?}", index_type);
                 Ok(TargetIndex::FaissNative {
@@ -668,14 +698,37 @@ impl FaissMigrationTool {
         let _enter = span.enter();
 
         match &self.config.strategy {
-            MigrationStrategy::Incremental { batch_size, checkpoint_interval } => {
-                self.transfer_incremental(source_path, source_format, target_index, target_path, *batch_size, *checkpoint_interval).await
+            MigrationStrategy::Incremental {
+                batch_size,
+                checkpoint_interval,
+            } => {
+                self.transfer_incremental(
+                    source_path,
+                    source_format,
+                    target_index,
+                    target_path,
+                    *batch_size,
+                    *checkpoint_interval,
+                )
+                .await
             }
-            MigrationStrategy::Parallel { thread_count, coordination_strategy } => {
-                self.transfer_parallel(source_path, source_format, target_index, target_path, *thread_count, coordination_strategy).await
+            MigrationStrategy::Parallel {
+                thread_count,
+                coordination_strategy,
+            } => {
+                self.transfer_parallel(
+                    source_path,
+                    source_format,
+                    target_index,
+                    target_path,
+                    *thread_count,
+                    coordination_strategy,
+                )
+                .await
             }
             _ => {
-                self.transfer_direct(source_path, source_format, target_index, target_path).await
+                self.transfer_direct(source_path, source_format, target_index, target_path)
+                    .await
             }
         }
     }
@@ -692,8 +745,11 @@ impl FaissMigrationTool {
         let _enter = span.enter();
 
         // Simulate direct transfer
-        info!("Performing direct data transfer from {:?} to {:?}", source_path, target_path);
-        
+        info!(
+            "Performing direct data transfer from {:?} to {:?}",
+            source_path, target_path
+        );
+
         // Update progress
         self.update_progress(50, 100)?;
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -715,18 +771,20 @@ impl FaissMigrationTool {
         let span = span!(Level::DEBUG, "transfer_incremental");
         let _enter = span.enter();
 
-        info!("Performing incremental transfer: batch_size={}, checkpoint_interval={}", 
-              batch_size, checkpoint_interval);
+        info!(
+            "Performing incremental transfer: batch_size={}, checkpoint_interval={}",
+            batch_size, checkpoint_interval
+        );
 
         let total_batches = 100; // Simulated
-        
+
         for batch in 0..total_batches {
             // Transfer batch
             self.process_batch(batch, batch_size).await?;
-            
+
             // Update progress
             self.update_progress(batch + 1, total_batches)?;
-            
+
             // Create checkpoint if needed
             if (batch + 1) % checkpoint_interval == 0 {
                 self.create_checkpoint(batch + 1).await?;
@@ -749,20 +807,24 @@ impl FaissMigrationTool {
         let span = span!(Level::DEBUG, "transfer_parallel");
         let _enter = span.enter();
 
-        info!("Performing parallel transfer: threads={}, strategy={:?}", 
-              thread_count, coordination_strategy);
+        info!(
+            "Performing parallel transfer: threads={}, strategy={:?}",
+            thread_count, coordination_strategy
+        );
 
         // Simulate parallel processing
-        let handles = (0..thread_count).map(|thread_id| {
-            let source_path = source_path.to_path_buf();
-            let target_path = target_path.to_path_buf();
-            
-            tokio::spawn(async move {
-                info!("Thread {} processing data", thread_id);
-                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-                Ok::<(), AnyhowError>(())
+        let handles = (0..thread_count)
+            .map(|thread_id| {
+                let source_path = source_path.to_path_buf();
+                let target_path = target_path.to_path_buf();
+
+                tokio::spawn(async move {
+                    info!("Thread {} processing data", thread_id);
+                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                    Ok::<(), AnyhowError>(())
+                })
             })
-        }).collect::<Vec<_>>();
+            .collect::<Vec<_>>();
 
         for handle in handles {
             handle.await.map_err(|e| AnyhowError::new(e))??;
@@ -774,13 +836,15 @@ impl FaissMigrationTool {
     /// Process a single batch of data
     async fn process_batch(&self, batch_id: usize, batch_size: usize) -> Result<()> {
         debug!("Processing batch {}: size={}", batch_id, batch_size);
-        
+
         // Simulate batch processing
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        
+
         // Update statistics
         {
-            let mut state = self.state.write()
+            let mut state = self
+                .state
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire state lock"))?;
             state.processed_vectors += batch_size;
             state.current_batch = batch_id;
@@ -792,7 +856,7 @@ impl FaissMigrationTool {
     /// Create migration checkpoint
     async fn create_checkpoint(&self, processed_count: usize) -> Result<()> {
         debug!("Creating checkpoint at vector {}", processed_count);
-        
+
         let checkpoint = MigrationCheckpoint {
             timestamp: std::time::SystemTime::now(),
             processed_count,
@@ -802,7 +866,9 @@ impl FaissMigrationTool {
         };
 
         {
-            let mut state = self.state.write()
+            let mut state = self
+                .state
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire state lock"))?;
             state.last_checkpoint = Some(checkpoint);
         }
@@ -822,7 +888,7 @@ impl FaissMigrationTool {
         let mut results = QualityAssuranceResults {
             integrity_passed: true,
             performance_passed: true,
-            accuracy_score: 0.95, // Simulated
+            accuracy_score: 0.95,        // Simulated
             performance_retention: 0.88, // Simulated
             validation_metrics: HashMap::new(),
         };
@@ -832,48 +898,65 @@ impl FaissMigrationTool {
         }
 
         if self.config.quality_assurance.verify_performance {
-            results.performance_passed = self.verify_performance_preservation(source_path, target_path).await?;
+            results.performance_passed = self
+                .verify_performance_preservation(source_path, target_path)
+                .await?;
         }
 
         // Add detailed metrics
-        results.validation_metrics.insert("checksum_validation".to_string(), 1.0);
-        results.validation_metrics.insert("format_compatibility".to_string(), 0.98);
-        results.validation_metrics.insert("data_completeness".to_string(), 0.99);
+        results
+            .validation_metrics
+            .insert("checksum_validation".to_string(), 1.0);
+        results
+            .validation_metrics
+            .insert("format_compatibility".to_string(), 0.98);
+        results
+            .validation_metrics
+            .insert("data_completeness".to_string(), 0.99);
 
-        info!("Quality assurance completed: integrity={}, performance={}", 
-              results.integrity_passed, results.performance_passed);
+        info!(
+            "Quality assurance completed: integrity={}, performance={}",
+            results.integrity_passed, results.performance_passed
+        );
 
         Ok(results)
     }
 
     /// Verify data integrity between source and target
     async fn verify_data_integrity(&self, source_path: &Path, target_path: &Path) -> Result<bool> {
-        debug!("Verifying data integrity between {:?} and {:?}", source_path, target_path);
-        
+        debug!(
+            "Verifying data integrity between {:?} and {:?}",
+            source_path, target_path
+        );
+
         // Simulate integrity verification
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-        
+
         // In practice, this would:
         // 1. Sample vectors from both indices
         // 2. Compare vector values with tolerance
         // 3. Verify index structure integrity
         // 4. Check metadata consistency
-        
+
         Ok(true) // Simulated success
     }
 
     /// Verify performance preservation
-    async fn verify_performance_preservation(&self, source_path: &Path, target_path: &Path) -> Result<bool> {
+    async fn verify_performance_preservation(
+        &self,
+        source_path: &Path,
+        target_path: &Path,
+    ) -> Result<bool> {
         debug!("Verifying performance preservation");
-        
+
         // Simulate performance comparison
         tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-        
+
         // In practice, this would:
         // 1. Run benchmark queries on both indices
         // 2. Compare search latency, recall, and throughput
         // 3. Verify performance meets threshold requirements
-        
+
         Ok(true) // Simulated success
     }
 
@@ -883,15 +966,19 @@ impl FaissMigrationTool {
         let _enter = span.enter();
 
         debug!("Optimizing target index at {:?}", target_path);
-        
+
         // Simulate optimization
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
+
         Ok(())
     }
 
     /// Compare performance between source and target
-    async fn compare_performance(&self, source_path: &Path, target_path: &Path) -> Result<PerformanceComparison> {
+    async fn compare_performance(
+        &self,
+        source_path: &Path,
+        target_path: &Path,
+    ) -> Result<PerformanceComparison> {
         let span = span!(Level::DEBUG, "compare_performance");
         let _enter = span.enter();
 
@@ -928,7 +1015,9 @@ impl FaissMigrationTool {
 
     /// Helper methods
     fn update_phase(&self, phase: MigrationPhase) -> Result<()> {
-        let mut state = self.state.write()
+        let mut state = self
+            .state
+            .write()
             .map_err(|_| AnyhowError::msg("Failed to acquire state lock"))?;
         state.phase = phase;
         debug!("Migration phase updated to: {:?}", phase);
@@ -936,14 +1025,21 @@ impl FaissMigrationTool {
     }
 
     fn update_progress(&self, current: usize, total: usize) -> Result<()> {
-        let mut state = self.state.write()
+        let mut state = self
+            .state
+            .write()
             .map_err(|_| AnyhowError::msg("Failed to acquire state lock"))?;
         state.processed_vectors = current;
         state.total_vectors = total;
 
         if let Some(ref progress) = *self.progress.lock().unwrap() {
             // Update progress bar (simplified)
-            debug!("Progress: {}/{} ({}%)", current, total, (current * 100) / total);
+            debug!(
+                "Progress: {}/{} ({}%)",
+                current,
+                total,
+                (current * 100) / total
+            );
         }
 
         Ok(())
@@ -953,13 +1049,15 @@ impl FaissMigrationTool {
         if self.config.progress.show_progress {
             let multi_progress = MultiProgress::new();
             let style = ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+                .template(
+                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+                )
                 .unwrap()
                 .progress_chars("#>-");
-            
+
             let progress_bar = multi_progress.add(ProgressBar::new(100));
             progress_bar.set_style(style);
-            
+
             *self.progress.lock().unwrap() = Some(multi_progress);
         }
         Ok(())
@@ -972,19 +1070,22 @@ impl FaissMigrationTool {
     }
 
     fn get_statistics(&self) -> Result<MigrationStatistics> {
-        let state = self.state.read()
+        let state = self
+            .state
+            .read()
             .map_err(|_| AnyhowError::msg("Failed to acquire state lock"))?;
         Ok(state.statistics.clone())
     }
 
     fn generate_recommendations(&self) -> Result<Vec<String>> {
         let mut recommendations = Vec::new();
-        
+
         recommendations.push("Consider enabling GPU acceleration for large datasets".to_string());
-        recommendations.push("Use incremental migration strategy for datasets > 10M vectors".to_string());
+        recommendations
+            .push("Use incremental migration strategy for datasets > 10M vectors".to_string());
         recommendations.push("Enable compression to reduce storage requirements".to_string());
         recommendations.push("Monitor memory usage during large migrations".to_string());
-        
+
         Ok(recommendations)
     }
 }
@@ -1063,7 +1164,7 @@ pub mod utils {
         strategy: &MigrationStrategy,
     ) -> MigrationEstimate {
         let base_time = vector_count as f64 / 10000.0; // 10k vectors per second baseline
-        
+
         let time_multiplier = match strategy {
             MigrationStrategy::Direct => 1.0,
             MigrationStrategy::Optimized => 1.5,
@@ -1101,7 +1202,7 @@ mod tests {
     async fn test_migration_tool_creation() {
         let config = MigrationConfig::default();
         let tool = FaissMigrationTool::new(config);
-        
+
         let state = tool.state.read().unwrap();
         assert_eq!(state.phase, MigrationPhase::Initialization);
         assert_eq!(state.processed_vectors, 0);
@@ -1111,15 +1212,15 @@ mod tests {
     async fn test_format_detection() {
         let config = MigrationConfig::default();
         let tool = FaissMigrationTool::new(config);
-        
+
         let temp_dir = tempdir().unwrap();
         let test_path = temp_dir.path().join("test_index");
         std::fs::create_dir(&test_path).unwrap();
-        
+
         // Create fake oxirs-vec format files
         std::fs::write(test_path.join("vectors.bin"), b"fake vector data").unwrap();
         std::fs::write(test_path.join("metadata.json"), b"{}").unwrap();
-        
+
         let detected_format = tool.detect_format(&test_path).await.unwrap();
         match detected_format {
             MigrationFormat::OxirsVec { .. } => (),
@@ -1130,13 +1231,9 @@ mod tests {
     #[test]
     fn test_migration_estimate() {
         use crate::faiss_migration_tools::utils::estimate_migration_requirements;
-        
-        let estimate = estimate_migration_requirements(
-            100000,
-            768,
-            &MigrationStrategy::Direct,
-        );
-        
+
+        let estimate = estimate_migration_requirements(100000, 768, &MigrationStrategy::Direct);
+
         assert!(estimate.estimated_time > Duration::from_secs(0));
         assert!(estimate.memory_requirement > 0);
     }

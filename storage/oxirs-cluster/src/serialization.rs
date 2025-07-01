@@ -205,25 +205,25 @@ impl MessageSerializer {
 
         // Serialize to binary format
         let serialized_data = match self.config.format {
-            SerializationFormat::MessagePack => {
-                rmp_serde::to_vec(message).map_err(|e| anyhow!("MessagePack serialization failed: {}", e))?
-            }
-            SerializationFormat::Bincode => {
-                bincode::serialize(message).map_err(|e| anyhow!("Bincode serialization failed: {}", e))?
-            }
-            SerializationFormat::Json => {
-                serde_json::to_vec(message).map_err(|e| anyhow!("JSON serialization failed: {}", e))?
-            }
+            SerializationFormat::MessagePack => rmp_serde::to_vec(message)
+                .map_err(|e| anyhow!("MessagePack serialization failed: {}", e))?,
+            SerializationFormat::Bincode => bincode::serialize(message)
+                .map_err(|e| anyhow!("Bincode serialization failed: {}", e))?,
+            SerializationFormat::Json => serde_json::to_vec(message)
+                .map_err(|e| anyhow!("JSON serialization failed: {}", e))?,
             SerializationFormat::ProtocolBuffers => {
                 // For now, fall back to bincode for protobuf
-                bincode::serialize(message).map_err(|e| anyhow!("ProtocolBuffers serialization failed: {}", e))?
+                bincode::serialize(message)
+                    .map_err(|e| anyhow!("ProtocolBuffers serialization failed: {}", e))?
             }
         };
 
         let original_size = serialized_data.len();
 
         // Apply compression if message is large enough
-        let (compressed_data, compression_used) = if original_size > self.config.compression_threshold {
+        let (compressed_data, compression_used) = if original_size
+            > self.config.compression_threshold
+        {
             let compression_start = Instant::now();
             let compressed = match self.config.compression {
                 CompressionAlgorithm::None => (serialized_data.clone(), CompressionAlgorithm::None),
@@ -240,9 +240,11 @@ impl MessageSerializer {
                     use flate2::write::DeflateEncoder;
                     use flate2::Compression;
                     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
-                    encoder.write_all(&serialized_data)
+                    encoder
+                        .write_all(&serialized_data)
                         .map_err(|e| anyhow!("Deflate compression failed: {}", e))?;
-                    let compressed = encoder.finish()
+                    let compressed = encoder
+                        .finish()
                         .map_err(|e| anyhow!("Deflate compression failed: {}", e))?;
                     (compressed, CompressionAlgorithm::Deflate)
                 }
@@ -284,22 +286,30 @@ impl MessageSerializer {
             self.metrics.messages_serialized += 1;
             self.metrics.bytes_serialized += original_size as u64;
             self.metrics.serialization_time += start_time.elapsed();
-            
+
             // Update rolling average compression ratio
             let total_messages = self.metrics.messages_serialized as f32;
-            self.metrics.avg_compression_ratio = 
-                (self.metrics.avg_compression_ratio * (total_messages - 1.0) + compression_ratio) / total_messages;
+            self.metrics.avg_compression_ratio =
+                (self.metrics.avg_compression_ratio * (total_messages - 1.0) + compression_ratio)
+                    / total_messages;
         }
 
         Ok(serialized_message)
     }
 
     /// Deserialize a message with decompression and validation
-    pub fn deserialize<T: for<'de> Deserialize<'de>>(&mut self, message: &SerializedMessage) -> Result<T> {
+    pub fn deserialize<T: for<'de> Deserialize<'de>>(
+        &mut self,
+        message: &SerializedMessage,
+    ) -> Result<T> {
         let start_time = Instant::now();
 
         // Check schema compatibility
-        if !self.config.schema_version.is_compatible_with(&message.schema_version) {
+        if !self
+            .config
+            .schema_version
+            .is_compatible_with(&message.schema_version)
+        {
             if self.config.enable_metrics {
                 self.metrics.schema_mismatches += 1;
             }
@@ -331,10 +341,8 @@ impl MessageSerializer {
         let decompression_start = Instant::now();
         let decompressed_data = match message.compression {
             CompressionAlgorithm::None => message.payload.clone(),
-            CompressionAlgorithm::Lz4 => {
-                decompress_size_prepended(&message.payload)
-                    .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?
-            }
+            CompressionAlgorithm::Lz4 => decompress_size_prepended(&message.payload)
+                .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?,
             CompressionAlgorithm::Zstd => {
                 zstd::bulk::decompress(&message.payload, message.original_size)
                     .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?
@@ -343,7 +351,8 @@ impl MessageSerializer {
                 use flate2::read::DeflateDecoder;
                 let mut decoder = DeflateDecoder::new(Cursor::new(&message.payload));
                 let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)
+                decoder
+                    .read_to_end(&mut decompressed)
                     .map_err(|e| anyhow!("Deflate decompression failed: {}", e))?;
                 decompressed
             }
@@ -355,18 +364,12 @@ impl MessageSerializer {
 
         // Deserialize from binary format
         let deserialized: T = match message.format {
-            SerializationFormat::MessagePack => {
-                rmp_serde::from_slice(&decompressed_data)
-                    .map_err(|e| anyhow!("MessagePack deserialization failed: {}", e))?
-            }
-            SerializationFormat::Bincode => {
-                bincode::deserialize(&decompressed_data)
-                    .map_err(|e| anyhow!("Bincode deserialization failed: {}", e))?
-            }
-            SerializationFormat::Json => {
-                serde_json::from_slice(&decompressed_data)
-                    .map_err(|e| anyhow!("JSON deserialization failed: {}", e))?
-            }
+            SerializationFormat::MessagePack => rmp_serde::from_slice(&decompressed_data)
+                .map_err(|e| anyhow!("MessagePack deserialization failed: {}", e))?,
+            SerializationFormat::Bincode => bincode::deserialize(&decompressed_data)
+                .map_err(|e| anyhow!("Bincode deserialization failed: {}", e))?,
+            SerializationFormat::Json => serde_json::from_slice(&decompressed_data)
+                .map_err(|e| anyhow!("JSON deserialization failed: {}", e))?,
             SerializationFormat::ProtocolBuffers => {
                 // For now, fall back to bincode for protobuf
                 bincode::deserialize(&decompressed_data)
@@ -434,7 +437,9 @@ impl MessageSerializer {
             results.max_serialization_time = results.max_serialization_time.max(serialize_time);
             results.total_compressed_size += serialized.payload.len();
             results.total_uncompressed_size += serialized.original_size;
-            results.compression_ratios.push(serialized.compression_ratio);
+            results
+                .compression_ratios
+                .push(serialized.compression_ratio);
 
             // Benchmark deserialization
             let deserialize_start = Instant::now();
@@ -442,8 +447,10 @@ impl MessageSerializer {
             let deserialize_time = deserialize_start.elapsed();
 
             results.total_deserialization_time += deserialize_time;
-            results.min_deserialization_time = results.min_deserialization_time.min(deserialize_time);
-            results.max_deserialization_time = results.max_deserialization_time.max(deserialize_time);
+            results.min_deserialization_time =
+                results.min_deserialization_time.min(deserialize_time);
+            results.max_deserialization_time =
+                results.max_deserialization_time.max(deserialize_time);
         }
 
         Ok(results)
@@ -582,15 +589,20 @@ impl AdaptiveCompression {
         let compressed_size = match algorithm {
             CompressionAlgorithm::None => data.len(),
             CompressionAlgorithm::Lz4 => compress_prepend_size(data).len(),
-            CompressionAlgorithm::Zstd => {
-                zstd::bulk::compress(data, 3).map_err(|e| anyhow!("Zstd benchmark failed: {}", e))?.len()
-            }
+            CompressionAlgorithm::Zstd => zstd::bulk::compress(data, 3)
+                .map_err(|e| anyhow!("Zstd benchmark failed: {}", e))?
+                .len(),
             CompressionAlgorithm::Deflate => {
                 use flate2::write::DeflateEncoder;
                 use flate2::Compression;
                 let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
-                encoder.write_all(data).map_err(|e| anyhow!("Deflate benchmark failed: {}", e))?;
-                encoder.finish().map_err(|e| anyhow!("Deflate benchmark failed: {}", e))?.len()
+                encoder
+                    .write_all(data)
+                    .map_err(|e| anyhow!("Deflate benchmark failed: {}", e))?;
+                encoder
+                    .finish()
+                    .map_err(|e| anyhow!("Deflate benchmark failed: {}", e))?
+                    .len()
             }
         };
 
@@ -678,9 +690,21 @@ mod tests {
 
     #[test]
     fn test_schema_version_compatibility() {
-        let v1_0_0 = SchemaVersion { major: 1, minor: 0, patch: 0 };
-        let v1_1_0 = SchemaVersion { major: 1, minor: 1, patch: 0 };
-        let v2_0_0 = SchemaVersion { major: 2, minor: 0, patch: 0 };
+        let v1_0_0 = SchemaVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
+        let v1_1_0 = SchemaVersion {
+            major: 1,
+            minor: 1,
+            patch: 0,
+        };
+        let v2_0_0 = SchemaVersion {
+            major: 2,
+            minor: 0,
+            patch: 0,
+        };
 
         assert!(v1_1_0.is_compatible_with(&v1_0_0));
         assert!(!v1_0_0.is_compatible_with(&v1_1_0));
@@ -708,7 +732,10 @@ mod tests {
 
         let result: Result<TestMessage> = serializer.deserialize(&serialized);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Checksum verification failed"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Checksum verification failed"));
     }
 
     #[test]
@@ -720,7 +747,13 @@ mod tests {
         let algorithm2 = adaptive.evaluate_and_select(&data);
 
         // Should return a valid algorithm
-        assert!(matches!(algorithm1, CompressionAlgorithm::None | CompressionAlgorithm::Lz4 | CompressionAlgorithm::Zstd | CompressionAlgorithm::Deflate));
+        assert!(matches!(
+            algorithm1,
+            CompressionAlgorithm::None
+                | CompressionAlgorithm::Lz4
+                | CompressionAlgorithm::Zstd
+                | CompressionAlgorithm::Deflate
+        ));
         assert_eq!(algorithm1, algorithm2); // Should be stable for same data
     }
 

@@ -32,7 +32,6 @@ impl IRI {
     }
 }
 
-#[juniper::graphql_scalar(description = "A valid IRI (Internationalized Resource Identifier)")]
 impl<S> GraphQLScalar<S> for IRI
 where
     S: ScalarValue,
@@ -99,7 +98,6 @@ impl RdfLiteral {
     }
 }
 
-#[juniper::graphql_scalar(description = "An RDF literal with optional language tag and datatype")]
 impl<S> GraphQLScalar<S> for RdfLiteral
 where
     S: ScalarValue,

@@ -561,7 +561,7 @@ impl TargetSelector {
         if let Target::Sparql(sparql_target) = target {
             // Get or create optimized query plan
             let query_plan = self.get_or_create_query_plan(&sparql_target.query)?;
-            
+
             // Choose execution strategy based on estimated cardinality
             match query_plan.execution_strategy {
                 ExecutionStrategy::Sequential => {
@@ -596,7 +596,8 @@ impl TargetSelector {
 
         // Create new optimized query plan
         let plan = self.create_optimized_query_plan(query)?;
-        self.query_plan_cache.insert(query.to_string(), plan.clone());
+        self.query_plan_cache
+            .insert(query.to_string(), plan.clone());
 
         Ok(plan)
     }
@@ -605,10 +606,10 @@ impl TargetSelector {
     fn create_optimized_query_plan(&self, query: &str) -> Result<QueryPlan> {
         let mut optimized_query = query.to_string();
         let mut index_hints = Vec::new();
-        
+
         // Analyze query patterns for optimization opportunities
         let estimated_cardinality = self.estimate_query_cardinality(query);
-        
+
         // Add DISTINCT if not present to avoid duplicates
         if !query.to_uppercase().contains("DISTINCT") && query.to_uppercase().contains("SELECT") {
             optimized_query = optimized_query.replace("SELECT", "SELECT DISTINCT");
@@ -624,17 +625,18 @@ impl TargetSelector {
         }
 
         // Determine execution strategy
-        let execution_strategy = if estimated_cardinality > self.optimization_config.parallel_threshold {
-            if self.optimization_config.enable_adaptive_optimization {
-                ExecutionStrategy::Hybrid
+        let execution_strategy =
+            if estimated_cardinality > self.optimization_config.parallel_threshold {
+                if self.optimization_config.enable_adaptive_optimization {
+                    ExecutionStrategy::Hybrid
+                } else {
+                    ExecutionStrategy::Parallel
+                }
+            } else if !index_hints.is_empty() {
+                ExecutionStrategy::IndexDriven
             } else {
-                ExecutionStrategy::Parallel
-            }
-        } else if !index_hints.is_empty() {
-            ExecutionStrategy::IndexDriven
-        } else {
-            ExecutionStrategy::Sequential
-        };
+                ExecutionStrategy::Sequential
+            };
 
         // Add performance hints
         if self.optimization_config.enable_adaptive_optimization {
@@ -662,7 +664,7 @@ impl TargetSelector {
         if query.contains("rdf:type") {
             estimated_cardinality *= 10; // Type queries tend to be larger
         }
-        
+
         if query.contains("OPTIONAL") {
             estimated_cardinality = (estimated_cardinality as f64 * 1.5) as usize;
         }
@@ -719,7 +721,10 @@ impl TargetSelector {
     ) -> Result<Vec<Term>> {
         // For now, return empty result as index-driven execution would require
         // specific index optimization in the SPARQL engine
-        tracing::debug!("Executing SPARQL target query with index optimization: {}", query);
+        tracing::debug!(
+            "Executing SPARQL target query with index optimization: {}",
+            query
+        );
         Ok(Vec::new())
     }
 
@@ -732,10 +737,10 @@ impl TargetSelector {
     ) -> Result<Vec<Term>> {
         // Hybrid strategy: start with index-driven, fall back to parallel if needed
         let start_time = std::time::Instant::now();
-        
+
         // Try index-driven first
         let result = self.execute_sparql_index_driven(store, query, graph_name)?;
-        
+
         // If taking too long or no results, try parallel approach
         if start_time.elapsed().as_millis() > 1000 && result.is_empty() {
             tracing::debug!("Falling back to parallel execution for SPARQL target");
@@ -766,7 +771,7 @@ impl TargetSelector {
         if self.cache.len() >= self.optimization_config.max_cache_size {
             // Advanced eviction strategy: remove least valuable entries
             let mut removal_candidates = Vec::new();
-            
+
             for (key, cached) in &self.cache {
                 let age = cached.cached_at.elapsed().as_secs();
                 let hit_rate = if cached.stats.hits + cached.stats.misses > 0 {
@@ -774,15 +779,18 @@ impl TargetSelector {
                 } else {
                     0.0
                 };
-                
+
                 // Score based on age, hit rate, and result size
-                let score = (age as f64) * 0.5 + (1.0 - hit_rate) * 0.3 + (cached.nodes.len() as f64 * 0.01);
+                let score = (age as f64) * 0.5
+                    + (1.0 - hit_rate) * 0.3
+                    + (cached.nodes.len() as f64 * 0.01);
                 removal_candidates.push((key.clone(), score));
             }
-            
+
             // Sort by score (higher score = more likely to remove)
-            removal_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-            
+            removal_candidates
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
             // Remove the worst candidate
             if let Some((key_to_remove, _)) = removal_candidates.first() {
                 self.cache.remove(key_to_remove);
@@ -796,10 +804,11 @@ impl TargetSelector {
     fn update_execution_statistics(&mut self, duration: std::time::Duration, result_count: usize) {
         self.stats.total_evaluations += 1;
         self.stats.total_time += duration;
-        
+
         // Update average evaluation time
         if self.stats.total_evaluations > 0 {
-            self.stats.avg_evaluation_time = self.stats.total_time / self.stats.total_evaluations as u32;
+            self.stats.avg_evaluation_time =
+                self.stats.total_time / self.stats.total_evaluations as u32;
         }
 
         // Update adaptive thresholds based on performance
@@ -811,25 +820,27 @@ impl TargetSelector {
     /// Update adaptive optimization thresholds based on performance data
     fn update_adaptive_thresholds(&mut self, duration: std::time::Duration, result_count: usize) {
         // Adjust parallel threshold based on performance
-        if duration.as_millis() > 500 && result_count > self.optimization_config.parallel_threshold / 2 {
+        if duration.as_millis() > 500
+            && result_count > self.optimization_config.parallel_threshold / 2
+        {
             // Lower threshold if we're seeing slow performance on medium-sized results
-            self.optimization_config.parallel_threshold = 
+            self.optimization_config.parallel_threshold =
                 (self.optimization_config.parallel_threshold * 8) / 10;
-        } else if duration.as_millis() < 100 && result_count > self.optimization_config.parallel_threshold {
+        } else if duration.as_millis() < 100
+            && result_count > self.optimization_config.parallel_threshold
+        {
             // Raise threshold if we're handling large results quickly
-            self.optimization_config.parallel_threshold = 
+            self.optimization_config.parallel_threshold =
                 (self.optimization_config.parallel_threshold * 12) / 10;
         }
 
         // Adjust cache TTL based on hit patterns
         if self.stats.cache_hit_rate > 0.8 {
             // High hit rate, can afford longer TTL
-            self.optimization_config.cache_ttl = 
-                (self.optimization_config.cache_ttl * 12) / 10;
+            self.optimization_config.cache_ttl = (self.optimization_config.cache_ttl * 12) / 10;
         } else if self.stats.cache_hit_rate < 0.3 {
             // Low hit rate, reduce TTL to freshen cache more often
-            self.optimization_config.cache_ttl = 
-                (self.optimization_config.cache_ttl * 8) / 10;
+            self.optimization_config.cache_ttl = (self.optimization_config.cache_ttl * 8) / 10;
         }
     }
 

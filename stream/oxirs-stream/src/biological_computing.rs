@@ -5,6 +5,7 @@
 //! cellular automata, and evolutionary computation for streaming RDF data.
 
 use async_trait::async_trait;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -56,7 +57,7 @@ impl Nucleotide {
 }
 
 /// DNA sequence for data encoding
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DNASequence {
     /// Sequence of nucleotides
     pub nucleotides: Vec<Nucleotide>,
@@ -65,7 +66,7 @@ pub struct DNASequence {
 }
 
 /// Metadata for DNA sequences
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SequenceMetadata {
     /// Length of the sequence
     pub length: usize,

@@ -10,9 +10,9 @@
 //! - Hardware-efficient implementation with selective scanning
 //! - Integration with knowledge graph structural information
 
-use crate::{Vector, EmbeddingError, ModelConfig};
+use crate::{EmbeddingError, ModelConfig, Vector};
 use anyhow::Result;
-use ndarray::{Array1, Array2, Array3, Axis, s};
+use ndarray::{s, Array1, Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -141,23 +141,23 @@ impl MambaBlock {
     /// Forward pass through Mamba block
     pub fn forward(&mut self, x: &Array2<f32>) -> Result<Array2<f32>> {
         let (batch_size, seq_len) = x.dim();
-        
+
         // Input projection and activation
         let x_norm = self.norm.forward(x)?;
         let x_and_res = self.apply_projection(&x_norm)?;
-        
+
         // Split into main path and residual
         let (x_main, x_res) = self.split_projection(&x_and_res)?;
-        
+
         // Apply convolution
         let x_conv = self.apply_convolution(&x_main)?;
-        
+
         // Apply selective SSM
         let y = self.selective_ssm(&x_conv, &x_res)?;
-        
+
         // Output projection
         let output = self.apply_output_projection(&y)?;
-        
+
         Ok(output)
     }
 
@@ -172,10 +172,10 @@ impl MambaBlock {
     fn split_projection(&self, x: &Array2<f32>) -> Result<(Array2<f32>, Array2<f32>)> {
         let (_, total_dim) = x.dim();
         let split_point = total_dim / 2;
-        
+
         let x_main = x.slice(s![.., ..split_point]).to_owned();
         let x_res = x.slice(s![.., split_point..]).to_owned();
-        
+
         Ok((x_main, x_res))
     }
 
@@ -185,26 +185,26 @@ impl MambaBlock {
         // In practice, this would use proper convolution operations
         let (batch_size, seq_len) = x.dim();
         let mut result = Array2::zeros((batch_size, seq_len));
-        
+
         for i in 0..batch_size {
             for j in 0..seq_len {
                 let start = j.saturating_sub(self.config.d_conv / 2);
                 let end = std::cmp::min(j + self.config.d_conv / 2 + 1, seq_len);
-                
+
                 let mut conv_sum = 0.0;
                 let mut weight_idx = 0;
-                
+
                 for k in start..end {
                     if weight_idx < self.conv1d.ncols() {
                         conv_sum += x[[i, k]] * self.conv1d[[0, weight_idx]];
                         weight_idx += 1;
                     }
                 }
-                
+
                 result[[i, j]] = conv_sum;
             }
         }
-        
+
         Ok(result)
     }
 
@@ -213,52 +213,55 @@ impl MambaBlock {
         let (batch_size, seq_len) = x.dim();
         let d_state = self.config.d_state;
         let d_inner = self.config.d_inner;
-        
+
         // Compute delta (time steps)
         let delta = self.compute_delta(x)?;
-        
+
         // Compute A and B matrices
         let a = self.compute_a_matrix(&delta)?;
         let b = self.compute_b_matrix(x)?;
-        
+
         // Initialize state
         let mut h = Array2::zeros((batch_size, d_state));
         let mut outputs = Array2::zeros((batch_size, seq_len));
-        
+
         // Selective scan algorithm
         for t in 0..seq_len {
             let x_t = x.slice(s![.., t]).to_owned();
             let a_t = a.slice(s![.., t, ..]).to_owned();
             let b_t = b.slice(s![.., t]).to_owned();
-            
+
             // Update state: h = a_t * h + b_t * x_t
             h = &a_t.dot(&h.t()).t() + &(&b_t * &x_t);
-            
+
             // Compute output: y_t = C * h + D * x_t
             let c = Array1::ones(d_state); // Simplified C matrix
             let y_t = c.dot(&h.t()) + &self.d * &x_t;
             outputs.slice_mut(s![.., t]).assign(&y_t);
         }
-        
+
         // Apply gating with z
         let gated_output = &outputs * &self.apply_activation(z)?;
-        
+
         Ok(gated_output)
     }
 
     /// Compute time steps (delta)
     fn compute_delta(&self, x: &Array2<f32>) -> Result<Array2<f32>> {
         let (batch_size, seq_len) = x.dim();
-        
+
         // Project input to delta space
         let delta_proj = x.dot(&self.dt_proj.t());
-        
+
         // Apply softplus to ensure positive values
         let delta = delta_proj.mapv(|x| {
             let exp_x = x.exp();
-            (1.0 + exp_x).ln().max(self.config.dt_min as f32).min(self.config.dt_max as f32)
+            (1.0 + exp_x)
+                .ln()
+                .max(self.config.dt_min as f32)
+                .min(self.config.dt_max as f32)
         });
-        
+
         Ok(delta)
     }
 
@@ -266,9 +269,9 @@ impl MambaBlock {
     fn compute_a_matrix(&self, delta: &Array2<f32>) -> Result<Array3<f32>> {
         let (batch_size, seq_len) = delta.dim();
         let d_state = self.config.d_state;
-        
+
         let mut a = Array3::zeros((batch_size, seq_len, d_state));
-        
+
         for i in 0..batch_size {
             for j in 0..seq_len {
                 for k in 0..d_state {
@@ -277,7 +280,7 @@ impl MambaBlock {
                 }
             }
         }
-        
+
         Ok(a)
     }
 
@@ -293,7 +296,8 @@ impl MambaBlock {
         match self.config.activation {
             ActivationType::SiLU => Ok(x.mapv(|x| x / (1.0 + (-x).exp()))),
             ActivationType::GELU => Ok(x.mapv(|x| {
-                0.5 * x * (1.0 + (std::f32::consts::FRAC_2_SQRT_PI * (x + 0.044715 * x.powi(3))).tanh())
+                0.5 * x
+                    * (1.0 + (std::f32::consts::FRAC_2_SQRT_PI * (x + 0.044715 * x.powi(3))).tanh())
             })),
             ActivationType::ReLU => Ok(x.mapv(|x| x.max(0.0))),
             ActivationType::Swish => Ok(x.mapv(|x| x / (1.0 + (-x).exp()))),
@@ -329,10 +333,10 @@ impl LayerNorm {
         let centered = x - &mean.insert_axis(Axis(1));
         let variance = centered.mapv(|x| x.powi(2)).mean_axis(Axis(1)).unwrap();
         let std = variance.mapv(|x| (x + self.eps).sqrt());
-        
+
         let normalized = &centered / &std.insert_axis(Axis(1));
         let result = &normalized * &self.weight + &self.bias;
-        
+
         Ok(result)
     }
 }
@@ -357,7 +361,7 @@ impl MambaEmbedding {
     pub fn new(config: ModelConfig, mamba_config: MambaConfig) -> Self {
         let num_layers = 6; // Default number of Mamba layers
         let mut mamba_blocks = Vec::new();
-        
+
         for _ in 0..num_layers {
             mamba_blocks.push(MambaBlock::new(mamba_config.clone()));
         }
@@ -384,11 +388,11 @@ impl MambaEmbedding {
     /// Process sequence through Mamba blocks
     pub fn process_sequence(&mut self, input: &Array2<f32>) -> Result<Array2<f32>> {
         let mut x = input.clone();
-        
+
         for block in &mut self.mamba_blocks {
             x = block.forward(&x)?;
         }
-        
+
         Ok(x)
     }
 
@@ -396,10 +400,10 @@ impl MambaEmbedding {
     pub fn encode_kg_structure(&mut self, triples: &[crate::Triple]) -> Result<Array2<f32>> {
         // Convert triples to sequence representation
         let sequence = self.triples_to_sequence(triples)?;
-        
+
         // Process through Mamba blocks
         let encoded = self.process_sequence(&sequence)?;
-        
+
         Ok(encoded)
     }
 
@@ -407,33 +411,37 @@ impl MambaEmbedding {
     fn triples_to_sequence(&self, triples: &[crate::Triple]) -> Result<Array2<f32>> {
         let seq_len = triples.len();
         let d_model = self.mamba_config.d_model;
-        
+
         let mut sequence = Array2::zeros((1, seq_len));
-        
+
         // Simple encoding: combine entity and relation embeddings
         for (i, triple) in triples.iter().enumerate() {
             let subj_idx = self.entities.get(&triple.subject.iri).unwrap_or(&0);
             let pred_idx = self.relations.get(&triple.predicate.iri).unwrap_or(&0);
             let obj_idx = self.entities.get(&triple.object.iri).unwrap_or(&0);
-            
+
             // Combine indices into a single value (simplified)
             sequence[[0, i]] = (*subj_idx as f32 + *pred_idx as f32 + *obj_idx as f32) / 3.0;
         }
-        
+
         Ok(sequence)
     }
 
     /// Generate embedding with selective state space modeling
-    pub fn generate_selective_embedding(&mut self, entity: &str, context: &[String]) -> Result<Vector> {
+    pub fn generate_selective_embedding(
+        &mut self,
+        entity: &str,
+        context: &[String],
+    ) -> Result<Vector> {
         // Create context sequence
         let context_sequence = self.create_context_sequence(entity, context)?;
-        
+
         // Process through Mamba
         let processed = self.process_sequence(&context_sequence)?;
-        
+
         // Extract final embedding
         let embedding = processed.slice(s![-1, ..]).to_owned();
-        
+
         Ok(Vector::new(embedding.to_vec()))
     }
 
@@ -441,21 +449,21 @@ impl MambaEmbedding {
     fn create_context_sequence(&self, entity: &str, context: &[String]) -> Result<Array2<f32>> {
         let seq_len = context.len() + 1; // +1 for the target entity
         let d_model = self.mamba_config.d_model;
-        
+
         let mut sequence = Array2::zeros((1, seq_len));
-        
+
         // Add target entity
         if let Some(&entity_idx) = self.entities.get(entity) {
             sequence[[0, 0]] = entity_idx as f32;
         }
-        
+
         // Add context
         for (i, ctx) in context.iter().enumerate() {
             if let Some(&ctx_idx) = self.entities.get(ctx) {
                 sequence[[0, i + 1]] = ctx_idx as f32;
             }
         }
-        
+
         Ok(sequence)
     }
 }
@@ -479,15 +487,17 @@ impl crate::EmbeddingModel for MambaEmbedding {
         let subj_id = self.entities.len();
         let pred_id = self.relations.len();
         let obj_id = self.entities.len() + 1;
-        
+
         self.entities.entry(triple.subject.iri).or_insert(subj_id);
-        self.relations.entry(triple.predicate.iri).or_insert(pred_id);
+        self.relations
+            .entry(triple.predicate.iri)
+            .or_insert(pred_id);
         self.entities.entry(triple.object.iri).or_insert(obj_id);
-        
+
         self.stats.num_triples += 1;
         self.stats.num_entities = self.entities.len();
         self.stats.num_relations = self.relations.len();
-        
+
         Ok(())
     }
 
@@ -495,48 +505,48 @@ impl crate::EmbeddingModel for MambaEmbedding {
         let max_epochs = epochs.unwrap_or(self.config.max_epochs);
         let mut loss_history = Vec::new();
         let start_time = std::time::Instant::now();
-        
+
         // Initialize embeddings
         let num_entities = self.entities.len();
         let num_relations = self.relations.len();
-        
+
         if num_entities > 0 && num_relations > 0 {
             self.entity_embeddings = Array2::zeros((num_entities, self.config.dimensions));
             self.relation_embeddings = Array2::zeros((num_relations, self.config.dimensions));
-            
+
             // Initialize with random values
             use rand::Rng;
             let mut rng = rand::thread_rng();
-            
+
             for i in 0..num_entities {
                 for j in 0..self.config.dimensions {
                     self.entity_embeddings[[i, j]] = rng.gen_range(-0.1..0.1);
                 }
             }
-            
+
             for i in 0..num_relations {
                 for j in 0..self.config.dimensions {
                     self.relation_embeddings[[i, j]] = rng.gen_range(-0.1..0.1);
                 }
             }
         }
-        
+
         // Simulate training process
         for epoch in 0..max_epochs {
             let loss = 1.0 / (epoch as f64 + 1.0); // Decreasing loss
             loss_history.push(loss);
-            
+
             if loss < 0.01 {
                 break;
             }
         }
-        
+
         self.is_trained = true;
         self.stats.is_trained = true;
         self.stats.last_training_time = Some(chrono::Utc::now());
-        
+
         let training_time = start_time.elapsed().as_secs_f64();
-        
+
         Ok(crate::TrainingStats {
             epochs_completed: max_epochs,
             final_loss: loss_history.last().copied().unwrap_or(1.0),
@@ -550,12 +560,14 @@ impl crate::EmbeddingModel for MambaEmbedding {
         if !self.is_trained {
             return Err(crate::EmbeddingError::ModelNotTrained.into());
         }
-        
-        let entity_idx = self.entities.get(entity)
-            .ok_or_else(|| crate::EmbeddingError::EntityNotFound { 
-                entity: entity.to_string() 
-            })?;
-        
+
+        let entity_idx =
+            self.entities
+                .get(entity)
+                .ok_or_else(|| crate::EmbeddingError::EntityNotFound {
+                    entity: entity.to_string(),
+                })?;
+
         let embedding = self.entity_embeddings.row(*entity_idx);
         Ok(Vector::new(embedding.to_vec()))
     }
@@ -564,12 +576,13 @@ impl crate::EmbeddingModel for MambaEmbedding {
         if !self.is_trained {
             return Err(crate::EmbeddingError::ModelNotTrained.into());
         }
-        
-        let relation_idx = self.relations.get(relation)
-            .ok_or_else(|| crate::EmbeddingError::RelationNotFound { 
-                relation: relation.to_string() 
-            })?;
-        
+
+        let relation_idx = self.relations.get(relation).ok_or_else(|| {
+            crate::EmbeddingError::RelationNotFound {
+                relation: relation.to_string(),
+            }
+        })?;
+
         let embedding = self.relation_embeddings.row(*relation_idx);
         Ok(Vector::new(embedding.to_vec()))
     }
@@ -578,59 +591,76 @@ impl crate::EmbeddingModel for MambaEmbedding {
         let s_emb = self.get_entity_embedding(subject)?;
         let p_emb = self.get_relation_embedding(predicate)?;
         let o_emb = self.get_entity_embedding(object)?;
-        
+
         // Simplified scoring using Mamba-processed representations
-        let score = s_emb.values.iter()
+        let score = s_emb
+            .values
+            .iter()
             .zip(p_emb.values.iter())
             .zip(o_emb.values.iter())
             .map(|((&s, &p), &o)| s * p * o)
             .sum::<f32>() as f64;
-        
+
         Ok(score)
     }
 
-    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
-        
+
         for (entity, _) in &self.entities {
             if let Ok(score) = self.score_triple(subject, predicate, entity) {
                 predictions.push((entity.clone(), score));
             }
         }
-        
+
         predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         predictions.truncate(k);
-        
+
         Ok(predictions)
     }
 
-    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
-        
+
         for (entity, _) in &self.entities {
             if let Ok(score) = self.score_triple(entity, predicate, object) {
                 predictions.push((entity.clone(), score));
             }
         }
-        
+
         predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         predictions.truncate(k);
-        
+
         Ok(predictions)
     }
 
-    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
-        
+
         for (relation, _) in &self.relations {
             if let Ok(score) = self.score_triple(subject, relation, object) {
                 predictions.push((relation.clone(), score));
             }
         }
-        
+
         predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         predictions.truncate(k);
-        
+
         Ok(predictions)
     }
 
@@ -669,7 +699,8 @@ impl crate::EmbeddingModel for MambaEmbedding {
 
     async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         // Simple encoding for now - in practice would use proper tokenization
-        let embeddings = texts.iter()
+        let embeddings = texts
+            .iter()
             .map(|text| {
                 let mut embedding = vec![0.0; self.config.dimensions];
                 for (i, byte) in text.bytes().enumerate() {
@@ -687,7 +718,7 @@ impl crate::EmbeddingModel for MambaEmbedding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{EmbeddingModel, Triple, NamedNode};
+    use crate::{EmbeddingModel, NamedNode, Triple};
     use nalgebra::Complex;
 
     #[test]
@@ -708,7 +739,8 @@ mod tests {
     #[test]
     fn test_layer_norm() {
         let norm = LayerNorm::new(4);
-        let input = Array2::from_shape_vec((2, 4), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).unwrap();
+        let input =
+            Array2::from_shape_vec((2, 4), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).unwrap();
         let output = norm.forward(&input).unwrap();
         assert_eq!(output.dim(), (2, 4));
     }
@@ -725,7 +757,7 @@ mod tests {
             crate::NamedNode::new("http://example.org/knows").unwrap(),
             crate::NamedNode::new("http://example.org/bob").unwrap(),
         );
-        
+
         model.add_triple(triple).unwrap();
         assert_eq!(model.get_entities().len(), 2);
         assert_eq!(model.get_relations().len(), 1);
@@ -735,11 +767,11 @@ mod tests {
     fn test_complex_arithmetic() {
         let a = Complex::new(1.0, 2.0);
         let b = Complex::new(3.0, 4.0);
-        
+
         let sum = a + b;
         assert_eq!(sum.re, 4.0);
         assert_eq!(sum.im, 6.0);
-        
+
         let product = a * b;
         assert_eq!(product.re, -5.0); // 1*3 - 2*4
         assert_eq!(product.im, 10.0); // 1*4 + 2*3
@@ -749,9 +781,9 @@ mod tests {
     fn test_activation_functions() {
         let config = MambaConfig::default();
         let block = MambaBlock::new(config.clone());
-        
+
         let input = Array2::from_shape_vec((1, 3), vec![-1.0, 0.0, 1.0]).unwrap();
-        
+
         // Test SiLU activation
         let output = block.apply_activation(&input).unwrap();
         assert!(output[[0, 0]] < 0.0); // SiLU(-1) < 0

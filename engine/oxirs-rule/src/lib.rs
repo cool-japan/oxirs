@@ -32,7 +32,7 @@ pub struct Rule {
 }
 
 /// Rule atom (triple pattern or builtin)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuleAtom {
     Triple {
         subject: Term,
@@ -46,7 +46,7 @@ pub enum RuleAtom {
 }
 
 /// Rule term
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Term {
     Variable(String),
     Constant(String),
@@ -119,6 +119,22 @@ impl RuleEngine {
         self.forward_chainer.clear_facts();
         self.backward_chainer.clear_facts();
         self.rete_network.clear();
+    }
+
+    /// Add a single fact to the knowledge base
+    pub fn add_fact(&mut self, fact: RuleAtom) {
+        self.add_facts(vec![fact]);
+    }
+
+    /// Set cache (placeholder implementation)
+    pub fn set_cache(&mut self, _cache: Option<crate::cache::Cache>) {
+        // TODO: Implement cache setting
+    }
+
+    /// Get cache (placeholder implementation)
+    pub fn get_cache(&self) -> Option<crate::cache::Cache> {
+        // TODO: Implement cache getting
+        None
     }
 }
 

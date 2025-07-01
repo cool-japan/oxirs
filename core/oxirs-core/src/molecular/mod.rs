@@ -33,8 +33,8 @@ pub use cellular_division::{
 };
 pub use dna_structures::{DnaDataStructure, NucleotideData, SpecialMarker};
 pub use genetic_optimizer::{
-    GeneticGraphOptimizer, GraphStructure, IndexingGenes, StorageGenes, AccessGenes,
-    GenerationStats, MutationType, default_fitness_function,
+    default_fitness_function, AccessGenes, GenerationStats, GeneticGraphOptimizer, GraphStructure,
+    IndexingGenes, MutationType, StorageGenes,
 };
 pub use regulatory::{CheckpointResult, CheckpointSystem, RegulatoryProtein};
 pub use replication::{

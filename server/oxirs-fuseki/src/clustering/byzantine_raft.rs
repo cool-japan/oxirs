@@ -1,5 +1,5 @@
 //! Byzantine Fault Tolerant Raft (BFT-Raft) implementation
-//! 
+//!
 //! This module enhances the standard Raft consensus algorithm with Byzantine fault tolerance
 //! capabilities to handle malicious or arbitrarily faulty nodes. It implements cryptographic
 //! signatures, message verification, and Byzantine behavior detection.
@@ -23,7 +23,7 @@ use ring::{
     digest::{Context, Digest, SHA256},
     hmac::{self, Key, Tag},
     rand::{self, SecureRandom},
-    signature::{KeyPair, Ed25519KeyPair, UnparsedPublicKey, ED25519},
+    signature::{Ed25519KeyPair, KeyPair, UnparsedPublicKey, ED25519},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -151,7 +151,7 @@ impl BftNodeState {
         let rng = rand::SystemRandom::new();
         let key_bytes = Ed25519KeyPair::generate_pkcs8(&rng)
             .map_err(|e| FusekiError::internal(format!("Failed to generate key pair: {:?}", e)))?;
-        
+
         let key_pair = Ed25519KeyPair::from_pkcs8(key_bytes.as_ref())
             .map_err(|e| FusekiError::internal(format!("Failed to parse key pair: {:?}", e)))?;
 
@@ -185,7 +185,7 @@ impl BftNodeState {
     /// Sign a message with cryptographic signature
     pub fn sign_message(&self, message: &RpcMessage) -> FusekiResult<BftMessage> {
         let timestamp = Utc::now();
-        
+
         // Generate nonce for uniqueness
         let rng = rand::SystemRandom::new();
         let mut nonce = [0u8; 16];
@@ -241,7 +241,8 @@ impl BftNodeState {
         }
 
         // Get sender's public key
-        let public_key_bytes = self.known_public_keys
+        let public_key_bytes = self
+            .known_public_keys
             .get(&bft_message.sender_key_id)
             .ok_or_else(|| FusekiError::authentication("Unknown sender"))?;
 
@@ -262,10 +263,10 @@ impl BftNodeState {
             Ok(()) => {
                 // Record message as seen
                 self.seen_messages.insert(message_id, bft_message.timestamp);
-                
+
                 // Check for Byzantine behavior patterns
                 self.detect_byzantine_patterns(bft_message)?;
-                
+
                 Ok(true)
             }
             Err(_) => {
@@ -280,18 +281,22 @@ impl BftNodeState {
     }
 
     /// Generate proof-of-work for leader election
-    pub fn generate_proof_of_work(&self, term: u64, candidate_id: &str) -> FusekiResult<ProofOfWork> {
+    pub fn generate_proof_of_work(
+        &self,
+        term: u64,
+        candidate_id: &str,
+    ) -> FusekiResult<ProofOfWork> {
         let start_time = Instant::now();
         let mut nonce = 0u64;
-        
+
         let challenge = format!("{}:{}:{}", term, candidate_id, self.identity.node_id);
-        
+
         loop {
             let mut context = Context::new(&SHA256);
             context.update(challenge.as_bytes());
             context.update(&nonce.to_le_bytes());
             let hash = context.finish();
-            
+
             // Check if hash meets difficulty requirement
             let leading_zeros = count_leading_zeros(hash.as_ref());
             if leading_zeros >= POW_DIFFICULTY {
@@ -303,12 +308,15 @@ impl BftNodeState {
                     compute_time_ms: compute_time.as_millis() as u64,
                 });
             }
-            
+
             nonce += 1;
-            
+
             // Prevent infinite loop
             if nonce % 1000000 == 0 {
-                debug!("PoW computation: {} attempts, {} leading zeros required", nonce, POW_DIFFICULTY);
+                debug!(
+                    "PoW computation: {} attempts, {} leading zeros required",
+                    nonce, POW_DIFFICULTY
+                );
             }
         }
     }
@@ -316,17 +324,17 @@ impl BftNodeState {
     /// Verify proof-of-work
     pub fn verify_proof_of_work(&self, pow: &ProofOfWork, term: u64, candidate_id: &str) -> bool {
         let challenge = format!("{}:{}:{}", term, candidate_id, candidate_id);
-        
+
         let mut context = Context::new(&SHA256);
         context.update(challenge.as_bytes());
         context.update(&pow.nonce.to_le_bytes());
         let computed_hash = context.finish();
-        
+
         // Verify hash matches
         if computed_hash.as_ref() != pow.hash {
             return false;
         }
-        
+
         // Verify difficulty
         let leading_zeros = count_leading_zeros(&pow.hash);
         leading_zeros >= POW_DIFFICULTY
@@ -348,57 +356,76 @@ impl BftNodeState {
 
     /// Check for double voting (Byzantine behavior)
     fn check_double_voting(&mut self, vote_req: &RequestVoteRequest) -> FusekiResult<()> {
-        let term_votes = self.vote_tracking.entry(vote_req.term).or_insert_with(HashMap::new);
-        
+        let term_votes = self
+            .vote_tracking
+            .entry(vote_req.term)
+            .or_insert_with(HashMap::new);
+
         if let Some(previous_vote) = term_votes.get(&vote_req.candidate_id) {
             if previous_vote.candidate_id != vote_req.candidate_id {
                 // Double voting detected!
                 self.record_byzantine_behavior(
                     &vote_req.candidate_id,
                     ByzantineBehavior::DoubleVoting,
-                    format!("Double vote in term {}: {} vs {}", 
-                           vote_req.term, previous_vote.candidate_id, vote_req.candidate_id).into_bytes(),
+                    format!(
+                        "Double vote in term {}: {} vs {}",
+                        vote_req.term, previous_vote.candidate_id, vote_req.candidate_id
+                    )
+                    .into_bytes(),
                 );
             }
         } else {
             term_votes.insert(vote_req.candidate_id.clone(), vote_req.clone());
         }
-        
+
         Ok(())
     }
 
     /// Check for conflicting append entries
-    fn check_conflicting_append_entries(&mut self, append_req: &AppendEntriesRequest) -> FusekiResult<()> {
-        let entries = self.append_entries_tracking
+    fn check_conflicting_append_entries(
+        &mut self,
+        append_req: &AppendEntriesRequest,
+    ) -> FusekiResult<()> {
+        let entries = self
+            .append_entries_tracking
             .entry(append_req.leader_id.clone())
             .or_insert_with(VecDeque::new);
-        
+
         // Keep only recent entries
         while entries.len() > 100 {
             entries.pop_front();
         }
-        
+
         // Check for conflicts
         for previous_req in entries.iter() {
-            if previous_req.term == append_req.term &&
-               previous_req.prev_log_index == append_req.prev_log_index &&
-               previous_req.entries != append_req.entries {
+            if previous_req.term == append_req.term
+                && previous_req.prev_log_index == append_req.prev_log_index
+                && previous_req.entries != append_req.entries
+            {
                 // Conflicting append entries detected!
                 self.record_byzantine_behavior(
                     &append_req.leader_id,
                     ByzantineBehavior::ConflictingAppendEntries,
-                    format!("Conflicting append entries at term {} index {}", 
-                           append_req.term, append_req.prev_log_index).into_bytes(),
+                    format!(
+                        "Conflicting append entries at term {} index {}",
+                        append_req.term, append_req.prev_log_index
+                    )
+                    .into_bytes(),
                 );
             }
         }
-        
+
         entries.push_back(append_req.clone());
         Ok(())
     }
 
     /// Record Byzantine behavior evidence
-    fn record_byzantine_behavior(&mut self, node_id: &str, behavior: ByzantineBehavior, evidence: Vec<u8>) {
+    fn record_byzantine_behavior(
+        &mut self,
+        node_id: &str,
+        behavior: ByzantineBehavior,
+        evidence: Vec<u8>,
+    ) {
         let evidence = ByzantineEvidence {
             node_id: node_id.to_string(),
             behavior_type: behavior,
@@ -408,22 +435,25 @@ impl BftNodeState {
         };
 
         info!("Byzantine behavior detected: {:?}", evidence);
-        
+
         // Track repeated offenses
         if let Some(existing) = self.suspected_byzantine.get_mut(node_id) {
             existing.witnesses.push(self.identity.node_id.clone());
             existing.witnesses.dedup();
         } else {
-            self.suspected_byzantine.insert(node_id.to_string(), evidence.clone());
+            self.suspected_byzantine
+                .insert(node_id.to_string(), evidence.clone());
         }
-        
+
         self.byzantine_evidence.push(evidence);
 
         // Blacklist node if sufficient evidence
-        let evidence_count = self.byzantine_evidence.iter()
+        let evidence_count = self
+            .byzantine_evidence
+            .iter()
             .filter(|e| e.node_id == node_id)
             .count() as u32;
-            
+
         if evidence_count >= BYZANTINE_THRESHOLD {
             warn!("Blacklisting Byzantine node: {}", node_id);
             self.blacklisted_nodes.insert(node_id.to_string());
@@ -437,7 +467,7 @@ impl BftNodeState {
         context.update(&bft_message.sender_key_id.as_bytes());
         context.update(&bft_message.timestamp.timestamp().to_le_bytes());
         context.update(&bft_message.nonce);
-        
+
         let hash = context.finish();
         Ok(hex::encode(hash.as_ref()))
     }
@@ -460,13 +490,14 @@ impl BftNodeState {
     /// Clean up old messages and evidence
     pub fn cleanup_old_data(&mut self) {
         let cutoff = Utc::now() - chrono::Duration::hours(1);
-        
+
         // Clean up seen messages
-        self.seen_messages.retain(|_, &mut timestamp| timestamp > cutoff);
-        
+        self.seen_messages
+            .retain(|_, &mut timestamp| timestamp > cutoff);
+
         // Clean up old vote tracking
         self.vote_tracking.clear(); // Simple cleanup - in production, be more selective
-        
+
         // Clean up old append entries
         for entries in self.append_entries_tracking.values_mut() {
             while entries.len() > 50 {
@@ -544,7 +575,7 @@ mod tests {
         });
 
         let signed_message = node1.sign_message(&message).unwrap();
-        
+
         // Verify the message
         assert!(node2.verify_message(&signed_message).unwrap());
     }
@@ -552,7 +583,7 @@ mod tests {
     #[tokio::test]
     async fn test_byzantine_detection() {
         let mut node = BftNodeState::new("test_node".to_string()).unwrap();
-        
+
         // Simulate double voting
         let vote1 = RequestVoteRequest {
             term: 1,
@@ -560,7 +591,7 @@ mod tests {
             last_log_index: 0,
             last_log_term: 0,
         };
-        
+
         let vote2 = RequestVoteRequest {
             term: 1,
             candidate_id: "candidate2".to_string(), // Different candidate, same term
@@ -578,7 +609,7 @@ mod tests {
     #[tokio::test]
     async fn test_proof_of_work() {
         let node = BftNodeState::new("test_node".to_string()).unwrap();
-        
+
         let pow = node.generate_proof_of_work(1, "candidate").unwrap();
         assert!(pow.difficulty >= POW_DIFFICULTY);
         assert!(node.verify_proof_of_work(&pow, 1, "candidate"));

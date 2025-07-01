@@ -10,12 +10,12 @@
 //! - Hardware-aware architecture search with efficiency constraints
 //! - Progressive complexity evolution with diversity preservation
 
-use crate::{Vector, EmbeddingError, ModelConfig, EmbeddingModel};
+use crate::{EmbeddingError, EmbeddingModel, ModelConfig, Vector};
 use anyhow::Result;
 use async_trait::async_trait;
 use ndarray::{Array1, Array2, Array3, Axis};
-use rand::{Rng, SeedableRng};
 use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -93,7 +93,7 @@ impl Default for HardwareConstraints {
             max_memory_mb: 8192, // 8GB
             max_inference_time_ms: 100.0,
             max_parameters: 10_000_000, // 10M parameters
-            max_flops: 1_000_000_000, // 1B FLOPs
+            max_flops: 1_000_000_000,   // 1B FLOPs
             target_platform: HardwarePlatform::GPU,
         }
     }
@@ -158,16 +158,16 @@ impl NeuralArchitecture {
     pub fn random(config: &NeuroEvolutionConfig, rng: &mut impl Rng) -> Self {
         let mut layers = Vec::new();
         let depth = rng.gen_range(1..=config.max_depth);
-        
+
         for i in 0..depth {
             let layer = ArchitectureLayer::random(config, i, rng);
             layers.push(layer);
         }
-        
+
         let skip_connections = Self::generate_skip_connections(&layers, rng);
         let hyperparameters = ArchitectureHyperparameters::random(rng);
         let complexity = Self::calculate_complexity(&layers, &skip_connections);
-        
+
         Self {
             id: Uuid::new_v4(),
             layers,
@@ -177,14 +177,18 @@ impl NeuralArchitecture {
             complexity,
         }
     }
-    
+
     /// Generate skip connections
-    fn generate_skip_connections(layers: &[ArchitectureLayer], rng: &mut impl Rng) -> Vec<SkipConnection> {
+    fn generate_skip_connections(
+        layers: &[ArchitectureLayer],
+        rng: &mut impl Rng,
+    ) -> Vec<SkipConnection> {
         let mut connections = Vec::new();
-        
+
         for i in 0..layers.len() {
             for j in (i + 2)..layers.len() {
-                if rng.gen_bool(0.2) { // 20% chance of skip connection
+                if rng.gen_bool(0.2) {
+                    // 20% chance of skip connection
                     connections.push(SkipConnection {
                         from_layer: i,
                         to_layer: j,
@@ -193,10 +197,10 @@ impl NeuralArchitecture {
                 }
             }
         }
-        
+
         connections
     }
-    
+
     /// Calculate architecture complexity
     fn calculate_complexity(
         layers: &[ArchitectureLayer],
@@ -205,20 +209,20 @@ impl NeuralArchitecture {
         let mut parameters = 0;
         let mut flops = 0;
         let mut memory_mb = 0;
-        
+
         for layer in layers {
             parameters += layer.estimate_parameters();
             flops += layer.estimate_flops();
             memory_mb += layer.estimate_memory_mb();
         }
-        
+
         // Add skip connection overhead
         for _conn in skip_connections {
             parameters += 1000; // Approximate overhead
             flops += 10000;
             memory_mb += 1;
         }
-        
+
         ArchitectureComplexity {
             parameters,
             flops,
@@ -227,7 +231,7 @@ impl NeuralArchitecture {
             width: layers.iter().map(|l| l.output_size).max().unwrap_or(0),
         }
     }
-    
+
     /// Mutate the architecture
     pub fn mutate(&mut self, config: &NeuroEvolutionConfig, rng: &mut impl Rng) {
         if rng.gen_bool(config.mutation_rate) {
@@ -238,12 +242,12 @@ impl NeuralArchitecture {
                 3 => self.mutate_layer_parameters(rng),
                 _ => unreachable!(),
             }
-            
+
             // Recalculate complexity
             self.complexity = Self::calculate_complexity(&self.layers, &self.skip_connections);
         }
     }
-    
+
     /// Mutate layers
     fn mutate_layers(&mut self, config: &NeuroEvolutionConfig, rng: &mut impl Rng) {
         match rng.gen_range(0..3) {
@@ -272,7 +276,7 @@ impl NeuralArchitecture {
             _ => unreachable!(),
         }
     }
-    
+
     /// Mutate skip connections
     fn mutate_skip_connections(&mut self, rng: &mut impl Rng) {
         match rng.gen_range(0..3) {
@@ -300,18 +304,19 @@ impl NeuralArchitecture {
                 // Modify skip connection
                 if !self.skip_connections.is_empty() {
                     let position = rng.gen_range(0..self.skip_connections.len());
-                    self.skip_connections[position].connection_type = SkipConnectionType::random(rng);
+                    self.skip_connections[position].connection_type =
+                        SkipConnectionType::random(rng);
                 }
             }
             _ => unreachable!(),
         }
     }
-    
+
     /// Mutate hyperparameters
     fn mutate_hyperparameters(&mut self, rng: &mut impl Rng) {
         self.hyperparameters.mutate(rng);
     }
-    
+
     /// Mutate layer parameters
     fn mutate_layer_parameters(&mut self, rng: &mut impl Rng) {
         if !self.layers.is_empty() {
@@ -319,7 +324,7 @@ impl NeuralArchitecture {
             self.layers[layer_idx].mutate_parameters(rng);
         }
     }
-    
+
     /// Crossover with another architecture
     pub fn crossover(&self, other: &Self, rng: &mut impl Rng) -> (Self, Self) {
         let min_layers = self.layers.len().min(other.layers.len());
@@ -328,13 +333,13 @@ impl NeuralArchitecture {
         } else {
             rng.gen_range(1..min_layers)
         };
-        
+
         let mut child1_layers = self.layers[..crossover_point].to_vec();
         child1_layers.extend_from_slice(&other.layers[crossover_point..]);
-        
+
         let mut child2_layers = other.layers[..crossover_point].to_vec();
         child2_layers.extend_from_slice(&self.layers[crossover_point..]);
-        
+
         let child1 = Self {
             id: Uuid::new_v4(),
             layers: child1_layers,
@@ -343,7 +348,7 @@ impl NeuralArchitecture {
             performance: None,
             complexity: ArchitectureComplexity::default(),
         };
-        
+
         let child2 = Self {
             id: Uuid::new_v4(),
             layers: child2_layers,
@@ -352,26 +357,26 @@ impl NeuralArchitecture {
             performance: None,
             complexity: ArchitectureComplexity::default(),
         };
-        
+
         (child1, child2)
     }
-    
+
     /// Calculate diversity distance to another architecture
     pub fn diversity_distance(&self, other: &Self) -> f64 {
         let layer_distance = self.layer_distance(other);
         let connection_distance = self.connection_distance(other);
         let hyperparameter_distance = self.hyperparameters.distance(&other.hyperparameters);
-        
+
         (layer_distance + connection_distance + hyperparameter_distance) / 3.0
     }
-    
+
     /// Calculate layer structure distance
     fn layer_distance(&self, other: &Self) -> f64 {
         let max_len = self.layers.len().max(other.layers.len());
         if max_len == 0 {
             return 0.0;
         }
-        
+
         let mut differences = 0;
         for i in 0..max_len {
             match (self.layers.get(i), other.layers.get(i)) {
@@ -384,28 +389,35 @@ impl NeuralArchitecture {
                 (None, None) => continue,
             }
         }
-        
+
         differences as f64 / max_len as f64
     }
-    
+
     /// Calculate skip connection distance
     fn connection_distance(&self, other: &Self) -> f64 {
-        let max_connections = self.skip_connections.len().max(other.skip_connections.len());
+        let max_connections = self
+            .skip_connections
+            .len()
+            .max(other.skip_connections.len());
         if max_connections == 0 {
             return 0.0;
         }
-        
-        let self_set: HashSet<_> = self.skip_connections.iter()
+
+        let self_set: HashSet<_> = self
+            .skip_connections
+            .iter()
             .map(|c| (c.from_layer, c.to_layer))
             .collect();
-        
-        let other_set: HashSet<_> = other.skip_connections.iter()
+
+        let other_set: HashSet<_> = other
+            .skip_connections
+            .iter()
             .map(|c| (c.from_layer, c.to_layer))
             .collect();
-        
+
         let intersection = self_set.intersection(&other_set).count();
         let union = self_set.union(&other_set).count();
-        
+
         1.0 - (intersection as f64 / union as f64)
     }
 }
@@ -428,9 +440,13 @@ impl ArchitectureLayer {
     pub fn random(config: &NeuroEvolutionConfig, layer_index: usize, rng: &mut impl Rng) -> Self {
         let layer_type = LayerType::random(rng);
         let output_size = rng.gen_range(16..=config.max_width);
-        let input_size = if layer_index == 0 { 128 } else { output_size / 2 };
+        let input_size = if layer_index == 0 {
+            128
+        } else {
+            output_size / 2
+        };
         let parameters = LayerParameters::random(&layer_type, rng);
-        
+
         Self {
             layer_type,
             input_size,
@@ -438,7 +454,7 @@ impl ArchitectureLayer {
             parameters,
         }
     }
-    
+
     /// Mutate the layer
     pub fn mutate(&mut self, config: &NeuroEvolutionConfig, rng: &mut impl Rng) {
         match rng.gen_range(0..3) {
@@ -448,12 +464,12 @@ impl ArchitectureLayer {
             _ => unreachable!(),
         }
     }
-    
+
     /// Mutate layer parameters only
     pub fn mutate_parameters(&mut self, rng: &mut impl Rng) {
         self.parameters.mutate(rng);
     }
-    
+
     /// Estimate number of parameters
     pub fn estimate_parameters(&self) -> usize {
         match self.layer_type {
@@ -467,15 +483,19 @@ impl ArchitectureLayer {
                 kernel_size * kernel_size * self.input_size * self.output_size + self.output_size
             }
             LayerType::GraphConv => self.input_size * self.output_size + self.output_size,
-            LayerType::LSTM => 4 * (self.input_size * self.output_size + self.output_size * self.output_size),
+            LayerType::LSTM => {
+                4 * (self.input_size * self.output_size + self.output_size * self.output_size)
+            }
             LayerType::Transformer => {
                 let ff_size = self.output_size * 4;
-                self.input_size * self.output_size * 3 + self.output_size * ff_size + ff_size * self.output_size
+                self.input_size * self.output_size * 3
+                    + self.output_size * ff_size
+                    + ff_size * self.output_size
             }
             LayerType::Embedding => self.input_size * self.output_size,
         }
     }
-    
+
     /// Estimate FLOPs
     pub fn estimate_flops(&self) -> usize {
         match self.layer_type {
@@ -491,7 +511,7 @@ impl ArchitectureLayer {
             LayerType::Embedding => self.input_size,
         }
     }
-    
+
     /// Estimate memory usage in MB
     pub fn estimate_memory_mb(&self) -> usize {
         let params = self.estimate_parameters();
@@ -548,7 +568,7 @@ impl LayerParameters {
         let dropout = rng.gen_range(0.0..0.5);
         let normalization = NormalizationType::random(rng);
         let mut settings = HashMap::new();
-        
+
         match layer_type {
             LayerType::Attention => {
                 settings.insert("num_heads".to_string(), rng.gen_range(1..16) as f64);
@@ -559,11 +579,14 @@ impl LayerParameters {
                 settings.insert("stride".to_string(), rng.gen_range(1..3) as f64);
             }
             LayerType::LSTM => {
-                settings.insert("bidirectional".to_string(), if rng.gen_bool(0.5) { 1.0 } else { 0.0 });
+                settings.insert(
+                    "bidirectional".to_string(),
+                    if rng.gen_bool(0.5) { 1.0 } else { 0.0 },
+                );
             }
             _ => {}
         }
-        
+
         Self {
             activation,
             dropout,
@@ -571,7 +594,7 @@ impl LayerParameters {
             settings,
         }
     }
-    
+
     /// Mutate parameters
     pub fn mutate(&mut self, rng: &mut impl Rng) {
         match rng.gen_range(0..4) {
@@ -691,7 +714,7 @@ impl ArchitectureHyperparameters {
             scheduler: SchedulerType::random(rng),
         }
     }
-    
+
     pub fn mutate(&mut self, rng: &mut impl Rng) {
         match rng.gen_range(0..6) {
             0 => self.learning_rate *= rng.gen_range(0.5..2.0),
@@ -703,25 +726,50 @@ impl ArchitectureHyperparameters {
             _ => unreachable!(),
         }
     }
-    
+
     pub fn crossover(&self, other: &Self, rng: &mut impl Rng) -> Self {
         Self {
-            learning_rate: if rng.gen_bool(0.5) { self.learning_rate } else { other.learning_rate },
-            batch_size: if rng.gen_bool(0.5) { self.batch_size } else { other.batch_size },
-            weight_decay: if rng.gen_bool(0.5) { self.weight_decay } else { other.weight_decay },
-            gradient_clipping: if rng.gen_bool(0.5) { self.gradient_clipping } else { other.gradient_clipping },
-            optimizer: if rng.gen_bool(0.5) { self.optimizer.clone() } else { other.optimizer.clone() },
-            scheduler: if rng.gen_bool(0.5) { self.scheduler.clone() } else { other.scheduler.clone() },
+            learning_rate: if rng.gen_bool(0.5) {
+                self.learning_rate
+            } else {
+                other.learning_rate
+            },
+            batch_size: if rng.gen_bool(0.5) {
+                self.batch_size
+            } else {
+                other.batch_size
+            },
+            weight_decay: if rng.gen_bool(0.5) {
+                self.weight_decay
+            } else {
+                other.weight_decay
+            },
+            gradient_clipping: if rng.gen_bool(0.5) {
+                self.gradient_clipping
+            } else {
+                other.gradient_clipping
+            },
+            optimizer: if rng.gen_bool(0.5) {
+                self.optimizer.clone()
+            } else {
+                other.optimizer.clone()
+            },
+            scheduler: if rng.gen_bool(0.5) {
+                self.scheduler.clone()
+            } else {
+                other.scheduler.clone()
+            },
         }
     }
-    
+
     pub fn distance(&self, other: &Self) -> f64 {
-        let lr_diff = (self.learning_rate - other.learning_rate).abs() / self.learning_rate.max(other.learning_rate);
-        let batch_diff = (self.batch_size as f64 - other.batch_size as f64).abs() / 
-                        (self.batch_size as f64).max(other.batch_size as f64);
-        let wd_diff = (self.weight_decay - other.weight_decay).abs() / 
-                     self.weight_decay.max(other.weight_decay);
-        
+        let lr_diff = (self.learning_rate - other.learning_rate).abs()
+            / self.learning_rate.max(other.learning_rate);
+        let batch_diff = (self.batch_size as f64 - other.batch_size as f64).abs()
+            / (self.batch_size as f64).max(other.batch_size as f64);
+        let wd_diff = (self.weight_decay - other.weight_decay).abs()
+            / self.weight_decay.max(other.weight_decay);
+
         (lr_diff + batch_diff + wd_diff) / 3.0
     }
 }
@@ -791,17 +839,17 @@ impl PerformanceMetrics {
         let memory_score = 1.0 / (1.0 + self.memory_usage_mb / 1000.0); // Normalize to [0,1]
         let generalization_score = self.generalization_score;
         let robustness_score = self.robustness_score;
-        
-        let weighted_score = 
-            weights.accuracy * accuracy_score +
-            weights.efficiency * efficiency_score +
-            weights.memory * memory_score +
-            weights.generalization * generalization_score +
-            weights.robustness * robustness_score;
-        
+
+        let weighted_score = weights.accuracy * accuracy_score
+            + weights.efficiency * efficiency_score
+            + weights.memory * memory_score
+            + weights.generalization * generalization_score
+            + weights.robustness * robustness_score;
+
         // Apply complexity penalty
-        let complexity_factor = 1.0 / (1.0 + complexity_penalty * self.parameter_count as f64 / 1e6);
-        
+        let complexity_factor =
+            1.0 / (1.0 + complexity_penalty * self.parameter_count as f64 / 1e6);
+
         weighted_score * complexity_factor
     }
 }
@@ -841,13 +889,14 @@ pub struct Population {
 impl Population {
     /// Create initial random population
     pub fn initialize(config: &NeuroEvolutionConfig) -> Self {
-        let mut rng = rand::rngs::StdRng::from_rng(&mut rand::thread_rng()).expect("Failed to create RNG");
+        let mut rng =
+            rand::rngs::StdRng::from_rng(&mut rand::thread_rng()).expect("Failed to create RNG");
         let mut individuals = Vec::new();
-        
+
         for _ in 0..config.population_size {
             individuals.push(NeuralArchitecture::random(config, &mut rng));
         }
-        
+
         Self {
             individuals,
             generation: 0,
@@ -856,76 +905,79 @@ impl Population {
             diversity_score: 0.0,
         }
     }
-    
+
     /// Evaluate population fitness
     pub async fn evaluate(&mut self, evaluator: &ArchitectureEvaluator) -> Result<()> {
         let mut total_fitness = 0.0;
         let mut best_fitness: f64 = 0.0;
-        
+
         for individual in &mut self.individuals {
             let performance = evaluator.evaluate(individual).await?;
             individual.performance = Some(performance.clone());
-            
+
             let fitness = performance.calculate_fitness(
                 &evaluator.config.objective_weights,
                 evaluator.config.complexity_penalty,
             );
-            
+
             total_fitness += fitness;
             best_fitness = best_fitness.max(fitness);
         }
-        
+
         self.best_fitness = best_fitness;
         self.average_fitness = total_fitness / self.individuals.len() as f64;
         self.diversity_score = self.calculate_diversity();
-        
+
         Ok(())
     }
-    
+
     /// Calculate population diversity
     fn calculate_diversity(&self) -> f64 {
         let mut total_distance = 0.0;
         let mut count = 0;
-        
+
         for i in 0..self.individuals.len() {
             for j in (i + 1)..self.individuals.len() {
                 total_distance += self.individuals[i].diversity_distance(&self.individuals[j]);
                 count += 1;
             }
         }
-        
+
         if count > 0 {
             total_distance / count as f64
         } else {
             0.0
         }
     }
-    
+
     /// Evolve to next generation
     pub fn evolve(&mut self, config: &NeuroEvolutionConfig) -> Result<()> {
-        let mut rng = rand::rngs::StdRng::from_rng(&mut rand::thread_rng()).expect("Failed to create RNG");
-        
+        let mut rng =
+            rand::rngs::StdRng::from_rng(&mut rand::thread_rng()).expect("Failed to create RNG");
+
         // Sort by fitness
         self.individuals.sort_by(|a, b| {
-            let fitness_a = a.performance.as_ref().unwrap().calculate_fitness(
-                &config.objective_weights,
-                config.complexity_penalty,
-            );
-            let fitness_b = b.performance.as_ref().unwrap().calculate_fitness(
-                &config.objective_weights,
-                config.complexity_penalty,
-            );
+            let fitness_a = a
+                .performance
+                .as_ref()
+                .unwrap()
+                .calculate_fitness(&config.objective_weights, config.complexity_penalty);
+            let fitness_b = b
+                .performance
+                .as_ref()
+                .unwrap()
+                .calculate_fitness(&config.objective_weights, config.complexity_penalty);
             fitness_b.partial_cmp(&fitness_a).unwrap()
         });
-        
+
         let mut new_population = Vec::new();
-        
+
         // Elite preservation
         let elite_count = (config.population_size as f64 * config.elite_ratio) as usize;
         for i in 0..elite_count {
             new_population.push(self.individuals[i].clone());
         }
-        
+
         // Generate offspring
         while new_population.len() < config.population_size {
             if rng.gen_bool(config.crossover_rate) {
@@ -933,11 +985,11 @@ impl Population {
                 let parent1 = self.tournament_selection(config, &mut rng);
                 let parent2 = self.tournament_selection(config, &mut rng);
                 let (mut child1, mut child2) = parent1.crossover(&parent2, &mut rng);
-                
+
                 // Mutation
                 child1.mutate(config, &mut rng);
                 child2.mutate(config, &mut rng);
-                
+
                 new_population.push(child1);
                 if new_population.len() < config.population_size {
                     new_population.push(child2);
@@ -951,38 +1003,40 @@ impl Population {
                 new_population.push(child);
             }
         }
-        
+
         self.individuals = new_population;
         self.generation += 1;
-        
+
         Ok(())
     }
-    
+
     /// Tournament selection
-    fn tournament_selection(&self, config: &NeuroEvolutionConfig, rng: &mut impl Rng) -> &NeuralArchitecture {
+    fn tournament_selection(
+        &self,
+        config: &NeuroEvolutionConfig,
+        rng: &mut impl Rng,
+    ) -> &NeuralArchitecture {
         let mut best = &self.individuals[0];
         let mut best_fitness = 0.0;
-        
+
         for _ in 0..config.tournament_size {
             let candidate_idx = rng.gen_range(0..self.individuals.len());
             let candidate = &self.individuals[candidate_idx];
-            
+
             if let Some(ref performance) = candidate.performance {
-                let fitness = performance.calculate_fitness(
-                    &config.objective_weights,
-                    config.complexity_penalty,
-                );
-                
+                let fitness = performance
+                    .calculate_fitness(&config.objective_weights, config.complexity_penalty);
+
                 if fitness > best_fitness {
                     best = candidate;
                     best_fitness = fitness;
                 }
             }
         }
-        
+
         best
     }
-    
+
     /// Get the best individual
     pub fn get_best(&self) -> Option<&NeuralArchitecture> {
         self.individuals.first()
@@ -1003,35 +1057,35 @@ impl ArchitectureEvaluator {
             evaluation_cache: HashMap::new(),
         }
     }
-    
+
     /// Evaluate a single architecture
     pub async fn evaluate(&self, architecture: &NeuralArchitecture) -> Result<PerformanceMetrics> {
         // Check cache first
         if let Some(cached) = self.evaluation_cache.get(&architecture.id) {
             return Ok(cached.clone());
         }
-        
+
         // Simulate architecture evaluation
         let metrics = self.simulate_evaluation(architecture)?;
-        
+
         Ok(metrics)
     }
-    
+
     /// Simulate architecture evaluation (replace with actual training/evaluation)
     fn simulate_evaluation(&self, architecture: &NeuralArchitecture) -> Result<PerformanceMetrics> {
         let mut rng = rand::thread_rng();
-        
+
         // Simulate based on architecture properties
         let base_accuracy = 0.7 + rng.gen_range(0.0..0.2);
         let complexity_factor = 1.0 / (1.0 + architecture.complexity.parameters as f64 / 1e6);
         let accuracy = base_accuracy * (0.8 + 0.4 * complexity_factor);
-        
+
         let inference_time = 10.0 + architecture.complexity.parameters as f64 / 1e5;
         let memory_usage = architecture.complexity.memory_mb as f64;
-        
+
         let generalization_score = accuracy * (0.9 + 0.1 * rng.gen_range(0.0..1.0));
         let robustness_score = accuracy * (0.85 + 0.15 * rng.gen_range(0.0..1.0));
-        
+
         let metrics = PerformanceMetrics {
             accuracy,
             inference_time_ms: inference_time,
@@ -1042,17 +1096,17 @@ impl ArchitectureEvaluator {
             robustness_score,
             multi_objective_score: 0.0, // Will be calculated by fitness function
         };
-        
+
         Ok(metrics)
     }
-    
+
     /// Validate architecture against hardware constraints
     pub fn validate_constraints(&self, architecture: &NeuralArchitecture) -> bool {
         let constraints = &self.config.hardware_constraints;
-        
-        architecture.complexity.memory_mb <= constraints.max_memory_mb &&
-        architecture.complexity.parameters <= constraints.max_parameters &&
-        architecture.complexity.flops <= constraints.max_flops
+
+        architecture.complexity.memory_mb <= constraints.max_memory_mb
+            && architecture.complexity.parameters <= constraints.max_parameters
+            && architecture.complexity.flops <= constraints.max_flops
     }
 }
 
@@ -1070,7 +1124,7 @@ impl NeuroEvolutionSystem {
     pub fn new(config: NeuroEvolutionConfig) -> Self {
         let population = Population::initialize(&config);
         let evaluator = ArchitectureEvaluator::new(config.clone());
-        
+
         Self {
             config,
             population,
@@ -1078,13 +1132,13 @@ impl NeuroEvolutionSystem {
             evolution_history: Vec::new(),
         }
     }
-    
+
     /// Run evolution for specified number of generations
     pub async fn evolve(&mut self) -> Result<NeuralArchitecture> {
         for generation in 0..self.config.num_generations {
             // Evaluate population
             self.population.evaluate(&self.evaluator).await?;
-            
+
             // Record statistics
             let stats = EvolutionStats {
                 generation,
@@ -1094,42 +1148,44 @@ impl NeuroEvolutionSystem {
                 best_architecture: self.population.get_best().cloned(),
             };
             self.evolution_history.push(stats);
-            
+
             // Check convergence
             if self.check_convergence() {
                 break;
             }
-            
+
             // Evolve to next generation
             if generation < self.config.num_generations - 1 {
                 self.population.evolve(&self.config)?;
             }
         }
-        
+
         // Return best architecture
-        self.population.get_best()
+        self.population
+            .get_best()
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("No best architecture found"))
     }
-    
+
     /// Check convergence criteria
     fn check_convergence(&self) -> bool {
         if self.evolution_history.len() < 10 {
             return false;
         }
-        
+
         // Check if fitness improvement has stagnated
-        let recent_best: Vec<f64> = self.evolution_history
+        let recent_best: Vec<f64> = self
+            .evolution_history
             .iter()
             .rev()
             .take(10)
             .map(|s| s.best_fitness)
             .collect();
-        
+
         let improvement = recent_best[0] - recent_best[9];
         improvement < 0.001 // Very small improvement threshold
     }
-    
+
     /// Get evolution statistics
     pub fn get_stats(&self) -> &[EvolutionStats] {
         &self.evolution_history
@@ -1173,7 +1229,7 @@ mod tests {
         let config = NeuroEvolutionConfig::default();
         let mut rng = rand::thread_rng();
         let arch = NeuralArchitecture::random(&config, &mut rng);
-        
+
         assert!(!arch.layers.is_empty());
         assert!(arch.layers.len() <= config.max_depth);
         assert!(arch.complexity.parameters > 0);
@@ -1185,7 +1241,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let mut arch = NeuralArchitecture::random(&config, &mut rng);
         let original_id = arch.id;
-        
+
         arch.mutate(&config, &mut rng);
         assert_eq!(arch.id, original_id); // ID should not change during mutation
     }
@@ -1196,7 +1252,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let parent1 = NeuralArchitecture::random(&config, &mut rng);
         let parent2 = NeuralArchitecture::random(&config, &mut rng);
-        
+
         let (child1, child2) = parent1.crossover(&parent2, &mut rng);
         assert_ne!(child1.id, parent1.id);
         assert_ne!(child2.id, parent2.id);
@@ -1216,7 +1272,7 @@ mod tests {
                 settings: HashMap::new(),
             },
         };
-        
+
         let params = layer.estimate_parameters();
         let expected = 128 * 256 + 256; // weights + biases
         assert_eq!(params, expected);
@@ -1226,7 +1282,7 @@ mod tests {
     fn test_population_initialization() {
         let config = NeuroEvolutionConfig::default();
         let population = Population::initialize(&config);
-        
+
         assert_eq!(population.individuals.len(), config.population_size);
         assert_eq!(population.generation, 0);
     }
@@ -1237,7 +1293,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let arch1 = NeuralArchitecture::random(&config, &mut rng);
         let arch2 = NeuralArchitecture::random(&config, &mut rng);
-        
+
         let distance = arch1.diversity_distance(&arch2);
         assert!((0.0..=1.0).contains(&distance));
     }
@@ -1248,7 +1304,7 @@ mod tests {
         let evaluator = ArchitectureEvaluator::new(config.clone());
         let mut rng = rand::thread_rng();
         let arch = NeuralArchitecture::random(&config, &mut rng);
-        
+
         let metrics = evaluator.evaluate(&arch).await.unwrap();
         assert!(metrics.accuracy >= 0.0 && metrics.accuracy <= 1.0);
         assert!(metrics.inference_time_ms > 0.0);
@@ -1260,10 +1316,12 @@ mod tests {
         let evaluator = ArchitectureEvaluator::new(config.clone());
         let mut rng = rand::thread_rng();
         let arch = NeuralArchitecture::random(&config, &mut rng);
-        
+
         let is_valid = evaluator.validate_constraints(&arch);
         // Should be valid for reasonable random architectures
-        assert!(is_valid || arch.complexity.parameters > config.hardware_constraints.max_parameters);
+        assert!(
+            is_valid || arch.complexity.parameters > config.hardware_constraints.max_parameters
+        );
     }
 
     #[tokio::test]
@@ -1271,14 +1329,14 @@ mod tests {
         let config = NeuroEvolutionConfig {
             population_size: 5, // Very small population for testing
             num_generations: 2, // Minimal generations for testing
-            max_depth: 3, // Limit architecture complexity
-            max_width: 16, // Limit architecture size
+            max_depth: 3,       // Limit architecture complexity
+            max_width: 16,      // Limit architecture size
             ..Default::default()
         };
-        
+
         let mut system = NeuroEvolutionSystem::new(config);
         let best_arch = system.evolve().await.unwrap();
-        
+
         assert!(!best_arch.layers.is_empty());
         assert!(system.evolution_history.len() <= 2);
     }

@@ -65,6 +65,15 @@ pub enum StreamError {
     #[error("Offset commit error: {0}")]
     OffsetCommit(String),
 
+    #[error("Commit error: {0}")]
+    CommitError(String),
+
+    #[error("Seek error: {0}")]
+    SeekError(String),
+
+    #[error("Topic metadata error: {0}")]
+    TopicMetadata(String),
+
     #[error("Unsupported operation: {0}")]
     UnsupportedOperation(String),
 

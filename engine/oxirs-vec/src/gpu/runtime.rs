@@ -23,7 +23,7 @@ impl CudaStream {
                 if result != cudaError_t::cudaSuccess {
                     return Err(anyhow::anyhow!("Failed to set CUDA device"));
                 }
-                
+
                 let result = cudaStreamCreate(&mut stream);
                 if result != cudaError_t::cudaSuccess {
                     return Err(anyhow::anyhow!("Failed to create CUDA stream"));
@@ -34,7 +34,7 @@ impl CudaStream {
                 device_id,
             })
         }
-        
+
         #[cfg(not(feature = "cuda"))]
         {
             Ok(Self {
@@ -90,7 +90,7 @@ impl CudaKernel {
             unsafe {
                 let mut module: CUmodule = std::ptr::null_mut();
                 let ptx_cstring = std::ffi::CString::new(ptx_code)?;
-                
+
                 let result = cuModuleLoadData(&mut module, ptx_cstring.as_ptr() as *const _);
                 if result != CUresult::CUDA_SUCCESS {
                     return Err(anyhow::anyhow!("Failed to load CUDA module"));
@@ -98,7 +98,7 @@ impl CudaKernel {
 
                 let mut function: CUfunction = std::ptr::null_mut();
                 let func_cstring = std::ffi::CString::new(function_name)?;
-                
+
                 let result = cuModuleGetFunction(&mut function, module, func_cstring.as_ptr());
                 if result != CUresult::CUDA_SUCCESS {
                     return Err(anyhow::anyhow!("Failed to get CUDA function"));
@@ -111,7 +111,7 @@ impl CudaKernel {
                 })
             }
         }
-        
+
         #[cfg(not(feature = "cuda"))]
         {
             Ok(Self {

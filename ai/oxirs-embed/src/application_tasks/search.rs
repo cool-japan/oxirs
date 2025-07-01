@@ -4,8 +4,8 @@
 //! embedding models, including precision, recall, NDCG, MAP, and other
 //! information retrieval metrics.
 
-use crate::{EmbeddingModel, Vector};
 use super::ApplicationEvalConfig;
+use crate::{EmbeddingModel, Vector};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

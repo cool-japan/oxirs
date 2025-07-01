@@ -42,8 +42,14 @@ pub struct TriplePattern {
 #[derive(Debug, Clone)]
 pub enum Algebra {
     Bgp(Vec<TriplePattern>),
-    Join { left: Box<Algebra>, right: Box<Algebra> },
-    Union { left: Box<Algebra>, right: Box<Algebra> },
+    Join {
+        left: Box<Algebra>,
+        right: Box<Algebra>,
+    },
+    Union {
+        left: Box<Algebra>,
+        right: Box<Algebra>,
+    },
 }
 
 /// SPARQL expression for filters and other operations

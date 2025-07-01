@@ -185,7 +185,7 @@ pub struct AdvancedBenchmarkResult {
     pub algorithm_name: String,
     pub dataset_name: String,
     pub timestamp: std::time::SystemTime,
-    
+
     /// Performance metrics
     pub performance: PerformanceMetrics,
     /// Quality metrics
@@ -196,7 +196,7 @@ pub struct AdvancedBenchmarkResult {
     pub memory: MemoryMetrics,
     /// Statistical analysis
     pub statistics: StatisticalMetrics,
-    
+
     /// Detailed traces
     pub traces: Option<BenchmarkTraces>,
     /// Error information
@@ -511,7 +511,11 @@ pub enum ParameterType {
 pub enum ParameterConstraint {
     GreaterThan(f64),
     LessThan(f64),
-    Conditional { if_param: String, if_value: String, then_constraint: Box<ParameterConstraint> },
+    Conditional {
+        if_param: String,
+        if_value: String,
+        then_constraint: Box<ParameterConstraint>,
+    },
 }
 
 /// Objective function for optimization
@@ -644,13 +648,18 @@ impl AdvancedBenchmarkSuite {
     }
 
     /// Analyze dataset characteristics
-    fn analyze_dataset(&self, mut base_dataset: BenchmarkDataset) -> Result<EnhancedBenchmarkDataset> {
+    fn analyze_dataset(
+        &self,
+        mut base_dataset: BenchmarkDataset,
+    ) -> Result<EnhancedBenchmarkDataset> {
         tracing::info!("Analyzing dataset: {}", base_dataset.name);
 
         let statistics = self.compute_dataset_statistics(&base_dataset.train_vectors)?;
         let quality_metrics = self.compute_quality_metrics(&base_dataset.train_vectors)?;
-        let intrinsic_dimensionality = self.estimate_intrinsic_dimensionality(&base_dataset.train_vectors)?;
-        let clustering_coefficient = self.compute_clustering_coefficient(&base_dataset.train_vectors)?;
+        let intrinsic_dimensionality =
+            self.estimate_intrinsic_dimensionality(&base_dataset.train_vectors)?;
+        let clustering_coefficient =
+            self.compute_clustering_coefficient(&base_dataset.train_vectors)?;
         let hubness_score = self.compute_hubness_score(&base_dataset.train_vectors)?;
         let local_id = self.compute_local_intrinsic_dimensionality(&base_dataset.train_vectors)?;
 
@@ -676,9 +685,11 @@ impl AdvancedBenchmarkSuite {
         // Compute magnitude statistics
         let magnitudes: Vec<f32> = vectors.iter().map(|v| v.magnitude()).collect();
         let mean_magnitude = magnitudes.iter().sum::<f32>() / magnitudes.len() as f32;
-        let variance_magnitude = magnitudes.iter()
+        let variance_magnitude = magnitudes
+            .iter()
             .map(|m| (m - mean_magnitude).powi(2))
-            .sum::<f32>() / magnitudes.len() as f32;
+            .sum::<f32>()
+            / magnitudes.len() as f32;
         let std_magnitude = variance_magnitude.sqrt();
 
         // Compute distance statistics (sample-based for large datasets)
@@ -722,9 +733,11 @@ impl AdvancedBenchmarkSuite {
         distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         let mean_distance = distances.iter().sum::<f32>() / distances.len() as f32;
-        let variance = distances.iter()
+        let variance = distances
+            .iter()
             .map(|d| (d - mean_distance).powi(2))
-            .sum::<f32>() / distances.len() as f32;
+            .sum::<f32>()
+            / distances.len() as f32;
         let std_distance = variance.sqrt();
         let min_distance = distances[0];
         let max_distance = distances[distances.len() - 1];
@@ -754,14 +767,14 @@ impl AdvancedBenchmarkSuite {
 
         for i in 0..sample_size {
             let mut distances: Vec<f32> = Vec::new();
-            
+
             for j in 0..vectors.len() {
                 if i != j {
                     let distance = vectors[i].euclidean_distance(&vectors[j])?;
                     distances.push(distance);
                 }
             }
-            
+
             distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
             if !distances.is_empty() {
                 nn_distances.push(distances[0]); // Nearest neighbor distance
@@ -779,7 +792,8 @@ impl AdvancedBenchmarkSuite {
         let mut total_elements = 0;
         let mut zero_elements = 0;
 
-        for vector in vectors.iter().take(1000) { // Sample for efficiency
+        for vector in vectors.iter().take(1000) {
+            // Sample for efficiency
             let values = vector.as_f32();
             total_elements += values.len();
             zero_elements += values.iter().filter(|&&x| x.abs() < 1e-8).count();
@@ -829,9 +843,8 @@ impl AdvancedBenchmarkSuite {
 
             if !values.is_empty() {
                 let mean = values.iter().sum::<f32>() / values.len() as f32;
-                let variance = values.iter()
-                    .map(|v| (v - mean).powi(2))
-                    .sum::<f32>() / values.len() as f32;
+                let variance =
+                    values.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / values.len() as f32;
                 variance_ratios.push(variance);
             }
         }
@@ -839,7 +852,7 @@ impl AdvancedBenchmarkSuite {
         // Sort variances and compute effective dimensionality
         variance_ratios.sort_by(|a, b| b.partial_cmp(a).unwrap());
         let total_variance: f32 = variance_ratios.iter().sum();
-        
+
         if total_variance <= 0.0 {
             return Ok(vectors[0].dimensions as f32);
         }
@@ -880,9 +893,11 @@ impl AdvancedBenchmarkSuite {
 
         let mean_distance = distances.iter().sum::<f32>() / distances.len() as f32;
         let std_distance = {
-            let variance = distances.iter()
+            let variance = distances
+                .iter()
                 .map(|d| (d - mean_distance).powi(2))
-                .sum::<f32>() / distances.len() as f32;
+                .sum::<f32>()
+                / distances.len() as f32;
             variance.sqrt()
         };
 
@@ -920,7 +935,8 @@ impl AdvancedBenchmarkSuite {
         let iqr = q3 - q1;
         let outlier_threshold = q3 + 1.5 * iqr;
 
-        let outlier_count = distances_to_centroid.iter()
+        let outlier_count = distances_to_centroid
+            .iter()
             .filter(|&&d| d > outlier_threshold)
             .count();
 
@@ -951,15 +967,17 @@ impl AdvancedBenchmarkSuite {
             }
 
             if !intra_cluster_distances.is_empty() && !inter_cluster_distances.is_empty() {
-                let avg_intra = intra_cluster_distances.iter().sum::<f32>() / intra_cluster_distances.len() as f32;
-                let avg_inter = inter_cluster_distances.iter().sum::<f32>() / inter_cluster_distances.len() as f32;
-                
+                let avg_intra = intra_cluster_distances.iter().sum::<f32>()
+                    / intra_cluster_distances.len() as f32;
+                let avg_inter = inter_cluster_distances.iter().sum::<f32>()
+                    / inter_cluster_distances.len() as f32;
+
                 let silhouette = if avg_intra.max(avg_inter) > 0.0 {
                     (avg_inter - avg_intra) / avg_intra.max(avg_inter)
                 } else {
                     0.0
                 };
-                
+
                 silhouette_scores.push(silhouette);
             }
         }
@@ -984,16 +1002,17 @@ impl AdvancedBenchmarkSuite {
         for i in 0..sample_size {
             // Find k nearest neighbors
             let mut distances_with_indices: Vec<(f32, usize)> = Vec::new();
-            
+
             for j in 0..vectors.len() {
                 if i != j {
                     let distance = vectors[i].euclidean_distance(&vectors[j])?;
                     distances_with_indices.push((distance, j));
                 }
             }
-            
+
             distances_with_indices.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-            let neighbors: Vec<usize> = distances_with_indices.iter()
+            let neighbors: Vec<usize> = distances_with_indices
+                .iter()
                 .take(k)
                 .map(|(_, idx)| *idx)
                 .collect();
@@ -1003,16 +1022,17 @@ impl AdvancedBenchmarkSuite {
             for &neighbor in &neighbors {
                 // Check if i is also in neighbor's k-nearest neighbors
                 let mut neighbor_distances: Vec<(f32, usize)> = Vec::new();
-                
+
                 for j in 0..vectors.len() {
                     if neighbor != j {
                         let distance = vectors[neighbor].euclidean_distance(&vectors[j])?;
                         neighbor_distances.push((distance, j));
                     }
                 }
-                
+
                 neighbor_distances.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-                let neighbor_neighbors: Vec<usize> = neighbor_distances.iter()
+                let neighbor_neighbors: Vec<usize> = neighbor_distances
+                    .iter()
                     .take(k)
                     .map(|(_, idx)| *idx)
                     .collect();
@@ -1052,16 +1072,17 @@ impl AdvancedBenchmarkSuite {
         for i in 0..sample_size {
             // Find k nearest neighbors
             let mut distances_with_indices: Vec<(f32, usize)> = Vec::new();
-            
+
             for j in 0..vectors.len() {
                 if i != j {
                     let distance = vectors[i].euclidean_distance(&vectors[j])?;
                     distances_with_indices.push((distance, j));
                 }
             }
-            
+
             distances_with_indices.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-            let neighbors: Vec<usize> = distances_with_indices.iter()
+            let neighbors: Vec<usize> = distances_with_indices
+                .iter()
                 .take(k)
                 .map(|(_, idx)| *idx)
                 .collect();
@@ -1070,13 +1091,16 @@ impl AdvancedBenchmarkSuite {
             let mut edge_count = 0;
             for a in 0..neighbors.len() {
                 for b in (a + 1)..neighbors.len() {
-                    let distance = vectors[neighbors[a]].euclidean_distance(&vectors[neighbors[b]])?;
+                    let distance =
+                        vectors[neighbors[a]].euclidean_distance(&vectors[neighbors[b]])?;
                     // Consider as edge if distance is small
-                    let avg_neighbor_distance = distances_with_indices.iter()
+                    let avg_neighbor_distance = distances_with_indices
+                        .iter()
                         .take(k)
                         .map(|(d, _)| *d)
-                        .sum::<f32>() / k as f32;
-                    
+                        .sum::<f32>()
+                        / k as f32;
+
                     if distance <= avg_neighbor_distance {
                         edge_count += 1;
                     }
@@ -1110,16 +1134,16 @@ impl AdvancedBenchmarkSuite {
         for i in 0..sample_size {
             // Find k nearest neighbors
             let mut distances_with_indices: Vec<(f32, usize)> = Vec::new();
-            
+
             for j in 0..vectors.len() {
                 if i != j {
                     let distance = vectors[i].euclidean_distance(&vectors[j])?;
                     distances_with_indices.push((distance, j));
                 }
             }
-            
+
             distances_with_indices.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-            
+
             // Count appearances as neighbors
             for (_, neighbor_idx) in distances_with_indices.iter().take(k) {
                 neighbor_counts[*neighbor_idx] += 1;
@@ -1127,16 +1151,21 @@ impl AdvancedBenchmarkSuite {
         }
 
         // Compute hubness as skewness of neighbor count distribution
-        let mean_count = neighbor_counts.iter().sum::<usize>() as f32 / neighbor_counts.len() as f32;
-        let variance = neighbor_counts.iter()
+        let mean_count =
+            neighbor_counts.iter().sum::<usize>() as f32 / neighbor_counts.len() as f32;
+        let variance = neighbor_counts
+            .iter()
             .map(|&count| (count as f32 - mean_count).powi(2))
-            .sum::<f32>() / neighbor_counts.len() as f32;
+            .sum::<f32>()
+            / neighbor_counts.len() as f32;
         let std_dev = variance.sqrt();
 
         if std_dev > 0.0 {
-            let skewness = neighbor_counts.iter()
+            let skewness = neighbor_counts
+                .iter()
                 .map(|&count| ((count as f32 - mean_count) / std_dev).powi(3))
-                .sum::<f32>() / neighbor_counts.len() as f32;
+                .sum::<f32>()
+                / neighbor_counts.len() as f32;
             Ok(skewness.abs()) // Return absolute skewness as hubness score
         } else {
             Ok(0.0)
@@ -1151,21 +1180,21 @@ impl AdvancedBenchmarkSuite {
         for i in 0..sample_size {
             // Estimate local dimensionality using nearest neighbor distances
             let mut distances: Vec<f32> = Vec::new();
-            
+
             for j in 0..vectors.len() {
                 if i != j {
                     let distance = vectors[i].euclidean_distance(&vectors[j])?;
                     distances.push(distance);
                 }
             }
-            
+
             distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            
+
             // Take first 20 neighbors for local analysis
             let k = distances.len().min(20);
             if k > 2 {
                 let local_distances = &distances[0..k];
-                
+
                 // Estimate local dimensionality using distance ratios
                 let mut ratios = Vec::new();
                 for j in 1..k {
@@ -1173,12 +1202,13 @@ impl AdvancedBenchmarkSuite {
                         ratios.push(local_distances[j] / local_distances[j - 1]);
                     }
                 }
-                
+
                 if !ratios.is_empty() {
                     let mean_ratio = ratios.iter().sum::<f32>() / ratios.len() as f32;
                     // Simple dimensionality estimate based on ratio
                     let local_id = if mean_ratio > 1.0 {
-                        (mean_ratio.ln() / (mean_ratio - 1.0).ln()).min(vectors[0].dimensions as f32)
+                        (mean_ratio.ln() / (mean_ratio - 1.0).ln())
+                            .min(vectors[0].dimensions as f32)
                     } else {
                         1.0
                     };
@@ -1229,11 +1259,13 @@ impl AdvancedBenchmarkSuite {
         // Build index
         tracing::info!("Building index for {}", algorithm.name);
         let build_start = Instant::now();
-        
+
         for (i, vector) in dataset.base_dataset.train_vectors.iter().enumerate() {
-            algorithm.index.insert(format!("vec_{}", i), vector.clone())?;
+            algorithm
+                .index
+                .insert(format!("vec_{}", i), vector.clone())?;
         }
-        
+
         let build_time = build_start.elapsed();
         algorithm.build_time = Some(build_time);
 
@@ -1346,19 +1378,30 @@ impl AdvancedBenchmarkSuite {
         }
 
         let mean_ms = latencies.iter().sum::<f64>() / latencies.len() as f64;
-        let variance = latencies.iter()
-            .map(|l| (l - mean_ms).powi(2))
-            .sum::<f64>() / latencies.len() as f64;
+        let variance =
+            latencies.iter().map(|l| (l - mean_ms).powi(2)).sum::<f64>() / latencies.len() as f64;
         let std_ms = variance.sqrt();
 
         let mut sorted_latencies = latencies.to_vec();
         sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         let mut percentiles = HashMap::new();
-        percentiles.insert("P50".to_string(), sorted_latencies[sorted_latencies.len() / 2]);
-        percentiles.insert("P95".to_string(), sorted_latencies[sorted_latencies.len() * 95 / 100]);
-        percentiles.insert("P99".to_string(), sorted_latencies[sorted_latencies.len() * 99 / 100]);
-        percentiles.insert("P99.9".to_string(), sorted_latencies[sorted_latencies.len() * 999 / 1000]);
+        percentiles.insert(
+            "P50".to_string(),
+            sorted_latencies[sorted_latencies.len() / 2],
+        );
+        percentiles.insert(
+            "P95".to_string(),
+            sorted_latencies[sorted_latencies.len() * 95 / 100],
+        );
+        percentiles.insert(
+            "P99".to_string(),
+            sorted_latencies[sorted_latencies.len() * 99 / 100],
+        );
+        percentiles.insert(
+            "P99.9".to_string(),
+            sorted_latencies[sorted_latencies.len() * 999 / 1000],
+        );
 
         LatencyMetrics {
             mean_ms,
@@ -1372,7 +1415,7 @@ impl AdvancedBenchmarkSuite {
 
     fn analyze_throughput(&self, measurements: &[(usize, f64)]) -> ThroughputMetrics {
         let qps = measurements.last().map(|(_, qps)| *qps).unwrap_or(0.0);
-        
+
         let batch_qps: HashMap<usize, f64> = measurements.iter().cloned().collect();
         let concurrent_qps = HashMap::new(); // Would be measured separately
         let saturation_qps = measurements.iter().map(|(_, qps)| *qps).fold(0.0, f64::max);
@@ -1401,7 +1444,7 @@ impl AdvancedBenchmarkSuite {
                 mean_reciprocal_rank: 0.85,
                 quality_degradation: QualityDegradation {
                     recall_latency_tradeoff: vec![(0.95, 1.0), (0.90, 0.5), (0.85, 0.2)],
-                    quality_size_tradeoff: vec![(0.95, 1024*1024), (0.90, 512*1024)],
+                    quality_size_tradeoff: vec![(0.95, 1024 * 1024), (0.90, 512 * 1024)],
                     quality_buildtime_tradeoff: vec![(0.95, 10.0), (0.90, 5.0)],
                 },
             });
@@ -1431,7 +1474,7 @@ impl AdvancedBenchmarkSuite {
         // Placeholder scalability measurement
         Ok(ScalabilityMetrics {
             latency_scaling: vec![(1000, 1.0), (10000, 2.0), (100000, 5.0)],
-            memory_scaling: vec![(1000, 1024*1024), (10000, 10*1024*1024)],
+            memory_scaling: vec![(1000, 1024 * 1024), (10000, 10 * 1024 * 1024)],
             buildtime_scaling: vec![(1000, 1.0), (10000, 12.0)],
             throughput_scaling: vec![(1, 1000.0), (10, 8000.0), (50, 20000.0)],
             scaling_efficiency: 0.85,
@@ -1455,7 +1498,10 @@ impl AdvancedBenchmarkSuite {
     }
 
     fn perform_comparative_analysis(&self, results: &[AdvancedBenchmarkResult]) -> Result<()> {
-        tracing::info!("Performing comparative analysis across {} results", results.len());
+        tracing::info!(
+            "Performing comparative analysis across {} results",
+            results.len()
+        );
 
         // Group results by dataset
         let mut dataset_groups: HashMap<String, Vec<&AdvancedBenchmarkResult>> = HashMap::new();
@@ -1467,7 +1513,11 @@ impl AdvancedBenchmarkSuite {
         }
 
         for (dataset_name, dataset_results) in dataset_groups {
-            tracing::info!("Analyzing {} algorithms on dataset {}", dataset_results.len(), dataset_name);
+            tracing::info!(
+                "Analyzing {} algorithms on dataset {}",
+                dataset_results.len(),
+                dataset_name
+            );
 
             // Perform pairwise comparisons
             for i in 0..dataset_results.len() {
@@ -1495,11 +1545,12 @@ impl AdvancedBenchmarkSuite {
         result1: &AdvancedBenchmarkResult,
         result2: &AdvancedBenchmarkResult,
     ) -> Result<ComparisonResult> {
-        let latency_improvement_percent = 
-            (result2.performance.latency.mean_ms - result1.performance.latency.mean_ms) / 
-            result1.performance.latency.mean_ms * 100.0;
+        let latency_improvement_percent = (result2.performance.latency.mean_ms
+            - result1.performance.latency.mean_ms)
+            / result1.performance.latency.mean_ms
+            * 100.0;
 
-        let quality_difference = 
+        let quality_difference =
             result1.quality.mean_average_precision - result2.quality.mean_average_precision;
 
         Ok(ComparisonResult {
@@ -1526,7 +1577,7 @@ impl StatisticalAnalyzer {
 
     pub fn analyze_metrics(&self, performance: &PerformanceMetrics) -> Result<StatisticalMetrics> {
         let sample_size = performance.latency.distribution.len();
-        
+
         let mut confidence_intervals = HashMap::new();
         let mut significance_tests = HashMap::new();
         let mut effect_sizes = HashMap::new();
@@ -1536,7 +1587,7 @@ impl StatisticalAnalyzer {
             let mean = performance.latency.mean_ms;
             let std = performance.latency.std_ms;
             let margin = self.compute_confidence_margin(std, sample_size);
-            
+
             confidence_intervals.insert(
                 "mean_latency_ms".to_string(),
                 (mean - margin, mean + margin),
@@ -1635,7 +1686,7 @@ mod tests {
     #[test]
     fn test_statistical_analyzer() {
         let analyzer = StatisticalAnalyzer::new(0.95, 10, 2.0);
-        
+
         let latency = LatencyMetrics {
             mean_ms: 1.0,
             std_ms: 0.1,

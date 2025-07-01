@@ -2,16 +2,12 @@
 //!
 //! This module contains handlers for triple scoring API endpoints.
 
+use super::super::helpers::get_production_model_version;
+use super::super::{ApiState, TripleScoreRequest, TripleScoreResponse};
 #[cfg(feature = "api-server")]
 use crate::CachedEmbeddingModel;
-use super::super::{ApiState, TripleScoreRequest, TripleScoreResponse};
-use super::super::helpers::get_production_model_version;
 #[cfg(feature = "api-server")]
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-};
+use axum::{extract::State, http::StatusCode, response::Json};
 use std::sync::Arc;
 
 /// Score a triple

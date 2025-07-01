@@ -168,11 +168,13 @@ impl VectorQuery {
 
         let mut hasher = DefaultHasher::new();
         self.operation_type.hash(&mut hasher);
-        
+
         // Simple hash of arguments (simplified for this implementation)
         for arg in &self.args {
             match arg {
-                VectorServiceArg::IRI(s) | VectorServiceArg::Literal(s) | VectorServiceArg::String(s) => {
+                VectorServiceArg::IRI(s)
+                | VectorServiceArg::Literal(s)
+                | VectorServiceArg::String(s) => {
                     s.hash(&mut hasher);
                 }
                 VectorServiceArg::Number(n) => {

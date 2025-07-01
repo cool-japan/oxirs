@@ -300,11 +300,11 @@ pub use simple_juniper_server::{
 
 // Advanced Juniper server with full Hyper v1 support
 pub use juniper_server::{
-    JuniperGraphQLServer as AdvancedJuniperGraphQLServer,
-    GraphQLServerBuilder as AdvancedGraphQLServerBuilder,
-    GraphQLServerConfig as AdvancedGraphQLServerConfig,
     start_graphql_server as start_advanced_graphql_server,
     start_graphql_server_with_config as start_advanced_graphql_server_with_config,
+    GraphQLServerBuilder as AdvancedGraphQLServerBuilder,
+    GraphQLServerConfig as AdvancedGraphQLServerConfig,
+    JuniperGraphQLServer as AdvancedJuniperGraphQLServer,
 };
 
 #[cfg(test)]

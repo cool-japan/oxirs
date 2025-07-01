@@ -3,10 +3,10 @@
 //! This module provides a comprehensive getting started guide for the OxiRS Rule Engine,
 //! including basic concepts, rule authoring best practices, and step-by-step examples.
 
-use std::collections::HashMap;
 use anyhow::Result;
+use std::collections::HashMap;
 
-use crate::{RuleEngine, Rule, RuleAtom, Term};
+use crate::{Rule, RuleAtom, RuleEngine, Term};
 
 /// # Quick Start Guide
 ///
@@ -71,20 +71,16 @@ impl GettingStartedGuide {
         // Rule: If X is a person, then X is mortal
         let mortality_rule = Rule {
             name: "mortality_rule".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("type".to_string()),
-                    object: Term::Constant("Person".to_string()),
-                }
-            ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("type".to_string()),
-                    object: Term::Constant("Mortal".to_string()),
-                }
-            ],
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Constant("Person".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Constant("Mortal".to_string()),
+            }],
         };
 
         engine.add_rule(mortality_rule);
@@ -100,7 +96,7 @@ impl GettingStartedGuide {
                 subject: Term::Constant("plato".to_string()),
                 predicate: Term::Constant("type".to_string()),
                 object: Term::Constant("Person".to_string()),
-            }
+            },
         ];
 
         engine.forward_chain(&facts)
@@ -123,15 +119,13 @@ impl GettingStartedGuide {
                     subject: Term::Variable("Y".to_string()),
                     predicate: Term::Constant("type".to_string()),
                     object: Term::Constant("Student".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("type".to_string()),
-                    object: Term::Constant("Teacher".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Constant("Teacher".to_string()),
+            }],
         };
 
         engine.add_rule(teaching_rule);
@@ -176,34 +170,28 @@ impl GettingStartedGuide {
                     subject: Term::Variable("Y".to_string()),
                     predicate: Term::Constant("parent".to_string()),
                     object: Term::Variable("Z".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("grandparent".to_string()),
-                    object: Term::Variable("Z".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("grandparent".to_string()),
+                object: Term::Variable("Z".to_string()),
+            }],
         };
 
         // Rule 2: If X is parent of Y, then Y is child of X
         let child_rule = Rule {
             name: "child_rule".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("parent".to_string()),
-                    object: Term::Variable("Y".to_string()),
-                }
-            ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Y".to_string()),
-                    predicate: Term::Constant("child".to_string()),
-                    object: Term::Variable("X".to_string()),
-                }
-            ],
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("parent".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Y".to_string()),
+                predicate: Term::Constant("child".to_string()),
+                object: Term::Variable("X".to_string()),
+            }],
         };
 
         engine.add_rule(grandparent_rule);
@@ -225,7 +213,7 @@ impl GettingStartedGuide {
                 subject: Term::Constant("bob".to_string()),
                 predicate: Term::Constant("parent".to_string()),
                 object: Term::Constant("diana".to_string()),
-            }
+            },
         ];
 
         engine.forward_chain(&facts)
@@ -248,15 +236,13 @@ impl GettingStartedGuide {
                     subject: Term::Variable("Z".to_string()),
                     predicate: Term::Constant("type".to_string()),
                     object: Term::Variable("X".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Z".to_string()),
-                    predicate: Term::Constant("type".to_string()),
-                    object: Term::Variable("Y".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Z".to_string()),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
         };
 
         // Rule 2: If P is subproperty of Q, and X P Y, then X Q Y
@@ -272,15 +258,13 @@ impl GettingStartedGuide {
                     subject: Term::Variable("X".to_string()),
                     predicate: Term::Variable("P".to_string()),
                     object: Term::Variable("Y".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Variable("Q".to_string()),
-                    object: Term::Variable("Y".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Variable("Q".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
         };
 
         engine.add_rule(subclass_rule);
@@ -315,7 +299,7 @@ impl GettingStartedGuide {
                 subject: Term::Constant("john".to_string()),
                 predicate: Term::Constant("owns".to_string()),
                 object: Term::Constant("fido".to_string()),
-            }
+            },
         ];
 
         engine.forward_chain(&facts)
@@ -337,7 +321,7 @@ impl RuleAuthoringBestPractices {
             "Use uppercase for variables to distinguish from constants",
             "Use descriptive names for complex patterns",
             "Avoid single-letter variables except for simple cases",
-            "Use domain-specific prefixes (e.g., 'pers_' for person variables)"
+            "Use domain-specific prefixes (e.g., 'pers_' for person variables)",
         ]
     }
 
@@ -349,7 +333,7 @@ impl RuleAuthoringBestPractices {
             "Group related atoms together for readability",
             "Use built-in predicates judiciously for validation",
             "Keep rule bodies concise and focused",
-            "Avoid overly complex rules - split into multiple simpler rules"
+            "Avoid overly complex rules - split into multiple simpler rules",
         ]
     }
 
@@ -363,7 +347,7 @@ impl RuleAuthoringBestPractices {
             "Consider rule ordering for optimization",
             "Profile rule execution to identify bottlenecks",
             "Use caching for expensive computations",
-            "Minimize variable scope and reuse"
+            "Minimize variable scope and reuse",
         ]
     }
 
@@ -371,13 +355,22 @@ impl RuleAuthoringBestPractices {
     pub fn common_pitfalls() -> Vec<(&'static str, &'static str)> {
         vec![
             ("Infinite recursion", "Always ensure termination conditions"),
-            ("Variable scope confusion", "Use clear naming and scope management"),
-            ("Performance bottlenecks", "Profile and optimize critical rules"),
+            (
+                "Variable scope confusion",
+                "Use clear naming and scope management",
+            ),
+            (
+                "Performance bottlenecks",
+                "Profile and optimize critical rules",
+            ),
             ("Rule conflicts", "Test rule interactions thoroughly"),
-            ("Over-generalization", "Be specific about rule applicability"),
+            (
+                "Over-generalization",
+                "Be specific about rule applicability",
+            ),
             ("Under-specification", "Include necessary constraints"),
             ("Complex debugging", "Use rule tracing and debugging tools"),
-            ("Memory issues", "Monitor memory usage with large rule sets")
+            ("Memory issues", "Monitor memory usage with large rule sets"),
         ]
     }
 
@@ -403,43 +396,41 @@ impl RuleAuthoringBestPractices {
                     subject: Term::Variable("Manager".to_string()),
                     predicate: Term::Constant("type".to_string()),
                     object: Term::Constant("Manager".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Employee".to_string()),
-                    predicate: Term::Constant("hasManager".to_string()),
-                    object: Term::Variable("Manager".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Employee".to_string()),
+                predicate: Term::Constant("hasManager".to_string()),
+                object: Term::Variable("Manager".to_string()),
+            }],
         }
     }
 
     /// Example of rule validation and testing
     pub fn validate_rule_example() -> Result<bool> {
         let rule = Self::well_structured_rule_example();
-        
+
         // Validation checks
         if rule.name.is_empty() {
             return Ok(false);
         }
-        
+
         if rule.body.is_empty() || rule.head.is_empty() {
             return Ok(false);
         }
-        
+
         // Check for variable consistency
         let mut body_vars = std::collections::HashSet::new();
         let mut head_vars = std::collections::HashSet::new();
-        
+
         for atom in &rule.body {
             Self::collect_variables(atom, &mut body_vars);
         }
-        
+
         for atom in &rule.head {
             Self::collect_variables(atom, &mut head_vars);
         }
-        
+
         // All head variables should appear in body (safety condition)
         for var in &head_vars {
             if !body_vars.contains(var) {
@@ -447,13 +438,17 @@ impl RuleAuthoringBestPractices {
                 return Ok(false);
             }
         }
-        
+
         Ok(true)
     }
-    
+
     fn collect_variables(atom: &RuleAtom, vars: &mut std::collections::HashSet<String>) {
         match atom {
-            RuleAtom::Triple { subject, predicate, object } => {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
                 if let Term::Variable(var) = subject {
                     vars.insert(var.clone());
                 }
@@ -463,7 +458,7 @@ impl RuleAuthoringBestPractices {
                 if let Term::Variable(var) = object {
                     vars.insert(var.clone());
                 }
-            },
+            }
             _ => {} // Handle other atom types as needed
         }
     }
@@ -479,56 +474,69 @@ impl DebuggingGuide {
     /// Enable debugging for rule execution
     pub fn enable_debugging_example() -> Result<()> {
         use crate::debug::DebuggableRuleEngine;
-        
+
         let mut debug_engine = DebuggableRuleEngine::new();
-        
+
         // Enable debugging with step mode
         debug_engine.enable_debugging(true);
-        
+
         // Add breakpoints
         debug_engine.add_breakpoint("specific_rule_name");
-        
+
         // Execute with debugging
-        let facts = vec![
-            RuleAtom::Triple {
-                subject: Term::Constant("test".to_string()),
-                predicate: Term::Constant("type".to_string()),
-                object: Term::Constant("entity".to_string()),
-            }
-        ];
-        
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("test".to_string()),
+            predicate: Term::Constant("type".to_string()),
+            object: Term::Constant("entity".to_string()),
+        }];
+
         let _result = debug_engine.debug_forward_chain(&facts)?;
-        
+
         // Get debugging information
         let trace = debug_engine.get_trace();
         let metrics = debug_engine.get_metrics();
         let conflicts = debug_engine.get_conflicts();
-        
+
         println!("Execution trace: {} entries", trace.len());
         println!("Performance metrics: {:?}", metrics);
         println!("Detected conflicts: {}", conflicts.len());
-        
+
         // Generate debug report
         let report = debug_engine.generate_debug_report();
         println!("{}", report);
-        
+
         Ok(())
     }
-    
+
     /// Common debugging techniques
     pub fn debugging_techniques() -> Vec<(&'static str, &'static str)> {
         vec![
-            ("Rule tracing", "Enable execution tracing to see rule firing order"),
-            ("Breakpoints", "Set breakpoints on specific rules for step debugging"),
-            ("Performance profiling", "Measure rule execution times and memory usage"),
-            ("Conflict detection", "Identify contradictory or redundant rules"),
+            (
+                "Rule tracing",
+                "Enable execution tracing to see rule firing order",
+            ),
+            (
+                "Breakpoints",
+                "Set breakpoints on specific rules for step debugging",
+            ),
+            (
+                "Performance profiling",
+                "Measure rule execution times and memory usage",
+            ),
+            (
+                "Conflict detection",
+                "Identify contradictory or redundant rules",
+            ),
             ("Derivation paths", "Trace how specific facts were derived"),
             ("Cache analysis", "Monitor cache hit rates and performance"),
             ("Memory monitoring", "Track memory usage during execution"),
-            ("Statistics collection", "Gather execution statistics for optimization")
+            (
+                "Statistics collection",
+                "Gather execution statistics for optimization",
+            ),
         ]
     }
-    
+
     /// Troubleshooting checklist
     pub fn troubleshooting_checklist() -> Vec<&'static str> {
         vec![
@@ -541,7 +549,7 @@ impl DebuggingGuide {
             "Verify rule execution order and dependencies",
             "Test with simplified rule sets first",
             "Use debugging tools to trace execution",
-            "Check for rule conflicts and contradictions"
+            "Check for rule conflicts and contradictions",
         ]
     }
 }
@@ -556,101 +564,103 @@ impl IntegrationExamples {
     /// Integration with RDF data
     pub fn rdf_integration_example() -> Result<Vec<RuleAtom>> {
         let mut engine = RuleEngine::new();
-        
+
         // Rule for RDFS subclass inference
         let rdfs_rule = Rule {
             name: "rdfs_subclass".to_string(),
             body: vec![
                 RuleAtom::Triple {
                     subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string(),
+                    ),
                     object: Term::Variable("Y".to_string()),
                 },
                 RuleAtom::Triple {
                     subject: Term::Variable("Z".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                    ),
                     object: Term::Variable("X".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Z".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
-                    object: Term::Variable("Y".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Z".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                ),
+                object: Term::Variable("Y".to_string()),
+            }],
         };
-        
+
         engine.add_rule(rdfs_rule);
-        
+
         // RDF facts (using full URIs)
         let facts = vec![
             RuleAtom::Triple {
                 subject: Term::Constant("http://example.org/Dog".to_string()),
-                predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string(),
+                ),
                 object: Term::Constant("http://example.org/Animal".to_string()),
             },
             RuleAtom::Triple {
                 subject: Term::Constant("http://example.org/fido".to_string()),
-                predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                ),
                 object: Term::Constant("http://example.org/Dog".to_string()),
-            }
+            },
         ];
-        
+
         engine.forward_chain(&facts)
     }
-    
+
     /// Integration with caching system
     pub fn caching_integration_example() -> Result<()> {
         use crate::cache::RuleCache;
-        
+
         let cache = RuleCache::new();
         let mut engine = RuleEngine::new();
-        
+
         // Enable caching
         engine.set_cache(Some(cache));
-        
+
         // Rules will now be automatically cached
         let rule = Rule {
             name: "cached_rule".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("likes".to_string()),
-                    object: Term::Constant("coffee".to_string()),
-                }
-            ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("drinks".to_string()),
-                    object: Term::Constant("beverage".to_string()),
-                }
-            ],
-        };
-        
-        engine.add_rule(rule);
-        
-        let facts = vec![
-            RuleAtom::Triple {
-                subject: Term::Constant("alice".to_string()),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
                 predicate: Term::Constant("likes".to_string()),
                 object: Term::Constant("coffee".to_string()),
-            }
-        ];
-        
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("drinks".to_string()),
+                object: Term::Constant("beverage".to_string()),
+            }],
+        };
+
+        engine.add_rule(rule);
+
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("alice".to_string()),
+            predicate: Term::Constant("likes".to_string()),
+            object: Term::Constant("coffee".to_string()),
+        }];
+
         // First execution - results will be cached
         let _result1 = engine.forward_chain(&facts)?;
-        
+
         // Second execution - results will be retrieved from cache
         let _result2 = engine.forward_chain(&facts)?;
-        
+
         // Get cache statistics
         if let Some(cache) = engine.get_cache() {
             let stats = cache.get_statistics();
             println!("Cache hit rate: {:.2}%", stats.rule_cache.hit_rate * 100.0);
         }
-        
+
         Ok(())
     }
 }
@@ -665,18 +675,21 @@ mod tests {
         assert!(result.is_ok());
         let facts = result.unwrap();
         assert!(!facts.is_empty());
-        
+
         // Should derive that socrates and plato are mortal
-        let mortal_facts: Vec<_> = facts.iter()
+        let mortal_facts: Vec<_> = facts
+            .iter()
             .filter(|fact| match fact {
-                RuleAtom::Triple { predicate, object, .. } => {
-                    predicate == &Term::Constant("type".to_string()) &&
-                    object == &Term::Constant("Mortal".to_string())
-                },
-                _ => false
+                RuleAtom::Triple {
+                    predicate, object, ..
+                } => {
+                    predicate == &Term::Constant("type".to_string())
+                        && object == &Term::Constant("Mortal".to_string())
+                }
+                _ => false,
             })
             .collect();
-        
+
         assert!(mortal_facts.len() >= 2);
     }
 
@@ -692,17 +705,18 @@ mod tests {
         let result = GettingStartedGuide::family_relationships_example();
         assert!(result.is_ok());
         let facts = result.unwrap();
-        
+
         // Should derive grandparent and child relationships
-        let grandparent_facts: Vec<_> = facts.iter()
+        let grandparent_facts: Vec<_> = facts
+            .iter()
             .filter(|fact| match fact {
                 RuleAtom::Triple { predicate, .. } => {
                     predicate == &Term::Constant("grandparent".to_string())
-                },
-                _ => false
+                }
+                _ => false,
             })
             .collect();
-        
+
         assert!(!grandparent_facts.is_empty());
     }
 
@@ -718,7 +732,7 @@ mod tests {
         let result = GettingStartedGuide::ontology_reasoning_example();
         assert!(result.is_ok());
         let facts = result.unwrap();
-        
+
         // Should derive class and property inheritance
         assert!(!facts.is_empty());
     }
@@ -728,18 +742,21 @@ mod tests {
         let result = IntegrationExamples::rdf_integration_example();
         assert!(result.is_ok());
         let facts = result.unwrap();
-        
+
         // Should derive that fido is an Animal (via subclass inference)
-        let animal_facts: Vec<_> = facts.iter()
+        let animal_facts: Vec<_> = facts
+            .iter()
             .filter(|fact| match fact {
-                RuleAtom::Triple { subject, object, .. } => {
-                    subject == &Term::Constant("http://example.org/fido".to_string()) &&
-                    object == &Term::Constant("http://example.org/Animal".to_string())
-                },
-                _ => false
+                RuleAtom::Triple {
+                    subject, object, ..
+                } => {
+                    subject == &Term::Constant("http://example.org/fido".to_string())
+                        && object == &Term::Constant("http://example.org/Animal".to_string())
+                }
+                _ => false,
             })
             .collect();
-        
+
         assert!(!animal_facts.is_empty());
     }
 }

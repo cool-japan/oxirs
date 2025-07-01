@@ -3,13 +3,13 @@
 //! Advanced debugging capabilities for rule engines including execution visualization,
 //! derivation path tracing, performance profiling, and conflict detection.
 
+use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{self, Display};
 use std::time::{Duration, Instant};
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
 
-use crate::{Rule, RuleAtom, Term, RuleEngine};
+use crate::{Rule, RuleAtom, RuleEngine, Term};
 
 /// Debug trace entry recording rule execution steps
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -238,26 +238,57 @@ impl DebuggableRuleEngine {
     /// Generate debug report
     pub fn generate_debug_report(&self) -> String {
         let mut report = String::new();
-        
+
         report.push_str("=== RULE ENGINE DEBUG REPORT ===\n\n");
-        
+
         // Performance metrics
         report.push_str("PERFORMANCE METRICS:\n");
-        report.push_str(&format!("Total execution time: {:?}\n", self.debug_session.metrics.total_execution_time));
-        report.push_str(&format!("Facts processed: {}\n", self.debug_session.metrics.facts_processed));
-        report.push_str(&format!("Facts derived: {}\n", self.debug_session.metrics.facts_derived));
-        report.push_str(&format!("Memory peak: {} bytes\n", self.debug_session.metrics.memory_peak));
-        report.push_str(&format!("Cache hits: {}\n", self.debug_session.metrics.cache_hits));
-        report.push_str(&format!("Cache misses: {}\n", self.debug_session.metrics.cache_misses));
+        report.push_str(&format!(
+            "Total execution time: {:?}\n",
+            self.debug_session.metrics.total_execution_time
+        ));
+        report.push_str(&format!(
+            "Facts processed: {}\n",
+            self.debug_session.metrics.facts_processed
+        ));
+        report.push_str(&format!(
+            "Facts derived: {}\n",
+            self.debug_session.metrics.facts_derived
+        ));
+        report.push_str(&format!(
+            "Memory peak: {} bytes\n",
+            self.debug_session.metrics.memory_peak
+        ));
+        report.push_str(&format!(
+            "Cache hits: {}\n",
+            self.debug_session.metrics.cache_hits
+        ));
+        report.push_str(&format!(
+            "Cache misses: {}\n",
+            self.debug_session.metrics.cache_misses
+        ));
         report.push_str("\n");
 
         // Rule execution times
         report.push_str("RULE EXECUTION TIMES:\n");
-        let mut rule_times: Vec<_> = self.debug_session.metrics.rule_execution_times.iter().collect();
+        let mut rule_times: Vec<_> = self
+            .debug_session
+            .metrics
+            .rule_execution_times
+            .iter()
+            .collect();
         rule_times.sort_by(|a, b| b.1.cmp(a.1));
         for (rule, time) in rule_times.iter().take(10) {
-            let count = self.debug_session.metrics.rule_execution_counts.get(*rule).unwrap_or(&0);
-            report.push_str(&format!("  {}: {:?} (executed {} times)\n", rule, time, count));
+            let count = self
+                .debug_session
+                .metrics
+                .rule_execution_counts
+                .get(*rule)
+                .unwrap_or(&0);
+            report.push_str(&format!(
+                "  {}: {:?} (executed {} times)\n",
+                rule, time, count
+            ));
         }
         report.push_str("\n");
 
@@ -265,8 +296,10 @@ impl DebuggableRuleEngine {
         if !self.debug_session.conflicts.is_empty() {
             report.push_str("DETECTED CONFLICTS:\n");
             for conflict in &self.debug_session.conflicts {
-                report.push_str(&format!("  {:?} - {:?}: {}\n", 
-                    conflict.severity, conflict.conflict_type, conflict.resolution_suggestion));
+                report.push_str(&format!(
+                    "  {:?} - {:?}: {}\n",
+                    conflict.severity, conflict.conflict_type, conflict.resolution_suggestion
+                ));
             }
             report.push_str("\n");
         }
@@ -279,8 +312,10 @@ impl DebuggableRuleEngine {
                 report.push_str(&format!("  Depth: {}\n", path.total_depth));
                 report.push_str(&format!("  Rules involved: {:?}\n", path.involved_rules));
                 for step in &path.steps {
-                    report.push_str(&format!("    Step {}: {} -> {:?}\n", 
-                        step.step_number, step.rule_name, step.conclusion));
+                    report.push_str(&format!(
+                        "    Step {}: {} -> {:?}\n",
+                        step.step_number, step.rule_name, step.conclusion
+                    ));
                 }
                 report.push_str("\n");
             }
@@ -358,33 +393,58 @@ impl DebuggableRuleEngine {
     fn detect_performance_bottlenecks(&mut self) {
         // Analyze performance metrics to identify bottlenecks
         for (rule_name, duration) in &self.debug_session.metrics.rule_execution_times {
-            if duration.as_millis() > 100 { // Threshold for slow rules
+            if duration.as_millis() > 100 {
+                // Threshold for slow rules
                 self.debug_session.conflicts.push(RuleConflict {
                     conflict_type: ConflictType::PerformanceBottleneck,
                     involved_rules: vec![rule_name.clone()],
                     conflicting_facts: vec![],
                     severity: ConflictSeverity::Warning,
-                    resolution_suggestion: format!("Rule '{}' is slow ({}ms). Consider optimization.", rule_name, duration.as_millis()),
+                    resolution_suggestion: format!(
+                        "Rule '{}' is slow ({}ms). Consider optimization.",
+                        rule_name,
+                        duration.as_millis()
+                    ),
                 });
             }
         }
     }
 
     fn record_trace_entry(&mut self, entry: TraceEntry) {
+        // Extract values before moving the entry
+        let rule_name = entry.rule_name.clone();
+        let duration = entry.duration;
+
         self.debug_session.trace.push(entry);
-        
+
         // Update metrics
-        if let Some(current_count) = self.debug_session.metrics.rule_execution_counts.get_mut(&entry.rule_name) {
+        if let Some(current_count) = self
+            .debug_session
+            .metrics
+            .rule_execution_counts
+            .get_mut(&rule_name)
+        {
             *current_count += 1;
         } else {
-            self.debug_session.metrics.rule_execution_counts.insert(entry.rule_name.clone(), 1);
+            self.debug_session
+                .metrics
+                .rule_execution_counts
+                .insert(rule_name.clone(), 1);
         }
 
         // Update timing
-        if let Some(current_time) = self.debug_session.metrics.rule_execution_times.get_mut(&entry.rule_name) {
-            *current_time += entry.duration;
+        if let Some(current_time) = self
+            .debug_session
+            .metrics
+            .rule_execution_times
+            .get_mut(&rule_name)
+        {
+            *current_time += duration;
         } else {
-            self.debug_session.metrics.rule_execution_times.insert(entry.rule_name.clone(), entry.duration);
+            self.debug_session
+                .metrics
+                .rule_execution_times
+                .insert(rule_name, duration);
         }
     }
 
@@ -397,9 +457,9 @@ impl DebuggableRuleEngine {
 
     fn estimate_memory_usage(&self) -> usize {
         // Rough estimation of memory usage
-        std::mem::size_of::<RuleEngine>() +
-        self.debug_session.trace.len() * std::mem::size_of::<TraceEntry>() +
-        self.debug_session.derivations.len() * 1024 // Rough estimate
+        std::mem::size_of::<RuleEngine>()
+            + self.debug_session.trace.len() * std::mem::size_of::<TraceEntry>()
+            + self.debug_session.derivations.len() * 1024 // Rough estimate
     }
 }
 
@@ -476,11 +536,11 @@ mod tests {
     #[test]
     fn test_debugging_enable_disable() {
         let mut engine = DebuggableRuleEngine::new();
-        
+
         engine.enable_debugging(true);
         assert!(engine.debug_enabled);
         assert!(engine.debug_session.step_mode);
-        
+
         engine.disable_debugging();
         assert!(!engine.debug_enabled);
     }
@@ -488,10 +548,10 @@ mod tests {
     #[test]
     fn test_breakpoint_management() {
         let mut engine = DebuggableRuleEngine::new();
-        
+
         engine.add_breakpoint("test_rule");
         assert!(engine.debug_session.breakpoints.contains("test_rule"));
-        
+
         engine.remove_breakpoint("test_rule");
         assert!(!engine.debug_session.breakpoints.contains("test_rule"));
     }
@@ -500,7 +560,7 @@ mod tests {
     fn test_trace_entry_recording() {
         let mut engine = DebuggableRuleEngine::new();
         engine.enable_debugging(false);
-        
+
         let entry = TraceEntry {
             timestamp: engine.current_timestamp(),
             rule_name: "test_rule".to_string(),
@@ -510,42 +570,52 @@ mod tests {
             duration: Duration::from_millis(10),
             memory_usage: 1024,
         };
-        
+
         engine.record_trace_entry(entry);
         assert_eq!(engine.debug_session.trace.len(), 1);
-        assert_eq!(engine.debug_session.metrics.rule_execution_counts.get("test_rule"), Some(&1));
+        assert_eq!(
+            engine
+                .debug_session
+                .metrics
+                .rule_execution_counts
+                .get("test_rule"),
+            Some(&1)
+        );
     }
 
     #[test]
     fn test_performance_bottleneck_detection() {
         let mut engine = DebuggableRuleEngine::new();
         engine.enable_debugging(false);
-        
+
         // Add a slow rule execution
-        engine.debug_session.metrics.rule_execution_times.insert(
-            "slow_rule".to_string(), 
-            Duration::from_millis(200)
-        );
-        
+        engine
+            .debug_session
+            .metrics
+            .rule_execution_times
+            .insert("slow_rule".to_string(), Duration::from_millis(200));
+
         engine.analyze_conflicts();
-        
+
         // Should detect performance bottleneck
         assert!(!engine.debug_session.conflicts.is_empty());
-        assert!(engine.debug_session.conflicts.iter().any(|c| {
-            matches!(c.conflict_type, ConflictType::PerformanceBottleneck)
-        }));
+        assert!(engine
+            .debug_session
+            .conflicts
+            .iter()
+            .any(|c| { matches!(c.conflict_type, ConflictType::PerformanceBottleneck) }));
     }
 
     #[test]
     fn test_debug_report_generation() {
         let mut engine = DebuggableRuleEngine::new();
         engine.enable_debugging(false);
-        
+
         // Add some test data
         engine.debug_session.metrics.facts_processed = 100;
         engine.debug_session.metrics.facts_derived = 50;
         engine.debug_session.metrics.total_execution_time = Duration::from_millis(500);
-        
+
         let report = engine.generate_debug_report();
         assert!(report.contains("RULE ENGINE DEBUG REPORT"));
         assert!(report.contains("Facts processed: 100"));
@@ -557,7 +627,7 @@ mod tests {
         let engine = DebuggableRuleEngine::new();
         let json_result = engine.export_debug_data();
         assert!(json_result.is_ok());
-        
+
         let json_data = json_result.unwrap();
         assert!(json_data.contains("trace"));
         assert!(json_data.contains("metrics"));

@@ -13,8 +13,8 @@ use tokio::time::{interval, Interval};
 use tracing::{debug, error, info, warn};
 
 use crate::ai_query_predictor::{AIQueryPredictor, QueryPrediction};
-use crate::quantum_optimizer::{QuantumOptimizer, QuantumState};
 use crate::predictive_analytics::{PredictiveAnalyticsEngine, TrendAnalysis};
+use crate::quantum_optimizer::{QuantumQueryOptimizer, QuantumState};
 
 /// Configuration for quantum-enhanced real-time analytics
 #[derive(Debug, Clone)]
@@ -76,11 +76,11 @@ impl Complex64 {
     pub fn new(real: f64, imag: f64) -> Self {
         Self { real, imag }
     }
-    
+
     pub fn magnitude(&self) -> f64 {
         (self.real * self.real + self.imag * self.imag).sqrt()
     }
-    
+
     pub fn phase(&self) -> f64 {
         self.imag.atan2(self.real)
     }
@@ -138,7 +138,7 @@ impl QuantumRealTimeAnalyticsEngine {
         }));
 
         let measurement_history = Arc::new(AsyncMutex::new(VecDeque::new()));
-        
+
         let analytics_metrics = Arc::new(AsyncRwLock::new(QuantumAnalyticsMetrics {
             quantum_advantage_ratio: 1.0,
             entanglement_strength: 0.0,
@@ -174,16 +174,18 @@ impl QuantumRealTimeAnalyticsEngine {
 
         let monitoring_task = tokio::spawn(async move {
             let mut interval = interval(config.monitoring_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 if let Err(e) = Self::perform_quantum_measurement(
                     &config,
                     &quantum_state,
                     &measurement_history,
                     &analytics_metrics,
-                ).await {
+                )
+                .await
+                {
                     error!("Quantum measurement failed: {}", e);
                 }
             }
@@ -202,30 +204,39 @@ impl QuantumRealTimeAnalyticsEngine {
         analytics_metrics: &Arc<AsyncRwLock<QuantumAnalyticsMetrics>>,
     ) -> Result<()> {
         let state = quantum_state.read().await;
-        
+
         // Quantum state measurement
-        let probability_distribution: Vec<f64> = state.amplitudes.iter()
+        let probability_distribution: Vec<f64> = state
+            .amplitudes
+            .iter()
             .map(|amp| amp.magnitude().powi(2))
             .collect();
-        
+
         // Calculate entanglement entropy
-        let entanglement_entropy = -probability_distribution.iter()
+        let entanglement_entropy = -probability_distribution
+            .iter()
             .filter(|&&p| p > 1e-10)
             .map(|&p| p * p.ln())
             .sum::<f64>();
-        
+
         // Calculate coherence measure
-        let coherence_measure = state.amplitudes.iter()
+        let coherence_measure = state
+            .amplitudes
+            .iter()
             .map(|amp| amp.magnitude())
-            .sum::<f64>() / state.amplitudes.len() as f64;
-        
+            .sum::<f64>()
+            / state.amplitudes.len() as f64;
+
         // Calculate quantum fidelity
         let ideal_state = vec![Complex64::new(1.0, 0.0); state.amplitudes.len()];
-        let fidelity = state.amplitudes.iter()
+        let fidelity = state
+            .amplitudes
+            .iter()
             .zip(ideal_state.iter())
             .map(|(a, b)| (a.real * b.real + a.imag * b.imag).abs())
-            .sum::<f64>() / state.amplitudes.len() as f64;
-        
+            .sum::<f64>()
+            / state.amplitudes.len() as f64;
+
         let measurement = QuantumMeasurement {
             state_vector: state.amplitudes.clone(),
             probability_distribution,
@@ -234,19 +245,20 @@ impl QuantumRealTimeAnalyticsEngine {
             measurement_timestamp: SystemTime::now(),
             quantum_fidelity: fidelity,
         };
-        
+
         // Store measurement
         {
             let mut history = measurement_history.lock().await;
             history.push_back(measurement.clone());
-            
+
             // Keep only recent measurements
-            let window_size = (config.analytics_window.as_secs() / config.monitoring_interval.as_secs()) as usize;
+            let window_size =
+                (config.analytics_window.as_secs() / config.monitoring_interval.as_secs()) as usize;
             while history.len() > window_size {
                 history.pop_front();
             }
         }
-        
+
         // Update analytics metrics
         {
             let mut metrics = analytics_metrics.write().await;
@@ -254,28 +266,31 @@ impl QuantumRealTimeAnalyticsEngine {
             metrics.superposition_efficiency = coherence_measure;
             metrics.decoherence_resistance = fidelity;
             metrics.total_quantum_operations += 1;
-            
+
             // Calculate quantum advantage ratio
             let classical_complexity = state.amplitudes.len() as f64;
             let quantum_complexity = state.amplitudes.len() as f64 * 2.0_f64.ln(); // O(log n) quantum
             metrics.quantum_advantage_ratio = classical_complexity / quantum_complexity;
-            
+
             // Calculate speedup factor based on entanglement
             metrics.quantum_speedup_factor = 1.0 + entanglement_entropy * 0.5;
-            
+
             // Interference optimization metric
-            let interference_sum = state.amplitudes.iter()
+            let interference_sum = state
+                .amplitudes
+                .iter()
                 .zip(state.amplitudes.iter().skip(1))
                 .map(|(a, b)| (a.real * b.real + a.imag * b.imag).abs())
                 .sum::<f64>();
-            metrics.interference_optimization = interference_sum / (state.amplitudes.len() - 1) as f64;
+            metrics.interference_optimization =
+                interference_sum / (state.amplitudes.len() - 1) as f64;
         }
-        
+
         debug!(
             "Quantum measurement completed - Entropy: {:.3}, Coherence: {:.3}, Fidelity: {:.3}",
             entanglement_entropy, coherence_measure, fidelity
         );
-        
+
         Ok(())
     }
 
@@ -285,9 +300,9 @@ impl QuantumRealTimeAnalyticsEngine {
         let query_bytes = query.as_bytes();
         let num_qubits = (query_bytes.len() as f64).log2().ceil() as usize;
         let superposition_size = 2_usize.pow(num_qubits as u32);
-        
+
         let mut query_superposition_states = vec![Complex64::new(0.0, 0.0); superposition_size];
-        
+
         // Initialize superposition with query features
         for (i, &byte) in query_bytes.iter().enumerate() {
             let index = (i % superposition_size);
@@ -297,30 +312,32 @@ impl QuantumRealTimeAnalyticsEngine {
                 amplitude * (index as f64 * 0.1).sin(),
             );
         }
-        
+
         // Normalize the superposition
-        let total_magnitude: f64 = query_superposition_states.iter()
+        let total_magnitude: f64 = query_superposition_states
+            .iter()
             .map(|amp| amp.magnitude().powi(2))
             .sum();
         let normalization_factor = total_magnitude.sqrt();
-        
+
         for state in &mut query_superposition_states {
             state.real /= normalization_factor;
             state.imag /= normalization_factor;
         }
-        
+
         // Analyze entangled operations
         let mut entangled_operations = HashMap::new();
         let operations = ["SELECT", "JOIN", "FILTER", "GROUP", "ORDER", "LIMIT"];
-        
+
         for operation in &operations {
             if query.to_uppercase().contains(operation) {
                 // Calculate entanglement strength for this operation
-                let op_positions: Vec<usize> = query.to_uppercase()
+                let op_positions: Vec<usize> = query
+                    .to_uppercase()
                     .match_indices(operation)
                     .map(|(pos, _)| pos)
                     .collect();
-                
+
                 let entanglement_strength = if op_positions.len() > 1 {
                     // Calculate quantum entanglement between operation positions
                     let mut entanglement = 0.0;
@@ -334,44 +351,46 @@ impl QuantumRealTimeAnalyticsEngine {
                 } else {
                     0.1 // Minimal entanglement for single operation
                 };
-                
+
                 entangled_operations.insert(operation.to_string(), entanglement_strength);
             }
         }
-        
+
         // Calculate interference patterns
         let mut interference_patterns = Vec::new();
         for i in 0..superposition_size - 1 {
             let state1 = &query_superposition_states[i];
             let state2 = &query_superposition_states[i + 1];
-            
+
             // Quantum interference calculation: |ψ₁ + ψ₂|²
             let combined_real = state1.real + state2.real;
             let combined_imag = state1.imag + state2.imag;
             let interference = combined_real * combined_real + combined_imag * combined_imag;
-            
+
             interference_patterns.push(interference);
         }
-        
+
         // Calculate optimization probability using quantum mechanics
-        let entanglement_avg = entangled_operations.values().sum::<f64>() / entangled_operations.len().max(1) as f64;
-        let interference_avg = interference_patterns.iter().sum::<f64>() / interference_patterns.len() as f64;
+        let entanglement_avg =
+            entangled_operations.values().sum::<f64>() / entangled_operations.len().max(1) as f64;
+        let interference_avg =
+            interference_patterns.iter().sum::<f64>() / interference_patterns.len() as f64;
         let optimization_probability = (entanglement_avg + interference_avg) / 2.0;
-        
+
         // Quantum complexity estimate
         let quantum_complexity_estimate = query.len() as f64 * (entanglement_avg + 1.0).ln();
-        
+
         // Expected quantum speedup
         let classical_complexity = query.len() as f64;
         let expected_quantum_speedup = classical_complexity / quantum_complexity_estimate;
-        
+
         // Confidence interval based on quantum uncertainty
         let uncertainty = 0.1 * entanglement_avg; // Heisenberg-inspired uncertainty
         let confidence_interval = (
             optimization_probability * (1.0 - uncertainty),
             optimization_probability * (1.0 + uncertainty),
         );
-        
+
         Ok(QuantumQueryAnalysis {
             query_superposition_states,
             entangled_operations,
@@ -397,29 +416,32 @@ impl QuantumRealTimeAnalyticsEngine {
     /// Optimize query using quantum-enhanced analytics
     pub async fn optimize_query_with_quantum_analytics(&self, query: &str) -> Result<String> {
         let analysis = self.analyze_query(query).await?;
-        
+
         // Use quantum analysis to optimize query
         let mut optimized_query = query.to_string();
-        
+
         // Apply quantum-informed optimizations
         if analysis.optimization_probability > 0.5 {
             // High optimization probability - apply aggressive optimizations
-            if analysis.entangled_operations.contains_key("JOIN") && 
-               analysis.entangled_operations.contains_key("FILTER") {
+            if analysis.entangled_operations.contains_key("JOIN")
+                && analysis.entangled_operations.contains_key("FILTER")
+            {
                 // Quantum entanglement suggests filter pushdown
                 info!("Quantum analysis suggests filter pushdown optimization");
                 // Note: Actual query rewriting would be more complex
                 optimized_query = format!("-- Quantum-optimized: {}", optimized_query);
             }
         }
-        
+
         if analysis.expected_quantum_speedup > 2.0 {
             // Significant speedup expected - add parallel execution hints
-            info!("Quantum analysis suggests parallel execution (speedup: {:.2}x)", 
-                  analysis.expected_quantum_speedup);
+            info!(
+                "Quantum analysis suggests parallel execution (speedup: {:.2}x)",
+                analysis.expected_quantum_speedup
+            );
             optimized_query = format!("-- Quantum-parallel: {}", optimized_query);
         }
-        
+
         Ok(optimized_query)
     }
 
@@ -450,12 +472,13 @@ impl QuantumRealTimeAnalyticsEngine {
     pub async fn generate_performance_insights(&self) -> Result<QuantumPerformanceInsights> {
         let metrics = self.get_analytics_metrics().await?;
         let recent_measurements = self.get_recent_measurements(10).await?;
-        
+
         // Calculate quantum efficiency score
-        let quantum_efficiency_score = (metrics.quantum_advantage_ratio * 
-                                       metrics.superposition_efficiency * 
-                                       metrics.decoherence_resistance) / 3.0;
-        
+        let quantum_efficiency_score = (metrics.quantum_advantage_ratio
+            * metrics.superposition_efficiency
+            * metrics.decoherence_resistance)
+            / 3.0;
+
         // Identify entanglement opportunities
         let entanglement_opportunities = if metrics.entanglement_strength < 0.5 {
             vec![
@@ -466,7 +489,7 @@ impl QuantumRealTimeAnalyticsEngine {
         } else {
             vec![]
         };
-        
+
         // Superposition optimizations
         let superposition_optimizations = if metrics.superposition_efficiency < 0.7 {
             vec![
@@ -477,7 +500,7 @@ impl QuantumRealTimeAnalyticsEngine {
         } else {
             vec![]
         };
-        
+
         // Interference warnings
         let interference_warnings = if metrics.interference_optimization > 0.8 {
             vec![
@@ -487,7 +510,7 @@ impl QuantumRealTimeAnalyticsEngine {
         } else {
             vec![]
         };
-        
+
         // Decoherence risks
         let decoherence_risks = if metrics.decoherence_resistance < 0.6 {
             vec![
@@ -498,23 +521,28 @@ impl QuantumRealTimeAnalyticsEngine {
         } else {
             vec![]
         };
-        
+
         // Quantum resource usage
         let mut quantum_resource_usage = HashMap::new();
         quantum_resource_usage.insert("qubits".to_string(), self.config.superposition_depth as f64);
-        quantum_resource_usage.insert("entanglement_pairs".to_string(), metrics.entanglement_strength * 10.0);
-        quantum_resource_usage.insert("coherence_time".to_string(), 
-                                    self.config.quantum_coherence_time.as_millis() as f64);
-        
+        quantum_resource_usage.insert(
+            "entanglement_pairs".to_string(),
+            metrics.entanglement_strength * 10.0,
+        );
+        quantum_resource_usage.insert(
+            "coherence_time".to_string(),
+            self.config.quantum_coherence_time.as_millis() as f64,
+        );
+
         // Recommended quantum gates
         let recommended_quantum_gates = vec![
             "Hadamard".to_string(),
-            "CNOT".to_string(), 
+            "CNOT".to_string(),
             "Toffoli".to_string(),
             "Phase".to_string(),
             "Rotation".to_string(),
         ];
-        
+
         Ok(QuantumPerformanceInsights {
             quantum_efficiency_score,
             entanglement_opportunities,
@@ -538,16 +566,13 @@ mod tests {
         let config = QuantumRealTimeAnalyticsConfig::default();
         let ai_config = AIQueryPredictorConfig::default();
         let quantum_config = QuantumOptimizerConfig::default();
-        
+
         let ai_predictor = Arc::new(AIQueryPredictor::new(ai_config).await.unwrap());
         let quantum_optimizer = Arc::new(QuantumOptimizer::new(quantum_config).await.unwrap());
-        
-        let analytics = QuantumRealTimeAnalyticsEngine::new(
-            config,
-            ai_predictor,
-            quantum_optimizer,
-        ).await;
-        
+
+        let analytics =
+            QuantumRealTimeAnalyticsEngine::new(config, ai_predictor, quantum_optimizer).await;
+
         assert!(analytics.is_ok());
     }
 
@@ -556,19 +581,18 @@ mod tests {
         let config = QuantumRealTimeAnalyticsConfig::default();
         let ai_config = AIQueryPredictorConfig::default();
         let quantum_config = QuantumOptimizerConfig::default();
-        
+
         let ai_predictor = Arc::new(AIQueryPredictor::new(ai_config).await.unwrap());
         let quantum_optimizer = Arc::new(QuantumOptimizer::new(quantum_config).await.unwrap());
-        
-        let analytics = QuantumRealTimeAnalyticsEngine::new(
-            config,
-            ai_predictor,
-            quantum_optimizer,
-        ).await.unwrap();
-        
+
+        let analytics =
+            QuantumRealTimeAnalyticsEngine::new(config, ai_predictor, quantum_optimizer)
+                .await
+                .unwrap();
+
         let query = "SELECT * FROM users JOIN orders ON users.id = orders.user_id WHERE users.active = true";
         let analysis = analytics.analyze_query(query).await;
-        
+
         assert!(analysis.is_ok());
         let analysis = analysis.unwrap();
         assert!(!analysis.query_superposition_states.is_empty());
@@ -581,19 +605,18 @@ mod tests {
         let config = QuantumRealTimeAnalyticsConfig::default();
         let ai_config = AIQueryPredictorConfig::default();
         let quantum_config = QuantumOptimizerConfig::default();
-        
+
         let ai_predictor = Arc::new(AIQueryPredictor::new(ai_config).await.unwrap());
         let quantum_optimizer = Arc::new(QuantumOptimizer::new(quantum_config).await.unwrap());
-        
-        let analytics = QuantumRealTimeAnalyticsEngine::new(
-            config,
-            ai_predictor,
-            quantum_optimizer,
-        ).await.unwrap();
-        
+
+        let analytics =
+            QuantumRealTimeAnalyticsEngine::new(config, ai_predictor, quantum_optimizer)
+                .await
+                .unwrap();
+
         let insights = analytics.generate_performance_insights().await;
         assert!(insights.is_ok());
-        
+
         let insights = insights.unwrap();
         assert!(insights.quantum_efficiency_score >= 0.0);
         assert!(!insights.quantum_resource_usage.is_empty());

@@ -106,23 +106,25 @@ impl ReportFormat {
 
     /// Check if this is an RDF format
     pub fn is_rdf_format(&self) -> bool {
-        matches!(self, 
-            ReportFormat::Turtle | 
-            ReportFormat::JsonLd | 
-            ReportFormat::RdfXml | 
-            ReportFormat::NTriples
+        matches!(
+            self,
+            ReportFormat::Turtle
+                | ReportFormat::JsonLd
+                | ReportFormat::RdfXml
+                | ReportFormat::NTriples
         )
     }
 
     /// Check if this is a structured data format
     pub fn is_structured(&self) -> bool {
-        matches!(self, 
-            ReportFormat::Json | 
-            ReportFormat::JsonLd | 
-            ReportFormat::Yaml |
-            ReportFormat::RdfXml |
-            ReportFormat::Turtle |
-            ReportFormat::NTriples
+        matches!(
+            self,
+            ReportFormat::Json
+                | ReportFormat::JsonLd
+                | ReportFormat::Yaml
+                | ReportFormat::RdfXml
+                | ReportFormat::Turtle
+                | ReportFormat::NTriples
         )
     }
 

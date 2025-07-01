@@ -19,13 +19,28 @@ impl KernelManager {
 
     fn initialize_kernels(&mut self) {
         let kernels = vec![
-            ("cosine_similarity".to_string(), self.get_cosine_similarity_kernel()),
-            ("euclidean_distance".to_string(), self.get_euclidean_distance_kernel()),
+            (
+                "cosine_similarity".to_string(),
+                self.get_cosine_similarity_kernel(),
+            ),
+            (
+                "euclidean_distance".to_string(),
+                self.get_euclidean_distance_kernel(),
+            ),
             ("dot_product".to_string(), self.get_dot_product_kernel()),
-            ("vector_addition".to_string(), self.get_vector_addition_kernel()),
-            ("vector_normalization".to_string(), self.get_vector_normalization_kernel()),
+            (
+                "vector_addition".to_string(),
+                self.get_vector_addition_kernel(),
+            ),
+            (
+                "vector_normalization".to_string(),
+                self.get_vector_normalization_kernel(),
+            ),
             ("hnsw_search".to_string(), self.get_hnsw_search_kernel()),
-            ("batch_distance_computation".to_string(), self.get_batch_distance_kernel()),
+            (
+                "batch_distance_computation".to_string(),
+                self.get_batch_distance_kernel(),
+            ),
         ];
 
         for (name, kernel) in kernels {
@@ -76,7 +91,8 @@ impl KernelManager {
             
             results[query_idx * db_count + db_idx] = similarity;
         }
-        "#.to_string()
+        "#
+        .to_string()
     }
 
     fn get_euclidean_distance_kernel(&self) -> String {
@@ -116,7 +132,8 @@ impl KernelManager {
             
             results[query_idx * db_count + db_idx] = sqrtf(sum_sq_diff);
         }
-        "#.to_string()
+        "#
+        .to_string()
     }
 
     fn get_dot_product_kernel(&self) -> String {
@@ -150,7 +167,8 @@ impl KernelManager {
                 atomicAdd(result, shared_sum[0]);
             }
         }
-        "#.to_string()
+        "#
+        .to_string()
     }
 
     fn get_vector_addition_kernel(&self) -> String {
@@ -166,7 +184,8 @@ impl KernelManager {
                 result[tid] = a[tid] + b[tid];
             }
         }
-        "#.to_string()
+        "#
+        .to_string()
     }
 
     fn get_vector_normalization_kernel(&self) -> String {
@@ -205,7 +224,8 @@ impl KernelManager {
                 vector[i] *= shared_norm;
             }
         }
-        "#.to_string()
+        "#
+        .to_string()
     }
 
     fn get_hnsw_search_kernel(&self) -> String {
@@ -280,7 +300,8 @@ impl KernelManager {
                 *queue_size = queue_tail;
             }
         }
-        "#.to_string()
+        "#
+        .to_string()
     }
 
     fn get_batch_distance_kernel(&self) -> String {
@@ -324,7 +345,8 @@ impl KernelManager {
             
             distances[i * batch_size_b + j] = distance;
         }
-        "#.to_string()
+        "#
+        .to_string()
     }
 }
 

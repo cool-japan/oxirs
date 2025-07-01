@@ -4,12 +4,12 @@
 //! real-world applications of knowledge graph embeddings including recommendation
 //! systems, search relevance, clustering performance, and classification accuracy.
 
-pub mod recommendation;
-pub mod search;
-pub mod clustering;
 pub mod classification;
-pub mod retrieval;
+pub mod clustering;
 pub mod query_answering;
+pub mod recommendation;
+pub mod retrieval;
+pub mod search;
 
 use crate::EmbeddingModel;
 use anyhow::{anyhow, Result};
@@ -19,31 +19,31 @@ use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 // Re-export all public types from submodules
-pub use recommendation::{
-    RecommendationEvaluator, RecommendationResults, RecommendationMetric,
-    UserInteraction, InteractionType, ItemMetadata, UserRecommendationResults,
-    CoverageStats, DiversityAnalysis, ABTestResults,
-};
-pub use search::{
-    SearchEvaluator, SearchResults, SearchMetric, RelevanceJudgment,
-    QueryResults, QueryPerformanceAnalysis, SearchEffectivenessMetrics,
+pub use classification::{
+    ClassResults, ClassificationEvaluator, ClassificationMetric, ClassificationReport,
+    ClassificationResults, SimpleClassifier,
 };
 pub use clustering::{
-    ClusteringEvaluator, ClusteringResults, ClusteringMetric,
-    ClusterAnalysis, ClusteringStabilityAnalysis,
-};
-pub use classification::{
-    ClassificationEvaluator, ClassificationResults, ClassificationMetric,
-    ClassResults, ClassificationReport, SimpleClassifier,
-};
-pub use retrieval::{
-    RetrievalEvaluator, RetrievalResults, RetrievalMetric,
-    DocumentMetadata, RetrievalQuery, RetrievalAnalysis,
+    ClusterAnalysis, ClusteringEvaluator, ClusteringMetric, ClusteringResults,
+    ClusteringStabilityAnalysis,
 };
 pub use query_answering::{
-    ApplicationQueryAnsweringEvaluator, QueryAnsweringResults,
-    QueryAnsweringMetric, QuestionAnswerPair, QueryResult,
-    QueryType, QueryComplexity, TypeResults, ComplexityResults, ReasoningAnalysis,
+    ApplicationQueryAnsweringEvaluator, ComplexityResults, QueryAnsweringMetric,
+    QueryAnsweringResults, QueryComplexity, QueryResult, QueryType, QuestionAnswerPair,
+    ReasoningAnalysis, TypeResults,
+};
+pub use recommendation::{
+    ABTestResults, CoverageStats, DiversityAnalysis, InteractionType, ItemMetadata,
+    RecommendationEvaluator, RecommendationMetric, RecommendationResults, UserInteraction,
+    UserRecommendationResults,
+};
+pub use retrieval::{
+    DocumentMetadata, RetrievalAnalysis, RetrievalEvaluator, RetrievalMetric, RetrievalQuery,
+    RetrievalResults,
+};
+pub use search::{
+    QueryPerformanceAnalysis, QueryResults, RelevanceJudgment, SearchEffectivenessMetrics,
+    SearchEvaluator, SearchMetric, SearchResults,
 };
 
 /// Configuration for application evaluation
@@ -174,11 +174,7 @@ impl ApplicationTaskEvaluator {
         }
 
         if self.config.enable_search_eval {
-            search_results = Some(
-                self.search_evaluator
-                    .evaluate(model, &self.config)
-                    .await?,
-            );
+            search_results = Some(self.search_evaluator.evaluate(model, &self.config).await?);
         }
 
         if self.config.enable_clustering_eval {
@@ -278,7 +274,10 @@ impl ApplicationTaskEvaluator {
         }
 
         if let Some(clustering) = clustering {
-            let silhouette = clustering.metric_scores.get("SilhouetteScore").unwrap_or(&0.0);
+            let silhouette = clustering
+                .metric_scores
+                .get("SilhouetteScore")
+                .unwrap_or(&0.0);
             total_score += silhouette.abs(); // Silhouette can be negative
             component_count += 1;
         }
@@ -291,7 +290,10 @@ impl ApplicationTaskEvaluator {
         }
 
         if let Some(retrieval) = retrieval {
-            let precision = retrieval.metric_scores.get("PrecisionAtK(10)").unwrap_or(&0.0);
+            let precision = retrieval
+                .metric_scores
+                .get("PrecisionAtK(10)")
+                .unwrap_or(&0.0);
             let recall = retrieval.metric_scores.get("RecallAtK(10)").unwrap_or(&0.0);
             total_score += (precision + recall) / 2.0;
             component_count += 1;

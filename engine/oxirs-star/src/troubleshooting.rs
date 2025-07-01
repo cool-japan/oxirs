@@ -892,7 +892,6 @@ impl MigrationAssistant {
         Ok(plan)
     }
 
-
     /// Execute the migration with the given plan
     pub fn execute_migration(
         &self,

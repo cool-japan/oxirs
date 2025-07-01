@@ -674,28 +674,6 @@ impl SecurityManager {
         }
     }
 
-    async fn validate_plugin(&self, plugin: &WasmPlugin) -> Result<()> {
-        // Basic security validation
-        if plugin.wasm_bytes.is_empty() {
-            return Err(anyhow!("Empty WASM module"));
-        }
-
-        // Log security audit
-        let audit_entry = SecurityAuditEntry {
-            timestamp: Utc::now(),
-            plugin_id: plugin.id.clone(),
-            action: "plugin_validation".to_string(),
-            risk_level: match plugin.security_level {
-                SecurityLevel::Untrusted => RiskLevel::High,
-                SecurityLevel::BasicSandbox => RiskLevel::Medium,
-                _ => RiskLevel::Low,
-            },
-            details: format!("Validated plugin {} with security level {:?}", plugin.id, plugin.security_level),
-        };
-
-        self.audit_log.write().await.push(audit_entry);
-        Ok(())
-    }
 }
 
 impl PerformanceMetrics {
@@ -994,6 +972,27 @@ impl WasmIntelligentCache {
     }
 }
 
+/// Execution behavior analysis result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionBehavior {
+    pub memory_usage: u64,
+    pub cpu_usage: f64,
+    pub network_calls: u32,
+    pub file_accesses: u32,
+    pub anomalies: Vec<String>,
+    pub execution_time_ms: u64,
+}
+
+/// Adaptive security policy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdaptivePolicy {
+    pub policy_type: String,
+    pub restrictions: HashMap<String, String>,
+    pub created_at: DateTime<Utc>,
+    pub last_updated: DateTime<Utc>,
+    pub severity_level: String,
+}
+
 /// Enhanced security sandbox with adaptive monitoring
 pub struct AdaptiveSecuritySandbox {
     threat_detector: ThreatDetector,
@@ -1072,6 +1071,54 @@ impl AdaptiveSecuritySandbox {
         }
         
         Ok(recommendations)
+    }
+
+    /// Update adaptive security policies based on behavior and threats
+    async fn update_adaptive_policies(
+        &self,
+        plugin_id: &str,
+        _behavior: &ExecutionBehavior,
+        threats: &[ThreatIndicator],
+    ) -> Result<()> {
+        let mut policies = self.adaptive_policies.write().await;
+        let now = Utc::now();
+        
+        // Update policies based on threat analysis
+        for threat in threats {
+            match threat.threat_type {
+                ThreatType::ExcessiveMemoryUsage => {
+                    let mut restrictions = HashMap::new();
+                    restrictions.insert("action".to_string(), "reduce_memory".to_string());
+                    policies.insert(
+                        format!("{}_memory_limit", plugin_id),
+                        AdaptivePolicy {
+                            policy_type: "memory_restriction".to_string(),
+                            restrictions,
+                            created_at: now,
+                            last_updated: now,
+                            severity_level: "high".to_string(),
+                        },
+                    );
+                },
+                ThreatType::SuspiciousNetworkActivity => {
+                    let mut restrictions = HashMap::new();
+                    restrictions.insert("action".to_string(), "block_network".to_string());
+                    policies.insert(
+                        format!("{}_network_access", plugin_id),
+                        AdaptivePolicy {
+                            policy_type: "network_restriction".to_string(),
+                            restrictions,
+                            created_at: now,
+                            last_updated: now,
+                            severity_level: "critical".to_string(),
+                        },
+                    );
+                },
+                _ => {}
+            }
+        }
+        
+        Ok(())
     }
 }
 
@@ -1421,26 +1468,6 @@ pub struct ThreatSignature {
     pub severity: f64,
 }
 
-#[derive(Debug)]
-pub struct AdaptivePolicy {
-    pub policy_id: String,
-    pub rules: Vec<SecurityRule>,
-    pub adaptation_history: Vec<PolicyChange>,
-}
-
-#[derive(Debug)]
-pub struct SecurityRule {
-    pub condition: String,
-    pub action: String,
-    pub confidence: f64,
-}
-
-#[derive(Debug)]
-pub struct PolicyChange {
-    pub timestamp: DateTime<Utc>,
-    pub change_type: String,
-    pub rationale: String,
-}
 
 #[derive(Debug, Default)]
 pub struct SecurityMetrics {

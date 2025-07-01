@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use crate::real_time_embedding_pipeline::{
-    traits::{HealthStatus, ContentItem},
+    traits::{ContentItem, HealthStatus},
     types::{StreamState, StreamStatus},
 };
 
@@ -217,15 +217,15 @@ impl StreamProcessor {
     /// Check stream health
     pub async fn health_check(&self) -> Result<HealthStatus> {
         if !self.is_running.load(Ordering::Acquire) {
-            return Ok(HealthStatus::Unhealthy { 
-                message: "Stream processor is not running".to_string() 
+            return Ok(HealthStatus::Unhealthy {
+                message: "Stream processor is not running".to_string(),
             });
         }
 
         // Check various health metrics
         if self.state.error_count > 10 {
-            return Ok(HealthStatus::Warning { 
-                message: format!("High error count: {}", self.state.error_count) 
+            return Ok(HealthStatus::Warning {
+                message: format!("High error count: {}", self.state.error_count),
             });
         }
 
@@ -282,7 +282,9 @@ impl StreamMultiplexer {
 
     /// Add a stream processor
     pub fn add_processor(&self, processor: StreamProcessor) -> Result<()> {
-        let mut processors = self.processors.write()
+        let mut processors = self
+            .processors
+            .write()
             .map_err(|_| anyhow::anyhow!("Failed to acquire processors lock"))?;
 
         let stream_id = processor.stream_id.clone();
@@ -292,7 +294,9 @@ impl StreamMultiplexer {
 
     /// Remove a stream processor
     pub async fn remove_processor(&self, stream_id: &str) -> Result<()> {
-        let mut processors = self.processors.write()
+        let mut processors = self
+            .processors
+            .write()
             .map_err(|_| anyhow::anyhow!("Failed to acquire processors lock"))?;
 
         if let Some(processor) = processors.remove(stream_id) {
@@ -304,14 +308,14 @@ impl StreamMultiplexer {
 
     /// Get processor count
     pub fn processor_count(&self) -> usize {
-        self.processors.read()
-            .map(|p| p.len())
-            .unwrap_or(0)
+        self.processors.read().map(|p| p.len()).unwrap_or(0)
     }
 
     /// Check multiplexer health
     pub async fn health_check(&self) -> Result<HealthStatus> {
-        let processors = self.processors.read()
+        let processors = self
+            .processors
+            .read()
             .map_err(|_| anyhow::anyhow!("Failed to acquire processors lock"))?;
 
         let unhealthy_count = {
@@ -328,12 +332,12 @@ impl StreamMultiplexer {
         if unhealthy_count == 0 {
             Ok(HealthStatus::Healthy)
         } else if unhealthy_count < processors.len() {
-            Ok(HealthStatus::Warning { 
-                message: format!("{} processors are unhealthy", unhealthy_count) 
+            Ok(HealthStatus::Warning {
+                message: format!("{} processors are unhealthy", unhealthy_count),
             })
         } else {
-            Ok(HealthStatus::Unhealthy { 
-                message: "All processors are unhealthy".to_string() 
+            Ok(HealthStatus::Unhealthy {
+                message: "All processors are unhealthy".to_string(),
             })
         }
     }
@@ -361,13 +365,13 @@ mod tests {
     async fn test_stream_processor_start_stop() {
         let config = StreamConfig::default();
         let processor = StreamProcessor::new("test_stream".to_string(), config).unwrap();
-        
+
         assert!(!processor.is_running());
-        
+
         let start_result = processor.start().await;
         assert!(start_result.is_ok());
         assert!(processor.is_running());
-        
+
         let stop_result = processor.stop().await;
         assert!(stop_result.is_ok());
     }

@@ -32,7 +32,7 @@ impl FederatedVectorService {
             .timeout(self.timeout)
             .build()
             .map_err(|e| anyhow!("Failed to create HTTP client: {}", e))?;
-        
+
         self.client = Some(client);
         Ok(())
     }
@@ -49,20 +49,25 @@ impl FederatedVectorService {
         // In a real implementation, this would make an actual HTTP request
         // For now, we'll simulate the response
         let simulated_response = self.simulate_remote_response(query)?;
-        
+
         let execution_time = start_time.elapsed();
         let parsed_result = self.parse_query_response(simulated_response)?;
-        
+
         Ok(VectorQueryResult::new(parsed_result, execution_time))
     }
 
     /// Serialize query for transmission
     fn serialize_query(&self, query: &VectorQuery) -> Result<String> {
         let mut query_json = serde_json::Map::new();
-        query_json.insert("operation".to_string(), Value::String(query.operation_type.clone()));
-        
-        let args_json: Vec<Value> = query.args.iter().map(|arg| {
-            match arg {
+        query_json.insert(
+            "operation".to_string(),
+            Value::String(query.operation_type.clone()),
+        );
+
+        let args_json: Vec<Value> = query
+            .args
+            .iter()
+            .map(|arg| match arg {
                 super::config::VectorServiceArg::IRI(iri) => {
                     let mut arg_obj = serde_json::Map::new();
                     arg_obj.insert("type".to_string(), Value::String("iri".to_string()));
@@ -78,7 +83,10 @@ impl FederatedVectorService {
                 super::config::VectorServiceArg::Number(num) => {
                     let mut arg_obj = serde_json::Map::new();
                     arg_obj.insert("type".to_string(), Value::String("number".to_string()));
-                    arg_obj.insert("value".to_string(), Value::Number(serde_json::Number::from_f64(*num as f64).unwrap()));
+                    arg_obj.insert(
+                        "value".to_string(),
+                        Value::Number(serde_json::Number::from_f64(*num as f64).unwrap()),
+                    );
                     Value::Object(arg_obj)
                 }
                 super::config::VectorServiceArg::String(s) => {
@@ -90,17 +98,26 @@ impl FederatedVectorService {
                 super::config::VectorServiceArg::Vector(v) => {
                     let mut arg_obj = serde_json::Map::new();
                     arg_obj.insert("type".to_string(), Value::String("vector".to_string()));
-                    arg_obj.insert("dimensions".to_string(), Value::Number(serde_json::Number::from(v.len())));
-                    let values: Vec<Value> = v.as_slice().iter().map(|&f| Value::Number(serde_json::Number::from_f64(f as f64).unwrap())).collect();
+                    arg_obj.insert(
+                        "dimensions".to_string(),
+                        Value::Number(serde_json::Number::from(v.len())),
+                    );
+                    let values: Vec<Value> = v
+                        .as_slice()
+                        .iter()
+                        .map(|&f| Value::Number(serde_json::Number::from_f64(f as f64).unwrap()))
+                        .collect();
                     arg_obj.insert("values".to_string(), Value::Array(values));
                     Value::Object(arg_obj)
                 }
-            }
-        }).collect();
-        
+            })
+            .collect();
+
         query_json.insert("args".to_string(), Value::Array(args_json));
-        
-        let metadata_json: serde_json::Map<String, Value> = query.metadata.iter()
+
+        let metadata_json: serde_json::Map<String, Value> = query
+            .metadata
+            .iter()
             .map(|(k, v)| (k.clone(), Value::String(v.clone())))
             .collect();
         query_json.insert("metadata".to_string(), Value::Object(metadata_json));
@@ -115,8 +132,11 @@ impl FederatedVectorService {
         match query.operation_type.as_str() {
             "similarity" => {
                 let mut response = serde_json::Map::new();
-                response.insert("type".to_string(), Value::String("similarity_list".to_string()));
-                
+                response.insert(
+                    "type".to_string(),
+                    Value::String("similarity_list".to_string()),
+                );
+
                 let results = vec![
                     serde_json::json!({"resource": "http://example.org/sim1", "score": 0.85}),
                     serde_json::json!({"resource": "http://example.org/sim2", "score": 0.78}),
@@ -126,8 +146,11 @@ impl FederatedVectorService {
             }
             "search" => {
                 let mut response = serde_json::Map::new();
-                response.insert("type".to_string(), Value::String("similarity_list".to_string()));
-                
+                response.insert(
+                    "type".to_string(),
+                    Value::String("similarity_list".to_string()),
+                );
+
                 let results = vec![
                     serde_json::json!({"resource": "http://example.org/doc1", "score": 0.92}),
                     serde_json::json!({"resource": "http://example.org/doc2", "score": 0.88}),
@@ -139,18 +162,26 @@ impl FederatedVectorService {
             "embed" => {
                 let mut response = serde_json::Map::new();
                 response.insert("type".to_string(), Value::String("vector".to_string()));
-                response.insert("dimensions".to_string(), Value::Number(serde_json::Number::from(384)));
-                
+                response.insert(
+                    "dimensions".to_string(),
+                    Value::Number(serde_json::Number::from(384)),
+                );
+
                 // Simulate a 384-dimensional embedding vector
                 let vector_values: Vec<Value> = (0..384)
-                    .map(|i| Value::Number(serde_json::Number::from_f64((i as f64 * 0.01) % 1.0).unwrap()))
+                    .map(|i| {
+                        Value::Number(
+                            serde_json::Number::from_f64((i as f64 * 0.01) % 1.0).unwrap(),
+                        )
+                    })
                     .collect();
                 response.insert("values".to_string(), Value::Array(vector_values));
                 Ok(Value::Object(response))
             }
-            _ => {
-                Err(anyhow!("Unsupported operation for remote execution: {}", query.operation_type))
-            }
+            _ => Err(anyhow!(
+                "Unsupported operation for remote execution: {}",
+                query.operation_type
+            )),
         }
     }
 
@@ -215,7 +246,9 @@ impl FederatedVectorService {
                     return Err(anyhow!("Vector dimensions mismatch"));
                 }
 
-                Ok(VectorServiceResult::Vector(crate::Vector::new(vector_values)))
+                Ok(VectorServiceResult::Vector(crate::Vector::new(
+                    vector_values,
+                )))
             }
             "clusters" => {
                 let clusters_json = response["value"]
@@ -329,7 +362,10 @@ impl FederationManager {
             }
         }
 
-        let successful_count = federated_results.iter().filter(|r| r.result.is_some()).count();
+        let successful_count = federated_results
+            .iter()
+            .filter(|r| r.result.is_some())
+            .count();
         let failed_count = federated_results.len() - successful_count;
 
         Ok(FederatedQueryResult {
@@ -348,7 +384,8 @@ impl FederationManager {
 
     /// Remove endpoint from federation
     pub fn remove_endpoint(&mut self, endpoint_url: &str) {
-        self.endpoints.retain(|service| service.endpoint_url != endpoint_url);
+        self.endpoints
+            .retain(|service| service.endpoint_url != endpoint_url);
     }
 
     /// Get endpoint health status
@@ -456,7 +493,7 @@ impl FederatedQueryResult {
     /// Merge results from all successful endpoints
     pub fn merge_results(&self) -> Vec<(String, f32)> {
         let mut all_results = Vec::new();
-        
+
         for endpoint_result in &self.endpoint_results {
             if let Some(ref result) = endpoint_result.result {
                 all_results.extend(result.results.clone());
@@ -466,7 +503,7 @@ impl FederatedQueryResult {
         // Simple deduplication and sorting
         all_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         all_results.dedup_by(|a, b| a.0 == b.0);
-        
+
         all_results
     }
 
@@ -518,7 +555,7 @@ mod tests {
     #[test]
     fn test_retry_policy() {
         let policy = RetryPolicy::new(3, Duration::from_millis(100), true);
-        
+
         assert_eq!(policy.get_delay(0), Duration::from_millis(100));
         assert_eq!(policy.get_delay(1), Duration::from_millis(200));
         assert_eq!(policy.get_delay(2), Duration::from_millis(400));
@@ -530,7 +567,7 @@ mod tests {
             "http://endpoint1.com".to_string(),
             "http://endpoint2.com".to_string(),
         ];
-        
+
         let mut manager = FederationManager::new(endpoints);
         assert_eq!(manager.endpoints.len(), 2);
 
@@ -547,7 +584,7 @@ mod tests {
             vec![("doc1".to_string(), 0.9), ("doc2".to_string(), 0.8)],
             Duration::from_millis(100),
         );
-        
+
         let result2 = VectorQueryResult::new(
             vec![("doc2".to_string(), 0.85), ("doc3".to_string(), 0.7)],
             Duration::from_millis(120),

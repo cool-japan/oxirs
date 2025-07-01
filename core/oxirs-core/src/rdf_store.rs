@@ -4,12 +4,12 @@ use crate::indexing::{IndexStats, MemoryUsage, UltraIndex};
 use crate::model::*;
 use crate::optimization::RdfArena;
 use crate::{OxirsError, Result};
+use async_trait::async_trait;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-use async_trait::async_trait;
 
 /// SPARQL query results supporting different result types
 #[derive(Debug, Clone)]
@@ -27,17 +27,17 @@ impl QueryResults {
     pub fn empty_bindings() -> Self {
         QueryResults::Bindings(Vec::new())
     }
-    
+
     /// Create ASK result
     pub fn boolean(value: bool) -> Self {
         QueryResults::Boolean(value)
     }
-    
+
     /// Create CONSTRUCT/DESCRIBE results
     pub fn graph(quads: Vec<Quad>) -> Self {
         QueryResults::Graph(quads)
     }
-    
+
     /// Check if results are empty
     pub fn is_empty(&self) -> bool {
         match self {
@@ -46,7 +46,7 @@ impl QueryResults {
             QueryResults::Graph(quads) => quads.is_empty(),
         }
     }
-    
+
     /// Get the number of results
     pub fn len(&self) -> usize {
         match self {
@@ -69,19 +69,19 @@ impl VariableBinding {
             bindings: std::collections::HashMap::new(),
         }
     }
-    
+
     pub fn bind(&mut self, variable: String, value: Term) {
         self.bindings.insert(variable, value);
     }
-    
+
     pub fn get(&self, variable: &str) -> Option<&Term> {
         self.bindings.get(variable)
     }
-    
+
     pub fn variables(&self) -> impl Iterator<Item = &String> {
         self.bindings.keys()
     }
-    
+
     pub fn values(&self) -> impl Iterator<Item = &Term> {
         self.bindings.values()
     }
@@ -287,10 +287,10 @@ impl MemoryStorage {
 pub trait Store: Send + Sync {
     /// Insert a quad into the store
     fn insert_quad(&mut self, quad: Quad) -> Result<bool>;
-    
+
     /// Remove a quad from the store  
     fn remove_quad(&mut self, quad: &Quad) -> Result<bool>;
-    
+
     /// Find quads matching the given pattern
     fn find_quads(
         &self,
@@ -299,28 +299,35 @@ pub trait Store: Send + Sync {
         object: Option<&Object>,
         graph_name: Option<&GraphName>,
     ) -> Result<Vec<Quad>>;
-    
+
     /// Check if the store is ready for operations
     fn is_ready(&self) -> bool;
-    
+
     /// Get the number of quads in the store
     fn len(&self) -> Result<usize>;
-    
+
     /// Check if the store is empty
     fn is_empty(&self) -> Result<bool>;
-    
+
     /// Query the store with SPARQL
     fn query(&self, sparql: &str) -> Result<OxirsQueryResults>;
-    
+
     /// Prepare a SPARQL query for execution
     fn prepare_query(&self, sparql: &str) -> Result<PreparedQuery>;
-    
+
     /// Get all triples in the store (converts quads to triples)
     fn triples(&self) -> Result<Vec<Triple>> {
         let quads = self.find_quads(None, None, None, None)?;
-        Ok(quads.into_iter().map(|quad| {
-            Triple::new(quad.subject().clone(), quad.predicate().clone(), quad.object().clone())
-        }).collect())
+        Ok(quads
+            .into_iter()
+            .map(|quad| {
+                Triple::new(
+                    quad.subject().clone(),
+                    quad.predicate().clone(),
+                    quad.object().clone(),
+                )
+            })
+            .collect())
     }
 }
 
@@ -333,7 +340,7 @@ impl PreparedQuery {
     pub fn new(sparql: String) -> Self {
         Self { sparql }
     }
-    
+
     /// Execute the prepared query
     pub fn exec(&self) -> Result<QueryResultsIterator> {
         // Simplified implementation - in reality this would parse and execute SPARQL
@@ -341,7 +348,7 @@ impl PreparedQuery {
     }
 }
 
-/// Iterator over query results 
+/// Iterator over query results
 pub struct QueryResultsIterator {
     results: Vec<SolutionMapping>,
     index: usize,
@@ -358,7 +365,7 @@ impl QueryResultsIterator {
 
 impl Iterator for QueryResultsIterator {
     type Item = SolutionMapping;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.results.len() {
             let result = self.results[self.index].clone();
@@ -382,7 +389,7 @@ impl SolutionMapping {
             bindings: std::collections::HashMap::new(),
         }
     }
-    
+
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Term)> {
         self.bindings.iter()
     }
@@ -852,11 +859,11 @@ impl Store for RdfStore {
     fn insert_quad(&mut self, quad: Quad) -> Result<bool> {
         self.insert_quad(quad)
     }
-    
+
     fn remove_quad(&mut self, quad: &Quad) -> Result<bool> {
         self.remove_quad(quad)
     }
-    
+
     fn find_quads(
         &self,
         subject: Option<&Subject>,
@@ -866,23 +873,23 @@ impl Store for RdfStore {
     ) -> Result<Vec<Quad>> {
         self.query_quads(subject, predicate, object, graph_name)
     }
-    
+
     fn is_ready(&self) -> bool {
         true // Simple implementation
     }
-    
+
     fn len(&self) -> Result<usize> {
         self.len()
     }
-    
+
     fn is_empty(&self) -> Result<bool> {
         self.is_empty()
     }
-    
+
     fn query(&self, sparql: &str) -> Result<OxirsQueryResults> {
         self.query(sparql)
     }
-    
+
     fn prepare_query(&self, sparql: &str) -> Result<PreparedQuery> {
         Ok(PreparedQuery::new(sparql.to_string()))
     }
@@ -914,11 +921,11 @@ impl Store for ConcreteStore {
     fn insert_quad(&mut self, quad: Quad) -> Result<bool> {
         self.inner.insert_quad(quad)
     }
-    
+
     fn remove_quad(&mut self, quad: &Quad) -> Result<bool> {
         self.inner.remove_quad(quad)
     }
-    
+
     fn find_quads(
         &self,
         subject: Option<&Subject>,
@@ -926,25 +933,26 @@ impl Store for ConcreteStore {
         object: Option<&Object>,
         graph_name: Option<&GraphName>,
     ) -> Result<Vec<Quad>> {
-        self.inner.find_quads(subject, predicate, object, graph_name)
+        self.inner
+            .find_quads(subject, predicate, object, graph_name)
     }
-    
+
     fn is_ready(&self) -> bool {
         self.inner.is_ready()
     }
-    
+
     fn len(&self) -> Result<usize> {
         self.inner.len()
     }
-    
+
     fn is_empty(&self) -> Result<bool> {
         self.inner.is_empty()
     }
-    
+
     fn query(&self, sparql: &str) -> Result<OxirsQueryResults> {
         self.inner.query(sparql)
     }
-    
+
     fn prepare_query(&self, sparql: &str) -> Result<PreparedQuery> {
         self.inner.prepare_query(sparql)
     }
@@ -964,40 +972,40 @@ impl OxirsQueryResults {
             variables: Vec::new(),
         }
     }
-    
+
     pub fn from_bindings(bindings: Vec<VariableBinding>, variables: Vec<String>) -> Self {
         OxirsQueryResults {
             results: QueryResults::Bindings(bindings),
             variables,
         }
     }
-    
+
     pub fn from_boolean(value: bool) -> Self {
         OxirsQueryResults {
             results: QueryResults::Boolean(value),
             variables: Vec::new(),
         }
     }
-    
+
     pub fn from_graph(quads: Vec<Quad>) -> Self {
         OxirsQueryResults {
             results: QueryResults::Graph(quads),
             variables: Vec::new(),
         }
     }
-    
+
     pub fn results(&self) -> &QueryResults {
         &self.results
     }
-    
+
     pub fn variables(&self) -> &[String] {
         &self.variables
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.results.is_empty()
     }
-    
+
     pub fn len(&self) -> usize {
         self.results.len()
     }

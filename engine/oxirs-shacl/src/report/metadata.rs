@@ -71,7 +71,7 @@ impl ReportMetadata {
 
     /// Get formatted timestamp
     pub fn formatted_timestamp(&self) -> String {
-        if let Some(datetime) = 
+        if let Some(datetime) =
             SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(self.timestamp))
         {
             // In a real implementation, you'd use chrono or similar for proper formatting
@@ -92,15 +92,15 @@ impl ReportMetadata {
     /// Get performance summary
     pub fn performance_summary(&self) -> String {
         let mut summary = Vec::new();
-        
+
         if let Some(duration) = self.validation_duration {
             summary.push(format!("Duration: {:.2?}", duration));
         }
-        
+
         if let Some(shapes) = self.shapes_count {
             summary.push(format!("Shapes: {}", shapes));
         }
-        
+
         if let Some(size) = self.data_graph_size {
             summary.push(format!("Triples: {}", size));
         }
@@ -115,9 +115,9 @@ impl ReportMetadata {
 
     /// Check if performance data is available
     pub fn has_performance_data(&self) -> bool {
-        self.validation_duration.is_some() || 
-        self.shapes_count.is_some() || 
-        self.data_graph_size.is_some()
+        self.validation_duration.is_some()
+            || self.shapes_count.is_some()
+            || self.data_graph_size.is_some()
     }
 
     /// Get validation efficiency metrics
@@ -187,9 +187,9 @@ pub struct EfficiencyMetrics {
 impl EfficiencyMetrics {
     /// Check if metrics are available
     pub fn has_metrics(&self) -> bool {
-        self.triples_per_second.is_some() || 
-        self.shapes_per_second.is_some() || 
-        self.memory_efficiency.is_some()
+        self.triples_per_second.is_some()
+            || self.shapes_per_second.is_some()
+            || self.memory_efficiency.is_some()
     }
 
     /// Get a performance rating (0.0 to 1.0)
@@ -206,15 +206,15 @@ impl EfficiencyMetrics {
     /// Format metrics for display
     pub fn format(&self) -> String {
         let mut parts = Vec::new();
-        
+
         if let Some(tps) = self.triples_per_second {
             parts.push(format!("{:.0} triples/sec", tps));
         }
-        
+
         if let Some(sps) = self.shapes_per_second {
             parts.push(format!("{:.1} shapes/sec", sps));
         }
-        
+
         if let Some(eff) = self.memory_efficiency {
             parts.push(format!("{:.1} triples/shape", eff));
         }

@@ -1112,22 +1112,20 @@ impl NovelArchitectureModel {
 
     /// Compute quantum circuit output using advanced quantum circuits
     pub fn quantum_forward(&self, input: &Array1<f64>) -> Result<Array1<f64>> {
-        use crate::quantum_circuits::{QuantumCircuit, QuantumGate, QuantumSimulator, QNNLayerType, QuantumNeuralNetworkLayer};
+        use crate::quantum_circuits::{
+            QNNLayerType, QuantumCircuit, QuantumGate, QuantumNeuralNetworkLayer, QuantumSimulator,
+        };
 
         if let Some(ref quantum_state) = self.architecture_state.quantum_state {
             let params = &self.config.architecture_params.quantum_params;
-            
+
             // Create quantum neural network layer for input encoding
-            let encoding_layer = QuantumNeuralNetworkLayer::new(
-                params.num_qubits, 
-                QNNLayerType::AngleEmbedding
-            );
-            
+            let encoding_layer =
+                QuantumNeuralNetworkLayer::new(params.num_qubits, QNNLayerType::AngleEmbedding);
+
             // Create variational circuit layer
-            let variational_layer = QuantumNeuralNetworkLayer::new(
-                params.num_qubits,
-                QNNLayerType::StronglyEntangling
-            );
+            let variational_layer =
+                QuantumNeuralNetworkLayer::new(params.num_qubits, QNNLayerType::StronglyEntangling);
 
             // Build combined circuit
             let mut circuit = QuantumCircuit::new(params.num_qubits);

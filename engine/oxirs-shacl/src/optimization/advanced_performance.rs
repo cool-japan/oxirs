@@ -3,13 +3,13 @@
 //! This module provides comprehensive performance analytics with adaptive threshold
 //! adjustment, predictive optimization, and real-time performance monitoring.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
 
 use crate::{
     constraints::{Constraint, ConstraintEvaluationResult},
-    ConstraintComponentId, ShapeId, Result, ShaclError,
+    ConstraintComponentId, Result, ShaclError, ShapeId,
 };
 
 /// Advanced performance analytics engine with adaptive optimization
@@ -297,7 +297,8 @@ impl AdvancedPerformanceAnalytics {
         memory_usage: usize,
     ) {
         // Update constraint metrics
-        let metrics = self.constraint_metrics
+        let metrics = self
+            .constraint_metrics
             .entry(constraint_id.clone())
             .or_insert_with(|| ConstraintPerformanceMetrics::new());
 
@@ -308,13 +309,14 @@ impl AdvancedPerformanceAnalytics {
         self.global_metrics.total_validation_time += execution_time;
 
         // Record for real-time monitoring
-        self.real_time_monitor.record_operation(PerformanceOperation {
-            timestamp: Instant::now(),
-            operation_type: OperationType::ConstraintEvaluation(constraint_id.clone()),
-            execution_time,
-            memory_usage,
-            success: result.is_satisfied(),
-        });
+        self.real_time_monitor
+            .record_operation(PerformanceOperation {
+                timestamp: Instant::now(),
+                operation_type: OperationType::ConstraintEvaluation(constraint_id.clone()),
+                execution_time,
+                memory_usage,
+                success: result.is_satisfied(),
+            });
 
         // Apply adaptive threshold adjustment
         if self.config.enable_adaptive_thresholds {
@@ -334,29 +336,39 @@ impl AdvancedPerformanceAnalytics {
         violations_count: usize,
         memory_usage: f64,
     ) {
-        let metrics = self.shape_metrics
+        let metrics = self
+            .shape_metrics
             .entry(shape_id.clone())
             .or_insert_with(|| ShapePerformanceMetrics::new());
 
-        metrics.update(execution_time, focus_nodes_count, violations_count, memory_usage);
+        metrics.update(
+            execution_time,
+            focus_nodes_count,
+            violations_count,
+            memory_usage,
+        );
 
         // Update global metrics
         self.global_metrics.total_shapes_evaluated += 1;
-        self.global_metrics.peak_memory_usage_mb = 
+        self.global_metrics.peak_memory_usage_mb =
             self.global_metrics.peak_memory_usage_mb.max(memory_usage);
 
         // Record for real-time monitoring
-        self.real_time_monitor.record_operation(PerformanceOperation {
-            timestamp: Instant::now(),
-            operation_type: OperationType::ShapeValidation(shape_id.clone()),
-            execution_time,
-            memory_usage: memory_usage as usize,
-            success: violations_count == 0,
-        });
+        self.real_time_monitor
+            .record_operation(PerformanceOperation {
+                timestamp: Instant::now(),
+                operation_type: OperationType::ShapeValidation(shape_id.clone()),
+                execution_time,
+                memory_usage: memory_usage as usize,
+                success: violations_count == 0,
+            });
     }
 
     /// Get performance predictions for optimization
-    pub fn get_performance_predictions(&self, constraint_id: &ConstraintComponentId) -> Option<PerformancePrediction> {
+    pub fn get_performance_predictions(
+        &self,
+        constraint_id: &ConstraintComponentId,
+    ) -> Option<PerformancePrediction> {
         if !self.config.enable_predictive_optimization {
             return None;
         }
@@ -364,10 +376,7 @@ impl AdvancedPerformanceAnalytics {
         if let Some(metrics) = self.constraint_metrics.get(constraint_id) {
             Some(PerformancePrediction {
                 expected_execution_time: metrics.avg_execution_time,
-                confidence_interval: (
-                    metrics.min_execution_time,
-                    metrics.max_execution_time,
-                ),
+                confidence_interval: (metrics.min_execution_time, metrics.max_execution_time),
                 predicted_success_rate: metrics.success_rate,
                 predicted_selectivity: metrics.selectivity,
                 trend: metrics.performance_trend.clone(),
@@ -378,26 +387,32 @@ impl AdvancedPerformanceAnalytics {
     }
 
     /// Adjust adaptive thresholds based on recent performance
-    fn adjust_adaptive_thresholds(&mut self, constraint_id: &ConstraintComponentId, execution_time: Duration) {
+    fn adjust_adaptive_thresholds(
+        &mut self,
+        constraint_id: &ConstraintComponentId,
+        execution_time: Duration,
+    ) {
         if let Some(metrics) = self.constraint_metrics.get_mut(constraint_id) {
             // Calculate new threshold based on recent performance
             let current_threshold = metrics.adaptive_threshold;
             let adjustment_factor = self.config.adjustment_sensitivity;
-            
+
             // If execution time is consistently above threshold, adjust upward
             if execution_time > current_threshold {
                 let adjustment = execution_time.saturating_sub(current_threshold);
-                let new_threshold = current_threshold + Duration::from_nanos(
-                    (adjustment.as_nanos() as f64 * adjustment_factor) as u64
-                );
+                let new_threshold = current_threshold
+                    + Duration::from_nanos(
+                        (adjustment.as_nanos() as f64 * adjustment_factor) as u64,
+                    );
                 metrics.adaptive_threshold = new_threshold;
             }
             // If execution time is consistently below threshold, adjust downward gradually
             else if execution_time < current_threshold {
                 let adjustment = current_threshold.saturating_sub(execution_time);
-                let new_threshold = current_threshold - Duration::from_nanos(
-                    (adjustment.as_nanos() as f64 * adjustment_factor * 0.1) as u64
-                );
+                let new_threshold = current_threshold
+                    - Duration::from_nanos(
+                        (adjustment.as_nanos() as f64 * adjustment_factor * 0.1) as u64,
+                    );
                 metrics.adaptive_threshold = new_threshold;
             }
         }
@@ -470,8 +485,8 @@ impl AdvancedPerformanceAnalytics {
 
     /// Get current performance status
     pub fn get_performance_status(&self) -> PerformanceStatus {
-        let total_operations = self.global_metrics.total_constraints_evaluated +
-                              self.global_metrics.total_shapes_evaluated;
+        let total_operations = self.global_metrics.total_constraints_evaluated
+            + self.global_metrics.total_shapes_evaluated;
 
         PerformanceStatus {
             overall_health: if self.global_metrics.overall_success_rate > 0.95 {
@@ -618,22 +633,25 @@ impl ConstraintPerformanceMetrics {
 
     fn update(&mut self, execution_time: Duration, success: bool, _memory_usage: usize) {
         self.total_evaluations += 1;
-        
+
         // Update execution time statistics
-        let total_time = self.avg_execution_time * self.total_evaluations.saturating_sub(1) as u32 + execution_time;
+        let total_time = self.avg_execution_time * self.total_evaluations.saturating_sub(1) as u32
+            + execution_time;
         self.avg_execution_time = total_time / self.total_evaluations as u32;
-        
+
         self.min_execution_time = self.min_execution_time.min(execution_time);
         self.max_execution_time = self.max_execution_time.max(execution_time);
-        
+
         // Update success rate
-        let success_count = (self.success_rate * (self.total_evaluations - 1) as f64) + if success { 1.0 } else { 0.0 };
+        let success_count = (self.success_rate * (self.total_evaluations - 1) as f64)
+            + if success { 1.0 } else { 0.0 };
         self.success_rate = success_count / self.total_evaluations as f64;
-        
+
         // Update selectivity (assuming success means no violation for simplicity)
-        let violation_count = ((1.0 - self.selectivity) * (self.total_evaluations - 1) as f64) + if !success { 1.0 } else { 0.0 };
+        let violation_count = ((1.0 - self.selectivity) * (self.total_evaluations - 1) as f64)
+            + if !success { 1.0 } else { 0.0 };
         self.selectivity = violation_count / self.total_evaluations as f64;
-        
+
         self.last_evaluation = Instant::now();
     }
 }
@@ -651,23 +669,30 @@ impl ShapePerformanceMetrics {
         }
     }
 
-    fn update(&mut self, execution_time: Duration, focus_nodes: usize, violations: usize, memory_usage: f64) {
+    fn update(
+        &mut self,
+        execution_time: Duration,
+        focus_nodes: usize,
+        violations: usize,
+        memory_usage: f64,
+    ) {
         self.total_validation_time += execution_time;
         self.focus_nodes_validated += focus_nodes;
         self.total_violations += violations;
         self.memory_usage_mb = memory_usage;
-        
+
         if self.focus_nodes_validated > 0 {
-            self.avg_validation_time = self.total_validation_time / self.focus_nodes_validated as u32;
+            self.avg_validation_time =
+                self.total_validation_time / self.focus_nodes_validated as u32;
         }
-        
+
         // Calculate efficiency score (lower violation rate and faster validation = higher score)
         let violation_rate = if self.focus_nodes_validated > 0 {
             self.total_violations as f64 / self.focus_nodes_validated as f64
         } else {
             0.0
         };
-        
+
         self.efficiency_score = (1.0 - violation_rate).max(0.0);
     }
 }
@@ -700,7 +725,7 @@ impl PerformanceTrendsAnalyzer {
 
     fn add_data_point(&mut self, data_point: PerformanceDataPoint) {
         self.performance_history.push(data_point);
-        
+
         // Keep only recent history within window size
         if self.performance_history.len() > self.config.trend_window_size {
             self.performance_history.remove(0);
@@ -709,38 +734,50 @@ impl PerformanceTrendsAnalyzer {
 
     fn get_current_trends(&self) -> HashMap<String, PerformanceTrend> {
         let mut trends = HashMap::new();
-        
+
         if self.performance_history.len() >= self.config.min_data_points {
-            trends.insert("execution_time".to_string(), self.analyze_execution_time_trend());
-            trends.insert("success_rate".to_string(), self.analyze_success_rate_trend());
+            trends.insert(
+                "execution_time".to_string(),
+                self.analyze_execution_time_trend(),
+            );
+            trends.insert(
+                "success_rate".to_string(),
+                self.analyze_success_rate_trend(),
+            );
             trends.insert("throughput".to_string(), self.analyze_throughput_trend());
         }
-        
+
         trends
     }
 
     fn analyze_execution_time_trend(&self) -> PerformanceTrend {
         // Simple linear regression on execution times
-        let times: Vec<f64> = self.performance_history.iter()
+        let times: Vec<f64> = self
+            .performance_history
+            .iter()
             .map(|dp| dp.avg_execution_time.as_secs_f64())
             .collect();
-        
+
         self.calculate_trend(&times)
     }
 
     fn analyze_success_rate_trend(&self) -> PerformanceTrend {
-        let rates: Vec<f64> = self.performance_history.iter()
+        let rates: Vec<f64> = self
+            .performance_history
+            .iter()
             .map(|dp| dp.success_rate)
             .collect();
-        
+
         self.calculate_trend(&rates)
     }
 
     fn analyze_throughput_trend(&self) -> PerformanceTrend {
-        let throughputs: Vec<f64> = self.performance_history.iter()
+        let throughputs: Vec<f64> = self
+            .performance_history
+            .iter()
             .map(|dp| dp.throughput)
             .collect();
-        
+
         self.calculate_trend(&throughputs)
     }
 
@@ -757,7 +794,7 @@ impl PerformanceTrendsAnalyzer {
         let sum_x2: f64 = (0..values.len()).map(|i| (i as f64).powi(2)).sum();
 
         let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x.powi(2));
-        
+
         if slope.abs() < self.config.trend_sensitivity {
             PerformanceTrend::Stable
         } else if slope > 0.0 {
@@ -788,7 +825,11 @@ impl RealTimePerformanceMonitor {
 
     fn record_operation(&mut self, operation: PerformanceOperation) {
         // Check if we need to start a new window
-        if operation.timestamp.duration_since(self.current_window.start_time) > self.current_window.duration {
+        if operation
+            .timestamp
+            .duration_since(self.current_window.start_time)
+            > self.current_window.duration
+        {
             self.analyze_window_and_generate_alerts();
             self.start_new_window(operation.timestamp);
         }
@@ -804,15 +845,19 @@ impl RealTimePerformanceMonitor {
         }
 
         // Check average execution time
-        let avg_execution_time: Duration = operations.iter()
+        let avg_execution_time: Duration = operations
+            .iter()
             .map(|op| op.execution_time)
-            .sum::<Duration>() / operations.len() as u32;
+            .sum::<Duration>()
+            / operations.len() as u32;
 
         if avg_execution_time > self.alert_thresholds.max_execution_time {
             self.active_alerts.push(PerformanceAlert {
                 alert_type: AlertType::HighExecutionTime,
-                message: format!("Average execution time ({:?}) exceeds threshold ({:?})", 
-                    avg_execution_time, self.alert_thresholds.max_execution_time),
+                message: format!(
+                    "Average execution time ({:?}) exceeds threshold ({:?})",
+                    avg_execution_time, self.alert_thresholds.max_execution_time
+                ),
                 severity: AlertSeverity::Warning,
                 timestamp: Instant::now(),
                 suggested_actions: vec![
@@ -824,15 +869,16 @@ impl RealTimePerformanceMonitor {
         }
 
         // Check success rate
-        let success_rate = operations.iter()
-            .filter(|op| op.success)
-            .count() as f64 / operations.len() as f64;
+        let success_rate =
+            operations.iter().filter(|op| op.success).count() as f64 / operations.len() as f64;
 
         if success_rate < self.alert_thresholds.min_success_rate {
             self.active_alerts.push(PerformanceAlert {
                 alert_type: AlertType::LowSuccessRate,
-                message: format!("Success rate ({:.2}) below threshold ({:.2})", 
-                    success_rate, self.alert_thresholds.min_success_rate),
+                message: format!(
+                    "Success rate ({:.2}) below threshold ({:.2})",
+                    success_rate, self.alert_thresholds.min_success_rate
+                ),
                 severity: AlertSeverity::Critical,
                 timestamp: Instant::now(),
                 suggested_actions: vec![

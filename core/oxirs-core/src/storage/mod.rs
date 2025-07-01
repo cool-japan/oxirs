@@ -15,6 +15,7 @@ pub mod compression;
 pub mod immutable;
 pub mod mvcc;
 pub mod temporal;
+#[cfg(feature = "rocksdb")]
 pub mod tiered;
 pub mod virtualization;
 
@@ -290,7 +291,10 @@ pub struct QueryMetrics {
 pub async fn create_engine(_config: StorageConfig) -> Result<Arc<dyn StorageEngine>, OxirsError> {
     // TODO: Implement alternative storage engine or resolve RocksDB conflicts
     // Implementation was in tiered.rs but temporarily disabled due to RocksDB dependency
-    Err(OxirsError::Store("Tiered storage engine temporarily disabled due to RocksDB dependency conflicts".to_string()))
+    Err(OxirsError::Store(
+        "Tiered storage engine temporarily disabled due to RocksDB dependency conflicts"
+            .to_string(),
+    ))
 }
 
 #[cfg(test)]

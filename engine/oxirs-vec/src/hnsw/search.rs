@@ -1,7 +1,7 @@
 //! Search algorithms for HNSW index
 
+use crate::hnsw::{Candidate, HnswIndex};
 use crate::{Vector, VectorIndex};
-use crate::hnsw::{HnswIndex, Candidate};
 use anyhow::Result;
 use std::collections::BinaryHeap;
 
@@ -18,24 +18,34 @@ impl HnswIndex {
         // 2. Search through layers from top to bottom
         // 3. Use greedy search at each layer
         // 4. Return k nearest neighbors
-        
+
         let mut results = Vec::new();
-        
+
         // For now, return empty results
         // TODO: Implement full HNSW search algorithm
-        
+
         Ok(results)
     }
 
     /// Search with early stopping and beam search
-    pub fn beam_search(&self, query: &Vector, beam_width: usize, k: usize) -> Result<Vec<(String, f32)>> {
+    pub fn beam_search(
+        &self,
+        query: &Vector,
+        beam_width: usize,
+        k: usize,
+    ) -> Result<Vec<(String, f32)>> {
         // Placeholder for beam search implementation
         // This would be more efficient for large k values
         todo!("Beam search not yet implemented")
     }
 
     /// Parallel search across multiple threads
-    pub fn parallel_search(&self, query: &Vector, k: usize, num_threads: usize) -> Result<Vec<(String, f32)>> {
+    pub fn parallel_search(
+        &self,
+        query: &Vector,
+        k: usize,
+        num_threads: usize,
+    ) -> Result<Vec<(String, f32)>> {
         // Placeholder for parallel search implementation
         todo!("Parallel search not yet implemented")
     }

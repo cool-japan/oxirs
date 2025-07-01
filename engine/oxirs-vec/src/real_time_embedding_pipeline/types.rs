@@ -1,8 +1,8 @@
 //! Common types and data structures for the real-time embedding pipeline
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque, BTreeMap};
-use std::sync::atomic::{AtomicU64, AtomicBool};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant, SystemTime};
 use uuid::Uuid;
 
@@ -68,7 +68,11 @@ pub enum UpdateOperation {
     /// Insert new content
     Insert { id: String, content: String },
     /// Update existing content
-    Update { id: String, content: String, version: Option<u64> },
+    Update {
+        id: String,
+        content: String,
+        version: Option<u64>,
+    },
     /// Delete content
     Delete { id: String },
     /// Batch operations
@@ -312,7 +316,8 @@ impl Default for BackpressureState {
     fn default() -> Self {
         Self {
             pressure_level: 0.0,
-            active_strategy: crate::real_time_embedding_pipeline::config::BackpressureStrategy::Adaptive,
+            active_strategy:
+                crate::real_time_embedding_pipeline::config::BackpressureStrategy::Adaptive,
             pressure_history: VecDeque::new(),
             dropped_items: 0,
             delayed_items: 0,

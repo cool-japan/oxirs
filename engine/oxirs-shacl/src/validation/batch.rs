@@ -7,21 +7,24 @@
 //! - Detailed performance analytics
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, AtomicUsize, Ordering}};
-use std::time::{Duration, Instant};
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use oxirs_core::{model::Term, Store};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    validation::{ValidationViolation, ConstraintEvaluationResult},
+    constraints::{Constraint, ConstraintContext},
     optimization::{
         AdvancedConstraintEvaluator, ConstraintCache, ConstraintPerformanceStats,
         StreamingValidationEngine, StreamingValidationResult,
     },
-    constraints::{Constraint, ConstraintContext},
-    Shape, ShapeId, Result, ShaclError, ValidationReport
+    validation::{ConstraintEvaluationResult, ValidationViolation},
+    Result, ShaclError, Shape, ShapeId, ValidationReport,
 };
 
 /// Enhanced batch validation engine with comprehensive features
@@ -126,7 +129,8 @@ impl BatchProgressTracker {
     /// Update progress with processed items
     pub fn update_progress(&self, processed: usize, violations: usize, errors: usize) {
         self.processed_items.fetch_add(processed, Ordering::SeqCst);
-        self.violations_found.fetch_add(violations, Ordering::SeqCst);
+        self.violations_found
+            .fetch_add(violations, Ordering::SeqCst);
         self.errors_encountered.fetch_add(errors, Ordering::SeqCst);
 
         // Trigger progress callbacks
@@ -146,10 +150,10 @@ impl BatchProgressTracker {
             processed_items: processed,
             violations_found: violations,
             errors_encountered: errors,
-            progress_percentage: if total > 0 { 
-                (processed as f64 / total as f64 * 100.0) 
-            } else { 
-                0.0 
+            progress_percentage: if total > 0 {
+                (processed as f64 / total as f64 * 100.0)
+            } else {
+                0.0
             },
             elapsed_time: elapsed,
             estimated_time_remaining: if processed > 0 && total > processed {
@@ -177,8 +181,8 @@ impl BatchProgressTracker {
     }
 
     /// Add a progress callback function
-    pub fn add_progress_callback<F>(&self, callback: F) 
-    where 
+    pub fn add_progress_callback<F>(&self, callback: F)
+    where
         F: Fn(BatchProgress) + Send + Sync + 'static,
     {
         if let Ok(mut callbacks) = self.progress_callbacks.lock() {
@@ -278,7 +282,9 @@ impl BatchErrorHandler {
         match error.error_type {
             BatchErrorType::ValidationFailure => ErrorRecoveryAction::Skip,
             BatchErrorType::MemoryExhaustion => ErrorRecoveryAction::TriggerGarbageCollection,
-            BatchErrorType::TimeoutError => ErrorRecoveryAction::RetryWithDelay(Duration::from_secs(1)),
+            BatchErrorType::TimeoutError => {
+                ErrorRecoveryAction::RetryWithDelay(Duration::from_secs(1))
+            }
             BatchErrorType::ConstraintError => ErrorRecoveryAction::Skip,
             BatchErrorType::SystemError => ErrorRecoveryAction::Stop,
         }
@@ -510,9 +516,9 @@ impl EnhancedBatchValidationEngine {
     /// Create a new enhanced batch validation engine
     pub fn new(config: BatchValidationConfig) -> Self {
         let streaming_engine = StreamingValidationEngine::new(
-            config.batch_size, 
-            config.memory_threshold, 
-            config.enable_memory_monitoring
+            config.batch_size,
+            config.memory_threshold,
+            config.enable_memory_monitoring,
         );
 
         Self {
@@ -521,8 +527,8 @@ impl EnhancedBatchValidationEngine {
             progress_tracker: Arc::new(BatchProgressTracker::new()),
             error_handler: BatchErrorHandler::new(config.max_errors),
             memory_monitor: MemoryMonitor::new(
-                config.memory_threshold, 
-                config.enable_memory_monitoring
+                config.memory_threshold,
+                config.enable_memory_monitoring,
             ),
             analytics: Arc::new(Mutex::new(BatchPerformanceAnalytics::default())),
         }
@@ -546,7 +552,7 @@ impl EnhancedBatchValidationEngine {
         let total_nodes = nodes.len();
 
         self.progress_tracker.set_total_items(total_nodes);
-        
+
         if self.config.enable_progress_reporting {
             tracing::info!("Starting batch validation of {} nodes", total_nodes);
         }
@@ -566,26 +572,22 @@ impl EnhancedBatchValidationEngine {
                     self.handle_memory_pressure()?;
                 } else {
                     return Err(ShaclError::ValidationEngine(
-                        "Memory threshold exceeded".to_string()
+                        "Memory threshold exceeded".to_string(),
                     ));
                 }
             }
 
             // Process batch with error recovery
             let batch_start = Instant::now();
-            let batch_result = self.process_batch_with_recovery(
-                store, 
-                &constraints, 
-                chunk, 
-                batch_index
-            )?;
+            let batch_result =
+                self.process_batch_with_recovery(store, &constraints, chunk, batch_index)?;
 
             // Update analytics
             if self.config.enable_analytics {
                 if let Ok(mut analytics) = self.analytics.lock() {
                     analytics.record_batch_time(batch_start.elapsed());
                     analytics.record_memory_usage(self.memory_monitor.current_usage());
-                    
+
                     let items_processed = chunk.len();
                     let elapsed = batch_start.elapsed();
                     if elapsed.as_secs_f64() > 0.0 {
@@ -607,8 +609,9 @@ impl EnhancedBatchValidationEngine {
             );
 
             // Progress reporting
-            if self.config.enable_progress_reporting 
-                && processed_count % self.config.progress_interval == 0 {
+            if self.config.enable_progress_reporting
+                && processed_count % self.config.progress_interval == 0
+            {
                 let progress = self.progress_tracker.get_progress();
                 tracing::info!("{}", progress.format_summary());
             }
@@ -704,7 +707,12 @@ impl EnhancedBatchValidationEngine {
                         }
                         ErrorRecoveryAction::ReduceBatchSize => {
                             // Process nodes individually
-                            batch_result = self.process_nodes_individually(store, constraints, nodes, batch_index)?;
+                            batch_result = self.process_nodes_individually(
+                                store,
+                                constraints,
+                                nodes,
+                                batch_index,
+                            )?;
                             break;
                         }
                     }
@@ -727,12 +735,12 @@ impl EnhancedBatchValidationEngine {
 
         for (item_index, node) in nodes.iter().enumerate() {
             let context = ConstraintContext::new(
-                node.clone(), 
-                ShapeId::new(&format!("BatchValidation_{}", batch_index))
+                node.clone(),
+                ShapeId::new(&format!("BatchValidation_{}", batch_index)),
             );
 
             // Use the streaming engine's evaluator
-            // Note: This is a simplified integration - in practice, you'd want to 
+            // Note: This is a simplified integration - in practice, you'd want to
             // properly integrate with the existing constraint evaluation system
             for constraint in constraints {
                 match constraint.evaluate(store, &context) {
@@ -807,8 +815,11 @@ impl EnhancedBatchValidationEngine {
         item_index: usize,
     ) -> Result<usize> {
         let context = ConstraintContext::new(
-            node.clone(), 
-            ShapeId::new(&format!("SingleNodeValidation_{}_{}", batch_index, item_index))
+            node.clone(),
+            ShapeId::new(&format!(
+                "SingleNodeValidation_{}_{}",
+                batch_index, item_index
+            )),
         );
 
         let mut violations = 0;
@@ -839,10 +850,10 @@ impl EnhancedBatchValidationEngine {
         // 4. Spill data to disk
 
         tracing::warn!("Memory pressure detected, triggering cleanup");
-        
+
         // Clear any caches we have access to
         // This is a placeholder for actual cleanup logic
-        
+
         Ok(())
     }
 
@@ -1013,7 +1024,7 @@ mod tests {
     #[test]
     fn test_error_handler() {
         let handler = BatchErrorHandler::new(Some(5));
-        
+
         let error = BatchValidationError {
             error_type: BatchErrorType::ValidationFailure,
             message: "Test error".to_string(),

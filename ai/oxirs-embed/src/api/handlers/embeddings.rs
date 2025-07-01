@@ -2,16 +2,14 @@
 //!
 //! This module contains handlers for all embedding-related API endpoints.
 
+use super::super::helpers::get_production_model_version;
+use super::super::{
+    ApiState, BatchEmbeddingRequest, BatchEmbeddingResponse, EmbeddingRequest, EmbeddingResponse,
+};
 #[cfg(feature = "api-server")]
 use crate::{CachedEmbeddingModel, EmbeddingModel};
-use super::super::{ApiState, EmbeddingRequest, EmbeddingResponse, BatchEmbeddingRequest, BatchEmbeddingResponse};
-use super::super::helpers::get_production_model_version;
 #[cfg(feature = "api-server")]
-use axum::{
-    extract::{State},
-    http::StatusCode,
-    response::Json,
-};
+use axum::{extract::State, http::StatusCode, response::Json};
 use std::sync::Arc;
 
 /// Generate embedding for a single entity

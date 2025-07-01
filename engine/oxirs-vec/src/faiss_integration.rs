@@ -4,15 +4,15 @@
 //! for high-performance vector similarity search and clustering. FAISS is particularly well-suited
 //! for large-scale vector databases with billions of vectors.
 
-use crate::index::{VectorIndex, IndexConfig};
-use crate::similarity::{SimilarityMetric, DistanceFunction};
 use crate::gpu::GpuConfig;
-use anyhow::{Result, Context, Error as AnyhowError};
-use std::collections::{HashMap, BTreeMap};
-use std::sync::{Arc, RwLock, Mutex};
+use crate::index::{IndexConfig, VectorIndex};
+use crate::similarity::{DistanceFunction, SimilarityMetric};
+use anyhow::{Context, Error as AnyhowError, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use serde::{Serialize, Deserialize};
-use tracing::{debug, info, warn, span, Level};
+use std::sync::{Arc, Mutex, RwLock};
+use tracing::{debug, info, span, warn, Level};
 
 /// Configuration for FAISS integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -350,22 +350,30 @@ impl FaissIndex {
         }
 
         if config.training_sample_size == 0 {
-            return Err(AnyhowError::msg("Training sample size must be greater than 0"));
+            return Err(AnyhowError::msg(
+                "Training sample size must be greater than 0",
+            ));
         }
 
         // Validate index-specific parameters
         match &config.index_type {
             FaissIndexType::IvfFlat | FaissIndexType::IvfPq | FaissIndexType::IvfSq => {
                 if config.num_clusters.is_none() {
-                    return Err(AnyhowError::msg("IVF indices require num_clusters to be set"));
+                    return Err(AnyhowError::msg(
+                        "IVF indices require num_clusters to be set",
+                    ));
                 }
             }
             FaissIndexType::IvfPq => {
                 if config.num_subquantizers.is_none() {
-                    return Err(AnyhowError::msg("IVF-PQ requires num_subquantizers to be set"));
+                    return Err(AnyhowError::msg(
+                        "IVF-PQ requires num_subquantizers to be set",
+                    ));
                 }
                 if config.bits_per_subquantizer.is_none() {
-                    return Err(AnyhowError::msg("IVF-PQ requires bits_per_subquantizer to be set"));
+                    return Err(AnyhowError::msg(
+                        "IVF-PQ requires bits_per_subquantizer to be set",
+                    ));
                 }
             }
             _ => {}
@@ -381,20 +389,22 @@ impl FaissIndex {
 
         // In a real implementation, this would call FAISS C++ bindings
         let index_type_str = self.faiss_index_string()?;
-        
+
         let handle = FaissIndexHandle {
             index_type: index_type_str,
             num_vectors: 0,
             dimension: self.config.dimension,
             is_trained: self.requires_training(),
-            gpu_device: if self.config.use_gpu { 
+            gpu_device: if self.config.use_gpu {
                 Some(self.config.gpu_devices.first().copied().unwrap_or(0))
-            } else { 
-                None 
+            } else {
+                None
             },
         };
 
-        let mut index_handle = self.index_handle.lock()
+        let mut index_handle = self
+            .index_handle
+            .lock()
             .map_err(|_| AnyhowError::msg("Failed to acquire index handle lock"))?;
         *index_handle = Some(handle);
 
@@ -435,9 +445,7 @@ impl FaissIndex {
             FaissIndexType::Lsh => {
                 format!("LSH")
             }
-            FaissIndexType::Auto => {
-                self.auto_select_index_type()?
-            }
+            FaissIndexType::Auto => self.auto_select_index_type()?,
             FaissIndexType::Custom(s) => s.clone(),
         };
 
@@ -447,7 +455,9 @@ impl FaissIndex {
     /// Automatically select index type based on data characteristics
     fn auto_select_index_type(&self) -> Result<String> {
         let num_vectors = {
-            let vectors = self.vectors.read()
+            let vectors = self
+                .vectors
+                .read()
                 .map_err(|_| AnyhowError::msg("Failed to acquire vectors lock"))?;
             vectors.len()
         };
@@ -472,8 +482,10 @@ impl FaissIndex {
             format!("IVF{},PQ{}x8", clusters, std::cmp::min(dimension / 4, 64))
         };
 
-        debug!("Auto-selected FAISS index: {} for {} vectors, {} dimensions", 
-               index_str, num_vectors, dimension);
+        debug!(
+            "Auto-selected FAISS index: {} for {} vectors, {} dimensions",
+            index_str, num_vectors, dimension
+        );
 
         Ok(index_str)
     }
@@ -490,7 +502,9 @@ impl FaissIndex {
 
         // Update training state
         {
-            let mut state = self.training_state.write()
+            let mut state = self
+                .training_state
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire training state lock"))?;
             state.training_start = Some(std::time::Instant::now());
             state.training_vectors_count = training_vectors.len();
@@ -506,25 +520,34 @@ impl FaissIndex {
             if vector.len() != self.config.dimension {
                 return Err(AnyhowError::msg(format!(
                     "Training vector {} has dimension {}, expected {}",
-                    i, vector.len(), self.config.dimension
+                    i,
+                    vector.len(),
+                    self.config.dimension
                 )));
             }
         }
 
         // Simulate training process (in real implementation, this would call FAISS training)
-        info!("Training FAISS index with {} vectors", training_vectors.len());
-        
+        info!(
+            "Training FAISS index with {} vectors",
+            training_vectors.len()
+        );
+
         // Simulate training progress
         for progress in 0..=10 {
             std::thread::sleep(std::time::Duration::from_millis(100));
-            let mut state = self.training_state.write()
+            let mut state = self
+                .training_state
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire training state lock"))?;
             state.training_progress = progress as f32 / 10.0;
         }
 
         // Mark as trained
         {
-            let mut state = self.training_state.write()
+            let mut state = self
+                .training_state
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire training state lock"))?;
             state.is_trained = true;
             state.training_progress = 1.0;
@@ -532,7 +555,9 @@ impl FaissIndex {
 
         // Update index handle
         {
-            let mut handle = self.index_handle.lock()
+            let mut handle = self
+                .index_handle
+                .lock()
                 .map_err(|_| AnyhowError::msg("Failed to acquire index handle lock"))?;
             if let Some(ref mut h) = *handle {
                 h.is_trained = true;
@@ -549,15 +574,21 @@ impl FaissIndex {
         let _enter = span.enter();
 
         if vectors.len() != ids.len() {
-            return Err(AnyhowError::msg("Number of vectors must match number of IDs"));
+            return Err(AnyhowError::msg(
+                "Number of vectors must match number of IDs",
+            ));
         }
 
         // Check if training is required and completed
         if self.requires_training() {
-            let state = self.training_state.read()
+            let state = self
+                .training_state
+                .read()
                 .map_err(|_| AnyhowError::msg("Failed to acquire training state lock"))?;
             if !state.is_trained {
-                return Err(AnyhowError::msg("Index must be trained before adding vectors"));
+                return Err(AnyhowError::msg(
+                    "Index must be trained before adding vectors",
+                ));
             }
         }
 
@@ -566,7 +597,9 @@ impl FaissIndex {
             if vector.len() != self.config.dimension {
                 return Err(AnyhowError::msg(format!(
                     "Vector {} has dimension {}, expected {}",
-                    i, vector.len(), self.config.dimension
+                    i,
+                    vector.len(),
+                    self.config.dimension
                 )));
             }
         }
@@ -574,9 +607,13 @@ impl FaissIndex {
         let start_time = std::time::Instant::now();
 
         // Add vectors to storage
-        let mut vec_storage = self.vectors.write()
+        let mut vec_storage = self
+            .vectors
+            .write()
             .map_err(|_| AnyhowError::msg("Failed to acquire vectors lock"))?;
-        let mut metadata_storage = self.metadata.write()
+        let mut metadata_storage = self
+            .metadata
+            .write()
             .map_err(|_| AnyhowError::msg("Failed to acquire metadata lock"))?;
 
         for (vector, id) in vectors.iter().zip(ids.iter()) {
@@ -595,7 +632,9 @@ impl FaissIndex {
 
         // Update statistics
         {
-            let mut stats = self.stats.write()
+            let mut stats = self
+                .stats
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
             stats.total_vectors += vectors.len();
             stats.index_build_time_s += start_time.elapsed().as_secs_f64();
@@ -603,7 +642,9 @@ impl FaissIndex {
 
         // Update index handle
         {
-            let mut handle = self.index_handle.lock()
+            let mut handle = self
+                .index_handle
+                .lock()
                 .map_err(|_| AnyhowError::msg("Failed to acquire index handle lock"))?;
             if let Some(ref mut h) = *handle {
                 h.num_vectors += vectors.len();
@@ -626,7 +667,8 @@ impl FaissIndex {
         if query_vector.len() != self.config.dimension {
             return Err(AnyhowError::msg(format!(
                 "Query vector has dimension {}, expected {}",
-                query_vector.len(), self.config.dimension
+                query_vector.len(),
+                self.config.dimension
             )));
         }
 
@@ -637,11 +679,15 @@ impl FaissIndex {
 
         // Update statistics
         {
-            let mut stats = self.stats.write()
+            let mut stats = self
+                .stats
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
             stats.total_searches += 1;
             let search_time_us = start_time.elapsed().as_micros() as f64;
-            stats.avg_search_time_us = (stats.avg_search_time_us * (stats.total_searches - 1) as f64 + search_time_us) / stats.total_searches as f64;
+            stats.avg_search_time_us =
+                (stats.avg_search_time_us * (stats.total_searches - 1) as f64 + search_time_us)
+                    / stats.total_searches as f64;
         }
 
         debug!("FAISS search completed in {:?}", start_time.elapsed());
@@ -654,9 +700,13 @@ impl FaissIndex {
         query_vector: &[f32],
         params: &FaissSearchParams,
     ) -> Result<Vec<(String, f32)>> {
-        let vectors = self.vectors.read()
+        let vectors = self
+            .vectors
+            .read()
             .map_err(|_| AnyhowError::msg("Failed to acquire vectors lock"))?;
-        let metadata = self.metadata.read()
+        let metadata = self
+            .metadata
+            .read()
             .map_err(|_| AnyhowError::msg("Failed to acquire metadata lock"))?;
 
         let mut results = Vec::new();
@@ -679,9 +729,16 @@ impl FaissIndex {
     /// Compute distance between two vectors
     fn compute_distance(&self, a: &[f32], b: &[f32]) -> f32 {
         match self.config.index_type {
-            FaissIndexType::FlatL2 | FaissIndexType::IvfFlat | FaissIndexType::IvfPq | FaissIndexType::IvfSq => {
+            FaissIndexType::FlatL2
+            | FaissIndexType::IvfFlat
+            | FaissIndexType::IvfPq
+            | FaissIndexType::IvfSq => {
                 // L2 distance
-                a.iter().zip(b.iter()).map(|(x, y)| (x - y).powi(2)).sum::<f32>().sqrt()
+                a.iter()
+                    .zip(b.iter())
+                    .map(|(x, y)| (x - y).powi(2))
+                    .sum::<f32>()
+                    .sqrt()
             }
             FaissIndexType::FlatIP => {
                 // Inner product (negative for similarity)
@@ -689,14 +746,20 @@ impl FaissIndex {
             }
             _ => {
                 // Default to L2
-                a.iter().zip(b.iter()).map(|(x, y)| (x - y).powi(2)).sum::<f32>().sqrt()
+                a.iter()
+                    .zip(b.iter())
+                    .map(|(x, y)| (x - y).powi(2))
+                    .sum::<f32>()
+                    .sqrt()
             }
         }
     }
 
     /// Get performance statistics
     pub fn get_statistics(&self) -> Result<FaissStatistics> {
-        let stats = self.stats.read()
+        let stats = self
+            .stats
+            .read()
             .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
         Ok(stats.clone())
     }
@@ -714,10 +777,10 @@ impl FaissIndex {
 
         // In real implementation, this would save the FAISS index
         info!("Saving FAISS index to {:?}", path);
-        
+
         // Simulate save operation
         std::thread::sleep(std::time::Duration::from_millis(100));
-        
+
         Ok(())
     }
 
@@ -727,15 +790,18 @@ impl FaissIndex {
         let _enter = span.enter();
 
         if !path.exists() {
-            return Err(AnyhowError::msg(format!("Index file does not exist: {:?}", path)));
+            return Err(AnyhowError::msg(format!(
+                "Index file does not exist: {:?}",
+                path
+            )));
         }
 
         // In real implementation, this would load the FAISS index
         info!("Loading FAISS index from {:?}", path);
-        
+
         // Simulate load operation
         std::thread::sleep(std::time::Duration::from_millis(100));
-        
+
         Ok(())
     }
 
@@ -746,7 +812,9 @@ impl FaissIndex {
 
         // Update optimization timestamp
         {
-            let mut stats = self.stats.write()
+            let mut stats = self
+                .stats
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
             stats.last_optimization = Some(std::time::SystemTime::now());
         }
@@ -757,12 +825,14 @@ impl FaissIndex {
 
     /// Get current memory usage
     pub fn get_memory_usage(&self) -> Result<usize> {
-        let vectors = self.vectors.read()
+        let vectors = self
+            .vectors
+            .read()
             .map_err(|_| AnyhowError::msg("Failed to acquire vectors lock"))?;
-        
+
         let vector_memory = vectors.len() * self.config.dimension * std::mem::size_of::<f32>();
         let metadata_memory = vectors.len() * std::mem::size_of::<VectorMetadata>();
-        
+
         Ok(vector_memory + metadata_memory)
     }
 }
@@ -823,10 +893,7 @@ impl FaissFactory {
     }
 
     /// Create a GPU-accelerated FAISS index
-    pub fn create_gpu_index(
-        dimension: usize,
-        gpu_devices: Vec<u32>,
-    ) -> Result<FaissIndex> {
+    pub fn create_gpu_index(dimension: usize, gpu_devices: Vec<u32>) -> Result<FaissIndex> {
         let config = FaissConfig {
             dimension,
             use_gpu: true,
@@ -865,7 +932,7 @@ mod tests {
         };
 
         let index = FaissIndex::new(config).unwrap();
-        
+
         // Add test vectors
         let vectors = vec![
             vec![1.0, 0.0, 0.0, 0.0],
@@ -873,15 +940,18 @@ mod tests {
             vec![0.0, 0.0, 1.0, 0.0],
         ];
         let ids = vec!["vec1".to_string(), "vec2".to_string(), "vec3".to_string()];
-        
+
         index.add_vectors(vectors, ids).unwrap();
         assert_eq!(index.size(), 3);
 
         // Search for similar vector
         let query = vec![1.0, 0.1, 0.0, 0.0];
-        let params = FaissSearchParams { k: 2, ..Default::default() };
+        let params = FaissSearchParams {
+            k: 2,
+            ..Default::default()
+        };
         let results = index.search(&query, &params).unwrap();
-        
+
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].0, "vec1"); // Should be closest to [1,0,0,0]
     }
@@ -897,14 +967,14 @@ mod tests {
         };
 
         let index = FaissIndex::new(config).unwrap();
-        
+
         // Generate training data
         let training_vectors: Vec<Vec<f32>> = (0..10)
             .map(|i| vec![i as f32, (i % 2) as f32, 0.0, 0.0])
             .collect();
-        
+
         index.train(&training_vectors).unwrap();
-        
+
         let state = index.training_state.read().unwrap();
         assert!(state.is_trained);
         assert_eq!(state.training_progress, 1.0);
@@ -914,7 +984,7 @@ mod tests {
     fn test_faiss_factory() {
         let index = FaissFactory::create_optimized_index(64, 1000, false).unwrap();
         assert_eq!(index.dimension(), 64);
-        
+
         let gpu_index = FaissFactory::create_gpu_index(128, vec![0]).unwrap();
         assert_eq!(gpu_index.dimension(), 128);
         assert!(gpu_index.config.use_gpu);
@@ -930,7 +1000,7 @@ mod tests {
 
         let index = FaissIndex::new(config).unwrap();
         let index_str = index.faiss_index_string().unwrap();
-        
+
         // For empty index, should select flat
         assert_eq!(index_str, "Flat");
     }

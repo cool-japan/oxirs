@@ -2,7 +2,7 @@
 //!
 //! This module provides actual integration with Facebook's FAISS library through
 //! native bindings, enabling high-performance vector search with full FAISS capabilities.
-//! 
+//!
 //! Features:
 //! - Real FAISS index import/export
 //! - Native FAISS performance optimization
@@ -11,20 +11,20 @@
 //! - Performance benchmarking against FAISS
 
 use crate::{
-    faiss_compatibility::{FaissIndexType, FaissMetricType, FaissIndexMetadata},
+    faiss_compatibility::{FaissIndexMetadata, FaissIndexType, FaissMetricType},
     faiss_integration::{FaissConfig, FaissSearchParams, FaissStatistics},
-    index::{VectorIndex, IndexConfig},
-    similarity::SimilarityMetric,
     gpu::GpuConfig,
+    index::{IndexConfig, VectorIndex},
+    similarity::SimilarityMetric,
     Vector, VectorPrecision,
 };
-use anyhow::{Result, Context, Error as AnyhowError};
-use std::collections::{HashMap, BTreeMap};
-use std::sync::{Arc, RwLock, Mutex};
+use anyhow::{Context, Error as AnyhowError, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
+use std::ffi::{CStr, CString};
 use std::path::{Path, PathBuf};
-use std::ffi::{CString, CStr};
-use serde::{Serialize, Deserialize};
-use tracing::{debug, info, warn, error, span, Level};
+use std::sync::{Arc, Mutex, RwLock};
+use tracing::{debug, error, info, span, warn, Level};
 
 /// Native FAISS integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -341,7 +341,8 @@ impl NativeFaissIndex {
         };
 
         // Initialize memory pool
-        let memory_pool = MemoryPool::new(config.performance_tuning.memory_pool_size_mb * 1024 * 1024);
+        let memory_pool =
+            MemoryPool::new(config.performance_tuning.memory_pool_size_mb * 1024 * 1024);
 
         let index = Self {
             config: config.clone(),
@@ -355,7 +356,10 @@ impl NativeFaissIndex {
         // Create native FAISS index
         index.create_native_index(&faiss_config)?;
 
-        info!("Created native FAISS index with GPU support: {}", config.enable_gpu);
+        info!(
+            "Created native FAISS index with GPU support: {}",
+            config.enable_gpu
+        );
         Ok(index)
     }
 
@@ -382,7 +386,10 @@ impl NativeFaissIndex {
 
         // Initialize GPU support
         if config.enable_gpu {
-            debug!("Initializing FAISS GPU support for devices: {:?}", config.gpu_devices);
+            debug!(
+                "Initializing FAISS GPU support for devices: {:?}",
+                config.gpu_devices
+            );
             // Initialize CUDA context and GPU resources
         }
 
@@ -421,7 +428,10 @@ impl NativeFaissIndex {
             resources,
         };
 
-        debug!("Initialized GPU context for {} devices", config.gpu_devices.len());
+        debug!(
+            "Initialized GPU context for {} devices",
+            config.gpu_devices.len()
+        );
         Ok(context)
     }
 
@@ -436,16 +446,20 @@ impl NativeFaissIndex {
 
         // Simulate index creation
         let index_handle = 98765; // Simulated FAISS index handle
-        
+
         {
-            let mut handle = self.index_handle.lock()
+            let mut handle = self
+                .index_handle
+                .lock()
                 .map_err(|_| AnyhowError::msg("Failed to acquire index handle lock"))?;
             *handle = Some(index_handle);
         }
 
         // Update statistics
         {
-            let mut stats = self.stats.write()
+            let mut stats = self
+                .stats
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
             stats.native_metrics.faiss_version = "1.7.4".to_string();
             stats.native_metrics.index_build_time_ms = 50; // Simulated
@@ -498,13 +512,19 @@ impl NativeFaissIndex {
 
         // Update statistics
         {
-            let mut stats = self.stats.write()
+            let mut stats = self
+                .stats
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
             stats.native_metrics.index_build_time_ms += start_time.elapsed().as_millis() as u64;
             stats.basic_stats.total_vectors += vectors.len();
         }
 
-        debug!("Added {} vectors in batches of {}", vectors.len(), batch_size);
+        debug!(
+            "Added {} vectors in batches of {}",
+            vectors.len(),
+            batch_size
+        );
         Ok(())
     }
 
@@ -545,22 +565,28 @@ impl NativeFaissIndex {
 
         // Update performance statistics
         {
-            let mut stats = self.stats.write()
+            let mut stats = self
+                .stats
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
             let search_time_ns = start_time.elapsed().as_nanos() as u64;
             stats.native_metrics.native_search_latency_ns = search_time_ns;
             stats.basic_stats.total_searches += query_vectors.len();
-            
+
             // Update average search time
             let search_time_us = search_time_ns as f64 / 1000.0;
             let total_searches = stats.basic_stats.total_searches as f64;
-            stats.basic_stats.avg_search_time_us = 
-                (stats.basic_stats.avg_search_time_us * (total_searches - query_vectors.len() as f64) + 
-                 search_time_us) / total_searches;
+            stats.basic_stats.avg_search_time_us = (stats.basic_stats.avg_search_time_us
+                * (total_searches - query_vectors.len() as f64)
+                + search_time_us)
+                / total_searches;
         }
 
-        debug!("Performed optimized search for {} queries in {:?}", 
-               query_vectors.len(), start_time.elapsed());
+        debug!(
+            "Performed optimized search for {} queries in {:?}",
+            query_vectors.len(),
+            start_time.elapsed()
+        );
         Ok(results)
     }
 
@@ -591,7 +617,9 @@ impl NativeFaissIndex {
 
         // Update GPU metrics
         {
-            let mut stats = self.stats.write()
+            let mut stats = self
+                .stats
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
             if let Some(ref mut gpu_metrics) = stats.gpu_metrics {
                 gpu_metrics.gpu_utilization = 85.0;
@@ -627,15 +655,19 @@ impl NativeFaissIndex {
 
     /// Allocate memory from pool
     fn allocate_from_pool(&self, size: usize) -> Result<usize> {
-        let mut pool = self.memory_pool.lock()
+        let mut pool = self
+            .memory_pool
+            .lock()
             .map_err(|_| AnyhowError::msg("Failed to acquire memory pool lock"))?;
-        
+
         pool.allocate(size)
     }
 
     /// Get comprehensive statistics
     pub fn get_native_statistics(&self) -> Result<NativeFaissStatistics> {
-        let stats = self.stats.read()
+        let stats = self
+            .stats
+            .read()
             .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
         Ok(stats.clone())
     }
@@ -652,7 +684,9 @@ impl NativeFaissIndex {
         // 4. Optimize GPU memory usage
 
         {
-            let mut stats = self.stats.write()
+            let mut stats = self
+                .stats
+                .write()
                 .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
             stats.native_metrics.cache_hit_rate = 92.5;
             stats.native_metrics.simd_utilization = 88.0;
@@ -688,7 +722,10 @@ impl NativeFaissIndex {
         let _enter = span.enter();
 
         if !input_path.exists() {
-            return Err(AnyhowError::msg(format!("Input file does not exist: {:?}", input_path)));
+            return Err(AnyhowError::msg(format!(
+                "Input file does not exist: {:?}",
+                input_path
+            )));
         }
 
         // In a real implementation, this would:
@@ -729,8 +766,9 @@ impl MemoryPool {
 
         self.used_size += size;
         self.allocation_stats.total_allocations += 1;
-        self.allocation_stats.avg_allocation_size = 
-            (self.allocation_stats.avg_allocation_size * (self.allocation_stats.total_allocations - 1) + size) 
+        self.allocation_stats.avg_allocation_size = (self.allocation_stats.avg_allocation_size
+            * (self.allocation_stats.total_allocations - 1)
+            + size)
             / self.allocation_stats.total_allocations;
 
         if self.used_size > self.allocation_stats.peak_usage {
@@ -743,7 +781,10 @@ impl MemoryPool {
     /// Find suitable free block
     fn find_free_block(&mut self, size: usize) -> Option<usize> {
         for &block_id in &self.free_blocks {
-            if block_id < self.blocks.len() && self.blocks[block_id].size >= size && self.blocks[block_id].is_free {
+            if block_id < self.blocks.len()
+                && self.blocks[block_id].size >= size
+                && self.blocks[block_id].is_free
+            {
                 self.blocks[block_id].is_free = false;
                 self.blocks[block_id].allocated_at = std::time::Instant::now();
                 self.free_blocks.retain(|&id| id != block_id);
@@ -865,10 +906,7 @@ pub struct StatisticalSignificance {
 
 impl FaissPerformanceComparison {
     /// Create new performance comparison framework
-    pub fn new(
-        faiss_index: NativeFaissIndex,
-        oxirs_index: Box<dyn VectorIndex>,
-    ) -> Self {
+    pub fn new(faiss_index: NativeFaissIndex, oxirs_index: Box<dyn VectorIndex>) -> Self {
         Self {
             faiss_index,
             oxirs_index,
@@ -895,7 +933,10 @@ impl FaissPerformanceComparison {
             self.results.push(result);
         }
 
-        info!("Completed comprehensive benchmark on {} datasets", self.benchmark_datasets.len());
+        info!(
+            "Completed comprehensive benchmark on {} datasets",
+            self.benchmark_datasets.len()
+        );
         Ok(self.results.clone())
     }
 
@@ -903,7 +944,7 @@ impl FaissPerformanceComparison {
     fn benchmark_single_dataset(&mut self, dataset: &BenchmarkDataset) -> Result<ComparisonResult> {
         // Benchmark FAISS performance
         let faiss_perf = self.benchmark_faiss_performance(dataset)?;
-        
+
         // Benchmark Oxirs performance
         let oxirs_perf = self.benchmark_oxirs_performance(dataset)?;
 
@@ -927,7 +968,10 @@ impl FaissPerformanceComparison {
     }
 
     /// Benchmark FAISS performance
-    fn benchmark_faiss_performance(&self, dataset: &BenchmarkDataset) -> Result<PerformanceMetrics> {
+    fn benchmark_faiss_performance(
+        &self,
+        dataset: &BenchmarkDataset,
+    ) -> Result<PerformanceMetrics> {
         let start_time = std::time::Instant::now();
 
         // Simulate FAISS performance measurement
@@ -947,7 +991,10 @@ impl FaissPerformanceComparison {
     }
 
     /// Benchmark Oxirs performance
-    fn benchmark_oxirs_performance(&self, dataset: &BenchmarkDataset) -> Result<PerformanceMetrics> {
+    fn benchmark_oxirs_performance(
+        &self,
+        dataset: &BenchmarkDataset,
+    ) -> Result<PerformanceMetrics> {
         let start_time = std::time::Instant::now();
 
         // Simulate Oxirs performance measurement
@@ -997,26 +1044,69 @@ impl FaissPerformanceComparison {
     /// Generate comprehensive comparison report
     pub fn generate_comparison_report(&self) -> Result<String> {
         let mut report = String::new();
-        
+
         report.push_str("# FAISS vs Oxirs-Vec Performance Comparison Report\n\n");
-        report.push_str(&format!("Generated: {}\n\n", chrono::Utc::now().to_rfc3339()));
+        report.push_str(&format!(
+            "Generated: {}\n\n",
+            chrono::Utc::now().to_rfc3339()
+        ));
 
         // Summary statistics
         if !self.results.is_empty() {
-            let avg_speed_ratio: f64 = self.results.iter().map(|r| r.ratios.speed_ratio).sum::<f64>() / self.results.len() as f64;
-            let avg_memory_ratio: f64 = self.results.iter().map(|r| r.ratios.memory_ratio).sum::<f64>() / self.results.len() as f64;
-            let avg_accuracy_ratio: f64 = self.results.iter().map(|r| r.ratios.accuracy_ratio).sum::<f64>() / self.results.len() as f64;
+            let avg_speed_ratio: f64 = self
+                .results
+                .iter()
+                .map(|r| r.ratios.speed_ratio)
+                .sum::<f64>()
+                / self.results.len() as f64;
+            let avg_memory_ratio: f64 = self
+                .results
+                .iter()
+                .map(|r| r.ratios.memory_ratio)
+                .sum::<f64>()
+                / self.results.len() as f64;
+            let avg_accuracy_ratio: f64 = self
+                .results
+                .iter()
+                .map(|r| r.ratios.accuracy_ratio)
+                .sum::<f64>()
+                / self.results.len() as f64;
 
             report.push_str("## Summary\n\n");
-            report.push_str(&format!("- Average Speed Ratio (Oxirs/FAISS): {:.2}\n", avg_speed_ratio));
-            report.push_str(&format!("- Average Memory Ratio (Oxirs/FAISS): {:.2}\n", avg_memory_ratio));
-            report.push_str(&format!("- Average Accuracy Ratio (Oxirs/FAISS): {:.2}\n\n", avg_accuracy_ratio));
+            report.push_str(&format!(
+                "- Average Speed Ratio (Oxirs/FAISS): {:.2}\n",
+                avg_speed_ratio
+            ));
+            report.push_str(&format!(
+                "- Average Memory Ratio (Oxirs/FAISS): {:.2}\n",
+                avg_memory_ratio
+            ));
+            report.push_str(&format!(
+                "- Average Accuracy Ratio (Oxirs/FAISS): {:.2}\n\n",
+                avg_accuracy_ratio
+            ));
 
-            let oxirs_wins = self.results.iter().filter(|r| r.ratios.speed_ratio < 1.0).count();
-            report.push_str(&format!("- Oxirs wins in speed: {}/{} datasets\n", oxirs_wins, self.results.len()));
-            
-            let memory_wins = self.results.iter().filter(|r| r.ratios.memory_ratio < 1.0).count();
-            report.push_str(&format!("- Oxirs wins in memory efficiency: {}/{} datasets\n\n", memory_wins, self.results.len()));
+            let oxirs_wins = self
+                .results
+                .iter()
+                .filter(|r| r.ratios.speed_ratio < 1.0)
+                .count();
+            report.push_str(&format!(
+                "- Oxirs wins in speed: {}/{} datasets\n",
+                oxirs_wins,
+                self.results.len()
+            ));
+
+            let memory_wins = self
+                .results
+                .iter()
+                .filter(|r| r.ratios.memory_ratio < 1.0)
+                .count();
+            report.push_str(&format!(
+                "- Oxirs wins in memory efficiency: {}/{} datasets\n\n",
+                memory_wins,
+                self.results.len()
+            ));
         }
 
         // Detailed results
@@ -1025,28 +1115,45 @@ impl FaissPerformanceComparison {
             report.push_str(&format!("### Dataset: {}\n\n", result.dataset_name));
             report.push_str("| Metric | FAISS | Oxirs | Ratio |\n");
             report.push_str("|--------|-------|-------|-------|\n");
-            report.push_str(&format!("| Search Latency (μs) | {:.1} | {:.1} | {:.2} |\n", 
+            report.push_str(&format!(
+                "| Search Latency (μs) | {:.1} | {:.1} | {:.2} |\n",
                 result.faiss_performance.search_latency_us,
                 result.oxirs_performance.search_latency_us,
-                result.ratios.speed_ratio));
-            report.push_str(&format!("| Memory Usage (MB) | {:.1} | {:.1} | {:.2} |\n",
+                result.ratios.speed_ratio
+            ));
+            report.push_str(&format!(
+                "| Memory Usage (MB) | {:.1} | {:.1} | {:.2} |\n",
                 result.faiss_performance.memory_usage_mb,
                 result.oxirs_performance.memory_usage_mb,
-                result.ratios.memory_ratio));
-            report.push_str(&format!("| Recall@10 | {:.3} | {:.3} | {:.2} |\n",
+                result.ratios.memory_ratio
+            ));
+            report.push_str(&format!(
+                "| Recall@10 | {:.3} | {:.3} | {:.2} |\n",
                 result.faiss_performance.recall_at_10,
                 result.oxirs_performance.recall_at_10,
-                result.ratios.accuracy_ratio));
-            report.push_str(&format!("| QPS | {:.1} | {:.1} | {:.2} |\n\n",
+                result.ratios.accuracy_ratio
+            ));
+            report.push_str(&format!(
+                "| QPS | {:.1} | {:.1} | {:.2} |\n\n",
                 result.faiss_performance.qps,
                 result.oxirs_performance.qps,
-                result.oxirs_performance.qps / result.faiss_performance.qps));
+                result.oxirs_performance.qps / result.faiss_performance.qps
+            ));
 
             // Statistical significance
             report.push_str("**Statistical Significance:**\n");
-            report.push_str(&format!("- Speed difference p-value: {:.3}\n", result.statistical_significance.speed_p_value));
-            report.push_str(&format!("- Accuracy difference p-value: {:.3}\n", result.statistical_significance.accuracy_p_value));
-            report.push_str(&format!("- Effect size: {:.2}\n\n", result.statistical_significance.effect_size));
+            report.push_str(&format!(
+                "- Speed difference p-value: {:.3}\n",
+                result.statistical_significance.speed_p_value
+            ));
+            report.push_str(&format!(
+                "- Accuracy difference p-value: {:.3}\n",
+                result.statistical_significance.accuracy_p_value
+            ));
+            report.push_str(&format!(
+                "- Effect size: {:.2}\n\n",
+                result.statistical_significance.effect_size
+            ));
         }
 
         Ok(report)
@@ -1067,7 +1174,7 @@ mod tests {
     fn test_native_faiss_index_creation() {
         let native_config = NativeFaissConfig::default();
         let faiss_config = FaissConfig::default();
-        
+
         let result = NativeFaissIndex::new(native_config, faiss_config);
         assert!(result.is_ok());
     }
@@ -1075,10 +1182,10 @@ mod tests {
     #[test]
     fn test_memory_pool_allocation() {
         let mut pool = MemoryPool::new(1024);
-        
+
         let block1 = pool.allocate(256).unwrap();
         let block2 = pool.allocate(512).unwrap();
-        
+
         assert_ne!(block1, block2);
         assert_eq!(pool.used_size, 768);
     }
@@ -1088,39 +1195,39 @@ mod tests {
         let native_config = NativeFaissConfig::default();
         let faiss_config = FaissConfig::default();
         let faiss_index = NativeFaissIndex::new(native_config, faiss_config).unwrap();
-        
+
         // Create mock oxirs index
         let oxirs_index: Box<dyn VectorIndex> = Box::new(MockVectorIndex::new());
-        
+
         let comparison = FaissPerformanceComparison::new(faiss_index, oxirs_index);
         assert_eq!(comparison.benchmark_datasets.len(), 0);
     }
 
     // Mock vector index for testing
     struct MockVectorIndex;
-    
+
     impl MockVectorIndex {
         fn new() -> Self {
             Self
         }
     }
-    
+
     impl VectorIndex for MockVectorIndex {
         type Config = ();
         type SearchParams = ();
-        
+
         fn add(&mut self, _vector: Vec<f32>, _id: String) -> Result<()> {
             Ok(())
         }
-        
+
         fn search(&self, _query: &[f32], _k: usize) -> Result<Vec<(String, f32)>> {
             Ok(vec![("mock".to_string(), 0.9)])
         }
-        
+
         fn size(&self) -> usize {
             0
         }
-        
+
         fn dimension(&self) -> usize {
             128
         }

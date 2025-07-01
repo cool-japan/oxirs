@@ -4,14 +4,14 @@
 //! version tracking, backward compatibility analysis, migration paths, and
 //! schema evolution management.
 
-use std::collections::{HashMap, HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
 use semver::{Version, VersionReq};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use oxirs_core::{
@@ -20,10 +20,8 @@ use oxirs_core::{
 };
 
 use crate::{
-    constraints::*, report::*, 
-    Shape, ShapeId, ValidationConfig, ValidationReport,
-    validation::ValidationEngine,
-    Result as ShaclResult,
+    constraints::*, report::*, validation::ValidationEngine, Result as ShaclResult, Shape, ShapeId,
+    ValidationConfig, ValidationReport,
 };
 
 /// Shape version identifier
@@ -31,10 +29,10 @@ use crate::{
 pub struct ShapeVersionId {
     /// Base shape identifier
     pub shape_id: ShapeId,
-    
+
     /// Version number (semver)
     pub version: Version,
-    
+
     /// Unique version UUID
     pub version_uuid: Uuid,
 }
@@ -44,37 +42,37 @@ pub struct ShapeVersionId {
 pub struct ShapeVersionMetadata {
     /// Version identifier
     pub version_id: ShapeVersionId,
-    
+
     /// Human-readable version name
     pub version_name: String,
-    
+
     /// Version description
     pub description: String,
-    
+
     /// Author information
     pub author: String,
-    
+
     /// Creation timestamp
     pub created_at: SystemTime,
-    
+
     /// Last modification timestamp
     pub modified_at: SystemTime,
-    
+
     /// Version tags
     pub tags: HashSet<String>,
-    
+
     /// Changelog entries
     pub changelog: Vec<ChangelogEntry>,
-    
+
     /// Compatibility information
     pub compatibility: CompatibilityInfo,
-    
+
     /// Deprecation information
     pub deprecation: Option<DeprecationInfo>,
-    
+
     /// Parent version (for incremental changes)
     pub parent_version: Option<Version>,
-    
+
     /// Child versions
     pub child_versions: Vec<Version>,
 }
@@ -84,19 +82,19 @@ pub struct ShapeVersionMetadata {
 pub struct ChangelogEntry {
     /// Change type
     pub change_type: ChangeType,
-    
+
     /// Description of the change
     pub description: String,
-    
+
     /// Affected constraint components
     pub affected_constraints: Vec<String>,
-    
+
     /// Breaking change indicator
     pub is_breaking: bool,
-    
+
     /// Migration notes
     pub migration_notes: Option<String>,
-    
+
     /// Change timestamp
     pub timestamp: SystemTime,
 }
@@ -133,19 +131,19 @@ pub enum ChangeType {
 pub struct CompatibilityInfo {
     /// Backward compatibility status
     pub backward_compatible: bool,
-    
+
     /// Forward compatibility status
     pub forward_compatible: bool,
-    
+
     /// Compatible version range
     pub compatible_versions: VersionReq,
-    
+
     /// Incompatible versions
     pub incompatible_versions: Vec<Version>,
-    
+
     /// Migration requirements
     pub migration_required: bool,
-    
+
     /// Validation differences
     pub validation_differences: Vec<ValidationDifference>,
 }
@@ -155,16 +153,16 @@ pub struct CompatibilityInfo {
 pub struct ValidationDifference {
     /// Type of difference
     pub difference_type: DifferenceType,
-    
+
     /// Description of the difference
     pub description: String,
-    
+
     /// Affected data patterns
     pub affected_patterns: Vec<String>,
-    
+
     /// Impact severity
     pub impact_severity: ImpactSeverity,
-    
+
     /// Mitigation strategy
     pub mitigation: Option<String>,
 }
@@ -204,16 +202,16 @@ pub enum ImpactSeverity {
 pub struct DeprecationInfo {
     /// Deprecation reason
     pub reason: String,
-    
+
     /// Deprecated since version
     pub deprecated_since: Version,
-    
+
     /// Planned removal version
     pub removal_planned: Option<Version>,
-    
+
     /// Replacement shape or version
     pub replacement: Option<ShapeVersionId>,
-    
+
     /// Migration guide
     pub migration_guide: String,
 }
@@ -222,19 +220,19 @@ pub struct DeprecationInfo {
 pub struct ShapeVersionRegistry {
     /// All shape versions
     versions: Arc<RwLock<BTreeMap<ShapeVersionId, VersionedShape>>>,
-    
+
     /// Version metadata
     metadata: Arc<RwLock<HashMap<ShapeVersionId, ShapeVersionMetadata>>>,
-    
+
     /// Active versions per shape
     active_versions: Arc<RwLock<HashMap<ShapeId, Version>>>,
-    
+
     /// Version dependencies
     dependencies: Arc<RwLock<HashMap<ShapeVersionId, Vec<ShapeVersionId>>>>,
-    
+
     /// Migration paths between versions
     migration_paths: Arc<RwLock<HashMap<(Version, Version), MigrationPath>>>,
-    
+
     /// Registry configuration
     config: VersionRegistryConfig,
 }
@@ -244,10 +242,10 @@ pub struct ShapeVersionRegistry {
 pub struct VersionedShape {
     /// Shape definition
     pub shape: Shape,
-    
+
     /// Version metadata
     pub metadata: ShapeVersionMetadata,
-    
+
     /// Validation statistics for this version
     pub validation_stats: VersionValidationStats,
 }
@@ -257,19 +255,19 @@ pub struct VersionedShape {
 pub struct VersionValidationStats {
     /// Number of times this version was used for validation
     pub usage_count: u64,
-    
+
     /// Total validation time
     pub total_validation_time: std::time::Duration,
-    
+
     /// Average validation time per use
     pub average_validation_time: std::time::Duration,
-    
+
     /// Success rate
     pub success_rate: f64,
-    
+
     /// Memory usage statistics
     pub memory_usage: MemoryUsageStats,
-    
+
     /// Performance metrics
     pub performance_metrics: PerformanceMetrics,
 }
@@ -279,10 +277,10 @@ pub struct VersionValidationStats {
 pub struct MemoryUsageStats {
     /// Average memory usage
     pub average_memory_bytes: usize,
-    
+
     /// Peak memory usage
     pub peak_memory_bytes: usize,
-    
+
     /// Memory efficiency score
     pub efficiency_score: f64,
 }
@@ -292,13 +290,13 @@ pub struct MemoryUsageStats {
 pub struct PerformanceMetrics {
     /// Constraint evaluation time
     pub constraint_evaluation_time: std::time::Duration,
-    
+
     /// Property path evaluation time
     pub path_evaluation_time: std::time::Duration,
-    
+
     /// Cache hit ratio
     pub cache_hit_ratio: f64,
-    
+
     /// Optimization effectiveness
     pub optimization_effectiveness: f64,
 }
@@ -308,19 +306,19 @@ pub struct PerformanceMetrics {
 pub struct MigrationPath {
     /// Source version
     pub from_version: Version,
-    
+
     /// Target version
     pub to_version: Version,
-    
+
     /// Migration steps
     pub steps: Vec<MigrationStep>,
-    
+
     /// Estimated migration time
     pub estimated_time: std::time::Duration,
-    
+
     /// Migration complexity
     pub complexity: MigrationComplexity,
-    
+
     /// Data transformation requirements
     pub data_transformations: Vec<DataTransformation>,
 }
@@ -330,19 +328,19 @@ pub struct MigrationPath {
 pub struct MigrationStep {
     /// Step identifier
     pub step_id: String,
-    
+
     /// Step description
     pub description: String,
-    
+
     /// Step type
     pub step_type: MigrationStepType,
-    
+
     /// Required actions
     pub actions: Vec<String>,
-    
+
     /// Validation checks
     pub validation_checks: Vec<String>,
-    
+
     /// Rollback procedure
     pub rollback_procedure: Option<String>,
 }
@@ -382,19 +380,19 @@ pub enum MigrationComplexity {
 pub struct DataTransformation {
     /// Transformation identifier
     pub transformation_id: String,
-    
+
     /// Source data pattern
     pub source_pattern: String,
-    
+
     /// Target data pattern
     pub target_pattern: String,
-    
+
     /// SPARQL transformation query
     pub sparql_transformation: String,
-    
+
     /// Validation query for transformed data
     pub validation_query: String,
-    
+
     /// Transformation reversibility
     pub reversible: bool,
 }
@@ -404,19 +402,19 @@ pub struct DataTransformation {
 pub struct VersionRegistryConfig {
     /// Maximum number of versions to keep per shape
     pub max_versions_per_shape: usize,
-    
+
     /// Automatic cleanup of old versions
     pub auto_cleanup: bool,
-    
+
     /// Cleanup threshold (versions older than this are candidates for cleanup)
     pub cleanup_threshold: std::time::Duration,
-    
+
     /// Enable performance tracking
     pub enable_performance_tracking: bool,
-    
+
     /// Enable automatic migration path generation
     pub auto_generate_migrations: bool,
-    
+
     /// Version validation on registration
     pub validate_on_registration: bool,
 }
@@ -446,7 +444,7 @@ impl ShapeVersionRegistry {
             config,
         }
     }
-    
+
     /// Register a new shape version
     pub fn register_version(
         &self,
@@ -459,46 +457,46 @@ impl ShapeVersionRegistry {
             version: version.clone(),
             version_uuid: Uuid::new_v4(),
         };
-        
+
         // Validate shape if configured
         if self.config.validate_on_registration {
             self.validate_shape_version(&shape)?;
         }
-        
+
         // Check for compatibility with existing versions
         self.analyze_compatibility(&version_id, &shape)?;
-        
+
         // Create versioned shape
         let versioned_shape = VersionedShape {
             shape,
             metadata: metadata.clone(),
             validation_stats: VersionValidationStats::new(),
         };
-        
+
         // Store version
         let mut versions = self.versions.write().unwrap();
         versions.insert(version_id.clone(), versioned_shape);
-        
+
         let mut metadata_store = self.metadata.write().unwrap();
         metadata_store.insert(version_id.clone(), metadata);
-        
+
         // Update active version if this is the latest
         self.update_active_version(&version_id)?;
-        
+
         // Generate migration paths if enabled
         if self.config.auto_generate_migrations {
             self.generate_migration_paths(&version_id)?;
         }
-        
+
         Ok(version_id)
     }
-    
+
     /// Get a specific shape version
     pub fn get_version(&self, version_id: &ShapeVersionId) -> Option<VersionedShape> {
         let versions = self.versions.read().unwrap();
         versions.get(version_id).cloned()
     }
-    
+
     /// Get the active version of a shape
     pub fn get_active_version(&self, shape_id: &ShapeId) -> Option<VersionedShape> {
         let active_versions = self.active_versions.read().unwrap();
@@ -513,16 +511,17 @@ impl ShapeVersionRegistry {
             None
         }
     }
-    
+
     /// Get all versions of a shape
     pub fn get_all_versions(&self, shape_id: &ShapeId) -> Vec<VersionedShape> {
         let versions = self.versions.read().unwrap();
-        versions.iter()
+        versions
+            .iter()
             .filter(|(id, _)| id.shape_id == *shape_id)
             .map(|(_, shape)| shape.clone())
             .collect()
     }
-    
+
     /// Compare two shape versions
     pub fn compare_versions(
         &self,
@@ -530,15 +529,17 @@ impl ShapeVersionRegistry {
         version2: &ShapeVersionId,
     ) -> Result<VersionComparison> {
         let versions = self.versions.read().unwrap();
-        
-        let shape1 = versions.get(version1)
+
+        let shape1 = versions
+            .get(version1)
             .ok_or_else(|| anyhow::anyhow!("Version not found: {:?}", version1))?;
-        let shape2 = versions.get(version2)
+        let shape2 = versions
+            .get(version2)
             .ok_or_else(|| anyhow::anyhow!("Version not found: {:?}", version2))?;
-        
+
         Ok(VersionComparison::compare(&shape1.shape, &shape2.shape))
     }
-    
+
     /// Get migration path between two versions
     pub fn get_migration_path(
         &self,
@@ -546,9 +547,11 @@ impl ShapeVersionRegistry {
         to_version: &Version,
     ) -> Option<MigrationPath> {
         let migration_paths = self.migration_paths.read().unwrap();
-        migration_paths.get(&(from_version.clone(), to_version.clone())).cloned()
+        migration_paths
+            .get(&(from_version.clone(), to_version.clone()))
+            .cloned()
     }
-    
+
     /// Execute migration between versions
     pub fn migrate_version(
         &self,
@@ -556,58 +559,59 @@ impl ShapeVersionRegistry {
         to_version: &ShapeVersionId,
         data_store: &Store,
     ) -> Result<MigrationResult> {
-        let migration_path = self.get_migration_path(&from_version.version, &to_version.version)
+        let migration_path = self
+            .get_migration_path(&from_version.version, &to_version.version)
             .ok_or_else(|| anyhow::anyhow!("No migration path found"))?;
-        
+
         let mut result = MigrationResult::new();
-        
+
         for step in &migration_path.steps {
             let step_result = self.execute_migration_step(step, data_store)?;
             result.add_step_result(step_result);
         }
-        
+
         Ok(result)
     }
-    
+
     /// Validate shape version
     fn validate_shape_version(&self, shape: &Shape) -> Result<()> {
         // Basic validation - could be extended with more sophisticated checks
         if shape.constraints.is_empty() {
             return Err(anyhow::anyhow!("Shape must have at least one constraint"));
         }
-        
+
         // Validate constraint consistency
         for constraint in &shape.constraints {
             self.validate_constraint(constraint)?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate individual constraint
     fn validate_constraint(&self, constraint: &Constraint) -> Result<()> {
         // Implement constraint validation logic
         Ok(())
     }
-    
+
     /// Analyze compatibility with existing versions
     fn analyze_compatibility(&self, version_id: &ShapeVersionId, shape: &Shape) -> Result<()> {
         // Get existing versions of the same shape
         let existing_versions = self.get_all_versions(&version_id.shape_id);
-        
+
         for existing in existing_versions {
             // Analyze backward compatibility
             let compatibility = self.check_backward_compatibility(&existing.shape, shape)?;
-            
+
             if !compatibility.is_compatible {
                 // Log compatibility issues but don't fail registration
                 eprintln!("Compatibility issues detected: {:?}", compatibility.issues);
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Check backward compatibility between shape versions
     fn check_backward_compatibility(
         &self,
@@ -615,7 +619,7 @@ impl ShapeVersionRegistry {
         new_shape: &Shape,
     ) -> Result<CompatibilityResult> {
         let mut result = CompatibilityResult::new();
-        
+
         // Compare constraints
         for old_constraint in &old_shape.constraints {
             if !new_shape.constraints.contains(old_constraint) {
@@ -626,7 +630,7 @@ impl ShapeVersionRegistry {
                 });
             }
         }
-        
+
         // Check for new constraints (may break existing valid data)
         for new_constraint in &new_shape.constraints {
             if !old_shape.constraints.contains(new_constraint) {
@@ -637,36 +641,36 @@ impl ShapeVersionRegistry {
                 });
             }
         }
-        
+
         Ok(result)
     }
-    
+
     /// Update active version for a shape
     fn update_active_version(&self, version_id: &ShapeVersionId) -> Result<()> {
         let mut active_versions = self.active_versions.write().unwrap();
-        
+
         // Check if this is the latest version
         let current_active = active_versions.get(&version_id.shape_id);
-        
+
         let should_update = match current_active {
             Some(current_version) => version_id.version > *current_version,
             None => true,
         };
-        
+
         if should_update {
             active_versions.insert(version_id.shape_id.clone(), version_id.version.clone());
         }
-        
+
         Ok(())
     }
-    
+
     /// Generate migration paths automatically
     fn generate_migration_paths(&self, version_id: &ShapeVersionId) -> Result<()> {
         // This would implement automatic migration path generation
         // based on shape differences and predefined migration rules
         Ok(())
     }
-    
+
     /// Execute a single migration step
     fn execute_migration_step(
         &self,
@@ -688,13 +692,13 @@ impl ShapeVersionRegistry {
 pub struct VersionComparison {
     /// Constraints added in the newer version
     pub constraints_added: Vec<Constraint>,
-    
+
     /// Constraints removed in the newer version
     pub constraints_removed: Vec<Constraint>,
-    
+
     /// Constraints modified in the newer version
     pub constraints_modified: Vec<(Constraint, Constraint)>,
-    
+
     /// Overall compatibility assessment
     pub compatibility: CompatibilityInfo,
 }
@@ -705,25 +709,25 @@ impl VersionComparison {
         let mut constraints_added = Vec::new();
         let mut constraints_removed = Vec::new();
         let mut constraints_modified = Vec::new();
-        
+
         // Find added constraints
         for constraint in &shape2.constraints {
             if !shape1.constraints.contains(constraint) {
                 constraints_added.push(constraint.clone());
             }
         }
-        
+
         // Find removed constraints
         for constraint in &shape1.constraints {
             if !shape2.constraints.contains(constraint) {
                 constraints_removed.push(constraint.clone());
             }
         }
-        
+
         // Determine compatibility
         let backward_compatible = constraints_removed.is_empty();
         let forward_compatible = constraints_added.is_empty();
-        
+
         let compatibility = CompatibilityInfo {
             backward_compatible,
             forward_compatible,
@@ -732,7 +736,7 @@ impl VersionComparison {
             migration_required: !constraints_added.is_empty() || !constraints_removed.is_empty(),
             validation_differences: Vec::new(),
         };
-        
+
         Self {
             constraints_added,
             constraints_removed,
@@ -747,7 +751,7 @@ impl VersionComparison {
 pub struct CompatibilityResult {
     /// Whether versions are compatible
     pub is_compatible: bool,
-    
+
     /// Compatibility issues found
     pub issues: Vec<CompatibilityIssue>,
 }
@@ -760,10 +764,13 @@ impl CompatibilityResult {
             issues: Vec::new(),
         }
     }
-    
+
     /// Add a compatibility issue
     pub fn add_issue(&mut self, issue: CompatibilityIssue) {
-        if matches!(issue.severity, ImpactSeverity::High | ImpactSeverity::Critical) {
+        if matches!(
+            issue.severity,
+            ImpactSeverity::High | ImpactSeverity::Critical
+        ) {
             self.is_compatible = false;
         }
         self.issues.push(issue);
@@ -775,10 +782,10 @@ impl CompatibilityResult {
 pub struct CompatibilityIssue {
     /// Type of compatibility issue
     pub issue_type: CompatibilityIssueType,
-    
+
     /// Issue description
     pub description: String,
-    
+
     /// Severity of the issue
     pub severity: ImpactSeverity,
 }
@@ -803,13 +810,13 @@ pub enum CompatibilityIssueType {
 pub struct MigrationResult {
     /// Overall migration success
     pub success: bool,
-    
+
     /// Individual step results
     pub step_results: Vec<MigrationStepResult>,
-    
+
     /// Total migration time
     pub total_time: std::time::Duration,
-    
+
     /// Migration summary
     pub summary: String,
 }
@@ -824,7 +831,7 @@ impl MigrationResult {
             summary: String::new(),
         }
     }
-    
+
     /// Add a step result
     pub fn add_step_result(&mut self, step_result: MigrationStepResult) {
         if !step_result.success {
@@ -840,13 +847,13 @@ impl MigrationResult {
 pub struct MigrationStepResult {
     /// Step identifier
     pub step_id: String,
-    
+
     /// Whether the step succeeded
     pub success: bool,
-    
+
     /// Result message
     pub message: String,
-    
+
     /// Step execution time
     pub execution_time: std::time::Duration,
 }
@@ -877,12 +884,12 @@ impl VersionValidationStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_shape_version_registry() {
         let config = VersionRegistryConfig::default();
         let registry = ShapeVersionRegistry::new(config);
-        
+
         // Create a test shape
         let shape = Shape {
             id: ShapeId::new("http://example.org/PersonShape".to_string()),
@@ -891,7 +898,7 @@ mod tests {
             closed: false,
             ignored_properties: Vec::new(),
         };
-        
+
         let version = Version::new(1, 0, 0);
         let metadata = ShapeVersionMetadata {
             version_id: ShapeVersionId {
@@ -918,9 +925,9 @@ mod tests {
             parent_version: None,
             child_versions: Vec::new(),
         };
-        
+
         let version_id = registry.register_version(shape, version, metadata).unwrap();
-        
+
         // Verify version was registered
         let retrieved = registry.get_version(&version_id);
         assert!(retrieved.is_some());

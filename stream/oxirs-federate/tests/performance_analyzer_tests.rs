@@ -35,7 +35,10 @@ async fn test_performance_analyzer_custom_config() {
 
     assert_eq!(analyzer.get_config().enable_real_time_monitoring, false);
     assert_eq!(analyzer.get_config().history_retention_hours, 48);
-    assert_eq!(analyzer.get_config().analysis_interval, Duration::from_secs(30));
+    assert_eq!(
+        analyzer.get_config().analysis_interval,
+        Duration::from_secs(30)
+    );
     assert_eq!(analyzer.get_config().enable_predictive_analysis, false);
 }
 
@@ -137,12 +140,12 @@ async fn test_bottleneck_detection() {
         overall_latency_p50: Duration::from_millis(800),
         overall_latency_p95: Duration::from_millis(1500),
         overall_latency_p99: Duration::from_millis(2000),
-        throughput_qps: 10.0, // Low throughput
-        error_rate: 0.15,     // High error rate
-        timeout_rate: 0.08,   // High timeout rate
-        cache_hit_rate: 0.30, // Low cache hit rate
-        memory_usage_mb: 2048.0, // High memory usage
-        cpu_usage_percent: 95.0, // High CPU usage
+        throughput_qps: 10.0,         // Low throughput
+        error_rate: 0.15,             // High error rate
+        timeout_rate: 0.08,           // High timeout rate
+        cache_hit_rate: 0.30,         // Low cache hit rate
+        memory_usage_mb: 2048.0,      // High memory usage
+        cpu_usage_percent: 95.0,      // High CPU usage
         network_bandwidth_mbps: 10.0, // Low bandwidth
         active_connections: 200,
         queue_depth: 50, // High queue depth
@@ -150,7 +153,9 @@ async fn test_bottleneck_detection() {
 
     // Record problematic metrics
     for _ in 0..10 {
-        analyzer.record_system_metrics(high_latency_metrics.clone()).await;
+        analyzer
+            .record_system_metrics(high_latency_metrics.clone())
+            .await;
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
 
@@ -159,15 +164,21 @@ async fn test_bottleneck_detection() {
 
     // Should detect multiple bottlenecks
     assert!(!bottlenecks.is_empty());
-    
+
     // Should detect high latency bottleneck
-    assert!(bottlenecks.iter().any(|b| matches!(b.bottleneck_type, BottleneckType::HighLatency)));
-    
+    assert!(bottlenecks
+        .iter()
+        .any(|b| matches!(b.bottleneck_type, BottleneckType::HighLatency)));
+
     // Should detect high error rate bottleneck
-    assert!(bottlenecks.iter().any(|b| matches!(b.bottleneck_type, BottleneckType::HighErrorRate)));
-    
+    assert!(bottlenecks
+        .iter()
+        .any(|b| matches!(b.bottleneck_type, BottleneckType::HighErrorRate)));
+
     // Should detect resource constraints
-    assert!(bottlenecks.iter().any(|b| matches!(b.bottleneck_type, BottleneckType::ResourceConstraint)));
+    assert!(bottlenecks
+        .iter()
+        .any(|b| matches!(b.bottleneck_type, BottleneckType::ResourceConstraint)));
 }
 
 #[tokio::test]
@@ -205,12 +216,16 @@ async fn test_performance_prediction() {
 
     // Should have predictions for various metrics
     assert!(!predictions.is_empty());
-    
+
     // Should predict performance degradation trends
-    assert!(predictions.iter().any(|p| matches!(p.prediction_type, PredictionType::PerformanceDegradation)));
-    
+    assert!(predictions
+        .iter()
+        .any(|p| matches!(p.prediction_type, PredictionType::PerformanceDegradation)));
+
     // Should predict resource exhaustion
-    assert!(predictions.iter().any(|p| matches!(p.prediction_type, PredictionType::ResourceExhaustion)));
+    assert!(predictions
+        .iter()
+        .any(|p| matches!(p.prediction_type, PredictionType::ResourceExhaustion)));
 }
 
 #[tokio::test]
@@ -227,9 +242,9 @@ async fn test_optimization_recommendations() {
         throughput_qps: 15.0,
         error_rate: 0.08,
         timeout_rate: 0.05,
-        cache_hit_rate: 0.40, // Low cache hit rate
-        memory_usage_mb: 1800.0, // High memory usage
-        cpu_usage_percent: 85.0, // High CPU usage
+        cache_hit_rate: 0.40,         // Low cache hit rate
+        memory_usage_mb: 1800.0,      // High memory usage
+        cpu_usage_percent: 85.0,      // High CPU usage
         network_bandwidth_mbps: 20.0, // Low bandwidth
         active_connections: 150,
         queue_depth: 30,
@@ -237,29 +252,46 @@ async fn test_optimization_recommendations() {
 
     // Record multiple data points
     for _ in 0..15 {
-        analyzer.record_system_metrics(problematic_metrics.clone()).await;
+        analyzer
+            .record_system_metrics(problematic_metrics.clone())
+            .await;
         tokio::time::sleep(Duration::from_millis(5)).await;
     }
 
     // Generate optimization recommendations
-    let recommendations = analyzer.generate_optimization_recommendations().await.unwrap();
+    let recommendations = analyzer
+        .generate_optimization_recommendations()
+        .await
+        .unwrap();
 
     // Should have recommendations
     assert!(!recommendations.is_empty());
-    
+
     // Should recommend caching improvements
-    assert!(recommendations.iter().any(|r| matches!(r.category, OptimizationCategory::Caching)));
-    
+    assert!(recommendations
+        .iter()
+        .any(|r| matches!(r.category, OptimizationCategory::Caching)));
+
     // Should recommend resource scaling
-    assert!(recommendations.iter().any(|r| matches!(r.category, OptimizationCategory::ResourceScaling)));
-    
+    assert!(recommendations
+        .iter()
+        .any(|r| matches!(r.category, OptimizationCategory::ResourceScaling)));
+
     // Should recommend query optimization
-    assert!(recommendations.iter().any(|r| matches!(r.category, OptimizationCategory::QueryOptimization)));
-    
+    assert!(recommendations
+        .iter()
+        .any(|r| matches!(r.category, OptimizationCategory::QueryOptimization)));
+
     // Each recommendation should have a priority and effort estimate
     for rec in &recommendations {
-        assert!(matches!(rec.priority, Priority::High | Priority::Medium | Priority::Low));
-        assert!(matches!(rec.effort, ImplementationEffort::Low | ImplementationEffort::Medium | ImplementationEffort::High));
+        assert!(matches!(
+            rec.priority,
+            Priority::High | Priority::Medium | Priority::Low
+        ));
+        assert!(matches!(
+            rec.effort,
+            ImplementationEffort::Low | ImplementationEffort::Medium | ImplementationEffort::High
+        ));
         assert!(!rec.description.is_empty());
         assert!(!rec.impact_description.is_empty());
     }
@@ -289,7 +321,9 @@ async fn test_baseline_establishment() {
 
     // Record enough data points to establish baseline
     for _ in 0..20 {
-        analyzer.record_system_metrics(baseline_metrics.clone()).await;
+        analyzer
+            .record_system_metrics(baseline_metrics.clone())
+            .await;
         tokio::time::sleep(Duration::from_millis(2)).await;
     }
 
@@ -342,15 +376,15 @@ async fn test_anomaly_detection() {
         overall_latency_p50: Duration::from_millis(1000), // 10x normal
         overall_latency_p95: Duration::from_millis(2000),
         overall_latency_p99: Duration::from_millis(3000),
-        throughput_qps: 10.0, // 1/10 normal
-        error_rate: 0.20,     // 20x normal
-        timeout_rate: 0.10,   // 20x normal
-        cache_hit_rate: 0.20, // Much lower than normal
-        memory_usage_mb: 2000.0, // 4x normal
-        cpu_usage_percent: 95.0, // Much higher than normal
+        throughput_qps: 10.0,         // 1/10 normal
+        error_rate: 0.20,             // 20x normal
+        timeout_rate: 0.10,           // 20x normal
+        cache_hit_rate: 0.20,         // Much lower than normal
+        memory_usage_mb: 2000.0,      // 4x normal
+        cpu_usage_percent: 95.0,      // Much higher than normal
         network_bandwidth_mbps: 10.0, // 1/10 normal
-        active_connections: 200, // 8x normal
-        queue_depth: 50, // Much higher than normal
+        active_connections: 200,      // 8x normal
+        queue_depth: 50,              // Much higher than normal
     };
 
     analyzer.record_system_metrics(anomalous_metrics).await;
@@ -360,16 +394,22 @@ async fn test_anomaly_detection() {
 
     // Should detect multiple anomalies
     assert!(!anomalies.is_empty());
-    
+
     // Should detect performance degradation
-    assert!(anomalies.iter().any(|a| matches!(a.anomaly_type, AnomalyType::PerformanceDegradation)));
-    
+    assert!(anomalies
+        .iter()
+        .any(|a| matches!(a.anomaly_type, AnomalyType::PerformanceDegradation)));
+
     // Should detect error spike
-    assert!(anomalies.iter().any(|a| matches!(a.anomaly_type, AnomalyType::ErrorSpike)));
-    
+    assert!(anomalies
+        .iter()
+        .any(|a| matches!(a.anomaly_type, AnomalyType::ErrorSpike)));
+
     // Should detect resource spike
-    assert!(anomalies.iter().any(|a| matches!(a.anomaly_type, AnomalyType::ResourceSpike)));
-    
+    assert!(anomalies
+        .iter()
+        .any(|a| matches!(a.anomaly_type, AnomalyType::ResourceSpike)));
+
     // Each anomaly should have confidence score
     for anomaly in &anomalies {
         assert!(anomaly.confidence >= 0.0 && anomaly.confidence <= 1.0);
@@ -412,7 +452,7 @@ async fn test_performance_regression_detection() {
 
     // Update baseline
     analyzer.update_performance_baseline().await.unwrap();
-    
+
     // Wait for baseline update
     tokio::time::sleep(Duration::from_millis(150)).await;
 
@@ -422,20 +462,22 @@ async fn test_performance_regression_detection() {
         overall_latency_p50: Duration::from_millis(200), // 2.5x worse
         overall_latency_p95: Duration::from_millis(400),
         overall_latency_p99: Duration::from_millis(600),
-        throughput_qps: 60.0, // 50% worse
-        error_rate: 0.02,     // 4x worse
-        timeout_rate: 0.01,   // 5x worse
-        cache_hit_rate: 0.70, // Worse
-        memory_usage_mb: 800.0, // 2x worse
-        cpu_usage_percent: 70.0, // 2x worse
+        throughput_qps: 60.0,         // 50% worse
+        error_rate: 0.02,             // 4x worse
+        timeout_rate: 0.01,           // 5x worse
+        cache_hit_rate: 0.70,         // Worse
+        memory_usage_mb: 800.0,       // 2x worse
+        cpu_usage_percent: 70.0,      // 2x worse
         network_bandwidth_mbps: 80.0, // Slightly worse
-        active_connections: 40, // 2x worse
-        queue_depth: 8, // 4x worse
+        active_connections: 40,       // 2x worse
+        queue_depth: 8,               // 4x worse
     };
 
     // Record degraded performance multiple times
     for _ in 0..8 {
-        analyzer.record_system_metrics(degraded_metrics.clone()).await;
+        analyzer
+            .record_system_metrics(degraded_metrics.clone())
+            .await;
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
 
@@ -444,16 +486,22 @@ async fn test_performance_regression_detection() {
 
     // Should detect regressions
     assert!(!regressions.is_empty());
-    
+
     // Should detect latency regression
-    assert!(regressions.iter().any(|r| matches!(r.regression_type, RegressionType::LatencyIncrease)));
-    
+    assert!(regressions
+        .iter()
+        .any(|r| matches!(r.regression_type, RegressionType::LatencyIncrease)));
+
     // Should detect throughput regression
-    assert!(regressions.iter().any(|r| matches!(r.regression_type, RegressionType::ThroughputDecrease)));
-    
+    assert!(regressions
+        .iter()
+        .any(|r| matches!(r.regression_type, RegressionType::ThroughputDecrease)));
+
     // Should detect error rate regression
-    assert!(regressions.iter().any(|r| matches!(r.regression_type, RegressionType::ErrorRateIncrease)));
-    
+    assert!(regressions
+        .iter()
+        .any(|r| matches!(r.regression_type, RegressionType::ErrorRateIncrease)));
+
     // Each regression should have confidence and impact
     for regression in &regressions {
         assert!(regression.confidence >= 0.0 && regression.confidence <= 1.0);
@@ -469,7 +517,7 @@ async fn test_service_comparison_analysis() {
 
     // Record metrics for multiple services
     let services = vec!["service-fast", "service-slow", "service-medium"];
-    
+
     for (i, service_id) in services.iter().enumerate() {
         let metrics = ServicePerformanceMetrics {
             service_id: service_id.to_string(),
@@ -484,7 +532,7 @@ async fn test_service_comparison_analysis() {
             data_transfer_kb: 100.0 + (i as f64 * 50.0),
             connection_pool_utilization: 0.5 + (i as f64 * 0.2),
         };
-        
+
         // Record multiple data points for each service
         for _ in 0..5 {
             analyzer.record_service_metrics(metrics.clone()).await;
@@ -498,13 +546,13 @@ async fn test_service_comparison_analysis() {
     // Should identify best and worst performing services
     assert!(!comparison.service_rankings.is_empty());
     assert_eq!(comparison.service_rankings.len(), 3);
-    
+
     // Best performing service should be service-fast (index 0)
     assert_eq!(comparison.service_rankings[0].service_id, "service-fast");
-    
+
     // Worst performing service should be service-slow (index 2)
     assert_eq!(comparison.service_rankings[2].service_id, "service-slow");
-    
+
     // Should have performance insights
     assert!(!comparison.insights.is_empty());
 }
@@ -534,10 +582,10 @@ async fn test_alert_threshold_configuration() {
         overall_latency_p50: Duration::from_millis(600), // Exceeds threshold
         overall_latency_p95: Duration::from_millis(1000),
         overall_latency_p99: Duration::from_millis(1500),
-        throughput_qps: 40.0, // Below threshold
-        error_rate: 0.08,     // Exceeds threshold
-        timeout_rate: 0.05,   // Exceeds threshold
-        cache_hit_rate: 0.50, // Below threshold
+        throughput_qps: 40.0,    // Below threshold
+        error_rate: 0.08,        // Exceeds threshold
+        timeout_rate: 0.05,      // Exceeds threshold
+        cache_hit_rate: 0.50,    // Below threshold
         memory_usage_mb: 1000.0, // Exceeds threshold (assuming total is ~1200MB)
         cpu_usage_percent: 90.0, // Exceeds threshold
         network_bandwidth_mbps: 100.0,
@@ -545,7 +593,9 @@ async fn test_alert_threshold_configuration() {
         queue_depth: 25, // Exceeds threshold
     };
 
-    analyzer.record_system_metrics(threshold_exceeding_metrics).await;
+    analyzer
+        .record_system_metrics(threshold_exceeding_metrics)
+        .await;
 
     // Check for triggered alerts
     let alerts = analyzer.get_triggered_alerts().await.unwrap();

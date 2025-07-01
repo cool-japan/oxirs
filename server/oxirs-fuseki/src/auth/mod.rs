@@ -1,5 +1,5 @@
 //! Comprehensive authentication and authorization system
-//! 
+//!
 //! This module provides a modular authentication system with support for:
 //! - Username/password authentication
 //! - X.509 certificate authentication  
@@ -30,9 +30,9 @@ pub mod session;
 pub mod types;
 
 // Re-export key types for easy access
-pub use types::*;
 pub use certificate::CertificateAuth as CertificateAuthenticator;
 pub use session::SessionManager;
+pub use types::*;
 
 /// Main authentication service that coordinates all authentication methods
 #[derive(Clone)]
@@ -130,7 +130,9 @@ impl AuthService {
 
     /// Authenticate using X.509 certificate
     pub async fn authenticate_certificate(&self, cert_data: &[u8]) -> FusekiResult<AuthResult> {
-        self.certificate_auth.authenticate_certificate(cert_data).await
+        self.certificate_auth
+            .authenticate_certificate(cert_data)
+            .await
     }
 
     /// Create a new session for authenticated user
@@ -204,7 +206,7 @@ impl AuthService {
 }
 
 /// Axum authentication extractor
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AuthUser(pub User);
 
 impl AuthUser {
@@ -298,10 +300,10 @@ impl axum::response::IntoResponse for AuthError {
 /// Helper function to decode basic auth
 fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::error::Error + Send>> {
     use base64::{engine::general_purpose::STANDARD, Engine};
-    
+
     let decoded = STANDARD.decode(encoded)?;
     let credential = String::from_utf8(decoded)?;
-    
+
     if let Some((username, password)) = credential.split_once(':') {
         Ok((username.to_string(), password.to_string()))
     } else {

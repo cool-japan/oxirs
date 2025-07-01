@@ -879,24 +879,23 @@ impl NeuralSymbolicModel {
         // Initialize neural layers with proper dimensions
         let mut neural_layers = Vec::new();
         let layer_configs = &config.architecture_config.neural_config.layers;
-        
+
         for (i, layer_config) in layer_configs.iter().enumerate() {
             let input_size = if i == 0 {
                 dimensions // First layer takes configured input dimension
             } else {
                 layer_configs[i - 1].size // Subsequent layers take previous layer's output
             };
-            
+
             let output_size = if i == layer_configs.len() - 1 {
                 dimensions // Last layer outputs configured dimension
             } else {
                 layer_config.size // Middle layers use configured size
             };
-            
-            neural_layers.push(Array2::from_shape_fn(
-                (output_size, input_size),
-                |_| rand::random::<f32>() * 0.1,
-            ));
+
+            neural_layers.push(Array2::from_shape_fn((output_size, input_size), |_| {
+                rand::random::<f32>() * 0.1
+            }));
         }
 
         Self {

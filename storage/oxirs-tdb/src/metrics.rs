@@ -227,9 +227,10 @@ impl TimeSeriesMetrics {
             labels,
         };
 
-        let mut data = self.data.lock().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire lock on time series data")
-        })?;
+        let mut data = self
+            .data
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire lock on time series data"))?;
 
         data.push(point);
 
@@ -244,9 +245,10 @@ impl TimeSeriesMetrics {
 
     /// Get all data points
     pub fn get_data(&self) -> Result<Vec<MetricsDataPoint>> {
-        let data = self.data.lock().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire lock on time series data")
-        })?;
+        let data = self
+            .data
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire lock on time series data"))?;
         Ok(data.clone())
     }
 
@@ -256,9 +258,10 @@ impl TimeSeriesMetrics {
         start: SystemTime,
         end: SystemTime,
     ) -> Result<Vec<MetricsDataPoint>> {
-        let data = self.data.lock().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire lock on time series data")
-        })?;
+        let data = self
+            .data
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire lock on time series data"))?;
 
         let filtered: Vec<_> = data
             .iter()
@@ -299,10 +302,7 @@ impl TimeSeriesMetrics {
         let p99 = sorted_values.get(p99_index).cloned().unwrap_or(0.0);
 
         // Calculate standard deviation
-        let variance = values
-            .iter()
-            .map(|v| (v - mean).powi(2))
-            .sum::<f64>() / count as f64;
+        let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / count as f64;
         let std_dev = variance.sqrt();
 
         Ok(MetricsStatistics {
@@ -380,8 +380,13 @@ impl MetricsCollector {
     }
 
     /// Record query execution time
-    pub fn record_query_time(&self, duration: Duration, labels: HashMap<String, String>) -> Result<()> {
-        self.query_times.add_point(duration.as_secs_f64() * 1000.0, labels)
+    pub fn record_query_time(
+        &self,
+        duration: Duration,
+        labels: HashMap<String, String>,
+    ) -> Result<()> {
+        self.query_times
+            .add_point(duration.as_secs_f64() * 1000.0, labels)
     }
 
     /// Record error occurrence
@@ -396,28 +401,35 @@ impl MetricsCollector {
         let mut labels = HashMap::new();
         labels.insert("metric_type".to_string(), "system".to_string());
 
-        self.memory_usage.add_point(metrics.memory_usage as f64, labels.clone())?;
+        self.memory_usage
+            .add_point(metrics.memory_usage as f64, labels.clone())?;
         self.cpu_usage.add_point(metrics.cpu_usage, labels)?;
 
         // Update current metrics
-        let mut current = self.current_metrics.lock().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire lock on current metrics")
-        })?;
+        let mut current = self
+            .current_metrics
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire lock on current metrics"))?;
         current.system = metrics;
 
         Ok(())
     }
 
     /// Record throughput metrics
-    pub fn record_throughput(&self, operations_per_second: f64, labels: HashMap<String, String>) -> Result<()> {
+    pub fn record_throughput(
+        &self,
+        operations_per_second: f64,
+        labels: HashMap<String, String>,
+    ) -> Result<()> {
         self.throughput.add_point(operations_per_second, labels)
     }
 
     /// Get current metrics snapshot
     pub fn get_current_metrics(&self) -> Result<ComprehensiveMetrics> {
-        let metrics = self.current_metrics.lock().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire lock on current metrics")
-        })?;
+        let metrics = self
+            .current_metrics
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire lock on current metrics"))?;
         Ok(metrics.clone())
     }
 
@@ -478,9 +490,10 @@ impl MetricsCollector {
 
     /// Update last collection time
     pub fn mark_collected(&self) -> Result<()> {
-        let mut last = self.last_collection.lock().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire lock on last collection time")
-        })?;
+        let mut last = self
+            .last_collection
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire lock on last collection time"))?;
         *last = Instant::now();
         Ok(())
     }
@@ -502,7 +515,8 @@ pub struct MetricsReport {
 impl MetricsReport {
     /// Export report as JSON
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string_pretty(self).map_err(|e| anyhow::anyhow!("Failed to serialize report: {}", e))
+        serde_json::to_string_pretty(self)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize report: {}", e))
     }
 
     /// Export report as CSV-like format
@@ -602,7 +616,9 @@ mod tests {
         let mut labels = HashMap::new();
         labels.insert("operation".to_string(), "insert".to_string());
 
-        collector.record_query_time(Duration::from_millis(50), labels).unwrap();
+        collector
+            .record_query_time(Duration::from_millis(50), labels)
+            .unwrap();
         collector.record_error("timeout").unwrap();
 
         let query_stats = collector.get_query_stats(Duration::from_secs(60)).unwrap();
@@ -616,19 +632,21 @@ mod tests {
     #[test]
     fn test_metrics_report_generation() {
         let collector = MetricsCollector::new(Duration::from_secs(1));
-        
+
         // Add some test data
         let mut labels = HashMap::new();
         labels.insert("operation".to_string(), "query".to_string());
-        collector.record_query_time(Duration::from_millis(100), labels).unwrap();
+        collector
+            .record_query_time(Duration::from_millis(100), labels)
+            .unwrap();
         collector.record_throughput(1000.0, HashMap::new()).unwrap();
 
         let report = collector.generate_report(Duration::from_secs(60)).unwrap();
         assert!(report.query_performance.count > 0);
-        
+
         let json = report.to_json().unwrap();
         assert!(!json.is_empty());
-        
+
         let csv = report.to_csv();
         assert!(csv.contains("query_time_ms"));
     }

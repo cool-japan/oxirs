@@ -286,17 +286,18 @@ impl KGEncoder {
     /// Encode knowledge graph entity
     pub fn encode_entity(&self, entity_embedding: &Array1<f32>) -> Result<Array1<f32>> {
         let projection = self.parameters.get("entity_projection").unwrap();
-        
+
         // Ensure dimension compatibility for matrix-vector multiplication
         if projection.ncols() != entity_embedding.len() {
             // Truncate or pad entity embedding to match projection input dimension
             let target_dim = projection.ncols();
             let mut adjusted_embedding = Array1::zeros(target_dim);
-            
+
             let copy_len = entity_embedding.len().min(target_dim);
-            adjusted_embedding.slice_mut(ndarray::s![..copy_len])
+            adjusted_embedding
+                .slice_mut(ndarray::s![..copy_len])
                 .assign(&entity_embedding.slice(ndarray::s![..copy_len]));
-            
+
             Ok(projection.dot(&adjusted_embedding))
         } else {
             Ok(projection.dot(entity_embedding))
@@ -306,17 +307,18 @@ impl KGEncoder {
     /// Encode knowledge graph relation
     pub fn encode_relation(&self, relation_embedding: &Array1<f32>) -> Result<Array1<f32>> {
         let projection = self.parameters.get("relation_projection").unwrap();
-        
+
         // Ensure dimension compatibility for matrix-vector multiplication
         if projection.ncols() != relation_embedding.len() {
             // Truncate or pad relation embedding to match projection input dimension
             let target_dim = projection.ncols();
             let mut adjusted_embedding = Array1::zeros(target_dim);
-            
+
             let copy_len = relation_embedding.len().min(target_dim);
-            adjusted_embedding.slice_mut(ndarray::s![..copy_len])
+            adjusted_embedding
+                .slice_mut(ndarray::s![..copy_len])
                 .assign(&relation_embedding.slice(ndarray::s![..copy_len]));
-            
+
             Ok(projection.dot(&adjusted_embedding))
         } else {
             Ok(projection.dot(relation_embedding))
@@ -460,7 +462,7 @@ impl AlignmentNetwork {
         let min_dim = text_emb.len().min(kg_emb.len());
         let text_slice = text_emb.slice(ndarray::s![..min_dim]);
         let kg_slice = kg_emb.slice(ndarray::s![..min_dim]);
-        
+
         // Simple dot product attention (avoiding matrix multiplication dimension issues)
         let attention_score = text_slice.dot(&kg_slice);
         let attention_weight = 1.0 / (1.0 + (-attention_score).exp()); // Sigmoid
@@ -474,7 +476,7 @@ impl AlignmentNetwork {
         let min_dim = text_emb.len().min(kg_emb.len());
         let text_slice = text_emb.slice(ndarray::s![..min_dim]);
         let kg_slice = kg_emb.slice(ndarray::s![..min_dim]);
-        
+
         // Cosine similarity
         let dot_product = text_slice.dot(&kg_slice);
         let text_norm = text_slice.dot(&text_slice).sqrt();
@@ -494,8 +496,7 @@ impl MultiModalEmbedding {
         let model_id = Uuid::from_u128(rand::random());
         let now = Utc::now();
 
-        let text_encoder =
-            TextEncoder::new("BERT".to_string(), config.text_dim, config.text_dim);
+        let text_encoder = TextEncoder::new("BERT".to_string(), config.text_dim, config.text_dim);
 
         let kg_encoder = KGEncoder::new(
             "ComplEx".to_string(),
@@ -2059,9 +2060,9 @@ mod tests {
                 dimensions: 128, // Match kg_dim for consistency
                 ..Default::default()
             },
-            text_dim: 128,     // Use consistent dimensions
-            kg_dim: 128,       // Keep original
-            unified_dim: 128,  // Use consistent dimensions
+            text_dim: 128,    // Use consistent dimensions
+            kg_dim: 128,      // Keep original
+            unified_dim: 128, // Use consistent dimensions
             ..Default::default()
         };
         let model = MultiModalEmbedding::new(config);

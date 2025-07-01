@@ -5,11 +5,13 @@
 //! https://www.w3.org/TR/sparql11-query/#sparqlQuery
 
 use crate::model::*;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr).
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PropertyPathExpression {
     /// Simple named node predicate
     NamedNode(NamedNode),
@@ -110,7 +112,8 @@ impl From<NamedNode> for PropertyPathExpression {
 }
 
 /// An [expression](https://www.w3.org/TR/sparql11-query/#expressions).
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Expression {
     NamedNode(NamedNode),
     Literal(Literal),
@@ -287,7 +290,8 @@ impl fmt::Display for Expression {
 }
 
 /// A function call
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FunctionExpression {
     /// A call to a built-in function
     BuiltIn(BuiltInFunction),
@@ -489,7 +493,8 @@ impl fmt::Display for BuiltInFunction {
 }
 
 /// A [SPARQL graph pattern](https://www.w3.org/TR/sparql11-query/#GraphPattern)
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum GraphPattern {
     /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern).
     Bgp { patterns: Vec<TriplePattern> },
@@ -941,7 +946,8 @@ impl GraphPattern {
 }
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum GroundTerm {
     NamedNode(NamedNode),
     Literal(Literal),
@@ -1022,7 +1028,8 @@ impl From<GroundTerm> for Term {
 
 /// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) without blank nodes.
 #[cfg(feature = "sparql-12")]
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GroundTriple {
     pub subject: GroundSubject,
     pub predicate: NamedNode,
@@ -1044,7 +1051,8 @@ impl GroundTriple {
 
 /// Either a named node or a quoted triple
 #[cfg(feature = "sparql-12")]
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum GroundSubject {
     NamedNode(NamedNode),
     Triple(Box<GroundTriple>),

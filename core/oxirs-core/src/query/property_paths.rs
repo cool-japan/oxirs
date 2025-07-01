@@ -237,8 +237,8 @@ impl PropertyPathPattern {
 
     /// Convert a simple property path to a regular triple pattern
     pub fn to_triple_pattern(&self) -> Option<TriplePattern> {
-        use crate::model::pattern::{SubjectPattern, PredicatePattern, ObjectPattern};
-        
+        use crate::model::pattern::{ObjectPattern, PredicatePattern, SubjectPattern};
+
         match &self.path {
             PropertyPath::Predicate(p) => {
                 let subject = match &self.subject {
@@ -247,9 +247,9 @@ impl PropertyPathPattern {
                     TermPattern::BlankNode(b) => Some(SubjectPattern::BlankNode(b.clone())),
                     _ => None,
                 };
-                
+
                 let predicate = Some(PredicatePattern::NamedNode(p.clone()));
-                
+
                 let object = match &self.object {
                     TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
                     TermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
@@ -257,9 +257,13 @@ impl PropertyPathPattern {
                     TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
                     _ => None,
                 };
-                
-                Some(TriplePattern { subject, predicate, object })
-            },
+
+                Some(TriplePattern {
+                    subject,
+                    predicate,
+                    object,
+                })
+            }
             _ => None,
         }
     }

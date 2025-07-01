@@ -1,6 +1,6 @@
 //! Main GPU accelerator implementation
 
-use super::{GpuConfig, GpuDevice, GpuBuffer, GpuPerformanceStats, KernelManager};
+use super::{GpuBuffer, GpuConfig, GpuDevice, GpuPerformanceStats, KernelManager};
 use crate::similarity::SimilarityMetric;
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
@@ -45,7 +45,7 @@ unsafe impl Sync for GpuAccelerator {}
 impl GpuAccelerator {
     pub fn new(config: GpuConfig) -> Result<Self> {
         config.validate()?;
-        
+
         let device = GpuDevice::get_device_info(config.device_id)?;
         let memory_pool = Arc::new(Mutex::new(Vec::new()));
         let stream_pool = Self::create_streams(config.stream_count, config.device_id)?;
@@ -64,12 +64,12 @@ impl GpuAccelerator {
 
     fn create_streams(count: usize, device_id: i32) -> Result<Vec<CudaStream>> {
         let mut streams = Vec::new();
-        
+
         for _ in 0..count {
             let handle = Self::create_cuda_stream(device_id)?;
             streams.push(CudaStream { handle, device_id });
         }
-        
+
         Ok(streams)
     }
 
@@ -110,7 +110,7 @@ impl GpuAccelerator {
         metric: SimilarityMetric,
     ) -> Result<Vec<f32>> {
         let timer = super::performance::GpuTimer::start("similarity_computation");
-        
+
         // Allocate GPU buffers
         let mut query_buffer = GpuBuffer::new(queries.len(), self.config.device_id)?;
         let mut db_buffer = GpuBuffer::new(database.len(), self.config.device_id)?;
@@ -144,7 +144,9 @@ impl GpuAccelerator {
 
         // Record performance
         let duration = timer.stop();
-        self.performance_stats.write().record_compute_operation(duration);
+        self.performance_stats
+            .write()
+            .record_compute_operation(duration);
 
         Ok(results)
     }
@@ -163,25 +165,40 @@ impl GpuAccelerator {
         {
             // Get or compile kernel
             let kernel = self.get_or_compile_kernel(kernel_name)?;
-            
+
             // Calculate grid and block dimensions
-            let (blocks, threads) = self.device.calculate_optimal_block_config(query_count * db_count);
-            
+            let (blocks, threads) = self
+                .device
+                .calculate_optimal_block_config(query_count * db_count);
+
             // Launch kernel
-            self.launch_kernel_impl(&kernel, blocks, threads, &[
-                query_buffer.ptr() as *mut std::ffi::c_void,
-                db_buffer.ptr() as *mut std::ffi::c_void,
-                result_buffer.ptr() as *mut std::ffi::c_void,
-                &query_count as *const usize as *mut std::ffi::c_void,
-                &db_count as *const usize as *mut std::ffi::c_void,
-                &dim as *const usize as *mut std::ffi::c_void,
-            ])?;
+            self.launch_kernel_impl(
+                &kernel,
+                blocks,
+                threads,
+                &[
+                    query_buffer.ptr() as *mut std::ffi::c_void,
+                    db_buffer.ptr() as *mut std::ffi::c_void,
+                    result_buffer.ptr() as *mut std::ffi::c_void,
+                    &query_count as *const usize as *mut std::ffi::c_void,
+                    &db_count as *const usize as *mut std::ffi::c_void,
+                    &dim as *const usize as *mut std::ffi::c_void,
+                ],
+            )?;
         }
 
         #[cfg(not(feature = "cuda"))]
         {
             // Fallback CPU implementation for testing
-            self.compute_similarity_cpu(query_buffer, db_buffer, result_buffer, query_count, db_count, dim, kernel_name)?;
+            self.compute_similarity_cpu(
+                query_buffer,
+                db_buffer,
+                result_buffer,
+                query_count,
+                db_count,
+                dim,
+                kernel_name,
+            )?;
         }
 
         Ok(())
@@ -210,13 +227,13 @@ impl GpuAccelerator {
             for j in 0..db_count {
                 let query_vec = &query_data[i * dim..(i + 1) * dim];
                 let db_vec = &db_data[j * dim..(j + 1) * dim];
-                
+
                 let similarity = match metric {
                     "cosine_similarity" => self.compute_cosine_similarity(query_vec, db_vec),
                     "euclidean_distance" => self.compute_euclidean_distance(query_vec, db_vec),
                     _ => 0.0,
                 };
-                
+
                 results[i * db_count + j] = similarity;
             }
         }
@@ -229,7 +246,7 @@ impl GpuAccelerator {
         let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
         let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-        
+
         if norm_a > 1e-8 && norm_b > 1e-8 {
             dot / (norm_a * norm_b)
         } else {
@@ -257,17 +274,22 @@ impl GpuAccelerator {
         }
 
         // Compile kernel
-        let kernel_source = self.kernel_manager.get_kernel(name)
+        let kernel_source = self
+            .kernel_manager
+            .get_kernel(name)
             .ok_or_else(|| anyhow!("Kernel {} not found", name))?;
-        
+
         let compiled_kernel = self.compile_kernel(name, kernel_source)?;
-        
+
         // Cache the compiled kernel
-        self.kernel_cache.write().insert(name.to_string(), CudaKernel {
-            function: compiled_kernel.function,
-            module: compiled_kernel.module,
-            name: compiled_kernel.name.clone(),
-        });
+        self.kernel_cache.write().insert(
+            name.to_string(),
+            CudaKernel {
+                function: compiled_kernel.function,
+                module: compiled_kernel.module,
+                name: compiled_kernel.name.clone(),
+            },
+        );
 
         Ok(compiled_kernel)
     }
@@ -307,8 +329,16 @@ impl GpuAccelerator {
         unsafe {
             let result = cudaLaunchKernel(
                 kernel.function,
-                dim3 { x: blocks as u32, y: 1, z: 1 },
-                dim3 { x: threads as u32, y: 1, z: 1 },
+                dim3 {
+                    x: blocks as u32,
+                    y: 1,
+                    z: 1,
+                },
+                dim3 {
+                    x: threads as u32,
+                    y: 1,
+                    z: 1,
+                },
                 args.as_ptr() as *mut *mut std::ffi::c_void,
                 0,
                 std::ptr::null_mut(),
@@ -316,7 +346,7 @@ impl GpuAccelerator {
             if result != cudaError_t::cudaSuccess {
                 return Err(anyhow!("Failed to launch kernel"));
             }
-            
+
             // Synchronize
             let result = cudaDeviceSynchronize();
             if result != cudaError_t::cudaSuccess {
@@ -369,7 +399,9 @@ impl Drop for GpuAccelerator {
         {
             for stream in &self.stream_pool {
                 unsafe {
-                    let _ = cuda_runtime_sys::cudaStreamDestroy(stream.handle as cuda_runtime_sys::cudaStream_t);
+                    let _ = cuda_runtime_sys::cudaStreamDestroy(
+                        stream.handle as cuda_runtime_sys::cudaStream_t,
+                    );
                 }
             }
         }

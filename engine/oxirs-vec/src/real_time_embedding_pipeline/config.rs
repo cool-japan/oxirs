@@ -74,7 +74,10 @@ pub enum BackpressureStrategy {
     /// Adaptive strategy based on system load
     Adaptive,
     /// Exponential backoff
-    ExponentialBackoff { initial_delay_ms: u64, max_delay_ms: u64 },
+    ExponentialBackoff {
+        initial_delay_ms: u64,
+        max_delay_ms: u64,
+    },
 }
 
 /// Retry configuration

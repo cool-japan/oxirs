@@ -3,13 +3,13 @@
 //! This module provides an extensive tutorial covering advanced features, real-world applications,
 //! and comprehensive API documentation for the OxiRS Rule Engine.
 
+use anyhow::{anyhow, Result};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
-use anyhow::{Result, anyhow};
 
-use crate::{RuleEngine, Rule, RuleAtom, Term};
-use crate::debug::DebuggableRuleEngine;
 use crate::cache::RuleCache;
+use crate::debug::DebuggableRuleEngine;
+use crate::{Rule, RuleAtom, RuleEngine, Term};
 
 /// # Advanced Rule Engine Features
 ///
@@ -22,7 +22,7 @@ impl AdvancedFeatures {
     /// Demonstrate complex reasoning with multiple rule types
     pub fn complex_reasoning_example() -> Result<Vec<RuleAtom>> {
         let mut engine = RuleEngine::new();
-        
+
         // Transitivity rule for "knows" relationship
         let transitivity_rule = Rule {
             name: "knows_transitivity".to_string(),
@@ -41,15 +41,13 @@ impl AdvancedFeatures {
                 RuleAtom::NotEqual {
                     left: Term::Variable("X".to_string()),
                     right: Term::Variable("Z".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("knows".to_string()),
-                    object: Term::Variable("Z".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("knows".to_string()),
+                object: Term::Variable("Z".to_string()),
+            }],
         };
 
         // Trust propagation rule
@@ -70,15 +68,13 @@ impl AdvancedFeatures {
                     subject: Term::Variable("Z".to_string()),
                     predicate: Term::Constant("type".to_string()),
                     object: Term::Constant("Service".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("trusts".to_string()),
-                    object: Term::Variable("Z".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("trusts".to_string()),
+                object: Term::Variable("Z".to_string()),
+            }],
         };
 
         // Social influence rule
@@ -99,15 +95,13 @@ impl AdvancedFeatures {
                     subject: Term::Variable("Y".to_string()),
                     predicate: Term::Constant("influencer".to_string()),
                     object: Term::Constant("true".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("interested_in".to_string()),
-                    object: Term::Variable("Z".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("interested_in".to_string()),
+                object: Term::Variable("Z".to_string()),
+            }],
         };
 
         engine.add_rule(transitivity_rule);
@@ -158,7 +152,7 @@ impl AdvancedFeatures {
                 subject: Term::Constant("charlie".to_string()),
                 predicate: Term::Constant("likes".to_string()),
                 object: Term::Constant("sustainable_fashion".to_string()),
-            }
+            },
         ];
 
         engine.forward_chain(&facts)
@@ -181,15 +175,13 @@ impl AdvancedFeatures {
                     subject: Term::Variable("Event2".to_string()),
                     predicate: Term::Constant("precedes".to_string()),
                     object: Term::Variable("Event3".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Event1".to_string()),
-                    predicate: Term::Constant("eventually_precedes".to_string()),
-                    object: Term::Variable("Event3".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Event1".to_string()),
+                predicate: Term::Constant("eventually_precedes".to_string()),
+                object: Term::Variable("Event3".to_string()),
+            }],
         };
 
         // Temporal constraint rule
@@ -205,21 +197,19 @@ impl AdvancedFeatures {
                     subject: Term::Variable("X".to_string()),
                     predicate: Term::Constant("duration".to_string()),
                     object: Term::Variable("Duration".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("ends_at".to_string()),
-                    object: Term::Function {
-                        name: "add".to_string(),
-                        args: vec![
-                            Term::Variable("StartTime".to_string()),
-                            Term::Variable("Duration".to_string())
-                        ]
-                    },
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("ends_at".to_string()),
+                object: Term::Function {
+                    name: "add".to_string(),
+                    args: vec![
+                        Term::Variable("StartTime".to_string()),
+                        Term::Variable("Duration".to_string()),
+                    ],
+                },
+            }],
         };
 
         engine.add_rule(sequence_rule);
@@ -247,7 +237,7 @@ impl AdvancedFeatures {
                 subject: Term::Constant("meeting1".to_string()),
                 predicate: Term::Constant("duration".to_string()),
                 object: Term::Constant("60".to_string()),
-            }
+            },
         ];
 
         engine.forward_chain(&facts)
@@ -275,15 +265,13 @@ impl AdvancedFeatures {
                     subject: Term::Variable("Location".to_string()),
                     predicate: Term::Constant("wind_speed".to_string()),
                     object: Term::Constant("low".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Location".to_string()),
-                    predicate: Term::Constant("will_rain".to_string()),
-                    object: Term::Constant("high_confidence".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Location".to_string()),
+                predicate: Term::Constant("will_rain".to_string()),
+                object: Term::Constant("high_confidence".to_string()),
+            }],
         };
 
         // Medium confidence rule
@@ -299,15 +287,13 @@ impl AdvancedFeatures {
                     subject: Term::Variable("Location".to_string()),
                     predicate: Term::Constant("clouds".to_string()),
                     object: Term::Constant("present".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Location".to_string()),
-                    predicate: Term::Constant("will_rain".to_string()),
-                    object: Term::Constant("medium_confidence".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Location".to_string()),
+                predicate: Term::Constant("will_rain".to_string()),
+                object: Term::Constant("medium_confidence".to_string()),
+            }],
         };
 
         engine.add_rule(high_confidence_rule);
@@ -338,7 +324,7 @@ impl AdvancedFeatures {
                 subject: Term::Constant("phoenix".to_string()),
                 predicate: Term::Constant("clouds".to_string()),
                 object: Term::Constant("present".to_string()),
-            }
+            },
         ];
 
         engine.forward_chain(&facts)
@@ -375,15 +361,13 @@ impl RealWorldApplications {
                     subject: Term::Variable("Patient".to_string()),
                     predicate: Term::Constant("has_symptom".to_string()),
                     object: Term::Constant("body_aches".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Patient".to_string()),
-                    predicate: Term::Constant("possible_diagnosis".to_string()),
-                    object: Term::Constant("influenza".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Patient".to_string()),
+                predicate: Term::Constant("possible_diagnosis".to_string()),
+                object: Term::Constant("influenza".to_string()),
+            }],
         };
 
         let pneumonia_diagnosis = Rule {
@@ -403,15 +387,13 @@ impl RealWorldApplications {
                     subject: Term::Variable("Patient".to_string()),
                     predicate: Term::Constant("has_symptom".to_string()),
                     object: Term::Constant("difficulty_breathing".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Patient".to_string()),
-                    predicate: Term::Constant("possible_diagnosis".to_string()),
-                    object: Term::Constant("pneumonia".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Patient".to_string()),
+                predicate: Term::Constant("possible_diagnosis".to_string()),
+                object: Term::Constant("pneumonia".to_string()),
+            }],
         };
 
         // Treatment recommendation rules
@@ -431,15 +413,13 @@ impl RealWorldApplications {
                 RuleAtom::GreaterThan {
                     left: Term::Variable("Age".to_string()),
                     right: Term::Constant("18".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Patient".to_string()),
-                    predicate: Term::Constant("recommended_treatment".to_string()),
-                    object: Term::Constant("antibiotics".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Patient".to_string()),
+                predicate: Term::Constant("recommended_treatment".to_string()),
+                object: Term::Constant("antibiotics".to_string()),
+            }],
         };
 
         engine.add_rule(flu_diagnosis);
@@ -484,7 +464,7 @@ impl RealWorldApplications {
                 subject: Term::Constant("patient002".to_string()),
                 predicate: Term::Constant("age".to_string()),
                 object: Term::Constant("45".to_string()),
-            }
+            },
         ];
 
         engine.forward_chain(&facts)
@@ -519,18 +499,16 @@ impl RealWorldApplications {
                         name: "multiply".to_string(),
                         args: vec![
                             Term::Variable("AvgAmount".to_string()),
-                            Term::Constant("10".to_string())
-                        ]
-                    }
-                }
+                            Term::Constant("10".to_string()),
+                        ],
+                    },
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Transaction".to_string()),
-                    predicate: Term::Constant("risk_level".to_string()),
-                    object: Term::Constant("high".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Transaction".to_string()),
+                predicate: Term::Constant("risk_level".to_string()),
+                object: Term::Constant("high".to_string()),
+            }],
         };
 
         let frequent_transactions_rule = Rule {
@@ -544,15 +522,13 @@ impl RealWorldApplications {
                 RuleAtom::GreaterThan {
                     left: Term::Variable("Count".to_string()),
                     right: Term::Constant("20".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Account".to_string()),
-                    predicate: Term::Constant("suspicious_activity".to_string()),
-                    object: Term::Constant("high_frequency".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Account".to_string()),
+                predicate: Term::Constant("suspicious_activity".to_string()),
+                object: Term::Constant("high_frequency".to_string()),
+            }],
         };
 
         let geographic_anomaly_rule = Rule {
@@ -576,15 +552,13 @@ impl RealWorldApplications {
                 RuleAtom::NotEqual {
                     left: Term::Variable("Location".to_string()),
                     right: Term::Variable("UsualLocation".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Transaction".to_string()),
-                    predicate: Term::Constant("geographic_risk".to_string()),
-                    object: Term::Constant("anomaly".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Transaction".to_string()),
+                predicate: Term::Constant("geographic_risk".to_string()),
+                object: Term::Constant("anomaly".to_string()),
+            }],
         };
 
         engine.add_rule(unusual_amount_rule);
@@ -623,7 +597,7 @@ impl RealWorldApplications {
                 subject: Term::Constant("acc123".to_string()),
                 predicate: Term::Constant("transactions_today".to_string()),
                 object: Term::Constant("25".to_string()),
-            }
+            },
         ];
 
         engine.forward_chain(&facts)
@@ -650,15 +624,13 @@ impl RealWorldApplications {
                 RuleAtom::LessThan {
                     left: Term::Variable("Stock".to_string()),
                     right: Term::Variable("ReorderLevel".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Product".to_string()),
-                    predicate: Term::Constant("action_required".to_string()),
-                    object: Term::Constant("reorder".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Product".to_string()),
+                predicate: Term::Constant("action_required".to_string()),
+                object: Term::Constant("reorder".to_string()),
+            }],
         };
 
         // Supplier selection rule
@@ -683,15 +655,13 @@ impl RealWorldApplications {
                 RuleAtom::GreaterThan {
                     left: Term::Variable("Rating".to_string()),
                     right: Term::Constant("4.0".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Product".to_string()),
-                    predicate: Term::Constant("preferred_supplier".to_string()),
-                    object: Term::Variable("Supplier".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Product".to_string()),
+                predicate: Term::Constant("preferred_supplier".to_string()),
+                object: Term::Variable("Supplier".to_string()),
+            }],
         };
 
         // Urgent delivery rule
@@ -711,15 +681,13 @@ impl RealWorldApplications {
                 RuleAtom::LessThan {
                     left: Term::Variable("Stock".to_string()),
                     right: Term::Variable("CriticalLevel".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Product".to_string()),
-                    predicate: Term::Constant("delivery_priority".to_string()),
-                    object: Term::Constant("urgent".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Product".to_string()),
+                predicate: Term::Constant("delivery_priority".to_string()),
+                object: Term::Constant("urgent".to_string()),
+            }],
         };
 
         engine.add_rule(reorder_rule);
@@ -763,7 +731,7 @@ impl RealWorldApplications {
                 subject: Term::Constant("supplier_b".to_string()),
                 predicate: Term::Constant("rating".to_string()),
                 object: Term::Constant("3.8".to_string()),
-            }
+            },
         ];
 
         engine.forward_chain(&facts)
@@ -786,15 +754,13 @@ impl RealWorldApplications {
                     subject: Term::Variable("Room".to_string()),
                     predicate: Term::Constant("lights".to_string()),
                     object: Term::Constant("on".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Room".to_string()),
-                    predicate: Term::Constant("action".to_string()),
-                    object: Term::Constant("turn_off_lights".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Room".to_string()),
+                predicate: Term::Constant("action".to_string()),
+                object: Term::Constant("turn_off_lights".to_string()),
+            }],
         };
 
         // Security rule
@@ -815,15 +781,13 @@ impl RealWorldApplications {
                     subject: Term::Constant("home".to_string()),
                     predicate: Term::Constant("security_mode".to_string()),
                     object: Term::Constant("armed".to_string()),
-                }
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Constant("security_system".to_string()),
-                    predicate: Term::Constant("alert".to_string()),
-                    object: Term::Constant("intrusion_detected".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Constant("security_system".to_string()),
+                predicate: Term::Constant("alert".to_string()),
+                object: Term::Constant("intrusion_detected".to_string()),
+            }],
         };
 
         // Climate control rule
@@ -846,18 +810,16 @@ impl RealWorldApplications {
                         name: "add".to_string(),
                         args: vec![
                             Term::Variable("Target".to_string()),
-                            Term::Constant("2".to_string())
-                        ]
-                    }
-                }
+                            Term::Constant("2".to_string()),
+                        ],
+                    },
+                },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Room".to_string()),
-                    predicate: Term::Constant("action".to_string()),
-                    object: Term::Constant("increase_cooling".to_string()),
-                }
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Room".to_string()),
+                predicate: Term::Constant("action".to_string()),
+                object: Term::Constant("increase_cooling".to_string()),
+            }],
         };
 
         engine.add_rule(energy_saving_rule);
@@ -901,7 +863,7 @@ impl RealWorldApplications {
                 subject: Term::Constant("home".to_string()),
                 predicate: Term::Constant("security_mode".to_string()),
                 object: Term::Constant("armed".to_string()),
-            }
+            },
         ];
 
         engine.forward_chain(&facts)
@@ -928,7 +890,7 @@ impl PerformanceOptimization {
         }
 
         let facts = Self::create_large_fact_set(1000);
-        
+
         let start = Instant::now();
         let _result = debug_engine.debug_forward_chain(&facts)?;
         let duration = start.elapsed();
@@ -939,13 +901,22 @@ impl PerformanceOptimization {
         println!("Total execution time: {:?}", duration);
         println!("Facts processed: {}", metrics.facts_processed);
         println!("Facts derived: {}", metrics.facts_derived);
-        println!("Cache hit rate: {:.2}%", 
-            (metrics.cache_hits as f64 / (metrics.cache_hits + metrics.cache_misses) as f64) * 100.0);
+        println!(
+            "Cache hit rate: {:.2}%",
+            (metrics.cache_hits as f64 / (metrics.cache_hits + metrics.cache_misses) as f64)
+                * 100.0
+        );
 
         // Identify bottlenecks
         let conflicts = debug_engine.get_conflicts();
-        let performance_issues: Vec<_> = conflicts.iter()
-            .filter(|c| matches!(c.conflict_type, crate::debug::ConflictType::PerformanceBottleneck))
+        let performance_issues: Vec<_> = conflicts
+            .iter()
+            .filter(|c| {
+                matches!(
+                    c.conflict_type,
+                    crate::debug::ConflictType::PerformanceBottleneck
+                )
+            })
             .collect();
 
         if !performance_issues.is_empty() {
@@ -967,7 +938,7 @@ impl PerformanceOptimization {
         // Warm the cache
         let rules = Self::create_performance_test_rules();
         let facts = Self::create_large_fact_set(100);
-        
+
         if let Some(cache) = engine.get_cache() {
             cache.warm_cache(&rules, &facts);
         }
@@ -993,14 +964,22 @@ impl PerformanceOptimization {
         println!("Cache Performance Analysis:");
         println!("With cache: {:?}", with_cache);
         println!("Without cache: {:?}", without_cache);
-        println!("Performance improvement: {:.2}x", 
-            without_cache.as_nanos() as f64 / with_cache.as_nanos() as f64);
+        println!(
+            "Performance improvement: {:.2}x",
+            without_cache.as_nanos() as f64 / with_cache.as_nanos() as f64
+        );
 
         if let Some(cache) = engine.get_cache() {
             let stats = cache.get_statistics();
             println!("Final cache statistics:");
-            println!("  Rule cache hit rate: {:.2}%", stats.rule_cache.hit_rate * 100.0);
-            println!("  Derivation cache hit rate: {:.2}%", stats.derivation_cache.hit_rate * 100.0);
+            println!(
+                "  Rule cache hit rate: {:.2}%",
+                stats.rule_cache.hit_rate * 100.0
+            );
+            println!(
+                "  Derivation cache hit rate: {:.2}%",
+                stats.derivation_cache.hit_rate * 100.0
+            );
         }
 
         Ok(())
@@ -1021,15 +1000,13 @@ impl PerformanceOptimization {
                         subject: Term::Variable("Y".to_string()),
                         predicate: Term::Constant("connected".to_string()),
                         object: Term::Variable("Z".to_string()),
-                    }
+                    },
                 ],
-                head: vec![
-                    RuleAtom::Triple {
-                        subject: Term::Variable("X".to_string()),
-                        predicate: Term::Constant("reachable".to_string()),
-                        object: Term::Variable("Z".to_string()),
-                    }
-                ],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant("reachable".to_string()),
+                    object: Term::Variable("Z".to_string()),
+                }],
             },
             Rule {
                 name: "classification_rule".to_string(),
@@ -1043,15 +1020,13 @@ impl PerformanceOptimization {
                         subject: Term::Variable("X".to_string()),
                         predicate: Term::Constant("property2".to_string()),
                         object: Term::Constant("value2".to_string()),
-                    }
+                    },
                 ],
-                head: vec![
-                    RuleAtom::Triple {
-                        subject: Term::Variable("X".to_string()),
-                        predicate: Term::Constant("category".to_string()),
-                        object: Term::Constant("special".to_string()),
-                    }
-                ],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant("category".to_string()),
+                    object: Term::Constant("special".to_string()),
+                }],
             },
             Rule {
                 name: "aggregation_rule".to_string(),
@@ -1065,26 +1040,24 @@ impl PerformanceOptimization {
                         subject: Term::Variable("X".to_string()),
                         predicate: Term::Constant("value".to_string()),
                         object: Term::Variable("V".to_string()),
-                    }
+                    },
                 ],
-                head: vec![
-                    RuleAtom::Triple {
-                        subject: Term::Variable("Group".to_string()),
-                        predicate: Term::Constant("total_value".to_string()),
-                        object: Term::Function {
-                            name: "sum".to_string(),
-                            args: vec![Term::Variable("V".to_string())]
-                        },
-                    }
-                ],
-            }
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("Group".to_string()),
+                    predicate: Term::Constant("total_value".to_string()),
+                    object: Term::Function {
+                        name: "sum".to_string(),
+                        args: vec![Term::Variable("V".to_string())],
+                    },
+                }],
+            },
         ]
     }
 
     /// Create a large set of facts for performance testing
     fn create_large_fact_set(size: usize) -> Vec<RuleAtom> {
         let mut facts = Vec::new();
-        
+
         // Generate connected graph
         for i in 0..size {
             if i < size - 1 {
@@ -1094,7 +1067,7 @@ impl PerformanceOptimization {
                     object: Term::Constant(format!("node{}", i + 1)),
                 });
             }
-            
+
             // Add properties
             if i % 3 == 0 {
                 facts.push(RuleAtom::Triple {
@@ -1103,7 +1076,7 @@ impl PerformanceOptimization {
                     object: Term::Constant("value1".to_string()),
                 });
             }
-            
+
             if i % 5 == 0 {
                 facts.push(RuleAtom::Triple {
                     subject: Term::Constant(format!("node{}", i)),
@@ -1112,23 +1085,53 @@ impl PerformanceOptimization {
                 });
             }
         }
-        
+
         facts
     }
 
     /// Performance optimization tips and techniques
     pub fn optimization_techniques() -> Vec<(&'static str, &'static str)> {
         vec![
-            ("Rule Ordering", "Place most selective rules first to reduce search space"),
-            ("Index Usage", "Use appropriate indices for frequently accessed patterns"),
-            ("Caching Strategy", "Implement multi-level caching for rule results and derivations"),
-            ("Memory Management", "Monitor memory usage and implement garbage collection"),
-            ("Parallel Processing", "Use parallel execution for independent rule evaluations"),
-            ("Fact Ordering", "Order facts to maximize early constraint satisfaction"),
-            ("Rule Specialization", "Create specialized rules for common patterns"),
-            ("Batch Processing", "Process facts in batches to improve cache locality"),
-            ("Incremental Updates", "Use incremental reasoning for dynamic fact sets"),
-            ("Profiling", "Regular profiling to identify and address bottlenecks")
+            (
+                "Rule Ordering",
+                "Place most selective rules first to reduce search space",
+            ),
+            (
+                "Index Usage",
+                "Use appropriate indices for frequently accessed patterns",
+            ),
+            (
+                "Caching Strategy",
+                "Implement multi-level caching for rule results and derivations",
+            ),
+            (
+                "Memory Management",
+                "Monitor memory usage and implement garbage collection",
+            ),
+            (
+                "Parallel Processing",
+                "Use parallel execution for independent rule evaluations",
+            ),
+            (
+                "Fact Ordering",
+                "Order facts to maximize early constraint satisfaction",
+            ),
+            (
+                "Rule Specialization",
+                "Create specialized rules for common patterns",
+            ),
+            (
+                "Batch Processing",
+                "Process facts in batches to improve cache locality",
+            ),
+            (
+                "Incremental Updates",
+                "Use incremental reasoning for dynamic fact sets",
+            ),
+            (
+                "Profiling",
+                "Regular profiling to identify and address bottlenecks",
+            ),
         ]
     }
 }
@@ -1158,17 +1161,18 @@ mod tests {
         let result = RealWorldApplications::healthcare_diagnosis_system();
         assert!(result.is_ok());
         let facts = result.unwrap();
-        
+
         // Should have diagnosis results
-        let diagnoses: Vec<_> = facts.iter()
+        let diagnoses: Vec<_> = facts
+            .iter()
             .filter(|fact| match fact {
                 RuleAtom::Triple { predicate, .. } => {
                     predicate == &Term::Constant("possible_diagnosis".to_string())
-                },
-                _ => false
+                }
+                _ => false,
             })
             .collect();
-        
+
         assert!(!diagnoses.is_empty());
     }
 
@@ -1177,19 +1181,20 @@ mod tests {
         let result = RealWorldApplications::fraud_detection_system();
         assert!(result.is_ok());
         let facts = result.unwrap();
-        
+
         // Should detect risks
-        let risks: Vec<_> = facts.iter()
+        let risks: Vec<_> = facts
+            .iter()
             .filter(|fact| match fact {
                 RuleAtom::Triple { predicate, .. } => {
-                    predicate == &Term::Constant("risk_level".to_string()) ||
-                    predicate == &Term::Constant("suspicious_activity".to_string()) ||
-                    predicate == &Term::Constant("geographic_risk".to_string())
-                },
-                _ => false
+                    predicate == &Term::Constant("risk_level".to_string())
+                        || predicate == &Term::Constant("suspicious_activity".to_string())
+                        || predicate == &Term::Constant("geographic_risk".to_string())
+                }
+                _ => false,
             })
             .collect();
-        
+
         assert!(!risks.is_empty());
     }
 
@@ -1198,19 +1203,20 @@ mod tests {
         let result = RealWorldApplications::supply_chain_optimization();
         assert!(result.is_ok());
         let facts = result.unwrap();
-        
+
         // Should have optimization actions
-        let actions: Vec<_> = facts.iter()
+        let actions: Vec<_> = facts
+            .iter()
             .filter(|fact| match fact {
                 RuleAtom::Triple { predicate, .. } => {
-                    predicate == &Term::Constant("action_required".to_string()) ||
-                    predicate == &Term::Constant("preferred_supplier".to_string()) ||
-                    predicate == &Term::Constant("delivery_priority".to_string())
-                },
-                _ => false
+                    predicate == &Term::Constant("action_required".to_string())
+                        || predicate == &Term::Constant("preferred_supplier".to_string())
+                        || predicate == &Term::Constant("delivery_priority".to_string())
+                }
+                _ => false,
             })
             .collect();
-        
+
         assert!(!actions.is_empty());
     }
 
@@ -1219,18 +1225,19 @@ mod tests {
         let result = RealWorldApplications::smart_home_automation();
         assert!(result.is_ok());
         let facts = result.unwrap();
-        
+
         // Should have automation actions
-        let actions: Vec<_> = facts.iter()
+        let actions: Vec<_> = facts
+            .iter()
             .filter(|fact| match fact {
                 RuleAtom::Triple { predicate, .. } => {
-                    predicate == &Term::Constant("action".to_string()) ||
-                    predicate == &Term::Constant("alert".to_string())
-                },
-                _ => false
+                    predicate == &Term::Constant("action".to_string())
+                        || predicate == &Term::Constant("alert".to_string())
+                }
+                _ => false,
             })
             .collect();
-        
+
         assert!(!actions.is_empty());
     }
 

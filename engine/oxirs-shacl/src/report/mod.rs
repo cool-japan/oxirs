@@ -13,7 +13,7 @@ pub mod summary;
 
 // Re-export key types for convenience
 pub use core::ValidationReport;
-pub use format::{ReportFormat, ReportConfig};
+pub use format::{ReportConfig, ReportFormat};
 pub use generator::{generate_report, ReportGenerator};
 pub use metadata::ReportMetadata;
 pub use summary::ValidationSummary;

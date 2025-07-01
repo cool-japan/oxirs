@@ -1008,9 +1008,7 @@ impl GraphThreadPool {
         }
         #[cfg(not(feature = "parallel"))]
         {
-            Ok(Self {
-                max_batch_size,
-            })
+            Ok(Self { max_batch_size })
         }
     }
 

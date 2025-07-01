@@ -3,12 +3,9 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::{
-    validation::ValidationViolation,
-    Severity, ShapeId, Result,
-};
+use crate::{validation::ValidationViolation, Result, Severity, ShapeId};
 
-use super::{ReportMetadata, ValidationSummary, ReportFormat, ReportConfig};
+use super::{ReportConfig, ReportFormat, ReportMetadata, ValidationSummary};
 
 /// SHACL validation report according to W3C specification
 ///
@@ -37,7 +34,7 @@ use super::{ReportMetadata, ValidationSummary, ReportFormat, ReportConfig};
 ///     
 ///     // Print violations
 ///     for violation in report.violations() {
-///         println\!("Violation at {}: {}", 
+///         println\!("Violation at {}: {}",
 ///             violation.focus_node,
 ///             violation.result_message.as_deref().unwrap_or("No message")
 ///         );
@@ -112,7 +109,7 @@ impl ValidationReport {
     pub fn from_violations(violations: Vec<ValidationViolation>) -> Self {
         let conforms = violations.is_empty();
         let summary = ValidationSummary::from_violations(&violations);
-        
+
         Self {
             conforms,
             violations,
@@ -285,11 +282,13 @@ impl ValidationReport {
     pub fn to_json_with_config(&self, config: &ReportConfig) -> Result<String> {
         let filtered_report = self.apply_config(config)?;
         if config.pretty_print {
-            serde_json::to_string_pretty(&filtered_report)
-                .map_err(|e| crate::ShaclError::ReportError(format!("JSON serialization failed: {}", e)))
+            serde_json::to_string_pretty(&filtered_report).map_err(|e| {
+                crate::ShaclError::ReportError(format!("JSON serialization failed: {}", e))
+            })
         } else {
-            serde_json::to_string(&filtered_report)
-                .map_err(|e| crate::ShaclError::ReportError(format!("JSON serialization failed: {}", e)))
+            serde_json::to_string(&filtered_report).map_err(|e| {
+                crate::ShaclError::ReportError(format!("JSON serialization failed: {}", e))
+            })
         }
     }
 
@@ -336,8 +335,9 @@ impl ValidationReport {
     /// Export to YAML with custom configuration
     pub fn to_yaml_with_config(&self, config: &ReportConfig) -> Result<String> {
         let filtered_report = self.apply_config(config)?;
-        serde_yaml::to_string(&filtered_report)
-            .map_err(|e| crate::ShaclError::ReportError(format!("YAML serialization failed: {}", e)))
+        serde_yaml::to_string(&filtered_report).map_err(|e| {
+            crate::ShaclError::ReportError(format!("YAML serialization failed: {}", e))
+        })
     }
 
     /// Apply configuration filters to create a filtered report
@@ -369,7 +369,10 @@ impl ValidationReport {
 
     fn update_conformance(&mut self) {
         // Data conforms if there are no error-level violations
-        self.conforms = !self.violations.iter().any(|v| v.result_severity == Severity::Violation);
+        self.conforms = !self
+            .violations
+            .iter()
+            .any(|v| v.result_severity == Severity::Violation);
     }
 
     /// Merge another report into this one
@@ -377,7 +380,7 @@ impl ValidationReport {
         self.violations.extend(other.violations);
         self.update_conformance();
         self.update_summary();
-        
+
         // Update metadata with combined information
         if let Some(other_duration) = other.metadata.validation_duration {
             if let Some(our_duration) = self.metadata.validation_duration {
@@ -395,7 +398,8 @@ impl ValidationReport {
 
     /// Create a subset report with only specific severities
     pub fn subset_by_severity(&self, severities: &[Severity]) -> ValidationReport {
-        let filtered_violations: Vec<ValidationViolation> = self.violations
+        let filtered_violations: Vec<ValidationViolation> = self
+            .violations
             .iter()
             .filter(|v| severities.contains(&v.result_severity))
             .cloned()
@@ -406,7 +410,8 @@ impl ValidationReport {
 
     /// Create a subset report with only specific shapes
     pub fn subset_by_shapes(&self, shape_ids: &[ShapeId]) -> ValidationReport {
-        let filtered_violations: Vec<ValidationViolation> = self.violations
+        let filtered_violations: Vec<ValidationViolation> = self
+            .violations
             .iter()
             .filter(|v| shape_ids.contains(&v.source_shape))
             .cloned()

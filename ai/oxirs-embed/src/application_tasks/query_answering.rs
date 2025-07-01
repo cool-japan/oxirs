@@ -3,8 +3,8 @@
 //! This module provides comprehensive evaluation for question answering tasks
 //! using embedding models, including accuracy, completeness, and reasoning analysis.
 
-use crate::EmbeddingModel;
 use super::ApplicationEvalConfig;
+use crate::EmbeddingModel;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

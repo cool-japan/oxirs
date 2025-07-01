@@ -4,10 +4,11 @@
 //! embedding models, including silhouette score, inertia, and other clustering
 //! quality metrics.
 
-use crate::EmbeddingModel;
 use super::ApplicationEvalConfig;
+use crate::EmbeddingModel;
 use anyhow::{anyhow, Result};
 use ndarray::Array2;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -164,8 +165,9 @@ impl ClusteringEvaluator {
 
         // Initialize centroids randomly
         let mut centroids = Vec::new();
+        let mut rng = rand::thread_rng();
         for _ in 0..k {
-            let idx = rand::random::<usize>() % n;
+            let idx = rng.gen::<usize>() % n;
             centroids.push(embeddings[idx].clone());
         }
 

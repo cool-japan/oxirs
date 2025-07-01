@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::mvcc::TransactionId;
 use crate::nodes::{NodeId, Term};
-use crate::triple_store::{Triple, Quad, TripleStore, IndexType};
+use crate::triple_store::{IndexType, Quad, Triple, TripleStore};
 
 /// Variable in a query pattern
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -73,11 +73,7 @@ pub struct TriplePattern {
 
 impl TriplePattern {
     /// Create a new triple pattern
-    pub fn new(
-        subject: PatternElement,
-        predicate: PatternElement,
-        object: PatternElement,
-    ) -> Self {
+    pub fn new(subject: PatternElement, predicate: PatternElement, object: PatternElement) -> Self {
         Self {
             subject,
             predicate,
@@ -88,7 +84,7 @@ impl TriplePattern {
     /// Get all variables in this pattern
     pub fn variables(&self) -> Vec<Variable> {
         let mut vars = Vec::new();
-        
+
         if let PatternElement::Variable(var) = &self.subject {
             vars.push(var.clone());
         }
@@ -98,29 +94,40 @@ impl TriplePattern {
         if let PatternElement::Variable(var) = &self.object {
             vars.push(var.clone());
         }
-        
+
         vars
     }
 
     /// Get the selectivity score (lower is more selective)
     pub fn selectivity_score(&self) -> u32 {
         let mut score = 0;
-        
-        if !self.subject.is_bound() { score += 1; }
-        if !self.predicate.is_bound() { score += 1; }
-        if !self.object.is_bound() { score += 1; }
-        
+
+        if !self.subject.is_bound() {
+            score += 1;
+        }
+        if !self.predicate.is_bound() {
+            score += 1;
+        }
+        if !self.object.is_bound() {
+            score += 1;
+        }
+
         score
     }
 
     /// Check if pattern matches a triple with given variable bindings
     pub fn matches(&self, triple: &Triple, bindings: &VariableBindings) -> bool {
-        self.matches_element(&self.subject, triple.subject, bindings) &&
-        self.matches_element(&self.predicate, triple.predicate, bindings) &&
-        self.matches_element(&self.object, triple.object, bindings)
+        self.matches_element(&self.subject, triple.subject, bindings)
+            && self.matches_element(&self.predicate, triple.predicate, bindings)
+            && self.matches_element(&self.object, triple.object, bindings)
     }
 
-    fn matches_element(&self, pattern: &PatternElement, value: NodeId, bindings: &VariableBindings) -> bool {
+    fn matches_element(
+        &self,
+        pattern: &PatternElement,
+        value: NodeId,
+        bindings: &VariableBindings,
+    ) -> bool {
         match pattern {
             PatternElement::Bound(bound_value) => *bound_value == value,
             PatternElement::Variable(var) => {
@@ -167,7 +174,7 @@ impl SolutionBinding {
 
     pub fn merge(&self, other: &SolutionBinding) -> Option<SolutionBinding> {
         let mut merged = self.bindings.clone();
-        
+
         for (var, value) in &other.bindings {
             if let Some(existing_value) = merged.get(var) {
                 if existing_value != value {
@@ -177,7 +184,7 @@ impl SolutionBinding {
                 merged.insert(var.clone(), *value);
             }
         }
-        
+
         Some(SolutionBinding { bindings: merged })
     }
 
@@ -202,7 +209,7 @@ impl QueryPlan {
     pub fn new(patterns: Vec<TriplePattern>) -> Self {
         let join_order = Self::optimize_join_order(&patterns);
         let estimated_cost = Self::estimate_cost(&patterns, &join_order);
-        
+
         Self {
             patterns,
             join_order,
@@ -212,12 +219,12 @@ impl QueryPlan {
 
     /// Optimize join order based on selectivity
     fn optimize_join_order(patterns: &[TriplePattern]) -> Vec<usize> {
-        let mut indexed_patterns: Vec<(usize, &TriplePattern)> = 
+        let mut indexed_patterns: Vec<(usize, &TriplePattern)> =
             patterns.iter().enumerate().collect();
-        
+
         // Sort by selectivity (most selective first)
         indexed_patterns.sort_by_key(|(_, pattern)| pattern.selectivity_score());
-        
+
         indexed_patterns.into_iter().map(|(i, _)| i).collect()
     }
 
@@ -250,7 +257,8 @@ impl QueryStatistics {
         self.total_queries += 1;
         self.total_execution_time_ms += execution_time_ms;
         self.total_results_returned += results_count;
-        self.avg_execution_time_ms = self.total_execution_time_ms as f64 / self.total_queries as f64;
+        self.avg_execution_time_ms =
+            self.total_execution_time_ms as f64 / self.total_queries as f64;
     }
 }
 
@@ -270,22 +278,19 @@ impl QueryExecutor {
         pattern: &TriplePattern,
     ) -> Result<QueryResultIterator> {
         let start_time = std::time::Instant::now();
-        
+
         let signature = pattern.to_query_signature();
-        let results = self.store.query_triples_tx(
-            tx_id,
-            signature.0,
-            signature.1,
-            signature.2,
-        )?;
+        let results = self
+            .store
+            .query_triples_tx(tx_id, signature.0, signature.1, signature.2)?;
 
         // Convert results to solution bindings
         let mut solutions = Vec::new();
         let variables = pattern.variables();
-        
+
         for triple in results {
             let mut binding = SolutionBinding::new();
-            
+
             // Bind variables based on pattern
             if let PatternElement::Variable(var) = &pattern.subject {
                 binding = binding.with_binding(var.name.clone(), triple.subject);
@@ -296,12 +301,12 @@ impl QueryExecutor {
             if let PatternElement::Variable(var) = &pattern.object {
                 binding = binding.with_binding(var.name.clone(), triple.object);
             }
-            
+
             solutions.push(binding);
         }
 
         let execution_time = start_time.elapsed().as_millis() as u64;
-        
+
         // Update statistics
         if let Ok(mut stats) = self.statistics.lock() {
             stats.record_query(execution_time, solutions.len() as u64);
@@ -318,21 +323,21 @@ impl QueryExecutor {
         patterns: Vec<TriplePattern>,
     ) -> Result<QueryResultIterator> {
         let start_time = std::time::Instant::now();
-        
+
         if patterns.is_empty() {
             return Ok(QueryResultIterator::new(Vec::new()));
         }
 
         // Create and optimize query plan
         let plan = QueryPlan::new(patterns);
-        
+
         // Execute query plan
         let mut results = Vec::new();
         let mut intermediate_results: Option<Vec<SolutionBinding>> = None;
 
         for &pattern_idx in &plan.join_order {
             let pattern = &plan.patterns[pattern_idx];
-            
+
             if intermediate_results.is_none() {
                 // First pattern - get initial results
                 let pattern_results = self.execute_pattern(tx_id, pattern)?;
@@ -341,14 +346,14 @@ impl QueryExecutor {
                 // Subsequent patterns - join with existing results
                 let current_results = intermediate_results.take().unwrap();
                 let mut joined_results = Vec::new();
-                
+
                 for binding in current_results {
                     // Apply current bindings to pattern
                     let specialized_pattern = self.apply_bindings_to_pattern(pattern, &binding);
-                    
+
                     // Execute specialized pattern
                     let pattern_results = self.execute_pattern(tx_id, &specialized_pattern)?;
-                    
+
                     // Join results
                     for pattern_binding in pattern_results.collect() {
                         if let Some(merged) = binding.merge(&pattern_binding) {
@@ -356,9 +361,9 @@ impl QueryExecutor {
                         }
                     }
                 }
-                
+
                 intermediate_results = Some(joined_results);
-                
+
                 // Update join statistics
                 if let Ok(mut stats) = self.statistics.lock() {
                     stats.join_count += 1;
@@ -369,7 +374,7 @@ impl QueryExecutor {
         results = intermediate_results.unwrap_or_default();
 
         let execution_time = start_time.elapsed().as_millis() as u64;
-        
+
         // Update statistics
         if let Ok(mut stats) = self.statistics.lock() {
             stats.record_query(execution_time, results.len() as u64);
@@ -511,7 +516,8 @@ impl QueryBuilder {
         predicate: PatternElement,
         object: PatternElement,
     ) -> Self {
-        self.patterns.push(TriplePattern::new(subject, predicate, object));
+        self.patterns
+            .push(TriplePattern::new(subject, predicate, object));
         self
     }
 
@@ -583,11 +589,7 @@ mod tests {
 
     #[test]
     fn test_triple_pattern_variables() {
-        let pattern = TriplePattern::new(
-            pattern::var("s"),
-            pattern::bound(123),
-            pattern::var("o"),
-        );
+        let pattern = TriplePattern::new(pattern::var("s"), pattern::bound(123), pattern::var("o"));
 
         let vars = pattern.variables();
         assert_eq!(vars.len(), 2);
@@ -597,12 +599,9 @@ mod tests {
 
     #[test]
     fn test_solution_binding_merge() {
-        let binding1 = SolutionBinding::new()
-            .with_binding("x".to_string(), 123);
-        let binding2 = SolutionBinding::new()
-            .with_binding("y".to_string(), 456);
-        let binding3 = SolutionBinding::new()
-            .with_binding("x".to_string(), 789); // Conflict
+        let binding1 = SolutionBinding::new().with_binding("x".to_string(), 123);
+        let binding2 = SolutionBinding::new().with_binding("y".to_string(), 456);
+        let binding3 = SolutionBinding::new().with_binding("x".to_string(), 789); // Conflict
 
         let merged = binding1.merge(&binding2);
         assert!(merged.is_some());
@@ -617,16 +616,8 @@ mod tests {
     #[test]
     fn test_query_builder() {
         let patterns = QueryBuilder::new()
-            .add_triple(
-                pattern::var("s"),
-                pattern::bound(123),
-                pattern::var("o"),
-            )
-            .add_triple(
-                pattern::var("s"),
-                pattern::bound(456),
-                pattern::any(),
-            )
+            .add_triple(pattern::var("s"), pattern::bound(123), pattern::var("o"))
+            .add_triple(pattern::var("s"), pattern::bound(456), pattern::any())
             .build();
 
         assert_eq!(patterns.len(), 2);
@@ -643,7 +634,7 @@ mod tests {
         ];
 
         let plan = QueryPlan::new(patterns);
-        
+
         // Should order by selectivity: most selective first
         assert_eq!(plan.join_order[0], 1); // All bound pattern
         assert_eq!(plan.join_order[1], 2); // One bound pattern

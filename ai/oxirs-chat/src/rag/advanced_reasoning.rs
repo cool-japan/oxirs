@@ -435,7 +435,15 @@ impl AdvancedReasoningEngine {
 
         // Sort by temporal order if possible
         let mut sorted_triples = temporal_triples;
-        // TODO: Implement actual temporal sorting based on timestamps
+        
+        // Implement temporal sorting based on timestamps and sequential relationships
+        sorted_triples.sort_by(|a, b| {
+            // Try to extract temporal information from the triple objects
+            let a_temporal_score = self.extract_temporal_score(a);
+            let b_temporal_score = self.extract_temporal_score(b);
+            
+            a_temporal_score.partial_cmp(&b_temporal_score).unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut steps = Vec::new();
         for (i, triple) in sorted_triples.iter().enumerate() {
@@ -639,8 +647,8 @@ impl AdvancedReasoningEngine {
         // Chain completeness
         let chain_completeness = if chain.final_conclusion.is_some() { 1.0 } else { 0.5 };
 
-        // Temporal coherence (simplified)
-        let temporal_coherence = 0.8; // Would be calculated based on actual temporal analysis
+        // Temporal coherence (enhanced analysis)
+        let temporal_coherence = self.analyze_temporal_coherence(chain);
 
         let overall_quality = (logical_consistency + evidence_strength + 
                              chain_completeness + temporal_coherence) / 4.0;
@@ -652,6 +660,79 @@ impl AdvancedReasoningEngine {
             temporal_coherence,
             overall_quality,
         })
+    }
+
+    /// Extract temporal score from a triple for sorting purposes
+    fn extract_temporal_score(&self, triple: &Triple) -> f64 {
+        let object_str = triple.object().to_string().to_lowercase();
+        
+        // Look for temporal keywords and assign scores
+        if object_str.contains("before") || object_str.contains("first") || object_str.contains("initial") {
+            0.0
+        } else if object_str.contains("during") || object_str.contains("while") || object_str.contains("concurrent") {
+            0.5
+        } else if object_str.contains("after") || object_str.contains("then") || object_str.contains("following") {
+            1.0
+        } else if object_str.contains("finally") || object_str.contains("last") || object_str.contains("end") {
+            2.0
+        } else {
+            // Try to extract year or date information
+            if let Some(year) = self.extract_year_from_string(&object_str) {
+                year as f64 / 10000.0 // Normalize to smaller range
+            } else {
+                0.5 // Default middle position
+            }
+        }
+    }
+
+    /// Extract year from string if present
+    fn extract_year_from_string(&self, text: &str) -> Option<i32> {
+        // Simple regex to find 4-digit years between 1000-2100
+        let year_regex = Regex::new(r"\b(1[0-9]{3}|20[0-9]{2}|21[0-9]{2})\b").ok()?;
+        if let Some(captures) = year_regex.find(text) {
+            captures.as_str().parse().ok()
+        } else {
+            None
+        }
+    }
+
+    /// Enhanced temporal coherence analysis
+    fn analyze_temporal_coherence(&self, chain: &ReasoningChain) -> f64 {
+        if chain.steps.len() < 2 {
+            return 1.0; // Single step is coherent
+        }
+
+        let mut coherence_scores = Vec::new();
+        
+        for i in 1..chain.steps.len() {
+            let prev_step = &chain.steps[i - 1];
+            let curr_step = &chain.steps[i];
+            
+            // Check if temporal order makes sense
+            let prev_temporal = self.extract_temporal_info_from_step(prev_step);
+            let curr_temporal = self.extract_temporal_info_from_step(curr_step);
+            
+            let coherence = if prev_temporal <= curr_temporal {
+                1.0 // Correct temporal order
+            } else {
+                0.3 // Potential temporal inconsistency
+            };
+            
+            coherence_scores.push(coherence);
+        }
+        
+        coherence_scores.iter().sum::<f64>() / coherence_scores.len() as f64
+    }
+
+    /// Extract temporal information from a reasoning step
+    fn extract_temporal_info_from_step(&self, step: &ReasoningStep) -> f64 {
+        if let Some(conclusion) = &step.conclusion_triple {
+            self.extract_temporal_score(conclusion)
+        } else if !step.premise_triples.is_empty() {
+            self.extract_temporal_score(&step.premise_triples[0])
+        } else {
+            0.5 // Default neutral position
+        }
     }
 }
 

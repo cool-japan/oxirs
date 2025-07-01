@@ -72,19 +72,25 @@ impl TransE {
 
     /// Create a new TransE model with L1 (Manhattan) distance metric
     pub fn with_l1_distance(mut config: ModelConfig) -> Self {
-        config.model_params.insert("distance_metric".to_string(), 0.0);
+        config
+            .model_params
+            .insert("distance_metric".to_string(), 0.0);
         Self::new(config)
     }
 
     /// Create a new TransE model with L2 (Euclidean) distance metric
     pub fn with_l2_distance(mut config: ModelConfig) -> Self {
-        config.model_params.insert("distance_metric".to_string(), 1.0);
+        config
+            .model_params
+            .insert("distance_metric".to_string(), 1.0);
         Self::new(config)
     }
 
     /// Create a new TransE model with Cosine distance metric
     pub fn with_cosine_distance(mut config: ModelConfig) -> Self {
-        config.model_params.insert("distance_metric".to_string(), 2.0);
+        config
+            .model_params
+            .insert("distance_metric".to_string(), 2.0);
         Self::new(config)
     }
 
@@ -174,7 +180,7 @@ impl TransE {
                 let dot_product = (&h_plus_r * &t).sum();
                 let norm_h_plus_r = h_plus_r.mapv(|x| x * x).sum().sqrt();
                 let norm_t = t.mapv(|x| x * x).sum().sqrt();
-                
+
                 if norm_h_plus_r == 0.0 || norm_t == 0.0 {
                     1.0 // Maximum distance for zero vectors
                 } else {
@@ -224,7 +230,7 @@ impl TransE {
                 } else {
                     0.0
                 }
-            },
+            }
         };
 
         let neg_distance = match self.distance_metric {
@@ -237,7 +243,7 @@ impl TransE {
                 } else {
                     0.0
                 }
-            },
+            }
         };
 
         // Check if we need to update (margin loss > 0)
@@ -260,7 +266,7 @@ impl TransE {
                     } else {
                         Array1::zeros(pos_diff.len())
                     }
-                },
+                }
                 DistanceMetric::Cosine => {
                     let norm_sq = pos_diff.mapv(|x| x * x).sum();
                     if norm_sq > 1e-10 {
@@ -268,7 +274,7 @@ impl TransE {
                     } else {
                         Array1::zeros(pos_diff.len())
                     }
-                },
+                }
             };
 
             let neg_grad_direction = match self.distance_metric {
@@ -287,7 +293,7 @@ impl TransE {
                     } else {
                         Array1::zeros(neg_diff.len())
                     }
-                },
+                }
                 DistanceMetric::Cosine => {
                     let norm_sq = neg_diff.mapv(|x| x * x).sum();
                     if norm_sq > 1e-10 {
@@ -295,7 +301,7 @@ impl TransE {
                     } else {
                         Array1::zeros(neg_diff.len())
                     }
-                },
+                }
             };
 
             // Update gradients for positive triple (increase distance)
@@ -705,7 +711,10 @@ mod tests {
 
         // Test Cosine distance
         let mut model_cosine = TransE::with_cosine_distance(base_config.clone());
-        assert!(matches!(model_cosine.distance_metric(), DistanceMetric::Cosine));
+        assert!(matches!(
+            model_cosine.distance_metric(),
+            DistanceMetric::Cosine
+        ));
 
         // Test custom margin
         let mut model_margin = TransE::with_margin(base_config.clone(), 2.0);
@@ -729,18 +738,18 @@ mod tests {
         // Test that all models produce finite scores
         let score_l1 = model_l1.score_triple(
             "http://example.org/alice",
-            "http://example.org/knows", 
-            "http://example.org/bob"
+            "http://example.org/knows",
+            "http://example.org/bob",
         )?;
         let score_l2 = model_l2.score_triple(
             "http://example.org/alice",
             "http://example.org/knows",
-            "http://example.org/bob"
+            "http://example.org/bob",
         )?;
         let score_cosine = model_cosine.score_triple(
             "http://example.org/alice",
             "http://example.org/knows",
-            "http://example.org/bob"
+            "http://example.org/bob",
         )?;
 
         assert!(score_l1.is_finite());
@@ -749,7 +758,10 @@ mod tests {
 
         // Scores may differ due to different distance metrics
         // This tests that the cosine distance implementation works
-        println!("L1 score: {}, L2 score: {}, Cosine score: {}", score_l1, score_l2, score_cosine);
+        println!(
+            "L1 score: {}, L2 score: {}, Cosine score: {}",
+            score_l1, score_l2, score_cosine
+        );
 
         Ok(())
     }

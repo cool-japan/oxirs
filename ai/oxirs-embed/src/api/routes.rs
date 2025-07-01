@@ -4,14 +4,14 @@
 
 #[cfg(feature = "api-server")]
 use super::{
-    ApiState,
     handlers::{
-        embeddings::{embed_single, embed_batch},
-        scoring::score_triple,
+        embeddings::{embed_batch, embed_single},
+        models::{get_model_health, get_model_info, list_models, load_model, unload_model},
         predictions::predict,
-        models::{list_models, get_model_info, get_model_health, load_model, unload_model},
-        system::{system_health, system_stats, cache_stats, clear_cache},
+        scoring::score_triple,
+        system::{cache_stats, clear_cache, system_health, system_stats},
     },
+    ApiState,
 };
 #[cfg(feature = "api-server")]
 use axum::{

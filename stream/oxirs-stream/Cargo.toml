@@ -28,19 +28,19 @@ futures-util.workspace = true
 futures.workspace = true
 async-trait = "0.1"
 parking_lot = "0.12.3"
-bytes = "1.5"
-fastrand = "2.0"
-bumpalo = "3.0"
-quick-xml = "0.31"
+bytes = "1.10"
+fastrand = "2.3"
+bumpalo = "3.18"
+quick-xml = "0.37"
 rayon = "1.10"
-aws-config = { version = "1.1", optional = true }
-aws-sdk-kinesis = { version = "1.1", optional = true }
-aws-smithy-types = { version = "1.1", optional = true }
-redis = { version = "0.24", features = ["tokio-comp", "connection-manager", "cluster-async", "streams"], optional = true }
-pulsar = { version = "6.0", optional = true }
+aws-config = { version = "1.5", optional = true }
+aws-sdk-kinesis = { version = "1.53", optional = true }
+aws-smithy-types = { version = "1.2", optional = true }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager", "cluster-async", "streams"], optional = true }
+pulsar = { version = "6.2", optional = true }
 time = { version = "0.3", optional = true }
 toml = "0.8"
-rmp-serde = "1.1"
+rmp-serde = "1.3"
 serde_cbor = "0.11"
 bincode = "1.3"
 flate2 = "1.0"
@@ -50,9 +50,9 @@ hmac = "0.12"
 sha2 = "0.10"
 hex = "0.4"
 rand.workspace = true
-prost = "0.12"
-prost-types = "0.12"
-apache-avro = "0.16"
+prost = "0.13"
+prost-types = "0.13"
+apache-avro = "0.17"
 tokio-stream = "0.1"
 lz4_flex = "0.11"
 crc32fast = "1.4"
@@ -61,7 +61,7 @@ num_cpus = "1.16"
 
 [dev-dependencies]
 criterion.workspace = true
-tempfile = "3.20"
+tempfile.workspace = true
 tracing-subscriber = "0.3"
 
 [features]

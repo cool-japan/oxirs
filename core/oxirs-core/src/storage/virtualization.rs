@@ -550,7 +550,8 @@ impl VirtualStorage {
             BackendType::Tiered => {
                 // Tiered backend temporarily disabled due to dependency conflicts
                 Err(OxirsError::Store(
-                    "Tiered backend temporarily disabled due to RocksDB dependency conflicts".to_string(),
+                    "Tiered backend temporarily disabled due to RocksDB dependency conflicts"
+                        .to_string(),
                 ))
             }
             BackendType::Columnar => {

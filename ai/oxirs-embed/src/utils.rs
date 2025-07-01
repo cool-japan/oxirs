@@ -4,8 +4,8 @@
 use anyhow::{anyhow, Result};
 use ndarray::{Array1, Array2};
 use rand::prelude::*;
-use rand::{thread_rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{thread_rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -160,6 +160,54 @@ pub mod data_loader {
         }
     }
 
+    /// Load triples from JSON Lines format (one triple per line as JSON)
+    pub fn load_triples_from_jsonl<P: AsRef<Path>>(
+        file_path: P,
+    ) -> Result<Vec<(String, String, String)>> {
+        let file = fs::File::open(file_path)?;
+        let reader = BufReader::new(file);
+        let mut triples = Vec::new();
+
+        for (line_num, line) in reader.lines().enumerate() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            match serde_json::from_str::<serde_json::Value>(&line) {
+                Ok(json) => {
+                    if let (Some(subject), Some(predicate), Some(object)) = (
+                        json["subject"].as_str(),
+                        json["predicate"].as_str(),
+                        json["object"].as_str(),
+                    ) {
+                        triples.push((
+                            subject.to_string(),
+                            predicate.to_string(),
+                            object.to_string(),
+                        ));
+                    } else {
+                        eprintln!(
+                            "Warning: Invalid JSON structure at line {}: {}",
+                            line_num + 1,
+                            line
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to parse JSON at line {}: {} - Error: {}",
+                        line_num + 1,
+                        line,
+                        e
+                    );
+                }
+            }
+        }
+
+        Ok(triples)
+    }
+
     /// Save triples to TSV format
     pub fn save_triples_to_tsv<P: AsRef<Path>>(
         triples: &[(String, String, String)],
@@ -174,6 +222,76 @@ pub mod data_loader {
 
         fs::write(file_path, content)?;
         Ok(())
+    }
+
+    /// Save triples to JSON Lines format
+    pub fn save_triples_to_jsonl<P: AsRef<Path>>(
+        triples: &[(String, String, String)],
+        file_path: P,
+    ) -> Result<()> {
+        use std::io::Write;
+        let mut file = fs::File::create(file_path)?;
+
+        for (subject, predicate, object) in triples {
+            let json = serde_json::json!({
+                "subject": subject,
+                "predicate": predicate,
+                "object": object
+            });
+            writeln!(file, "{}", json)?;
+        }
+
+        Ok(())
+    }
+
+    /// Auto-detect file format and load triples accordingly
+    pub fn load_triples_auto_detect<P: AsRef<Path>>(
+        file_path: P,
+    ) -> Result<Vec<(String, String, String)>> {
+        let path = file_path.as_ref();
+        let extension = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        match extension.as_str() {
+            "tsv" => load_triples_from_tsv(path),
+            "csv" => load_triples_from_csv(path),
+            "nt" | "ntriples" => load_triples_from_ntriples(path),
+            "jsonl" | "ndjson" => load_triples_from_jsonl(path),
+            _ => {
+                // Try to auto-detect based on content
+                eprintln!(
+                    "Warning: Unknown file extension '{}', attempting auto-detection",
+                    extension
+                );
+
+                // Try TSV first (most common)
+                if let Ok(triples) = load_triples_from_tsv(path) {
+                    if !triples.is_empty() {
+                        return Ok(triples);
+                    }
+                }
+
+                // Try N-Triples
+                if let Ok(triples) = load_triples_from_ntriples(path) {
+                    if !triples.is_empty() {
+                        return Ok(triples);
+                    }
+                }
+
+                // Try JSON Lines
+                if let Ok(triples) = load_triples_from_jsonl(path) {
+                    if !triples.is_empty() {
+                        return Ok(triples);
+                    }
+                }
+
+                // Finally try CSV
+                load_triples_from_csv(path)
+            }
+        }
     }
 }
 
@@ -581,6 +699,453 @@ impl ProgressTracker {
     }
 }
 
+/// Performance benchmarking and profiling utilities
+pub mod performance_benchmark {
+    use super::*;
+    use std::collections::BTreeMap;
+    use std::time::{Duration, Instant};
+
+    /// Comprehensive performance benchmarking for embedding operations
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct BenchmarkSuite {
+        /// Results organized by operation type
+        pub results: BTreeMap<String, BenchmarkResult>,
+        /// Overall benchmark statistics
+        pub summary: BenchmarkSummary,
+        /// Benchmark configuration
+        pub config: BenchmarkConfig,
+    }
+
+    /// Individual benchmark result for a specific operation
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct BenchmarkResult {
+        /// Operation name
+        pub operation: String,
+        /// Total number of iterations
+        pub iterations: usize,
+        /// Total elapsed time
+        pub total_duration: Duration,
+        /// Average time per operation
+        pub avg_duration: Duration,
+        /// Minimum time observed
+        pub min_duration: Duration,
+        /// Maximum time observed
+        pub max_duration: Duration,
+        /// Standard deviation of durations
+        pub std_deviation: Duration,
+        /// Operations per second
+        pub ops_per_second: f64,
+        /// Memory usage statistics
+        pub memory_stats: MemoryStats,
+        /// Additional metrics
+        pub custom_metrics: HashMap<String, f64>,
+    }
+
+    /// Memory usage statistics
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct MemoryStats {
+        /// Peak memory usage (bytes)
+        pub peak_memory_bytes: usize,
+        /// Average memory usage (bytes)
+        pub avg_memory_bytes: usize,
+        /// Memory allocations count
+        pub allocations: usize,
+        /// Memory deallocations count
+        pub deallocations: usize,
+    }
+
+    /// Overall benchmark summary
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct BenchmarkSummary {
+        /// Total benchmark duration
+        pub total_duration: Duration,
+        /// Number of operations benchmarked
+        pub total_operations: usize,
+        /// Overall throughput (ops/sec)
+        pub overall_throughput: f64,
+        /// Performance efficiency score (0.0-1.0)
+        pub efficiency_score: f64,
+        /// Bottleneck analysis
+        pub bottlenecks: Vec<String>,
+    }
+
+    /// Benchmarking configuration
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct BenchmarkConfig {
+        /// Number of warmup iterations
+        pub warmup_iterations: usize,
+        /// Number of measurement iterations
+        pub measurement_iterations: usize,
+        /// Target confidence level (0.0-1.0)
+        pub confidence_level: f64,
+        /// Enable memory profiling
+        pub enable_memory_profiling: bool,
+        /// Enable detailed timing analysis
+        pub enable_detailed_timing: bool,
+    }
+
+    impl Default for BenchmarkConfig {
+        fn default() -> Self {
+            Self {
+                warmup_iterations: 100,
+                measurement_iterations: 1000,
+                confidence_level: 0.95,
+                enable_memory_profiling: true,
+                enable_detailed_timing: true,
+            }
+        }
+    }
+
+    /// High-precision timer for micro-benchmarking
+    pub struct PrecisionTimer {
+        start_time: Instant,
+        lap_times: Vec<Duration>,
+    }
+
+    impl PrecisionTimer {
+        pub fn new() -> Self {
+            Self {
+                start_time: Instant::now(),
+                lap_times: Vec::new(),
+            }
+        }
+
+        /// Start timing
+        pub fn start(&mut self) {
+            self.start_time = Instant::now();
+            self.lap_times.clear();
+        }
+
+        /// Record a lap time
+        pub fn lap(&mut self) -> Duration {
+            let lap_duration = self.start_time.elapsed();
+            self.lap_times.push(lap_duration);
+            lap_duration
+        }
+
+        /// Stop timing and return final duration
+        pub fn stop(&self) -> Duration {
+            self.start_time.elapsed()
+        }
+
+        /// Get all recorded lap times
+        pub fn lap_times(&self) -> &[Duration] {
+            &self.lap_times
+        }
+    }
+
+    /// Benchmarking framework for embedding operations
+    pub struct EmbeddingBenchmark {
+        config: BenchmarkConfig,
+        results: BTreeMap<String, BenchmarkResult>,
+    }
+
+    impl EmbeddingBenchmark {
+        pub fn new(config: BenchmarkConfig) -> Self {
+            Self {
+                config,
+                results: BTreeMap::new(),
+            }
+        }
+
+        /// Benchmark a function with comprehensive timing and memory analysis
+        pub fn benchmark<F, T>(&mut self, name: &str, mut operation: F) -> Result<T>
+        where
+            F: FnMut() -> Result<T>,
+        {
+            // Warmup phase
+            for _ in 0..self.config.warmup_iterations {
+                let _ = operation()?;
+            }
+
+            let mut durations = Vec::with_capacity(self.config.measurement_iterations);
+            let mut memory_snapshots = Vec::new();
+            let mut result = None;
+
+            // Measurement phase
+            for i in 0..self.config.measurement_iterations {
+                let memory_before = self.get_memory_usage();
+                let start = Instant::now();
+
+                let op_result = operation()?;
+
+                let duration = start.elapsed();
+                let memory_after = self.get_memory_usage();
+
+                durations.push(duration);
+
+                if self.config.enable_memory_profiling {
+                    memory_snapshots.push((memory_before, memory_after));
+                }
+
+                // Store result from the first iteration
+                if i == 0 {
+                    result = Some(op_result);
+                }
+            }
+
+            // Calculate statistics
+            let total_duration: Duration = durations.iter().sum();
+            let avg_duration = total_duration / durations.len() as u32;
+            let min_duration = *durations.iter().min().unwrap();
+            let max_duration = *durations.iter().max().unwrap();
+
+            // Calculate standard deviation
+            let variance: f64 = durations
+                .iter()
+                .map(|d| {
+                    let diff = d.as_nanos() as f64 - avg_duration.as_nanos() as f64;
+                    diff * diff
+                })
+                .sum::<f64>()
+                / durations.len() as f64;
+            let std_deviation = Duration::from_nanos(variance.sqrt() as u64);
+
+            let ops_per_second = 1_000_000_000.0 / avg_duration.as_nanos() as f64;
+
+            // Memory statistics
+            let memory_stats = if self.config.enable_memory_profiling
+                && !memory_snapshots.is_empty()
+            {
+                let peak_memory = memory_snapshots
+                    .iter()
+                    .map(|(_, after)| after.peak_memory_bytes)
+                    .max()
+                    .unwrap_or(0);
+
+                let avg_memory = memory_snapshots
+                    .iter()
+                    .map(|(before, after)| (before.avg_memory_bytes + after.avg_memory_bytes) / 2)
+                    .sum::<usize>()
+                    / memory_snapshots.len();
+
+                MemoryStats {
+                    peak_memory_bytes: peak_memory,
+                    avg_memory_bytes: avg_memory,
+                    allocations: memory_snapshots.len(),
+                    deallocations: 0, // Simplified for now
+                }
+            } else {
+                MemoryStats {
+                    peak_memory_bytes: 0,
+                    avg_memory_bytes: 0,
+                    allocations: 0,
+                    deallocations: 0,
+                }
+            };
+
+            let benchmark_result = BenchmarkResult {
+                operation: name.to_string(),
+                iterations: self.config.measurement_iterations,
+                total_duration,
+                avg_duration,
+                min_duration,
+                max_duration,
+                std_deviation,
+                ops_per_second,
+                memory_stats,
+                custom_metrics: HashMap::new(),
+            };
+
+            self.results.insert(name.to_string(), benchmark_result);
+
+            result.ok_or_else(|| anyhow!("Failed to capture benchmark result"))
+        }
+
+        /// Generate comprehensive benchmark report
+        pub fn generate_report(&self) -> BenchmarkSuite {
+            let total_duration = self.results.values().map(|r| r.total_duration).sum();
+
+            let total_operations = self.results.len();
+
+            let overall_throughput = self.results.values().map(|r| r.ops_per_second).sum::<f64>()
+                / total_operations as f64;
+
+            // Calculate efficiency score based on consistency and performance
+            let efficiency_score = self.calculate_efficiency_score();
+
+            // Identify bottlenecks
+            let bottlenecks = self.identify_bottlenecks();
+
+            let summary = BenchmarkSummary {
+                total_duration,
+                total_operations,
+                overall_throughput,
+                efficiency_score,
+                bottlenecks,
+            };
+
+            BenchmarkSuite {
+                results: self.results.clone(),
+                summary,
+                config: self.config.clone(),
+            }
+        }
+
+        /// Calculate efficiency score based on performance consistency
+        fn calculate_efficiency_score(&self) -> f64 {
+            if self.results.is_empty() {
+                return 0.0;
+            }
+
+            let consistency_scores: Vec<f64> = self
+                .results
+                .values()
+                .map(|result| {
+                    // Calculate coefficient of variation (std_dev / mean)
+                    let cv = result.std_deviation.as_nanos() as f64
+                        / result.avg_duration.as_nanos() as f64;
+                    // Convert to consistency score (lower CV = higher consistency)
+                    1.0 / (1.0 + cv)
+                })
+                .collect();
+
+            consistency_scores.iter().sum::<f64>() / consistency_scores.len() as f64
+        }
+
+        /// Identify performance bottlenecks
+        fn identify_bottlenecks(&self) -> Vec<String> {
+            let mut bottlenecks = Vec::new();
+
+            // Find operations with high standard deviation (inconsistent performance)
+            for (name, result) in &self.results {
+                let cv =
+                    result.std_deviation.as_nanos() as f64 / result.avg_duration.as_nanos() as f64;
+                if cv > 0.2 {
+                    // 20% coefficient of variation threshold
+                    bottlenecks.push(format!("High variance in {}: {:.2}% CV", name, cv * 100.0));
+                }
+            }
+
+            // Find slow operations (below average throughput)
+            let avg_throughput = self.results.values().map(|r| r.ops_per_second).sum::<f64>()
+                / self.results.len() as f64;
+
+            for (name, result) in &self.results {
+                if result.ops_per_second < avg_throughput * 0.5 {
+                    // 50% below average
+                    bottlenecks.push(format!(
+                        "Slow operation {}: {:.0} ops/sec",
+                        name, result.ops_per_second
+                    ));
+                }
+            }
+
+            bottlenecks
+        }
+
+        /// Get current memory usage (simplified implementation)
+        fn get_memory_usage(&self) -> MemoryStats {
+            // This is a simplified implementation
+            // In a real-world scenario, you'd use proper memory profiling tools
+            MemoryStats {
+                peak_memory_bytes: 0,
+                avg_memory_bytes: 0,
+                allocations: 0,
+                deallocations: 0,
+            }
+        }
+    }
+
+    /// Utility functions for performance analysis
+    pub mod analysis {
+        use super::*;
+
+        /// Compare two benchmark results
+        pub fn compare_benchmarks(
+            baseline: &BenchmarkResult,
+            comparison: &BenchmarkResult,
+        ) -> BenchmarkComparison {
+            let throughput_improvement =
+                (comparison.ops_per_second - baseline.ops_per_second) / baseline.ops_per_second;
+
+            let latency_improvement = (baseline.avg_duration.as_nanos() as f64
+                - comparison.avg_duration.as_nanos() as f64)
+                / baseline.avg_duration.as_nanos() as f64;
+
+            let consistency_improvement = {
+                let baseline_cv = baseline.std_deviation.as_nanos() as f64
+                    / baseline.avg_duration.as_nanos() as f64;
+                let comparison_cv = comparison.std_deviation.as_nanos() as f64
+                    / comparison.avg_duration.as_nanos() as f64;
+                (baseline_cv - comparison_cv) / baseline_cv
+            };
+
+            BenchmarkComparison {
+                baseline_name: baseline.operation.clone(),
+                comparison_name: comparison.operation.clone(),
+                throughput_improvement,
+                latency_improvement,
+                consistency_improvement,
+                is_improvement: throughput_improvement > 0.0 && latency_improvement > 0.0,
+            }
+        }
+
+        /// Generate performance regression analysis
+        pub fn analyze_regression(
+            historical_results: &[BenchmarkResult],
+            current_result: &BenchmarkResult,
+        ) -> RegressionAnalysis {
+            if historical_results.is_empty() {
+                return RegressionAnalysis::default();
+            }
+
+            let historical_avg_throughput = historical_results
+                .iter()
+                .map(|r| r.ops_per_second)
+                .sum::<f64>()
+                / historical_results.len() as f64;
+
+            let throughput_change = (current_result.ops_per_second - historical_avg_throughput)
+                / historical_avg_throughput;
+
+            let is_regression = throughput_change < -0.05; // 5% threshold
+
+            RegressionAnalysis {
+                throughput_change,
+                is_regression,
+                confidence_level: 0.95, // Simplified
+                analysis_notes: if is_regression {
+                    vec!["Performance regression detected".to_string()]
+                } else {
+                    vec!["Performance within expected range".to_string()]
+                },
+            }
+        }
+    }
+
+    /// Benchmark comparison result
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct BenchmarkComparison {
+        pub baseline_name: String,
+        pub comparison_name: String,
+        pub throughput_improvement: f64,
+        pub latency_improvement: f64,
+        pub consistency_improvement: f64,
+        pub is_improvement: bool,
+    }
+
+    /// Performance regression analysis
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct RegressionAnalysis {
+        pub throughput_change: f64,
+        pub is_regression: bool,
+        pub confidence_level: f64,
+        pub analysis_notes: Vec<String>,
+    }
+
+    impl Default for RegressionAnalysis {
+        fn default() -> Self {
+            Self {
+                throughput_change: 0.0,
+                is_regression: false,
+                confidence_level: 0.0,
+                analysis_notes: vec!["No historical data available".to_string()],
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -618,6 +1183,75 @@ mod tests {
         assert_eq!(split.train.len(), 2);
         assert_eq!(split.validation.len(), 0); // 0.2 * 4 = 0.8, rounded down
         assert_eq!(split.test.len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_triples_from_jsonl() -> Result<()> {
+        let mut temp_file = NamedTempFile::new()?;
+        writeln!(
+            temp_file,
+            r#"{{"subject": "alice", "predicate": "knows", "object": "bob"}}"#
+        )?;
+        writeln!(
+            temp_file,
+            r#"{{"subject": "bob", "predicate": "likes", "object": "charlie"}}"#
+        )?;
+
+        let triples = data_loader::load_triples_from_jsonl(temp_file.path())?;
+        assert_eq!(triples.len(), 2);
+        assert_eq!(
+            triples[0],
+            ("alice".to_string(), "knows".to_string(), "bob".to_string())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_save_triples_to_jsonl() -> Result<()> {
+        let triples = vec![
+            ("alice".to_string(), "knows".to_string(), "bob".to_string()),
+            (
+                "bob".to_string(),
+                "likes".to_string(),
+                "charlie".to_string(),
+            ),
+        ];
+
+        let temp_file = NamedTempFile::new()?;
+        data_loader::save_triples_to_jsonl(&triples, temp_file.path())?;
+
+        let loaded_triples = data_loader::load_triples_from_jsonl(temp_file.path())?;
+        assert_eq!(loaded_triples, triples);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_triples_auto_detect() -> Result<()> {
+        // Test TSV auto-detection
+        let mut tsv_file = NamedTempFile::with_suffix(".tsv")?;
+        writeln!(tsv_file, "subject\tpredicate\tobject")?;
+        writeln!(tsv_file, "alice\tknows\tbob")?;
+
+        let triples = data_loader::load_triples_auto_detect(tsv_file.path())?;
+        assert_eq!(triples.len(), 1);
+
+        // Test JSON Lines auto-detection
+        let mut jsonl_file = NamedTempFile::with_suffix(".jsonl")?;
+        writeln!(
+            jsonl_file,
+            r#"{{"subject": "alice", "predicate": "knows", "object": "bob"}}"#
+        )?;
+
+        let triples = data_loader::load_triples_auto_detect(jsonl_file.path())?;
+        assert_eq!(triples.len(), 1);
+        assert_eq!(
+            triples[0],
+            ("alice".to_string(), "knows".to_string(), "bob".to_string())
+        );
 
         Ok(())
     }

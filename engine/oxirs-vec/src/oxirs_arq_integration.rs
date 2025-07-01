@@ -12,18 +12,18 @@
 //! - Neural-symbolic query processing
 
 use crate::{
-    index::{VectorIndex, IndexConfig},
+    hnsw::{HnswConfig, HnswIndex},
+    index::{IndexConfig, VectorIndex},
     similarity::SimilarityMetric,
     sparql_integration::{SparqlVectorFunctions, VectorServiceConfig},
-    hnsw::{HnswIndex, HnswConfig},
     Vector, VectorPrecision,
 };
-use anyhow::{Result, Context, Error as AnyhowError};
-use std::collections::{HashMap, BTreeMap, HashSet};
-use std::sync::{Arc, RwLock, Mutex};
-use std::time::{Instant, Duration};
-use serde::{Serialize, Deserialize};
-use tracing::{debug, info, warn, error, span, Level};
+use anyhow::{Context, Error as AnyhowError, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
+use tracing::{debug, error, info, span, warn, Level};
 
 /// Vector-aware query optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -478,20 +478,20 @@ pub struct VectorFunctionRegistry {
 pub trait VectorFunction: Send + Sync {
     /// Function name
     fn name(&self) -> &str;
-    
+
     /// Function signature
     fn signature(&self) -> FunctionSignature;
-    
+
     /// Execute function
     fn execute(
         &self,
         args: &[FunctionArgument],
         context: &ExecutionContext,
     ) -> Result<FunctionResult>;
-    
+
     /// Get optimization hints
     fn optimization_hints(&self) -> Vec<OptimizationHint>;
-    
+
     /// Cost estimation
     fn estimate_cost(&self, args: &[FunctionArgument]) -> f64;
 }
@@ -716,21 +716,14 @@ impl VectorQueryPlanner {
     }
 
     /// Register a vector index for query optimization
-    pub fn register_vector_index(
-        &self,
-        name: String,
-        index: Arc<dyn VectorIndex>,
-    ) -> Result<()> {
+    pub fn register_vector_index(&self, name: String, index: Arc<dyn VectorIndex>) -> Result<()> {
         let mut indices = self.vector_indices.write().unwrap();
         indices.insert(name, index);
         Ok(())
     }
 
     /// Create an optimization plan for a query
-    pub fn create_optimization_plan(
-        &self,
-        query: &VectorQuery,
-    ) -> Result<OptimizationPlan> {
+    pub fn create_optimization_plan(&self, query: &VectorQuery) -> Result<OptimizationPlan> {
         let span = span!(Level::DEBUG, "create_optimization_plan");
         let _enter = span.enter();
 
@@ -817,21 +810,19 @@ impl VectorQueryPlanner {
         query: &VectorQuery,
     ) -> Result<OptimizationStep> {
         match opportunity {
-            OptimizationOpportunity::FilterPushdown => {
-                Ok(OptimizationStep {
-                    step_type: OptimizationStepType::FilterPushdown {
-                        filter_type: FilterType::SimilarityFilter,
-                        pushdown_level: 2,
-                    },
-                    parameters: HashMap::new(),
-                    cost: self.estimate_filter_pushdown_cost(query),
-                    dependencies: Vec::new(),
-                })
-            }
+            OptimizationOpportunity::FilterPushdown => Ok(OptimizationStep {
+                step_type: OptimizationStepType::FilterPushdown {
+                    filter_type: FilterType::SimilarityFilter,
+                    pushdown_level: 2,
+                },
+                parameters: HashMap::new(),
+                cost: self.estimate_filter_pushdown_cost(query),
+                dependencies: Vec::new(),
+            }),
             OptimizationOpportunity::JoinReordering => {
                 let original_order = query.get_join_order();
                 let optimized_order = self.optimize_join_order(&original_order, query)?;
-                
+
                 Ok(OptimizationStep {
                     step_type: OptimizationStepType::JoinReordering {
                         original_order,
@@ -844,7 +835,7 @@ impl VectorQueryPlanner {
             }
             OptimizationOpportunity::IndexSelection => {
                 let best_index = self.select_optimal_index(query)?;
-                
+
                 Ok(OptimizationStep {
                     step_type: OptimizationStepType::IndexSelection {
                         index_type: best_index,
@@ -855,28 +846,24 @@ impl VectorQueryPlanner {
                     dependencies: Vec::new(),
                 })
             }
-            OptimizationOpportunity::Batching => {
-                Ok(OptimizationStep {
-                    step_type: OptimizationStepType::VectorBatching {
-                        batch_size: self.calculate_optimal_batch_size(query),
-                        batching_strategy: BatchingStrategy::Adaptive,
-                    },
-                    parameters: HashMap::new(),
-                    cost: self.estimate_batching_cost(query),
-                    dependencies: Vec::new(),
-                })
-            }
-            OptimizationOpportunity::Caching => {
-                Ok(OptimizationStep {
-                    step_type: OptimizationStepType::CachingSetup {
-                        cache_type: CacheType::ResultCache,
-                        cache_size: 1000,
-                    },
-                    parameters: HashMap::new(),
-                    cost: self.estimate_caching_cost(query),
-                    dependencies: Vec::new(),
-                })
-            }
+            OptimizationOpportunity::Batching => Ok(OptimizationStep {
+                step_type: OptimizationStepType::VectorBatching {
+                    batch_size: self.calculate_optimal_batch_size(query),
+                    batching_strategy: BatchingStrategy::Adaptive,
+                },
+                parameters: HashMap::new(),
+                cost: self.estimate_batching_cost(query),
+                dependencies: Vec::new(),
+            }),
+            OptimizationOpportunity::Caching => Ok(OptimizationStep {
+                step_type: OptimizationStepType::CachingSetup {
+                    cache_type: CacheType::ResultCache,
+                    cache_size: 1000,
+                },
+                parameters: HashMap::new(),
+                cost: self.estimate_caching_cost(query),
+                dependencies: Vec::new(),
+            }),
         }
     }
 
@@ -888,9 +875,9 @@ impl VectorQueryPlanner {
     ) -> Result<Duration> {
         let base_time = self.estimate_base_execution_time(query);
         let optimization_factor = self.calculate_optimization_factor(steps);
-        
+
         Ok(Duration::from_secs_f64(
-            base_time.as_secs_f64() * optimization_factor
+            base_time.as_secs_f64() * optimization_factor,
         ))
     }
 
@@ -901,10 +888,11 @@ impl VectorQueryPlanner {
         query: &VectorQuery,
     ) -> Result<f32> {
         let base_quality = 0.8; // Base quality score
-        let quality_improvement = steps.iter()
+        let quality_improvement = steps
+            .iter()
             .map(|step| self.estimate_step_quality_impact(step))
             .sum::<f32>();
-        
+
         Ok((base_quality + quality_improvement).min(1.0))
     }
 
@@ -969,20 +957,19 @@ impl VectorQueryPlanner {
         result_count: usize,
     ) -> Result<()> {
         let mut stats = self.query_stats.write().unwrap();
-        
+
         stats.total_queries += 1;
-        
+
         // Update operation counts
         for op in &query.vector_operations {
             *stats.vector_op_counts.entry(op.clone()).or_insert(0) += 1;
         }
-        
+
         // Update execution times
-        stats.avg_execution_times.insert(
-            query.query_type.clone(),
-            execution_time,
-        );
-        
+        stats
+            .avg_execution_times
+            .insert(query.query_type.clone(), execution_time);
+
         Ok(())
     }
 
@@ -1011,22 +998,23 @@ impl VectorFunctionRegistry {
         metadata: FunctionMetadata,
     ) -> Result<()> {
         let name = function.name().to_string();
-        
+
         // Validate function signature
-        self.type_checker.validate_signature(&function.signature())?;
-        
+        self.type_checker
+            .validate_signature(&function.signature())?;
+
         // Register function
         {
             let mut functions = self.functions.write().unwrap();
             functions.insert(name.clone(), function);
         }
-        
+
         // Register metadata
         {
             let mut meta = self.function_metadata.write().unwrap();
             meta.insert(name, metadata);
         }
-        
+
         Ok(())
     }
 
@@ -1039,64 +1027,68 @@ impl VectorFunctionRegistry {
     ) -> Result<FunctionResult> {
         let function = {
             let functions = self.functions.read().unwrap();
-            functions.get(name)
+            functions
+                .get(name)
                 .ok_or_else(|| AnyhowError::msg(format!("Function not found: {}", name)))?
                 .clone()
         };
-        
+
         // Type check arguments
-        self.type_checker.check_arguments(&function.signature(), args)?;
-        
+        self.type_checker
+            .check_arguments(&function.signature(), args)?;
+
         // Execute function
         let start_time = Instant::now();
         let result = function.execute(args, context)?;
         let execution_time = start_time.elapsed();
-        
+
         // Update performance metrics
         self.update_function_performance(name, execution_time)?;
-        
+
         Ok(result)
     }
 
     /// Update function performance metrics
-    fn update_function_performance(
-        &self,
-        name: &str,
-        execution_time: Duration,
-    ) -> Result<()> {
+    fn update_function_performance(&self, name: &str, execution_time: Duration) -> Result<()> {
         let mut monitor = self.performance_monitor.write().unwrap();
-        
+
         // Update call count
         *monitor.call_counts.entry(name.to_string()).or_insert(0) += 1;
-        
+
         // Update execution times
-        monitor.execution_times
+        monitor
+            .execution_times
             .entry(name.to_string())
             .or_insert_with(Vec::new)
             .push(execution_time);
-        
+
         // Add performance trend point
-        monitor.trends
+        monitor
+            .trends
             .entry(name.to_string())
             .or_insert_with(Vec::new)
             .push((Instant::now(), execution_time.as_secs_f64()));
-        
+
         Ok(())
     }
 
     /// Get function performance statistics
     pub fn get_function_stats(&self, name: &str) -> Result<FunctionStats> {
         let monitor = self.performance_monitor.read().unwrap();
-        
+
         let call_count = monitor.call_counts.get(name).copied().unwrap_or(0);
-        let execution_times = monitor.execution_times.get(name).cloned().unwrap_or_default();
-        
+        let execution_times = monitor
+            .execution_times
+            .get(name)
+            .cloned()
+            .unwrap_or_default();
+
         let avg_time = if !execution_times.is_empty() {
             execution_times.iter().sum::<Duration>() / execution_times.len() as u32
         } else {
             Duration::ZERO
         };
-        
+
         Ok(FunctionStats {
             name: name.to_string(),
             call_count,
@@ -1131,18 +1123,18 @@ impl VectorTypeChecker {
         if args.len() < signature.required_params {
             return Err(AnyhowError::msg("Insufficient arguments"));
         }
-        
+
         if !signature.variadic && args.len() > signature.parameters.len() {
             return Err(AnyhowError::msg("Too many arguments"));
         }
-        
+
         // Type check each argument
         for (i, arg) in args.iter().enumerate() {
             if i < signature.parameters.len() {
                 self.check_argument_type(arg, &signature.parameters[i])?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -1181,7 +1173,9 @@ pub struct VectorQuery {
 impl VectorQuery {
     /// Check if query has vector filters
     pub fn has_vector_filters(&self) -> bool {
-        self.filters.iter().any(|f| f.contains("vector") || f.contains("similarity"))
+        self.filters
+            .iter()
+            .any(|f| f.contains("vector") || f.contains("similarity"))
     }
 
     /// Check if query has joins
@@ -1249,14 +1243,14 @@ mod tests {
     fn test_vector_query_planner_creation() {
         let config = VectorQueryConfig::default();
         let planner = VectorQueryPlanner::new(config);
-        
+
         assert_eq!(planner.vector_indices.read().unwrap().len(), 0);
     }
 
     #[test]
     fn test_vector_function_registry() {
         let registry = VectorFunctionRegistry::new();
-        
+
         assert_eq!(registry.functions.read().unwrap().len(), 0);
     }
 
@@ -1264,7 +1258,7 @@ mod tests {
     fn test_optimization_plan_creation() {
         let config = VectorQueryConfig::default();
         let planner = VectorQueryPlanner::new(config);
-        
+
         let query = VectorQuery {
             query_type: "test".to_string(),
             vector_operations: vec!["similarity".to_string()],
@@ -1272,7 +1266,7 @@ mod tests {
             filters: vec!["vector_filter".to_string()],
             metadata: HashMap::new(),
         };
-        
+
         let plan = planner.create_optimization_plan(&query).unwrap();
         assert!(!plan.steps.is_empty());
     }
@@ -1286,7 +1280,7 @@ mod tests {
             filters: vec!["similarity_filter".to_string()],
             metadata: HashMap::new(),
         };
-        
+
         assert!(query.has_vector_filters());
         assert!(query.has_joins());
         assert!(query.has_vector_operations());

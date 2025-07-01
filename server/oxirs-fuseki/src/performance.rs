@@ -14,6 +14,7 @@ use crate::{
 };
 use lru::LruCache;
 use moka::future::Cache;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
@@ -414,17 +415,24 @@ impl PerformanceService {
     }
 
     async fn perform_query_optimization(&self, query: &str, dataset: &str) -> FusekiResult<String> {
-        debug!("Optimizing query for dataset: {} using consciousness-inspired optimization", dataset);
+        debug!(
+            "Optimizing query for dataset: {} using consciousness-inspired optimization",
+            dataset
+        );
 
         // Consciousness-inspired query optimization
         let optimization_result = self.consciousness_optimization(query, dataset).await?;
-        
+
         // Apply quantum-inspired pattern matching
-        let quantum_optimized = self.apply_quantum_optimization(&optimization_result).await?;
-        
+        let quantum_optimized = self
+            .apply_quantum_optimization(&optimization_result)
+            .await?;
+
         // Neural network-based query rewriting
-        let neural_optimized = self.neural_query_rewriter(&quantum_optimized, dataset).await?;
-        
+        let neural_optimized = self
+            .neural_query_rewriter(&quantum_optimized, dataset)
+            .await?;
+
         debug!("Query optimization completed with AI enhancements");
         Ok(neural_optimized)
     }
@@ -432,82 +440,88 @@ impl PerformanceService {
     async fn estimate_query_cost(&self, query: &str) -> u64 {
         // Neural network-based cost estimation with consciousness awareness
         let neural_estimate = self.neural_cost_estimator(query).await;
-        
+
         // Quantum-inspired cost adjustment based on system state
         let quantum_adjustment = self.quantum_cost_adjustment(query).await;
-        
+
         // Consciousness-aware complexity analysis
         let consciousness_factor = self.consciousness_complexity_analysis(query).await;
-        
+
         // Combine all factors for final cost estimate
-        let final_cost = (neural_estimate as f64 * quantum_adjustment * consciousness_factor) as u64;
-        
-        debug!("AI-powered cost estimation: {} (neural: {}, quantum: {}, consciousness: {})", 
-               final_cost, neural_estimate, quantum_adjustment, consciousness_factor);
-        
+        let final_cost =
+            (neural_estimate as f64 * quantum_adjustment * consciousness_factor) as u64;
+
+        debug!(
+            "AI-powered cost estimation: {} (neural: {}, quantum: {}, consciousness: {})",
+            final_cost, neural_estimate, quantum_adjustment, consciousness_factor
+        );
+
         final_cost.max(1) // Ensure minimum cost of 1
     }
 
     // ========== AI-POWERED ENHANCEMENT METHODS ==========
-    
+
     /// Consciousness-inspired query optimization using artificial intuition
     async fn consciousness_optimization(&self, query: &str, dataset: &str) -> FusekiResult<String> {
         debug!("Applying consciousness-inspired optimization");
-        
+
         // Artificial intuition based on query patterns
         let intuitive_optimizations = self.analyze_query_intuition(query).await;
-        
+
         // Apply gut-feeling based reorderings
         let mut optimized_query = query.to_string();
-        
+
         // Pattern-based intuitive optimizations
         if query.to_lowercase().contains("union") && query.to_lowercase().contains("filter") {
             // Intuitive insight: push filters into union branches
             optimized_query = self.push_filters_into_unions(&optimized_query);
         }
-        
+
         if query.to_lowercase().contains("optional") && query.to_lowercase().contains("order by") {
             // Consciousness insight: optional patterns benefit from early ordering
             optimized_query = self.optimize_optional_ordering(&optimized_query);
         }
-        
+
         // Emotional learning from past optimization success
-        self.record_optimization_attempt(query, &optimized_query, dataset).await;
-        
+        self.record_optimization_attempt(query, &optimized_query, dataset)
+            .await;
+
         Ok(optimized_query)
     }
-    
+
     /// Quantum-inspired optimization using superposition of query plans
     async fn apply_quantum_optimization(&self, query: &str) -> FusekiResult<String> {
         debug!("Applying quantum-inspired optimization");
-        
+
         // Create superposition of multiple query plans
         let plan_variants = vec![
             self.create_left_deep_join_plan(query),
-            self.create_right_deep_join_plan(query), 
+            self.create_right_deep_join_plan(query),
             self.create_bushy_join_plan(query),
             self.create_star_join_plan(query),
         ];
-        
+
         // Quantum interference - combine best aspects of each plan
         let interference_optimized = self.apply_quantum_interference(&plan_variants);
-        
+
         // Quantum measurement - collapse to optimal plan
-        let measured_plan = self.quantum_measurement_collapse(&interference_optimized).await;
-        
+        let measured_plan = self
+            .quantum_measurement_collapse(&interference_optimized)
+            .await;
+
         Ok(measured_plan)
     }
-    
+
     /// Neural network-based query rewriting with pattern learning
     async fn neural_query_rewriter(&self, query: &str, dataset: &str) -> FusekiResult<String> {
         debug!("Applying neural network query rewriting");
-        
+
         // Pattern recognition neural network
         let recognized_patterns = self.neural_pattern_recognition(query).await;
-        
+
         // Query transformation neural network
         let mut rewritten_query = query.to_string();
-        
+
         for pattern in recognized_patterns {
             match pattern.pattern_type.as_str() {
                 "inefficient_join" => {
@@ -522,136 +536,146 @@ impl PerformanceService {
                 _ => {}
             }
         }
-        
+
         // Reinforcement learning feedback
-        self.update_neural_weights(query, &rewritten_query, dataset).await;
-        
+        self.update_neural_weights(query, &rewritten_query, dataset)
+            .await;
+
         Ok(rewritten_query)
     }
-    
+
     /// Neural network-based cost estimation
     async fn neural_cost_estimator(&self, query: &str) -> u64 {
         // Extract query features for neural network
         let features = self.extract_query_features(query);
-        
+
         // Simulate neural network inference
         let base_complexity = features.triple_patterns * 10;
         let join_complexity = features.joins * 50;
         let filter_complexity = features.filters * 5;
         let union_complexity = features.unions * 30;
         let optional_complexity = features.optionals * 25;
-        
+
         // Neural network learned weights (would be trained from historical data)
         let learned_adjustment = 1.0 + (features.depth as f64 * 0.1);
-        
-        ((base_complexity + join_complexity + filter_complexity + union_complexity + optional_complexity) as f64 * learned_adjustment) as u64
+
+        ((base_complexity
+            + join_complexity
+            + filter_complexity
+            + union_complexity
+            + optional_complexity) as f64
+            * learned_adjustment) as u64
     }
-    
+
     /// Quantum-inspired cost adjustment based on system superposition
     async fn quantum_cost_adjustment(&self, query: &str) -> f64 {
         // Quantum superposition of cost states
         let cost_states = vec![0.8, 1.0, 1.2, 1.5]; // Different possible cost multipliers
         let probabilities = vec![0.1, 0.6, 0.25, 0.05]; // Quantum probabilities
-        
+
         // Calculate expected value from quantum superposition
-        let quantum_expectation: f64 = cost_states.iter()
+        let quantum_expectation: f64 = cost_states
+            .iter()
             .zip(probabilities.iter())
             .map(|(cost, prob)| cost * prob)
             .sum();
-        
+
         // Apply quantum entanglement effects based on query complexity
-        let entanglement_factor = if query.to_lowercase().contains("join") { 1.1 } else { 1.0 };
-        
+        let entanglement_factor = if query.to_lowercase().contains("join") {
+            1.1
+        } else {
+            1.0
+        };
+
         quantum_expectation * entanglement_factor
     }
-    
+
     /// Consciousness-aware complexity analysis with emotional intelligence
     async fn consciousness_complexity_analysis(&self, query: &str) -> f64 {
         let mut consciousness_factor = 1.0;
-        
+
         // Emotional intelligence assessment
         if query.len() > 1000 {
             // Large queries invoke "anxiety" - increase cost estimate
             consciousness_factor *= 1.3;
         }
-        
+
         if query.to_lowercase().contains("regex") {
             // Regex patterns invoke "frustration" - significant cost increase
             consciousness_factor *= 2.0;
         }
-        
+
         if query.to_lowercase().contains("describe") {
             // Describe queries invoke "curiosity" - slight cost increase
             consciousness_factor *= 1.1;
         }
-        
+
         // Pattern memory influences - learn from past emotional experiences
         let pattern_emotion = self.recall_pattern_emotion(query).await;
         consciousness_factor *= pattern_emotion;
-        
+
         consciousness_factor
     }
-}
 
     // ========== HELPER METHODS FOR AI ENHANCEMENTS ==========
-    
+
     async fn analyze_query_intuition(&self, query: &str) -> Vec<String> {
         let mut insights = Vec::new();
-        
+
         if query.matches('{').count() > 3 {
             insights.push("complex_nesting_detected".to_string());
         }
-        
+
         if query.to_lowercase().contains("filter") && query.to_lowercase().contains("regex") {
             insights.push("expensive_regex_filter".to_string());
         }
-        
+
         insights
     }
-    
+
     fn push_filters_into_unions(&self, query: &str) -> String {
         // Simplified filter pushdown - in reality would use proper SPARQL parsing
         query.replace("} UNION {", "} FILTER(...) UNION { FILTER(...) ")
     }
-    
+
     fn optimize_optional_ordering(&self, query: &str) -> String {
         // Simplified optional optimization
         query.replace("OPTIONAL {", "OPTIONAL { # Optimized ordering ")
     }
-    
+
     async fn record_optimization_attempt(&self, _original: &str, _optimized: &str, _dataset: &str) {
         // Would record optimization attempts for learning
     }
-    
+
     fn create_left_deep_join_plan(&self, query: &str) -> String {
         format!("/* Left-deep plan */ {}", query)
     }
-    
+
     fn create_right_deep_join_plan(&self, query: &str) -> String {
         format!("/* Right-deep plan */ {}", query)
     }
-    
+
     fn create_bushy_join_plan(&self, query: &str) -> String {
         format!("/* Bushy plan */ {}", query)
     }
-    
+
     fn create_star_join_plan(&self, query: &str) -> String {
         format!("/* Star plan */ {}", query)
     }
-    
+
     fn apply_quantum_interference(&self, plans: &[String]) -> String {
         // Quantum interference combines best aspects
         plans.iter().max_by_key(|p| p.len()).unwrap().clone()
     }
-    
+
     async fn quantum_measurement_collapse(&self, plan: &str) -> String {
         // Quantum measurement collapses to definite state
         plan.to_string()
     }
-    
+
     async fn neural_pattern_recognition(&self, query: &str) -> Vec<QueryPattern> {
         let mut patterns = Vec::new();
-        
+
         if query.to_lowercase().contains("join") || query.matches(".").count() > 5 {
             patterns.push(QueryPattern {
                 pattern_type: "inefficient_join".to_string(),
@@ -659,7 +683,7 @@ impl PerformanceService {
                 location: 0,
             });
         }
-        
+
         if query.to_lowercase().contains("filter") && query.to_lowercase().contains("optional") {
             patterns.push(QueryPattern {
                 pattern_type: "redundant_filter".to_string(),
@@ -667,26 +691,26 @@ impl PerformanceService {
                 location: 0,
             });
         }
-        
+
         patterns
     }
-    
+
     fn apply_join_reordering_nn(&self, query: &str, _pattern: &QueryPattern) -> String {
         format!("/* NN-optimized joins */ {}", query)
     }
-    
+
     fn optimize_filter_placement_nn(&self, query: &str, _pattern: &QueryPattern) -> String {
         format!("/* NN-optimized filters */ {}", query)
     }
-    
+
     fn optimize_projection_nn(&self, query: &str, _pattern: &QueryPattern) -> String {
         format!("/* NN-optimized projection */ {}", query)
     }
-    
+
     async fn update_neural_weights(&self, _original: &str, _optimized: &str, _dataset: &str) {
         // Would update neural network weights based on performance feedback
     }
-    
+
     fn extract_query_features(&self, query: &str) -> QueryFeatures {
         QueryFeatures {
             triple_patterns: query.matches("?").count() / 3,
@@ -697,7 +721,7 @@ impl PerformanceService {
             depth: query.matches('{').count(),
         }
     }
-    
+
     async fn recall_pattern_emotion(&self, query: &str) -> f64 {
         // Emotional memory of similar query patterns
         if query.to_lowercase().contains("construct") {

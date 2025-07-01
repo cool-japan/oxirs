@@ -18,9 +18,15 @@ async fn test_ml_optimizer_creation() {
 
     // Should create with default configuration
     assert_eq!(optimizer.get_config().enable_performance_prediction, true);
-    assert_eq!(optimizer.get_config().enable_source_selection_learning, true);
+    assert_eq!(
+        optimizer.get_config().enable_source_selection_learning,
+        true
+    );
     assert_eq!(optimizer.get_config().enable_join_order_optimization, true);
-    assert_eq!(optimizer.get_config().enable_caching_strategy_learning, true);
+    assert_eq!(
+        optimizer.get_config().enable_caching_strategy_learning,
+        true
+    );
     assert_eq!(optimizer.get_config().enable_anomaly_detection, true);
 }
 
@@ -131,7 +137,10 @@ async fn test_query_performance_prediction() {
     optimizer.train_performance_model().await.unwrap();
 
     // Make prediction
-    let prediction = optimizer.predict_query_performance(&query_info).await.unwrap();
+    let prediction = optimizer
+        .predict_query_performance(&query_info)
+        .await
+        .unwrap();
 
     // Should have valid prediction
     assert!(prediction.predicted_execution_time > Duration::from_millis(0));
@@ -369,7 +378,10 @@ async fn test_caching_strategy_learning() {
     // Should recommend aggressive caching for type patterns
     assert_eq!(caching_recommendation.strategy, CacheStrategy::Aggressive);
     assert!(caching_recommendation.confidence >= 0.0 && caching_recommendation.confidence <= 1.0);
-    assert!(caching_recommendation.predicted_hit_rate >= 0.0 && caching_recommendation.predicted_hit_rate <= 1.0);
+    assert!(
+        caching_recommendation.predicted_hit_rate >= 0.0
+            && caching_recommendation.predicted_hit_rate <= 1.0
+    );
     assert!(caching_recommendation.predicted_performance_improvement >= 0.0);
 }
 
@@ -587,7 +599,9 @@ async fn test_model_retraining() {
 
     // Record initial data multiple times
     for _ in 0..10 {
-        optimizer.record_query_performance(initial_data.clone()).await;
+        optimizer
+            .record_query_performance(initial_data.clone())
+            .await;
     }
 
     // Train initial model
@@ -601,7 +615,9 @@ async fn test_model_retraining() {
 
     // Record more data to trigger retraining
     for _ in 0..5 {
-        optimizer.record_query_performance(initial_data.clone()).await;
+        optimizer
+            .record_query_performance(initial_data.clone())
+            .await;
     }
 
     // Check if model was retrained
@@ -641,7 +657,7 @@ async fn test_cross_validation() {
                 has_joins: (i % 4) > 0,
             },
             execution_time: Duration::from_millis(50 + (i as u64 * 20)), // Correlated with complexity
-            success: (i % 10) != 9, // 90% success rate
+            success: (i % 10) != 9,                                      // 90% success rate
             timestamp: Instant::now(),
         };
         training_data.push(data);
@@ -674,32 +690,30 @@ async fn test_prediction_confidence_thresholding() {
     let optimizer = MLOptimizer::new(config);
 
     // Train with limited data to create low-confidence predictions
-    let limited_training_data = vec![
-        QueryPerformanceData {
-            query_features: QueryFeatures {
-                pattern_count: 1,
-                variable_count: 3,
-                filter_count: 0,
-                service_count: 0,
-                join_count: 0,
-                union_count: 0,
-                optional_count: 0,
-                has_aggregation: false,
-                has_grouping: false,
-                has_ordering: false,
-                has_limit: false,
-                complexity_score: 0.2,
-                selectivity_estimate: 0.8,
-                predicate_distribution: vec![("?p".to_string(), 1.0)],
-                namespace_distribution: vec![],
-                pattern_type_distribution: vec![("basic".to_string(), 1.0)],
-                has_joins: false,
-            },
-            execution_time: Duration::from_millis(100),
-            success: true,
-            timestamp: Instant::now(),
-        }
-    ];
+    let limited_training_data = vec![QueryPerformanceData {
+        query_features: QueryFeatures {
+            pattern_count: 1,
+            variable_count: 3,
+            filter_count: 0,
+            service_count: 0,
+            join_count: 0,
+            union_count: 0,
+            optional_count: 0,
+            has_aggregation: false,
+            has_grouping: false,
+            has_ordering: false,
+            has_limit: false,
+            complexity_score: 0.2,
+            selectivity_estimate: 0.8,
+            predicate_distribution: vec![("?p".to_string(), 1.0)],
+            namespace_distribution: vec![],
+            pattern_type_distribution: vec![("basic".to_string(), 1.0)],
+            has_joins: false,
+        },
+        execution_time: Duration::from_millis(100),
+        success: true,
+        timestamp: Instant::now(),
+    }];
 
     // Record minimal training data
     for data in limited_training_data {
@@ -746,7 +760,11 @@ fn create_test_query_features(
         variable_count,
         filter_count: 0,
         service_count: 0,
-        join_count: if pattern_count > 1 { pattern_count - 1 } else { 0 },
+        join_count: if pattern_count > 1 {
+            pattern_count - 1
+        } else {
+            0
+        },
         union_count: 0,
         optional_count: 0,
         has_aggregation: false,

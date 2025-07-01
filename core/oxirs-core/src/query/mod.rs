@@ -19,12 +19,11 @@ pub mod streaming_results;
 pub mod wasm;
 
 // Re-export the enhanced SPARQL algebra and query types from sparql_algebra
-pub use sparql_algebra::{
-    TermPattern as SparqlTermPattern, TriplePattern as SparqlTriplePattern, 
-    GraphPattern as SparqlGraphPattern, Expression as SparqlExpression, 
-    PropertyPathExpression, NamedNodePattern
-};
 pub use crate::{GraphName, Triple};
+pub use sparql_algebra::{
+    Expression as SparqlExpression, GraphPattern as SparqlGraphPattern, NamedNodePattern,
+    PropertyPathExpression, TermPattern as SparqlTermPattern, TriplePattern as SparqlTriplePattern,
+};
 pub use sparql_query::*;
 
 // Re-export execution plan types
@@ -33,8 +32,8 @@ pub use plan::ExecutionPlan;
 // Re-export algebra types (without Query to avoid conflict)
 // Use explicit aliases to avoid conflicts
 pub use algebra::{
-    AlgebraTriplePattern, Expression as AlgebraExpression, GraphPattern as AlgebraGraphPattern, 
-    PropertyPath, TermPattern as AlgebraTermPattern, Query as AlgebraQuery
+    AlgebraTriplePattern, Expression as AlgebraExpression, GraphPattern as AlgebraGraphPattern,
+    PropertyPath, Query as AlgebraQuery, TermPattern as AlgebraTermPattern,
 };
 pub use binding_optimizer::{BindingIterator, BindingOptimizer, BindingSet, Constraint, TermType};
 pub use distributed::{DistributedConfig, DistributedQueryEngine, FederatedEndpoint};
@@ -61,7 +60,7 @@ use crate::OxirsError;
 use crate::Store;
 use std::collections::HashMap;
 
-// Import TermPattern for internal usage 
+// Import TermPattern for internal usage
 use algebra::TermPattern;
 
 /// Simplified QueryResult for SHACL compatibility
@@ -134,7 +133,11 @@ impl QueryEngine {
     }
 
     /// Execute a parsed Query object against a store
-    pub fn execute_query(&self, query: &sparql_query::Query, store: &dyn Store) -> Result<QueryResult, OxirsError> {
+    pub fn execute_query(
+        &self,
+        query: &sparql_query::Query,
+        store: &dyn Store,
+    ) -> Result<QueryResult, OxirsError> {
         match query {
             sparql_query::Query::Select {
                 pattern, dataset, ..
@@ -264,9 +267,15 @@ impl QueryEngine {
         for solution in solutions.into_iter().take(self.executor_config.max_results) {
             // For each bound entity, get all triples where it appears
             for (_, term) in solution.iter() {
-                if let Ok(store_quads) = store.find_quads(None, None, None, Some(&GraphName::DefaultGraph)) {
+                if let Ok(store_quads) =
+                    store.find_quads(None, None, None, Some(&GraphName::DefaultGraph))
+                {
                     for quad in store_quads {
-                        let triple = Triple::new(quad.subject().clone(), quad.predicate().clone(), quad.object().clone());
+                        let triple = Triple::new(
+                            quad.subject().clone(),
+                            quad.predicate().clone(),
+                            quad.object().clone(),
+                        );
                         if self.triple_involves_term(&triple, term) {
                             triples.push(triple);
                         }
@@ -457,8 +466,8 @@ impl QueryEngine {
         &self,
         expr: sparql_algebra::Expression,
     ) -> Result<AlgebraExpression, OxirsError> {
-        use AlgebraExpression as AlgebraExpr;
         use sparql_algebra::Expression as SparqlExpr;
+        use AlgebraExpression as AlgebraExpr;
 
         match expr {
             SparqlExpr::NamedNode(n) => Ok(AlgebraExpr::Term(crate::model::Term::NamedNode(n))),

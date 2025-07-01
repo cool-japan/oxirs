@@ -377,7 +377,7 @@ impl TemporalSimilarity {
 
 // Individual similarity function implementations
 
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     // Use oxirs-core SIMD operations
     1.0 - f32::cosine_distance(a, b)
 }

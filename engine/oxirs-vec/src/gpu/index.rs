@@ -44,8 +44,11 @@ impl GpuVectorIndex {
         // Validate all vectors have the same dimension
         for vector in &vectors {
             if vector.data.len() != self.dimension {
-                return Err(anyhow!("Vector dimension mismatch: expected {}, got {}", 
-                                 self.dimension, vector.data.len()));
+                return Err(anyhow!(
+                    "Vector dimension mismatch: expected {}, got {}",
+                    self.dimension,
+                    vector.data.len()
+                ));
             }
         }
 
@@ -53,7 +56,9 @@ impl GpuVectorIndex {
         for vector in &vectors {
             match &vector.data {
                 VectorData::Dense(data) => self.vector_data.extend(data),
-                VectorData::Sparse(_) => return Err(anyhow!("Sparse vectors not yet supported on GPU")),
+                VectorData::Sparse(_) => {
+                    return Err(anyhow!("Sparse vectors not yet supported on GPU"))
+                }
             }
         }
 
@@ -74,12 +79,17 @@ impl GpuVectorIndex {
 
         let query_data = match &query.data {
             VectorData::Dense(data) => data.clone(),
-            VectorData::Sparse(_) => return Err(anyhow!("Sparse queries not yet supported on GPU")),
+            VectorData::Sparse(_) => {
+                return Err(anyhow!("Sparse queries not yet supported on GPU"))
+            }
         };
 
         if query_data.len() != self.dimension {
-            return Err(anyhow!("Query dimension mismatch: expected {}, got {}", 
-                             self.dimension, query_data.len()));
+            return Err(anyhow!(
+                "Query dimension mismatch: expected {}, got {}",
+                self.dimension,
+                query_data.len()
+            ));
         }
 
         // Compute similarities using GPU
@@ -121,7 +131,7 @@ impl GpuVectorIndex {
         metric: SimilarityMetric,
     ) -> Result<Vec<Vec<(usize, f32)>>> {
         let mut results = Vec::new();
-        
+
         for query in queries {
             let query_results = self.search(query, k, metric)?;
             results.push(query_results);
@@ -199,7 +209,7 @@ impl AdvancedGpuVectorIndex {
     pub fn new(mut config: GpuConfig) -> Result<Self> {
         config.enable_tensor_cores = true;
         config.enable_mixed_precision = true;
-        
+
         let base_index = GpuVectorIndex::new(config)?;
 
         Ok(Self {
@@ -225,7 +235,7 @@ impl AdvancedGpuVectorIndex {
         metric: SimilarityMetric,
     ) -> Result<Vec<Vec<(usize, f32)>>> {
         let mut all_results = Vec::new();
-        
+
         for batch in queries.chunks(batch_size) {
             let batch_results = self.base_index.batch_search(batch, k, metric)?;
             all_results.extend(batch_results);
@@ -238,7 +248,7 @@ impl AdvancedGpuVectorIndex {
     pub fn memory_stats(&self) -> Result<MemoryUsageStats> {
         let device = self.base_index.accelerator.device();
         let pool_stats = self.base_index.memory_pool.read().unwrap().stats();
-        
+
         Ok(MemoryUsageStats {
             total_gpu_memory: device.total_memory,
             free_gpu_memory: device.free_memory,
@@ -278,11 +288,23 @@ impl MemoryUsageStats {
     /// Print memory statistics
     pub fn print(&self) {
         println!("GPU Vector Index Memory Usage:");
-        println!("  Total GPU Memory: {:.2} GB", self.total_gpu_memory as f64 / 1024.0 / 1024.0 / 1024.0);
-        println!("  Free GPU Memory: {:.2} GB", self.free_gpu_memory as f64 / 1024.0 / 1024.0 / 1024.0);
-        println!("  Used by Index: {:.2} MB", self.used_by_index as f64 / 1024.0 / 1024.0);
+        println!(
+            "  Total GPU Memory: {:.2} GB",
+            self.total_gpu_memory as f64 / 1024.0 / 1024.0 / 1024.0
+        );
+        println!(
+            "  Free GPU Memory: {:.2} GB",
+            self.free_gpu_memory as f64 / 1024.0 / 1024.0 / 1024.0
+        );
+        println!(
+            "  Used by Index: {:.2} MB",
+            self.used_by_index as f64 / 1024.0 / 1024.0
+        );
         println!("  Vectors: {} ({}D)", self.vector_count, self.dimension);
-        println!("  Memory per Vector: {:.2} KB", self.memory_per_vector as f64 / 1024.0);
+        println!(
+            "  Memory per Vector: {:.2} KB",
+            self.memory_per_vector as f64 / 1024.0
+        );
         println!("  GPU Utilization: {:.1}%", self.utilization() * 100.0);
     }
 }
@@ -309,17 +331,13 @@ impl BatchVectorProcessor {
     }
 
     /// Process vectors in batches with specified operation
-    pub fn process_batches<F, R>(
-        &self,
-        vectors: &[Vector],
-        operation: F,
-    ) -> Result<Vec<R>>
+    pub fn process_batches<F, R>(&self, vectors: &[Vector], operation: F) -> Result<Vec<R>>
     where
         F: Fn(&[Vector]) -> Result<Vec<R>> + Send + Sync,
         R: Send,
     {
         let mut results = Vec::new();
-        
+
         for batch in vectors.chunks(self.batch_size) {
             let batch_results = operation(batch)?;
             results.extend(batch_results);
@@ -329,17 +347,13 @@ impl BatchVectorProcessor {
     }
 
     /// Parallel batch processing using multiple streams
-    pub fn parallel_process_batches<F, R>(
-        &self,
-        vectors: &[Vector],
-        operation: F,
-    ) -> Result<Vec<R>>
+    pub fn parallel_process_batches<F, R>(&self, vectors: &[Vector], operation: F) -> Result<Vec<R>>
     where
         F: Fn(&[Vector]) -> Result<Vec<R>> + Send + Sync + Clone,
         R: Send,
     {
         use std::thread;
-        
+
         let chunks: Vec<&[Vector]> = vectors.chunks(self.batch_size).collect();
         let mut handles = Vec::new();
         let mut results = Vec::new();
@@ -348,7 +362,7 @@ impl BatchVectorProcessor {
             for chunk in chunk_batch {
                 let chunk_vec = chunk.to_vec();
                 let op = operation.clone();
-                
+
                 let handle = thread::spawn(move || op(&chunk_vec));
                 handles.push(handle);
             }

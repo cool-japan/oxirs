@@ -48,14 +48,14 @@ pub use constraint_validators::*;
 pub use engine::ValidationEngine;
 pub use error_recovery::*;
 pub use multi_graph::{
-    MultiGraphValidationConfig, MultiGraphValidationEngine, MultiGraphValidationResult,
-    GraphSelectionStrategy, CrossGraphViolation, MultiGraphStats,
+    CrossGraphViolation, GraphSelectionStrategy, MultiGraphStats, MultiGraphValidationConfig,
+    MultiGraphValidationEngine, MultiGraphValidationResult,
 };
 pub use stats::*;
 #[cfg(feature = "async")]
 pub use streaming::{
-    StreamingValidationConfig, StreamingValidationEngine, StreamingValidationResult,
-    StreamEvent, StreamingStats, ValidationAlert,
+    StreamEvent, StreamingStats, StreamingValidationConfig, StreamingValidationEngine,
+    StreamingValidationResult, ValidationAlert,
 };
 pub use utils::*;
 
@@ -103,7 +103,11 @@ impl ConstraintEvaluationResult {
 
     /// Check if the result is satisfied (including satisfied with note)
     pub fn is_satisfied(&self) -> bool {
-        matches!(self, ConstraintEvaluationResult::Satisfied | ConstraintEvaluationResult::SatisfiedWithNote { .. })
+        matches!(
+            self,
+            ConstraintEvaluationResult::Satisfied
+                | ConstraintEvaluationResult::SatisfiedWithNote { .. }
+        )
     }
 
     /// Check if the result is violated
@@ -227,7 +231,9 @@ impl ValidationViolation {
 
     /// Get the total number of violations (including nested)
     pub fn total_violation_count(&self) -> usize {
-        1 + self.nested_results.iter()
+        1 + self
+            .nested_results
+            .iter()
             .map(|v| v.total_violation_count())
             .sum::<usize>()
     }

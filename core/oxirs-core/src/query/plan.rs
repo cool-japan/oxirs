@@ -3,9 +3,12 @@
 //! This module is responsible for converting SPARQL algebra into
 //! optimized execution plans.
 
+use crate::model::pattern::{ObjectPattern, PredicatePattern, SubjectPattern, TriplePattern};
 use crate::model::*;
-use crate::model::pattern::{SubjectPattern, PredicatePattern, ObjectPattern, TriplePattern};
-use crate::query::algebra::{AlgebraTriplePattern, Expression, GraphPattern, OrderExpression, Query, QueryForm, SelectVariables, TermPattern};
+use crate::query::algebra::{
+    AlgebraTriplePattern, Expression, GraphPattern, OrderExpression, Query, QueryForm,
+    SelectVariables, TermPattern,
+};
 use crate::OxirsError;
 
 /// Convert algebra TriplePattern to model TriplePattern
@@ -195,10 +198,7 @@ impl QueryPlanner {
     }
 
     /// Plans a graph pattern
-    fn plan_graph_pattern(
-        &self,
-        pattern: &GraphPattern,
-    ) -> Result<ExecutionPlan, OxirsError> {
+    fn plan_graph_pattern(&self, pattern: &GraphPattern) -> Result<ExecutionPlan, OxirsError> {
         match pattern {
             GraphPattern::Bgp(patterns) => {
                 if patterns.is_empty() {

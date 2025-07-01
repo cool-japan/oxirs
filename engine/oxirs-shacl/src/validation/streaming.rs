@@ -6,13 +6,13 @@
 #[cfg(feature = "async")]
 use std::collections::{HashMap, VecDeque};
 #[cfg(feature = "async")]
-use std::sync::{Arc, Mutex, RwLock};
-#[cfg(feature = "async")]
-use std::time::{Duration, Instant};
-#[cfg(feature = "async")]
 use std::pin::Pin;
 #[cfg(feature = "async")]
+use std::sync::{Arc, Mutex, RwLock};
+#[cfg(feature = "async")]
 use std::task::{Context, Poll};
+#[cfg(feature = "async")]
+use std::time::{Duration, Instant};
 
 #[cfg(feature = "async")]
 use anyhow::Result;
@@ -21,9 +21,9 @@ use futures_util::{Stream, StreamExt};
 #[cfg(feature = "async")]
 use indexmap::IndexMap;
 #[cfg(feature = "async")]
-use tokio::sync::{broadcast, mpsc};
-#[cfg(feature = "async")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "async")]
+use tokio::sync::{broadcast, mpsc};
 
 #[cfg(feature = "async")]
 use oxirs_core::{
@@ -33,10 +33,12 @@ use oxirs_core::{
 
 #[cfg(feature = "async")]
 use crate::{
-    constraints::*, paths::*, report::*, targets::*, 
-    Shape, ShapeId, ValidationConfig, ValidationReport,
-    validation::{ValidationEngine, ValidationStats, ConstraintEvaluationResult},
-    Result as ShaclResult,
+    constraints::*,
+    paths::*,
+    report::*,
+    targets::*,
+    validation::{ConstraintEvaluationResult, ValidationEngine, ValidationStats},
+    Result as ShaclResult, Shape, ShapeId, ValidationConfig, ValidationReport,
 };
 
 /// Configuration for streaming validation
@@ -44,28 +46,28 @@ use crate::{
 pub struct StreamingValidationConfig {
     /// Maximum number of triples to buffer before validation
     pub buffer_size: usize,
-    
+
     /// Validation timeout for each batch
     pub batch_timeout: Duration,
-    
+
     /// Maximum memory usage in bytes
     pub max_memory_bytes: usize,
-    
+
     /// Whether to enable incremental validation
     pub incremental: bool,
-    
+
     /// Window size for temporal validation (number of batches to keep)
     pub window_size: usize,
-    
+
     /// Backpressure threshold (pause processing when buffer exceeds this)
     pub backpressure_threshold: usize,
-    
+
     /// Number of concurrent validation workers
     pub worker_count: usize,
-    
+
     /// Enable real-time violation alerts
     pub enable_alerts: bool,
-    
+
     /// Alert severity threshold
     pub alert_threshold: crate::Severity,
 }
@@ -106,19 +108,19 @@ pub enum StreamEvent {
 pub struct StreamingValidationResult {
     /// Validation report for the current batch
     pub report: ValidationReport,
-    
+
     /// Batch sequence number
     pub batch_id: u64,
-    
+
     /// Processing timestamp
     pub timestamp: Instant,
-    
+
     /// Batch processing statistics
     pub batch_stats: BatchStats,
-    
+
     /// Violations that are new in this batch
     pub new_violations: Vec<ValidationViolation>,
-    
+
     /// Violations that were resolved in this batch
     pub resolved_violations: Vec<ValidationViolation>,
 }
@@ -128,19 +130,19 @@ pub struct StreamingValidationResult {
 pub struct BatchStats {
     /// Number of triples processed
     pub triples_processed: usize,
-    
+
     /// Processing duration
     pub processing_duration: Duration,
-    
+
     /// Memory used for validation
     pub memory_used_bytes: usize,
-    
+
     /// Number of constraint evaluations
     pub constraint_evaluations: usize,
-    
+
     /// Cache hit ratio
     pub cache_hit_ratio: f64,
-    
+
     /// Backpressure events
     pub backpressure_events: usize,
 }
@@ -149,25 +151,25 @@ pub struct BatchStats {
 pub struct StreamingValidationEngine {
     /// Core validation configuration
     config: StreamingValidationConfig,
-    
+
     /// SHACL shapes to validate against
     shapes: Arc<RwLock<IndexMap<ShapeId, Shape>>>,
-    
+
     /// Internal data store for buffering
     buffer_store: Arc<Mutex<Store>>,
-    
+
     /// Previous validation state for incremental validation
     previous_state: Arc<RwLock<ValidationState>>,
-    
+
     /// Statistics collector
     stats: Arc<Mutex<StreamingStats>>,
-    
+
     /// Violation alert sender
     alert_sender: Option<broadcast::Sender<ValidationAlert>>,
-    
+
     /// Worker handles for concurrent processing
     worker_handles: Vec<tokio::task::JoinHandle<()>>,
-    
+
     /// Current batch ID
     batch_counter: Arc<Mutex<u64>>,
 }
@@ -177,13 +179,13 @@ pub struct StreamingValidationEngine {
 struct ValidationState {
     /// Current validation report
     current_report: ValidationReport,
-    
+
     /// Violations by focus node
     violations_by_node: HashMap<Term, Vec<ValidationViolation>>,
-    
+
     /// Last validation timestamp
     last_validation: Instant,
-    
+
     /// Processed triple count
     processed_triples: usize,
 }
@@ -193,25 +195,25 @@ struct ValidationState {
 pub struct StreamingStats {
     /// Total batches processed
     pub total_batches: u64,
-    
+
     /// Total triples processed
     pub total_triples: usize,
-    
+
     /// Total violations found
     pub total_violations: usize,
-    
+
     /// Average processing latency
     pub average_latency: Duration,
-    
+
     /// Peak memory usage
     pub peak_memory_bytes: usize,
-    
+
     /// Total processing time
     pub total_processing_time: Duration,
-    
+
     /// Throughput (triples per second)
     pub throughput_tps: f64,
-    
+
     /// Error count
     pub error_count: usize,
 }
@@ -221,16 +223,16 @@ pub struct StreamingStats {
 pub struct ValidationAlert {
     /// Alert ID
     pub alert_id: String,
-    
+
     /// Alert timestamp
     pub timestamp: Instant,
-    
+
     /// Violation that triggered the alert
     pub violation: ValidationViolation,
-    
+
     /// Alert severity
     pub severity: crate::Severity,
-    
+
     /// Additional context information
     pub context: HashMap<String, String>,
 }
@@ -243,25 +245,25 @@ impl StreamingValidationEngine {
     ) -> Result<Self> {
         let shapes = Arc::new(RwLock::new(shapes));
         let buffer_store = Arc::new(Mutex::new(Store::new()?));
-        
+
         let initial_state = ValidationState {
             current_report: ValidationReport::new(true),
             violations_by_node: HashMap::new(),
             last_validation: Instant::now(),
             processed_triples: 0,
         };
-        
+
         let previous_state = Arc::new(RwLock::new(initial_state));
         let stats = Arc::new(Mutex::new(StreamingStats::new()));
         let batch_counter = Arc::new(Mutex::new(0));
-        
+
         let alert_sender = if config.enable_alerts {
             let (sender, _) = broadcast::channel(1000);
             Some(sender)
         } else {
             None
         };
-        
+
         Ok(Self {
             config,
             shapes,
@@ -273,7 +275,7 @@ impl StreamingValidationEngine {
             batch_counter,
         })
     }
-    
+
     /// Process a stream of RDF events with validation
     pub async fn validate_stream<S>(
         &mut self,
@@ -284,7 +286,7 @@ impl StreamingValidationEngine {
     {
         let (result_sender, result_receiver) = mpsc::unbounded_channel();
         let (event_sender, mut event_receiver) = mpsc::channel(self.config.buffer_size);
-        
+
         // Spawn stream processor task
         let config = self.config.clone();
         let shapes = Arc::clone(&self.shapes);
@@ -293,7 +295,7 @@ impl StreamingValidationEngine {
         let stats = Arc::clone(&self.stats);
         let batch_counter = Arc::clone(&self.batch_counter);
         let alert_sender = self.alert_sender.clone();
-        
+
         tokio::spawn(async move {
             Self::process_stream_events(
                 stream,
@@ -306,12 +308,15 @@ impl StreamingValidationEngine {
                 batch_counter,
                 alert_sender,
                 result_sender,
-            ).await;
+            )
+            .await;
         });
-        
-        Ok(tokio_stream::wrappers::UnboundedReceiverStream::new(result_receiver))
+
+        Ok(tokio_stream::wrappers::UnboundedReceiverStream::new(
+            result_receiver,
+        ))
     }
-    
+
     /// Internal stream processing logic
     async fn process_stream_events<S>(
         mut stream: S,
@@ -329,16 +334,16 @@ impl StreamingValidationEngine {
     {
         let mut batch_buffer = Vec::new();
         let mut last_batch_time = Instant::now();
-        
+
         while let Some(event) = stream.next().await {
             match event {
                 StreamEvent::Addition(triple) => {
                     batch_buffer.push(StreamEvent::Addition(triple));
-                    
+
                     // Check if batch is ready for processing
-                    if batch_buffer.len() >= config.buffer_size 
-                        || last_batch_time.elapsed() >= config.batch_timeout {
-                        
+                    if batch_buffer.len() >= config.buffer_size
+                        || last_batch_time.elapsed() >= config.batch_timeout
+                    {
                         Self::process_batch(
                             &batch_buffer,
                             &config,
@@ -349,8 +354,9 @@ impl StreamingValidationEngine {
                             &batch_counter,
                             &alert_sender,
                             &result_sender,
-                        ).await;
-                        
+                        )
+                        .await;
+
                         batch_buffer.clear();
                         last_batch_time = Instant::now();
                     }
@@ -370,8 +376,9 @@ impl StreamingValidationEngine {
                             &batch_counter,
                             &alert_sender,
                             &result_sender,
-                        ).await;
-                        
+                        )
+                        .await;
+
                         batch_buffer.clear();
                         last_batch_time = Instant::now();
                     }
@@ -389,7 +396,8 @@ impl StreamingValidationEngine {
                             &batch_counter,
                             &alert_sender,
                             &result_sender,
-                        ).await;
+                        )
+                        .await;
                     }
                     break;
                 }
@@ -397,14 +405,14 @@ impl StreamingValidationEngine {
                     let _ = result_sender.send(Err(anyhow::anyhow!("Stream error: {}", error)));
                 }
             }
-            
+
             // Check for backpressure
             if batch_buffer.len() > config.backpressure_threshold {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         }
     }
-    
+
     /// Process a batch of stream events
     async fn process_batch(
         batch: &[StreamEvent],
@@ -423,10 +431,10 @@ impl StreamingValidationEngine {
             *counter += 1;
             *counter
         };
-        
+
         // Apply batch changes to buffer store
         let triples_processed = Self::apply_batch_changes(batch, buffer_store).await;
-        
+
         // Perform validation
         let validation_result = Self::validate_batch(
             config,
@@ -436,8 +444,9 @@ impl StreamingValidationEngine {
             batch_id,
             triples_processed,
             start_time,
-        ).await;
-        
+        )
+        .await;
+
         match validation_result {
             Ok(result) => {
                 // Send alerts for new violations
@@ -447,19 +456,21 @@ impl StreamingValidationEngine {
                             alert_id: format!("alert-{}-{}", batch_id, violation.focus_node),
                             timestamp: Instant::now(),
                             violation: violation.clone(),
-                            severity: violation.result_severity.unwrap_or(crate::Severity::Violation),
+                            severity: violation
+                                .result_severity
+                                .unwrap_or(crate::Severity::Violation),
                             context: HashMap::new(),
                         };
-                        
+
                         if alert.severity >= config.alert_threshold {
                             let _ = sender.send(alert);
                         }
                     }
                 }
-                
+
                 // Update statistics
                 Self::update_statistics(stats, &result.batch_stats).await;
-                
+
                 let _ = result_sender.send(Ok(result));
             }
             Err(error) => {
@@ -467,15 +478,12 @@ impl StreamingValidationEngine {
             }
         }
     }
-    
+
     /// Apply stream events to the buffer store
-    async fn apply_batch_changes(
-        batch: &[StreamEvent],
-        buffer_store: &Arc<Mutex<Store>>,
-    ) -> usize {
+    async fn apply_batch_changes(batch: &[StreamEvent], buffer_store: &Arc<Mutex<Store>>) -> usize {
         let mut store = buffer_store.lock().unwrap();
         let mut count = 0;
-        
+
         for event in batch {
             match event {
                 StreamEvent::Addition(triple) => {
@@ -489,10 +497,10 @@ impl StreamingValidationEngine {
                 _ => {}
             }
         }
-        
+
         count
     }
-    
+
     /// Validate the current batch
     async fn validate_batch(
         config: &StreamingValidationConfig,
@@ -505,46 +513,44 @@ impl StreamingValidationEngine {
     ) -> Result<StreamingValidationResult> {
         let shapes_guard = shapes.read().unwrap();
         let store = buffer_store.lock().unwrap();
-        
+
         // Create validation configuration
         let validation_config = ValidationConfig::default()
             .with_strategy(crate::ValidationStrategy::Optimized)
             .with_incremental_enabled(config.incremental)
             .with_memory_limit_mb(config.max_memory_bytes / (1024 * 1024));
-        
+
         // Perform validation
         let engine = ValidationEngine::new(&shapes_guard, validation_config);
         let current_report = engine.validate_store(&store)?;
-        
+
         // Calculate differences if incremental validation is enabled
         let (new_violations, resolved_violations) = if config.incremental {
             let mut previous = previous_state.write().unwrap();
-            let (new, resolved) = Self::calculate_violation_diff(
-                &previous.current_report,
-                &current_report,
-            );
-            
+            let (new, resolved) =
+                Self::calculate_violation_diff(&previous.current_report, &current_report);
+
             // Update previous state
             previous.current_report = current_report.clone();
             previous.last_validation = Instant::now();
             previous.processed_triples += triples_processed;
-            
+
             (new, resolved)
         } else {
             (current_report.violations().to_vec(), Vec::new())
         };
-        
+
         let processing_duration = start_time.elapsed();
-        
+
         let batch_stats = BatchStats {
             triples_processed,
             processing_duration,
-            memory_used_bytes: 0, // TODO: Calculate actual memory usage
+            memory_used_bytes: 0,      // TODO: Calculate actual memory usage
             constraint_evaluations: 0, // TODO: Track constraint evaluations
-            cache_hit_ratio: 0.0, // TODO: Track cache performance
-            backpressure_events: 0, // TODO: Track backpressure
+            cache_hit_ratio: 0.0,      // TODO: Track cache performance
+            backpressure_events: 0,    // TODO: Track backpressure
         };
-        
+
         Ok(StreamingValidationResult {
             report: current_report,
             batch_id,
@@ -554,68 +560,66 @@ impl StreamingValidationEngine {
             resolved_violations,
         })
     }
-    
+
     /// Calculate difference between two validation reports
     fn calculate_violation_diff(
         previous: &ValidationReport,
         current: &ValidationReport,
     ) -> (Vec<ValidationViolation>, Vec<ValidationViolation>) {
-        let previous_violations: std::collections::HashSet<_> = 
+        let previous_violations: std::collections::HashSet<_> =
             previous.violations().iter().cloned().collect();
-        let current_violations: std::collections::HashSet<_> = 
+        let current_violations: std::collections::HashSet<_> =
             current.violations().iter().cloned().collect();
-        
+
         let new_violations = current_violations
             .difference(&previous_violations)
             .cloned()
             .collect();
-            
+
         let resolved_violations = previous_violations
             .difference(&current_violations)
             .cloned()
             .collect();
-        
+
         (new_violations, resolved_violations)
     }
-    
+
     /// Update streaming statistics
-    async fn update_statistics(
-        stats: &Arc<Mutex<StreamingStats>>,
-        batch_stats: &BatchStats,
-    ) {
+    async fn update_statistics(stats: &Arc<Mutex<StreamingStats>>, batch_stats: &BatchStats) {
         let mut stats_guard = stats.lock().unwrap();
         stats_guard.total_batches += 1;
         stats_guard.total_triples += batch_stats.triples_processed;
         stats_guard.total_processing_time += batch_stats.processing_duration;
-        
+
         // Update average latency
         let total_batches = stats_guard.total_batches as f64;
         let current_latency = batch_stats.processing_duration.as_secs_f64();
         let previous_avg = stats_guard.average_latency.as_secs_f64();
         let new_avg = (previous_avg * (total_batches - 1.0) + current_latency) / total_batches;
         stats_guard.average_latency = Duration::from_secs_f64(new_avg);
-        
+
         // Update throughput
         if stats_guard.total_processing_time.as_secs_f64() > 0.0 {
-            stats_guard.throughput_tps = stats_guard.total_triples as f64 
-                / stats_guard.total_processing_time.as_secs_f64();
+            stats_guard.throughput_tps =
+                stats_guard.total_triples as f64 / stats_guard.total_processing_time.as_secs_f64();
         }
-        
+
         // Update peak memory
-        stats_guard.peak_memory_bytes = stats_guard.peak_memory_bytes
+        stats_guard.peak_memory_bytes = stats_guard
+            .peak_memory_bytes
             .max(batch_stats.memory_used_bytes);
     }
-    
+
     /// Get current streaming statistics
     pub fn get_statistics(&self) -> StreamingStats {
         self.stats.lock().unwrap().clone()
     }
-    
+
     /// Subscribe to validation alerts
     pub fn subscribe_to_alerts(&self) -> Option<broadcast::Receiver<ValidationAlert>> {
         self.alert_sender.as_ref().map(|sender| sender.subscribe())
     }
-    
+
     /// Update shapes during streaming (hot-swappable shapes)
     pub fn update_shapes(&self, new_shapes: IndexMap<ShapeId, Shape>) -> Result<()> {
         let mut shapes = self.shapes.write().unwrap();
@@ -650,35 +654,37 @@ impl Default for StreamingStats {
 mod tests {
     use super::*;
     use tokio_stream::{self as stream, StreamExt};
-    
+
     #[tokio::test]
     async fn test_streaming_validation_basic() {
         // Create test shapes
         let shapes = IndexMap::new();
         let config = StreamingValidationConfig::default();
-        
+
         let mut engine = StreamingValidationEngine::new(shapes, config).unwrap();
-        
+
         // Create test stream
         let events = vec![
             StreamEvent::Addition(Triple {
                 subject: Term::NamedNode(NamedNode::new("http://example.org/person1").unwrap()),
-                predicate: Term::NamedNode(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap()),
+                predicate: Term::NamedNode(
+                    NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap(),
+                ),
                 object: Term::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
             }),
             StreamEvent::BatchEnd,
             StreamEvent::StreamEnd,
         ];
-        
+
         let test_stream = stream::iter(events);
         let mut result_stream = engine.validate_stream(test_stream).await.unwrap();
-        
+
         // Collect results
         let mut results = Vec::new();
         while let Some(result) = result_stream.next().await {
             results.push(result.unwrap());
         }
-        
+
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].batch_stats.triples_processed, 1);
     }

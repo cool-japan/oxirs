@@ -4,8 +4,8 @@
 //! embedding models, including precision, recall, coverage, diversity, and user
 //! satisfaction metrics.
 
-use crate::{EmbeddingModel, Vector};
 use super::ApplicationEvalConfig;
+use crate::{EmbeddingModel, Vector};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

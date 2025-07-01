@@ -39,28 +39,28 @@ pub enum VectorDomain {
 /// Access frequency patterns
 #[derive(Debug, Clone)]
 pub enum AccessFrequency {
-    VeryHigh,  // Accessed multiple times per second
-    High,      // Accessed multiple times per minute
-    Moderate,  // Accessed multiple times per hour
-    Low,       // Accessed daily
-    Archive,   // Rarely accessed
+    VeryHigh, // Accessed multiple times per second
+    High,     // Accessed multiple times per minute
+    Moderate, // Accessed multiple times per hour
+    Low,      // Accessed daily
+    Archive,  // Rarely accessed
 }
 
 /// Quality requirements for different use cases
 #[derive(Debug, Clone)]
 pub enum QualityRequirement {
-    Lossless,     // No quality loss acceptable
-    HighQuality,  // Minimal quality loss (>99% accuracy)
-    Balanced,     // Moderate quality loss (>95% accuracy)
-    Compressed,   // Higher compression priority (>90% accuracy)
-    Aggressive,   // Maximum compression (<90% accuracy)
+    Lossless,    // No quality loss acceptable
+    HighQuality, // Minimal quality loss (>99% accuracy)
+    Balanced,    // Moderate quality loss (>95% accuracy)
+    Compressed,  // Higher compression priority (>90% accuracy)
+    Aggressive,  // Maximum compression (<90% accuracy)
 }
 
 /// Resource constraints for compression decisions
 #[derive(Debug, Clone)]
 pub struct ResourceConstraints {
-    pub cpu_usage_limit: f32,      // 0.0 to 1.0
-    pub memory_usage_limit: f32,   // 0.0 to 1.0
+    pub cpu_usage_limit: f32,    // 0.0 to 1.0
+    pub memory_usage_limit: f32, // 0.0 to 1.0
     pub compression_time_limit: Duration,
     pub decompression_time_limit: Duration,
 }
@@ -68,9 +68,9 @@ pub struct ResourceConstraints {
 /// Temporal patterns for time-aware compression
 #[derive(Debug, Clone)]
 pub struct TemporalPatterns {
-    pub time_of_day_factor: f32,   // Compression aggressiveness based on time
-    pub load_factor: f32,          // Current system load
-    pub seasonal_factor: f32,      // Long-term usage patterns
+    pub time_of_day_factor: f32, // Compression aggressiveness based on time
+    pub load_factor: f32,        // Current system load
+    pub seasonal_factor: f32,    // Long-term usage patterns
 }
 
 /// Enhanced statistics about vector data characteristics
@@ -82,11 +82,11 @@ pub struct VectorStats {
     pub min_val: f32,
     pub max_val: f32,
     pub entropy: f32,
-    pub sparsity: f32,           // Fraction of near-zero values
-    pub correlation: f32,        // Average correlation between dimensions
-    pub intrinsic_dimension: f32, // Estimated intrinsic dimensionality
-    pub clustering_tendency: f32, // Hopkins statistic
-    pub temporal_stability: f32,  // Stability over time
+    pub sparsity: f32,                 // Fraction of near-zero values
+    pub correlation: f32,              // Average correlation between dimensions
+    pub intrinsic_dimension: f32,      // Estimated intrinsic dimensionality
+    pub clustering_tendency: f32,      // Hopkins statistic
+    pub temporal_stability: f32,       // Stability over time
     pub domain_affinity: VectorDomain, // Detected domain type
 }
 
@@ -146,7 +146,7 @@ impl VectorStats {
             VectorDomain::KnowledgeGraph => 64,
             _ => 256,
         };
-        
+
         let mut histogram = vec![0u32; bin_count];
         let range = max_val - min_val;
         if range > 0.0 {
@@ -173,16 +173,16 @@ impl VectorStats {
 
         // Enhanced correlation analysis
         let correlation = Self::calculate_enhanced_correlation(&values);
-        
+
         // Intrinsic dimensionality estimation using correlation dimension
         let intrinsic_dimension = Self::estimate_intrinsic_dimension(&values);
-        
+
         // Clustering tendency using Hopkins statistic
         let clustering_tendency = Self::calculate_hopkins_statistic(&values);
-        
+
         // Temporal stability (placeholder for now)
         let temporal_stability = 1.0;
-        
+
         // Domain detection based on statistical patterns
         let domain_affinity = Self::detect_domain(&values, entropy, sparsity, correlation);
 
@@ -201,7 +201,7 @@ impl VectorStats {
             domain_affinity,
         })
     }
-    
+
     /// Enhanced correlation analysis with multiple window sizes
     fn calculate_enhanced_correlation(values: &[f32]) -> f32 {
         let n = values.len();
@@ -217,7 +217,7 @@ impl VectorStats {
             if window_size >= n {
                 continue;
             }
-            
+
             for i in 0..(n - window_size) {
                 let window1 = &values[i..i + window_size];
                 let window2 = &values[i + 1..i + window_size + 1];
@@ -247,37 +247,35 @@ impl VectorStats {
             0.0
         }
     }
-    
+
     /// Estimate intrinsic dimensionality using correlation dimension method
     fn estimate_intrinsic_dimension(values: &[f32]) -> f32 {
         let n = values.len();
         if n < 10 {
             return n as f32;
         }
-        
+
         // Sample points for correlation dimension calculation
         let sample_size = n.min(100);
         let step = n / sample_size;
-        let sampled: Vec<f32> = (0..sample_size)
-            .map(|i| values[i * step])
-            .collect();
-        
+        let sampled: Vec<f32> = (0..sample_size).map(|i| values[i * step]).collect();
+
         // Calculate correlation dimension with multiple radii
         let mut log_radii = Vec::new();
         let mut log_counts = Vec::new();
-        
+
         let max_val = sampled.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
         let min_val = sampled.iter().fold(f32::INFINITY, |a, &b| a.min(b));
         let range = max_val - min_val;
-        
+
         if range <= 0.0 {
             return 1.0;
         }
-        
+
         for radius_factor in [0.001, 0.01, 0.1, 0.5] {
             let radius = range * radius_factor;
             let mut count = 0;
-            
+
             for i in 0..sampled.len() {
                 for j in (i + 1)..sampled.len() {
                     if (sampled[i] - sampled[j]).abs() < radius {
@@ -285,31 +283,28 @@ impl VectorStats {
                     }
                 }
             }
-            
+
             if count > 0 {
                 log_radii.push(radius.ln());
                 log_counts.push((count as f32).ln());
             }
         }
-        
+
         // Linear regression to estimate dimension
         if log_radii.len() < 2 {
             return n as f32;
         }
-        
+
         let mean_log_r: f32 = log_radii.iter().sum::<f32>() / log_radii.len() as f32;
         let mean_log_c: f32 = log_counts.iter().sum::<f32>() / log_counts.len() as f32;
-        
+
         let numerator: f32 = log_radii
             .iter()
             .zip(&log_counts)
             .map(|(r, c)| (r - mean_log_r) * (c - mean_log_c))
             .sum();
-        let denominator: f32 = log_radii
-            .iter()
-            .map(|r| (r - mean_log_r).powi(2))
-            .sum();
-        
+        let denominator: f32 = log_radii.iter().map(|r| (r - mean_log_r).powi(2)).sum();
+
         if denominator > 0.0 {
             let slope = numerator / denominator;
             slope.abs().min(n as f32).max(1.0)
@@ -317,30 +312,30 @@ impl VectorStats {
             n as f32
         }
     }
-    
+
     /// Calculate Hopkins statistic for clustering tendency
     fn calculate_hopkins_statistic(values: &[f32]) -> f32 {
         let n = values.len();
         if n < 10 {
             return 0.5; // Neutral value
         }
-        
+
         let sample_size = (n / 10).max(5).min(50);
         let min_val = values.iter().fold(f32::INFINITY, |a, &b| a.min(b));
         let max_val = values.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
-        
+
         if max_val <= min_val {
             return 0.5;
         }
-        
+
         let mut w_sum = 0.0; // Sum of distances to nearest neighbor in data
         let mut u_sum = 0.0; // Sum of distances to nearest neighbor in uniform random data
-        
+
         // Sample from actual data
         for i in 0..sample_size {
             let idx = (i * n / sample_size) % n;
             let point = values[idx];
-            
+
             let mut min_dist = f32::INFINITY;
             for &other in values {
                 if other != point {
@@ -350,20 +345,19 @@ impl VectorStats {
             }
             w_sum += min_dist;
         }
-        
+
         // Generate uniform random points and find nearest neighbors in data
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         42u64.hash(&mut hasher);
         let mut rng_state = hasher.finish();
-        
+
         for _ in 0..sample_size {
             rng_state = rng_state.wrapping_mul(1103515245).wrapping_add(12345);
-            let random_point = min_val + (max_val - min_val) * 
-                (rng_state as f32 / u64::MAX as f32);
-            
+            let random_point = min_val + (max_val - min_val) * (rng_state as f32 / u64::MAX as f32);
+
             let mut min_dist = f32::INFINITY;
             for &data_point in values {
                 let dist = (random_point - data_point).abs();
@@ -371,36 +365,46 @@ impl VectorStats {
             }
             u_sum += min_dist;
         }
-        
+
         if w_sum + u_sum > 0.0 {
             u_sum / (w_sum + u_sum)
         } else {
             0.5
         }
     }
-    
+
     /// Detect vector domain based on statistical patterns
-    fn detect_domain(values: &[f32], entropy: f32, sparsity: f32, correlation: f32) -> VectorDomain {
+    fn detect_domain(
+        values: &[f32],
+        entropy: f32,
+        sparsity: f32,
+        correlation: f32,
+    ) -> VectorDomain {
         // Text embeddings: moderate entropy, low sparsity, moderate correlation
-        if entropy > 6.0 && entropy < 8.0 && sparsity < 0.3 && correlation > 0.2 && correlation < 0.6 {
+        if entropy > 6.0
+            && entropy < 8.0
+            && sparsity < 0.3
+            && correlation > 0.2
+            && correlation < 0.6
+        {
             return VectorDomain::TextEmbeddings;
         }
-        
+
         // Image features: high entropy, variable sparsity, low correlation
         if entropy > 7.0 && correlation < 0.3 {
             return VectorDomain::ImageFeatures;
         }
-        
+
         // Knowledge graph: lower entropy, higher sparsity, specific patterns
         if entropy < 6.0 && sparsity > 0.4 {
             return VectorDomain::KnowledgeGraph;
         }
-        
+
         // Time series: high correlation, moderate entropy
         if correlation > 0.7 && entropy > 5.0 && entropy < 7.0 {
             return VectorDomain::TimeSeriesData;
         }
-        
+
         VectorDomain::Unknown
     }
 
@@ -408,7 +412,7 @@ impl VectorStats {
     pub fn from_vectors(vectors: &[Vector]) -> Result<Self, VectorError> {
         Self::from_vectors_with_context(vectors, &CompressionContext::default())
     }
-    
+
     /// Calculate aggregate statistics from multiple vectors with context
     pub fn from_vectors_with_context(
         vectors: &[Vector],
@@ -449,15 +453,17 @@ impl VectorStats {
             domain_affinity: Self::aggregate_domain_affinity(&stats),
         })
     }
-    
+
     /// Aggregate domain affinity from multiple statistics
     fn aggregate_domain_affinity(stats: &[VectorStats]) -> VectorDomain {
         let mut domain_counts = HashMap::new();
-        
+
         for stat in stats {
-            *domain_counts.entry(stat.domain_affinity.clone()).or_insert(0) += 1;
+            *domain_counts
+                .entry(stat.domain_affinity.clone())
+                .or_insert(0) += 1;
         }
-        
+
         domain_counts
             .into_iter()
             .max_by_key(|(_, count)| *count)
@@ -992,7 +998,7 @@ pub struct CompressionProfiles {
 impl CompressionProfiles {
     pub fn new() -> Self {
         let mut profiles = HashMap::new();
-        
+
         // Text embeddings: balance compression and quality
         profiles.insert(
             VectorDomain::TextEmbeddings,
@@ -1002,7 +1008,7 @@ impl CompressionProfiles {
                 accuracy_weight: 0.3,
             },
         );
-        
+
         // Image features: favor compression due to redundancy
         profiles.insert(
             VectorDomain::ImageFeatures,
@@ -1012,7 +1018,7 @@ impl CompressionProfiles {
                 accuracy_weight: 0.3,
             },
         );
-        
+
         // Knowledge graph: favor accuracy
         profiles.insert(
             VectorDomain::KnowledgeGraph,
@@ -1022,7 +1028,7 @@ impl CompressionProfiles {
                 accuracy_weight: 0.5,
             },
         );
-        
+
         // Time series: balance speed and accuracy
         profiles.insert(
             VectorDomain::TimeSeriesData,
@@ -1032,7 +1038,7 @@ impl CompressionProfiles {
                 accuracy_weight: 0.3,
             },
         );
-        
+
         // Audio features: favor compression
         profiles.insert(
             VectorDomain::AudioFeatures,
@@ -1042,17 +1048,14 @@ impl CompressionProfiles {
                 accuracy_weight: 0.3,
             },
         );
-        
+
         Self { profiles }
     }
-    
+
     pub fn get_profile(&self, domain: &VectorDomain) -> CompressionPriorities {
-        self.profiles
-            .get(domain)
-            .cloned()
-            .unwrap_or_default()
+        self.profiles.get(domain).cloned().unwrap_or_default()
     }
-    
+
     pub fn update_profile(&mut self, domain: VectorDomain, priorities: CompressionPriorities) {
         self.profiles.insert(domain, priorities);
     }

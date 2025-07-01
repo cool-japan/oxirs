@@ -115,7 +115,7 @@ pub enum DiscoveryMethod {
     Dns,
     Consul,
     Kubernetes,
-    VoID, // Vocabulary of Interlinked Datasets
+    VoID,   // Vocabulary of Interlinked Datasets
     SPARQL, // SPARQL endpoint lists
 }
 
@@ -241,8 +241,9 @@ impl ServiceDelegationManager {
         while let Some(service_pos) = query[pos..].find("SERVICE") {
             let abs_pos = pos + service_pos;
             if let Some(clause) = self.extract_complete_service_clause(&query[abs_pos..]) {
+                let clause_len = clause.len();
                 clauses.push(clause);
-                pos = abs_pos + clause.len();
+                pos = abs_pos + clause_len;
             } else {
                 pos = abs_pos + 7; // Move past "SERVICE"
             }
@@ -257,7 +258,7 @@ impl ServiceDelegationManager {
         let service_start = text.find("SERVICE")?;
         let url_start = text[service_start..].find('<')?;
         let url_end = text[service_start + url_start..].find('>')?;
-        
+
         let block_start = text[service_start..].find('{')?;
         let mut brace_count = 0;
         let mut block_end = block_start;
@@ -295,7 +296,10 @@ impl ServiceDelegationManager {
         let optimized_inner = self.optimize_for_endpoint(&inner_query, &endpoint).await?;
 
         // Reconstruct the SERVICE clause
-        Ok(format!("SERVICE <{}> {{ {} }}", service_url, optimized_inner))
+        Ok(format!(
+            "SERVICE <{}> {{ {} }}",
+            service_url, optimized_inner
+        ))
     }
 
     /// Parse SERVICE clause to extract URL and inner query
@@ -303,21 +307,23 @@ impl ServiceDelegationManager {
         let url_start = service_clause.find('<').ok_or_else(|| {
             crate::error::FusekiError::query_parsing("Invalid SERVICE clause - missing URL")
         })? + 1;
-        
+
         let url_end = service_clause.find('>').ok_or_else(|| {
             crate::error::FusekiError::query_parsing("Invalid SERVICE clause - malformed URL")
         })?;
-        
+
         let service_url = service_clause[url_start..url_end].to_string();
 
         let block_start = service_clause.find('{').ok_or_else(|| {
             crate::error::FusekiError::query_parsing("Invalid SERVICE clause - missing query block")
         })? + 1;
-        
+
         let block_end = service_clause.rfind('}').ok_or_else(|| {
-            crate::error::FusekiError::query_parsing("Invalid SERVICE clause - unclosed query block")
+            crate::error::FusekiError::query_parsing(
+                "Invalid SERVICE clause - unclosed query block",
+            )
         })?;
-        
+
         let inner_query = service_clause[block_start..block_end].trim().to_string();
 
         Ok((service_url, inner_query))
@@ -335,7 +341,7 @@ impl ServiceDelegationManager {
 
         // Try to discover the endpoint
         let discovered = self.discovery.discover_endpoint(url).await?;
-        
+
         // Register the discovered endpoint
         self.register_endpoint(discovered.clone()).await?;
 
@@ -343,7 +349,11 @@ impl ServiceDelegationManager {
     }
 
     /// Optimize query for specific endpoint
-    async fn optimize_for_endpoint(&self, query: &str, endpoint: &ServiceEndpoint) -> FusekiResult<String> {
+    async fn optimize_for_endpoint(
+        &self,
+        query: &str,
+        endpoint: &ServiceEndpoint,
+    ) -> FusekiResult<String> {
         let mut optimized = query.to_string();
 
         // Apply endpoint-specific optimizations
@@ -404,7 +414,11 @@ impl ServiceDelegationManager {
     }
 
     /// Update endpoint health status
-    pub async fn update_endpoint_health(&self, url: &str, health: ServiceHealth) -> FusekiResult<()> {
+    pub async fn update_endpoint_health(
+        &self,
+        url: &str,
+        health: ServiceHealth,
+    ) -> FusekiResult<()> {
         let mut endpoints = self.endpoints.write().await;
         if let Some(endpoint) = endpoints.get_mut(url) {
             endpoint.health_status = health;
@@ -444,7 +458,7 @@ impl ServiceDelegationManager {
 
         // Get available endpoints for this URL
         let endpoints = self.get_available_endpoints(service_url).await?;
-        
+
         // Use load balancer to select best endpoint
         let selected_endpoint = if endpoints.len() > 1 {
             self.load_balancer.select_endpoint(&endpoints)
@@ -452,9 +466,8 @@ impl ServiceDelegationManager {
             endpoints.first()
         };
 
-        let endpoint = selected_endpoint.ok_or_else(|| {
-            crate::error::FusekiError::service_error("No available endpoints")
-        })?;
+        let endpoint = selected_endpoint
+            .ok_or_else(|| crate::error::FusekiError::service_error("No available endpoints"))?;
 
         // Execute the query
         let request = ServiceQueryRequest {
@@ -474,7 +487,8 @@ impl ServiceDelegationManager {
                 backoff_multiplier: 2.0,
             },
             endpoint.timeout,
-        ).await;
+        )
+        .await;
 
         // Cache successful results
         if use_cache && response.status == ResponseStatus::Success {
@@ -489,9 +503,12 @@ impl ServiceDelegationManager {
     }
 
     /// Get available endpoints for a service URL
-    async fn get_available_endpoints(&self, service_url: &str) -> FusekiResult<Vec<ServiceEndpoint>> {
+    async fn get_available_endpoints(
+        &self,
+        service_url: &str,
+    ) -> FusekiResult<Vec<ServiceEndpoint>> {
         let endpoints = self.endpoints.read().await;
-        
+
         // Get direct endpoint if available
         if let Some(endpoint) = endpoints.get(service_url) {
             if endpoint.health_status != ServiceHealth::Unhealthy {
@@ -505,10 +522,16 @@ impl ServiceDelegationManager {
     }
 
     /// Update load balancer weights and health scores
-    pub async fn update_load_balancer_metrics(&mut self, url: &str, response_time: Duration, success: bool) {
+    pub async fn update_load_balancer_metrics(
+        &mut self,
+        url: &str,
+        response_time: Duration,
+        success: bool,
+    ) {
         // Update health score based on success rate
         let health_score = if success { 1.0 } else { 0.0 };
-        self.load_balancer.set_endpoint_health_score(url.to_string(), health_score);
+        self.load_balancer
+            .set_endpoint_health_score(url.to_string(), health_score);
 
         // Update weight based on response time (faster = higher weight)
         let weight = if response_time.as_millis() > 0 {
@@ -516,7 +539,8 @@ impl ServiceDelegationManager {
         } else {
             10.0
         };
-        self.load_balancer.set_endpoint_weight(url.to_string(), weight);
+        self.load_balancer
+            .set_endpoint_weight(url.to_string(), weight);
     }
 
     /// Get cache statistics
@@ -625,11 +649,11 @@ impl ParallelServiceExecutor {
                 }
                 Err(e) => {
                     last_error = Some(e);
-                    
+
                     // Don't retry on last attempt
                     if attempt < retry_policy.max_retries {
-                        let delay = retry_policy.initial_delay * 
-                            retry_policy.backoff_multiplier.powi(attempt as i32);
+                        let delay = retry_policy.initial_delay
+                            * retry_policy.backoff_multiplier.powi(attempt as i32);
                         let delay = delay.min(retry_policy.max_delay);
                         tokio::time::sleep(delay).await;
                     }
@@ -689,8 +713,9 @@ impl ParallelServiceExecutor {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("application/json");
 
-        if content_type.contains("application/sparql-results+json") || 
-           content_type.contains("application/json") {
+        if content_type.contains("application/sparql-results+json")
+            || content_type.contains("application/json")
+        {
             let json_response: serde_json::Value = response.json().await?;
             Ok(json_response)
         } else {
@@ -790,31 +815,47 @@ impl ServiceResultMerger {
     }
 
     /// Merge results using INTERSECTION strategy
-    fn merge_intersection(&self, responses: Vec<ServiceQueryResponse>) -> FusekiResult<serde_json::Value> {
+    fn merge_intersection(
+        &self,
+        responses: Vec<ServiceQueryResponse>,
+    ) -> FusekiResult<serde_json::Value> {
         // Simplified intersection - would need proper implementation
         self.merge_union(responses)
     }
 
     /// Merge results using LEFT JOIN strategy
-    fn merge_left_join(&self, responses: Vec<ServiceQueryResponse>) -> FusekiResult<serde_json::Value> {
+    fn merge_left_join(
+        &self,
+        responses: Vec<ServiceQueryResponse>,
+    ) -> FusekiResult<serde_json::Value> {
         // Simplified left join - would need proper implementation
         self.merge_union(responses)
     }
 
     /// Merge results using RIGHT JOIN strategy
-    fn merge_right_join(&self, responses: Vec<ServiceQueryResponse>) -> FusekiResult<serde_json::Value> {
+    fn merge_right_join(
+        &self,
+        responses: Vec<ServiceQueryResponse>,
+    ) -> FusekiResult<serde_json::Value> {
         // Simplified right join - would need proper implementation
         self.merge_union(responses)
     }
 
     /// Merge results using FULL JOIN strategy
-    fn merge_full_join(&self, responses: Vec<ServiceQueryResponse>) -> FusekiResult<serde_json::Value> {
+    fn merge_full_join(
+        &self,
+        responses: Vec<ServiceQueryResponse>,
+    ) -> FusekiResult<serde_json::Value> {
         // Simplified full join - would need proper implementation
         self.merge_union(responses)
     }
 
     /// Merge results using custom strategy
-    fn merge_custom(&self, responses: Vec<ServiceQueryResponse>, _strategy_name: &str) -> FusekiResult<serde_json::Value> {
+    fn merge_custom(
+        &self,
+        responses: Vec<ServiceQueryResponse>,
+        _strategy_name: &str,
+    ) -> FusekiResult<serde_json::Value> {
         // Custom merge strategies would be implemented here
         self.merge_union(responses)
     }
@@ -879,14 +920,18 @@ impl EndpointDiscovery {
             DiscoveryMethod::Static => self.discover_static(url).await,
             DiscoveryMethod::VoID => self.discover_void(url).await,
             DiscoveryMethod::SPARQL => self.discover_sparql(url).await,
-            _ => Err(crate::error::FusekiError::service_error("Discovery method not implemented")),
+            _ => Err(crate::error::FusekiError::service_error(
+                "Discovery method not implemented",
+            )),
         }
     }
 
     /// Static discovery (configuration-based)
     async fn discover_static(&self, url: &str) -> FusekiResult<ServiceEndpoint> {
         // Would read from static configuration
-        Err(crate::error::FusekiError::service_error("Static discovery not configured"))
+        Err(crate::error::FusekiError::service_error(
+            "Static discovery not configured",
+        ))
     }
 
     /// VoID discovery (Vocabulary of Interlinked Datasets)
@@ -911,7 +956,9 @@ impl EndpointDiscovery {
         Ok(ServiceEndpoint {
             url: url.to_string(),
             name: "sparql-discovered".to_string(),
-            supported_features: ["SPARQL_1_1".to_string(), "BIND".to_string()].into_iter().collect(),
+            supported_features: ["SPARQL_1_1".to_string(), "BIND".to_string()]
+                .into_iter()
+                .collect(),
             authentication: None,
             timeout: Duration::from_secs(30),
             retry_count: 3,
@@ -934,7 +981,7 @@ impl HealthMonitor {
     /// Start health monitoring for all endpoints
     pub async fn start_monitoring(&self, manager: Arc<ServiceDelegationManager>) {
         let mut interval = tokio::time::interval(self.check_interval);
-        
+
         loop {
             interval.tick().await;
             self.check_all_endpoints(&manager).await;
@@ -944,7 +991,7 @@ impl HealthMonitor {
     /// Check health of all registered endpoints
     async fn check_all_endpoints(&self, manager: &ServiceDelegationManager) {
         let endpoints = manager.endpoints.read().await;
-        
+
         for (url, _endpoint) in endpoints.iter() {
             match self.check_endpoint_health(url).await {
                 Ok(health) => {
@@ -954,7 +1001,10 @@ impl HealthMonitor {
                 }
                 Err(e) => {
                     warn!("Health check failed for {}: {}", url, e);
-                    if let Err(e) = manager.update_endpoint_health(url, ServiceHealth::Unhealthy).await {
+                    if let Err(e) = manager
+                        .update_endpoint_health(url, ServiceHealth::Unhealthy)
+                        .await
+                    {
                         error!("Failed to update health for {}: {}", url, e);
                     }
                 }
@@ -966,12 +1016,12 @@ impl HealthMonitor {
     async fn check_endpoint_health(&self, url: &str) -> FusekiResult<ServiceHealth> {
         // Simple health check - in practice would make HTTP request
         tokio::time::sleep(Duration::from_millis(10)).await;
-        
+
         // Simulate random health status
         use rand::Rng;
         let mut rng = rand::thread_rng();
         let health_value: f32 = rng.gen();
-        
+
         if health_value > 0.9 {
             Ok(ServiceHealth::Healthy)
         } else if health_value > 0.7 {
@@ -1009,7 +1059,7 @@ impl QueryCache {
     /// Store result in cache with TTL
     pub fn put(&mut self, key: String, result: serde_json::Value, ttl: Option<Duration>) {
         let ttl = ttl.unwrap_or(self.default_ttl);
-        
+
         // If cache is full, evict LRU entry
         if self.cache.len() >= self.max_size {
             self.evict_lru();
@@ -1027,7 +1077,8 @@ impl QueryCache {
 
     /// Evict least recently used entry
     fn evict_lru(&mut self) {
-        if let Some(lru_key) = self.cache
+        if let Some(lru_key) = self
+            .cache
             .iter()
             .min_by_key(|(_, entry)| entry.last_accessed)
             .map(|(key, _)| key.clone())
@@ -1046,15 +1097,15 @@ impl QueryCache {
     pub fn stats(&self) -> CacheStats {
         let total_entries = self.cache.len();
         let total_accesses: u64 = self.cache.values().map(|e| e.access_count).sum();
-        
+
         CacheStats {
             total_entries,
             max_size: self.max_size,
             total_accesses,
-            hit_ratio: if total_accesses > 0 { 
-                total_accesses as f64 / (total_accesses + total_entries as u64) as f64 
-            } else { 
-                0.0 
+            hit_ratio: if total_accesses > 0 {
+                total_accesses as f64 / (total_accesses + total_entries as u64) as f64
+            } else {
+                0.0
             },
         }
     }
@@ -1080,14 +1131,19 @@ impl LoadBalancer {
     }
 
     /// Select best endpoint based on strategy
-    pub fn select_endpoint(&self, endpoints: &[ServiceEndpoint]) -> Option<&ServiceEndpoint> {
+    pub fn select_endpoint<'a>(
+        &self,
+        endpoints: &'a [ServiceEndpoint],
+    ) -> Option<&'a ServiceEndpoint> {
         if endpoints.is_empty() {
             return None;
         }
 
         match self.strategy {
             LoadBalancingStrategy::RoundRobin => self.select_round_robin(endpoints),
-            LoadBalancingStrategy::WeightedRoundRobin => self.select_weighted_round_robin(endpoints),
+            LoadBalancingStrategy::WeightedRoundRobin => {
+                self.select_weighted_round_robin(endpoints)
+            }
             LoadBalancingStrategy::ResponseTime => self.select_by_response_time(endpoints),
             LoadBalancingStrategy::HealthScore => self.select_by_health_score(endpoints),
             LoadBalancingStrategy::Adaptive => self.select_adaptive(endpoints),
@@ -1095,13 +1151,21 @@ impl LoadBalancer {
     }
 
     /// Round robin selection
-    fn select_round_robin(&self, endpoints: &[ServiceEndpoint]) -> Option<&ServiceEndpoint> {
-        let index = self.round_robin_index.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    fn select_round_robin<'a>(
+        &self,
+        endpoints: &'a [ServiceEndpoint],
+    ) -> Option<&'a ServiceEndpoint> {
+        let index = self
+            .round_robin_index
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         endpoints.get(index % endpoints.len())
     }
 
     /// Weighted round robin selection
-    fn select_weighted_round_robin(&self, endpoints: &[ServiceEndpoint]) -> Option<&ServiceEndpoint> {
+    fn select_weighted_round_robin<'a>(
+        &self,
+        endpoints: &'a [ServiceEndpoint],
+    ) -> Option<&'a ServiceEndpoint> {
         let mut total_weight = 0.0;
         for endpoint in endpoints {
             total_weight += self.endpoint_weights.get(&endpoint.url).unwrap_or(&1.0);
@@ -1124,7 +1188,10 @@ impl LoadBalancer {
     }
 
     /// Select by response time
-    fn select_by_response_time(&self, endpoints: &[ServiceEndpoint]) -> Option<&ServiceEndpoint> {
+    fn select_by_response_time<'a>(
+        &self,
+        endpoints: &'a [ServiceEndpoint],
+    ) -> Option<&'a ServiceEndpoint> {
         endpoints
             .iter()
             .filter(|e| e.health_status == ServiceHealth::Healthy)
@@ -1132,19 +1199,24 @@ impl LoadBalancer {
     }
 
     /// Select by health score
-    fn select_by_health_score(&self, endpoints: &[ServiceEndpoint]) -> Option<&ServiceEndpoint> {
+    fn select_by_health_score<'a>(
+        &self,
+        endpoints: &'a [ServiceEndpoint],
+    ) -> Option<&'a ServiceEndpoint> {
         endpoints
             .iter()
             .filter(|e| e.health_status != ServiceHealth::Unhealthy)
             .max_by(|a, b| {
                 let score_a = self.endpoint_health_scores.get(&a.url).unwrap_or(&0.5);
                 let score_b = self.endpoint_health_scores.get(&b.url).unwrap_or(&0.5);
-                score_a.partial_cmp(score_b).unwrap_or(std::cmp::Ordering::Equal)
+                score_a
+                    .partial_cmp(score_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
     }
 
     /// Adaptive selection combining multiple factors
-    fn select_adaptive(&self, endpoints: &[ServiceEndpoint]) -> Option<&ServiceEndpoint> {
+    fn select_adaptive<'a>(&self, endpoints: &'a [ServiceEndpoint]) -> Option<&'a ServiceEndpoint> {
         let mut best_endpoint = None;
         let mut best_score = f64::NEG_INFINITY;
 
@@ -1156,7 +1228,10 @@ impl LoadBalancer {
             let mut score = 0.0;
 
             // Health score (40% weight)
-            let health_score = self.endpoint_health_scores.get(&endpoint.url).unwrap_or(&0.5);
+            let health_score = self
+                .endpoint_health_scores
+                .get(&endpoint.url)
+                .unwrap_or(&0.5);
             score += health_score * 0.4;
 
             // Response time score (30% weight)
@@ -1195,7 +1270,8 @@ impl LoadBalancer {
 
     /// Update endpoint health score
     pub fn set_endpoint_health_score(&mut self, url: String, score: f64) {
-        self.endpoint_health_scores.insert(url, score.max(0.0).min(1.0));
+        self.endpoint_health_scores
+            .insert(url, score.max(0.0).min(1.0));
     }
 
     /// Get endpoint statistics
@@ -1223,10 +1299,10 @@ mod tests {
     #[tokio::test]
     async fn test_service_clause_extraction() {
         let manager = ServiceDelegationManager::new();
-        
+
         let query = "SELECT ?s WHERE { SERVICE <http://example.org/sparql> { ?s ?p ?o } }";
         let clauses = manager.extract_service_clauses(query).unwrap();
-        
+
         assert_eq!(clauses.len(), 1);
         assert!(clauses[0].contains("SERVICE <http://example.org/sparql>"));
     }
@@ -1234,7 +1310,7 @@ mod tests {
     #[tokio::test]
     async fn test_endpoint_registration() {
         let manager = ServiceDelegationManager::new();
-        
+
         let endpoint = ServiceEndpoint {
             url: "http://example.org/sparql".to_string(),
             name: "test-endpoint".to_string(),
@@ -1246,17 +1322,19 @@ mod tests {
             response_time_avg: None,
             last_checked: None,
         };
-        
+
         manager.register_endpoint(endpoint).await.unwrap();
-        
-        let health = manager.get_endpoint_health("http://example.org/sparql").await;
+
+        let health = manager
+            .get_endpoint_health("http://example.org/sparql")
+            .await;
         assert_eq!(health, Some(ServiceHealth::Healthy));
     }
 
     #[tokio::test]
     async fn test_parallel_execution() {
         let executor = ParallelServiceExecutor::new();
-        
+
         let requests = vec![
             ServiceQueryRequest {
                 service_url: "http://example1.org/sparql".to_string(),
@@ -1273,7 +1351,7 @@ mod tests {
                 headers: HashMap::new(),
             },
         ];
-        
+
         let responses = executor.execute_parallel(requests).await.unwrap();
         assert_eq!(responses.len(), 2);
     }
@@ -1281,7 +1359,7 @@ mod tests {
     #[tokio::test]
     async fn test_result_merging() {
         let merger = ServiceResultMerger::new();
-        
+
         let responses = vec![
             ServiceQueryResponse {
                 status: ResponseStatus::Success,
@@ -1312,9 +1390,12 @@ mod tests {
                 },
             },
         ];
-        
-        let merged = merger.merge_results(responses, Some(MergeStrategy::Union)).await.unwrap();
-        
+
+        let merged = merger
+            .merge_results(responses, Some(MergeStrategy::Union))
+            .await
+            .unwrap();
+
         let bindings = merged["results"]["bindings"].as_array().unwrap();
         assert_eq!(bindings.len(), 2);
     }
@@ -1385,7 +1466,13 @@ impl QueryCache {
     }
 
     /// Store result in cache
-    pub fn set(&mut self, query_hash: String, data: serde_json::Value, endpoint_url: String, ttl: Option<Duration>) {
+    pub fn set(
+        &mut self,
+        query_hash: String,
+        data: serde_json::Value,
+        endpoint_url: String,
+        ttl: Option<Duration>,
+    ) {
         // Remove oldest entries if cache is full
         if self.cache.len() >= self.max_size {
             self.evict_oldest();
@@ -1405,7 +1492,9 @@ impl QueryCache {
 
     /// Evict oldest or least accessed entries
     fn evict_oldest(&mut self) {
-        if let Some((oldest_key, _)) = self.cache.iter()
+        if let Some((oldest_key, _)) = self
+            .cache
+            .iter()
             .min_by_key(|(_, entry)| entry.last_accessed)
             .map(|(k, v)| (k.clone(), v.clone()))
         {
@@ -1414,10 +1503,14 @@ impl QueryCache {
     }
 
     /// Generate cache key for query
-    pub fn generate_cache_key(query: &str, endpoint: &str, parameters: &HashMap<String, String>) -> String {
+    pub fn generate_cache_key(
+        query: &str,
+        endpoint: &str,
+        parameters: &HashMap<String, String>,
+    ) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         query.hash(&mut hasher);
         endpoint.hash(&mut hasher);
@@ -1430,14 +1523,19 @@ impl QueryCache {
 
     /// Invalidate cache entries for specific endpoint
     pub fn invalidate_endpoint(&mut self, endpoint_url: &str) {
-        self.cache.retain(|_, entry| entry.endpoint_url != endpoint_url);
+        self.cache
+            .retain(|_, entry| entry.endpoint_url != endpoint_url);
     }
 
     /// Get cache statistics
     pub fn get_stats(&self) -> CacheStats {
         let total_access_count = self.cache.values().map(|e| e.access_count).sum();
         let avg_age = if !self.cache.is_empty() {
-            self.cache.values().map(|e| e.created_at.elapsed().as_secs()).sum::<u64>() / self.cache.len() as u64
+            self.cache
+                .values()
+                .map(|e| e.created_at.elapsed().as_secs())
+                .sum::<u64>()
+                / self.cache.len() as u64
         } else {
             0
         };
@@ -1470,7 +1568,11 @@ impl LoadBalancer {
     }
 
     /// Select best endpoint for query based on strategy
-    pub fn select_endpoint(&self, available_endpoints: &[ServiceEndpoint], query_complexity: Option<f64>) -> Option<ServiceEndpoint> {
+    pub fn select_endpoint(
+        &self,
+        available_endpoints: &[ServiceEndpoint],
+        query_complexity: Option<f64>,
+    ) -> Option<ServiceEndpoint> {
         if available_endpoints.is_empty() {
             return None;
         }
@@ -1483,21 +1585,21 @@ impl LoadBalancer {
             LoadBalancingStrategy::WeightedRoundRobin => {
                 self.weighted_selection(available_endpoints)
             }
-            LoadBalancingStrategy::ResponseTime => {
-                available_endpoints.iter()
-                    .min_by_key(|ep| ep.response_time_avg.unwrap_or(Duration::from_secs(999)))
-                    .cloned()
-            }
-            LoadBalancingStrategy::HealthScore => {
-                available_endpoints.iter()
-                    .filter(|ep| ep.health_status == ServiceHealth::Healthy)
-                    .max_by(|a, b| {
-                        let score_a = self.endpoint_health_scores.get(&a.url).unwrap_or(&0.5);
-                        let score_b = self.endpoint_health_scores.get(&b.url).unwrap_or(&0.5);
-                        score_a.partial_cmp(score_b).unwrap_or(std::cmp::Ordering::Equal)
-                    })
-                    .cloned()
-            }
+            LoadBalancingStrategy::ResponseTime => available_endpoints
+                .iter()
+                .min_by_key(|ep| ep.response_time_avg.unwrap_or(Duration::from_secs(999)))
+                .cloned(),
+            LoadBalancingStrategy::HealthScore => available_endpoints
+                .iter()
+                .filter(|ep| ep.health_status == ServiceHealth::Healthy)
+                .max_by(|a, b| {
+                    let score_a = self.endpoint_health_scores.get(&a.url).unwrap_or(&0.5);
+                    let score_b = self.endpoint_health_scores.get(&b.url).unwrap_or(&0.5);
+                    score_a
+                        .partial_cmp(score_b)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .cloned(),
             LoadBalancingStrategy::Adaptive => {
                 self.adaptive_selection(available_endpoints, query_complexity)
             }
@@ -1507,7 +1609,8 @@ impl LoadBalancer {
 
     /// Weighted selection based on endpoint weights
     fn weighted_selection(&self, endpoints: &[ServiceEndpoint]) -> Option<ServiceEndpoint> {
-        let total_weight: f64 = endpoints.iter()
+        let total_weight: f64 = endpoints
+            .iter()
             .map(|ep| self.endpoint_weights.get(&ep.url).unwrap_or(&1.0))
             .sum();
 
@@ -1530,8 +1633,13 @@ impl LoadBalancer {
     }
 
     /// Adaptive selection considering multiple factors
-    fn adaptive_selection(&self, endpoints: &[ServiceEndpoint], query_complexity: Option<f64>) -> Option<ServiceEndpoint> {
-        let mut scored_endpoints: Vec<(f64, ServiceEndpoint)> = endpoints.iter()
+    fn adaptive_selection(
+        &self,
+        endpoints: &[ServiceEndpoint],
+        query_complexity: Option<f64>,
+    ) -> Option<ServiceEndpoint> {
+        let mut scored_endpoints: Vec<(f64, ServiceEndpoint)> = endpoints
+            .iter()
             .map(|ep| {
                 let mut score = 0.0;
 
@@ -1552,7 +1660,9 @@ impl LoadBalancer {
 
                 // Feature support score (20% weight)
                 if let Some(complexity) = query_complexity {
-                    let feature_score = if complexity > 0.7 && ep.supported_features.contains("complex_queries") {
+                    let feature_score = if complexity > 0.7
+                        && ep.supported_features.contains("complex_queries")
+                    {
                         1.0
                     } else if complexity < 0.3 && ep.supported_features.contains("fast_queries") {
                         1.0
@@ -1578,11 +1688,13 @@ impl LoadBalancer {
     pub fn update_endpoint_weight(&mut self, endpoint_url: &str, performance_score: f64) {
         let current_weight = self.endpoint_weights.get(endpoint_url).unwrap_or(&1.0);
         let new_weight = (current_weight * 0.8) + (performance_score * 0.2);
-        self.endpoint_weights.insert(endpoint_url.to_string(), new_weight.max(0.1).min(2.0));
+        self.endpoint_weights
+            .insert(endpoint_url.to_string(), new_weight.max(0.1).min(2.0));
     }
 
     /// Update endpoint health score
     pub fn update_health_score(&mut self, endpoint_url: &str, health_score: f64) {
-        self.endpoint_health_scores.insert(endpoint_url.to_string(), health_score.max(0.0).min(1.0));
+        self.endpoint_health_scores
+            .insert(endpoint_url.to_string(), health_score.max(0.0).min(1.0));
     }
 }

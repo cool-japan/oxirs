@@ -3,8 +3,8 @@
 //! This module provides comprehensive evaluation for information retrieval tasks
 //! using embedding models, including document ranking and retrieval effectiveness.
 
-use crate::EmbeddingModel;
 use super::ApplicationEvalConfig;
+use crate::EmbeddingModel;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -196,7 +196,7 @@ impl RetrievalEvaluator {
         let mut recall_at_k = HashMap::new();
         let mut ndcg_scores = HashMap::new();
 
-        let relevant_set: std::collections::HashSet<String> = 
+        let relevant_set: std::collections::HashSet<String> =
             query.relevant_docs.iter().cloned().collect();
 
         for &k in &[1, 3, 5, 10, 20] {
@@ -246,9 +246,9 @@ impl RetrievalEvaluator {
 
         for (doc_id, doc) in &self.documents {
             // Calculate relevance score based on text overlap
-            let query_words: std::collections::HashSet<&str> = 
+            let query_words: std::collections::HashSet<&str> =
                 query.query_text.split_whitespace().collect();
-            let doc_words: std::collections::HashSet<&str> = 
+            let doc_words: std::collections::HashSet<&str> =
                 doc.content.split_whitespace().collect();
 
             let overlap = query_words.intersection(&doc_words).count();

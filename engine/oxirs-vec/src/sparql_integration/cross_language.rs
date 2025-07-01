@@ -41,20 +41,24 @@ impl CrossLanguageProcessor {
         target_languages: &[String],
     ) -> Vec<(String, f32)> {
         let mut processed_queries = Vec::new();
-        
+
         // Original query gets highest weight
         processed_queries.push((query.to_string(), 1.0));
 
         // Detect source language
         let detected_lang = self.detect_language(query);
-        
+
         // Generate variations for each target language
         for target_lang in target_languages {
             if target_lang == &detected_lang {
                 continue; // Skip same language
             }
 
-            let weight = self.language_weights.get(target_lang).copied().unwrap_or(0.8);
+            let weight = self
+                .language_weights
+                .get(target_lang)
+                .copied()
+                .unwrap_or(0.8);
 
             // Generate translations
             let translations = self.generate_translations(query, target_lang);
@@ -281,7 +285,7 @@ impl CrossLanguageProcessor {
         if !variants.is_empty() {
             let original_words: Vec<&str> = query.split_whitespace().collect();
             let mut variant_query = String::new();
-            
+
             for (i, word) in original_words.iter().enumerate() {
                 if i < variants.len() && !variants[i].is_empty() {
                     variant_query.push_str(&variants[i]);
@@ -292,7 +296,7 @@ impl CrossLanguageProcessor {
                     variant_query.push(' ');
                 }
             }
-            
+
             if variant_query != query.to_lowercase() {
                 vec![variant_query]
             } else {
@@ -337,18 +341,9 @@ mod tests {
             processor.detect_language("machine learning algorithm"),
             "en"
         );
-        assert_eq!(
-            processor.detect_language("aprendizaje automático"),
-            "es"
-        );
-        assert_eq!(
-            processor.detect_language("apprentissage automatique"),
-            "fr"
-        );
-        assert_eq!(
-            processor.detect_language("maschinelles Lernen"),
-            "de"
-        );
+        assert_eq!(processor.detect_language("aprendizaje automático"), "es");
+        assert_eq!(processor.detect_language("apprentissage automatique"), "fr");
+        assert_eq!(processor.detect_language("maschinelles Lernen"), "de");
     }
 
     #[test]

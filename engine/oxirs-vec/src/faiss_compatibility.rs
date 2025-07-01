@@ -235,16 +235,17 @@ impl FaissCompatibility {
 
         // Create appropriate oxirs-vec index based on FAISS type
         match metadata.index_type {
-            FaissIndexType::IndexHNSWFlat => {
-                self.import_hnsw_index(input_path, &metadata, config)
-            }
+            FaissIndexType::IndexHNSWFlat => self.import_hnsw_index(input_path, &metadata, config),
             FaissIndexType::IndexIVFFlat | FaissIndexType::IndexIVFPQ => {
                 self.import_ivf_index(input_path, &metadata, config)
             }
             FaissIndexType::IndexFlatL2 | FaissIndexType::IndexFlatIP => {
                 self.import_flat_index(input_path, &metadata, config)
             }
-            _ => Err(anyhow!("Import not yet implemented for {:?}", metadata.index_type)),
+            _ => Err(anyhow!(
+                "Import not yet implemented for {:?}",
+                metadata.index_type
+            )),
         }
     }
 
@@ -421,20 +422,20 @@ impl FaissCompatibility {
     ) -> Result<()> {
         // FAISS magic number
         writer.write_all(b"FAISS")?;
-        
+
         // Version
         writer.write_all(&1u32.to_le_bytes())?;
-        
+
         // Index type identifier
         let type_id = self.faiss_type_to_id(metadata.index_type);
         writer.write_all(&type_id.to_le_bytes())?;
-        
+
         // Dimension
         writer.write_all(&(metadata.dimension as u32).to_le_bytes())?;
-        
+
         // Number of vectors
         writer.write_all(&(metadata.num_vectors as u64).to_le_bytes())?;
-        
+
         // Metric type
         let metric_id = self.faiss_metric_to_id(metadata.metric_type);
         writer.write_all(&metric_id.to_le_bytes())?;
@@ -446,7 +447,7 @@ impl FaissCompatibility {
     fn skip_faiss_header(&self, reader: &mut BufReader<File>) -> Result<()> {
         let mut magic = [0u8; 5];
         reader.read_exact(&mut magic)?;
-        
+
         if &magic != b"FAISS" {
             return Err(anyhow!("Invalid FAISS file format"));
         }
@@ -498,10 +499,10 @@ impl FaissCompatibility {
         chunk_size: usize,
     ) -> Result<()> {
         let total_vectors = self.get_index_size(index)?;
-        
+
         for chunk_start in (0..total_vectors).step_by(chunk_size) {
             let chunk_end = std::cmp::min(chunk_start + chunk_size, total_vectors);
-            
+
             for i in chunk_start..chunk_end {
                 if let Some(vector) = self.get_vector_at_index(index, i) {
                     self.write_vector(writer, &vector)?;
@@ -529,7 +530,7 @@ impl FaissCompatibility {
             reader.read_exact(&mut bytes)?;
             *value = f32::from_le_bytes(bytes);
         }
-        
+
         Ok(Vector::new(data))
     }
 
@@ -583,7 +584,10 @@ impl FaissCompatibility {
     ) -> Result<HashMap<String, FaissParameter>> {
         // Extract relevant parameters based on index type
         let mut params = HashMap::new();
-        params.insert("created_by".to_string(), FaissParameter::String("oxirs-vec".to_string()));
+        params.insert(
+            "created_by".to_string(),
+            FaissParameter::String("oxirs-vec".to_string()),
+        );
         Ok(params)
     }
 
@@ -592,18 +596,30 @@ impl FaissCompatibility {
         metadata.num_vectors * metadata.dimension * 4 // 4 bytes per float
     }
 
-    fn estimate_accuracy_preservation(&self, _format: FaissIndexType, _config: &FaissExportConfig) -> f32 {
+    fn estimate_accuracy_preservation(
+        &self,
+        _format: FaissIndexType,
+        _config: &FaissExportConfig,
+    ) -> f32 {
         // Conservative estimate
         0.95 // 95% accuracy preservation
     }
 
     // Additional helper methods for reading configurations
-    fn read_hnsw_config(&self, _reader: &mut BufReader<File>, _metadata: &FaissIndexMetadata) -> Result<HnswConfig> {
+    fn read_hnsw_config(
+        &self,
+        _reader: &mut BufReader<File>,
+        _metadata: &FaissIndexMetadata,
+    ) -> Result<HnswConfig> {
         // Read HNSW-specific configuration from FAISS file
         Ok(HnswConfig::default()) // Placeholder
     }
 
-    fn read_ivf_config(&self, _reader: &mut BufReader<File>, _metadata: &FaissIndexMetadata) -> Result<IvfConfig> {
+    fn read_ivf_config(
+        &self,
+        _reader: &mut BufReader<File>,
+        _metadata: &FaissIndexMetadata,
+    ) -> Result<IvfConfig> {
         // Read IVF-specific configuration from FAISS file
         Ok(IvfConfig::default()) // Placeholder
     }
@@ -613,7 +629,11 @@ impl FaissCompatibility {
         Ok(()) // Placeholder
     }
 
-    fn read_ivf_structure(&self, _reader: &mut BufReader<File>, _index: &mut IvfIndex) -> Result<()> {
+    fn read_ivf_structure(
+        &self,
+        _reader: &mut BufReader<File>,
+        _index: &mut IvfIndex,
+    ) -> Result<()> {
         // Read IVF centroids and structure
         Ok(()) // Placeholder
     }
@@ -666,7 +686,10 @@ impl FaissCompatibility {
                     Err(anyhow!("Index is not an IVF index"))
                 }
             }
-            _ => Err(anyhow!("Export format not yet implemented: {:?}", metadata.index_type)),
+            _ => Err(anyhow!(
+                "Export format not yet implemented: {:?}",
+                metadata.index_type
+            )),
         }
     }
 
@@ -709,37 +732,40 @@ impl VectorIndex for SimpleVectorIndex {
 
     fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
         let mut results = Vec::new();
-        
+
         for (i, vector) in self.vectors.iter().enumerate() {
             let similarity = self.compute_similarity(query, vector);
             results.push((self.uris[i].clone(), similarity));
         }
-        
+
         // Sort by similarity (descending) and take top k
         results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(k);
-        
+
         Ok(results)
     }
 
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
         let mut results = Vec::new();
-        
+
         for (i, vector) in self.vectors.iter().enumerate() {
             let similarity = self.compute_similarity(query, vector);
             if similarity >= threshold {
                 results.push((self.uris[i].clone(), similarity));
             }
         }
-        
+
         // Sort by similarity (descending)
         results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         Ok(results)
     }
 
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
-        self.uris.iter().position(|u| u == uri).map(|i| &self.vectors[i])
+        self.uris
+            .iter()
+            .position(|u| u == uri)
+            .map(|i| &self.vectors[i])
     }
 }
 
@@ -748,15 +774,15 @@ impl SimpleVectorIndex {
         // Simple cosine similarity implementation
         let v1_data = v1.as_f32();
         let v2_data = v2.as_f32();
-        
+
         if v1_data.len() != v2_data.len() {
             return 0.0;
         }
-        
+
         let dot_product: f32 = v1_data.iter().zip(v2_data.iter()).map(|(a, b)| a * b).sum();
         let magnitude1: f32 = v1_data.iter().map(|x| x * x).sum::<f32>().sqrt();
         let magnitude2: f32 = v2_data.iter().map(|x| x * x).sum::<f32>().sqrt();
-        
+
         if magnitude1 == 0.0 || magnitude2 == 0.0 {
             0.0
         } else {
@@ -790,7 +816,9 @@ pub mod utils {
             FaissIndexType::IndexFlatL2
         } else if accuracy_requirement > 0.99 {
             FaissIndexType::IndexFlatL2
-        } else if dimension > 1000 || memory_constraint.map_or(false, |mem| mem < 1024 * 1024 * 1024) {
+        } else if dimension > 1000
+            || memory_constraint.map_or(false, |mem| mem < 1024 * 1024 * 1024)
+        {
             FaissIndexType::IndexIVFPQ
         } else if num_vectors > 100000 {
             FaissIndexType::IndexHNSWFlat
@@ -812,7 +840,7 @@ pub mod utils {
             FaissIndexType::IndexIVFFlat => base_memory + (num_vectors / 100) * dimension * 4, // Centroids
             FaissIndexType::IndexIVFPQ => base_memory / 8 + (num_vectors / 100) * dimension * 4, // PQ compression
             FaissIndexType::IndexHNSWFlat => base_memory * 2, // Graph structure overhead
-            FaissIndexType::IndexLSH => base_memory / 2, // Hash table compression
+            FaissIndexType::IndexLSH => base_memory / 2,      // Hash table compression
             FaissIndexType::IndexPCAFlat => base_memory, // Assuming no dimension reduction for estimate
         }
     }
@@ -832,7 +860,7 @@ mod tests {
     #[test]
     fn test_metric_conversion() {
         let faiss_compat = FaissCompatibility::new();
-        
+
         assert_eq!(
             faiss_compat.convert_similarity_metric(SimilarityMetric::Cosine),
             FaissMetricType::Cosine
@@ -855,12 +883,12 @@ mod tests {
             Vector::new(vec![0.0, 0.0, 1.0]),
         ];
         let uris = vec!["v1".to_string(), "v2".to_string(), "v3".to_string()];
-        
+
         let index = SimpleVectorIndex::new(vectors, uris);
-        
+
         let query = Vector::new(vec![1.0, 0.0, 0.0]);
         let results = index.search_knn(&query, 2).unwrap();
-        
+
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].0, "v1"); // Should be most similar to itself
     }
@@ -868,19 +896,19 @@ mod tests {
     #[test]
     fn test_format_recommendation() {
         use crate::faiss_compatibility::utils::recommend_faiss_format;
-        
+
         // Small dataset
         assert_eq!(
             recommend_faiss_format(100, 128, None, 0.9),
             FaissIndexType::IndexFlatL2
         );
-        
+
         // Large dataset
         assert_eq!(
             recommend_faiss_format(1000000, 128, None, 0.8),
             FaissIndexType::IndexHNSWFlat
         );
-        
+
         // High dimensional with memory constraint
         assert_eq!(
             recommend_faiss_format(50000, 2048, Some(512 * 1024 * 1024), 0.8),

@@ -211,7 +211,10 @@ impl Sparql12Features {
 
         // Apply property path optimization
         if contains_property_paths(&optimized) {
-            optimized = self.property_path_optimizer.optimize_query(&optimized).await?;
+            optimized = self
+                .property_path_optimizer
+                .optimize_query(&optimized)
+                .await?;
         }
 
         // Apply aggregation optimization
@@ -222,12 +225,18 @@ impl Sparql12Features {
         // Apply subquery optimization
         if contains_subqueries(&optimized) {
             optimized = self.subquery_optimizer.optimize_query(&optimized).await?;
-            optimized = self.advanced_subquery_optimizer.optimize_query(&optimized).await?;
+            optimized = self
+                .advanced_subquery_optimizer
+                .optimize_query(&optimized)
+                .await?;
         }
 
         // Apply BIND/VALUES optimization
         if contains_bind_values(&optimized) {
-            optimized = self.bind_values_processor.optimize_query(&optimized).await?;
+            optimized = self
+                .bind_values_processor
+                .optimize_query(&optimized)
+                .await?;
         }
 
         Ok(optimized)
@@ -252,7 +261,7 @@ impl PropertyPathOptimizer {
 impl AggregationEngine {
     pub fn new() -> Self {
         let mut function_registry = HashMap::new();
-        
+
         // Register enhanced aggregation functions
         function_registry.insert(
             "GROUP_CONCAT".to_string(),
@@ -264,7 +273,7 @@ impl AggregationEngine {
                 parallel_safe: true,
             },
         );
-        
+
         function_registry.insert(
             "SAMPLE".to_string(),
             AggregationFunction {
@@ -301,8 +310,16 @@ impl AggregationEngine {
     fn extract_aggregation_functions(&self, query: &str) -> FusekiResult<Vec<String>> {
         // Simple pattern matching for aggregation functions
         let mut functions = Vec::new();
-        let patterns = ["COUNT(", "SUM(", "AVG(", "MIN(", "MAX(", "GROUP_CONCAT(", "SAMPLE("];
-        
+        let patterns = [
+            "COUNT(",
+            "SUM(",
+            "AVG(",
+            "MIN(",
+            "MAX(",
+            "GROUP_CONCAT(",
+            "SAMPLE(",
+        ];
+
         for pattern in &patterns {
             let mut start = 0;
             while let Some(pos) = query[start..].find(pattern) {
@@ -313,14 +330,14 @@ impl AggregationEngine {
                 start = abs_pos + pattern.len();
             }
         }
-        
+
         Ok(functions)
     }
 
     fn extract_function_call(&self, text: &str) -> Option<String> {
         let mut paren_count = 0;
         let mut end_pos = 0;
-        
+
         for (i, ch) in text.char_indices() {
             match ch {
                 '(' => paren_count += 1,
@@ -334,7 +351,7 @@ impl AggregationEngine {
                 _ => {}
             }
         }
-        
+
         if end_pos > 0 {
             Some(text[..end_pos].to_string())
         } else {
@@ -383,7 +400,7 @@ impl AggregationEngine {
             Ok(Some(format!("ENHANCED_{}", function)))
         } else {
             // Add default separator
-            let inner = &function[12..function.len()-1]; // Remove GROUP_CONCAT( and )
+            let inner = &function[12..function.len() - 1]; // Remove GROUP_CONCAT( and )
             Ok(Some(format!("GROUP_CONCAT({}, ',')", inner)))
         }
     }
@@ -493,7 +510,7 @@ impl SubqueryOptimizer {
     fn analyze_correlation(&self, subquery: &str) -> FusekiResult<HashSet<String>> {
         // Simple correlation analysis - look for variables used outside the subquery
         let mut correlation_vars = HashSet::new();
-        
+
         // This is a simplified implementation
         // In practice, you'd do proper SPARQL parsing
         if subquery.contains("?outer_var") {
@@ -507,13 +524,22 @@ impl SubqueryOptimizer {
         // Try to convert subquery to join
         // This is a simplified implementation
         if subquery.contains("EXISTS") {
-            Ok(Some(subquery.replace("EXISTS", "").replace("{", "").replace("}", "")))
+            Ok(Some(
+                subquery
+                    .replace("EXISTS", "")
+                    .replace("{", "")
+                    .replace("}", ""),
+            ))
         } else {
             Ok(None)
         }
     }
 
-    fn optimize_correlated_subquery(&self, subquery: &str, _correlation_vars: &HashSet<String>) -> FusekiResult<Option<String>> {
+    fn optimize_correlated_subquery(
+        &self,
+        subquery: &str,
+        _correlation_vars: &HashSet<String>,
+    ) -> FusekiResult<Option<String>> {
         // Optimize correlated subquery by pushing predicates
         // This is a simplified implementation
         Ok(Some(format!("OPTIMIZED_CORRELATED({})", subquery)))
@@ -792,14 +818,19 @@ fn contains_property_paths(query: &str) -> bool {
 
 fn contains_aggregation_functions(query: &str) -> bool {
     let upper = query.to_uppercase();
-    upper.contains("COUNT(") || upper.contains("SUM(") || upper.contains("AVG(") 
-        || upper.contains("MIN(") || upper.contains("MAX(") 
-        || upper.contains("GROUP_CONCAT(") || upper.contains("SAMPLE(")
+    upper.contains("COUNT(")
+        || upper.contains("SUM(")
+        || upper.contains("AVG(")
+        || upper.contains("MIN(")
+        || upper.contains("MAX(")
+        || upper.contains("GROUP_CONCAT(")
+        || upper.contains("SAMPLE(")
 }
 
 fn contains_subqueries(query: &str) -> bool {
     let upper = query.to_uppercase();
-    upper.contains("EXISTS") || upper.contains("NOT EXISTS") 
+    upper.contains("EXISTS")
+        || upper.contains("NOT EXISTS")
         || (upper.contains("SELECT") && upper.matches("SELECT").count() > 1)
 }
 

@@ -9,10 +9,10 @@
 
 use anyhow::{anyhow, Result};
 use ndarray::{Array1, Array2, Array3, Axis};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f64::consts::PI;
-use rand::Rng;
 
 /// Complex number representation for quantum amplitudes
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -308,11 +308,13 @@ impl QuantumSimulator {
             if bit == 0 {
                 // This state has qubit in |0⟩
                 new_state[i] = new_state[i] + gate_matrix[(0, 0)] * self.state_vector[i];
-                new_state[i_complement] = new_state[i_complement] + gate_matrix[(1, 0)] * self.state_vector[i];
+                new_state[i_complement] =
+                    new_state[i_complement] + gate_matrix[(1, 0)] * self.state_vector[i];
             } else {
-                // This state has qubit in |1⟩  
+                // This state has qubit in |1⟩
                 new_state[i] = new_state[i] + gate_matrix[(1, 1)] * self.state_vector[i];
-                new_state[i_complement] = new_state[i_complement] + gate_matrix[(0, 1)] * self.state_vector[i];
+                new_state[i_complement] =
+                    new_state[i_complement] + gate_matrix[(0, 1)] * self.state_vector[i];
             }
         }
 
@@ -351,25 +353,37 @@ impl QuantumSimulator {
                 QuantumGate::I => {
                     // Identity gate - do nothing
                 }
-                QuantumGate::X | QuantumGate::Y | QuantumGate::Z | QuantumGate::H | QuantumGate::S | QuantumGate::T => {
+                QuantumGate::X
+                | QuantumGate::Y
+                | QuantumGate::Z
+                | QuantumGate::H
+                | QuantumGate::S
+                | QuantumGate::T => {
                     let matrix = circuit.get_single_qubit_matrix(gate);
                     // Apply to first qubit for now (would need qubit specification in real implementation)
                     self.apply_single_qubit_gate(&matrix, 0);
                 }
                 QuantumGate::RX(theta) | QuantumGate::RY(theta) | QuantumGate::RZ(theta) => {
                     let mut theta_val = *theta;
-                    
+
                     // Check if this gate uses parameters
                     if let Some(param_indices) = circuit.parameter_mapping.get(&gate_idx) {
-                        if !param_indices.is_empty() && param_indices[0] < circuit.parameters.len() {
+                        if !param_indices.is_empty() && param_indices[0] < circuit.parameters.len()
+                        {
                             theta_val = circuit.parameters[param_indices[0]];
                         }
                     }
 
                     let matrix = match gate {
-                        QuantumGate::RX(_) => circuit.get_single_qubit_matrix(&QuantumGate::RX(theta_val)),
-                        QuantumGate::RY(_) => circuit.get_single_qubit_matrix(&QuantumGate::RY(theta_val)),
-                        QuantumGate::RZ(_) => circuit.get_single_qubit_matrix(&QuantumGate::RZ(theta_val)),
+                        QuantumGate::RX(_) => {
+                            circuit.get_single_qubit_matrix(&QuantumGate::RX(theta_val))
+                        }
+                        QuantumGate::RY(_) => {
+                            circuit.get_single_qubit_matrix(&QuantumGate::RY(theta_val))
+                        }
+                        QuantumGate::RZ(_) => {
+                            circuit.get_single_qubit_matrix(&QuantumGate::RZ(theta_val))
+                        }
                         _ => unreachable!(),
                     };
                     self.apply_single_qubit_gate(&matrix, 0);
@@ -392,7 +406,7 @@ impl QuantumSimulator {
                     // Toffoli gate (CCX)
                     let state_size = self.state_vector.len();
                     let mut new_state = self.state_vector.clone();
-                    
+
                     for i in 0..state_size {
                         let c1_bit = (i >> control1) & 1;
                         let c2_bit = (i >> control2) & 1;
@@ -420,7 +434,7 @@ impl QuantumSimulator {
         for (i, amplitude) in self.state_vector.iter().enumerate() {
             let bit = (i >> qubit) & 1;
             let prob = amplitude.magnitude_squared();
-            
+
             if bit == 0 {
                 prob_0 += prob;
             } else {
@@ -509,7 +523,7 @@ impl VariationalQuantumEigensolver {
             let mut simulator = QuantumSimulator::new(self.ansatz.num_qubits);
             let mut circuit = self.ansatz.clone();
             circuit.set_parameters(parameters.to_vec());
-            
+
             simulator.execute_circuit(&circuit)?;
 
             // Compute expectation value for this Pauli string
@@ -535,7 +549,8 @@ impl VariationalQuantumEigensolver {
                                 Complex::new(0.0, 0.0),
                                 Complex::new(0.0, -1.0),
                             ],
-                        ).unwrap();
+                        )
+                        .unwrap();
                         let h_matrix = circuit.get_single_qubit_matrix(&QuantumGate::H);
                         sim_copy.apply_single_qubit_gate(&s_dag, qubit);
                         sim_copy.apply_single_qubit_gate(&h_matrix, qubit);
@@ -587,10 +602,12 @@ impl VariationalQuantumEigensolver {
             // Early convergence check
             if iteration > 10 {
                 let recent_energies = &self.energy_history[iteration.saturating_sub(5)..];
-                let energy_variance = recent_energies.iter()
+                let energy_variance = recent_energies
+                    .iter()
                     .map(|&e| (e - current_energy).powi(2))
-                    .sum::<f64>() / recent_energies.len() as f64;
-                
+                    .sum::<f64>()
+                    / recent_energies.len() as f64;
+
                 if energy_variance < 1e-8 {
                     break;
                 }
@@ -624,7 +641,7 @@ impl QuantumApproximateOptimization {
     /// Create new QAOA instance
     pub fn new(num_qubits: usize, depth: usize) -> Self {
         let mut mixer_hamiltonian = Vec::new();
-        
+
         // Default mixer: sum of X operators
         for qubit in 0..num_qubits {
             mixer_hamiltonian.push((1.0, vec![(qubit, 'X')]));
@@ -660,13 +677,12 @@ impl QuantumApproximateOptimization {
             // Cost unitary e^(-i*γ*H_C)
             for (coefficient, pauli_string) in &self.cost_hamiltonian {
                 let angle = self.gamma_params[layer] * coefficient;
-                
+
                 // For ZZ terms, decompose into CNOTs and RZ
-                if pauli_string.len() == 2 && 
-                   pauli_string.iter().all(|(_, op)| *op == 'Z') {
+                if pauli_string.len() == 2 && pauli_string.iter().all(|(_, op)| *op == 'Z') {
                     let qubit1 = pauli_string[0].0;
                     let qubit2 = pauli_string[1].0;
-                    
+
                     circuit.add_gate(QuantumGate::CNOT(qubit1, qubit2));
                     circuit.add_gate(QuantumGate::RZ(angle));
                     circuit.add_gate(QuantumGate::CNOT(qubit1, qubit2));
@@ -720,14 +736,14 @@ impl QuantumApproximateOptimization {
                 // Forward shift
                 self.beta_params[i] += shift;
                 let cost_plus = self.compute_cost()?;
-                
+
                 // Backward shift
                 self.beta_params[i] -= 2.0 * shift;
                 let cost_minus = self.compute_cost()?;
-                
+
                 // Restore original value
                 self.beta_params[i] += shift;
-                
+
                 beta_gradients[i] = (cost_plus - cost_minus) / (2.0 * shift);
             }
 
@@ -736,14 +752,14 @@ impl QuantumApproximateOptimization {
                 // Forward shift
                 self.gamma_params[i] += shift;
                 let cost_plus = self.compute_cost()?;
-                
+
                 // Backward shift
                 self.gamma_params[i] -= 2.0 * shift;
                 let cost_minus = self.compute_cost()?;
-                
+
                 // Restore original value
                 self.gamma_params[i] += shift;
-                
+
                 gamma_gradients[i] = (cost_plus - cost_minus) / (2.0 * shift);
             }
 
@@ -758,8 +774,9 @@ impl QuantumApproximateOptimization {
                 let recent_variance = self.cost_history[iteration.saturating_sub(5)..]
                     .iter()
                     .map(|&c| (c - current_cost).powi(2))
-                    .sum::<f64>() / 5.0;
-                
+                    .sum::<f64>()
+                    / 5.0;
+
                 if recent_variance < 1e-8 {
                     break;
                 }
@@ -960,7 +977,8 @@ impl QuantumErrorCorrection {
         let mut total_error_magnitude = 0.0;
 
         // Check for amplitude anomalies
-        let expected_normalization = state_vector.iter()
+        let expected_normalization = state_vector
+            .iter()
             .map(|amp| amp.magnitude_squared())
             .sum::<f64>();
 
@@ -1006,7 +1024,11 @@ impl QuantumErrorCorrection {
     }
 
     /// Apply error corrections to quantum circuit
-    pub fn apply_corrections(&self, circuit: &mut QuantumCircuit, syndrome: &ErrorSyndrome) -> Result<()> {
+    pub fn apply_corrections(
+        &self,
+        circuit: &mut QuantumCircuit,
+        syndrome: &ErrorSyndrome,
+    ) -> Result<()> {
         if syndrome.confidence < self.correction_threshold {
             return Ok(()); // Don't apply corrections if confidence is too low
         }
@@ -1040,13 +1062,19 @@ impl QuantumErrorCorrection {
             return (0.0, 0.0, 0);
         }
 
-        let avg_confidence = self.syndrome_history.iter()
+        let avg_confidence = self
+            .syndrome_history
+            .iter()
             .map(|s| s.confidence)
-            .sum::<f64>() / self.syndrome_history.len() as f64;
+            .sum::<f64>()
+            / self.syndrome_history.len() as f64;
 
-        let error_rate = self.syndrome_history.iter()
+        let error_rate = self
+            .syndrome_history
+            .iter()
             .filter(|s| !s.error_types.is_empty())
-            .count() as f64 / self.syndrome_history.len() as f64;
+            .count() as f64
+            / self.syndrome_history.len() as f64;
 
         (avg_confidence, error_rate, self.syndrome_history.len())
     }
@@ -1118,19 +1146,17 @@ impl CoherenceTimeManager {
                 let sigma = t2 / (2.0 * (2.0 * (2.0_f64).ln()).sqrt());
                 (-(time * time) / (2.0 * sigma * sigma)).exp().max(0.01)
             }
-            CoherenceDecayModel::PowerLaw(exponent) => {
-                (1.0 + time / t2).powf(-exponent).max(0.01)
-            }
+            CoherenceDecayModel::PowerLaw(exponent) => (1.0 + time / t2).powf(-exponent).max(0.01),
         }
     }
 
     /// Apply coherence decay to quantum state
     pub fn apply_coherence_decay(&self, state_vector: &mut Vec<Complex>) -> Result<()> {
         let num_qubits = (state_vector.len() as f64).log2() as usize;
-        
+
         for qubit in 0..num_qubits {
             let coherence_factor = self.calculate_coherence_factor(qubit);
-            
+
             // Apply amplitude damping (T1 process)
             for i in 0..state_vector.len() {
                 let bit = (i >> qubit) & 1;
@@ -1139,7 +1165,7 @@ impl CoherenceTimeManager {
                     state_vector[i] = state_vector[i] * coherence_factor;
                 }
             }
-            
+
             // Apply dephasing (T2 process) by adding random phase
             if coherence_factor < 1.0 {
                 let phase_noise = (1.0 - coherence_factor) * rand::random::<f64>() * PI;
@@ -1151,11 +1177,12 @@ impl CoherenceTimeManager {
         }
 
         // Renormalize
-        let norm = state_vector.iter()
+        let norm = state_vector
+            .iter()
             .map(|amp| amp.magnitude_squared())
             .sum::<f64>()
             .sqrt();
-        
+
         if norm > 0.0 {
             for amp in state_vector.iter_mut() {
                 *amp = *amp * (1.0 / norm);
@@ -1182,8 +1209,12 @@ impl CoherenceTimeManager {
             .collect();
 
         let avg_coherence = coherence_factors.iter().sum::<f64>() / coherence_factors.len() as f64;
-        let min_coherence = coherence_factors.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-        let max_coherence = coherence_factors.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+        let min_coherence = coherence_factors
+            .iter()
+            .fold(f64::INFINITY, |a, &b| a.min(b));
+        let max_coherence = coherence_factors
+            .iter()
+            .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
 
         CoherenceReport {
             execution_time: self.execution_time,
@@ -1298,7 +1329,8 @@ impl QuantumNeuralNetwork {
 
     /// Set custom coherence times
     pub fn set_coherence_times(&mut self, t1_times: Vec<f64>, t2_times: Vec<f64>) {
-        self.coherence_manager.set_coherence_times(t1_times, t2_times);
+        self.coherence_manager
+            .set_coherence_times(t1_times, t2_times);
     }
 
     /// Enhanced forward pass with error correction and coherence modeling
@@ -1321,7 +1353,8 @@ impl QuantumNeuralNetwork {
             // Update execution time for coherence modeling
             if self.enable_coherence_modeling {
                 let gate_time = 0.1e-6; // 100 nanoseconds per gate (typical)
-                self.coherence_manager.update_execution_time(gate_time * layer_circuit.gates.len() as f64);
+                self.coherence_manager
+                    .update_execution_time(gate_time * layer_circuit.gates.len() as f64);
             }
 
             // Add layer gates to main circuit
@@ -1336,18 +1369,22 @@ impl QuantumNeuralNetwork {
 
         // Apply coherence decay if enabled
         if self.enable_coherence_modeling {
-            self.coherence_manager.apply_coherence_decay(&mut simulator.state_vector)?;
+            self.coherence_manager
+                .apply_coherence_decay(&mut simulator.state_vector)?;
         }
 
         // Apply error detection and correction if enabled
         if self.enable_error_correction {
-            let syndrome = self.error_correction.detect_errors(&simulator.state_vector)?;
-            
+            let syndrome = self
+                .error_correction
+                .detect_errors(&simulator.state_vector)?;
+
             if syndrome.confidence > 0.5 {
                 // If error detected with reasonable confidence, apply corrections
                 let mut correction_circuit = QuantumCircuit::new(self.num_qubits);
-                self.error_correction.apply_corrections(&mut correction_circuit, &syndrome)?;
-                
+                self.error_correction
+                    .apply_corrections(&mut correction_circuit, &syndrome)?;
+
                 if !correction_circuit.gates.is_empty() {
                     simulator.execute_circuit(&correction_circuit)?;
                 }
@@ -1356,11 +1393,9 @@ impl QuantumNeuralNetwork {
 
         // Perform measurements based on strategy
         let output = match &self.measurement_strategy {
-            MeasurementStrategy::ExpectationZ => {
-                (0..self.num_qubits)
-                    .map(|qubit| simulator.expectation_z(qubit))
-                    .collect()
-            }
+            MeasurementStrategy::ExpectationZ => (0..self.num_qubits)
+                .map(|qubit| simulator.expectation_z(qubit))
+                .collect(),
             MeasurementStrategy::ExpectationX => {
                 let mut outputs = Vec::new();
                 for qubit in 0..self.num_qubits {
@@ -1371,11 +1406,9 @@ impl QuantumNeuralNetwork {
                 }
                 outputs
             }
-            MeasurementStrategy::Probability0 => {
-                (0..self.num_qubits)
-                    .map(|qubit| simulator.measure_qubit(qubit).0)
-                    .collect()
-            }
+            MeasurementStrategy::Probability0 => (0..self.num_qubits)
+                .map(|qubit| simulator.measure_qubit(qubit).0)
+                .collect(),
             MeasurementStrategy::CustomPauli(pauli_string) => {
                 let mut expectation = 1.0;
                 for &(qubit, pauli_op) in pauli_string {
@@ -1400,7 +1433,8 @@ impl QuantumNeuralNetwork {
 
     /// Get quantum error and coherence diagnostics
     pub fn get_quantum_diagnostics(&self) -> QuantumDiagnostics {
-        let (avg_confidence, error_rate, num_measurements) = self.error_correction.get_correction_stats();
+        let (avg_confidence, error_rate, num_measurements) =
+            self.error_correction.get_correction_stats();
         let coherence_report = self.coherence_manager.get_coherence_report();
 
         QuantumDiagnostics {
@@ -1425,24 +1459,30 @@ impl QuantumNeuralNetwork {
 
             for (input, target) in training_data {
                 let prediction = self.forward(input)?;
-                
+
                 // Mean squared error loss
                 let loss = prediction
                     .iter()
                     .zip(target.iter())
                     .map(|(p, t)| (p - t).powi(2))
-                    .sum::<f64>() / prediction.len() as f64;
-                
+                    .sum::<f64>()
+                    / prediction.len() as f64;
+
                 total_loss += loss;
 
                 // Update parameters using finite difference gradients
                 self.update_parameters(input, target, learning_rate)?;
             }
 
-            self.loss_history.push(total_loss / training_data.len() as f64);
+            self.loss_history
+                .push(total_loss / training_data.len() as f64);
 
             if epoch % 10 == 0 {
-                println!("Epoch {}: Average Loss = {:.6}", epoch, self.loss_history.last().unwrap());
+                println!(
+                    "Epoch {}: Average Loss = {:.6}",
+                    epoch,
+                    self.loss_history.last().unwrap()
+                );
             }
         }
 
@@ -1460,15 +1500,18 @@ impl QuantumNeuralNetwork {
 
         // Collect all gradients first
         let mut gradients = Vec::new();
-        
+
         // Collect layer information first to avoid borrow conflicts
-        let layer_info: Vec<(usize, usize)> = self.layers.iter().enumerate()
+        let layer_info: Vec<(usize, usize)> = self
+            .layers
+            .iter()
+            .enumerate()
             .map(|(idx, layer)| (idx, layer.parameters.len()))
             .collect();
-        
+
         for (layer_idx, param_count) in layer_info {
             let mut layer_gradients = Vec::new();
-            
+
             for i in 0..param_count {
                 // Forward shift
                 self.layers[layer_idx].parameters[i] += shift;
@@ -1490,7 +1533,7 @@ impl QuantumNeuralNetwork {
 
                 // Restore original parameter
                 self.layers[layer_idx].parameters[i] += shift;
-                
+
                 // Calculate gradient
                 let gradient = (loss_plus - loss_minus) / (2.0 * shift);
                 layer_gradients.push(gradient);
@@ -1517,7 +1560,7 @@ mod tests {
     fn test_complex_arithmetic() {
         let a = Complex::new(1.0, 2.0);
         let b = Complex::new(3.0, 4.0);
-        
+
         let sum = a + b;
         assert_eq!(sum.real, 4.0);
         assert_eq!(sum.imag, 6.0);
@@ -1530,7 +1573,7 @@ mod tests {
     #[test]
     fn test_quantum_gates() {
         let circuit = QuantumCircuit::new(1);
-        
+
         // Test Pauli-X gate
         let x_matrix = circuit.get_single_qubit_matrix(&QuantumGate::X);
         assert_eq!(x_matrix[(0, 0)].real, 0.0);
@@ -1548,7 +1591,7 @@ mod tests {
     #[test]
     fn test_quantum_simulator() {
         let mut simulator = QuantumSimulator::new(2);
-        
+
         // Initial state should be |00⟩ (use tolerance for floating point comparisons)
         assert!((simulator.state_vector[0].real - 1.0).abs() < 1e-10);
         assert!((simulator.state_vector[0].imag).abs() < 1e-10);
@@ -1575,15 +1618,15 @@ mod tests {
     #[test]
     fn test_cnot_gate() {
         let mut simulator = QuantumSimulator::new(2);
-        
+
         // Prepare |10⟩ state
         let circuit = QuantumCircuit::new(2);
         let x_matrix = circuit.get_single_qubit_matrix(&QuantumGate::X);
         simulator.apply_single_qubit_gate(&x_matrix, 0);
-        
+
         // Apply CNOT
         simulator.apply_cnot(0, 1);
-        
+
         // Should be in |11⟩ state (use tolerance for floating point comparisons)
         assert!((simulator.state_vector[0].real).abs() < 1e-10);
         assert!((simulator.state_vector[0].imag).abs() < 1e-10);
@@ -1613,7 +1656,7 @@ mod tests {
         // Add MaxCut cost terms
         qaoa.add_cost_term(0.5, vec![(0, 'Z'), (1, 'Z')]);
         qaoa.add_cost_term(0.5, vec![(1, 'Z'), (2, 'Z')]);
-        
+
         assert_eq!(qaoa.cost_hamiltonian.len(), 2);
     }
 
@@ -1648,11 +1691,11 @@ mod tests {
     #[test]
     fn test_rotation_gates() {
         let circuit = QuantumCircuit::new(1);
-        
+
         // Test RY gate with π/2 rotation
         let ry_matrix = circuit.get_single_qubit_matrix(&QuantumGate::RY(PI / 2.0));
         let inv_sqrt2 = 1.0 / (2.0_f64).sqrt();
-        
+
         assert!((ry_matrix[(0, 0)].real - inv_sqrt2).abs() < 1e-10);
         assert!((ry_matrix[(0, 1)].real + inv_sqrt2).abs() < 1e-10);
         assert!((ry_matrix[(1, 0)].real - inv_sqrt2).abs() < 1e-10);
@@ -1662,17 +1705,17 @@ mod tests {
     #[test]
     fn test_error_correction() {
         let mut error_correction = QuantumErrorCorrection::new();
-        
+
         // Create a test state vector with some error
         let mut state_vector = vec![
-            Complex::new(0.7, 0.0),   // |00⟩ - slightly denormalized
-            Complex::new(0.0, 0.0),   // |01⟩
-            Complex::new(0.7, 0.0),   // |10⟩ - slightly denormalized
-            Complex::new(0.0, 0.0),   // |11⟩
+            Complex::new(0.7, 0.0), // |00⟩ - slightly denormalized
+            Complex::new(0.0, 0.0), // |01⟩
+            Complex::new(0.7, 0.0), // |10⟩ - slightly denormalized
+            Complex::new(0.0, 0.0), // |11⟩
         ];
-        
+
         let syndrome = error_correction.detect_errors(&state_vector).unwrap();
-        
+
         // Should detect normalization error
         assert!(!syndrome.error_types.is_empty());
         assert!(syndrome.confidence > 0.0);
@@ -1681,22 +1724,22 @@ mod tests {
     #[test]
     fn test_coherence_time_manager() {
         let mut coherence_manager = CoherenceTimeManager::new(2);
-        
+
         // Set custom coherence times
         coherence_manager.set_coherence_times(vec![100e-6, 50e-6], vec![50e-6, 25e-6]);
-        
+
         // Test coherence factor calculation
         let factor_qubit0 = coherence_manager.calculate_coherence_factor(0);
         let factor_qubit1 = coherence_manager.calculate_coherence_factor(1);
-        
+
         assert!(factor_qubit0 > 0.0);
         assert!(factor_qubit1 > 0.0);
         assert!(factor_qubit0 <= 1.0);
         assert!(factor_qubit1 <= 1.0);
-        
+
         // Update execution time and check decay
         coherence_manager.update_execution_time(10e-6); // 10 microseconds
-        
+
         let factor_after = coherence_manager.calculate_coherence_factor(0);
         assert!(factor_after < factor_qubit0); // Should decay with time
     }
@@ -1732,22 +1775,22 @@ mod tests {
     #[test]
     fn test_coherence_decay_models() {
         let mut manager = CoherenceTimeManager::new(3);
-        
+
         // Test different decay models
         manager.decay_models = vec![
             CoherenceDecayModel::Exponential,
             CoherenceDecayModel::Gaussian,
             CoherenceDecayModel::PowerLaw(1.5),
         ];
-        
+
         manager.update_execution_time(5e-6);
-        
+
         for qubit in 0..3 {
             let factor = manager.calculate_coherence_factor(qubit);
             assert!(factor > 0.0);
             assert!(factor <= 1.0);
         }
-        
+
         // Test coherence report
         let report = manager.get_coherence_report();
         assert_eq!(report.qubit_coherence_factors.len(), 3);
@@ -1759,11 +1802,17 @@ mod tests {
     #[test]
     fn test_error_mitigation_strategies() {
         let error_correction = QuantumErrorCorrection::new();
-        
+
         // Check that default mitigation strategies are set
         assert!(!error_correction.mitigation_strategies.is_empty());
-        assert!(error_correction.mitigation_strategies.contains(&ErrorMitigationStrategy::ZeroNoiseExtrapolation));
-        assert!(error_correction.mitigation_strategies.contains(&ErrorMitigationStrategy::ReadoutErrorMitigation));
-        assert!(error_correction.mitigation_strategies.contains(&ErrorMitigationStrategy::SymmetryVerification));
+        assert!(error_correction
+            .mitigation_strategies
+            .contains(&ErrorMitigationStrategy::ZeroNoiseExtrapolation));
+        assert!(error_correction
+            .mitigation_strategies
+            .contains(&ErrorMitigationStrategy::ReadoutErrorMitigation));
+        assert!(error_correction
+            .mitigation_strategies
+            .contains(&ErrorMitigationStrategy::SymmetryVerification));
     }
 }

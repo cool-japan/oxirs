@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, Semaphore};
+use rand::Rng;
 use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "nats")]
@@ -460,7 +461,7 @@ impl NatsProducer {
     fn should_process_message(strategy: &LoadBalancingStrategy, message_count: u64, _subject: &str) -> bool {
         match strategy {
             LoadBalancingStrategy::RoundRobin => message_count % 2 == 0, // Simple implementation
-            LoadBalancingStrategy::Random => rand::random::<bool>(),
+            LoadBalancingStrategy::Random => rand::thread_rng().gen::<bool>(),
             LoadBalancingStrategy::LeastConnections => true, // Simplified
             LoadBalancingStrategy::WeightedRoundRobin(_weights) => true, // Simplified
             LoadBalancingStrategy::Consistent => true, // Simplified

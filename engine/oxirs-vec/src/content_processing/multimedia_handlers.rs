@@ -6,10 +6,10 @@
 #[cfg(feature = "content-processing")]
 use crate::{
     content_processing::{
-        AudioEnergyMetrics, AudioFeatures, ContentExtractionConfig, ContentLocation, DocumentFormat,
-        DocumentStructure, ExtractedAudio, ExtractedContent, ExtractedImage, ExtractedVideo,
-        FormatHandler, ImageComplexityMetrics, MotionAnalysis, MusicAnalysis, PitchStatistics,
-        ProcessingStats, SpeechAnalysis, VideoAnalysis, VideoKeyframe, VideoScene,
+        AudioEnergyMetrics, AudioFeatures, ContentExtractionConfig, ContentLocation,
+        DocumentFormat, DocumentStructure, ExtractedAudio, ExtractedContent, ExtractedImage,
+        ExtractedVideo, FormatHandler, ImageComplexityMetrics, MotionAnalysis, MusicAnalysis,
+        PitchStatistics, ProcessingStats, SpeechAnalysis, VideoAnalysis, VideoKeyframe, VideoScene,
     },
     Vector,
 };

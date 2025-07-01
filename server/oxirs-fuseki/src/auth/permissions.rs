@@ -126,20 +126,22 @@ impl PermissionChecker {
     }
 
     /// Check if user can access a specific dataset
-    pub fn can_access_dataset(user: &User, dataset: &str, required_permission: &Permission) -> bool {
+    pub fn can_access_dataset(
+        user: &User,
+        dataset: &str,
+        required_permission: &Permission,
+    ) -> bool {
         // Check for dataset-specific permissions
         match required_permission {
             Permission::Read => {
-                Self::has_permission(user, &Permission::Read) || 
-                Self::has_permission(user, &Permission::Admin)
+                Self::has_permission(user, &Permission::Read)
+                    || Self::has_permission(user, &Permission::Admin)
             }
             Permission::Write => {
-                Self::has_permission(user, &Permission::Write) || 
-                Self::has_permission(user, &Permission::Admin)
+                Self::has_permission(user, &Permission::Write)
+                    || Self::has_permission(user, &Permission::Admin)
             }
-            Permission::Admin => {
-                Self::has_permission(user, &Permission::Admin)
-            }
+            Permission::Admin => Self::has_permission(user, &Permission::Admin),
             _ => Self::has_permission(user, required_permission),
         }
     }
@@ -172,13 +174,7 @@ impl PermissionChecker {
 
     /// Get all available roles
     pub fn get_all_roles() -> Vec<&'static str> {
-        vec![
-            "admin",
-            "user", 
-            "writer",
-            "monitor",
-            "dataset_admin",
-        ]
+        vec!["admin", "user", "writer", "monitor", "dataset_admin"]
     }
 
     /// Validate role name

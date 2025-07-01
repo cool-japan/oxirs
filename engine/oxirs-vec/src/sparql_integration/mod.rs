@@ -1,5 +1,5 @@
 //! SPARQL integration for vector search and hybrid symbolic-vector queries
-//! 
+//!
 //! This module provides comprehensive SPARQL integration capabilities for vector operations,
 //! including cross-language search, federated queries, and custom function support.
 
@@ -84,11 +84,9 @@ impl SparqlVectorService {
     ) -> Result<VectorServiceResult> {
         let start_time = std::time::Instant::now();
 
-        let result = self.sparql_functions.execute_function(
-            function_name,
-            args,
-            &mut self.query_executor,
-        );
+        let result =
+            self.sparql_functions
+                .execute_function(function_name, args, &mut self.query_executor);
 
         // Record performance metrics
         if let Some(ref monitor) = self.performance_monitor {
@@ -140,7 +138,9 @@ impl SparqlVectorService {
 
     /// Get performance report
     pub fn get_performance_report(&self) -> Option<PerformanceReport> {
-        self.performance_monitor.as_ref().map(|m| m.generate_report())
+        self.performance_monitor
+            .as_ref()
+            .map(|m| m.generate_report())
     }
 
     /// Get function documentation
@@ -301,7 +301,9 @@ pub mod convenience {
             VectorServiceResult::SimilarityList(results) => {
                 Ok(results.get(0).map(|(_, score)| *score).unwrap_or(0.0))
             }
-            _ => Err(anyhow::anyhow!("Unexpected result type for similarity query")),
+            _ => Err(anyhow::anyhow!(
+                "Unexpected result type for similarity query"
+            )),
         }
     }
 
@@ -364,9 +366,8 @@ mod tests {
         let hp_service = convenience::create_high_performance_service();
         assert!(hp_service.is_ok());
 
-        let federated_service = convenience::create_federated_service(vec![
-            "http://endpoint1.com".to_string(),
-        ]);
+        let federated_service =
+            convenience::create_federated_service(vec!["http://endpoint1.com".to_string()]);
         assert!(federated_service.is_ok());
     }
 

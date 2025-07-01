@@ -1,8 +1,8 @@
 use crate::{Vector, VectorData, VectorError};
-use std::io::{Read, Write};
-use std::collections::HashMap;
-use zstd;
 use half::f16;
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use zstd;
 
 #[derive(Debug, Clone)]
 pub enum CompressionMethod {
@@ -416,26 +416,28 @@ impl VectorCompressor for PcaCompressor {
 /// Vector characteristics analysis for adaptive compression selection
 #[derive(Debug, Clone)]
 pub struct VectorAnalysis {
-    pub sparsity: f32,        // Percentage of near-zero values
-    pub range: f32,           // max - min
-    pub mean: f32,            // Average value
-    pub std_dev: f32,         // Standard deviation
-    pub entropy: f32,         // Shannon entropy (approximation)
+    pub sparsity: f32,               // Percentage of near-zero values
+    pub range: f32,                  // max - min
+    pub mean: f32,                   // Average value
+    pub std_dev: f32,                // Standard deviation
+    pub entropy: f32,                // Shannon entropy (approximation)
     pub dominant_patterns: Vec<f32>, // Most common value patterns
     pub recommended_method: CompressionMethod,
-    pub expected_ratio: f32,  // Expected compression ratio
+    pub expected_ratio: f32, // Expected compression ratio
 }
 
 impl VectorAnalysis {
     pub fn analyze(vectors: &[Vector], quality: &AdaptiveQuality) -> Result<Self, VectorError> {
         if vectors.is_empty() {
-            return Err(VectorError::InvalidDimensions("No vectors to analyze".to_string()));
+            return Err(VectorError::InvalidDimensions(
+                "No vectors to analyze".to_string(),
+            ));
         }
 
         // Convert all vectors to f32 for analysis
         let mut all_values = Vec::new();
         let mut dimensions = 0;
-        
+
         for vector in vectors {
             let values = match &vector.values {
                 VectorData::F32(v) => v.clone(),
@@ -453,7 +455,9 @@ impl VectorAnalysis {
         }
 
         if all_values.is_empty() {
-            return Err(VectorError::InvalidDimensions("No values to analyze".to_string()));
+            return Err(VectorError::InvalidDimensions(
+                "No values to analyze".to_string(),
+            ));
         }
 
         // Calculate basic statistics
@@ -461,17 +465,14 @@ impl VectorAnalysis {
         let max_val = all_values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         let range = max_val - min_val;
         let mean = all_values.iter().sum::<f32>() / all_values.len() as f32;
-        
-        let variance = all_values.iter()
-            .map(|&x| (x - mean).powi(2))
-            .sum::<f32>() / all_values.len() as f32;
+
+        let variance =
+            all_values.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / all_values.len() as f32;
         let std_dev = variance.sqrt();
 
         // Calculate sparsity (percentage of values close to zero)
         let epsilon = std_dev * 0.01; // 1% of std deviation
-        let near_zero_count = all_values.iter()
-            .filter(|&&x| x.abs() < epsilon)
-            .count();
+        let near_zero_count = all_values.iter().filter(|&&x| x.abs() < epsilon).count();
         let sparsity = near_zero_count as f32 / all_values.len() as f32;
 
         // Approximate entropy calculation (simplified)
@@ -481,9 +482,8 @@ impl VectorAnalysis {
         let dominant_patterns = Self::find_dominant_patterns(&all_values);
 
         // Select best compression method based on analysis
-        let (recommended_method, expected_ratio) = Self::select_optimal_method(
-            sparsity, range, std_dev, entropy, dimensions, quality
-        );
+        let (recommended_method, expected_ratio) =
+            Self::select_optimal_method(sparsity, range, std_dev, entropy, dimensions, quality);
 
         Ok(Self {
             sparsity,
@@ -514,7 +514,7 @@ impl VectorAnalysis {
         // Simplified entropy calculation using histogram
         let mut histogram = std::collections::HashMap::new();
         let bins = 64; // Quantize to 64 bins for entropy calculation
-        
+
         if values.is_empty() {
             return 0.0;
         }
@@ -522,7 +522,7 @@ impl VectorAnalysis {
         let min_val = values.iter().copied().fold(f32::INFINITY, f32::min);
         let max_val = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         let range = max_val - min_val;
-        
+
         if range == 0.0 {
             return 0.0; // All values are the same
         }
@@ -535,7 +535,7 @@ impl VectorAnalysis {
 
         let total = values.len() as f32;
         let mut entropy = 0.0;
-        
+
         for count in histogram.values() {
             let probability = *count as f32 / total;
             if probability > 0.0 {
@@ -549,7 +549,7 @@ impl VectorAnalysis {
     fn find_dominant_patterns(values: &[f32]) -> Vec<f32> {
         // Find the most common values (simplified implementation)
         let mut value_counts = std::collections::HashMap::new();
-        
+
         // Quantize values to find patterns
         for &value in values {
             let quantized = (value * 1000.0).round() / 1000.0; // 3 decimal places
@@ -558,8 +558,9 @@ impl VectorAnalysis {
 
         let mut patterns: Vec<_> = value_counts.into_iter().collect();
         patterns.sort_by(|a, b| b.1.cmp(&a.1)); // Sort by frequency
-        
-        patterns.into_iter()
+
+        patterns
+            .into_iter()
             .take(5) // Top 5 patterns
             .map(|(bits, _)| f32::from_bits(bits))
             .collect()
@@ -574,7 +575,7 @@ impl VectorAnalysis {
         quality: &AdaptiveQuality,
     ) -> (CompressionMethod, f32) {
         // Decision tree for optimal compression method selection
-        
+
         // High sparsity suggests good compression with general methods
         if sparsity > 0.7 {
             return match quality {
@@ -606,10 +607,13 @@ impl VectorAnalysis {
         if dimensions > 128 {
             let components = match quality {
                 AdaptiveQuality::Fast => dimensions * 7 / 10, // 70% of dimensions
-                AdaptiveQuality::Balanced => dimensions / 2, // 50% of dimensions
+                AdaptiveQuality::Balanced => dimensions / 2,  // 50% of dimensions
                 AdaptiveQuality::BestRatio => dimensions / 3, // 33% of dimensions
             };
-            return (CompressionMethod::Pca { components }, components as f32 / dimensions as f32);
+            return (
+                CompressionMethod::Pca { components },
+                components as f32 / dimensions as f32,
+            );
         }
 
         // Default to moderate Zstd compression
@@ -685,13 +689,13 @@ impl AdaptiveCompressor {
         }
 
         let start_time = std::time::Instant::now();
-        
+
         // Take a sample for analysis
         let samples_to_analyze = sample_vectors.len().min(self.analysis_samples);
         let analysis_vectors = &sample_vectors[..samples_to_analyze];
-        
+
         let analysis = VectorAnalysis::analyze(analysis_vectors, &self.quality_level)?;
-        
+
         // Create new compressor if method changed
         let should_switch = match (&self.current_method, &self.analysis_cache) {
             (Some(_), Some(cached)) => {
@@ -704,7 +708,7 @@ impl AdaptiveCompressor {
         if should_switch {
             self.current_method = Some(create_compressor(&analysis.recommended_method));
             self.performance_metrics.method_switches += 1;
-            
+
             // Train the compressor if it supports training
             if let Some(compressor) = &mut self.current_method {
                 self.train_compressor(compressor.as_mut(), analysis_vectors)?;
@@ -712,14 +716,18 @@ impl AdaptiveCompressor {
         }
 
         self.analysis_cache = Some(analysis);
-        
+
         let analysis_time = start_time.elapsed().as_secs_f64() * 1000.0;
         log::debug!("Adaptive compression analysis took {:.2}ms", analysis_time);
-        
+
         Ok(())
     }
 
-    fn train_compressor(&self, compressor: &mut dyn VectorCompressor, vectors: &[Vector]) -> Result<(), VectorError> {
+    fn train_compressor(
+        &self,
+        compressor: &mut dyn VectorCompressor,
+        vectors: &[Vector],
+    ) -> Result<(), VectorError> {
         // This is a bit hacky since we need to downcast to train specific compressor types
         // In a real implementation, we'd want a training trait
         Ok(())
@@ -739,7 +747,9 @@ impl AdaptiveCompressor {
             return Ok(false); // Not enough data for meaningful analysis
         }
 
-        let old_method = self.analysis_cache.as_ref()
+        let old_method = self
+            .analysis_cache
+            .as_ref()
             .map(|a| a.recommended_method.clone());
 
         self.optimize_for_vectors(recent_vectors)?;
@@ -759,10 +769,10 @@ impl VectorCompressor for AdaptiveCompressor {
             let start = std::time::Instant::now();
             let result = compressor.compress(vector);
             let compression_time = start.elapsed().as_secs_f64() * 1000.0;
-            
+
             // Update metrics (note: this requires mutable access, so we can't update here)
             // In a real implementation, we'd use interior mutability or restructure
-            
+
             result
         } else {
             // Fallback to no compression
@@ -776,9 +786,9 @@ impl VectorCompressor for AdaptiveCompressor {
             let start = std::time::Instant::now();
             let result = compressor.decompress(data, dimensions);
             let decompression_time = start.elapsed().as_secs_f64() * 1000.0;
-            
+
             // Update metrics (note: this requires mutable access)
-            
+
             result
         } else {
             // Fallback to no compression
@@ -802,9 +812,10 @@ fn methods_equivalent(method1: &CompressionMethod, method2: &CompressionMethod) 
         (CompressionMethod::Zstd { level: l1 }, CompressionMethod::Zstd { level: l2 }) => {
             (l1 - l2).abs() <= 2 // Allow small level differences
         }
-        (CompressionMethod::Quantization { bits: b1 }, CompressionMethod::Quantization { bits: b2 }) => {
-            b1 == b2
-        }
+        (
+            CompressionMethod::Quantization { bits: b1 },
+            CompressionMethod::Quantization { bits: b2 },
+        ) => b1 == b2,
         (CompressionMethod::Pca { components: c1 }, CompressionMethod::Pca { components: c2 }) => {
             ((*c1 as i32) - (*c2 as i32)).abs() <= (*c1 as i32) / 10 // Allow 10% difference
         }
@@ -822,9 +833,13 @@ pub fn create_compressor(method: &CompressionMethod) -> Box<dyn VectorCompressor
             // TODO: Implement product quantization
             Box::new(NoOpCompressor)
         }
-        CompressionMethod::Adaptive { quality_level, analysis_samples } => {
-            Box::new(AdaptiveCompressor::new(quality_level.clone(), *analysis_samples))
-        }
+        CompressionMethod::Adaptive {
+            quality_level,
+            analysis_samples,
+        } => Box::new(AdaptiveCompressor::new(
+            quality_level.clone(),
+            *analysis_samples,
+        )),
     }
 }
 
@@ -1021,11 +1036,11 @@ mod tests {
 
         let analysis = adaptive.get_analysis().unwrap();
         assert!(analysis.sparsity > 0.5); // Should detect high sparsity
-        
+
         // Test compression
         let compressed = adaptive.compress(&vectors[0]).unwrap();
         let decompressed = adaptive.decompress(&compressed, 10).unwrap();
-        
+
         let orig = vectors[0].as_f32();
         let dec = decompressed.as_f32();
         assert_eq!(orig.len(), dec.len());
@@ -1045,15 +1060,15 @@ mod tests {
 
         let analysis = adaptive.get_analysis().unwrap();
         assert!(analysis.range < 1.0); // Should detect small range
-        
+
         // Test compression
         let compressed = adaptive.compress(&vectors[0]).unwrap();
         let decompressed = adaptive.decompress(&compressed, 5).unwrap();
-        
+
         let orig = vectors[0].as_f32();
         let dec = decompressed.as_f32();
         assert_eq!(orig.len(), dec.len());
-        
+
         // Check compression ratio
         assert!(adaptive.compression_ratio() < 0.5); // Should achieve good compression
     }
@@ -1082,7 +1097,7 @@ mod tests {
         // Test compression
         let compressed = adaptive.compress(&vectors[0]).unwrap();
         let decompressed = adaptive.decompress(&compressed, 200).unwrap();
-        
+
         let dec = decompressed.as_f32();
         assert_eq!(dec.len(), 200);
     }
@@ -1105,7 +1120,7 @@ mod tests {
             Vector::new(vec![0.2, 0.3, 0.4, 0.5, 0.6]),
         ];
         adaptive.optimize_for_vectors(&dense_vectors).unwrap();
-        
+
         // Should have switched methods
         assert!(adaptive.get_metrics().method_switches > initial_switches);
     }
@@ -1119,7 +1134,7 @@ mod tests {
         ];
 
         let analysis = VectorAnalysis::analyze(&vectors, &AdaptiveQuality::Balanced).unwrap();
-        
+
         assert!(analysis.mean > 0.0);
         assert!(analysis.std_dev > 0.0);
         assert!(analysis.range > 0.0);

@@ -49,7 +49,7 @@ impl Default for ErrorRecoveryConfig {
             max_recursion_depth: 50,
             max_evaluation_timeout_ms: 5000, // 5 seconds per constraint
             max_memory_usage: 100 * 1024 * 1024, // 100MB
-            max_result_size: 10000, // Maximum violations to report
+            max_result_size: 10000,          // Maximum violations to report
             enable_graceful_degradation: true,
             max_errors_before_stop: 100,
         }
@@ -440,13 +440,11 @@ impl ErrorRecoveryManager {
                     }
                 }
             }
-            RecoveryStrategy::GracefulDegradation => {
-                ErrorRecoveryResult::Degraded {
-                    degraded_results: partial_results,
-                    degradation_reason: "Graceful degradation due to resource limits".to_string(),
-                    skipped_constraints: vec![],
-                }
-            }
+            RecoveryStrategy::GracefulDegradation => ErrorRecoveryResult::Degraded {
+                degraded_results: partial_results,
+                degradation_reason: "Graceful degradation due to resource limits".to_string(),
+                skipped_constraints: vec![],
+            },
             RecoveryStrategy::PartialResults => ErrorRecoveryResult::Recovered {
                 partial_results,
                 recovered_errors: vec![],
@@ -551,14 +549,18 @@ impl ErrorRecoveryManager {
         let recovery_result = self.recover_from_error(&error, context, vec![]);
 
         match recovery_result {
-            ErrorRecoveryResult::Recovered { partial_results, .. } => {
+            ErrorRecoveryResult::Recovered {
+                partial_results, ..
+            } => {
                 // Return the best result we have, or a satisfied result if recovery worked
                 Ok(partial_results
                     .into_iter()
                     .next()
                     .unwrap_or_else(|| ConstraintEvaluationResult::satisfied()))
             }
-            ErrorRecoveryResult::Degraded { degraded_results, .. } => {
+            ErrorRecoveryResult::Degraded {
+                degraded_results, ..
+            } => {
                 // Return degraded result
                 Ok(degraded_results
                     .into_iter()
@@ -609,7 +611,11 @@ impl ErrorRecoveryManager {
     }
 
     /// Check if constraint should be skipped due to previous failures
-    fn should_skip_constraint(&self, constraint: &Constraint, _context: &ConstraintContext) -> bool {
+    fn should_skip_constraint(
+        &self,
+        constraint: &Constraint,
+        _context: &ConstraintContext,
+    ) -> bool {
         let cache = self.failed_constraint_cache.lock().unwrap();
         let constraint_key = format!("{:?}", constraint.component_id());
         if let Some(failure_info) = cache.get(&constraint_key) {
@@ -744,7 +750,6 @@ pub struct MemoryUsageInfo {
     /// Whether currently under memory pressure
     pub is_under_pressure: bool,
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -910,7 +910,8 @@ async fn metrics_summary_handler(State(state): State<AppState>) -> impl IntoResp
     } else {
         axum::Json(serde_json::json!({
             "error": "Metrics service not available"
-        })).into_response()
+        }))
+        .into_response()
     }
 }
 

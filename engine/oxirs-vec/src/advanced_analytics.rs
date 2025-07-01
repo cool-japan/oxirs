@@ -8,10 +8,10 @@
 //! - Anomaly detection in search behavior
 //! - Vector quality assessment and recommendations
 
-use std::collections::{HashMap, BTreeMap, VecDeque};
+use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use anyhow::{Result, anyhow};
-use serde::{Serialize, Deserialize};
 
 use crate::similarity::SimilarityMetric;
 
@@ -239,37 +239,40 @@ impl VectorAnalyticsEngine {
         if self.query_history.len() >= self.max_history_size {
             self.query_history.pop_front();
         }
-        
+
         self.query_history.push_back(analytics.clone());
-        
+
         // Update performance metrics
         self.update_performance_metrics(&analytics);
-        
+
         // Update anomaly detector
         self.anomaly_detector.update_baseline(&analytics);
     }
 
     /// Analyze vector distribution patterns
-    pub fn analyze_vector_distribution(&self, vectors: &[Vec<f32>]) -> Result<VectorDistributionAnalysis> {
+    pub fn analyze_vector_distribution(
+        &self,
+        vectors: &[Vec<f32>],
+    ) -> Result<VectorDistributionAnalysis> {
         if vectors.is_empty() {
             return Err(anyhow!("Cannot analyze empty vector set"));
         }
 
         let total_vectors = vectors.len();
         let dimensionality = vectors[0].len();
-        
+
         // Calculate basic statistics
         let density_estimate = self.calculate_density_estimate(vectors);
         let sparsity_ratio = self.calculate_sparsity_ratio(vectors);
         let distribution_skewness = self.calculate_skewness(vectors);
-        
+
         // Perform clustering analysis
-        let (cluster_count, cluster_sizes, cluster_cohesion, cluster_separation) = 
+        let (cluster_count, cluster_sizes, cluster_cohesion, cluster_separation) =
             self.analyze_clustering(vectors)?;
-        
+
         // Detect outliers
         let (outlier_count, outlier_threshold) = self.detect_outliers(vectors);
-        
+
         Ok(VectorDistributionAnalysis {
             total_vectors,
             dimensionality,
@@ -288,16 +291,16 @@ impl VectorAnalyticsEngine {
     /// Generate performance trends analysis
     pub fn analyze_performance_trends(&self) -> PerformanceTrends {
         let cutoff_time = self.current_timestamp() - self.analysis_window.as_secs();
-        
+
         let query_volume_trend = self.calculate_query_volume_trend(cutoff_time);
         let response_time_trend = self.calculate_response_time_trend(cutoff_time);
         let cache_hit_rate_trend = self.calculate_cache_hit_rate_trend(cutoff_time);
         let error_rate_trend = self.calculate_error_rate_trend(cutoff_time);
-        
+
         let predicted_peak_hours = self.predict_peak_hours();
         let performance_score = self.calculate_performance_score();
         let bottleneck_analysis = self.analyze_bottlenecks();
-        
+
         PerformanceTrends {
             time_window: self.analysis_window,
             query_volume_trend,
@@ -313,32 +316,39 @@ impl VectorAnalyticsEngine {
     /// Generate optimization recommendations
     pub fn generate_optimization_recommendations(&self) -> Vec<OptimizationRecommendation> {
         let mut recommendations = Vec::new();
-        
+
         // Analyze query patterns for index optimization
         recommendations.extend(self.analyze_index_optimization());
-        
+
         // Analyze cache effectiveness
         recommendations.extend(self.analyze_cache_optimization());
-        
+
         // Analyze similarity metric usage
         recommendations.extend(self.analyze_similarity_optimization());
-        
+
         // Analyze batching opportunities
         recommendations.extend(self.analyze_batching_optimization());
-        
+
         // Sort by priority and expected improvement
-        recommendations.sort_by(|a, b| {
-            match (&a.priority, &b.priority) {
-                (Priority::Critical, Priority::Critical) => b.expected_improvement.partial_cmp(&a.expected_improvement).unwrap(),
-                (Priority::Critical, _) => std::cmp::Ordering::Less,
-                (_, Priority::Critical) => std::cmp::Ordering::Greater,
-                (Priority::High, Priority::High) => b.expected_improvement.partial_cmp(&a.expected_improvement).unwrap(),
-                (Priority::High, _) => std::cmp::Ordering::Less,
-                (_, Priority::High) => std::cmp::Ordering::Greater,
-                _ => b.expected_improvement.partial_cmp(&a.expected_improvement).unwrap(),
-            }
+        recommendations.sort_by(|a, b| match (&a.priority, &b.priority) {
+            (Priority::Critical, Priority::Critical) => b
+                .expected_improvement
+                .partial_cmp(&a.expected_improvement)
+                .unwrap(),
+            (Priority::Critical, _) => std::cmp::Ordering::Less,
+            (_, Priority::Critical) => std::cmp::Ordering::Greater,
+            (Priority::High, Priority::High) => b
+                .expected_improvement
+                .partial_cmp(&a.expected_improvement)
+                .unwrap(),
+            (Priority::High, _) => std::cmp::Ordering::Less,
+            (_, Priority::High) => std::cmp::Ordering::Greater,
+            _ => b
+                .expected_improvement
+                .partial_cmp(&a.expected_improvement)
+                .unwrap(),
         });
-        
+
         recommendations
     }
 
@@ -359,9 +369,9 @@ impl VectorAnalyticsEngine {
         let embedding_consistency = self.calculate_embedding_consistency(vectors);
         let semantic_coherence = self.calculate_semantic_coherence(vectors);
         let recommendations = self.generate_quality_recommendations(
-            overall_quality_score, 
-            &dimension_quality, 
-            noise_level
+            overall_quality_score,
+            &dimension_quality,
+            noise_level,
         );
 
         Ok(VectorQualityAssessment {
@@ -401,28 +411,33 @@ impl VectorAnalyticsEngine {
 
     fn update_performance_metrics(&mut self, query: &QueryAnalytics) {
         let time_bucket = (query.timestamp / 300) * 300; // 5-minute buckets
-        
-        let metrics = self.performance_metrics.entry(time_bucket).or_insert(PerformanceMetrics {
-            timestamp: time_bucket,
-            query_count: 0,
-            avg_response_time: 0.0,
-            cache_hit_rate: 0.0,
-            error_rate: 0.0,
-            throughput: 0.0,
-        });
-        
+
+        let metrics = self
+            .performance_metrics
+            .entry(time_bucket)
+            .or_insert(PerformanceMetrics {
+                timestamp: time_bucket,
+                query_count: 0,
+                avg_response_time: 0.0,
+                cache_hit_rate: 0.0,
+                error_rate: 0.0,
+                throughput: 0.0,
+            });
+
         metrics.query_count += 1;
-        metrics.avg_response_time = (metrics.avg_response_time * (metrics.query_count - 1) as f32 + 
-            query.response_time.as_secs_f32()) / metrics.query_count as f32;
-        
+        metrics.avg_response_time = (metrics.avg_response_time * (metrics.query_count - 1) as f32
+            + query.response_time.as_secs_f32())
+            / metrics.query_count as f32;
+
         if query.cache_hit {
-            metrics.cache_hit_rate = (metrics.cache_hit_rate * (metrics.query_count - 1) as f32 + 1.0) / 
-                metrics.query_count as f32;
+            metrics.cache_hit_rate = (metrics.cache_hit_rate * (metrics.query_count - 1) as f32
+                + 1.0)
+                / metrics.query_count as f32;
         } else {
-            metrics.cache_hit_rate = (metrics.cache_hit_rate * (metrics.query_count - 1) as f32) / 
-                metrics.query_count as f32;
+            metrics.cache_hit_rate = (metrics.cache_hit_rate * (metrics.query_count - 1) as f32)
+                / metrics.query_count as f32;
         }
-        
+
         metrics.throughput = metrics.query_count as f32 / 300.0; // queries per second in 5-min window
     }
 
@@ -431,17 +446,18 @@ impl VectorAnalyticsEngine {
         if vectors.len() < 2 {
             return 0.0;
         }
-        
+
         let mut total_distance = 0.0;
         let mut count = 0;
-        
-        for (i, v1) in vectors.iter().enumerate().take(100) { // Sample for performance
+
+        for (i, v1) in vectors.iter().enumerate().take(100) {
+            // Sample for performance
             for v2 in vectors.iter().skip(i + 1).take(10) {
                 total_distance += euclidean_distance(v1, v2);
                 count += 1;
             }
         }
-        
+
         if count > 0 {
             1.0 / (total_distance / count as f32)
         } else {
@@ -452,7 +468,7 @@ impl VectorAnalyticsEngine {
     fn calculate_sparsity_ratio(&self, vectors: &[Vec<f32>]) -> f32 {
         let mut zero_count = 0;
         let mut total_elements = 0;
-        
+
         for vector in vectors {
             for &value in vector {
                 if value.abs() < 1e-6 {
@@ -461,7 +477,7 @@ impl VectorAnalyticsEngine {
                 total_elements += 1;
             }
         }
-        
+
         zero_count as f32 / total_elements as f32
     }
 
@@ -470,84 +486,96 @@ impl VectorAnalyticsEngine {
         if vectors.is_empty() || vectors[0].is_empty() {
             return 0.0;
         }
-        
+
         let values: Vec<f32> = vectors.iter().map(|v| v[0]).collect();
         let mean = values.iter().sum::<f32>() / values.len() as f32;
         let variance = values.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / values.len() as f32;
         let std_dev = variance.sqrt();
-        
+
         if std_dev == 0.0 {
             return 0.0;
         }
-        
-        let skewness = values.iter()
+
+        let skewness = values
+            .iter()
             .map(|x| ((x - mean) / std_dev).powi(3))
-            .sum::<f32>() / values.len() as f32;
-            
+            .sum::<f32>()
+            / values.len() as f32;
+
         skewness
     }
 
-    fn analyze_clustering(&self, vectors: &[Vec<f32>]) -> Result<(usize, Vec<usize>, Vec<f32>, f32)> {
+    fn analyze_clustering(
+        &self,
+        vectors: &[Vec<f32>],
+    ) -> Result<(usize, Vec<usize>, Vec<f32>, f32)> {
         // Simplified clustering analysis using k-means with multiple k values
         let max_k = (vectors.len() as f32).sqrt() as usize;
         let optimal_k = (max_k / 2).max(2).min(10);
-        
+
         // For simplicity, return estimated values
         let cluster_count = optimal_k;
         let cluster_sizes = vec![vectors.len() / cluster_count; cluster_count];
         let cluster_cohesion = vec![0.8; cluster_count]; // Simulated cohesion scores
         let cluster_separation = 0.6; // Simulated separation score
-        
-        Ok((cluster_count, cluster_sizes, cluster_cohesion, cluster_separation))
+
+        Ok((
+            cluster_count,
+            cluster_sizes,
+            cluster_cohesion,
+            cluster_separation,
+        ))
     }
 
     fn detect_outliers(&self, vectors: &[Vec<f32>]) -> (usize, f32) {
         // Simple outlier detection based on distance to centroid
         let centroid = calculate_centroid(vectors);
         let mut distances = Vec::new();
-        
+
         for vector in vectors {
             distances.push(euclidean_distance(vector, &centroid));
         }
-        
+
         distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let q3_index = (distances.len() as f32 * 0.75) as usize;
         let q1_index = (distances.len() as f32 * 0.25) as usize;
-        
+
         let iqr = distances[q3_index] - distances[q1_index];
         let threshold = distances[q3_index] + 1.5 * iqr;
-        
+
         let outlier_count = distances.iter().filter(|&&d| d > threshold).count();
-        
+
         (outlier_count, threshold)
     }
 
     fn calculate_query_volume_trend(&self, cutoff_time: u64) -> Vec<(u64, usize)> {
         let mut hourly_counts = BTreeMap::new();
-        
+
         for query in &self.query_history {
             if query.timestamp > cutoff_time {
                 let hour_bucket = (query.timestamp / 3600) * 3600;
                 *hourly_counts.entry(hour_bucket).or_insert(0) += 1;
             }
         }
-        
+
         hourly_counts.into_iter().collect()
     }
 
     fn calculate_response_time_trend(&self, cutoff_time: u64) -> Vec<(u64, f32)> {
         let mut hourly_times = BTreeMap::new();
         let mut hourly_counts = BTreeMap::new();
-        
+
         for query in &self.query_history {
             if query.timestamp > cutoff_time {
                 let hour_bucket = (query.timestamp / 3600) * 3600;
-                *hourly_times.entry(hour_bucket).or_insert(0.0) += query.response_time.as_secs_f32();
+                *hourly_times.entry(hour_bucket).or_insert(0.0) +=
+                    query.response_time.as_secs_f32();
                 *hourly_counts.entry(hour_bucket).or_insert(0) += 1;
             }
         }
-        
-        hourly_times.into_iter()
+
+        hourly_times
+            .into_iter()
             .map(|(time, total)| (time, total / hourly_counts[&time] as f32))
             .collect()
     }
@@ -555,7 +583,7 @@ impl VectorAnalyticsEngine {
     fn calculate_cache_hit_rate_trend(&self, cutoff_time: u64) -> Vec<(u64, f32)> {
         let mut hourly_hits = BTreeMap::new();
         let mut hourly_counts = BTreeMap::new();
-        
+
         for query in &self.query_history {
             if query.timestamp > cutoff_time {
                 let hour_bucket = (query.timestamp / 3600) * 3600;
@@ -565,8 +593,9 @@ impl VectorAnalyticsEngine {
                 *hourly_counts.entry(hour_bucket).or_insert(0) += 1;
             }
         }
-        
-        hourly_counts.into_iter()
+
+        hourly_counts
+            .into_iter()
             .map(|(time, count)| {
                 let hits = hourly_hits.get(&time).unwrap_or(&0);
                 (time, *hits as f32 / count as f32)
@@ -581,17 +610,18 @@ impl VectorAnalyticsEngine {
 
     fn predict_peak_hours(&self) -> Vec<u8> {
         let mut hour_volumes = vec![0; 24];
-        
+
         for query in &self.query_history {
             let hour = ((query.timestamp % 86400) / 3600) as usize;
             if hour < 24 {
                 hour_volumes[hour] += 1;
             }
         }
-        
+
         let avg_volume = hour_volumes.iter().sum::<usize>() as f32 / 24.0;
-        
-        hour_volumes.iter()
+
+        hour_volumes
+            .iter()
             .enumerate()
             .filter(|(_, &volume)| volume as f32 > avg_volume * 1.5)
             .map(|(hour, _)| hour as u8)
@@ -602,50 +632,61 @@ impl VectorAnalyticsEngine {
         if self.query_history.is_empty() {
             return 0.0;
         }
-        
-        let avg_response_time = self.query_history.iter()
+
+        let avg_response_time = self
+            .query_history
+            .iter()
             .map(|q| q.response_time.as_secs_f32())
-            .sum::<f32>() / self.query_history.len() as f32;
-        
-        let cache_hit_rate = self.query_history.iter()
-            .filter(|q| q.cache_hit)
-            .count() as f32 / self.query_history.len() as f32;
-        
-        let avg_similarity = self.query_history.iter()
+            .sum::<f32>()
+            / self.query_history.len() as f32;
+
+        let cache_hit_rate = self.query_history.iter().filter(|q| q.cache_hit).count() as f32
+            / self.query_history.len() as f32;
+
+        let avg_similarity = self
+            .query_history
+            .iter()
             .map(|q| q.avg_similarity_score)
-            .sum::<f32>() / self.query_history.len() as f32;
-        
+            .sum::<f32>()
+            / self.query_history.len() as f32;
+
         // Composite score (0-1)
         let response_score = 1.0 / (1.0 + avg_response_time);
         let cache_score = cache_hit_rate;
         let similarity_score = avg_similarity;
-        
+
         (response_score + cache_score + similarity_score) / 3.0
     }
 
     fn analyze_bottlenecks(&self) -> Vec<BottleneckInsight> {
         let mut bottlenecks = Vec::new();
-        
+
         // Analyze response time bottlenecks
-        let avg_response_time = self.query_history.iter()
+        let avg_response_time = self
+            .query_history
+            .iter()
             .map(|q| q.response_time.as_secs_f32())
-            .sum::<f32>() / self.query_history.len().max(1) as f32;
-        
+            .sum::<f32>()
+            / self.query_history.len().max(1) as f32;
+
         if avg_response_time > 0.1 {
             bottlenecks.push(BottleneckInsight {
                 component: "Response Time".to_string(),
-                severity: if avg_response_time > 1.0 { BottleneckSeverity::Critical } else { BottleneckSeverity::High },
+                severity: if avg_response_time > 1.0 {
+                    BottleneckSeverity::Critical
+                } else {
+                    BottleneckSeverity::High
+                },
                 impact_score: avg_response_time * 10.0,
                 recommendation: "Consider index optimization or caching improvements".to_string(),
                 estimated_improvement: 0.3,
             });
         }
-        
+
         // Analyze cache hit rate
-        let cache_hit_rate = self.query_history.iter()
-            .filter(|q| q.cache_hit)
-            .count() as f32 / self.query_history.len().max(1) as f32;
-        
+        let cache_hit_rate = self.query_history.iter().filter(|q| q.cache_hit).count() as f32
+            / self.query_history.len().max(1) as f32;
+
         if cache_hit_rate < 0.5 {
             bottlenecks.push(BottleneckInsight {
                 component: "Cache Efficiency".to_string(),
@@ -655,27 +696,34 @@ impl VectorAnalyticsEngine {
                 estimated_improvement: 0.25,
             });
         }
-        
+
         bottlenecks
     }
 
     fn analyze_index_optimization(&self) -> Vec<OptimizationRecommendation> {
         // Analyze which index types are performing poorly
         let mut recommendations = Vec::new();
-        
+
         // Group queries by index type and analyze performance
         let mut index_performance = HashMap::new();
         for query in &self.query_history {
-            let entry = index_performance.entry(&query.index_type).or_insert(Vec::new());
+            let entry = index_performance
+                .entry(&query.index_type)
+                .or_insert(Vec::new());
             entry.push(query.response_time.as_secs_f32());
         }
-        
+
         for (index_type, times) in index_performance {
             let avg_time = times.iter().sum::<f32>() / times.len() as f32;
-            if avg_time > 0.05 { // 50ms threshold
+            if avg_time > 0.05 {
+                // 50ms threshold
                 recommendations.push(OptimizationRecommendation {
                     recommendation_type: RecommendationType::IndexOptimization,
-                    priority: if avg_time > 0.2 { Priority::High } else { Priority::Medium },
+                    priority: if avg_time > 0.2 {
+                        Priority::High
+                    } else {
+                        Priority::Medium
+                    },
                     description: format!("Optimize {} index performance", index_type),
                     expected_improvement: (avg_time * 0.3).min(0.8),
                     implementation_effort: ImplementationEffort::Medium,
@@ -683,17 +731,16 @@ impl VectorAnalyticsEngine {
                 });
             }
         }
-        
+
         recommendations
     }
 
     fn analyze_cache_optimization(&self) -> Vec<OptimizationRecommendation> {
-        let cache_hit_rate = self.query_history.iter()
-            .filter(|q| q.cache_hit)
-            .count() as f32 / self.query_history.len().max(1) as f32;
-        
+        let cache_hit_rate = self.query_history.iter().filter(|q| q.cache_hit).count() as f32
+            / self.query_history.len().max(1) as f32;
+
         let mut recommendations = Vec::new();
-        
+
         if cache_hit_rate < 0.7 {
             recommendations.push(OptimizationRecommendation {
                 recommendation_type: RecommendationType::CacheStrategy,
@@ -704,25 +751,32 @@ impl VectorAnalyticsEngine {
                 affected_queries: vec![],
             });
         }
-        
+
         recommendations
     }
 
     fn analyze_similarity_optimization(&self) -> Vec<OptimizationRecommendation> {
         // Analyze similarity metric performance
         let mut metric_performance = HashMap::new();
-        
+
         for query in &self.query_history {
-            let entry = metric_performance.entry(&query.similarity_metric).or_insert(Vec::new());
-            entry.push((query.response_time.as_secs_f32(), query.avg_similarity_score));
+            let entry = metric_performance
+                .entry(&query.similarity_metric)
+                .or_insert(Vec::new());
+            entry.push((
+                query.response_time.as_secs_f32(),
+                query.avg_similarity_score,
+            ));
         }
-        
+
         let mut recommendations = Vec::new();
-        
+
         for (metric, performance) in metric_performance {
-            let avg_time = performance.iter().map(|(t, _)| t).sum::<f32>() / performance.len() as f32;
-            let avg_score = performance.iter().map(|(_, s)| s).sum::<f32>() / performance.len() as f32;
-            
+            let avg_time =
+                performance.iter().map(|(t, _)| t).sum::<f32>() / performance.len() as f32;
+            let avg_score =
+                performance.iter().map(|(_, s)| s).sum::<f32>() / performance.len() as f32;
+
             if avg_time > 0.05 && avg_score < 0.8 {
                 recommendations.push(OptimizationRecommendation {
                     recommendation_type: RecommendationType::SimilarityMetric,
@@ -734,29 +788,28 @@ impl VectorAnalyticsEngine {
                 });
             }
         }
-        
+
         recommendations
     }
 
     fn analyze_batching_optimization(&self) -> Vec<OptimizationRecommendation> {
         // Analyze query patterns for batching opportunities
         let mut recommendations = Vec::new();
-        
-        let single_query_count = self.query_history.iter()
-            .filter(|q| q.top_k == 1)
-            .count();
-        
+
+        let single_query_count = self.query_history.iter().filter(|q| q.top_k == 1).count();
+
         if single_query_count > self.query_history.len() / 3 {
             recommendations.push(OptimizationRecommendation {
                 recommendation_type: RecommendationType::Batching,
                 priority: Priority::Medium,
-                description: "Consider batching single-result queries for better throughput".to_string(),
+                description: "Consider batching single-result queries for better throughput"
+                    .to_string(),
                 expected_improvement: 0.2,
                 implementation_effort: ImplementationEffort::Medium,
                 affected_queries: vec![],
             });
         }
-        
+
         recommendations
     }
 
@@ -765,7 +818,7 @@ impl VectorAnalyticsEngine {
         let consistency = self.calculate_embedding_consistency(vectors);
         let coherence = self.calculate_semantic_coherence(vectors);
         let noise = 1.0 - self.estimate_noise_level(vectors);
-        
+
         (consistency + coherence + noise) / 3.0
     }
 
@@ -773,20 +826,26 @@ impl VectorAnalyticsEngine {
         if vectors.is_empty() || vectors[0].is_empty() {
             return vec![];
         }
-        
+
         let dim_count = vectors[0].len();
         let mut quality_scores = vec![0.0; dim_count];
-        
+
         for dim in 0..dim_count {
             let values: Vec<f32> = vectors.iter().map(|v| v[dim]).collect();
             let variance = calculate_variance(&values);
-            let range = values.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap() - 
-                       values.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
-            
+            let range = values
+                .iter()
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap()
+                - values
+                    .iter()
+                    .min_by(|a, b| a.partial_cmp(b).unwrap())
+                    .unwrap();
+
             // Quality based on variance and range (higher is better for meaningful dimensions)
             quality_scores[dim] = (variance * range).min(1.0);
         }
-        
+
         quality_scores
     }
 
@@ -794,7 +853,7 @@ impl VectorAnalyticsEngine {
         // Estimate noise as inconsistency in similar vectors
         let mut noise_estimate = 0.0;
         let sample_size = vectors.len().min(100);
-        
+
         for i in 0..sample_size {
             let mut min_distance = f32::INFINITY;
             for j in 0..sample_size {
@@ -805,7 +864,7 @@ impl VectorAnalyticsEngine {
             }
             noise_estimate += min_distance;
         }
-        
+
         noise_estimate / sample_size as f32
     }
 
@@ -813,11 +872,11 @@ impl VectorAnalyticsEngine {
         // Measure consistency across embeddings
         let centroid = calculate_centroid(vectors);
         let mut total_distance = 0.0;
-        
+
         for vector in vectors {
             total_distance += euclidean_distance(vector, &centroid);
         }
-        
+
         let avg_distance = total_distance / vectors.len() as f32;
         1.0 / (1.0 + avg_distance) // Convert to 0-1 score
     }
@@ -828,9 +887,14 @@ impl VectorAnalyticsEngine {
         0.8
     }
 
-    fn generate_quality_recommendations(&self, overall_score: f32, dimension_quality: &[f32], noise_level: f32) -> Vec<QualityRecommendation> {
+    fn generate_quality_recommendations(
+        &self,
+        overall_score: f32,
+        dimension_quality: &[f32],
+        noise_level: f32,
+    ) -> Vec<QualityRecommendation> {
         let mut recommendations = Vec::new();
-        
+
         if overall_score < 0.7 {
             recommendations.push(QualityRecommendation {
                 aspect: QualityAspect::EmbeddingModel,
@@ -840,22 +904,24 @@ impl VectorAnalyticsEngine {
                 priority: Priority::High,
             });
         }
-        
+
         if noise_level > 0.3 {
             recommendations.push(QualityRecommendation {
                 aspect: QualityAspect::NoiseReduction,
                 current_score: 1.0 - noise_level,
                 target_score: 0.8,
-                recommendation: "Apply noise reduction techniques to improve vector quality".to_string(),
+                recommendation: "Apply noise reduction techniques to improve vector quality"
+                    .to_string(),
                 priority: Priority::Medium,
             });
         }
-        
-        let low_quality_dims = dimension_quality.iter()
+
+        let low_quality_dims = dimension_quality
+            .iter()
             .enumerate()
             .filter(|(_, &score)| score < 0.5)
             .count();
-        
+
         if low_quality_dims > dimension_quality.len() / 4 {
             recommendations.push(QualityRecommendation {
                 aspect: QualityAspect::DimensionalityReduction,
@@ -865,7 +931,7 @@ impl VectorAnalyticsEngine {
                 priority: Priority::Medium,
             });
         }
-        
+
         recommendations
     }
 
@@ -896,47 +962,55 @@ impl AnomalyDetector {
 
     fn update_baseline(&mut self, query: &QueryAnalytics) {
         let response_time = query.response_time.as_secs_f32();
-        
+
         let current_baseline = self.baseline_metrics.get("response_time").unwrap_or(&0.1);
-        let new_baseline = current_baseline * (1.0 - self.learning_rate) + response_time * self.learning_rate;
-        self.baseline_metrics.insert("response_time".to_string(), new_baseline);
-        
+        let new_baseline =
+            current_baseline * (1.0 - self.learning_rate) + response_time * self.learning_rate;
+        self.baseline_metrics
+            .insert("response_time".to_string(), new_baseline);
+
         let current_similarity = self.baseline_metrics.get("avg_similarity").unwrap_or(&0.8);
-        let new_similarity = current_similarity * (1.0 - self.learning_rate) + query.avg_similarity_score * self.learning_rate;
-        self.baseline_metrics.insert("avg_similarity".to_string(), new_similarity);
+        let new_similarity = current_similarity * (1.0 - self.learning_rate)
+            + query.avg_similarity_score * self.learning_rate;
+        self.baseline_metrics
+            .insert("avg_similarity".to_string(), new_similarity);
     }
 
     fn detect_anomalies(&self, queries: &VecDeque<QueryAnalytics>) -> AnomalyDetection {
         let mut anomalies = Vec::new();
-        
+
         let response_time_baseline = self.baseline_metrics.get("response_time").unwrap_or(&0.1);
         let similarity_baseline = self.baseline_metrics.get("avg_similarity").unwrap_or(&0.8);
-        
+
         for query in queries {
             let response_time_ratio = query.response_time.as_secs_f32() / response_time_baseline;
             let similarity_ratio = query.avg_similarity_score / similarity_baseline;
-            
+
             if response_time_ratio > self.detection_sensitivity {
                 anomalies.push(QueryAnomaly {
                     query_id: query.query_id.clone(),
                     anomaly_type: AnomalyType::UnusualLatency,
                     severity_score: response_time_ratio,
-                    description: format!("Query response time {}x higher than baseline", response_time_ratio),
+                    description: format!(
+                        "Query response time {}x higher than baseline",
+                        response_time_ratio
+                    ),
                     suggested_action: "Investigate query complexity or system load".to_string(),
                 });
             }
-            
+
             if similarity_ratio < (1.0 / self.detection_sensitivity) {
                 anomalies.push(QueryAnomaly {
                     query_id: query.query_id.clone(),
                     anomaly_type: AnomalyType::LowSimilarityScores,
                     severity_score: 1.0 / similarity_ratio,
                     description: "Unusually low similarity scores detected".to_string(),
-                    suggested_action: "Check vector quality or similarity metric configuration".to_string(),
+                    suggested_action: "Check vector quality or similarity metric configuration"
+                        .to_string(),
                 });
             }
         }
-        
+
         AnomalyDetection {
             anomalies,
             detection_threshold: self.detection_sensitivity,
@@ -949,7 +1023,8 @@ impl AnomalyDetector {
 // Utility functions
 
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b.iter())
+    a.iter()
+        .zip(b.iter())
         .map(|(x, y)| (x - y).powi(2))
         .sum::<f32>()
         .sqrt()
@@ -959,20 +1034,20 @@ fn calculate_centroid(vectors: &[Vec<f32>]) -> Vec<f32> {
     if vectors.is_empty() {
         return vec![];
     }
-    
+
     let dim_count = vectors[0].len();
     let mut centroid = vec![0.0; dim_count];
-    
+
     for vector in vectors {
         for (i, &value) in vector.iter().enumerate() {
             centroid[i] += value;
         }
     }
-    
+
     for value in &mut centroid {
         *value /= vectors.len() as f32;
     }
-    
+
     centroid
 }
 
@@ -980,11 +1055,9 @@ fn calculate_variance(values: &[f32]) -> f32 {
     if values.is_empty() {
         return 0.0;
     }
-    
+
     let mean = values.iter().sum::<f32>() / values.len() as f32;
-    values.iter()
-        .map(|x| (x - mean).powi(2))
-        .sum::<f32>() / values.len() as f32
+    values.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / values.len() as f32
 }
 
 impl Default for VectorAnalyticsEngine {
@@ -1008,7 +1081,7 @@ mod tests {
     #[test]
     fn test_query_recording() {
         let mut engine = VectorAnalyticsEngine::new();
-        
+
         let query = QueryAnalytics {
             query_id: "test_query_1".to_string(),
             timestamp: 1640995200, // 2022-01-01
@@ -1023,7 +1096,7 @@ mod tests {
             cache_hit: true,
             index_type: "hnsw".to_string(),
         };
-        
+
         engine.record_query(query);
         assert_eq!(engine.query_history.len(), 1);
     }
@@ -1031,7 +1104,7 @@ mod tests {
     #[test]
     fn test_vector_distribution_analysis() {
         let engine = VectorAnalyticsEngine::new();
-        
+
         let vectors = vec![
             vec![1.0, 2.0, 3.0],
             vec![1.1, 2.1, 3.1],
@@ -1039,9 +1112,9 @@ mod tests {
             vec![5.0, 6.0, 7.0],
             vec![5.1, 6.1, 7.1],
         ];
-        
+
         let analysis = engine.analyze_vector_distribution(&vectors).unwrap();
-        
+
         assert_eq!(analysis.total_vectors, 5);
         assert_eq!(analysis.dimensionality, 3);
         assert!(analysis.density_estimate > 0.0);
@@ -1051,7 +1124,7 @@ mod tests {
     #[test]
     fn test_performance_score_calculation() {
         let mut engine = VectorAnalyticsEngine::new();
-        
+
         // Add some test queries
         for i in 0..10 {
             let query = QueryAnalytics {
@@ -1070,7 +1143,7 @@ mod tests {
             };
             engine.record_query(query);
         }
-        
+
         let score = engine.calculate_performance_score();
         assert!(score > 0.0 && score <= 1.0);
     }
@@ -1079,7 +1152,7 @@ mod tests {
     fn test_anomaly_detection() {
         let engine = VectorAnalyticsEngine::new();
         let anomalies = engine.detect_anomalies();
-        
+
         assert_eq!(anomalies.anomalies.len(), 0); // No queries recorded yet
         assert!(anomalies.confidence_level > 0.0);
     }
@@ -1087,7 +1160,7 @@ mod tests {
     #[test]
     fn test_optimization_recommendations() {
         let mut engine = VectorAnalyticsEngine::new();
-        
+
         // Add a slow query to trigger recommendations
         let slow_query = QueryAnalytics {
             query_id: "slow_query".to_string(),
@@ -1103,26 +1176,26 @@ mod tests {
             cache_hit: false, // Cache miss
             index_type: "linear".to_string(),
         };
-        
+
         engine.record_query(slow_query);
         let recommendations = engine.generate_optimization_recommendations();
-        
+
         assert!(!recommendations.is_empty());
     }
 
     #[test]
     fn test_vector_quality_assessment() {
         let engine = VectorAnalyticsEngine::new();
-        
+
         let vectors = vec![
             vec![1.0, 2.0, 3.0, 0.0],
             vec![1.1, 2.1, 3.1, 0.0], // Last dimension is always 0 (low quality)
             vec![0.9, 1.9, 2.9, 0.0],
             vec![1.05, 2.05, 3.05, 0.0],
         ];
-        
+
         let assessment = engine.assess_vector_quality(&vectors).unwrap();
-        
+
         assert!(assessment.overall_quality_score >= 0.0 && assessment.overall_quality_score <= 1.0);
         assert_eq!(assessment.dimension_quality.len(), 4);
         assert!(assessment.noise_level >= 0.0);
@@ -1133,7 +1206,7 @@ mod tests {
     fn test_analytics_export() {
         let engine = VectorAnalyticsEngine::new();
         let json_result = engine.export_analytics();
-        
+
         assert!(json_result.is_ok());
         let json_data = json_result.unwrap();
         assert!(json_data.contains("query_count"));

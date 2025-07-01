@@ -4,9 +4,11 @@
 //! leverages multi-index strategies (SPO/POS/OSP) for efficient query execution.
 
 use crate::indexing::IndexStats as BaseIndexStats;
+use crate::model::pattern::{
+    ObjectPattern, PredicatePattern, SubjectPattern, TriplePattern as ModelTriplePattern,
+};
 use crate::model::*;
-use crate::model::pattern::{TriplePattern as ModelTriplePattern, SubjectPattern, PredicatePattern, ObjectPattern};
-use crate::query::algebra::{TermPattern as AlgebraTermPattern, AlgebraTriplePattern};
+use crate::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
 use crate::store::IndexedGraph;
 use crate::OxirsError;
 use std::collections::{HashMap, HashSet};
@@ -268,7 +270,7 @@ impl PatternOptimizer {
     fn analyze_pattern(&self, pattern: &AlgebraTriplePattern) -> Vec<PatternStrategy> {
         let mut strategies = Vec::new();
 
-        // Analyze which components are bound vs variable  
+        // Analyze which components are bound vs variable
         let s_bound = !matches!(pattern.subject, AlgebraTermPattern::Variable(_));
         let p_bound = !matches!(pattern.predicate, AlgebraTermPattern::Variable(_));
         let o_bound = !matches!(pattern.object, AlgebraTermPattern::Variable(_));
@@ -947,7 +949,7 @@ mod tests {
         let pattern = AlgebraTriplePattern::new(
             AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
             AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
-            AlgebraTermPattern::Literal(Literal::new("test"))
+            AlgebraTermPattern::Literal(Literal::new("test")),
         );
 
         let selectivity = optimizer.estimate_selectivity(&pattern);
@@ -964,19 +966,13 @@ mod tests {
         let patterns = vec![
             AlgebraTriplePattern::new(
                 AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-                AlgebraTermPattern::NamedNode(
-                    NamedNode::new("http://example.org/type").unwrap(),
-                ),
-                AlgebraTermPattern::NamedNode(
-                    NamedNode::new("http://example.org/Person").unwrap(),
-                )
+                AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+                AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
             ),
             AlgebraTriplePattern::new(
                 AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-                AlgebraTermPattern::NamedNode(
-                    NamedNode::new("http://example.org/name").unwrap(),
-                ),
-                AlgebraTermPattern::Variable(Variable::new("name").unwrap())
+                AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
+                AlgebraTermPattern::Variable(Variable::new("name").unwrap()),
             ),
         ];
 

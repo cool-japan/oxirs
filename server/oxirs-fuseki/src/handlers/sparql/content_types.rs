@@ -60,7 +60,7 @@ impl ContentNegotiator {
     /// Parse Accept header and return best matching content type
     fn parse_accept_header(&self, accept: &str) -> String {
         let mut types = Vec::new();
-        
+
         for part in accept.split(',') {
             let part = part.trim();
             let (media_type, quality) = if let Some(q_pos) = part.find(";q=") {
@@ -70,7 +70,7 @@ impl ContentNegotiator {
             } else {
                 (part, 1.0)
             };
-            
+
             types.push((media_type.to_string(), quality));
         }
 
@@ -82,7 +82,7 @@ impl ContentNegotiator {
             if self.supported_types.contains(&media_type) {
                 return media_type;
             }
-            
+
             // Handle wildcards
             if media_type == "*/*" || media_type == "application/*" {
                 return self.default_type.clone();
@@ -104,7 +104,10 @@ pub struct ResponseFormatter;
 
 impl ResponseFormatter {
     /// Format response data based on content type
-    pub fn format<T: Serialize>(data: &T, content_type: &str) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn format<T: Serialize>(
+        data: &T,
+        content_type: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         match content_type {
             content_types::SPARQL_RESULTS_JSON | content_types::APPLICATION_JSON => {
                 Ok(serde_json::to_string_pretty(data)?)
@@ -127,7 +130,10 @@ impl ResponseFormatter {
             }
             content_types::APPLICATION_RDF_XML => {
                 // TODO: Implement RDF/XML formatting
-                Ok("<?xml version=\"1.0\"?>\n<!-- RDF/XML formatting not yet implemented -->".to_string())
+                Ok(
+                    "<?xml version=\"1.0\"?>\n<!-- RDF/XML formatting not yet implemented -->"
+                        .to_string(),
+                )
             }
             content_types::APPLICATION_NTRIPLES => {
                 // TODO: Implement N-Triples formatting
@@ -158,32 +164,52 @@ mod tests {
     #[test]
     fn test_content_negotiation() {
         let negotiator = ContentNegotiator::new();
-        
+
         // Test JSON preference
         let mut headers = HeaderMap::new();
         headers.insert("accept", "application/json".parse().unwrap());
-        assert_eq!(negotiator.negotiate(&headers), content_types::APPLICATION_JSON);
-        
+        assert_eq!(
+            negotiator.negotiate(&headers),
+            content_types::APPLICATION_JSON
+        );
+
         // Test SPARQL JSON preference
         headers.clear();
-        headers.insert("accept", content_types::SPARQL_RESULTS_JSON.parse().unwrap());
-        assert_eq!(negotiator.negotiate(&headers), content_types::SPARQL_RESULTS_JSON);
-        
+        headers.insert(
+            "accept",
+            content_types::SPARQL_RESULTS_JSON.parse().unwrap(),
+        );
+        assert_eq!(
+            negotiator.negotiate(&headers),
+            content_types::SPARQL_RESULTS_JSON
+        );
+
         // Test wildcard
         headers.clear();
         headers.insert("accept", "*/*".parse().unwrap());
-        assert_eq!(negotiator.negotiate(&headers), content_types::SPARQL_RESULTS_JSON);
-        
+        assert_eq!(
+            negotiator.negotiate(&headers),
+            content_types::SPARQL_RESULTS_JSON
+        );
+
         // Test quality values
         headers.clear();
-        headers.insert("accept", "application/xml;q=0.8,application/json;q=0.9".parse().unwrap());
-        assert_eq!(negotiator.negotiate(&headers), content_types::APPLICATION_JSON);
+        headers.insert(
+            "accept",
+            "application/xml;q=0.8,application/json;q=0.9"
+                .parse()
+                .unwrap(),
+        );
+        assert_eq!(
+            negotiator.negotiate(&headers),
+            content_types::APPLICATION_JSON
+        );
     }
 
     #[test]
     fn test_accept_header_parsing() {
         let negotiator = ContentNegotiator::new();
-        
+
         // Complex Accept header
         let complex_accept = "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.1";
         let result = negotiator.parse_accept_header(complex_accept);
@@ -193,7 +219,7 @@ mod tests {
     #[test]
     fn test_response_formatting() {
         use serde_json::json;
-        
+
         let data = json!({
             "head": {
                 "vars": ["name", "age"]
@@ -207,12 +233,12 @@ mod tests {
                 ]
             }
         });
-        
+
         // Test JSON formatting
         let json_result = ResponseFormatter::format(&data, content_types::SPARQL_RESULTS_JSON);
         assert!(json_result.is_ok());
         assert!(json_result.unwrap().contains("John"));
-        
+
         // Test XML formatting (placeholder)
         let xml_result = ResponseFormatter::format(&data, content_types::SPARQL_RESULTS_XML);
         assert!(xml_result.is_ok());

@@ -51,6 +51,9 @@ pub use types::*;
 // Re-export key RAG types
 pub use rag::{RAGSystem, RAGConfig, QueryContext, AssembledContext};
 
+// Re-export LLM types including circuit breaker
+pub use llm::{LLMConfig, LLMResponse, CircuitBreakerConfig, CircuitBreakerStats, CircuitBreakerState};
+
 /// Main chat interface for OxiRS with advanced AI capabilities
 pub struct OxiRSChat {
     /// Configuration for the chat system
@@ -529,6 +532,18 @@ impl OxiRSChat {
         sessions.insert(session_data.id, session);
         
         Ok(())
+    }
+
+    /// Get circuit breaker statistics for all LLM providers
+    pub async fn get_circuit_breaker_stats(&self) -> Result<HashMap<String, llm::CircuitBreakerStats>> {
+        let llm_manager = self.llm_manager.lock().await;
+        Ok(llm_manager.get_circuit_breaker_stats().await)
+    }
+
+    /// Reset circuit breaker for a specific LLM provider
+    pub async fn reset_circuit_breaker(&self, provider_name: &str) -> Result<()> {
+        let llm_manager = self.llm_manager.lock().await;
+        llm_manager.reset_circuit_breaker(provider_name).await
     }
 }
 

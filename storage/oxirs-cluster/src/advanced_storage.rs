@@ -174,7 +174,7 @@ impl WriteAheadLog {
     /// Create a new Write-Ahead Log
     async fn new(config: StorageConfig) -> Result<Self> {
         let wal_path = config.data_dir.join("wal.log");
-        
+
         // Create directory if it doesn't exist
         if let Some(parent) = wal_path.parent() {
             fs::create_dir_all(parent).await?;
@@ -186,7 +186,7 @@ impl WriteAheadLog {
             .open(&wal_path)?;
 
         let current_sequence = AtomicU64::new(0);
-        
+
         // Recover sequence number from existing WAL
         if wal_path.exists() && wal_file.metadata()?.len() > 0 {
             // In a full implementation, we would scan the WAL file to find the last sequence number
@@ -197,7 +197,9 @@ impl WriteAheadLog {
             enable_compression: config.enable_compression,
             ..Default::default()
         };
-        let serializer = Arc::new(Mutex::new(MessageSerializer::with_config(serializer_config)));
+        let serializer = Arc::new(Mutex::new(MessageSerializer::with_config(
+            serializer_config,
+        )));
 
         Ok(Self {
             config,
@@ -275,7 +277,7 @@ impl WriteAheadLog {
             }
 
             let entry_size = u32::from_le_bytes(size_bytes) as usize;
-            
+
             // Read entry data
             buffer.clear();
             buffer.resize(entry_size, 0);
@@ -298,9 +300,13 @@ impl WriteAheadLog {
                     let computed_checksum = format!("{:x}", Sha256::digest(&buffer));
                     if entry.checksum == computed_checksum {
                         recovered_entries.push(entry);
-                        self.current_sequence.store(entry.sequence + 1, Ordering::SeqCst);
+                        self.current_sequence
+                            .store(entry.sequence + 1, Ordering::SeqCst);
                     } else {
-                        tracing::warn!("WAL entry {} has invalid checksum, stopping recovery", entry.sequence);
+                        tracing::warn!(
+                            "WAL entry {} has invalid checksum, stopping recovery",
+                            entry.sequence
+                        );
                         break;
                     }
                 }
@@ -345,11 +351,8 @@ impl MmapStorage {
     fn new(file_path: &Path) -> Result<Self> {
         let file = File::open(file_path)?;
         let mmap = unsafe { MmapOptions::new().map(&file)? };
-        
-        Ok(Self {
-            _file: file,
-            mmap,
-        })
+
+        Ok(Self { _file: file, mmap })
     }
 
     /// Read data from memory-mapped region
@@ -533,7 +536,9 @@ impl AdvancedStorageBackend {
         let start_time = Instant::now();
 
         // Write to WAL first for durability
-        self.wal.append(WalOperation::WriteRaftState(state.clone())).await?;
+        self.wal
+            .append(WalOperation::WriteRaftState(state.clone()))
+            .await?;
 
         // Store in database
         self.store_raft_state_internal(state.clone()).await?;
@@ -545,8 +550,8 @@ impl AdvancedStorageBackend {
         // Update statistics
         let mut stats = self.stats.write().await;
         stats.total_operations += 1;
-        stats.avg_write_latency = 
-            (stats.avg_write_latency * (stats.total_operations - 1) as u32 + start_time.elapsed()) 
+        stats.avg_write_latency = (stats.avg_write_latency * (stats.total_operations - 1) as u32
+            + start_time.elapsed())
             / stats.total_operations as u32;
 
         Ok(())
@@ -555,10 +560,15 @@ impl AdvancedStorageBackend {
     /// Internal method to store Raft state in database
     async fn store_raft_state_internal(&self, state: RaftState) -> Result<()> {
         let serialized = self.serializer.serialize(&state)?;
-        
+
         let env = self.environment.lock().await;
         let mut txn = env.begin_rw_txn()?;
-        txn.put(self.state_db, &b"current", &serialized.payload, WriteFlags::empty())?;
+        txn.put(
+            self.state_db,
+            &b"current",
+            &serialized.payload,
+            WriteFlags::empty(),
+        )?;
         txn.commit()?;
 
         let mut stats = self.stats.write().await;
@@ -584,7 +594,7 @@ impl AdvancedStorageBackend {
         // Load from database
         let env = self.environment.lock().await;
         let txn = env.begin_ro_txn()?;
-        
+
         let result = match txn.get(self.state_db, &b"current") {
             Ok(data) => {
                 let serialized_message = crate::serialization::SerializedMessage {
@@ -596,13 +606,15 @@ impl AdvancedStorageBackend {
                     original_size: data.len(),
                     compression_ratio: 1.0,
                 };
-                
-                let state = self.serializer.deserialize::<RaftState>(&serialized_message)?;
-                
+
+                let state = self
+                    .serializer
+                    .deserialize::<RaftState>(&serialized_message)?;
+
                 // Update cache
                 let mut cache = self.state_cache.write().await;
                 cache.put("current".to_string(), state.clone());
-                
+
                 Some(state)
             }
             Err(lmdb::Error::NotFound) => None,
@@ -612,9 +624,12 @@ impl AdvancedStorageBackend {
         // Update statistics
         let mut stats = self.stats.write().await;
         stats.total_operations += 1;
-        stats.bytes_read += result.as_ref().map(|_| std::mem::size_of::<RaftState>()).unwrap_or(0) as u64;
-        stats.avg_read_latency = 
-            (stats.avg_read_latency * (stats.total_operations - 1) as u32 + start_time.elapsed()) 
+        stats.bytes_read += result
+            .as_ref()
+            .map(|_| std::mem::size_of::<RaftState>())
+            .unwrap_or(0) as u64;
+        stats.avg_read_latency = (stats.avg_read_latency * (stats.total_operations - 1) as u32
+            + start_time.elapsed())
             / stats.total_operations as u32;
         stats.cache_hit_ratio = (stats.cache_hit_ratio * 0.9) + 0.0; // Cache miss
 
@@ -655,9 +670,11 @@ impl AdvancedStorageBackend {
         };
 
         // Write snapshot file atomically
-        let snapshot_path = self.config.data_dir.join(format!("snapshot-{}-{}.dat", 
-            last_included_index, last_included_term));
-        
+        let snapshot_path = self.config.data_dir.join(format!(
+            "snapshot-{}-{}.dat",
+            last_included_index, last_included_term
+        ));
+
         let mut atomic_file = AtomicFile::create(snapshot_path, self.config.wal_sync_mode)?;
         atomic_file.write_all(&final_data)?;
         atomic_file.commit()?;
@@ -667,7 +684,12 @@ impl AdvancedStorageBackend {
         let env = self.environment.lock().await;
         let mut txn = env.begin_rw_txn()?;
         let key = format!("snapshot-{}-{}", last_included_index, last_included_term);
-        txn.put(self.snapshot_db, &key.as_bytes(), &serialized_metadata.payload, WriteFlags::empty())?;
+        txn.put(
+            self.snapshot_db,
+            &key.as_bytes(),
+            &serialized_metadata.payload,
+            WriteFlags::empty(),
+        )?;
         txn.commit()?;
 
         // Update cache
@@ -675,23 +697,33 @@ impl AdvancedStorageBackend {
         cache.put(key, metadata.clone());
 
         // Log WAL operation
-        self.wal.append(WalOperation::CreateSnapshot(metadata.clone())).await?;
+        self.wal
+            .append(WalOperation::CreateSnapshot(metadata.clone()))
+            .await?;
 
         // Update statistics
         let mut stats = self.stats.write().await;
         stats.checkpoints_created += 1;
         stats.bytes_written += final_data.len() as u64;
 
-        tracing::info!("Created snapshot {} (compressed: {}, size: {} bytes)", 
-            metadata.last_included_index, compressed, final_data.len());
+        tracing::info!(
+            "Created snapshot {} (compressed: {}, size: {} bytes)",
+            metadata.last_included_index,
+            compressed,
+            final_data.len()
+        );
 
         Ok(metadata)
     }
 
     /// Load a snapshot by index and term
-    pub async fn load_snapshot(&self, last_included_index: u64, last_included_term: u64) -> Result<Option<Vec<u8>>> {
+    pub async fn load_snapshot(
+        &self,
+        last_included_index: u64,
+        last_included_term: u64,
+    ) -> Result<Option<Vec<u8>>> {
         let key = format!("snapshot-{}-{}", last_included_index, last_included_term);
-        
+
         // Try cache first
         let metadata = {
             let mut cache = self.snapshot_cache.write().await;
@@ -704,7 +736,7 @@ impl AdvancedStorageBackend {
             // Load metadata from database
             let env = self.environment.lock().await;
             let txn = env.begin_ro_txn()?;
-            
+
             match txn.get(self.snapshot_db, &key.as_bytes()) {
                 Ok(data) => {
                     let serialized_message = crate::serialization::SerializedMessage {
@@ -716,13 +748,15 @@ impl AdvancedStorageBackend {
                         original_size: data.len(),
                         compression_ratio: 1.0,
                     };
-                    
-                    let metadata = self.serializer.deserialize::<SnapshotMetadata>(&serialized_message)?;
-                    
+
+                    let metadata = self
+                        .serializer
+                        .deserialize::<SnapshotMetadata>(&serialized_message)?;
+
                     // Update cache
                     let mut cache = self.snapshot_cache.write().await;
                     cache.put(key.clone(), metadata.clone());
-                    
+
                     metadata
                 }
                 Err(lmdb::Error::NotFound) => return Ok(None),
@@ -731,8 +765,10 @@ impl AdvancedStorageBackend {
         };
 
         // Load snapshot data from file
-        let snapshot_path = self.config.data_dir.join(format!("snapshot-{}-{}.dat", 
-            last_included_index, last_included_term));
+        let snapshot_path = self.config.data_dir.join(format!(
+            "snapshot-{}-{}.dat",
+            last_included_index, last_included_term
+        ));
 
         if !snapshot_path.exists() {
             return Ok(None);
@@ -771,10 +807,10 @@ impl AdvancedStorageBackend {
     pub async fn clear_caches(&self) {
         let mut state_cache = self.state_cache.write().await;
         state_cache.clear();
-        
+
         let mut snapshot_cache = self.snapshot_cache.write().await;
         snapshot_cache.clear();
-        
+
         tracing::info!("Cleared all storage caches");
     }
 
@@ -785,18 +821,18 @@ impl AdvancedStorageBackend {
         }
 
         let start_time = Instant::now();
-        
+
         // In a full implementation, this would:
         // 1. Identify unused log entries
         // 2. Compact snapshot files
         // 3. Rebuild database files
         // 4. Update WAL
-        
+
         tracing::info!("Storage compaction completed in {:?}", start_time.elapsed());
-        
+
         let mut stats = self.stats.write().await;
         stats.compactions_performed += 1;
-        
+
         Ok(())
     }
 
@@ -809,7 +845,7 @@ impl AdvancedStorageBackend {
         let mmap_storage = MmapStorage::new(file_path)?;
         let mut mmap = self.mmap_storage.write().await;
         *mmap = Some(mmap_storage);
-        
+
         tracing::info!("Enabled memory-mapped storage for {:?}", file_path);
         Ok(())
     }
@@ -819,7 +855,11 @@ impl AdvancedStorageBackend {
         // Check WAL size and truncate if necessary
         let wal_size = self.wal.size().await?;
         if wal_size > self.config.max_wal_size {
-            tracing::info!("WAL size {} exceeds limit {}, truncating", wal_size, self.config.max_wal_size);
+            tracing::info!(
+                "WAL size {} exceeds limit {}, truncating",
+                wal_size,
+                self.config.max_wal_size
+            );
             // In a full implementation, we would checkpoint and truncate the WAL
             self.wal.truncate(0).await?;
         }
@@ -838,10 +878,10 @@ impl AdvancedStorageBackend {
 pub trait StorageBackend: Send + Sync {
     /// Store Raft state
     async fn store_raft_state(&self, state: RaftState) -> Result<()>;
-    
+
     /// Load Raft state
     async fn load_raft_state(&self) -> Result<Option<RaftState>>;
-    
+
     /// Create snapshot
     async fn create_snapshot(
         &self,
@@ -850,10 +890,14 @@ pub trait StorageBackend: Send + Sync {
         configuration: Vec<OxirsNodeId>,
         data: &[u8],
     ) -> Result<SnapshotMetadata>;
-    
+
     /// Load snapshot
-    async fn load_snapshot(&self, last_included_index: u64, last_included_term: u64) -> Result<Option<Vec<u8>>>;
-    
+    async fn load_snapshot(
+        &self,
+        last_included_index: u64,
+        last_included_term: u64,
+    ) -> Result<Option<Vec<u8>>>;
+
     /// Get storage statistics
     async fn stats(&self) -> StorageStats;
 }
@@ -863,11 +907,11 @@ impl StorageBackend for AdvancedStorageBackend {
     async fn store_raft_state(&self, state: RaftState) -> Result<()> {
         self.store_raft_state(state).await
     }
-    
+
     async fn load_raft_state(&self) -> Result<Option<RaftState>> {
         self.load_raft_state().await
     }
-    
+
     async fn create_snapshot(
         &self,
         last_included_index: u64,
@@ -875,13 +919,19 @@ impl StorageBackend for AdvancedStorageBackend {
         configuration: Vec<OxirsNodeId>,
         data: &[u8],
     ) -> Result<SnapshotMetadata> {
-        self.create_snapshot(last_included_index, last_included_term, configuration, data).await
+        self.create_snapshot(last_included_index, last_included_term, configuration, data)
+            .await
     }
-    
-    async fn load_snapshot(&self, last_included_index: u64, last_included_term: u64) -> Result<Option<Vec<u8>>> {
-        self.load_snapshot(last_included_index, last_included_term).await
+
+    async fn load_snapshot(
+        &self,
+        last_included_index: u64,
+        last_included_term: u64,
+    ) -> Result<Option<Vec<u8>>> {
+        self.load_snapshot(last_included_index, last_included_term)
+            .await
     }
-    
+
     async fn stats(&self) -> StorageStats {
         self.stats().await
     }
@@ -928,7 +978,10 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage().await;
 
         let data = b"test snapshot data";
-        let metadata = storage.create_snapshot(10, 1, vec![1, 2, 3], data).await.unwrap();
+        let metadata = storage
+            .create_snapshot(10, 1, vec![1, 2, 3], data)
+            .await
+            .unwrap();
 
         assert_eq!(metadata.last_included_index, 10);
         assert_eq!(metadata.last_included_term, 1);
@@ -953,7 +1006,7 @@ mod tests {
 
         // Store and load multiple times to test caching
         storage.store_raft_state(state.clone()).await.unwrap();
-        
+
         for _ in 0..5 {
             let _loaded_state = storage.load_raft_state().await.unwrap().unwrap();
         }
@@ -978,7 +1031,10 @@ mod tests {
         // Loading should detect corruption
         let result = storage.load_snapshot(1, 1).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("checksum verification failed"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("checksum verification failed"));
     }
 
     #[tokio::test]
@@ -1006,7 +1062,7 @@ mod tests {
         // Create new storage instance (simulates restart)
         let storage = AdvancedStorageBackend::new(config).await.unwrap();
         let recovered_state = storage.load_raft_state().await.unwrap().unwrap();
-        
+
         assert_eq!(state.current_term, recovered_state.current_term);
         assert_eq!(state.voted_for, recovered_state.voted_for);
     }

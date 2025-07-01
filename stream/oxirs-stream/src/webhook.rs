@@ -17,6 +17,7 @@ use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+use rand::Rng;
 
 use crate::{
     store_integration::{ChangeNotification, UpdateNotification},
@@ -898,7 +899,7 @@ impl WebhookManager {
 
         if config.enable_jitter {
             // Add random jitter (±10%)
-            let jitter = (delay.as_millis() as f64 * 0.1 * (rand::random::<f64>() - 0.5)) as u64;
+            let jitter = (delay.as_millis() as f64 * 0.1 * (rand::thread_rng().gen::<f64>() - 0.5)) as u64;
             delay + Duration::from_millis(jitter)
         } else {
             delay

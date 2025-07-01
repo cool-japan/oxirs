@@ -229,6 +229,9 @@ impl From<crate::OxirsError> for RdfParseError {
             crate::OxirsError::ConcurrencyError(msg) => {
                 Self::internal(format!("Concurrency error: {}", msg))
             }
+            crate::OxirsError::NotSupported(msg) => {
+                Self::unsupported(format!("Not supported: {}", msg))
+            }
         }
     }
 }

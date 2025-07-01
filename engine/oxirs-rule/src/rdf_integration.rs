@@ -323,7 +323,7 @@ pub fn convert_rdf_term_to_legacy(term: &RdfTerm, namespaces: &NamespaceManager)
 pub struct RdfRuleEngine {
     rules: Vec<RdfRule>,
     namespaces: NamespaceManager,
-    store: Arc<Store>,
+    store: Arc<dyn Store>,
 }
 
 /// RDF-aware rule
@@ -336,7 +336,7 @@ pub struct RdfRule {
 
 impl RdfRuleEngine {
     /// Create a new RDF rule engine with a store
-    pub fn new(store: Arc<Store>) -> Self {
+    pub fn new(store: Arc<dyn Store>) -> Self {
         Self {
             rules: Vec::new(),
             namespaces: NamespaceManager::new(),

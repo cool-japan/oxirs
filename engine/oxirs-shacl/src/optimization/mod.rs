@@ -53,7 +53,7 @@ pub use advanced_performance::{
 
 // Re-export memory optimization types
 pub use memory::{
-    MemoryOptimizationConfig, MemoryOptimizationStats, MemoryOptimizer, MemoryMonitor,
-    MemoryPressureLevel, MemoryTrend, StringInterner, InternedString, OptimizationResult,
-    compact::{CompactViolation, CompactShape, CompactConverter},
+    compact::{CompactConverter, CompactShape, CompactViolation},
+    InternedString, MemoryMonitor, MemoryOptimizationConfig, MemoryOptimizationStats,
+    MemoryOptimizer, MemoryPressureLevel, MemoryTrend, OptimizationResult, StringInterner,
 };

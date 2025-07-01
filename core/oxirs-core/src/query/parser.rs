@@ -5,7 +5,7 @@
 
 use crate::model::{BlankNode, Literal, NamedNode, Variable};
 use crate::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
-use crate::query::sparql_algebra::{GraphPattern, TriplePattern, TermPattern};
+use crate::query::sparql_algebra::{GraphPattern, TermPattern, TriplePattern};
 use crate::query::sparql_query::Query;
 use crate::OxirsError;
 use std::collections::HashMap;
@@ -182,8 +182,13 @@ impl SparqlParser {
             }
 
             // Validate predicate pattern (only named nodes and variables allowed)
-            if !matches!(predicate, TermPattern::NamedNode(_) | TermPattern::Variable(_)) {
-                return Err(OxirsError::Parse("Predicates must be named nodes or variables".to_string()));
+            if !matches!(
+                predicate,
+                TermPattern::NamedNode(_) | TermPattern::Variable(_)
+            ) {
+                return Err(OxirsError::Parse(
+                    "Predicates must be named nodes or variables".to_string(),
+                ));
             }
 
             // Convert sparql_algebra::TermPattern to algebra::TermPattern
@@ -191,21 +196,30 @@ impl SparqlParser {
             let algebra_predicate = self.convert_to_algebra_term(&predicate)?;
             let algebra_object = self.convert_to_algebra_term(&object)?;
 
-            triple_patterns.push(AlgebraTriplePattern::new(algebra_subject, algebra_predicate, algebra_object));
+            triple_patterns.push(AlgebraTriplePattern::new(
+                algebra_subject,
+                algebra_predicate,
+                algebra_object,
+            ));
         }
 
         Ok(triple_patterns)
     }
 
     // Helper method to convert sparql_algebra::TermPattern to algebra::TermPattern
-    fn convert_to_algebra_term(&self, term: &TermPattern) -> Result<AlgebraTermPattern, OxirsError> {
+    fn convert_to_algebra_term(
+        &self,
+        term: &TermPattern,
+    ) -> Result<AlgebraTermPattern, OxirsError> {
         match term {
             TermPattern::NamedNode(n) => Ok(AlgebraTermPattern::NamedNode(n.clone())),
             TermPattern::BlankNode(b) => Ok(AlgebraTermPattern::BlankNode(b.clone())),
             TermPattern::Literal(l) => Ok(AlgebraTermPattern::Literal(l.clone())),
             TermPattern::Variable(v) => Ok(AlgebraTermPattern::Variable(v.clone())),
             #[cfg(feature = "sparql-12")]
-            TermPattern::Triple(_) => Err(OxirsError::Parse("Quoted triples not supported in construct templates".to_string())),
+            TermPattern::Triple(_) => Err(OxirsError::Parse(
+                "Quoted triples not supported in construct templates".to_string(),
+            )),
         }
     }
 

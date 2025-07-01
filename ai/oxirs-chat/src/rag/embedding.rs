@@ -310,11 +310,25 @@ impl EmbeddingStats {
 /// Simple embedding model wrapper for testing
 pub struct SimpleEmbeddingModel {
     dimensions: usize,
+    config: oxirs_embed::ModelConfig,
+    model_id: uuid::Uuid,
 }
 
 impl SimpleEmbeddingModel {
     pub fn new(dimensions: usize) -> Self {
-        Self { dimensions }
+        Self { 
+            dimensions,
+            config: oxirs_embed::ModelConfig {
+                model_type: "simple".to_string(),
+                dimensions,
+                learning_rate: 0.01,
+                batch_size: 128,
+                negative_samples: 5,
+                epochs: 100,
+                regularization: 0.001,
+            },
+            model_id: uuid::Uuid::new_v4(),
+        }
     }
 
     /// Convenience method for single string embedding
@@ -326,11 +340,11 @@ impl SimpleEmbeddingModel {
 #[async_trait]
 impl EmbeddingModel for SimpleEmbeddingModel {
     fn config(&self) -> &oxirs_embed::ModelConfig {
-        unimplemented!("Not implemented for simple model")
+        &self.config
     }
 
     fn model_id(&self) -> &uuid::Uuid {
-        unimplemented!("Not implemented for simple model")
+        &self.model_id
     }
 
     fn model_type(&self) -> &'static str {
@@ -341,8 +355,18 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         Ok(())
     }
 
-    async fn train(&mut self, _epochs: Option<usize>) -> Result<oxirs_embed::TrainingStats> {
-        unimplemented!("Not implemented for simple model")
+    async fn train(&mut self, epochs: Option<usize>) -> Result<oxirs_embed::TrainingStats> {
+        let epochs = epochs.unwrap_or(self.config.epochs);
+        
+        // Simple mock training for testing purposes
+        let stats = oxirs_embed::TrainingStats {
+            total_epochs: epochs,
+            final_loss: 0.1,
+            training_time_seconds: 1,
+            convergence_epoch: Some(epochs / 2),
+        };
+        
+        Ok(stats)
     }
 
     fn get_entity_embedding(&self, entity: &str) -> Result<EmbedVector> {

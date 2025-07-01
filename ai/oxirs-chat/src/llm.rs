@@ -20,9 +20,11 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::PathBuf,
-    time::{Duration, Instant},
+    sync::atomic::{AtomicUsize, AtomicU64, Ordering},
+    sync::Arc,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::{Mutex as TokioMutex, RwLock};
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 
@@ -33,6 +35,7 @@ pub struct LLMConfig {
     pub routing: RoutingConfig,
     pub fallback: FallbackConfig,
     pub rate_limits: RateLimitConfig,
+    pub circuit_breaker: CircuitBreakerConfig,
 }
 
 impl Default for LLMConfig {
@@ -46,6 +49,7 @@ impl Default for LLMConfig {
             routing: RoutingConfig::default(),
             fallback: FallbackConfig::default(),
             rate_limits: RateLimitConfig::default(),
+            circuit_breaker: CircuitBreakerConfig::default(),
         }
     }
 }
@@ -200,6 +204,231 @@ impl Default for RateLimitConfig {
     }
 }
 
+/// Circuit breaker configuration for resilient LLM API calls
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CircuitBreakerConfig {
+    /// Number of consecutive failures before opening the circuit
+    pub failure_threshold: usize,
+    /// Duration to keep circuit open before attempting recovery
+    pub timeout_duration: Duration,
+    /// Number of successful requests required to close the circuit
+    pub recovery_threshold: usize,
+    /// Maximum response time considered acceptable
+    pub slow_call_threshold: Duration,
+    /// Percentage of slow calls that triggers circuit opening
+    pub slow_call_rate_threshold: f32,
+    /// Window size for calculating failure rates
+    pub sliding_window_size: usize,
+}
+
+impl Default for CircuitBreakerConfig {
+    fn default() -> Self {
+        Self {
+            failure_threshold: 5,
+            timeout_duration: Duration::from_secs(60),
+            recovery_threshold: 3,
+            slow_call_threshold: Duration::from_secs(10),
+            slow_call_rate_threshold: 0.5, // 50%
+            sliding_window_size: 20,
+        }
+    }
+}
+
+/// Circuit breaker states
+#[derive(Debug, Clone, PartialEq)]
+pub enum CircuitBreakerState {
+    Closed,   // Normal operation
+    Open,     // Failing fast
+    HalfOpen, // Testing recovery
+}
+
+/// Circuit breaker for LLM provider calls
+pub struct CircuitBreaker {
+    state: Arc<RwLock<CircuitBreakerState>>,
+    config: CircuitBreakerConfig,
+    failure_count: AtomicUsize,
+    success_count: AtomicUsize,
+    last_failure_time: AtomicU64,
+    call_history: Arc<RwLock<Vec<CallResult>>>,
+}
+
+#[derive(Debug, Clone)]
+struct CallResult {
+    timestamp: Instant,
+    success: bool,
+    duration: Duration,
+}
+
+impl CircuitBreaker {
+    pub fn new(config: CircuitBreakerConfig) -> Self {
+        Self {
+            state: Arc::new(RwLock::new(CircuitBreakerState::Closed)),
+            config,
+            failure_count: AtomicUsize::new(0),
+            success_count: AtomicUsize::new(0),
+            last_failure_time: AtomicU64::new(0),
+            call_history: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    /// Check if a call should be allowed through the circuit breaker
+    pub async fn can_execute(&self) -> bool {
+        let state = self.state.read().await;
+        match *state {
+            CircuitBreakerState::Closed => true,
+            CircuitBreakerState::Open => {
+                // Check if timeout has passed
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                let last_failure = self.last_failure_time.load(Ordering::Relaxed);
+                
+                if now - last_failure >= self.config.timeout_duration.as_secs() {
+                    drop(state);
+                    self.transition_to_half_open().await;
+                    true
+                } else {
+                    false
+                }
+            }
+            CircuitBreakerState::HalfOpen => {
+                // Allow limited calls to test recovery
+                self.success_count.load(Ordering::Relaxed) < self.config.recovery_threshold
+            }
+        }
+    }
+
+    /// Record the result of a call
+    pub async fn record_result(&self, success: bool, duration: Duration) {
+        let now = Instant::now();
+        
+        // Add to call history
+        {
+            let mut history = self.call_history.write().await;
+            history.push(CallResult {
+                timestamp: now,
+                success,
+                duration,
+            });
+            
+            // Keep only recent calls
+            let cutoff = now - Duration::from_secs(300); // 5 minutes
+            history.retain(|call| call.timestamp > cutoff);
+            
+            // Maintain sliding window size
+            if history.len() > self.config.sliding_window_size {
+                history.remove(0);
+            }
+        }
+
+        let current_state = self.state.read().await.clone();
+        
+        if success {
+            self.success_count.fetch_add(1, Ordering::Relaxed);
+            self.failure_count.store(0, Ordering::Relaxed);
+            
+            // Transition to closed if we're in half-open and have enough successes
+            if current_state == CircuitBreakerState::HalfOpen &&
+               self.success_count.load(Ordering::Relaxed) >= self.config.recovery_threshold {
+                drop(current_state);
+                self.transition_to_closed().await;
+            }
+        } else {
+            self.failure_count.fetch_add(1, Ordering::Relaxed);
+            self.success_count.store(0, Ordering::Relaxed);
+            self.last_failure_time.store(
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                Ordering::Relaxed
+            );
+            
+            // Check if we should open the circuit
+            if self.should_open_circuit().await {
+                drop(current_state);
+                self.transition_to_open().await;
+            }
+        }
+    }
+
+    async fn should_open_circuit(&self) -> bool {
+        let failure_count = self.failure_count.load(Ordering::Relaxed);
+        
+        // Simple failure threshold check
+        if failure_count >= self.config.failure_threshold {
+            return true;
+        }
+
+        // Check slow call rate
+        let history = self.call_history.read().await;
+        if history.len() < self.config.sliding_window_size {
+            return false; // Not enough data
+        }
+
+        let slow_calls = history.iter()
+            .filter(|call| !call.success || call.duration > self.config.slow_call_threshold)
+            .count();
+        
+        let slow_call_rate = slow_calls as f32 / history.len() as f32;
+        slow_call_rate >= self.config.slow_call_rate_threshold
+    }
+
+    async fn transition_to_open(&self) {
+        let mut state = self.state.write().await;
+        *state = CircuitBreakerState::Open;
+        warn!("Circuit breaker opened - failing fast for LLM calls");
+    }
+
+    async fn transition_to_half_open(&self) {
+        let mut state = self.state.write().await;
+        *state = CircuitBreakerState::HalfOpen;
+        self.success_count.store(0, Ordering::Relaxed);
+        info!("Circuit breaker transitioned to half-open - testing recovery");
+    }
+
+    async fn transition_to_closed(&self) {
+        let mut state = self.state.write().await;
+        *state = CircuitBreakerState::Closed;
+        self.failure_count.store(0, Ordering::Relaxed);
+        self.success_count.store(0, Ordering::Relaxed);
+        info!("Circuit breaker closed - normal operation resumed");
+    }
+
+    /// Get current circuit breaker statistics
+    pub async fn get_stats(&self) -> CircuitBreakerStats {
+        let state = self.state.read().await.clone();
+        let history = self.call_history.read().await;
+        
+        let total_calls = history.len();
+        let successful_calls = history.iter().filter(|call| call.success).count();
+        let failed_calls = total_calls - successful_calls;
+        
+        let avg_response_time = if !history.is_empty() {
+            history.iter().map(|call| call.duration.as_millis()).sum::<u128>() / history.len() as u128
+        } else {
+            0
+        };
+
+        CircuitBreakerStats {
+            state,
+            total_calls,
+            successful_calls,
+            failed_calls,
+            failure_rate: if total_calls > 0 { failed_calls as f32 / total_calls as f32 } else { 0.0 },
+            avg_response_time_ms: avg_response_time as u64,
+            consecutive_failures: self.failure_count.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// Circuit breaker statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CircuitBreakerStats {
+    pub state: CircuitBreakerState,
+    pub total_calls: usize,
+    pub successful_calls: usize,
+    pub failed_calls: usize,
+    pub failure_rate: f32,
+    pub avg_response_time_ms: u64,
+    pub consecutive_failures: usize,
+}
+
 /// LLM request context
 #[derive(Debug, Clone)]
 pub struct LLMRequest {
@@ -302,6 +531,7 @@ pub struct LLMManager {
     config: LLMConfig,
     openai_client: Option<OpenAIClient<OpenAIConfig>>,
     providers: HashMap<String, Box<dyn LLMProvider + Send + Sync>>,
+    circuit_breakers: HashMap<String, Arc<CircuitBreaker>>,
     usage_tracker: TokioMutex<UsageTracker>,
 }
 
@@ -310,11 +540,13 @@ impl LLMManager {
         let mut manager = Self {
             openai_client: Self::create_openai_client(&config)?,
             providers: HashMap::new(),
+            circuit_breakers: HashMap::new(),
             usage_tracker: TokioMutex::new(UsageTracker::new()),
             config,
         };
 
         manager.initialize_providers()?;
+        manager.initialize_circuit_breakers();
         Ok(manager)
     }
 
@@ -356,8 +588,38 @@ impl LLMManager {
         Ok(())
     }
 
-    /// Generate response using intelligent routing
-    pub async fn generate_response(&self, request: LLMRequest) -> Result<LLMResponse> {
+    fn initialize_circuit_breakers(&mut self) {
+        // Initialize circuit breakers for each enabled provider
+        for (provider_name, provider_config) in &self.config.providers {
+            if provider_config.enabled {
+                let circuit_breaker = Arc::new(CircuitBreaker::new(self.config.circuit_breaker.clone()));
+                self.circuit_breakers.insert(provider_name.clone(), circuit_breaker);
+                info!("Initialized circuit breaker for provider: {}", provider_name);
+            }
+        }
+    }
+
+    /// Convenience method to generate response from a simple text prompt
+    pub async fn generate_response(&self, prompt: &str) -> Result<LLMResponse> {
+        let request = LLMRequest {
+            messages: vec![ChatMessage {
+                role: ChatRole::User,
+                content: prompt.to_string(),
+                metadata: None,
+            }],
+            system_prompt: None,
+            temperature: 0.7,
+            max_tokens: Some(2048),
+            use_case: UseCase::GeneralChat,
+            priority: Priority::Normal,
+            timeout: Some(Duration::from_secs(30)),
+        };
+        
+        self.generate_response_with_request(request).await
+    }
+
+    /// Generate response using intelligent routing with full request control
+    pub async fn generate_response_with_request(&self, request: LLMRequest) -> Result<LLMResponse> {
         let start_time = Instant::now();
 
         // Select the best provider and model
@@ -541,14 +803,63 @@ impl LLMManager {
         model_name: &str,
         request: &LLMRequest,
     ) -> Result<LLMResponse> {
-        if let Some(provider) = self.providers.get(provider_name) {
-            let timeout_duration = request.timeout.unwrap_or(Duration::from_secs(30));
+        // Get the circuit breaker for this provider
+        let circuit_breaker = self.circuit_breakers.get(provider_name)
+            .ok_or_else(|| anyhow!("No circuit breaker found for provider: {}", provider_name))?;
 
-            timeout(timeout_duration, provider.generate(model_name, request))
-                .await
-                .map_err(|_| anyhow!("Request timed out"))?
+        // Check if the circuit breaker allows the call
+        if !circuit_breaker.can_execute().await {
+            return Err(anyhow!("Circuit breaker is OPEN for provider: {} - failing fast", provider_name));
+        }
+
+        let provider = self.providers.get(provider_name)
+            .ok_or_else(|| anyhow!("Provider {} not found", provider_name))?;
+        
+        let timeout_duration = request.timeout.unwrap_or(Duration::from_secs(30));
+        let call_start = Instant::now();
+
+        // Execute the call with circuit breaker protection
+        let result = timeout(timeout_duration, provider.generate(model_name, request)).await;
+        
+        let call_duration = call_start.elapsed();
+        let is_success = result.is_ok();
+
+        // Record the result in the circuit breaker
+        circuit_breaker.record_result(is_success, call_duration).await;
+
+        // Handle the result
+        match result {
+            Ok(response) => response,
+            Err(_) => Err(anyhow!("Request timed out after {:?}", timeout_duration)),
+        }
+    }
+
+    /// Get circuit breaker statistics for all providers
+    pub async fn get_circuit_breaker_stats(&self) -> HashMap<String, CircuitBreakerStats> {
+        let mut stats = HashMap::new();
+        
+        for (provider_name, circuit_breaker) in &self.circuit_breakers {
+            let provider_stats = circuit_breaker.get_stats().await;
+            stats.insert(provider_name.clone(), provider_stats);
+            
+            debug!("Circuit breaker stats for {}: state={:?}, failure_rate={:.2}%, avg_response_time={}ms", 
+                   provider_name, 
+                   stats.get(provider_name).unwrap().state,
+                   stats.get(provider_name).unwrap().failure_rate * 100.0,
+                   stats.get(provider_name).unwrap().avg_response_time_ms);
+        }
+        
+        stats
+    }
+
+    /// Force reset a specific provider's circuit breaker (for debugging/recovery)
+    pub async fn reset_circuit_breaker(&self, provider_name: &str) -> Result<()> {
+        if let Some(circuit_breaker) = self.circuit_breakers.get(provider_name) {
+            circuit_breaker.transition_to_closed().await;
+            info!("Manually reset circuit breaker for provider: {}", provider_name);
+            Ok(())
         } else {
-            Err(anyhow!("Provider {} not found", provider_name))
+            Err(anyhow!("Circuit breaker not found for provider: {}", provider_name))
         }
     }
 

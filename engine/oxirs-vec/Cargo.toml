@@ -48,6 +48,8 @@ candle-core = { version = "0.9", optional = true }
 pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
 numpy = { version = "0.22", optional = true }
 uuid = { version = "1.11", features = ["v4"] }
+num_cpus = "1.16"
+humantime = "2.1"
 
 [dev-dependencies]
 criterion.workspace = true

@@ -10,11 +10,11 @@
 //! Run with: cargo run --example comprehensive_tutorial
 
 use anyhow::Result;
-use oxirs_rule::*;
 use oxirs_rule::debug::DebuggableRuleEngine;
-use oxirs_rule::rdfs::RdfsReasoner;
 use oxirs_rule::owl::OwlReasoner;
-use oxirs_rule::swrl::{SwrlEngine, SwrlRule, SwrlAtom, SwrlArgument};
+use oxirs_rule::rdfs::RdfsReasoner;
+use oxirs_rule::swrl::{SwrlArgument, SwrlAtom, SwrlEngine, SwrlRule};
+use oxirs_rule::*;
 use std::collections::HashMap;
 
 fn main() -> Result<()> {
@@ -23,19 +23,19 @@ fn main() -> Result<()> {
 
     // Demonstrate basic rule engine usage
     basic_rule_engine_example()?;
-    
+
     // Demonstrate debugging capabilities
     debugging_example()?;
-    
+
     // Demonstrate RDFS reasoning
     rdfs_reasoning_example()?;
-    
+
     // Demonstrate OWL reasoning
     owl_reasoning_example()?;
-    
+
     // Demonstrate SWRL rules
     swrl_reasoning_example()?;
-    
+
     // Demonstrate performance analysis
     performance_analysis_example()?;
 
@@ -118,8 +118,15 @@ fn basic_rule_engine_example() -> Result<()> {
     println!("\n🔄 Forward chaining results:");
     let forward_results = engine.forward_chain(&family_facts)?;
     for result in &forward_results {
-        if let RuleAtom::Triple { subject, predicate, object } = result {
-            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) = (subject, predicate, object) {
+        if let RuleAtom::Triple {
+            subject,
+            predicate,
+            object,
+        } = result
+        {
+            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
+                (subject, predicate, object)
+            {
                 if p == "ancestor" {
                     println!("  Derived: {} is ancestor of {}", s, o);
                 }
@@ -134,7 +141,7 @@ fn basic_rule_engine_example() -> Result<()> {
         predicate: Term::Constant("ancestor".to_string()),
         object: Term::Constant("sue".to_string()),
     };
-    
+
     engine.add_facts(family_facts);
     let can_prove = engine.backward_chain(&goal)?;
     println!("  Can prove john is ancestor of sue: {}", can_prove);
@@ -187,13 +194,13 @@ fn debugging_example() -> Result<()> {
 
     // Show debug information
     println!("Debug trace entries: {}", debug_engine.get_trace().len());
-    
+
     let metrics = debug_engine.get_metrics();
     println!("Performance metrics:");
     println!("  Execution time: {:?}", metrics.total_execution_time);
     println!("  Facts processed: {}", metrics.facts_processed);
     println!("  Facts derived: {}", metrics.facts_derived);
-    
+
     let conflicts = debug_engine.get_conflicts();
     println!("  Conflicts detected: {}", conflicts.len());
 
@@ -217,24 +224,32 @@ fn rdfs_reasoning_example() -> Result<()> {
         // Class hierarchy: Animal -> Mammal -> Dog
         RuleAtom::Triple {
             subject: Term::Constant("Mammal".to_string()),
-            predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string(),
+            ),
             object: Term::Constant("Animal".to_string()),
         },
         RuleAtom::Triple {
             subject: Term::Constant("Dog".to_string()),
-            predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string(),
+            ),
             object: Term::Constant("Mammal".to_string()),
         },
         // Property hierarchy: hasChild -> hasOffspring
         RuleAtom::Triple {
             subject: Term::Constant("hasChild".to_string()),
-            predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subPropertyOf".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/2000/01/rdf-schema#subPropertyOf".to_string(),
+            ),
             object: Term::Constant("hasOffspring".to_string()),
         },
         // Instance data
         RuleAtom::Triple {
             subject: Term::Constant("fido".to_string()),
-            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            ),
             object: Term::Constant("Dog".to_string()),
         },
         RuleAtom::Triple {
@@ -246,8 +261,15 @@ fn rdfs_reasoning_example() -> Result<()> {
 
     println!("Input RDFS facts:");
     for fact in &rdfs_facts {
-        if let RuleAtom::Triple { subject, predicate, object } = fact {
-            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) = (subject, predicate, object) {
+        if let RuleAtom::Triple {
+            subject,
+            predicate,
+            object,
+        } = fact
+        {
+            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
+                (subject, predicate, object)
+            {
                 let short_pred = p.split('#').last().unwrap_or(p);
                 println!("  {} {} {}", s, short_pred, o);
             }
@@ -259,8 +281,15 @@ fn rdfs_reasoning_example() -> Result<()> {
 
     println!("\n🧠 RDFS inferred facts:");
     for fact in &inferred_facts {
-        if let RuleAtom::Triple { subject, predicate, object } = fact {
-            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) = (subject, predicate, object) {
+        if let RuleAtom::Triple {
+            subject,
+            predicate,
+            object,
+        } = fact
+        {
+            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
+                (subject, predicate, object)
+            {
                 // Skip input facts, show only inferred ones
                 if !rdfs_facts.contains(fact) {
                     let short_pred = p.split('#').last().unwrap_or(p);
@@ -292,18 +321,24 @@ fn owl_reasoning_example() -> Result<()> {
         // Property characteristics
         RuleAtom::Triple {
             subject: Term::Constant("knows".to_string()),
-            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            ),
             object: Term::Constant("http://www.w3.org/2002/07/owl#SymmetricProperty".to_string()),
         },
         RuleAtom::Triple {
             subject: Term::Constant("ancestorOf".to_string()),
-            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            ),
             object: Term::Constant("http://www.w3.org/2002/07/owl#TransitiveProperty".to_string()),
         },
         // Instance data
         RuleAtom::Triple {
             subject: Term::Constant("alice".to_string()),
-            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            ),
             object: Term::Constant("Human".to_string()),
         },
         RuleAtom::Triple {
@@ -325,8 +360,15 @@ fn owl_reasoning_example() -> Result<()> {
 
     println!("Input OWL facts:");
     for fact in &owl_facts {
-        if let RuleAtom::Triple { subject, predicate, object } = fact {
-            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) = (subject, predicate, object) {
+        if let RuleAtom::Triple {
+            subject,
+            predicate,
+            object,
+        } = fact
+        {
+            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
+                (subject, predicate, object)
+            {
                 let short_pred = p.split('#').last().unwrap_or(p);
                 println!("  {} {} {}", s, short_pred, o);
             }
@@ -338,8 +380,15 @@ fn owl_reasoning_example() -> Result<()> {
 
     println!("\n🧠 OWL inferred facts:");
     for fact in &owl_inferred {
-        if let RuleAtom::Triple { subject, predicate, object } = fact {
-            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) = (subject, predicate, object) {
+        if let RuleAtom::Triple {
+            subject,
+            predicate,
+            object,
+        } = fact
+        {
+            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
+                (subject, predicate, object)
+            {
                 // Skip input facts, show only inferred ones
                 if !owl_facts.contains(fact) {
                     let short_pred = p.split('#').last().unwrap_or(p);
@@ -417,12 +466,16 @@ fn swrl_reasoning_example() -> Result<()> {
     let swrl_facts = vec![
         RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
-            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            ),
             object: Term::Constant("Person".to_string()),
         },
         RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
-            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            ),
             object: Term::Constant("Customer".to_string()),
         },
         RuleAtom::Triple {
@@ -432,7 +485,9 @@ fn swrl_reasoning_example() -> Result<()> {
         },
         RuleAtom::Triple {
             subject: Term::Constant("mary".to_string()),
-            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            ),
             object: Term::Constant("Person".to_string()),
         },
         RuleAtom::Triple {
@@ -444,8 +499,15 @@ fn swrl_reasoning_example() -> Result<()> {
 
     println!("Input facts:");
     for fact in &swrl_facts {
-        if let RuleAtom::Triple { subject, predicate, object } = fact {
-            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) = (subject, predicate, object) {
+        if let RuleAtom::Triple {
+            subject,
+            predicate,
+            object,
+        } = fact
+        {
+            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
+                (subject, predicate, object)
+            {
                 let short_pred = p.split('#').last().unwrap_or(p);
                 println!("  {} {} {}", s, short_pred, o);
             }
@@ -457,8 +519,15 @@ fn swrl_reasoning_example() -> Result<()> {
 
     println!("\n🧠 SWRL inferred facts:");
     for fact in &swrl_results {
-        if let RuleAtom::Triple { subject, predicate, object } = fact {
-            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) = (subject, predicate, object) {
+        if let RuleAtom::Triple {
+            subject,
+            predicate,
+            object,
+        } = fact
+        {
+            if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
+                (subject, predicate, object)
+            {
                 // Skip input facts, show only inferred ones
                 if !swrl_facts.contains(fact) {
                     let short_pred = p.split('#').last().unwrap_or(p);
@@ -509,7 +578,11 @@ fn performance_analysis_example() -> Result<()> {
         }
     }
 
-    println!("Processing {} facts with {} rules...", large_facts.len(), 10);
+    println!(
+        "Processing {} facts with {} rules...",
+        large_facts.len(),
+        10
+    );
 
     // Execute with performance monitoring
     let start = std::time::Instant::now();
@@ -523,7 +596,7 @@ fn performance_analysis_example() -> Result<()> {
     println!("  Facts processed: {}", metrics.facts_processed);
     println!("  Facts derived: {}", metrics.facts_derived);
     println!("  Memory peak: {} bytes", metrics.memory_peak);
-    
+
     // Show rule execution times
     println!("\n  Rule execution times:");
     let mut rule_times: Vec<_> = metrics.rule_execution_times.iter().collect();

@@ -1,5 +1,5 @@
 //! Comprehensive property-based testing for edge cases and error conditions
-//! 
+//!
 //! This test suite focuses on boundary conditions, error handling, and edge cases
 //! that might not be covered by the basic property tests.
 
@@ -68,27 +68,31 @@ fn deeply_nested_triple_strategy(max_depth: u32) -> BoxedStrategy<StarTriple> {
     if max_depth == 0 {
         (
             "http://example.org/s",
-            "http://example.org/p", 
-            "http://example.org/o"
-        ).prop_map(|(s, p, o)| {
-            StarTriple::new(
-                StarTerm::iri(s).unwrap(),
-                StarTerm::iri(p).unwrap(),
-                StarTerm::iri(o).unwrap(),
-            )
-        }).boxed()
+            "http://example.org/p",
+            "http://example.org/o",
+        )
+            .prop_map(|(s, p, o)| {
+                StarTriple::new(
+                    StarTerm::iri(s).unwrap(),
+                    StarTerm::iri(p).unwrap(),
+                    StarTerm::iri(o).unwrap(),
+                )
+            })
+            .boxed()
     } else {
         (
             deeply_nested_triple_strategy(max_depth - 1),
             "http://example.org/p",
             deeply_nested_triple_strategy(max_depth - 1),
-        ).prop_map(|(subject_triple, p, object_triple)| {
-            StarTriple::new(
-                StarTerm::quoted_triple(subject_triple),
-                StarTerm::iri(p).unwrap(),
-                StarTerm::quoted_triple(object_triple),
-            )
-        }).boxed()
+        )
+            .prop_map(|(subject_triple, p, object_triple)| {
+                StarTriple::new(
+                    StarTerm::quoted_triple(subject_triple),
+                    StarTerm::iri(p).unwrap(),
+                    StarTerm::quoted_triple(object_triple),
+                )
+            })
+            .boxed()
     }
 }
 
@@ -97,7 +101,7 @@ fn malformed_rdf_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
         // Missing closing brackets
         "<http://example.org/s> <http://example.org/p> <http://example.org/o",
-        // Extra closing brackets  
+        // Extra closing brackets
         "<http://example.org/s> <http://example.org/p> <http://example.org/o>> .",
         // Missing dots
         "<http://example.org/s> <http://example.org/p> <http://example.org/o>",
@@ -125,7 +129,7 @@ mod tests {
         fn test_invalid_iri_handling(iri in malformed_iri_strategy()) {
             // All malformed IRIs should be rejected
             let result = StarTerm::iri(&iri);
-            
+
             if result.is_ok() {
                 // If it somehow succeeds, it should validate properly
                 let term = result.unwrap();
@@ -141,7 +145,7 @@ mod tests {
         fn test_problematic_string_literals(value in invalid_literal_strategy()) {
             // Test that literal creation either succeeds or fails gracefully
             let result = StarTerm::literal(&value);
-            
+
             match result {
                 Ok(literal) => {
                     // If successful, should behave correctly
@@ -162,22 +166,22 @@ mod tests {
         fn test_extreme_nesting_depth(depth in 1u32..20) {
             // Test behavior with very deep nesting
             let triple_result = deeply_nested_triple_strategy(depth).new_tree(&mut TestRunner::default());
-            
+
             match triple_result {
                 Ok(triple_tree) => {
                     let triple = triple_tree.current();
-                    
+
                     // Should handle deep nesting gracefully
                     let computed_depth = triple.nesting_depth();
                     prop_assert!(computed_depth >= depth);
-                    
+
                     // Validation should still work
                     prop_assert!(triple.validate().is_ok());
-                    
+
                     // Should be serializable
                     let serialized = format!("{}", triple);
                     prop_assert!(!serialized.is_empty());
-                    
+
                     // Should count quoted triples correctly
                     let quoted_count = triple.count_quoted_triples();
                     prop_assert!(quoted_count > 0);
@@ -192,11 +196,11 @@ mod tests {
         #[test]
         fn test_malformed_rdf_parsing(content in malformed_rdf_strategy()) {
             let parser = StarParser::new();
-            
+
             // All formats should handle malformed input gracefully
             for format in [StarFormat::TurtleStar, StarFormat::NTriplesStar, StarFormat::NQuadsStar, StarFormat::TrigStar] {
                 let result = parser.parse_str(&content, format);
-                
+
                 match result {
                     Ok(graph) => {
                         // If parsing succeeds unexpectedly, graph should be valid
@@ -226,30 +230,30 @@ mod tests {
         ) {
             let mut graph = StarGraph::new();
             let mut inserted_count = 0;
-            
+
             // Insert all triples, tracking successful insertions
             for (s, p, o) in &triples {
                 let triple = StarTriple::new(
                     StarTerm::iri(s).unwrap(),
-                    StarTerm::iri(p).unwrap(), 
+                    StarTerm::iri(p).unwrap(),
                     StarTerm::iri(o).unwrap(),
                 );
-                
+
                 if graph.insert(triple).is_ok() {
                     inserted_count += 1;
                 }
             }
-            
+
             // Graph operations should be consistent
             prop_assert_eq!(graph.len(), inserted_count);
             prop_assert!(graph.total_len() >= inserted_count);
-            
+
             // Memory usage should be reasonable
             let stats = graph.statistics();
             if let Some(&triple_count) = stats.get("triples") {
                 prop_assert_eq!(triple_count, inserted_count);
             }
-            
+
             // Iteration should work
             let iterated_count = graph.iter().count();
             prop_assert_eq!(iterated_count, inserted_count);
@@ -258,28 +262,28 @@ mod tests {
         #[test]
         fn test_unicode_handling(
             subject in "[\\p{L}\\p{N}]+",
-            predicate in "[\\p{L}\\p{N}]+", 
+            predicate in "[\\p{L}\\p{N}]+",
             object in "[\\p{L}\\p{N}\\p{P}\\p{S}\\s]+"
         ) {
             // Test Unicode character handling in various positions
             let s_iri = format!("http://example.org/{}", subject);
             let p_iri = format!("http://example.org/{}", predicate);
-            
+
             let s_term = StarTerm::iri(&s_iri);
             let p_term = StarTerm::iri(&p_iri);
             let o_term = StarTerm::literal(&object);
-            
+
             if let (Ok(s), Ok(p), Ok(o)) = (s_term, p_term, o_term) {
                 let triple = StarTriple::new(s, p, o);
-                
+
                 // Should handle Unicode correctly
                 prop_assert!(triple.validate().is_ok());
-                
+
                 // Serialization should preserve Unicode
                 let serialized = format!("{}", triple);
                 prop_assert!(serialized.contains(&subject) || serialized.contains(&predicate));
                 prop_assert!(serialized.contains(&object));
-                
+
                 // Round-trip through string representation
                 let display_format = format!("{}", triple);
                 prop_assert!(!display_format.is_empty());
@@ -291,30 +295,30 @@ mod tests {
             // Stress test memory management with many operations
             let mut graph = StarGraph::new();
             let mut operation_count = 0;
-            
+
             for i in 0..operations {
                 let triple = StarTriple::new(
                     StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
                     StarTerm::iri("http://example.org/predicate").unwrap(),
                     StarTerm::literal(&format!("value{}", i)).unwrap(),
                 );
-                
+
                 // Insert
                 if graph.insert(triple.clone()).is_ok() {
                     operation_count += 1;
                 }
-                
+
                 // Occasionally remove to test memory cleanup
                 if i % 100 == 0 && i > 0 {
                     graph.remove(&triple);
                     operation_count -= 1;
                 }
             }
-            
+
             // Graph should maintain consistency
             prop_assert!(graph.len() <= operations);
             prop_assert!(graph.len() >= 0);
-            
+
             // Should be able to clear efficiently
             graph.clear();
             prop_assert_eq!(graph.len(), 0);
@@ -329,7 +333,7 @@ mod tests {
         ) {
             // Test patterns that might occur in concurrent scenarios
             let mut graph = StarGraph::new();
-            
+
             // Simulate mixed read/write operations
             for i in 0..operations {
                 let triple = StarTriple::new(
@@ -337,27 +341,27 @@ mod tests {
                     StarTerm::iri(&format!("http://example.org/p{}", i % 10)).unwrap(),
                     StarTerm::literal(&format!("value{}", i)).unwrap(),
                 );
-                
+
                 // Writers add data
                 if i % (readers + writers) < writers {
                     graph.insert(triple.clone()).ok();
                 }
-                
-                // Readers query data  
+
+                // Readers query data
                 for reader in 0..readers {
                     let query_triple = StarTriple::new(
                         StarTerm::iri(&format!("http://example.org/s{}", i.saturating_sub(reader))).unwrap(),
                         StarTerm::iri(&format!("http://example.org/p{}", (i.saturating_sub(reader)) % 10)).unwrap(),
                         StarTerm::literal(&format!("value{}", i.saturating_sub(reader))).unwrap(),
                     );
-                    
+
                     // Query operations should not fail
                     let _contains = graph.contains(&query_triple);
                     let _subjects: Vec<_> = graph.subjects().collect();
                     let _predicates: Vec<_> = graph.predicates().collect();
                 }
             }
-            
+
             // Graph should remain in valid state
             prop_assert!(graph.is_valid());
             prop_assert!(graph.len() <= operations);
@@ -372,15 +376,15 @@ mod tests {
         ) {
             let mut graph = StarGraph::new();
             let mut valid_triples = 0;
-            
+
             // Try to create triples from problematic strings
             for (s, p, o) in triples {
                 let s_iri = format!("http://example.org/{}", s.replace(' ', "_"));
                 let p_iri = format!("http://example.org/{}", p.replace(' ', "_"));
-                
+
                 if let (Ok(s_term), Ok(p_term), Ok(o_term)) = (
                     StarTerm::iri(&s_iri),
-                    StarTerm::iri(&p_iri), 
+                    StarTerm::iri(&p_iri),
                     StarTerm::literal(&o)
                 ) {
                     let triple = StarTriple::new(s_term, p_term, o_term);
@@ -389,11 +393,11 @@ mod tests {
                     }
                 }
             }
-            
+
             if valid_triples > 0 {
                 // Serialization should handle edge cases
                 let serializer = StarSerializer::new();
-                
+
                 // Try different formats
                 for format in [StarFormat::TurtleStar, StarFormat::NTriplesStar, StarFormat::NQuadsStar] {
                     match serializer.serialize_graph(&graph, format) {
@@ -426,7 +430,7 @@ mod tests {
     fn test_extremely_long_iri() {
         let very_long_path = "a".repeat(10_000);
         let long_iri = format!("http://example.org/{}", very_long_path);
-        
+
         let result = StarTerm::iri(&long_iri);
         match result {
             Ok(term) => assert!(term.is_named_node()),
@@ -437,7 +441,7 @@ mod tests {
     #[test]
     fn test_empty_graph_operations() {
         let graph = StarGraph::new();
-        
+
         // Empty graph operations should work correctly
         assert_eq!(graph.len(), 0);
         assert!(graph.is_empty());
@@ -445,7 +449,7 @@ mod tests {
         assert_eq!(graph.predicates().count(), 0);
         assert_eq!(graph.objects().count(), 0);
         assert_eq!(graph.iter().count(), 0);
-        
+
         // Statistics should be consistent
         let stats = graph.statistics();
         assert_eq!(stats.get("triples"), Some(&0));
@@ -470,7 +474,7 @@ mod tests {
                 ))
             }
         }
-        
+
         // Test various depths
         for depth in [10, 50, 100, 500, 1000] {
             match create_deeply_nested(depth) {
@@ -478,7 +482,7 @@ mod tests {
                     // Should handle reasonably deep nesting
                     assert!(triple.validate().is_ok());
                     assert!(triple.nesting_depth() >= depth);
-                },
+                }
                 None => {
                     // It's acceptable to fail at extreme depths
                     break;

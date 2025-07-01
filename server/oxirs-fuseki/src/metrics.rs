@@ -248,7 +248,8 @@ impl MetricsService {
 
         // Update Prometheus metrics
         let status_str = metrics.status.to_string();
-        counter!("http_requests_total", "method" => metrics.method.clone(), "status" => status_str).increment(1);
+        counter!("http_requests_total", "method" => metrics.method.clone(), "status" => status_str)
+            .increment(1);
         histogram!("http_request_duration_seconds", "method" => metrics.method.clone())
             .record(metrics.duration.as_secs_f64());
 

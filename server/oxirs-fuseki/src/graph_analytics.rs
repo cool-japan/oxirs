@@ -109,7 +109,8 @@ impl AnalysisGraph {
     /// Add node to graph
     pub fn add_node(&mut self, node: GraphNode) {
         self.adjacency_list.insert(node.id.clone(), Vec::new());
-        self.reverse_adjacency_list.insert(node.id.clone(), Vec::new());
+        self.reverse_adjacency_list
+            .insert(node.id.clone(), Vec::new());
         self.nodes.insert(node.id.clone(), node);
     }
 
@@ -120,7 +121,7 @@ impl AnalysisGraph {
             .entry(edge.source.clone())
             .or_insert_with(Vec::new)
             .push(edge.target.clone());
-        
+
         self.reverse_adjacency_list
             .entry(edge.target.clone())
             .or_insert_with(Vec::new)
@@ -128,7 +129,8 @@ impl AnalysisGraph {
 
         // Store edge weight
         let weight = edge.weight.unwrap_or(1.0);
-        self.edge_weights.insert((edge.source.clone(), edge.target.clone()), weight);
+        self.edge_weights
+            .insert((edge.source.clone(), edge.target.clone()), weight);
 
         self.edges.push(edge);
     }
@@ -151,7 +153,10 @@ impl AnalysisGraph {
 
     /// Get edge weight
     pub fn get_edge_weight(&self, source: &str, target: &str) -> f64 {
-        self.edge_weights.get(&(source.to_string(), target.to_string())).copied().unwrap_or(1.0)
+        self.edge_weights
+            .get(&(source.to_string(), target.to_string()))
+            .copied()
+            .unwrap_or(1.0)
     }
 
     /// Get graph statistics
@@ -275,10 +280,10 @@ impl GraphAnalyticsEngine {
     #[instrument(skip(self))]
     pub async fn extract_graph(&self, graph_uri: Option<&str>) -> FusekiResult<AnalysisGraph> {
         info!("Extracting graph for analysis");
-        
+
         // This is a simplified implementation - in practice, you'd query the RDF store
         let mut graph = AnalysisGraph::new();
-        
+
         // Add sample nodes and edges for demonstration
         for i in 1..=100 {
             let node = GraphNode {
@@ -290,7 +295,7 @@ impl GraphAnalyticsEngine {
             };
             graph.add_node(node);
         }
-        
+
         // Add sample edges
         for i in 1..=100 {
             for j in 1..=3 {
@@ -307,96 +312,107 @@ impl GraphAnalyticsEngine {
                 }
             }
         }
-        
-        info!("Graph extracted: {} nodes, {} edges", graph.nodes.len(), graph.edges.len());
+
+        info!(
+            "Graph extracted: {} nodes, {} edges",
+            graph.nodes.len(),
+            graph.edges.len()
+        );
         Ok(graph)
     }
 
     /// Compute PageRank centrality
     #[instrument(skip(self, graph))]
-    pub async fn compute_pagerank(&self, graph: &AnalysisGraph, damping_factor: f64) -> FusekiResult<HashMap<String, f64>> {
+    pub async fn compute_pagerank(
+        &self,
+        graph: &AnalysisGraph,
+        damping_factor: f64,
+    ) -> FusekiResult<HashMap<String, f64>> {
         info!("Computing PageRank centrality");
-        
+
         let nodes: Vec<&String> = graph.nodes.keys().collect();
         let node_count = nodes.len();
-        
+
         if node_count == 0 {
             return Ok(HashMap::new());
         }
-        
+
         let mut pagerank = HashMap::new();
         let mut new_pagerank = HashMap::new();
-        
+
         // Initialize PageRank values
         let initial_value = 1.0 / node_count as f64;
         for node_id in &nodes {
             pagerank.insert((*node_id).clone(), initial_value);
         }
-        
+
         // Iterative computation
         for iteration in 0..self.config.max_iterations {
             let mut max_change = 0.0;
-            
+
             for node_id in &nodes {
                 let mut rank = (1.0 - damping_factor) / node_count as f64;
-                
+
                 // Sum contributions from incoming edges
                 for neighbor in graph.get_incoming_neighbors(node_id) {
                     let neighbor_rank = pagerank.get(neighbor).copied().unwrap_or(0.0);
                     let neighbor_out_degree = graph.get_neighbors(neighbor).len() as f64;
-                    
+
                     if neighbor_out_degree > 0.0 {
                         rank += damping_factor * neighbor_rank / neighbor_out_degree;
                     }
                 }
-                
+
                 let old_rank = pagerank.get(*node_id).copied().unwrap_or(0.0);
                 let change = (rank - old_rank).abs();
                 max_change = max_change.max(change);
-                
+
                 new_pagerank.insert((*node_id).clone(), rank);
             }
-            
+
             pagerank = new_pagerank.clone();
-            
+
             // Check convergence
             if max_change < self.config.convergence_threshold {
                 info!("PageRank converged after {} iterations", iteration + 1);
                 break;
             }
         }
-        
+
         Ok(pagerank)
     }
 
     /// Compute betweenness centrality
     #[instrument(skip(self, graph))]
-    pub async fn compute_betweenness_centrality(&self, graph: &AnalysisGraph) -> FusekiResult<HashMap<String, f64>> {
+    pub async fn compute_betweenness_centrality(
+        &self,
+        graph: &AnalysisGraph,
+    ) -> FusekiResult<HashMap<String, f64>> {
         info!("Computing betweenness centrality");
-        
+
         let nodes: Vec<&String> = graph.nodes.keys().collect();
         let mut betweenness = HashMap::new();
-        
+
         // Initialize betweenness scores
         for node_id in &nodes {
             betweenness.insert((*node_id).clone(), 0.0);
         }
-        
+
         // For each node as source
         for source in &nodes {
             let shortest_paths = self.compute_shortest_paths(graph, source).await?;
-            
+
             // For each target
             for target in &nodes {
                 if source == target {
                     continue;
                 }
-                
+
                 if let Some(paths) = shortest_paths.get(*target) {
                     if paths.len() > 1 {
                         // Multiple shortest paths exist
                         let path_weight = 1.0 / paths.len() as f64;
-                        
+
                         for path in paths {
                             // Add contribution to intermediate nodes
                             for i in 1..path.len() - 1 {
@@ -410,39 +426,43 @@ impl GraphAnalyticsEngine {
                 }
             }
         }
-        
+
         // Normalize by the number of pairs
         let n = nodes.len() as f64;
         let normalization_factor = 2.0 / ((n - 1.0) * (n - 2.0));
-        
+
         for score in betweenness.values_mut() {
             *score *= normalization_factor;
         }
-        
+
         Ok(betweenness)
     }
 
     /// Compute shortest paths from a source node
-    async fn compute_shortest_paths(&self, graph: &AnalysisGraph, source: &str) -> FusekiResult<HashMap<String, Vec<Vec<String>>>> {
+    async fn compute_shortest_paths(
+        &self,
+        graph: &AnalysisGraph,
+        source: &str,
+    ) -> FusekiResult<HashMap<String, Vec<Vec<String>>>> {
         let mut distances = HashMap::new();
         let mut paths = HashMap::new();
         let mut queue = VecDeque::new();
-        
+
         distances.insert(source.to_string(), 0);
         paths.insert(source.to_string(), vec![vec![source.to_string()]]);
         queue.push_back(source.to_string());
-        
+
         while let Some(current) = queue.pop_front() {
             let current_distance = distances[&current];
-            
+
             for neighbor in graph.get_neighbors(&current) {
                 let new_distance = current_distance + 1;
-                
+
                 match distances.get(neighbor) {
                     None => {
                         // First time visiting this node
                         distances.insert(neighbor.clone(), new_distance);
-                        
+
                         let mut new_paths = Vec::new();
                         for path in &paths[&current] {
                             let mut new_path = path.clone();
@@ -468,39 +488,42 @@ impl GraphAnalyticsEngine {
                 }
             }
         }
-        
+
         Ok(paths)
     }
 
     /// Detect communities using Louvain algorithm
     #[instrument(skip(self, graph))]
-    pub async fn detect_communities_louvain(&self, graph: &AnalysisGraph) -> FusekiResult<CommunityDetectionResult> {
+    pub async fn detect_communities_louvain(
+        &self,
+        graph: &AnalysisGraph,
+    ) -> FusekiResult<CommunityDetectionResult> {
         info!("Detecting communities using Louvain algorithm");
-        
+
         let nodes: Vec<String> = graph.nodes.keys().cloned().collect();
         let mut node_communities = HashMap::new();
-        
+
         // Initially, each node is in its own community
         for (i, node_id) in nodes.iter().enumerate() {
             node_communities.insert(node_id.clone(), i);
         }
-        
+
         let mut improved = true;
         let mut iteration = 0;
-        
+
         while improved && iteration < self.config.max_iterations {
             improved = false;
             iteration += 1;
-            
+
             for node_id in &nodes {
                 let current_community = node_communities[node_id];
                 let mut best_community = current_community;
                 let mut best_modularity_gain = 0.0;
-                
+
                 // Try moving to neighbors' communities
                 for neighbor in graph.get_neighbors(node_id) {
                     let neighbor_community = node_communities[neighbor];
-                    
+
                     if neighbor_community != current_community {
                         let modularity_gain = self.calculate_modularity_gain(
                             graph,
@@ -509,14 +532,14 @@ impl GraphAnalyticsEngine {
                             neighbor_community,
                             &node_communities,
                         );
-                        
+
                         if modularity_gain > best_modularity_gain {
                             best_modularity_gain = modularity_gain;
                             best_community = neighbor_community;
                         }
                     }
                 }
-                
+
                 // Move node to best community if it improves modularity
                 if best_community != current_community && best_modularity_gain > 0.0 {
                     node_communities.insert(node_id.clone(), best_community);
@@ -524,32 +547,32 @@ impl GraphAnalyticsEngine {
                 }
             }
         }
-        
+
         // Renumber communities to be consecutive
         let mut community_map = HashMap::new();
         let mut next_community_id = 0;
-        
+
         for community_id in node_communities.values() {
             if !community_map.contains_key(community_id) {
                 community_map.insert(*community_id, next_community_id);
                 next_community_id += 1;
             }
         }
-        
+
         // Update node communities with new numbering
         for community_id in node_communities.values_mut() {
             *community_id = community_map[community_id];
         }
-        
+
         // Calculate community sizes
         let mut community_sizes = HashMap::new();
         for &community_id in node_communities.values() {
             *community_sizes.entry(community_id).or_insert(0) += 1;
         }
-        
+
         // Calculate final modularity
         let modularity = self.calculate_modularity(graph, &node_communities);
-        
+
         Ok(CommunityDetectionResult {
             node_communities,
             community_sizes,
@@ -569,14 +592,14 @@ impl GraphAnalyticsEngine {
     ) -> f64 {
         // Simplified modularity gain calculation
         // In practice, this would be more sophisticated
-        
+
         let mut gain = 0.0;
         let total_edges = graph.edges.len() as f64;
-        
+
         // Count edges within communities
         for neighbor in graph.get_neighbors(node_id) {
             let neighbor_community = node_communities[neighbor];
-            
+
             if neighbor_community == to_community {
                 gain += 1.0 / total_edges;
             }
@@ -584,74 +607,86 @@ impl GraphAnalyticsEngine {
                 gain -= 1.0 / total_edges;
             }
         }
-        
+
         gain
     }
 
     /// Calculate modularity of the current community assignment
-    fn calculate_modularity(&self, graph: &AnalysisGraph, node_communities: &HashMap<String, usize>) -> f64 {
+    fn calculate_modularity(
+        &self,
+        graph: &AnalysisGraph,
+        node_communities: &HashMap<String, usize>,
+    ) -> f64 {
         let total_edges = graph.edges.len() as f64;
         if total_edges == 0.0 {
             return 0.0;
         }
-        
+
         let mut modularity = 0.0;
-        
+
         for edge in &graph.edges {
             let source_community = node_communities.get(&edge.source).copied().unwrap_or(0);
             let target_community = node_communities.get(&edge.target).copied().unwrap_or(0);
-            
+
             if source_community == target_community {
                 modularity += 1.0;
             }
         }
-        
+
         modularity / total_edges - 0.5 // Simplified calculation
     }
 
     /// Compute all centrality metrics for all nodes
     #[instrument(skip(self, graph))]
-    pub async fn compute_all_centrality_metrics(&self, graph: &AnalysisGraph) -> FusekiResult<Vec<CentralityMetrics>> {
+    pub async fn compute_all_centrality_metrics(
+        &self,
+        graph: &AnalysisGraph,
+    ) -> FusekiResult<Vec<CentralityMetrics>> {
         info!("Computing all centrality metrics");
-        
+
         // Compute PageRank
         let pagerank = self.compute_pagerank(graph, 0.85).await?;
-        
+
         // Compute betweenness centrality
         let betweenness = self.compute_betweenness_centrality(graph).await?;
-        
+
         // Compute degree centralities
         let mut results = Vec::new();
-        
+
         for node_id in graph.nodes.keys() {
             let in_degree = graph.get_incoming_neighbors(node_id).len() as f64;
             let out_degree = graph.get_neighbors(node_id).len() as f64;
-            
+
             let metrics = CentralityMetrics {
                 node_id: node_id.clone(),
                 pagerank: pagerank.get(node_id).copied().unwrap_or(0.0),
                 betweenness: betweenness.get(node_id).copied().unwrap_or(0.0),
-                closeness: 0.0, // TODO: Implement closeness centrality
+                closeness: 0.0,   // TODO: Implement closeness centrality
                 eigenvector: 0.0, // TODO: Implement eigenvector centrality
                 in_degree,
                 out_degree,
             };
-            
+
             results.push(metrics);
         }
-        
+
         Ok(results)
     }
 
     /// Find shortest path between two nodes
     #[instrument(skip(self, graph))]
-    pub async fn find_shortest_path(&self, graph: &AnalysisGraph, source: &str, target: &str) -> FusekiResult<PathAnalysisResult> {
+    pub async fn find_shortest_path(
+        &self,
+        graph: &AnalysisGraph,
+        source: &str,
+        target: &str,
+    ) -> FusekiResult<PathAnalysisResult> {
         let paths = self.compute_shortest_paths(graph, source).await?;
-        
+
         if let Some(target_paths) = paths.get(target) {
             let shortest_path = target_paths[0].clone();
             let path_length = shortest_path.len() - 1;
-            
+
             Ok(PathAnalysisResult {
                 source: source.to_string(),
                 target: target.to_string(),
@@ -685,7 +720,7 @@ impl GraphAnalyticsEngine {
         if self.config.enable_caching {
             let mut cache = self.cache.write().await;
             cache.insert(key, value);
-            
+
             // Simple cache eviction
             if cache.len() > 100 {
                 let keys_to_remove: Vec<String> = cache.keys().take(20).cloned().collect();
@@ -704,7 +739,7 @@ mod tests {
     #[test]
     fn test_graph_creation() {
         let mut graph = AnalysisGraph::new();
-        
+
         let node1 = GraphNode {
             id: "node1".to_string(),
             label: Some("Node 1".to_string()),
@@ -712,7 +747,7 @@ mod tests {
             out_edges: Vec::new(),
             in_edges: Vec::new(),
         };
-        
+
         let node2 = GraphNode {
             id: "node2".to_string(),
             label: Some("Node 2".to_string()),
@@ -720,10 +755,10 @@ mod tests {
             out_edges: Vec::new(),
             in_edges: Vec::new(),
         };
-        
+
         graph.add_node(node1);
         graph.add_node(node2);
-        
+
         let edge = GraphEdge {
             source: "node1".to_string(),
             target: "node2".to_string(),
@@ -731,9 +766,9 @@ mod tests {
             weight: Some(1.0),
             properties: HashMap::new(),
         };
-        
+
         graph.add_edge(edge);
-        
+
         assert_eq!(graph.nodes.len(), 2);
         assert_eq!(graph.edges.len(), 1);
         assert_eq!(graph.get_neighbors("node1").len(), 1);
@@ -743,7 +778,7 @@ mod tests {
     #[test]
     fn test_graph_statistics() {
         let mut graph = AnalysisGraph::new();
-        
+
         for i in 1..=5 {
             let node = GraphNode {
                 id: format!("node{}", i),
@@ -754,7 +789,7 @@ mod tests {
             };
             graph.add_node(node);
         }
-        
+
         // Add edges to form a simple cycle
         for i in 1..=5 {
             let edge = GraphEdge {
@@ -766,7 +801,7 @@ mod tests {
             };
             graph.add_edge(edge);
         }
-        
+
         let stats = graph.get_statistics();
         assert_eq!(stats.node_count, 5);
         assert_eq!(stats.edge_count, 5);

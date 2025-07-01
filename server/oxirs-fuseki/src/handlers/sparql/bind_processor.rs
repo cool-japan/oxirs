@@ -75,16 +75,16 @@ impl EnhancedBindProcessor {
     /// Process BIND clauses in a query
     pub fn process_bind_clauses(&mut self, query: &str) -> FusekiResult<String> {
         let mut processed = query.to_string();
-        
+
         // Find all BIND clauses
         let bind_clauses = self.extract_bind_clauses(&processed)?;
-        
+
         for bind_clause in bind_clauses {
             if let Some(optimized) = self.optimize_bind_clause(&bind_clause)? {
                 processed = processed.replace(&bind_clause, &optimized);
             }
         }
-        
+
         Ok(processed)
     }
 
@@ -92,7 +92,7 @@ impl EnhancedBindProcessor {
     fn extract_bind_clauses(&self, query: &str) -> FusekiResult<Vec<String>> {
         let mut clauses = Vec::new();
         let mut pos = 0;
-        
+
         while let Some(bind_pos) = query[pos..].find("BIND(") {
             let abs_pos = pos + bind_pos;
             if let Some(clause) = self.extract_complete_bind(&query[abs_pos..]) {
@@ -102,7 +102,7 @@ impl EnhancedBindProcessor {
                 break;
             }
         }
-        
+
         Ok(clauses)
     }
 
@@ -111,13 +111,13 @@ impl EnhancedBindProcessor {
         let mut paren_count = 0;
         let mut in_string = false;
         let mut escape_next = false;
-        
+
         for (i, ch) in text.char_indices() {
             if escape_next {
                 escape_next = false;
                 continue;
             }
-            
+
             match ch {
                 '\\' => escape_next = true,
                 '"' | '\'' => in_string = !in_string,
@@ -128,7 +128,9 @@ impl EnhancedBindProcessor {
                         // Look for " AS ?var" part
                         let remaining = &text[i + 1..];
                         if let Some(as_match) = remaining.find(" AS ") {
-                            if let Some(var_end) = remaining[as_match + 4..].find(|c: char| c.is_whitespace() || c == ')' || c == '}') {
+                            if let Some(var_end) = remaining[as_match + 4..]
+                                .find(|c: char| c.is_whitespace() || c == ')' || c == '}')
+                            {
                                 return Some(text[..i + 1 + as_match + 4 + var_end].to_string());
                             }
                         }
@@ -138,7 +140,7 @@ impl EnhancedBindProcessor {
                 _ => {}
             }
         }
-        
+
         None
     }
 
@@ -151,10 +153,10 @@ impl EnhancedBindProcessor {
 
         // Parse the BIND clause
         let (expression, variable) = self.parse_bind_clause(bind_clause)?;
-        
+
         // Optimize the expression
         let optimized_expr = self.optimize_expression(&expression)?;
-        
+
         // Reconstruct BIND clause
         let optimized_bind = if optimized_expr != expression {
             format!("BIND({} AS {})", optimized_expr, variable)
@@ -180,44 +182,45 @@ impl EnhancedBindProcessor {
     /// Parse BIND clause to extract expression and variable
     fn parse_bind_clause(&self, bind_clause: &str) -> FusekiResult<(String, String)> {
         // Find the expression between BIND( and AS
-        let start = bind_clause.find("BIND(").ok_or_else(|| {
-            crate::error::FusekiError::query_parsing("Invalid BIND clause")
-        })? + 5;
-        
-        let as_pos = bind_clause.find(" AS ").ok_or_else(|| {
-            crate::error::FusekiError::query_parsing("BIND clause missing AS")
-        })?;
-        
+        let start = bind_clause
+            .find("BIND(")
+            .ok_or_else(|| crate::error::FusekiError::query_parsing("Invalid BIND clause"))?
+            + 5;
+
+        let as_pos = bind_clause
+            .find(" AS ")
+            .ok_or_else(|| crate::error::FusekiError::query_parsing("BIND clause missing AS"))?;
+
         let expression = bind_clause[start..as_pos].trim().to_string();
-        
+
         // Extract variable
         let var_start = as_pos + 4;
         let var_end = bind_clause.len() - 1; // Remove closing )
         let variable = bind_clause[var_start..var_end].trim().to_string();
-        
+
         Ok((expression, variable))
     }
 
     /// Optimize an expression
     fn optimize_expression(&self, expression: &str) -> FusekiResult<String> {
         let mut optimized = expression.to_string();
-        
+
         // Apply constant folding
         optimized = self.constant_folder.fold_constants(&optimized)?;
-        
+
         // Apply algebraic simplifications
         optimized = self.apply_algebraic_simplifications(&optimized)?;
-        
+
         // Apply function optimizations
         optimized = self.optimize_functions(&optimized)?;
-        
+
         Ok(optimized)
     }
 
     /// Apply algebraic simplifications
     fn apply_algebraic_simplifications(&self, expression: &str) -> FusekiResult<String> {
         let mut simplified = expression.to_string();
-        
+
         // Simple algebraic rules
         simplified = simplified.replace("(?x + 0)", "?x");
         simplified = simplified.replace("(0 + ?x)", "?x");
@@ -225,24 +228,24 @@ impl EnhancedBindProcessor {
         simplified = simplified.replace("(1 * ?x)", "?x");
         simplified = simplified.replace("(?x * 0)", "0");
         simplified = simplified.replace("(0 * ?x)", "0");
-        
+
         Ok(simplified)
     }
 
     /// Optimize function calls in expressions
     fn optimize_functions(&self, expression: &str) -> FusekiResult<String> {
         let mut optimized = expression.to_string();
-        
+
         // Optimize CONCAT calls
         if optimized.contains("CONCAT(") {
             optimized = self.optimize_concat(&optimized)?;
         }
-        
+
         // Optimize SUBSTR calls
         if optimized.contains("SUBSTR(") {
             optimized = self.optimize_substr(&optimized)?;
         }
-        
+
         Ok(optimized)
     }
 
@@ -267,18 +270,18 @@ impl EnhancedBindProcessor {
     /// Estimate expression execution cost
     fn estimate_expression_cost(&self, expression: &str) -> f64 {
         let mut cost = 1.0;
-        
+
         // Count function calls
         cost += expression.matches("CONCAT(").count() as f64 * 2.0;
         cost += expression.matches("SUBSTR(").count() as f64 * 1.5;
         cost += expression.matches("REGEX(").count() as f64 * 10.0;
-        
+
         // Count arithmetic operations
         cost += expression.matches('+').count() as f64 * 0.1;
         cost += expression.matches('-').count() as f64 * 0.1;
         cost += expression.matches('*').count() as f64 * 0.2;
         cost += expression.matches('/').count() as f64 * 0.3;
-        
+
         cost
     }
 
@@ -286,7 +289,7 @@ impl EnhancedBindProcessor {
     fn extract_variables(&self, expression: &str) -> Vec<String> {
         let mut variables = Vec::new();
         let mut chars = expression.chars().peekable();
-        
+
         while let Some(ch) = chars.next() {
             if ch == '?' {
                 let mut var_name = String::new();
@@ -302,7 +305,7 @@ impl EnhancedBindProcessor {
                 }
             }
         }
-        
+
         variables
     }
 }
@@ -318,16 +321,16 @@ impl EnhancedValuesProcessor {
     /// Process VALUES clauses in a query
     pub fn process_values_clauses(&mut self, query: &str) -> FusekiResult<String> {
         let mut processed = query.to_string();
-        
+
         // Find all VALUES clauses
         let values_clauses = self.extract_values_clauses(&processed)?;
-        
+
         for values_clause in values_clauses {
             if let Some(optimized) = self.optimize_values_clause(&values_clause)? {
                 processed = processed.replace(&values_clause, &optimized);
             }
         }
-        
+
         Ok(processed)
     }
 
@@ -335,7 +338,7 @@ impl EnhancedValuesProcessor {
     fn extract_values_clauses(&self, query: &str) -> FusekiResult<Vec<String>> {
         let mut clauses = Vec::new();
         let mut pos = 0;
-        
+
         while let Some(values_pos) = query[pos..].find("VALUES") {
             let abs_pos = pos + values_pos;
             if let Some(clause) = self.extract_complete_values(&query[abs_pos..]) {
@@ -345,7 +348,7 @@ impl EnhancedValuesProcessor {
                 break;
             }
         }
-        
+
         Ok(clauses)
     }
 
@@ -354,7 +357,7 @@ impl EnhancedValuesProcessor {
         if let Some(brace_start) = text.find('{') {
             let mut brace_count = 0;
             let mut end_pos = brace_start;
-            
+
             for (i, ch) in text[brace_start..].char_indices() {
                 match ch {
                     '{' => brace_count += 1,
@@ -368,7 +371,7 @@ impl EnhancedValuesProcessor {
                     _ => {}
                 }
             }
-            
+
             if end_pos > brace_start {
                 Some(text[..end_pos].to_string())
             } else {
@@ -388,10 +391,12 @@ impl EnhancedValuesProcessor {
 
         // Parse VALUES clause
         let (variables, rows) = self.parse_values_clause(values_clause)?;
-        
+
         // Estimate selectivity
-        let selectivity = self.selectivity_estimator.estimate_selectivity(&variables, &rows);
-        
+        let selectivity = self
+            .selectivity_estimator
+            .estimate_selectivity(&variables, &rows);
+
         // Optimize based on selectivity and size
         let optimized = if rows.len() > 1000 {
             // Large VALUES clause - consider materialization
@@ -423,11 +428,14 @@ impl EnhancedValuesProcessor {
     }
 
     /// Parse VALUES clause to extract variables and rows
-    fn parse_values_clause(&self, values_clause: &str) -> FusekiResult<(Vec<String>, Vec<Vec<String>>)> {
+    fn parse_values_clause(
+        &self,
+        values_clause: &str,
+    ) -> FusekiResult<(Vec<String>, Vec<Vec<String>>)> {
         // Simplified parsing - would need proper SPARQL parser in production
         let mut variables = Vec::new();
         let mut rows = Vec::new();
-        
+
         // Extract variables (after VALUES and before {)
         if let Some(values_pos) = values_clause.find("VALUES") {
             if let Some(brace_pos) = values_clause.find('{') {
@@ -439,7 +447,7 @@ impl EnhancedValuesProcessor {
                 }
             }
         }
-        
+
         // Extract rows (simplified)
         let rows_section = if let Some(start) = values_clause.find('{') {
             if let Some(end) = values_clause.rfind('}') {
@@ -450,22 +458,20 @@ impl EnhancedValuesProcessor {
         } else {
             ""
         };
-        
+
         // Parse individual rows (very simplified)
         for line in rows_section.lines() {
             let line = line.trim();
             if line.starts_with('(') && line.ends_with(')') {
                 let row_data = &line[1..line.len() - 1];
-                let values: Vec<String> = row_data
-                    .split_whitespace()
-                    .map(|s| s.to_string())
-                    .collect();
+                let values: Vec<String> =
+                    row_data.split_whitespace().map(|s| s.to_string()).collect();
                 if values.len() == variables.len() {
                     rows.push(values);
                 }
             }
         }
-        
+
         Ok((variables, rows))
     }
 }
@@ -481,37 +487,37 @@ impl ConstantFolder {
     /// Fold constants in an expression
     pub fn fold_constants(&self, expression: &str) -> FusekiResult<String> {
         let mut folded = expression.to_string();
-        
+
         // Fold numeric constants
         folded = self.fold_numeric_operations(&folded)?;
-        
+
         // Fold string operations
         folded = self.fold_string_operations(&folded)?;
-        
+
         Ok(folded)
     }
 
     /// Fold numeric operations
     fn fold_numeric_operations(&self, expression: &str) -> FusekiResult<String> {
         let mut folded = expression.to_string();
-        
+
         // Simple constant folding patterns
         if let Some(result) = self.evaluate_simple_arithmetic(&folded) {
             folded = result;
         }
-        
+
         Ok(folded)
     }
 
     /// Fold string operations
     fn fold_string_operations(&self, expression: &str) -> FusekiResult<String> {
         let mut folded = expression.to_string();
-        
+
         // Fold string concatenations
         if folded.contains("CONCAT(\"") {
             folded = self.fold_string_concat(&folded)?;
         }
-        
+
         Ok(folded)
     }
 
@@ -546,17 +552,17 @@ impl SelectivityEstimator {
     pub fn estimate_selectivity(&self, _variables: &[String], rows: &[Vec<String>]) -> f64 {
         // Simple selectivity estimation based on row count
         let row_count = rows.len() as f64;
-        
+
         if row_count == 0.0 {
             0.0
         } else if row_count == 1.0 {
             0.001 // Very selective
         } else if row_count < 10.0 {
-            0.01  // Selective
+            0.01 // Selective
         } else if row_count < 100.0 {
-            0.1   // Moderately selective
+            0.1 // Moderately selective
         } else {
-            0.5   // Not very selective
+            0.5 // Not very selective
         }
     }
 }
@@ -568,7 +574,7 @@ mod tests {
     #[test]
     fn test_bind_processing() {
         let mut processor = EnhancedBindProcessor::new();
-        
+
         let query = "SELECT ?result WHERE { BIND((?x + 1) AS ?result) }";
         let result = processor.process_bind_clauses(query).unwrap();
         assert!(result.contains("BIND"));
@@ -577,7 +583,7 @@ mod tests {
     #[test]
     fn test_values_processing() {
         let mut processor = EnhancedValuesProcessor::new();
-        
+
         let query = "SELECT ?x WHERE { VALUES ?x { \"a\" \"b\" \"c\" } }";
         let result = processor.process_values_clauses(query).unwrap();
         assert!(result.contains("VALUES"));
@@ -586,7 +592,7 @@ mod tests {
     #[test]
     fn test_constant_folding() {
         let folder = ConstantFolder::new();
-        
+
         let expression = "(1 + 1)";
         let result = folder.fold_constants(expression).unwrap();
         assert_eq!(result, "2");
@@ -595,10 +601,10 @@ mod tests {
     #[test]
     fn test_selectivity_estimation() {
         let estimator = SelectivityEstimator::new();
-        
+
         let variables = vec!["?x".to_string()];
         let rows = vec![vec!["\"a\"".to_string()], vec!["\"b\"".to_string()]];
-        
+
         let selectivity = estimator.estimate_selectivity(&variables, &rows);
         assert!(selectivity > 0.0 && selectivity <= 1.0);
     }

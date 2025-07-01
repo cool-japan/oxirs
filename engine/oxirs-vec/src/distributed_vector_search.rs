@@ -4,20 +4,20 @@
 //! vector operations across multiple nodes and data centers.
 
 use crate::{
-    Vector, VectorStore, VectorId, SearchResult,
-    similarity::{SimilarityMetric, SimilarityResult},
     advanced_analytics::VectorAnalyticsEngine,
     real_time_updates::{RealTimeVectorUpdater, UpdateOperation},
+    similarity::{SimilarityMetric, SimilarityResult},
+    SearchResult, Vector, VectorId, VectorStore,
 };
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{mpsc, Mutex};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-use tracing::{info, warn, error, debug};
 
 /// Distributed node configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -208,7 +208,7 @@ impl DistributedVectorSearch {
             nodes: Arc::new(RwLock::new(HashMap::new())),
             partitioning_strategy,
             load_balancer: Arc::new(Mutex::new(LoadBalancer::new(
-                LoadBalancingAlgorithm::LatencyBased
+                LoadBalancingAlgorithm::LatencyBased,
             ))),
             replication_manager: Arc::new(Mutex::new(ReplicationManager::new())),
             query_router: Arc::new(QueryRouter::new(QueryExecutionStrategy::Adaptive)),
@@ -223,10 +223,10 @@ impl DistributedVectorSearch {
     /// Register a new node in the cluster
     pub async fn register_node(&self, config: DistributedNodeConfig) -> Result<()> {
         let mut nodes = self.nodes.write().unwrap();
-        
+
         info!("Registering node {} at {}", config.node_id, config.endpoint);
         nodes.insert(config.node_id.clone(), config.clone());
-        
+
         // Update load balancer
         let mut load_balancer = self.load_balancer.lock().await;
         load_balancer.add_node(&config.node_id);
@@ -245,10 +245,10 @@ impl DistributedVectorSearch {
     /// Remove a node from the cluster
     pub async fn deregister_node(&self, node_id: &str) -> Result<()> {
         let mut nodes = self.nodes.write().unwrap();
-        
+
         if let Some(config) = nodes.remove(node_id) {
             info!("Deregistering node {} at {}", node_id, config.endpoint);
-            
+
             // Update load balancer
             let mut load_balancer = self.load_balancer.lock().await;
             load_balancer.remove_node(node_id);
@@ -268,12 +268,15 @@ impl DistributedVectorSearch {
     /// Execute distributed vector search
     pub async fn search(&self, query: DistributedQuery) -> Result<DistributedSearchResponse> {
         let start_time = Instant::now();
-        
+
         // Determine target nodes based on query and partitioning strategy
         let target_nodes = self.select_target_nodes(&query).await?;
-        
-        info!("Executing distributed query {} across {} nodes", 
-              query.id, target_nodes.len());
+
+        info!(
+            "Executing distributed query {} across {} nodes",
+            query.id,
+            target_nodes.len()
+        );
 
         // Execute query on selected nodes
         let node_results = match self.query_router.execution_strategy {
@@ -352,16 +355,15 @@ impl DistributedVectorSearch {
         target_nodes: &[String],
     ) -> Result<Vec<NodeSearchResult>> {
         let mut handles = Vec::new();
-        
+
         for node_id in target_nodes {
             let node_id = node_id.clone();
             let query = query.clone();
             let nodes = Arc::clone(&self.nodes);
-            
-            let handle = tokio::spawn(async move {
-                Self::execute_node_query(node_id, query, nodes).await
-            });
-            
+
+            let handle =
+                tokio::spawn(async move { Self::execute_node_query(node_id, query, nodes).await });
+
             handles.push(handle);
         }
 
@@ -384,13 +386,11 @@ impl DistributedVectorSearch {
         target_nodes: &[String],
     ) -> Result<Vec<NodeSearchResult>> {
         let mut results = Vec::new();
-        
+
         for node_id in target_nodes {
-            match Self::execute_node_query(
-                node_id.clone(),
-                query.clone(),
-                Arc::clone(&self.nodes),
-            ).await {
+            match Self::execute_node_query(node_id.clone(), query.clone(), Arc::clone(&self.nodes))
+                .await
+            {
                 Ok(result) => {
                     results.push(result);
                     // Early termination if we have enough results
@@ -429,17 +429,18 @@ impl DistributedVectorSearch {
         nodes: Arc<RwLock<HashMap<String, DistributedNodeConfig>>>,
     ) -> Result<NodeSearchResult> {
         let start_time = Instant::now();
-        
+
         // In a real implementation, this would make HTTP requests to the node
         // For now, simulate the query execution
-        
+
         let nodes_guard = nodes.read().unwrap();
-        let _node_config = nodes_guard.get(&node_id)
+        let _node_config = nodes_guard
+            .get(&node_id)
             .ok_or_else(|| anyhow::anyhow!("Node {} not found", node_id))?;
-        
+
         // Simulate network latency and processing
         tokio::time::sleep(Duration::from_millis(10)).await;
-        
+
         // Generate sample results
         let mut results = Vec::new();
         for i in 0..query.k.min(10) {
@@ -465,7 +466,7 @@ impl DistributedVectorSearch {
         k: usize,
     ) -> Vec<SimilarityResult> {
         let mut all_results = Vec::new();
-        
+
         // Collect all results
         for node_result in node_results {
             all_results.extend(node_result.results.clone());
@@ -473,7 +474,7 @@ impl DistributedVectorSearch {
 
         // Sort by similarity score (descending)
         all_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-        
+
         // Take top k results
         all_results.truncate(k);
         all_results
@@ -521,13 +522,13 @@ impl DistributedVectorSearch {
     /// Get cluster statistics
     pub fn get_cluster_stats(&self) -> DistributedClusterStats {
         let nodes = self.nodes.read().unwrap();
-        
+
         let total_nodes = nodes.len();
         let healthy_nodes = nodes
             .values()
             .filter(|config| config.health_status == NodeHealthStatus::Healthy)
             .count();
-        
+
         let total_capacity: usize = nodes.values().map(|config| config.capacity).sum();
         let average_load_factor = if !nodes.is_empty() {
             nodes.values().map(|config| config.load_factor).sum::<f32>() / nodes.len() as f32
@@ -564,12 +565,15 @@ impl LoadBalancer {
     }
 
     fn add_node(&mut self, node_id: &str) {
-        self.node_stats.insert(node_id.to_string(), NodeStats {
-            active_queries: 0,
-            average_latency_ms: 0.0,
-            success_rate: 1.0,
-            last_updated: SystemTime::now(),
-        });
+        self.node_stats.insert(
+            node_id.to_string(),
+            NodeStats {
+                active_queries: 0,
+                average_latency_ms: 0.0,
+                success_rate: 1.0,
+                last_updated: SystemTime::now(),
+            },
+        );
     }
 
     fn remove_node(&mut self, node_id: &str) {
@@ -631,17 +635,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_distributed_search_creation() {
-        let distributed_search = DistributedVectorSearch::new(
-            PartitioningStrategy::Hash
-        );
+        let distributed_search = DistributedVectorSearch::new(PartitioningStrategy::Hash);
         assert!(distributed_search.is_ok());
     }
 
     #[tokio::test]
     async fn test_node_registration() {
-        let distributed_search = DistributedVectorSearch::new(
-            PartitioningStrategy::Hash
-        ).unwrap();
+        let distributed_search = DistributedVectorSearch::new(PartitioningStrategy::Hash).unwrap();
 
         let config = DistributedNodeConfig {
             node_id: "node1".to_string(),
@@ -655,7 +655,7 @@ mod tests {
         };
 
         assert!(distributed_search.register_node(config).await.is_ok());
-        
+
         let stats = distributed_search.get_cluster_stats();
         assert_eq!(stats.total_nodes, 1);
         assert_eq!(stats.healthy_nodes, 1);
@@ -663,9 +663,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_distributed_query_execution() {
-        let distributed_search = DistributedVectorSearch::new(
-            PartitioningStrategy::Hash
-        ).unwrap();
+        let distributed_search = DistributedVectorSearch::new(PartitioningStrategy::Hash).unwrap();
 
         // Register test nodes
         for i in 0..3 {
@@ -694,7 +692,7 @@ mod tests {
         };
 
         let response = distributed_search.search(query).await.unwrap();
-        
+
         assert_eq!(response.nodes_queried, 3);
         assert!(response.nodes_responded > 0);
         assert!(!response.merged_results.is_empty());

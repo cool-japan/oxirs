@@ -51,7 +51,10 @@ impl NodeState {
 
     /// Check if node should be included in consensus
     pub fn is_consensus_eligible(self) -> bool {
-        matches!(self, NodeState::Active | NodeState::Degraded | NodeState::Draining)
+        matches!(
+            self,
+            NodeState::Active | NodeState::Degraded | NodeState::Draining
+        )
     }
 
     /// Check if node is healthy
@@ -158,7 +161,7 @@ impl Default for ResourceCapacity {
             cpu_cores: num_cpus::get() as u32,
             memory_bytes: 8 * 1024 * 1024 * 1024, // 8GB default
             disk_bytes: 100 * 1024 * 1024 * 1024, // 100GB default
-            network_bandwidth: 1_000_000_000, // 1Gbps default
+            network_bandwidth: 1_000_000_000,     // 1Gbps default
             max_connections: 10000,
         }
     }
@@ -230,11 +233,7 @@ pub struct NodeStatus {
 
 impl NodeStatus {
     /// Create new node status
-    pub fn new(
-        node_id: OxirsNodeId,
-        address: SocketAddr,
-        metadata: NodeMetadata,
-    ) -> Self {
+    pub fn new(node_id: OxirsNodeId, address: SocketAddr, metadata: NodeMetadata) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -263,7 +262,7 @@ impl NodeStatus {
 
         // Add to history
         self.state_history.push((new_state, now, reason));
-        
+
         // Keep only last 10 transitions
         if self.state_history.len() > 10 {
             self.state_history.remove(0);
@@ -388,7 +387,10 @@ impl NodeLifecycleManager {
 
     /// Start the lifecycle manager
     pub async fn start(&self) -> Result<()> {
-        info!("Starting node lifecycle manager for node {}", self.local_node_id);
+        info!(
+            "Starting node lifecycle manager for node {}",
+            self.local_node_id
+        );
 
         // Start background monitoring task
         let task_handle = {
@@ -429,7 +431,10 @@ impl NodeLifecycleManager {
         {
             let nodes = self.node_status.read().await;
             if nodes.contains_key(&node_id) {
-                return Err(ClusterError::Config(format!("Node {} already exists", node_id)));
+                return Err(ClusterError::Config(format!(
+                    "Node {} already exists",
+                    node_id
+                )));
             }
         }
 
@@ -441,18 +446,20 @@ impl NodeLifecycleManager {
             node_id,
             address,
             metadata,
-        }).await;
+        })
+        .await;
 
         // Perform join process with timeout
         let join_result = timeout(
             self.config.join_timeout,
             self.perform_node_join(node_id, address, node_status),
-        ).await;
+        )
+        .await;
 
         match join_result {
             Ok(Ok(())) => {
                 info!("Successfully added node {} to cluster", node_id);
-                
+
                 // Emit joined event
                 self.emit_event(LifecycleEvent::NodeJoined {
                     node_id,
@@ -460,7 +467,8 @@ impl NodeLifecycleManager {
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
                         .as_secs(),
-                }).await;
+                })
+                .await;
 
                 Ok(())
             }
@@ -525,7 +533,10 @@ impl NodeLifecycleManager {
 
     /// Remove a node from the cluster
     pub async fn remove_node(&self, node_id: OxirsNodeId, graceful: bool) -> Result<()> {
-        info!("Removing node {} from cluster (graceful: {})", node_id, graceful);
+        info!(
+            "Removing node {} from cluster (graceful: {})",
+            node_id, graceful
+        );
 
         // Check if node exists
         let node_exists = {
@@ -540,9 +551,15 @@ impl NodeLifecycleManager {
         // Emit leaving event
         self.emit_event(LifecycleEvent::NodeLeaving {
             node_id,
-            reason: if graceful { "Graceful shutdown" } else { "Forced removal" }.to_string(),
+            reason: if graceful {
+                "Graceful shutdown"
+            } else {
+                "Forced removal"
+            }
+            .to_string(),
             graceful,
-        }).await;
+        })
+        .await;
 
         if graceful {
             // Perform graceful removal
@@ -559,7 +576,8 @@ impl NodeLifecycleManager {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
-        }).await;
+        })
+        .await;
 
         info!("Successfully removed node {} from cluster", node_id);
         Ok(())
@@ -571,7 +589,10 @@ impl NodeLifecycleManager {
         {
             let mut nodes = self.node_status.write().await;
             if let Some(node_status) = nodes.get_mut(&node_id) {
-                node_status.update_state(NodeState::Draining, "Graceful removal initiated".to_string());
+                node_status.update_state(
+                    NodeState::Draining,
+                    "Graceful removal initiated".to_string(),
+                );
             }
         }
 
@@ -631,7 +652,8 @@ impl NodeLifecycleManager {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
-        }).await;
+        })
+        .await;
 
         // Perform removal
         self.perform_immediate_removal(node_id).await?;
@@ -678,7 +700,10 @@ impl NodeLifecycleManager {
         let total_nodes = nodes.len();
         let healthy_nodes = nodes.values().filter(|s| s.state.is_healthy()).count();
         let operational_nodes = nodes.values().filter(|s| s.state.is_operational()).count();
-        let failed_nodes = nodes.values().filter(|s| matches!(s.state, NodeState::Failed)).count();
+        let failed_nodes = nodes
+            .values()
+            .filter(|s| matches!(s.state, NodeState::Failed))
+            .count();
 
         let health_ratio = if total_nodes > 0 {
             healthy_nodes as f64 / total_nodes as f64
@@ -746,12 +771,13 @@ impl NodeLifecycleManager {
                 let mut nodes = self.node_status.write().await;
                 if let Some(node_status) = nodes.get_mut(&node_id) {
                     node_status.update_health(health);
-                    
+
                     // Update state based on health
                     let new_state = if node_status.health.is_healthy {
                         NodeState::Active
-                    } else if node_status.health.system_metrics.cpu_usage > 0.9 ||
-                             node_status.health.system_metrics.memory_usage > 0.95 {
+                    } else if node_status.health.system_metrics.cpu_usage > 0.9
+                        || node_status.health.system_metrics.memory_usage > 0.95
+                    {
                         NodeState::Degraded
                     } else {
                         node_status.state // Keep current state
@@ -759,8 +785,9 @@ impl NodeLifecycleManager {
 
                     if new_state != node_status.state {
                         let old_state = node_status.state;
-                        node_status.update_state(new_state, "Health check state change".to_string());
-                        
+                        node_status
+                            .update_state(new_state, "Health check state change".to_string());
+
                         // Emit state change event
                         self.emit_event(LifecycleEvent::NodeStateChanged {
                             node_id,
@@ -771,7 +798,8 @@ impl NodeLifecycleManager {
                                 .duration_since(UNIX_EPOCH)
                                 .unwrap()
                                 .as_secs(),
-                        }).await;
+                        })
+                        .await;
                     }
                 }
             }
@@ -789,8 +817,8 @@ impl NodeLifecycleManager {
             nodes
                 .values()
                 .filter(|status| {
-                    status.is_stale(self.config.failure_timeout) &&
-                    !matches!(status.state, NodeState::Failed | NodeState::Left)
+                    status.is_stale(self.config.failure_timeout)
+                        && !matches!(status.state, NodeState::Failed | NodeState::Left)
                 })
                 .map(|status| status.node_id)
                 .collect()
@@ -804,7 +832,8 @@ impl NodeLifecycleManager {
                 let mut nodes = self.node_status.write().await;
                 if let Some(node_status) = nodes.get_mut(&node_id) {
                     let old_state = node_status.state;
-                    node_status.update_state(NodeState::Failed, "Node failure detected".to_string());
+                    node_status
+                        .update_state(NodeState::Failed, "Node failure detected".to_string());
                     node_status.record_failure();
 
                     // Emit state change event
@@ -817,7 +846,8 @@ impl NodeLifecycleManager {
                             .duration_since(UNIX_EPOCH)
                             .unwrap()
                             .as_secs(),
-                    }).await;
+                    })
+                    .await;
                 }
             }
 
@@ -827,11 +857,14 @@ impl NodeLifecycleManager {
                 let manager = self.clone();
                 tokio::spawn(async move {
                     tokio::time::sleep(manager.config.removal_grace_period).await;
-                    
+
                     // Check if node is still failed
                     if let Some(status) = manager.get_node_status(node_id).await {
                         if matches!(status.state, NodeState::Failed) {
-                            if let Err(e) = manager.force_evict_node(node_id, "Auto-recovery eviction".to_string()).await {
+                            if let Err(e) = manager
+                                .force_evict_node(node_id, "Auto-recovery eviction".to_string())
+                                .await
+                            {
                                 error!("Failed to auto-evict node {}: {}", node_id, e);
                             }
                         }
@@ -871,7 +904,10 @@ impl NodeLifecycleManager {
                 let mut nodes = self.node_status.write().await;
                 if let Some(node_status) = nodes.get_mut(&node_id) {
                     let old_state = node_status.state;
-                    node_status.update_state(NodeState::Suspected, "Byzantine behavior detected".to_string());
+                    node_status.update_state(
+                        NodeState::Suspected,
+                        "Byzantine behavior detected".to_string(),
+                    );
 
                     // Emit state change event
                     self.emit_event(LifecycleEvent::NodeStateChanged {
@@ -883,7 +919,8 @@ impl NodeLifecycleManager {
                             .duration_since(UNIX_EPOCH)
                             .unwrap()
                             .as_secs(),
-                    }).await;
+                    })
+                    .await;
                 }
             }
 
@@ -918,15 +955,21 @@ impl NodeLifecycleManager {
 
         if let Some(target) = target_node {
             // Transfer to specific node
-            self.consensus.transfer_leadership(target).await
+            self.consensus
+                .transfer_leadership(target)
+                .await
                 .map_err(|e| ClusterError::Other(format!("Leadership transfer failed: {}", e)))?;
         } else {
             // Let consensus layer choose the best candidate
             let healthy_nodes = self.get_healthy_nodes().await;
             if let Some(&target) = healthy_nodes.first() {
                 if target != self.local_node_id {
-                    self.consensus.transfer_leadership(target).await
-                        .map_err(|e| ClusterError::Other(format!("Leadership transfer failed: {}", e)))?;
+                    self.consensus
+                        .transfer_leadership(target)
+                        .await
+                        .map_err(|e| {
+                            ClusterError::Other(format!("Leadership transfer failed: {}", e))
+                        })?;
                 }
             }
         }
@@ -1075,7 +1118,8 @@ mod tests {
         old_status.last_seen = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() - 120; // 2 minutes ago
+            .as_secs()
+            - 120; // 2 minutes ago
 
         // Should be stale with 1 minute timeout
         assert!(old_status.is_stale(Duration::from_secs(60)));
@@ -1084,7 +1128,7 @@ mod tests {
     #[test]
     fn test_resource_capacity_defaults() {
         let capacity = ResourceCapacity::default();
-        
+
         assert!(capacity.cpu_cores > 0);
         assert!(capacity.memory_bytes > 0);
         assert!(capacity.disk_bytes > 0);

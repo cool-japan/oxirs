@@ -197,7 +197,11 @@ pub struct AlgebraTriplePattern {
 impl AlgebraTriplePattern {
     /// Create a new algebra triple pattern
     pub fn new(subject: TermPattern, predicate: TermPattern, object: TermPattern) -> Self {
-        Self { subject, predicate, object }
+        Self {
+            subject,
+            predicate,
+            object,
+        }
     }
 
     /// Formats using the SPARQL S-Expression syntax
@@ -220,26 +224,26 @@ impl fmt::Display for AlgebraTriplePattern {
 
 impl From<crate::model::pattern::TriplePattern> for Option<AlgebraTriplePattern> {
     fn from(pattern: crate::model::pattern::TriplePattern) -> Self {
-        use crate::model::pattern::{SubjectPattern, PredicatePattern, ObjectPattern};
-        
+        use crate::model::pattern::{ObjectPattern, PredicatePattern, SubjectPattern};
+
         let subject = match pattern.subject? {
             SubjectPattern::NamedNode(n) => TermPattern::NamedNode(n),
             SubjectPattern::BlankNode(b) => TermPattern::BlankNode(b),
             SubjectPattern::Variable(v) => TermPattern::Variable(v),
         };
-        
+
         let predicate = match pattern.predicate? {
             PredicatePattern::NamedNode(n) => TermPattern::NamedNode(n),
             PredicatePattern::Variable(v) => TermPattern::Variable(v),
         };
-        
+
         let object = match pattern.object? {
             ObjectPattern::NamedNode(n) => TermPattern::NamedNode(n),
             ObjectPattern::BlankNode(b) => TermPattern::BlankNode(b),
             ObjectPattern::Literal(l) => TermPattern::Literal(l),
             ObjectPattern::Variable(v) => TermPattern::Variable(v),
         };
-        
+
         Some(AlgebraTriplePattern::new(subject, predicate, object))
     }
 }

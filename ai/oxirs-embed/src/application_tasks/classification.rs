@@ -1,11 +1,11 @@
 //! Classification evaluation module
 //!
 //! This module provides comprehensive evaluation for classification tasks using
-//! embedding models, including accuracy, precision, recall, F1-score, and 
+//! embedding models, including accuracy, precision, recall, F1-score, and
 //! confusion matrix analysis.
 
-use crate::EmbeddingModel;
 use super::ApplicationEvalConfig;
+use crate::EmbeddingModel;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -324,9 +324,7 @@ impl ClassificationEvaluator {
     ) -> Result<ClassificationReport> {
         let accuracy = predictions
             .iter()
-            .filter(|(true_label, _, pred)| {
-                pred.as_ref().map(|p| p == true_label).unwrap_or(false)
-            })
+            .filter(|(true_label, _, pred)| pred.as_ref().map(|p| p == true_label).unwrap_or(false))
             .count() as f64
             / predictions.len() as f64;
 

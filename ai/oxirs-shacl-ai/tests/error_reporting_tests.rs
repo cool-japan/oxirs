@@ -1,8 +1,8 @@
 //! Tests for advanced error reporting functionality
 
 use oxirs_shacl_ai::error_handling::{
-    IntelligentErrorHandler, ErrorHandlingConfig, SmartErrorAnalysis,
-    AdvancedErrorReport, ExecutiveSummary, ActionableInsight,
+    ActionableInsight, AdvancedErrorReport, ErrorHandlingConfig, ExecutiveSummary,
+    IntelligentErrorHandler, SmartErrorAnalysis,
 };
 use std::time::Duration;
 

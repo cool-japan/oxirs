@@ -8,21 +8,26 @@
 //! - Version control and rollback capabilities
 //! - Performance monitoring and analytics
 
-use crate::index::{VectorIndex, VectorId};
-use crate::similarity::SimilarityResult;
 use crate::embeddings::{EmbeddingManager, EmbeddingStrategy};
+use crate::enhanced_performance_monitoring::{
+    AlertSeverity, EnhancedPerformanceMonitor, QueryType,
+};
+use crate::index::{VectorId, VectorIndex};
+use crate::similarity::SimilarityResult;
 use crate::storage_optimizations::{StorageUtils, VectorBlock};
-use crate::enhanced_performance_monitoring::{EnhancedPerformanceMonitor, QueryType, AlertSeverity};
-use anyhow::{anyhow, Result, Context};
+use anyhow::{anyhow, Context, Result};
+use chrono::{DateTime, Utc};
+use parking_lot::RwLock as ParkingRwLock;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque, BTreeMap};
-use std::sync::{Arc, RwLock, atomic::{AtomicU64, AtomicBool, Ordering}};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc, RwLock,
+};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, watch, Mutex, Semaphore};
 use tokio::time::{interval, timeout};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use parking_lot::RwLock as ParkingRwLock;
 
 /// Real-time update operation
 #[derive(Debug, Clone)]
@@ -129,7 +134,7 @@ pub struct UpdateStats {
 }
 
 /// Batch processor for efficient updates
-struct BatchProcessor {
+pub struct BatchProcessor {
     pending_batch: Vec<UpdateOperation>,
     batch_start_time: Option<Instant>,
     total_updates_since_rebuild: usize,
@@ -143,7 +148,7 @@ impl RealTimeVectorUpdater {
         config: RealTimeConfig,
     ) -> Result<Self> {
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        
+
         let updater = Self {
             config: config.clone(),
             update_queue: Arc::new(Mutex::new(VecDeque::new())),
@@ -160,9 +165,11 @@ impl RealTimeVectorUpdater {
     /// Start background processing
     pub async fn start(&mut self) -> Result<()> {
         let shutdown_rx = self.shutdown.subscribe();
-        
+
         // Start batch processing task
-        let batch_task = self.start_batch_processing_task(shutdown_rx.clone()).await?;
+        let batch_task = self
+            .start_batch_processing_task(shutdown_rx.clone())
+            .await?;
         self.tasks.push(batch_task);
 
         // Start compaction task if enabled
@@ -177,7 +184,9 @@ impl RealTimeVectorUpdater {
     /// Stop background processing
     pub async fn stop(&mut self) -> Result<()> {
         // Send shutdown signal
-        self.shutdown.send(true).map_err(|_| anyhow!("Failed to send shutdown signal"))?;
+        self.shutdown
+            .send(true)
+            .map_err(|_| anyhow!("Failed to send shutdown signal"))?;
 
         // Wait for all tasks to complete
         for task in self.tasks.drain(..) {
@@ -193,7 +202,7 @@ impl RealTimeVectorUpdater {
     /// Submit update operation
     pub async fn submit_update(&self, operation: UpdateOperation) -> Result<()> {
         let mut queue = self.update_queue.lock().await;
-        
+
         // Check queue capacity
         if queue.len() >= self.config.buffer_capacity {
             return Err(anyhow!("Update queue is full"));
@@ -219,10 +228,10 @@ impl RealTimeVectorUpdater {
         let index = self.index.read().unwrap();
         // Compact implementation would go here
         // For now, this is a placeholder
-        
+
         let mut stats = self.stats.write().unwrap();
         stats.last_compaction = Some(Instant::now());
-        
+
         Ok(())
     }
 
@@ -230,18 +239,18 @@ impl RealTimeVectorUpdater {
     pub async fn rebuild_index_if_needed(&self) -> Result<bool> {
         let stats = self.stats.read().unwrap();
         let index_size = stats.index_size;
-        
+
         if index_size == 0 {
             return Ok(false);
         }
 
         let processor = self.batch_processor.lock().await;
         let update_ratio = processor.total_updates_since_rebuild as f64 / index_size as f64;
-        
+
         if update_ratio >= self.config.rebuild_threshold {
             drop(processor);
             drop(stats);
-            
+
             // Trigger rebuild
             self.rebuild_index().await?;
             Ok(true)
@@ -254,11 +263,11 @@ impl RealTimeVectorUpdater {
     pub async fn rebuild_index(&self) -> Result<()> {
         // Implementation would extract all vectors and rebuild the index
         // This is a placeholder for the actual rebuild logic
-        
+
         let mut processor = self.batch_processor.lock().await;
         processor.total_updates_since_rebuild = 0;
         processor.last_rebuild = Some(Instant::now());
-        
+
         Ok(())
     }
 
@@ -266,17 +275,17 @@ impl RealTimeVectorUpdater {
     pub async fn flush_pending_updates(&self) -> Result<()> {
         let mut queue = self.update_queue.lock().await;
         let mut processor = self.batch_processor.lock().await;
-        
+
         // Move all queued operations to batch processor
         while let Some(operation) = queue.pop_front() {
             processor.pending_batch.push(operation);
         }
-        
+
         // Process the batch
         if !processor.pending_batch.is_empty() {
             self.process_batch(&mut processor).await?;
         }
-        
+
         Ok(())
     }
 
@@ -290,10 +299,10 @@ impl RealTimeVectorUpdater {
         let index = self.index.clone();
         let stats = self.stats.clone();
         let config = self.config.clone();
-        
+
         let task = tokio::spawn(async move {
             let mut interval = interval(config.max_batch_wait);
-            
+
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -312,7 +321,7 @@ impl RealTimeVectorUpdater {
                 }
             }
         });
-        
+
         Ok(task)
     }
 
@@ -324,10 +333,10 @@ impl RealTimeVectorUpdater {
         let index = self.index.clone();
         let stats = self.stats.clone();
         let config = self.config.clone();
-        
+
         let task = tokio::spawn(async move {
             let mut interval = interval(config.compaction_interval);
-            
+
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -344,7 +353,7 @@ impl RealTimeVectorUpdater {
                 }
             }
         });
-        
+
         Ok(task)
     }
 
@@ -358,7 +367,7 @@ impl RealTimeVectorUpdater {
     ) -> Result<()> {
         let mut queue_guard = queue.lock().await;
         let mut processor_guard = processor.lock().await;
-        
+
         // Move operations from queue to batch
         let mut batch_size = processor_guard.pending_batch.len();
         while batch_size < config.max_batch_size && !queue_guard.is_empty() {
@@ -367,67 +376,73 @@ impl RealTimeVectorUpdater {
                 batch_size += 1;
             }
         }
-        
+
         // Process batch if not empty
         if !processor_guard.pending_batch.is_empty() {
             let start_time = Instant::now();
-            
+
             // Apply operations to index
             let operations = std::mem::take(&mut processor_guard.pending_batch);
             drop(queue_guard);
             drop(processor_guard);
-            
+
             let mut index_guard = index.write().unwrap();
             let mut successful_ops = 0;
             let mut failed_ops = 0;
-            
+
             for operation in &operations {
                 match Self::apply_operation(&mut *index_guard, operation) {
                     Ok(_) => successful_ops += 1,
                     Err(_) => failed_ops += 1,
                 }
             }
-            
+
             drop(index_guard);
-            
+
             // Update statistics
             let processing_time = start_time.elapsed();
             let mut stats_guard = stats.write().unwrap();
             stats_guard.total_batches += 1;
             stats_guard.total_updates += successful_ops;
             stats_guard.failed_updates += failed_ops;
-            stats_guard.average_batch_size = 
-                (stats_guard.average_batch_size * (stats_guard.total_batches - 1) as f64 + operations.len() as f64) 
+            stats_guard.average_batch_size = (stats_guard.average_batch_size
+                * (stats_guard.total_batches - 1) as f64
+                + operations.len() as f64)
                 / stats_guard.total_batches as f64;
-            
+
             // Update average processing time
-            let total_time = stats_guard.average_processing_time.as_nanos() as f64 * (stats_guard.total_batches - 1) as f64
+            let total_time = stats_guard.average_processing_time.as_nanos() as f64
+                * (stats_guard.total_batches - 1) as f64
                 + processing_time.as_nanos() as f64;
-            stats_guard.average_processing_time = Duration::from_nanos(
-                (total_time / stats_guard.total_batches as f64) as u64
-            );
-            
+            stats_guard.average_processing_time =
+                Duration::from_nanos((total_time / stats_guard.total_batches as f64) as u64);
+
             // Update processor state
             let mut processor_guard = processor.lock().await;
             processor_guard.total_updates_since_rebuild += successful_ops as usize;
         }
-        
+
         Ok(())
     }
 
     /// Apply single operation to index
-    fn apply_operation(
-        index: &mut dyn VectorIndex,
-        operation: &UpdateOperation,
-    ) -> Result<()> {
+    fn apply_operation(index: &mut dyn VectorIndex, operation: &UpdateOperation) -> Result<()> {
         match operation {
-            UpdateOperation::Insert { id, vector, metadata } => {
+            UpdateOperation::Insert {
+                id,
+                vector,
+                metadata,
+            } => {
                 index.add_vector(*id, vector.clone(), metadata.clone())?;
             }
-            UpdateOperation::Update { id, vector, metadata } => {
+            UpdateOperation::Update {
+                id,
+                vector,
+                metadata,
+            } => {
                 // Update vector
                 index.update_vector(*id, vector.clone())?;
-                
+
                 // Update metadata if provided
                 if let Some(meta) = metadata {
                     index.update_metadata(*id, meta.clone())?;
@@ -454,10 +469,10 @@ impl RealTimeVectorUpdater {
         // Compaction logic would go here
         // This is a placeholder
         drop(index_guard);
-        
+
         let mut stats_guard = stats.write().unwrap();
         stats_guard.last_compaction = Some(Instant::now());
-        
+
         Ok(())
     }
 
@@ -469,30 +484,30 @@ impl RealTimeVectorUpdater {
 
         let start_time = Instant::now();
         let operations = std::mem::take(&mut processor.pending_batch);
-        
+
         let mut index = self.index.write().unwrap();
         let mut successful_ops = 0;
         let mut failed_ops = 0;
-        
+
         for operation in &operations {
             match Self::apply_operation(&mut *index, operation) {
                 Ok(_) => successful_ops += 1,
                 Err(_) => failed_ops += 1,
             }
         }
-        
+
         drop(index);
-        
+
         // Update statistics
         let processing_time = start_time.elapsed();
         let mut stats = self.stats.write().unwrap();
         stats.total_batches += 1;
         stats.total_updates += successful_ops;
         stats.failed_updates += failed_ops;
-        
+
         processor.total_updates_since_rebuild += successful_ops as usize;
         processor.batch_start_time = None;
-        
+
         Ok(())
     }
 }
@@ -532,20 +547,20 @@ impl RealTimeVectorSearch {
         k: usize,
     ) -> Result<Vec<SimilarityResult>> {
         let query_hash = self.compute_query_hash(query_vector, k);
-        
+
         // Check cache first
         if let Some(cached_results) = self.get_cached_results(&query_hash) {
             return Ok(cached_results);
         }
-        
+
         // Perform search
         let index = self.updater.index.read().unwrap();
         let results = index.search(query_vector, k)?;
         drop(index);
-        
+
         // Cache results
         self.cache_results(query_hash, &results);
-        
+
         Ok(results)
     }
 
@@ -571,7 +586,7 @@ impl RealTimeVectorSearch {
     fn cache_results(&self, query_hash: String, results: &[SimilarityResult]) {
         let mut cache = self.search_cache.write().unwrap();
         cache.insert(query_hash, (results.to_vec(), Instant::now()));
-        
+
         // Cleanup old cache entries
         cache.retain(|_, (_, timestamp)| timestamp.elapsed() < self.cache_ttl);
     }
@@ -597,17 +612,17 @@ mod tests {
         let index = Arc::new(RwLock::new(MemoryVectorIndex::new()));
         let config = RealTimeConfig::default();
         let updater = RealTimeVectorUpdater::new(index, config).unwrap();
-        
+
         // Test basic operations
         let operation = UpdateOperation::Insert {
             id: 1,
             vector: vec![1.0, 2.0, 3.0],
             metadata: HashMap::new(),
         };
-        
+
         updater.submit_update(operation).await.unwrap();
         updater.flush_pending_updates().await.unwrap();
-        
+
         let stats = updater.get_stats();
         assert!(stats.total_updates > 0);
     }
@@ -617,7 +632,7 @@ mod tests {
         let index = Arc::new(RwLock::new(MemoryVectorIndex::new()));
         let config = RealTimeConfig::default();
         let updater = RealTimeVectorUpdater::new(index, config).unwrap();
-        
+
         let operations = vec![
             UpdateOperation::Insert {
                 id: 1,
@@ -630,10 +645,10 @@ mod tests {
                 metadata: HashMap::new(),
             },
         ];
-        
+
         updater.submit_batch(operations).await.unwrap();
         updater.flush_pending_updates().await.unwrap();
-        
+
         let stats = updater.get_stats();
         assert_eq!(stats.total_updates, 2);
     }
