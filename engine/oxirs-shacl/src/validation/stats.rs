@@ -223,7 +223,7 @@ impl ShapeConformanceStats {
 
         violation_metrics.count += 1;
         *violation_metrics.by_severity.entry(severity).or_insert(0) += 1;
-        
+
         // Also update the total violations count
         shape_metrics.total_violations += 1;
     }

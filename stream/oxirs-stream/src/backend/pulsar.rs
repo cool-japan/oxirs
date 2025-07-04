@@ -23,9 +23,7 @@ use uuid::Uuid;
 use pulsar::{
     authentication::Authentication,
     compression::Compression,
-    consumer::{
-        Consumer, ConsumerBuilder, ConsumerOptions, DeadLetterPolicy, InitialPosition,
-    },
+    consumer::{Consumer, ConsumerBuilder, ConsumerOptions, DeadLetterPolicy, InitialPosition},
     error::Error as PulsarError,
     message::{Message as PulsarMessageTrait, Payload},
     producer::{Producer, ProducerBuilder, ProducerOptions},
@@ -284,15 +282,16 @@ impl MessageRouter {
 
 impl PulsarProducer {
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let pulsar_config = if let crate::StreamBackendType::Pulsar { service_url, .. } = &config.backend {
-            PulsarProducerConfig {
-                service_url: service_url.clone(),
-                topic: config.topic.clone(),
-                ..Default::default()
-            }
-        } else {
-            return Err(anyhow!("Invalid backend configuration for Pulsar producer"));
-        };
+        let pulsar_config =
+            if let crate::StreamBackendType::Pulsar { service_url, .. } = &config.backend {
+                PulsarProducerConfig {
+                    service_url: service_url.clone(),
+                    topic: config.topic.clone(),
+                    ..Default::default()
+                }
+            } else {
+                return Err(anyhow!("Invalid backend configuration for Pulsar producer"));
+            };
 
         let message_router = MessageRouter::new(
             pulsar_config.routing_mode.clone(),
@@ -731,16 +730,17 @@ struct ConsumerStats {
 
 impl PulsarConsumer {
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let pulsar_config = if let crate::StreamBackendType::Pulsar { service_url, .. } = &config.backend {
-            PulsarConsumerConfig {
-                service_url: service_url.clone(),
-                topic: config.topic.clone(),
-                subscription_name: format!("{}-subscription", config.topic),
-                ..Default::default()
-            }
-        } else {
-            return Err(anyhow!("Invalid backend configuration for Pulsar consumer"));
-        };
+        let pulsar_config =
+            if let crate::StreamBackendType::Pulsar { service_url, .. } = &config.backend {
+                PulsarConsumerConfig {
+                    service_url: service_url.clone(),
+                    topic: config.topic.clone(),
+                    subscription_name: format!("{}-subscription", config.topic),
+                    ..Default::default()
+                }
+            } else {
+                return Err(anyhow!("Invalid backend configuration for Pulsar consumer"));
+            };
 
         let consumer_name = format!("consumer-{}", Uuid::new_v4());
 
@@ -796,10 +796,18 @@ impl PulsarConsumer {
 
             // Set subscription type
             let sub_type = match self.pulsar_config.subscription_type {
-                PulsarSubscriptionType::Exclusive => pulsar::message::proto::command_subscribe::SubType::Exclusive,
-                PulsarSubscriptionType::Shared => pulsar::message::proto::command_subscribe::SubType::Shared,
-                PulsarSubscriptionType::Failover => pulsar::message::proto::command_subscribe::SubType::Failover,
-                PulsarSubscriptionType::KeyShared => pulsar::message::proto::command_subscribe::SubType::KeyShared,
+                PulsarSubscriptionType::Exclusive => {
+                    pulsar::message::proto::command_subscribe::SubType::Exclusive
+                }
+                PulsarSubscriptionType::Shared => {
+                    pulsar::message::proto::command_subscribe::SubType::Shared
+                }
+                PulsarSubscriptionType::Failover => {
+                    pulsar::message::proto::command_subscribe::SubType::Failover
+                }
+                PulsarSubscriptionType::KeyShared => {
+                    pulsar::message::proto::command_subscribe::SubType::KeyShared
+                }
             };
 
             // Set initial position

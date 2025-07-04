@@ -92,10 +92,9 @@ impl ColumnStoreCompressor {
             // Check if values are sequential (for delta compression)
             if value.len() >= 8 {
                 let current_value = u64::from_le_bytes([
-                    value[0], value[1], value[2], value[3],
-                    value[4], value[5], value[6], value[7],
+                    value[0], value[1], value[2], value[3], value[4], value[5], value[6], value[7],
                 ]);
-                
+
                 if let Some(last) = last_value {
                     if current_value != last + 1 {
                         is_sequential = false;

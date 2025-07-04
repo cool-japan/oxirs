@@ -4,13 +4,13 @@
 //! running in Kubernetes clusters by watching for services with specific
 //! labels and annotations.
 
+use crate::FederatedService;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::warn;
-use crate::FederatedService;
 
 #[cfg(feature = "kubernetes")]
 use k8s_openapi::api::core::v1::{Service as K8sService, ServicePort};

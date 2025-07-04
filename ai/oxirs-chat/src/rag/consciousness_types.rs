@@ -719,7 +719,10 @@ pub enum EmotionalTone {
     Positive,
     Negative,
     Neutral,
-    Mixed { positive_weight: f64, negative_weight: f64 },
+    Mixed {
+        positive_weight: f64,
+        negative_weight: f64,
+    },
 }
 
 #[derive(Debug, Clone)]

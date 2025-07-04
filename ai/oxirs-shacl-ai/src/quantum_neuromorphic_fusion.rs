@@ -1276,7 +1276,7 @@ impl BiologicalQuantumEntanglementGenerator {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct EntanglementManager;
 
 impl EntanglementManager {
@@ -1289,7 +1289,7 @@ impl EntanglementManager {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct EntanglementFidelityMonitor;
 
 impl EntanglementFidelityMonitor {
@@ -1302,7 +1302,7 @@ impl EntanglementFidelityMonitor {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct BellStateController;
 
 impl BellStateController {

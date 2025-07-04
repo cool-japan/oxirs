@@ -4,11 +4,11 @@
 //! and machine learning-based optimization hints.
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use chrono::{DateTime, Utc};
 
 use crate::nodes::NodeId;
 use crate::triple_store::TripleStoreStats;

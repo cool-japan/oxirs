@@ -156,8 +156,11 @@ impl IriResolver {
         relative_iri: &str,
         base_iri: &str,
     ) -> Result<String, IriResolutionError> {
-        let base_url = Url::parse(base_iri).map_err(|e| IriResolutionError::UrlParsing(e.to_string()))?;
-        let resolved_url = base_url.join(relative_iri).map_err(|e| IriResolutionError::UrlParsing(e.to_string()))?;
+        let base_url =
+            Url::parse(base_iri).map_err(|e| IriResolutionError::UrlParsing(e.to_string()))?;
+        let resolved_url = base_url
+            .join(relative_iri)
+            .map_err(|e| IriResolutionError::UrlParsing(e.to_string()))?;
         Ok(resolved_url.to_string())
     }
 

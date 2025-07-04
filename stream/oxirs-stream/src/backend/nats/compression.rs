@@ -155,7 +155,7 @@ impl CompressionManager {
         let compression_ratio = data.len() as f64 / compressed_data.len() as f64;
         let compression_time_ms = compression_time.as_millis() as u64;
         let decompression_time_ms = decompression_time.as_millis() as u64;
-        
+
         let stats = CompressionStats {
             algorithm: algorithm.clone(),
             original_size: data.len(),
@@ -166,7 +166,7 @@ impl CompressionManager {
             cpu_efficiency: self.calculate_cpu_efficiency_direct(
                 compression_ratio,
                 compression_time_ms,
-                decompression_time_ms
+                decompression_time_ms,
             ),
         };
 
@@ -402,7 +402,12 @@ impl CompressionManager {
     }
 
     /// Calculate CPU efficiency score
-    fn calculate_cpu_efficiency_direct(&self, compression_ratio: f64, compression_time_ms: u64, decompression_time_ms: u64) -> f64 {
+    fn calculate_cpu_efficiency_direct(
+        &self,
+        compression_ratio: f64,
+        compression_time_ms: u64,
+        decompression_time_ms: u64,
+    ) -> f64 {
         let total_time = compression_time_ms + decompression_time_ms;
         if total_time == 0 {
             return 1.0;

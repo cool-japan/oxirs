@@ -760,7 +760,7 @@ impl ScientificKnowledgeIntegrator {
             .await?;
 
         let insights_count = literature_insights.len();
-        
+
         Ok(ScientificKnowledge {
             research_results,
             literature_insights,

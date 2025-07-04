@@ -304,7 +304,9 @@ impl FormatDetector {
         );
 
         // JSON-LD format
-        let jsonld_format = RdfFormat::JsonLd { profile: oxirs_core::format::JsonLdProfileSet::empty() };
+        let jsonld_format = RdfFormat::JsonLd {
+            profile: oxirs_core::format::JsonLdProfileSet::empty(),
+        };
         self.format_registry.insert(
             jsonld_format.clone(),
             FormatInfo {
@@ -413,7 +415,9 @@ impl FormatDetector {
 
         // JSON-LD patterns
         self.content_patterns.insert(
-            RdfFormat::JsonLd { profile: oxirs_core::format::JsonLdProfileSet::empty() },
+            RdfFormat::JsonLd {
+                profile: oxirs_core::format::JsonLdProfileSet::empty(),
+            },
             vec![
                 ContentPattern {
                     pattern: r#""@context"\s*:"#.to_string(),
@@ -438,7 +442,8 @@ impl FormatDetector {
         for info in self.format_registry.values() {
             // MIME type mappings
             for mime_type in &info.mime_types {
-                self.mime_mappings.insert(mime_type.clone(), info.format.clone());
+                self.mime_mappings
+                    .insert(mime_type.clone(), info.format.clone());
             }
 
             // Extension mappings
@@ -477,9 +482,8 @@ impl FormatDetector {
         let content = std::str::from_utf8(&buffer)
             .map_err(|_| CliError::invalid_format("File contains invalid UTF-8"))?;
 
-        self.detect_by_content_patterns(content).ok_or_else(|| {
-            CliError::unknown_format("Could not detect format from content")
-        })
+        self.detect_by_content_patterns(content)
+            .ok_or_else(|| CliError::unknown_format("Could not detect format from content"))
     }
 
     fn detect_by_content_patterns(&self, content: &str) -> Option<DetectionResult> {
@@ -617,7 +621,10 @@ impl FormatDetector {
         let handler = FormatHandler::new(format);
         match handler.parse_triples(reader) {
             Ok(_) => Ok(()),
-            Err(e) => Err(CliError::invalid_format(format!("Validation failed: {}", e))),
+            Err(e) => Err(CliError::invalid_format(format!(
+                "Validation failed: {}",
+                e
+            ))),
         }
     }
 
@@ -649,10 +656,7 @@ impl FormatDetector {
                 }
             }
             Err(e) => {
-                return Err(CliError::from(format!(
-                    "Failed to parse input: {}",
-                    e
-                )));
+                return Err(CliError::from(format!("Failed to parse input: {}", e)));
             }
         }
 
@@ -666,10 +670,7 @@ impl FormatDetector {
                 stats.conversion_time = start_time.elapsed();
                 Ok(stats)
             }
-            Err(e) => Err(CliError::from(format!(
-                "Failed to write output: {}",
-                e
-            ))),
+            Err(e) => Err(CliError::from(format!("Failed to write output: {}", e))),
         }
     }
 }
@@ -761,7 +762,9 @@ fn parse_format(format_str: &str) -> Result<RdfFormat, CliError> {
         "turtle" | "ttl" => Ok(RdfFormat::Turtle),
         "ntriples" | "nt" => Ok(RdfFormat::NTriples),
         "rdfxml" | "rdf" | "xml" => Ok(RdfFormat::RdfXml),
-        "jsonld" | "json" => Ok(RdfFormat::JsonLd { profile: oxirs_core::format::JsonLdProfileSet::empty() }),
+        "jsonld" | "json" => Ok(RdfFormat::JsonLd {
+            profile: oxirs_core::format::JsonLdProfileSet::empty(),
+        }),
         "trig" => Ok(RdfFormat::TriG),
         "nquads" | "nq" => Ok(RdfFormat::NQuads),
         _ => Err(CliError::invalid_format(format!(

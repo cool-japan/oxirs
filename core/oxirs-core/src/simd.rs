@@ -3,7 +3,6 @@
 //! This module provides unified SIMD operations across the OxiRS ecosystem.
 //! All SIMD operations must go through this module - direct SIMD usage in other modules is forbidden.
 
-
 /// Unified SIMD operations trait
 pub trait SimdOps {
     /// Add two slices element-wise

@@ -4,10 +4,13 @@
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use serde_json;
-use std::{collections::HashMap, time::{Duration, Instant}};
-use tracing::{debug, error, warn};
 use futures_util::StreamExt;
+use serde_json;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+use tracing::{debug, error, warn};
 
 use super::{
     config::ProviderConfig,

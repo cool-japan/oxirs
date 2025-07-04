@@ -865,13 +865,13 @@ impl DreamProcessor {
 
     /// Process a dream sequence with given input and dream state
     pub fn process_dream_sequence(
-        &mut self, 
-        dream_input: &[String], 
-        dream_state: DreamState
+        &mut self,
+        dream_input: &[String],
+        dream_state: DreamState,
     ) -> Result<StepResult, OxirsError> {
         // Set the dream state
         self.dream_state = dream_state.clone();
-        
+
         // Process each input in the dream sequence
         for (index, input) in dream_input.iter().enumerate() {
             match dream_state {
@@ -881,30 +881,34 @@ impl DreamProcessor {
                     if index % 2 == 0 {
                         self.synthesize_insights()?;
                     }
-                },
+                }
                 DreamState::DeepSleep => {
                     // Deep sleep focuses on memory consolidation
                     self.organize_memories_temporally()?;
                     self.weight_memory_importance()?;
-                },
+                }
                 DreamState::CreativeDreaming => {
                     // Creative dreaming focuses on novel pattern discovery
                     self.synthesize_creative_combinations()?;
                     self.synthesize_insights()?;
-                },
+                }
                 DreamState::Lucid => {
                     // Lucid dreaming allows controlled exploration
                     self.integrate_memory_schemas()?;
                     self.strengthen_memory_connections()?;
-                },
+                }
                 _ => {
                     // Default processing for other states
                     self.process_dream_step()?;
                 }
             }
         }
-        
-        Ok(StepResult::SequenceComplete(format!("processed_{}_inputs_in_{:?}", dream_input.len(), dream_state)))
+
+        Ok(StepResult::SequenceComplete(format!(
+            "processed_{}_inputs_in_{:?}",
+            dream_input.len(),
+            dream_state
+        )))
     }
 }
 

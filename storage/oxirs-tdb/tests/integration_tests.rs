@@ -187,7 +187,7 @@ fn test_performance_benchmarks() -> Result<()> {
     let start = std::time::Instant::now();
     store.insert_triples_bulk(&triples)?;
     let insert_time = start.elapsed();
-    
+
     println!("Inserted 10,000 triples in {} ms", insert_time.as_millis());
 
     // Performance requirement: Should handle bulk inserts efficiently

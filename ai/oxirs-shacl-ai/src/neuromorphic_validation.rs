@@ -50,7 +50,7 @@ pub struct ValidationNeuron {
 }
 
 /// Types of neuromorphic neurons
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum NeuronType {
     /// Input neurons - receive validation data
     Input,
@@ -573,10 +573,11 @@ impl NeuromorphicValidationNetwork {
     /// Calculate shape complexity for spike encoding
     fn calculate_shape_complexity(&self, shape: &Shape) -> f64 {
         // Simple complexity metric based on shape properties
-        let constraint_count = shape.property_constraints.len() as f64;
-        let target_count = shape.targets.len() as f64;
+        // TODO: Access actual shape properties when available
+        let constraint_count = 1.0; // Placeholder: shape.property_constraints.len() as f64;
+        let target_count = 1.0; // Placeholder: shape.targets.len() as f64;
 
-        (constraint_count + target_count * 0.5).min(10.0) / 10.0
+        (constraint_count + target_count * 0.5_f64).min(10.0_f64) / 10.0
     }
 
     /// Simulate neuromorphic network processing

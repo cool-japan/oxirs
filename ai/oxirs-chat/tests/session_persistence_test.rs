@@ -1,5 +1,5 @@
 use oxirs_chat::*;
-use oxirs_core::{Store, ConcreteStore};
+use oxirs_core::{ConcreteStore, Store};
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio;
@@ -118,7 +118,8 @@ async fn test_session_backup_and_restore() {
         .await
         .expect("Restored session not found");
 
-    let restored_session_guard = restored_session.expect("Restored session should exist").lock().await;
+    let restored_session_arc = restored_session.expect("Restored session should exist");
+    let restored_session_guard = restored_session_arc.lock().await;
     assert_eq!(restored_session_guard.id, session_id);
     assert!(restored_session_guard.messages.len() >= 2); // Should have the messages we added
 
@@ -159,7 +160,8 @@ async fn test_session_expiration_and_cleanup() {
     assert_eq!(cleaned_count, 1);
 
     // Verify session was removed
-    assert!(manager.get_session(&session_id).await.is_none());
+    let session_result = manager.get_session(&session_id).await;
+    assert!(session_result.expect("Should get result").is_none());
 
     println!("✅ Session expiration and cleanup test passed!");
 }

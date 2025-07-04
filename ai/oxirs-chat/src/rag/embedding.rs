@@ -171,7 +171,10 @@ impl EmbeddingManager {
 
         // If still too large, remove oldest entries
         if cache.len() > self.config.max_cache_size {
-            let entries: Vec<_> = cache.iter().map(|(k, v)| (k.clone(), v.created_at)).collect();
+            let entries: Vec<_> = cache
+                .iter()
+                .map(|(k, v)| (k.clone(), v.created_at))
+                .collect();
             let mut sorted_entries = entries;
             sorted_entries.sort_by_key(|(_, created_at)| *created_at);
 
@@ -364,7 +367,7 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         for i in 0..epochs {
             loss_history.push(0.1 * (epochs - i) as f64 / epochs as f64);
         }
-        
+
         let stats = oxirs_embed::TrainingStats {
             epochs_completed: epochs,
             convergence_achieved: true,

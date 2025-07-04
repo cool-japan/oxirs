@@ -517,8 +517,8 @@ impl PrivacyManager {
         sigma: f64,
     ) -> Result<(), PrivacyError> {
         use rand::distributions::Distribution;
-        use rand_distr::Normal;
         use rand::thread_rng;
+        use rand_distr::Normal;
 
         let mut rng = thread_rng();
         let normal = Normal::new(0.0, sigma).map_err(|e| {

@@ -177,7 +177,10 @@ pub fn generate_jsonld_report(report: &ValidationReport) -> Result<String> {
                     Value::String("sh:ValidationResult".to_string()),
                 );
 
-                result.insert("sh:focusNode".to_string(), format_term_jsonld(&violation.focus_node));
+                result.insert(
+                    "sh:focusNode".to_string(),
+                    format_term_jsonld(&violation.focus_node),
+                );
 
                 if let Some(path) = &violation.result_path {
                     result.insert("sh:resultPath".to_string(), format_path_jsonld(path));
@@ -189,7 +192,10 @@ pub fn generate_jsonld_report(report: &ValidationReport) -> Result<String> {
 
                 result.insert(
                     "sh:sourceConstraintComponent".to_string(),
-                    Value::String(format!("sh:{}", violation.source_constraint_component.as_str())),
+                    Value::String(format!(
+                        "sh:{}",
+                        violation.source_constraint_component.as_str()
+                    )),
                 );
 
                 result.insert(
@@ -655,7 +661,7 @@ pub fn generate_html_report(report: &ValidationReport) -> Result<String> {
             writeln!(
                 output,
                 "                        <td class=\"focus-node\">{}</td>",
-format!("{:?}", violation.focus_node)
+                format!("{:?}", violation.focus_node)
             )?;
             writeln!(
                 output,
@@ -686,12 +692,12 @@ format!("{:?}", violation.focus_node)
             writeln!(
                 output,
                 "                        <td class=\"shape\">{}</td>",
-violation.source_shape.as_str()
+                violation.source_shape.as_str()
             )?;
             writeln!(
                 output,
                 "                        <td class=\"constraint\">{}</td>",
-violation.source_constraint_component.as_str()
+                violation.source_constraint_component.as_str()
             )?;
             writeln!(output, "                    </tr>")?;
         }
@@ -834,9 +840,17 @@ pub fn generate_text_report(report: &ValidationReport) -> Result<String> {
                 writeln!(output, "   Value: {:?}", value)?;
             }
 
-            writeln!(output, "   Source Shape: {}", violation.source_shape.as_str())?;
+            writeln!(
+                output,
+                "   Source Shape: {}",
+                violation.source_shape.as_str()
+            )?;
 
-            writeln!(output, "   Constraint Component: {}", violation.source_constraint_component.as_str())?;
+            writeln!(
+                output,
+                "   Constraint Component: {}",
+                violation.source_constraint_component.as_str()
+            )?;
 
             writeln!(output)?;
         }
@@ -924,7 +938,11 @@ pub fn generate_yaml_report(report: &ValidationReport) -> Result<String> {
                 )?;
             }
 
-            writeln!(output, "      sourceShape: \"{}\"", violation.source_shape.as_str())?;
+            writeln!(
+                output,
+                "      sourceShape: \"{}\"",
+                violation.source_shape.as_str()
+            )?;
 
             writeln!(
                 output,

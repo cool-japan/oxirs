@@ -6,16 +6,16 @@
 //! the best embedding strategies for specific datasets and use cases.
 
 use crate::{
-    embeddings::{EmbeddingStrategy, EmbeddingGenerator},
+    advanced_analytics::VectorAnalyticsEngine,
+    benchmarking::{BenchmarkConfig, BenchmarkResult, BenchmarkSuite},
+    embeddings::{EmbeddingGenerator, EmbeddingStrategy},
     similarity::{SimilarityMetric, SimilarityResult},
     Vector, VectorError, VectorStore,
-    advanced_analytics::VectorAnalyticsEngine,
-    benchmarking::{BenchmarkResult, BenchmarkSuite, BenchmarkConfig},
 };
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -270,11 +270,14 @@ impl AutoMLOptimizer {
         let span = span!(Level::INFO, "automl_optimization");
         let _enter = span.enter();
 
-        info!("Starting AutoML optimization for {} training samples", training_data.len());
-        
+        info!(
+            "Starting AutoML optimization for {} training samples",
+            training_data.len()
+        );
+
         let start_time = Instant::now();
         let mut optimization_state = self.optimization_state.lock().await;
-        
+
         // Generate optimization trials
         let trials = self.generate_optimization_trials()?;
         info!("Generated {} optimization trials", trials.len());
@@ -291,18 +294,26 @@ impl AutoMLOptimizer {
                 break;
             }
 
-            info!("Executing trial {}/{}: {}", i + 1, trials.len(), trial.trial_id);
+            info!(
+                "Executing trial {}/{}: {}",
+                i + 1,
+                trials.len(),
+                trial.trial_id
+            );
 
-            match self.execute_trial(trial, training_data, validation_data, test_queries).await {
+            match self
+                .execute_trial(trial, training_data, validation_data, test_queries)
+                .await
+            {
                 Ok(trial_result) => {
                     // Check for improvement
                     let primary_score = self.compute_primary_score(&trial_result.metrics);
-                    
+
                     if primary_score > best_score {
                         best_score = primary_score;
                         let mut best_trial = self.best_trial.write().unwrap();
                         *best_trial = Some(trial_result.clone());
-                        
+
                         // Reset early stopping counter
                         let mut state = self.optimization_state.lock().await;
                         state.early_stopping_counter = 0;
@@ -310,11 +321,13 @@ impl AutoMLOptimizer {
                     } else {
                         let mut state = self.optimization_state.lock().await;
                         state.early_stopping_counter += 1;
-                        
+
                         // Check early stopping
                         if state.early_stopping_counter >= self.config.early_stopping_patience {
-                            info!("Early stopping triggered after {} trials without improvement", 
-                                  self.config.early_stopping_patience);
+                            info!(
+                                "Early stopping triggered after {} trials without improvement",
+                                self.config.early_stopping_patience
+                            );
                             break;
                         }
                     }
@@ -345,11 +358,13 @@ impl AutoMLOptimizer {
 
         // Generate final results
         let best_trial = self.best_trial.read().unwrap();
-        let best_configuration = best_trial.as_ref()
+        let best_configuration = best_trial
+            .as_ref()
             .map(|r| r.trial.clone())
             .unwrap_or_else(|| trials[0].clone());
-        
-        let best_metrics = best_trial.as_ref()
+
+        let best_metrics = best_trial
+            .as_ref()
             .map(|r| r.metrics.clone())
             .unwrap_or_default();
 
@@ -422,34 +437,33 @@ impl AutoMLOptimizer {
         // Record trial start
         {
             let mut state = self.optimization_state.lock().await;
-            state.active_trials.insert(trial.trial_id.clone(), trial_start);
+            state
+                .active_trials
+                .insert(trial.trial_id.clone(), trial_start);
         }
 
         // Create vector store with trial configuration
         let mut vector_store = self.create_vector_store_for_trial(trial)?;
-        
+
         // Training phase
         let training_start = Instant::now();
         for (id, content) in training_data {
-            vector_store.index_resource(id.clone(), content)
+            vector_store
+                .index_resource(id.clone(), content)
                 .context("Failed to index training data")?;
         }
         let training_time = training_start.elapsed();
 
         // Cross-validation evaluation
-        let cv_scores = self.perform_cross_validation(
-            &vector_store, 
-            validation_data, 
-            test_queries
-        ).await?;
+        let cv_scores = self
+            .perform_cross_validation(&vector_store, validation_data, test_queries)
+            .await?;
 
         // Final evaluation
         let eval_start = Instant::now();
-        let metrics = self.evaluate_trial_performance(
-            &vector_store,
-            test_queries,
-            trial
-        ).await?;
+        let metrics = self
+            .evaluate_trial_performance(&vector_store, test_queries, trial)
+            .await?;
         let evaluation_time = eval_start.elapsed();
 
         // Estimate memory usage (simplified)
@@ -492,7 +506,8 @@ impl AutoMLOptimizer {
             };
 
             // Use this fold as test set
-            let fold_queries: Vec<_> = test_queries.iter()
+            let fold_queries: Vec<_> = test_queries
+                .iter()
                 .filter(|(query_id, _)| {
                     // Simple hash-based assignment
                     let hash = query_id.chars().map(|c| c as u32).sum::<u32>() as usize;
@@ -511,10 +526,9 @@ impl AutoMLOptimizer {
             let mut total_recall = 0.0;
             for (query, relevant_docs) in &fold_queries {
                 let search_results = vector_store.similarity_search(query, 10)?;
-                let retrieved_docs: Vec<String> = search_results.iter()
-                    .map(|r| r.0.clone())
-                    .collect();
-                
+                let retrieved_docs: Vec<String> =
+                    search_results.iter().map(|r| r.0.clone()).collect();
+
                 let recall = self.compute_recall(&retrieved_docs, relevant_docs);
                 total_recall += recall;
             }
@@ -544,23 +558,23 @@ impl AutoMLOptimizer {
             let query_start = Instant::now();
             let search_results = vector_store.similarity_search(query, 10)?;
             let query_latency = query_start.elapsed().as_millis() as f32;
-            
+
             total_latency += query_latency;
 
-            let retrieved_docs: Vec<String> = search_results.iter()
-                .map(|r| r.0.clone())
-                .collect();
-            
+            let retrieved_docs: Vec<String> = search_results.iter().map(|r| r.0.clone()).collect();
+
             let recall = self.compute_recall(&retrieved_docs, relevant_docs);
             let precision = self.compute_precision(&retrieved_docs, relevant_docs);
-            
+
             total_recall += recall;
             total_precision += precision;
         }
 
         let num_queries = test_queries.len() as f32;
-        metrics.insert(OptimizationMetric::Accuracy, 
-                      (total_recall + total_precision) / (2.0 * num_queries));
+        metrics.insert(
+            OptimizationMetric::Accuracy,
+            (total_recall + total_precision) / (2.0 * num_queries),
+        );
         metrics.insert(OptimizationMetric::Latency, total_latency / num_queries);
 
         // Throughput (queries per second)
@@ -568,10 +582,14 @@ impl AutoMLOptimizer {
         metrics.insert(OptimizationMetric::Throughput, 1.0 / avg_latency_seconds);
 
         // Memory and storage efficiency (simplified estimates)
-        metrics.insert(OptimizationMetric::MemoryUsage, 
-                      (trial.vector_dimension as f32) * 4.0); // 4 bytes per f32
-        metrics.insert(OptimizationMetric::StorageEfficiency, 
-                      1.0 / (trial.vector_dimension as f32).log2());
+        metrics.insert(
+            OptimizationMetric::MemoryUsage,
+            (trial.vector_dimension as f32) * 4.0,
+        ); // 4 bytes per f32
+        metrics.insert(
+            OptimizationMetric::StorageEfficiency,
+            1.0 / (trial.vector_dimension as f32).log2(),
+        );
 
         // Index build time (estimated from hyperparameters)
         let build_time_estimate = match trial.embedding_strategy {
@@ -598,25 +616,31 @@ impl AutoMLOptimizer {
         let random_seed = hasher.finish();
 
         let search_space = &self.config.search_space;
-        
+
         Ok(OptimizationTrial {
             trial_id: Uuid::new_v4().to_string(),
-            embedding_strategy: search_space.embedding_strategies[
-                (random_seed % search_space.embedding_strategies.len() as u64) as usize
-            ].clone(),
-            vector_dimension: search_space.vector_dimensions[
-                ((random_seed >> 8) % search_space.vector_dimensions.len() as u64) as usize
-            ],
-            similarity_metric: search_space.similarity_metrics[
-                ((random_seed >> 16) % search_space.similarity_metrics.len() as u64) as usize
-            ].clone(),
+            embedding_strategy: search_space.embedding_strategies
+                [(random_seed % search_space.embedding_strategies.len() as u64) as usize]
+                .clone(),
+            vector_dimension: search_space.vector_dimensions
+                [((random_seed >> 8) % search_space.vector_dimensions.len() as u64) as usize],
+            similarity_metric: search_space.similarity_metrics
+                [((random_seed >> 16) % search_space.similarity_metrics.len() as u64) as usize]
+                .clone(),
             index_config: self.generate_index_config()?,
             hyperparameters: {
                 let mut params = HashMap::new();
-                let lr_idx = ((random_seed >> 24) % search_space.learning_rates.len() as u64) as usize;
+                let lr_idx =
+                    ((random_seed >> 24) % search_space.learning_rates.len() as u64) as usize;
                 let bs_idx = ((random_seed >> 32) % search_space.batch_sizes.len() as u64) as usize;
-                params.insert("learning_rate".to_string(), search_space.learning_rates[lr_idx]);
-                params.insert("batch_size".to_string(), search_space.batch_sizes[bs_idx] as f32);
+                params.insert(
+                    "learning_rate".to_string(),
+                    search_space.learning_rates[lr_idx],
+                );
+                params.insert(
+                    "batch_size".to_string(),
+                    search_space.batch_sizes[bs_idx] as f32,
+                );
                 params
             },
             timestamp: std::time::SystemTime::now()
@@ -649,7 +673,7 @@ impl AutoMLOptimizer {
     /// Compute primary optimization score
     fn compute_primary_score(&self, metrics: &HashMap<OptimizationMetric, f32>) -> f32 {
         let mut score = 0.0;
-        
+
         // Weighted combination of metrics
         if let Some(&accuracy) = metrics.get(&OptimizationMetric::Accuracy) {
             score += accuracy * 0.4;
@@ -661,32 +685,32 @@ impl AutoMLOptimizer {
         if let Some(&throughput) = metrics.get(&OptimizationMetric::Throughput) {
             score += (throughput / 100.0).min(1.0) * 0.3;
         }
-        
+
         score
     }
 
     /// Compute Pareto frontier from trial results
     fn compute_pareto_frontier(&self, results: &[TrialResult]) -> Vec<TrialResult> {
         let mut frontier = Vec::new();
-        
+
         for result in results {
             if !result.success {
                 continue;
             }
-            
+
             let is_dominated = results.iter().any(|other| {
                 if !other.success || other.trial.trial_id == result.trial.trial_id {
                     return false;
                 }
-                
+
                 // Check if other dominates result
                 let mut better_in_all = true;
                 let mut better_in_some = false;
-                
+
                 for metric in &self.config.optimization_metrics {
                     let result_val = result.metrics.get(metric).unwrap_or(&0.0);
                     let other_val = other.metrics.get(metric).unwrap_or(&0.0);
-                    
+
                     match metric {
                         OptimizationMetric::Latency | OptimizationMetric::MemoryUsage => {
                             // Lower is better
@@ -706,15 +730,15 @@ impl AutoMLOptimizer {
                         }
                     }
                 }
-                
+
                 better_in_all && better_in_some
             });
-            
+
             if !is_dominated {
                 frontier.push(result.clone());
             }
         }
-        
+
         frontier
     }
 
@@ -722,7 +746,7 @@ impl AutoMLOptimizer {
     fn compute_improvement_curve(&self, results: &[TrialResult]) -> Vec<(usize, f32)> {
         let mut curve = Vec::new();
         let mut best_score = f32::NEG_INFINITY;
-        
+
         for (i, result) in results.iter().enumerate() {
             if result.success {
                 let score = self.compute_primary_score(&result.metrics);
@@ -732,17 +756,21 @@ impl AutoMLOptimizer {
             }
             curve.push((i, best_score));
         }
-        
+
         curve
     }
 
     /// Estimate memory usage for trial
-    fn estimate_memory_usage(&self, _vector_store: &VectorStore, trial: &OptimizationTrial) -> Result<usize> {
+    fn estimate_memory_usage(
+        &self,
+        _vector_store: &VectorStore,
+        trial: &OptimizationTrial,
+    ) -> Result<usize> {
         // Simplified memory estimation
         let base_memory = 100 * 1024 * 1024; // 100MB base
         let vector_memory = trial.vector_dimension * 4; // 4 bytes per f32
         let index_overhead = vector_memory / 2; // 50% overhead for index structures
-        
+
         Ok(base_memory + vector_memory + index_overhead)
     }
 
@@ -751,12 +779,13 @@ impl AutoMLOptimizer {
         if relevant.is_empty() {
             return 1.0;
         }
-        
+
         let relevant_set: std::collections::HashSet<_> = relevant.iter().collect();
-        let retrieved_relevant = retrieved.iter()
+        let retrieved_relevant = retrieved
+            .iter()
             .filter(|doc| relevant_set.contains(doc))
             .count();
-        
+
         retrieved_relevant as f32 / relevant.len() as f32
     }
 
@@ -765,12 +794,13 @@ impl AutoMLOptimizer {
         if retrieved.is_empty() {
             return 0.0;
         }
-        
+
         let relevant_set: std::collections::HashSet<_> = relevant.iter().collect();
-        let retrieved_relevant = retrieved.iter()
+        let retrieved_relevant = retrieved
+            .iter()
             .filter(|doc| relevant_set.contains(doc))
             .count();
-        
+
         retrieved_relevant as f32 / retrieved.len() as f32
     }
 
@@ -778,19 +808,22 @@ impl AutoMLOptimizer {
     pub fn get_optimization_statistics(&self) -> AutoMLStatistics {
         let history = self.trial_history.read().unwrap();
         let best_trial = self.best_trial.read().unwrap();
-        
+
         let total_trials = history.len();
         let successful_trials = history.iter().filter(|r| r.success).count();
         let average_trial_time = if !history.is_empty() {
-            history.iter()
+            history
+                .iter()
                 .map(|r| r.training_time + r.evaluation_time)
                 .sum::<Duration>()
-                .as_secs_f32() / history.len() as f32
+                .as_secs_f32()
+                / history.len() as f32
         } else {
             0.0
         };
-        
-        let best_score = best_trial.as_ref()
+
+        let best_score = best_trial
+            .as_ref()
             .map(|r| self.compute_primary_score(&r.metrics))
             .unwrap_or(0.0);
 
@@ -806,11 +839,11 @@ impl AutoMLOptimizer {
 
     fn estimate_search_space_size(&self) -> usize {
         let space = &self.config.search_space;
-        space.embedding_strategies.len() *
-        space.vector_dimensions.len() *
-        space.similarity_metrics.len() *
-        space.learning_rates.len() *
-        space.batch_sizes.len()
+        space.embedding_strategies.len()
+            * space.vector_dimensions.len()
+            * space.similarity_metrics.len()
+            * space.learning_rates.len()
+            * space.batch_sizes.len()
     }
 }
 
@@ -856,7 +889,7 @@ mod tests {
         let optimizer = AutoMLOptimizer::with_default_config().unwrap();
         let trials = optimizer.generate_optimization_trials().unwrap();
         assert!(!trials.is_empty());
-        
+
         // Check trial uniqueness
         let mut trial_ids = std::collections::HashSet::new();
         for trial in &trials {
@@ -867,20 +900,38 @@ mod tests {
     #[tokio::test]
     async fn test_optimization_with_sample_data() {
         let optimizer = AutoMLOptimizer::with_default_config().unwrap();
-        
+
         let training_data = vec![
-            ("doc1".to_string(), "artificial intelligence machine learning".to_string()),
-            ("doc2".to_string(), "deep learning neural networks".to_string()),
-            ("doc3".to_string(), "natural language processing".to_string()),
+            (
+                "doc1".to_string(),
+                "artificial intelligence machine learning".to_string(),
+            ),
+            (
+                "doc2".to_string(),
+                "deep learning neural networks".to_string(),
+            ),
+            (
+                "doc3".to_string(),
+                "natural language processing".to_string(),
+            ),
         ];
-        
+
         let validation_data = vec![
-            ("doc4".to_string(), "computer vision image recognition".to_string()),
-            ("doc5".to_string(), "reinforcement learning algorithms".to_string()),
+            (
+                "doc4".to_string(),
+                "computer vision image recognition".to_string(),
+            ),
+            (
+                "doc5".to_string(),
+                "reinforcement learning algorithms".to_string(),
+            ),
         ];
-        
+
         let test_queries = vec![
-            ("ai query".to_string(), vec!["doc1".to_string(), "doc2".to_string()]),
+            (
+                "ai query".to_string(),
+                vec!["doc1".to_string(), "doc2".to_string()],
+            ),
             ("nlp query".to_string(), vec!["doc3".to_string()]),
         ];
 
@@ -888,10 +939,12 @@ mod tests {
         let mut config = AutoMLConfig::default();
         config.max_optimization_time = Duration::from_secs(1);
         config.trials_per_config = 1;
-        
+
         let optimizer = AutoMLOptimizer::new(config).unwrap();
-        let results = optimizer.optimize_embeddings(&training_data, &validation_data, &test_queries).await;
-        
+        let results = optimizer
+            .optimize_embeddings(&training_data, &validation_data, &test_queries)
+            .await;
+
         // Test should complete without errors even if no trials complete
         assert!(results.is_ok());
     }
@@ -899,7 +952,7 @@ mod tests {
     #[test]
     fn test_pareto_frontier_computation() {
         let optimizer = AutoMLOptimizer::with_default_config().unwrap();
-        
+
         let trial1 = OptimizationTrial {
             trial_id: "trial1".to_string(),
             embedding_strategy: EmbeddingStrategy::TfIdf,
@@ -909,7 +962,7 @@ mod tests {
             hyperparameters: HashMap::new(),
             timestamp: 0,
         };
-        
+
         let trial2 = OptimizationTrial {
             trial_id: "trial2".to_string(),
             embedding_strategy: EmbeddingStrategy::SentenceTransformer,
@@ -958,13 +1011,13 @@ mod tests {
     #[test]
     fn test_recall_precision_computation() {
         let optimizer = AutoMLOptimizer::with_default_config().unwrap();
-        
+
         let retrieved = vec!["doc1".to_string(), "doc2".to_string(), "doc3".to_string()];
         let relevant = vec!["doc1".to_string(), "doc3".to_string(), "doc4".to_string()];
-        
+
         let recall = optimizer.compute_recall(&retrieved, &relevant);
         let precision = optimizer.compute_precision(&retrieved, &relevant);
-        
+
         assert_eq!(recall, 2.0 / 3.0); // 2 out of 3 relevant docs retrieved
         assert_eq!(precision, 2.0 / 3.0); // 2 out of 3 retrieved docs are relevant
     }
@@ -973,7 +1026,7 @@ mod tests {
     fn test_optimization_statistics() {
         let optimizer = AutoMLOptimizer::with_default_config().unwrap();
         let stats = optimizer.get_optimization_statistics();
-        
+
         assert_eq!(stats.total_trials, 0);
         assert_eq!(stats.successful_trials, 0);
         assert!(stats.search_space_size > 0);

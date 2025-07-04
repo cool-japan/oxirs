@@ -177,7 +177,7 @@ impl DeepCostPredictor {
 
         // Create cost prediction from output
         let estimated_cost = activation[0];
-        
+
         Ok(CostPrediction {
             estimated_cost,
             execution_time: Duration::from_millis((estimated_cost * 1000.0) as u64),
@@ -203,11 +203,11 @@ impl DeepCostPredictor {
     ) -> Result<()> {
         // Simplified training logic - compute loss and update weights
         let loss = (prediction.estimated_cost - target).powi(2);
-        
+
         // Update training statistics
         self.training_stats.total_epochs += 1;
         self.training_stats.current_loss = loss;
-        
+
         // Add training record
         self.training_history.push(TrainingRecord {
             epoch: self.training_stats.total_epochs,
@@ -216,7 +216,7 @@ impl DeepCostPredictor {
             learning_rate: self.optimizer.learning_rate,
             timestamp: SystemTime::now(),
         });
-        
+
         Ok(())
     }
 
@@ -229,11 +229,13 @@ impl DeepCostPredictor {
         let mut total_loss = 0.0;
         let mut correct_predictions = 0;
 
-        for (i, (feature_row, &target)) in features.axis_iter(Axis(0)).zip(targets.iter()).enumerate() {
+        for (i, (feature_row, &target)) in
+            features.axis_iter(Axis(0)).zip(targets.iter()).enumerate()
+        {
             let input = feature_row.to_owned();
             let prediction = self.forward(&input, true)?;
             self.backward(&input, target, &prediction)?;
-            
+
             total_loss += self.training_stats.current_loss;
             if (prediction.estimated_cost - target).abs() / target.abs() < 0.1 {
                 correct_predictions += 1;
@@ -280,7 +282,9 @@ impl NetworkLayer {
     fn apply_activation(&self, input: &Array1<f64>) -> Array1<f64> {
         match self.activation {
             ActivationFunction::ReLU => input.map(|&x| x.max(0.0)),
-            ActivationFunction::LeakyReLU { alpha } => input.map(|&x| if x > 0.0 { x } else { alpha * x }),
+            ActivationFunction::LeakyReLU { alpha } => {
+                input.map(|&x| if x > 0.0 { x } else { alpha * x })
+            }
             ActivationFunction::Tanh => input.map(|&x| x.tanh()),
             ActivationFunction::Sigmoid => input.map(|&x| 1.0 / (1.0 + (-x).exp())),
             _ => input.clone(), // Default to linear for other activations
@@ -292,7 +296,7 @@ impl AttentionLayer {
     pub fn new(input_dim: usize, num_heads: usize) -> Self {
         let head_dim = input_dim / num_heads;
         let scale = (head_dim as f64).sqrt().recip();
-        
+
         Self {
             query_weights: {
                 use rand::Rng;
@@ -323,11 +327,11 @@ impl AttentionLayer {
         let query = self.query_weights.dot(input);
         let key = self.key_weights.dot(input);
         let value = self.value_weights.dot(input);
-        
+
         // Compute attention scores (simplified)
         let attention_score = query.dot(&key) / (key.len() as f64).sqrt();
         let attention_weight = 1.0 / (1.0 + (-attention_score).exp()); // sigmoid
-        
+
         let attended = &value * attention_weight;
         Ok(self.output_weights.dot(&attended))
     }
@@ -353,7 +357,8 @@ impl BatchNormLayer {
             Ok(&self.gamma * &normalized + &self.beta)
         } else {
             // Use running statistics
-            let normalized = (input - &self.running_mean) / (&self.running_var + 1e-8).mapv(|x| x.sqrt());
+            let normalized =
+                (input - &self.running_mean) / (&self.running_var + 1e-8).mapv(|x| x.sqrt());
             Ok(&self.gamma * &normalized + &self.beta)
         }
     }

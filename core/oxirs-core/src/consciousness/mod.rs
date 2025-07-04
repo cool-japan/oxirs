@@ -16,9 +16,11 @@
 
 pub mod dream_processing;
 pub mod emotional_learning;
+pub mod enhanced_coordinator;
 pub mod intuitive_planner;
 pub mod quantum_consciousness;
 pub mod quantum_genetic_optimizer;
+pub mod temporal_consciousness;
 
 pub use intuitive_planner::{
     ComplexityLevel, CreativeTechnique, CreativityEngine, DatasetSize, ExecutionResults,
@@ -51,6 +53,21 @@ pub use quantum_genetic_optimizer::{
     BellStateType, ConsciousnessEvolutionInsight, InsightType, OptimizationStrategy,
     QuantumEntanglementLevel, QuantumEvolutionResult, QuantumGeneticOptimizer,
     QuantumOptimizationSuperposition,
+};
+
+pub use enhanced_coordinator::{
+    EnhancedConsciousnessCoordinator, IntegrationPattern, SyncRequirements,
+    PatternPerformanceMetrics, ActivationCondition, ConditionType, EvolutionCheckpoint,
+    PerformanceImprovement, SynchronizationMonitor, ConsciousnessOptimizer,
+    OptimizationResult, PatternAnalysis, CoordinationResult,
+};
+
+pub use temporal_consciousness::{
+    TemporalConsciousness, TemporalExperience, TemporalSequence, SequenceStep,
+    PatternEvolutionTracker, EvolutionSnapshot, TrendAnalysis, TrendDirection,
+    FutureProjection, EmotionalTrend, TemporalAnalysisResult, SequenceAnalysisResult,
+    EmotionalContextResult, PredictionResult, HistoricalContextResult,
+    TemporalRecommendation, RecommendationType,
 };
 
 // Integrated consciousness types are defined below as structs

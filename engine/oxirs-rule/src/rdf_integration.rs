@@ -210,7 +210,7 @@ pub fn convert_rule_atom(atom: &RuleAtom, namespaces: &NamespaceManager) -> Resu
         RuleAtom::NotEqual { left, right } => {
             let left_term = convert_term(left, namespaces)?;
             let right_term = convert_term(right, namespaces)?;
-            
+
             Ok(RdfRuleAtom::Builtin {
                 name: "notEqual".to_string(),
                 args: vec![left_term, right_term],
@@ -219,7 +219,7 @@ pub fn convert_rule_atom(atom: &RuleAtom, namespaces: &NamespaceManager) -> Resu
         RuleAtom::GreaterThan { left, right } => {
             let left_term = convert_term(left, namespaces)?;
             let right_term = convert_term(right, namespaces)?;
-            
+
             Ok(RdfRuleAtom::Builtin {
                 name: "greaterThan".to_string(),
                 args: vec![left_term, right_term],
@@ -228,7 +228,7 @@ pub fn convert_rule_atom(atom: &RuleAtom, namespaces: &NamespaceManager) -> Resu
         RuleAtom::LessThan { left, right } => {
             let left_term = convert_term(left, namespaces)?;
             let right_term = convert_term(right, namespaces)?;
-            
+
             Ok(RdfRuleAtom::Builtin {
                 name: "lessThan".to_string(),
                 args: vec![left_term, right_term],
@@ -285,13 +285,16 @@ pub fn convert_term(term: &RuleTerm, namespaces: &NamespaceManager) -> Result<Rd
         }
         RuleTerm::Function { name, args } => {
             // Convert function terms to complex literals for RDF representation
-            let args_repr: Vec<String> = args.iter().map(|arg| {
-                // Recursively convert arguments, but handle potential errors
-                match convert_term(arg, namespaces) {
-                    Ok(converted) => format!("{:?}", converted), // Simple string representation
-                    Err(_) => "?".to_string(), // Fallback for unparseable terms
-                }
-            }).collect();
+            let args_repr: Vec<String> = args
+                .iter()
+                .map(|arg| {
+                    // Recursively convert arguments, but handle potential errors
+                    match convert_term(arg, namespaces) {
+                        Ok(converted) => format!("{:?}", converted), // Simple string representation
+                        Err(_) => "?".to_string(), // Fallback for unparseable terms
+                    }
+                })
+                .collect();
             let func_repr = format!("{}({})", name, args_repr.join(", "));
             let function_datatype = NamedNode::new("http://oxirs.org/function")?;
             let lit = Literal::new_typed_literal(&func_repr, function_datatype);

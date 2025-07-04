@@ -8,17 +8,17 @@ use crate::quantum_neural_patterns::{QuantumPattern, QuantumState};
 use crate::self_adaptive_ai::{AdaptationStats, PerformanceMetrics};
 use crate::{Result, ShaclAiError};
 
-use super::core::{VisualizationData, GraphNode, GraphEdge, TimeSeriesData};
+use super::core::{GraphEdge, GraphNode, TimeSeriesData, VisualizationData};
 
 /// Trait for data collectors
 #[async_trait::async_trait]
 pub trait DataCollector: Send + Sync + std::fmt::Debug {
     /// Collect data for visualization
     async fn collect_data(&self) -> Result<VisualizationData>;
-    
+
     /// Get collector metadata
     fn get_metadata(&self) -> CollectorMetadata;
-    
+
     /// Check if collector is available
     async fn is_available(&self) -> bool;
 }
@@ -148,15 +148,16 @@ impl DataCollector for QuantumPatternCollector {
             },
         ];
 
-        let entanglements = vec![
-            super::core::EntanglementVisualization {
-                qubit1: "qubit_0".to_string(),
-                qubit2: "qubit_1".to_string(),
-                strength: 0.8,
-            },
-        ];
+        let entanglements = vec![super::core::EntanglementVisualization {
+            qubit1: "qubit_0".to_string(),
+            qubit2: "qubit_1".to_string(),
+            strength: 0.8,
+        }];
 
-        Ok(VisualizationData::Quantum { states, entanglements })
+        Ok(VisualizationData::Quantum {
+            states,
+            entanglements,
+        })
     }
 
     fn get_metadata(&self) -> CollectorMetadata {

@@ -11,6 +11,7 @@ use std::collections::HashMap;
 pub struct InjectionDetector {
     patterns: Vec<String>,
     whitelist: Vec<String>,
+    pub enabled: bool,
 }
 
 impl InjectionDetector {
@@ -29,6 +30,7 @@ impl InjectionDetector {
                 "ASK".to_string(),
                 "DESCRIBE".to_string(),
             ],
+            enabled: true,
         }
     }
 

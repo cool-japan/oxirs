@@ -373,43 +373,57 @@ pub trait Store: Send + Sync {
     /// Clear all data from all graphs
     fn clear_all(&self) -> Result<usize> {
         // Default implementation - not supported in trait
-        Err(OxirsError::NotSupported("clear_all requires mutable access".to_string()))
+        Err(OxirsError::NotSupported(
+            "clear_all requires mutable access".to_string(),
+        ))
     }
 
     /// Clear all named graphs (but not the default graph)
     fn clear_named_graphs(&self) -> Result<usize> {
         // Default implementation - not supported in trait
-        Err(OxirsError::NotSupported("clear_named_graphs requires mutable access".to_string()))
+        Err(OxirsError::NotSupported(
+            "clear_named_graphs requires mutable access".to_string(),
+        ))
     }
 
     /// Clear the default graph only
     fn clear_default_graph(&self) -> Result<usize> {
         // Default implementation - not supported in trait
-        Err(OxirsError::NotSupported("clear_default_graph requires mutable access".to_string()))
+        Err(OxirsError::NotSupported(
+            "clear_default_graph requires mutable access".to_string(),
+        ))
     }
 
     /// Clear a specific graph
     fn clear_graph(&self, _graph: Option<&GraphName>) -> Result<usize> {
         // Default implementation - not supported in trait
-        Err(OxirsError::NotSupported("clear_graph requires mutable access".to_string()))
+        Err(OxirsError::NotSupported(
+            "clear_graph requires mutable access".to_string(),
+        ))
     }
 
     /// Create a new graph (if it doesn't exist)
     fn create_graph(&self, _graph: Option<&NamedNode>) -> Result<()> {
         // Default implementation - not supported in trait
-        Err(OxirsError::NotSupported("create_graph requires mutable access".to_string()))
+        Err(OxirsError::NotSupported(
+            "create_graph requires mutable access".to_string(),
+        ))
     }
 
     /// Drop a graph (remove the graph and all its quads)
     fn drop_graph(&self, _graph: Option<&GraphName>) -> Result<()> {
         // Default implementation - not supported in trait
-        Err(OxirsError::NotSupported("drop_graph requires mutable access".to_string()))
+        Err(OxirsError::NotSupported(
+            "drop_graph requires mutable access".to_string(),
+        ))
     }
 
     /// Load data from a URL into a graph
     fn load_from_url(&self, _url: &str, _graph: Option<&NamedNode>) -> Result<usize> {
         // Default implementation - not supported in trait
-        Err(OxirsError::NotSupported("load_from_url requires mutable access".to_string()))
+        Err(OxirsError::NotSupported(
+            "load_from_url requires mutable access".to_string(),
+        ))
     }
 
     /// Get all triples in the store (converts quads to triples)

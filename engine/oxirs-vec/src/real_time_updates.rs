@@ -408,7 +408,7 @@ impl RealTimeVectorUpdater {
         }; // index_guard is dropped here
 
         let processing_time = start_time.elapsed();
-        
+
         // Update statistics without holding lock across await
         {
             let stats_guard = stats.write();

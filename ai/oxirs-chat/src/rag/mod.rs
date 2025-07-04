@@ -56,7 +56,7 @@ pub use embedding_providers::{
 pub use entity_extraction::{EntityExtractor, LLMEntityExtraction};
 pub use graph_traversal::{EntityType, ExtractedEntity, ExtractedRelationship, GraphTraversal};
 pub use knowledge_extraction::{
-    EntityType as KnowledgeEntityType, ExtractedEntity as KnowledgeExtractedEntity, 
+    EntityType as KnowledgeEntityType, ExtractedEntity as KnowledgeExtractedEntity,
     ExtractedKnowledge, ExtractedRelationship as KnowledgeExtractedRelationship,
     KnowledgeExtractionConfig, KnowledgeExtractionEngine, RelationshipType,
 };
@@ -283,7 +283,11 @@ impl RagEngine {
     }
 
     /// Create a new RAG engine with vector index configuration
-    pub async fn with_vector_index(config: RagConfig, store: Arc<dyn Store>, vector_dimensions: usize) -> Result<Self> {
+    pub async fn with_vector_index(
+        config: RagConfig,
+        store: Arc<dyn Store>,
+        vector_dimensions: usize,
+    ) -> Result<Self> {
         let mut engine = Self::new(config, store);
         engine.initialize().await?;
         Ok(engine)

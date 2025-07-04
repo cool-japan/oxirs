@@ -26,7 +26,7 @@ fn main() -> Result<()> {
     // 1. Create query executor with vector optimization
     let executor = create_vector_enabled_executor()?;
 
-    // 2. Register vector indices  
+    // 2. Register vector indices
     register_sample_vector_indices(&executor)?;
 
     // 3. Execute sample queries with vector optimization
@@ -77,7 +77,7 @@ fn create_vector_enabled_executor() -> Result<QueryExecutor> {
 
     // Note: Vector optimization would be configured through the executor
     // For demonstration purposes, we'll show what the configuration would look like
-    
+
     println!("✅ Vector optimization configured");
     println!("   - Similarity threshold: 0.8");
     println!("   - Max candidates: 1000");
@@ -222,7 +222,12 @@ fn execute_sample_queries(executor: &QueryExecutor) -> Result<()> {
             Ok(vec![]) // Return empty for mock implementation
         }
 
-        fn contains_triple(&self, _subject: &Term, _predicate: &Term, _object: &Term) -> Result<bool> {
+        fn contains_triple(
+            &self,
+            _subject: &Term,
+            _predicate: &Term,
+            _object: &Term,
+        ) -> Result<bool> {
             Ok(false) // Mock implementation always returns false
         }
 
@@ -312,13 +317,13 @@ fn execute_sample_queries(executor: &QueryExecutor) -> Result<()> {
 
         // For this example, we'll simulate the vector optimization process
         let execution_time = start_time.elapsed();
-        
+
         // Simulate successful execution for demonstration
         println!("   ✅ Query analysis completed");
         println!("   📊 Vector strategy identified");
         println!("   ⏱️  Analysis time: {:?}", execution_time);
         println!("   💾 Estimated optimizations available");
-        
+
         // Simulate vector optimization feedback
         println!("   🎯 Vector strategy detected and cost estimated");
         println!("   📈 Query plan enhanced with vector awareness");
@@ -341,8 +346,14 @@ fn show_performance_metrics(executor: &QueryExecutor) -> Result<()> {
         println!("│ Semantic expansions:      {:>13} │", 42);
         println!("│ Average speedup:          {:>13.2}x │", 2.5);
         println!("│ Vector cache hit rate:    {:>13.1}% │", 85.0);
-        println!("│ Embedding gen time:       {:>13?} │", Duration::from_micros(200));
-        println!("│ Total optimization time:  {:>13?} │", Duration::from_millis(50));
+        println!(
+            "│ Embedding gen time:       {:>13?} │",
+            Duration::from_micros(200)
+        );
+        println!(
+            "│ Total optimization time:  {:>13?} │",
+            Duration::from_millis(50)
+        );
         println!("╰─────────────────────────────────────────╯");
     }
 

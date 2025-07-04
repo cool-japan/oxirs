@@ -209,13 +209,13 @@ impl CircuitBreaker {
     /// Reset the circuit breaker to closed state
     pub async fn reset(&self) -> Result<(), anyhow::Error> {
         self.transition_to_closed().await;
-        
+
         // Clear call history
         {
             let mut history = self.call_history.write().await;
             history.clear();
         }
-        
+
         info!("Circuit breaker has been manually reset");
         Ok(())
     }

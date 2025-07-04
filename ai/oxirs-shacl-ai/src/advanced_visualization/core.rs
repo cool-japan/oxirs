@@ -9,10 +9,7 @@ use tokio::sync::RwLock;
 
 use crate::{Result, ShaclAiError};
 
-use super::{
-    collectors::DataCollector,
-    renderers::VisualizationRenderer,
-};
+use super::{collectors::DataCollector, renderers::VisualizationRenderer};
 
 /// Advanced visualization engine for SHACL-AI components
 #[derive(Debug)]
@@ -72,11 +69,13 @@ impl AdvancedVisualizationEngine {
         let collectors = self.data_collectors.read().await;
         let renderers = self.renderers.read().await;
 
-        let collector = collectors.get(&collector_name)
-            .ok_or_else(|| ShaclAiError::Visualization(format!("Collector '{}' not found", collector_name)))?;
+        let collector = collectors.get(&collector_name).ok_or_else(|| {
+            ShaclAiError::Visualization(format!("Collector '{}' not found", collector_name))
+        })?;
 
-        let renderer = renderers.get(&renderer_name)
-            .ok_or_else(|| ShaclAiError::Visualization(format!("Renderer '{}' not found", renderer_name)))?;
+        let renderer = renderers.get(&renderer_name).ok_or_else(|| {
+            ShaclAiError::Visualization(format!("Renderer '{}' not found", renderer_name))
+        })?;
 
         // Collect data
         let data = collector.collect_data().await?;
@@ -98,24 +97,31 @@ impl AdvancedVisualizationEngine {
     }
 
     /// Update an existing visualization
-    pub async fn update_visualization(&self, visualization_id: &str) -> Result<VisualizationOutput> {
+    pub async fn update_visualization(
+        &self,
+        visualization_id: &str,
+    ) -> Result<VisualizationOutput> {
         let mut active = self.active_visualizations.write().await;
-        
+
         if let Some(active_viz) = active.get_mut(visualization_id) {
             // Update the visualization (simplified - would need to re-collect and render)
             active_viz.last_updated = SystemTime::now();
             active_viz.update_count += 1;
-            
+
             Ok(active_viz.output.clone())
         } else {
-            Err(ShaclAiError::Visualization(
-                format!("Visualization '{}' not found", visualization_id)
-            ))
+            Err(ShaclAiError::Visualization(format!(
+                "Visualization '{}' not found",
+                visualization_id
+            )))
         }
     }
 
     /// Get active visualization
-    pub async fn get_visualization(&self, visualization_id: &str) -> Result<Option<VisualizationOutput>> {
+    pub async fn get_visualization(
+        &self,
+        visualization_id: &str,
+    ) -> Result<Option<VisualizationOutput>> {
         let active = self.active_visualizations.read().await;
         Ok(active.get(visualization_id).map(|v| v.output.clone()))
     }

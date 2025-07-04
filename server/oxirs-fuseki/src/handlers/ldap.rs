@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
 /// LDAP login request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LdapLoginRequest {
     pub username: String,
     pub password: String,

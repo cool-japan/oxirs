@@ -28,28 +28,28 @@ use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 
 // Module declarations
-pub mod config;
-pub mod circuit_breaker;
-pub mod types;
-pub mod providers;
-pub mod manager;
-pub mod reasoning;
-pub mod openai_provider;
 pub mod anthropic_provider;
+pub mod circuit_breaker;
+pub mod config;
 pub mod local_provider;
+pub mod manager;
+pub mod openai_provider;
+pub mod providers;
+pub mod reasoning;
+pub mod types;
 
 // Re-export commonly used types
-pub use config::{
-    LLMConfig, ProviderConfig, ModelConfig, RoutingConfig, RoutingStrategy,
-    FallbackConfig, BackoffStrategy, RateLimitConfig, CircuitBreakerConfig, CircuitBreakerState
-};
-pub use circuit_breaker::{CircuitBreaker, CircuitBreakerStats};
-pub use types::{
-    LLMRequest, LLMResponse, LLMResponseChunk, LLMResponseStream, ChatMessage, ChatRole,
-    UseCase, Priority, Usage, RoutingCandidate
-};
-pub use providers::LLMProvider;
-pub use manager::{LLMManager, EnhancedLLMManager};
-pub use openai_provider::OpenAIProvider;
 pub use anthropic_provider::AnthropicProvider;
+pub use circuit_breaker::{CircuitBreaker, CircuitBreakerStats};
+pub use config::{
+    BackoffStrategy, CircuitBreakerConfig, CircuitBreakerState, FallbackConfig, LLMConfig,
+    ModelConfig, ProviderConfig, RateLimitConfig, RoutingConfig, RoutingStrategy,
+};
 pub use local_provider::LocalModelProvider;
+pub use manager::{EnhancedLLMManager, LLMManager};
+pub use openai_provider::OpenAIProvider;
+pub use providers::LLMProvider;
+pub use types::{
+    ChatMessage, ChatRole, LLMRequest, LLMResponse, LLMResponseChunk, LLMResponseStream, Priority,
+    RoutingCandidate, Usage, UseCase,
+};

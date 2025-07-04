@@ -4,10 +4,10 @@
 //! quantum interference optimization, and entanglement-based result ranking.
 
 use super::types::RagDocument;
+use fastrand;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 use std::time::Duration;
-use fastrand;
 
 /// Quantum-inspired state for retrieval optimization
 #[derive(Debug, Clone, Serialize, Deserialize)]

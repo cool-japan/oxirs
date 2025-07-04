@@ -9,8 +9,8 @@ use oid_registry::{OID_X509_EXT_EXTENDED_KEY_USAGE, OID_X509_EXT_KEY_USAGE};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, error, warn};
-use x509_parser::prelude::*;
 use x509_parser::pem;
+use x509_parser::prelude::*;
 
 /// Certificate authentication service
 pub struct CertificateAuthService {
@@ -173,7 +173,7 @@ impl CertificateAuthService {
         let serial = format!("{:x}", cert.serial);
         let subject = cert.subject().to_string();
         let combined = format!("{}:{}", serial, subject);
-        
+
         let fingerprint = Sha256::digest(combined.as_bytes())
             .iter()
             .map(|b| format!("{:02X}", b))

@@ -60,8 +60,12 @@ impl NaturalLanguageProcessor {
         &mut self,
         explanation: &RawExplanation,
     ) -> Result<String> {
-        let default_template = "The AI system made this decision with {confidence}% confidence.".to_string();
-        let template = self.templates.get(&explanation.explanation_type).unwrap_or(&default_template);
+        let default_template =
+            "The AI system made this decision with {confidence}% confidence.".to_string();
+        let template = self
+            .templates
+            .get(&explanation.explanation_type)
+            .unwrap_or(&default_template);
 
         let mut result = template.clone();
 

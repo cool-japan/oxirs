@@ -494,7 +494,7 @@ impl Clone for ServiceBloomFilter {
             false_positive_rate: self.false_positive_rate,
             estimated_cardinality: self.estimated_cardinality,
             predicate_filter: ExternalBloomFilter::with_rate(0.01, 1000), // Create new filter with default params
-            resource_filter: ExternalBloomFilter::with_rate(0.01, 1000),  // Create new filter with default params
+            resource_filter: ExternalBloomFilter::with_rate(0.01, 1000), // Create new filter with default params
             last_updated: self.last_updated,
             estimated_elements: self.estimated_elements,
         }

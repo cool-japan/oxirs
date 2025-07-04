@@ -2,9 +2,9 @@
 
 use anyhow::{Context, Result};
 use std::collections::HashMap;
-use tracing::debug;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::real_time_embedding_pipeline::{

@@ -84,10 +84,7 @@ pub struct ExperienceSample {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AdaptationStrategy {
     /// Gradient-based fine-tuning
-    GradientDescent {
-        momentum: f64,
-        weight_decay: f64,
-    },
+    GradientDescent { momentum: f64, weight_decay: f64 },
     /// Evolutionary adaptation
     Evolutionary {
         mutation_rate: f64,
@@ -198,7 +195,7 @@ impl AdaptiveLearningSystem {
     pub fn new(config: AdaptiveLearningConfig) -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
         let learning_rate = config.learning_rate;
-        
+
         Self {
             config,
             experience_buffer: Arc::new(RwLock::new(VecDeque::new())),
@@ -231,7 +228,8 @@ impl AdaptiveLearningSystem {
 
     /// Start the adaptive learning process
     pub async fn start_learning(&self) -> Result<()> {
-        let mut receiver = self.feedback_receiver
+        let mut receiver = self
+            .feedback_receiver
             .write()
             .unwrap()
             .take()
@@ -243,15 +241,12 @@ impl AdaptiveLearningSystem {
         let experience_buffer = Arc::clone(&self.experience_buffer);
         let metrics = Arc::clone(&self.metrics);
         let config = self.config.clone();
-        
+
         tokio::spawn(async move {
             while let Some(feedback) = receiver.recv().await {
-                if let Err(e) = Self::process_feedback(
-                    feedback,
-                    &experience_buffer,
-                    &metrics,
-                    &config,
-                ).await {
+                if let Err(e) =
+                    Self::process_feedback(feedback, &experience_buffer, &metrics, &config).await
+                {
                     warn!("Error processing feedback: {}", e);
                 }
             }
@@ -267,7 +262,7 @@ impl AdaptiveLearningSystem {
 
         tokio::spawn(async move {
             let mut last_adaptation = Instant::now();
-            
+
             loop {
                 tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -275,9 +270,10 @@ impl AdaptiveLearningSystem {
                 let should_adapt = {
                     let buffer_guard = buffer.read().unwrap();
                     let metrics_guard = metrics.read().unwrap();
-                    
-                    buffer_guard.len() >= config.min_samples_for_adaptation &&
-                    last_adaptation.elapsed().as_secs_f64() >= 1.0 / config.max_adaptation_frequency
+
+                    buffer_guard.len() >= config.min_samples_for_adaptation
+                        && last_adaptation.elapsed().as_secs_f64()
+                            >= 1.0 / config.max_adaptation_frequency
                 };
 
                 if should_adapt {
@@ -288,7 +284,9 @@ impl AdaptiveLearningSystem {
                         &learning_state,
                         &config,
                         &strategy,
-                    ).await {
+                    )
+                    .await
+                    {
                         warn!("Error during adaptation: {}", e);
                     } else {
                         last_adaptation = Instant::now();
@@ -314,7 +312,8 @@ impl AdaptiveLearningSystem {
                 target: feedback.embedding.clone(),
                 current: feedback.embedding.clone(), // This would be the current model output
                 improvement_target: 1.0 - feedback.quality_score,
-                context: feedback.task_context
+                context: feedback
+                    .task_context
                     .map(|ctx| [("task".to_string(), ctx)].into())
                     .unwrap_or_default(),
             };
@@ -323,7 +322,7 @@ impl AdaptiveLearningSystem {
             {
                 let mut buffer_guard = buffer.write().unwrap();
                 buffer_guard.push_back(sample);
-                
+
                 // Maintain buffer size
                 while buffer_guard.len() > config.buffer_size {
                     buffer_guard.pop_front();
@@ -334,10 +333,14 @@ impl AdaptiveLearningSystem {
             {
                 let mut metrics_guard = metrics.write().unwrap();
                 let buffer_guard = buffer.read().unwrap();
-                metrics_guard.buffer_utilization = buffer_guard.len() as f64 / config.buffer_size as f64;
+                metrics_guard.buffer_utilization =
+                    buffer_guard.len() as f64 / config.buffer_size as f64;
             }
 
-            debug!("Processed feedback with quality score: {}", feedback.quality_score);
+            debug!(
+                "Processed feedback with quality score: {}",
+                feedback.quality_score
+            );
         }
 
         Ok(())
@@ -354,7 +357,8 @@ impl AdaptiveLearningSystem {
     ) -> Result<()> {
         let samples = {
             let buffer_guard = buffer.read().unwrap();
-            buffer_guard.iter()
+            buffer_guard
+                .iter()
                 .take(config.adaptation_batch_size)
                 .cloned()
                 .collect::<Vec<_>>()
@@ -371,7 +375,10 @@ impl AdaptiveLearningSystem {
 
         // Perform adaptation based on strategy
         match strategy {
-            AdaptationStrategy::GradientDescent { momentum, weight_decay } => {
+            AdaptationStrategy::GradientDescent {
+                momentum,
+                weight_decay,
+            } => {
                 Self::gradient_descent_adaptation(
                     &samples,
                     parameters,
@@ -381,7 +388,10 @@ impl AdaptiveLearningSystem {
                     config.learning_rate,
                 )?;
             }
-            AdaptationStrategy::MetaLearning { inner_steps, outer_learning_rate } => {
+            AdaptationStrategy::MetaLearning {
+                inner_steps,
+                outer_learning_rate,
+            } => {
                 Self::meta_learning_adaptation(
                     &samples,
                     parameters,
@@ -390,7 +400,10 @@ impl AdaptiveLearningSystem {
                     *outer_learning_rate,
                 )?;
             }
-            AdaptationStrategy::Evolutionary { mutation_rate, population_size } => {
+            AdaptationStrategy::Evolutionary {
+                mutation_rate,
+                population_size,
+            } => {
                 Self::evolutionary_adaptation(
                     &samples,
                     parameters,
@@ -398,7 +411,10 @@ impl AdaptiveLearningSystem {
                     *population_size,
                 )?;
             }
-            AdaptationStrategy::BayesianOptimization { exploration_factor, kernel_bandwidth } => {
+            AdaptationStrategy::BayesianOptimization {
+                exploration_factor,
+                kernel_bandwidth,
+            } => {
                 Self::bayesian_optimization_adaptation(
                     &samples,
                     parameters,
@@ -416,8 +432,9 @@ impl AdaptiveLearningSystem {
             let mut metrics_guard = metrics.write().unwrap();
             metrics_guard.adaptations_count += 1;
             let improvement = quality_after - quality_before;
-            metrics_guard.avg_quality_improvement = 
-                (metrics_guard.avg_quality_improvement * (metrics_guard.adaptations_count - 1) as f64 + improvement)
+            metrics_guard.avg_quality_improvement = (metrics_guard.avg_quality_improvement
+                * (metrics_guard.adaptations_count - 1) as f64
+                + improvement)
                 / metrics_guard.adaptations_count as f64;
             metrics_guard.last_adaptation = Some(Utc::now());
         }
@@ -444,7 +461,8 @@ impl AdaptiveLearningSystem {
             } else {
                 state_guard.current_learning_rate *= 0.95; // Decrease
             }
-            state_guard.current_learning_rate = state_guard.current_learning_rate
+            state_guard.current_learning_rate = state_guard
+                .current_learning_rate
                 .max(config.learning_rate * 0.1)
                 .min(config.learning_rate * 10.0);
         }
@@ -463,12 +481,13 @@ impl AdaptiveLearningSystem {
             return Ok(0.0);
         }
 
-        let total_quality: f64 = samples.iter()
+        let total_quality: f64 = samples
+            .iter()
             .map(|sample| {
                 // Calculate similarity between current and target embeddings
                 let current = DVector::from_vec(sample.current.clone());
                 let target = DVector::from_vec(sample.target.clone());
-                
+
                 if current.len() != target.len() {
                     return 0.0;
                 }
@@ -477,7 +496,7 @@ impl AdaptiveLearningSystem {
                 let dot_product = current.dot(&target);
                 let norm_current = current.norm();
                 let norm_target = target.norm();
-                
+
                 if norm_current == 0.0 || norm_target == 0.0 {
                     return 0.0;
                 }
@@ -501,24 +520,25 @@ impl AdaptiveLearningSystem {
         // Simplified gradient descent implementation
         // In a real implementation, this would compute gradients based on the loss
         // between current embeddings and target embeddings
-        
+
         let mut params_guard = parameters.write().unwrap();
         let mut state_guard = learning_state.write().unwrap();
 
         for (param_name, param_matrix) in params_guard.iter_mut() {
             // Compute pseudo-gradient (simplified for demonstration)
             let gradient = Self::compute_gradient(samples, param_matrix)?;
-            
+
             // Update momentum
-            let momentum_entry = state_guard.momentum
+            let momentum_entry = state_guard
+                .momentum
                 .entry(param_name.clone())
                 .or_insert_with(|| DMatrix::zeros(param_matrix.nrows(), param_matrix.ncols()));
-            
+
             *momentum_entry = momentum_entry.clone() * momentum + &gradient;
-            
+
             // Apply weight decay
             let decay_term = param_matrix.clone() * weight_decay;
-            
+
             // Update parameters
             *param_matrix -= &(momentum_entry.clone() * learning_rate + decay_term * learning_rate);
         }
@@ -534,7 +554,7 @@ impl AdaptiveLearningSystem {
         // Simplified gradient computation
         // In practice, this would involve backpropagation through the embedding model
         let mut gradient = DMatrix::zeros(param_matrix.nrows(), param_matrix.ncols());
-        
+
         // Add small random perturbations as a placeholder
         for i in 0..gradient.nrows() {
             for j in 0..gradient.ncols() {
@@ -554,7 +574,7 @@ impl AdaptiveLearningSystem {
         outer_learning_rate: f64,
     ) -> Result<()> {
         let mut params_guard = parameters.write().unwrap();
-        
+
         // MAML inner loop
         for _ in 0..inner_steps {
             for (_, param_matrix) in params_guard.iter_mut() {
@@ -574,16 +594,16 @@ impl AdaptiveLearningSystem {
         population_size: usize,
     ) -> Result<()> {
         let mut params_guard = parameters.write().unwrap();
-        
+
         // Simple evolutionary strategy
         for (_, param_matrix) in params_guard.iter_mut() {
             let mut best_fitness = Self::evaluate_fitness(samples, param_matrix)?;
             let mut best_params = param_matrix.clone();
-            
+
             // Generate population
             for _ in 0..population_size {
                 let mut mutated = param_matrix.clone();
-                
+
                 // Apply mutations
                 for i in 0..mutated.nrows() {
                     for j in 0..mutated.ncols() {
@@ -592,14 +612,14 @@ impl AdaptiveLearningSystem {
                         }
                     }
                 }
-                
+
                 let fitness = Self::evaluate_fitness(samples, &mutated)?;
                 if fitness > best_fitness {
                     best_fitness = fitness;
                     best_params = mutated;
                 }
             }
-            
+
             *param_matrix = best_params;
         }
 
@@ -624,34 +644,34 @@ impl AdaptiveLearningSystem {
         _kernel_bandwidth: f64,
     ) -> Result<()> {
         let mut params_guard = parameters.write().unwrap();
-        
+
         // Simplified Bayesian optimization
         for (_, param_matrix) in params_guard.iter_mut() {
             let current_fitness = Self::evaluate_fitness(samples, param_matrix)?;
-            
+
             // Generate candidate solutions
             let mut best_candidate = param_matrix.clone();
             let mut best_acquisition = 0.0;
-            
+
             for _ in 0..10 {
                 let mut candidate = param_matrix.clone();
-                
+
                 // Add exploration noise
                 for i in 0..candidate.nrows() {
                     for j in 0..candidate.ncols() {
                         candidate[(i, j)] += (rand::random::<f64>() - 0.5) * exploration_factor;
                     }
                 }
-                
+
                 let fitness = Self::evaluate_fitness(samples, &candidate)?;
                 let acquisition = fitness + exploration_factor * rand::random::<f64>();
-                
+
                 if acquisition > best_acquisition {
                     best_acquisition = acquisition;
                     best_candidate = candidate;
                 }
             }
-            
+
             // Update only if improvement is significant
             if best_acquisition > current_fitness + 0.01 {
                 *param_matrix = best_candidate;
@@ -695,7 +715,7 @@ mod tests {
     async fn test_adaptive_learning_system_creation() {
         let config = AdaptiveLearningConfig::default();
         let system = AdaptiveLearningSystem::new(config);
-        
+
         let metrics = system.get_metrics();
         assert_eq!(metrics.adaptations_count, 0);
         assert_eq!(metrics.avg_quality_improvement, 0.0);
@@ -705,7 +725,7 @@ mod tests {
     async fn test_feedback_submission() {
         let config = AdaptiveLearningConfig::default();
         let system = AdaptiveLearningSystem::new(config);
-        
+
         let feedback = QualityFeedback {
             query: "test query".to_string(),
             embedding: vec![0.1, 0.2, 0.3],
@@ -714,14 +734,14 @@ mod tests {
             relevance: Some(0.8),
             task_context: Some("similarity".to_string()),
         };
-        
+
         assert!(system.submit_feedback(feedback).is_ok());
     }
 
     #[tokio::test]
     async fn test_adaptive_learning_config_default() {
         let config = AdaptiveLearningConfig::default();
-        
+
         assert_eq!(config.learning_rate, 0.001);
         assert_eq!(config.buffer_size, 10000);
         assert_eq!(config.min_samples_for_adaptation, 100);
@@ -732,19 +752,31 @@ mod tests {
     #[tokio::test]
     async fn test_adaptation_strategies() {
         let config = AdaptiveLearningConfig::default();
-        
+
         // Test different strategies
         let strategies = vec![
-            AdaptationStrategy::GradientDescent { momentum: 0.9, weight_decay: 0.0001 },
-            AdaptationStrategy::MetaLearning { inner_steps: 3, outer_learning_rate: 0.01 },
-            AdaptationStrategy::Evolutionary { mutation_rate: 0.1, population_size: 20 },
-            AdaptationStrategy::BayesianOptimization { exploration_factor: 0.1, kernel_bandwidth: 1.0 },
+            AdaptationStrategy::GradientDescent {
+                momentum: 0.9,
+                weight_decay: 0.0001,
+            },
+            AdaptationStrategy::MetaLearning {
+                inner_steps: 3,
+                outer_learning_rate: 0.01,
+            },
+            AdaptationStrategy::Evolutionary {
+                mutation_rate: 0.1,
+                population_size: 20,
+            },
+            AdaptationStrategy::BayesianOptimization {
+                exploration_factor: 0.1,
+                kernel_bandwidth: 1.0,
+            },
         ];
-        
+
         for strategy in strategies {
             let system = AdaptiveLearningSystem::with_strategy(config.clone(), strategy);
             assert!(system.start_learning().await.is_ok());
-            
+
             // Give some time for initialization
             sleep(Duration::from_millis(10)).await;
         }
@@ -768,7 +800,7 @@ mod tests {
                 context: HashMap::new(),
             },
         ];
-        
+
         let quality = AdaptiveLearningSystem::calculate_current_quality(&samples).unwrap();
         assert!(quality > 0.0 && quality <= 1.0);
     }

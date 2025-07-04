@@ -212,9 +212,7 @@ pub enum VectorOperation {
         threshold: Option<f32>,
     },
     /// Embed text into a vector
-    EmbedText {
-        text: String,
-    },
+    EmbedText { text: String },
     /// Calculate similarity between two vectors
     VectorSimilarity {
         vector1: crate::Vector,
@@ -232,7 +230,11 @@ impl VectorOperation {
     /// Generate a SPARQL SERVICE query for this operation
     pub fn to_sparql_service_query(&self, service_uri: &str) -> String {
         match self {
-            VectorOperation::FindSimilar { resource, limit, threshold } => {
+            VectorOperation::FindSimilar {
+                resource,
+                limit,
+                threshold,
+            } => {
                 let limit_clause = limit.map(|l| format!("LIMIT {}", l)).unwrap_or_default();
                 let threshold_param = threshold.unwrap_or(0.0);
                 format!(
@@ -252,7 +254,10 @@ impl VectorOperation {
                     service_uri, resource, threshold_param, limit_clause
                 )
             }
-            VectorOperation::CalculateSimilarity { resource1, resource2 } => {
+            VectorOperation::CalculateSimilarity {
+                resource1,
+                resource2,
+            } => {
                 format!(
                     r#"
                     SELECT ?similarity WHERE {{
@@ -266,7 +271,11 @@ impl VectorOperation {
                     service_uri, resource1, resource2
                 )
             }
-            VectorOperation::SearchText { query, limit, threshold } => {
+            VectorOperation::SearchText {
+                query,
+                limit,
+                threshold,
+            } => {
                 let limit_clause = limit.map(|l| format!("LIMIT {}", l)).unwrap_or_default();
                 let threshold_param = threshold.unwrap_or(0.0);
                 format!(

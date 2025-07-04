@@ -105,7 +105,8 @@ impl AuthService {
                 debug!("Successful local authentication for user: {}", username);
 
                 // Create user object with permissions
-                let permissions = permissions::PermissionChecker::compute_user_permissions(user_config);
+                let permissions =
+                    permissions::PermissionChecker::compute_user_permissions(user_config);
                 let user = User {
                     username: username.to_string(),
                     roles: user_config.roles.clone(),
@@ -122,7 +123,9 @@ impl AuthService {
         // If local authentication failed, try LDAP if enabled
         if let Some(ldap_service) = &self.ldap_service {
             debug!("Trying LDAP authentication for user: {}", username);
-            return ldap_service.authenticate_ldap_user(username, password).await;
+            return ldap_service
+                .authenticate_ldap_user(username, password)
+                .await;
         }
 
         Ok(AuthResult::Unauthenticated)
@@ -150,7 +153,10 @@ impl AuthService {
 
     /// Logout a session
     pub async fn logout(&self, session_id: &str) -> FusekiResult<bool> {
-        self.session_manager.invalidate_session(session_id).await.map(|_| true)
+        self.session_manager
+            .invalidate_session(session_id)
+            .await
+            .map(|_| true)
     }
 
     /// Create JWT token for user
@@ -172,13 +178,19 @@ impl AuthService {
     }
 
     /// Complete OAuth2 authentication
-    pub async fn complete_oauth2_authentication(&self, code: &str, state: &str, redirect_uri: &str) -> FusekiResult<AuthResult> {
-        let token = self.oauth2_service
+    pub async fn complete_oauth2_authentication(
+        &self,
+        code: &str,
+        state: &str,
+        redirect_uri: &str,
+    ) -> FusekiResult<AuthResult> {
+        let token = self
+            .oauth2_service
             .as_ref()
             .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?
             .exchange_code_for_token(code, state, redirect_uri)
             .await?;
-        
+
         // Convert OAuth2Token to AuthResult - this would need to be implemented
         // For now, return a placeholder
         Ok(AuthResult::Unauthenticated)
@@ -222,7 +234,7 @@ impl AuthService {
         // TODO: Replace with proper bcrypt hashing
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         password.hash(&mut hasher);
         Ok(format!("hash_{:x}", hasher.finish()))
@@ -254,9 +266,15 @@ impl AuthService {
     }
 
     /// Authenticate user against LDAP
-    pub async fn authenticate_ldap(&self, username: &str, password: &str) -> FusekiResult<AuthResult> {
+    pub async fn authenticate_ldap(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> FusekiResult<AuthResult> {
         if let Some(ref ldap_service) = self.ldap_service {
-            ldap_service.authenticate_ldap_user(username, password).await
+            ldap_service
+                .authenticate_ldap_user(username, password)
+                .await
         } else {
             Err(FusekiError::configuration("LDAP not configured"))
         }
@@ -297,13 +315,20 @@ impl AuthService {
     }
 
     /// Store MFA challenge (placeholder)
-    pub async fn store_mfa_challenge(&self, _challenge_id: &str, _challenge: MfaChallenge) -> FusekiResult<()> {
+    pub async fn store_mfa_challenge(
+        &self,
+        _challenge_id: &str,
+        _challenge: MfaChallenge,
+    ) -> FusekiResult<()> {
         // TODO: Implement MFA challenge storage
         Ok(())
     }
 
     /// Get MFA challenge (placeholder)
-    pub async fn get_mfa_challenge(&self, _challenge_id: &str) -> FusekiResult<Option<MfaChallenge>> {
+    pub async fn get_mfa_challenge(
+        &self,
+        _challenge_id: &str,
+    ) -> FusekiResult<Option<MfaChallenge>> {
         // TODO: Implement MFA challenge retrieval
         Ok(None)
     }
@@ -315,7 +340,11 @@ impl AuthService {
     }
 
     /// Update MFA challenge (placeholder)
-    pub async fn update_mfa_challenge(&self, _challenge_id: &str, _challenge: MfaChallenge) -> FusekiResult<()> {
+    pub async fn update_mfa_challenge(
+        &self,
+        _challenge_id: &str,
+        _challenge: MfaChallenge,
+    ) -> FusekiResult<()> {
         // TODO: Implement MFA challenge update
         Ok(())
     }
@@ -333,13 +362,21 @@ impl AuthService {
     }
 
     /// Disable MFA method (placeholder)
-    pub async fn disable_mfa_method(&self, _username: &str, _method: MfaMethod) -> FusekiResult<()> {
+    pub async fn disable_mfa_method(
+        &self,
+        _username: &str,
+        _method: MfaMethod,
+    ) -> FusekiResult<()> {
         // TODO: Implement MFA method disabling
         Ok(())
     }
 
     /// Store backup codes (placeholder)
-    pub async fn store_backup_codes(&self, _username: &str, _codes: Vec<String>) -> FusekiResult<()> {
+    pub async fn store_backup_codes(
+        &self,
+        _username: &str,
+        _codes: Vec<String>,
+    ) -> FusekiResult<()> {
         // TODO: Implement backup code storage
         Ok(())
     }
@@ -354,6 +391,13 @@ impl AuthService {
     pub async fn store_sms_phone(&self, _username: &str, _phone: &str) -> FusekiResult<()> {
         // TODO: Implement SMS phone storage
         Ok(())
+    }
+
+    /// Cleanup LDAP cache
+    pub async fn cleanup_ldap_cache(&self) {
+        if let Some(ref ldap_service) = self.ldap_service {
+            ldap_service.cleanup_expired_cache().await;
+        }
     }
 }
 
@@ -453,13 +497,19 @@ impl axum::response::IntoResponse for AuthError {
 fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::error::Error + Send>> {
     use base64::{engine::general_purpose::STANDARD, Engine};
 
-    let decoded = STANDARD.decode(encoded).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
-    let credential = String::from_utf8(decoded).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+    let decoded = STANDARD
+        .decode(encoded)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+    let credential =
+        String::from_utf8(decoded).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
 
     if let Some((username, password)) = credential.split_once(':') {
         Ok((username.to_string(), password.to_string()))
     } else {
-        Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid basic auth format")))
+        Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Invalid basic auth format",
+        )))
     }
 }
 

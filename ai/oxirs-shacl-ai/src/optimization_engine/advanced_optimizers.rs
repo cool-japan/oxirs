@@ -250,7 +250,7 @@ pub struct TabuSearchOptimizer {
     best_solution: Option<OptimizationSolution>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TabuMove {
     move_type: String,
     parameters: HashMap<String, String>,
@@ -298,11 +298,22 @@ pub struct StateActionPair {
     action: OptimizationAction,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OptimizationState {
     parallel_threads: usize,
     cache_size_mb: f64,
     constraint_order_entropy: f64,
+}
+
+impl Eq for OptimizationState {}
+
+impl std::hash::Hash for OptimizationState {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.parallel_threads.hash(state);
+        // Hash f64 values by converting to bits
+        self.cache_size_mb.to_bits().hash(state);
+        self.constraint_order_entropy.to_bits().hash(state);
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

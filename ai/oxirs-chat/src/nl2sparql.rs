@@ -407,7 +407,10 @@ pub struct NL2SPARQLSystem {
 }
 
 impl NL2SPARQLSystem {
-    pub fn new(config: NL2SPARQLConfig, llm_manager: Option<Arc<TokioMutex<LLMManager>>>) -> Result<Self> {
+    pub fn new(
+        config: NL2SPARQLConfig,
+        llm_manager: Option<Arc<TokioMutex<LLMManager>>>,
+    ) -> Result<Self> {
         let mut system = Self {
             config,
             llm_manager,
@@ -448,7 +451,8 @@ impl NL2SPARQLSystem {
     ) -> Result<SPARQLGenerationResult> {
         let start_time = std::time::Instant::now();
 
-        let query_text = query_context.conversation_history
+        let query_text = query_context
+            .conversation_history
             .iter()
             .rev()
             .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
@@ -749,7 +753,8 @@ LIMIT {{limit}}
         let system_prompt = self.create_sparql_generation_prompt();
 
         if let Some(ref llm_manager) = self.llm_manager {
-            let query_text = query_context.conversation_history
+            let query_text = query_context
+                .conversation_history
                 .iter()
                 .rev()
                 .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
@@ -850,7 +855,8 @@ LIMIT {{limit}}
     }
 
     fn select_template(&self, query_context: &QueryContext) -> Result<&SPARQLTemplate> {
-        let query_text = query_context.conversation_history
+        let query_text = query_context
+            .conversation_history
             .iter()
             .rev()
             .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
@@ -879,7 +885,8 @@ LIMIT {{limit}}
         query_context: &QueryContext,
     ) -> Result<HashMap<String, String>> {
         let mut parameters = HashMap::new();
-        let query_text = query_context.conversation_history
+        let query_text = query_context
+            .conversation_history
             .iter()
             .rev()
             .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
@@ -974,7 +981,8 @@ Always respond with just the SPARQL query, no additional explanation unless requ
         query_context: &QueryContext,
     ) -> Result<QueryExplanation> {
         // TODO: Implement explanation generation
-        let query_text = query_context.conversation_history
+        let query_text = query_context
+            .conversation_history
             .iter()
             .rev()
             .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))

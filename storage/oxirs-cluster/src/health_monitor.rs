@@ -88,7 +88,6 @@ impl Default for NodeHealthStatus {
     }
 }
 
-
 /// System metrics for health assessment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemMetrics {
@@ -395,7 +394,9 @@ impl HealthMonitor {
             let new_health = status.update_health();
 
             // Send health event if status changed
-            if old_health.status != new_health.status && new_health.status == NodeHealthLevel::Healthy {
+            if old_health.status != new_health.status
+                && new_health.status == NodeHealthLevel::Healthy
+            {
                 let _ = self.event_sender.send(HealthEvent::NodeRecovered(node_id));
             }
         }

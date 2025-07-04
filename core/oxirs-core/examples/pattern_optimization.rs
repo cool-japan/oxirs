@@ -1,7 +1,7 @@
 //! Example demonstrating pattern matching optimization for SPARQL queries
 
 use oxirs_core::model::*;
-use oxirs_core::query::algebra::{TermPattern as AlgebraTermPattern, AlgebraTriplePattern};
+use oxirs_core::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
 use oxirs_core::query::pattern_optimizer::IndexStats;
 use oxirs_core::query::{IndexType, PatternExecutor, PatternOptimizer};
 use oxirs_core::store::IndexedGraph;
@@ -114,7 +114,9 @@ fn multi_pattern_optimization(stats: &Arc<IndexStats>) -> Result<(), Box<dyn std
         // ?person foaf:age "25"
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("person")?),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/age")?),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new(
+                "http://xmlns.com/foaf/0.1/age",
+            )?),
             object: AlgebraTermPattern::Literal(Literal::new("25")),
         },
         // ?person rdf:type foaf:Person
@@ -123,18 +125,24 @@ fn multi_pattern_optimization(stats: &Arc<IndexStats>) -> Result<(), Box<dyn std
             predicate: AlgebraTermPattern::NamedNode(NamedNode::new(
                 "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
             )?),
-            object: AlgebraTermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/Person")?),
+            object: AlgebraTermPattern::NamedNode(NamedNode::new(
+                "http://xmlns.com/foaf/0.1/Person",
+            )?),
         },
         // ?person foaf:knows ?friend
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("person")?),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/knows")?),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new(
+                "http://xmlns.com/foaf/0.1/knows",
+            )?),
             object: AlgebraTermPattern::Variable(Variable::new("friend")?),
         },
         // ?friend foaf:name ?friendName
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("friend")?),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/name")?),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new(
+                "http://xmlns.com/foaf/0.1/name",
+            )?),
             object: AlgebraTermPattern::Variable(Variable::new("friendName")?),
         },
     ];
@@ -228,12 +236,16 @@ fn performance_comparison(
     let patterns = vec![
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("person")?),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/age")?),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new(
+                "http://xmlns.com/foaf/0.1/age",
+            )?),
             object: AlgebraTermPattern::Literal(Literal::new("30")),
         },
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("person")?),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/name")?),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new(
+                "http://xmlns.com/foaf/0.1/name",
+            )?),
             object: AlgebraTermPattern::Variable(Variable::new("name")?),
         },
     ];

@@ -93,6 +93,7 @@ pub mod optimization;
 pub mod optimization_engine;
 pub mod patterns;
 pub mod performance_analytics;
+pub mod photonic_computing;
 pub mod prediction;
 pub mod predictive_analytics;
 pub mod production_deployment;
@@ -120,13 +121,15 @@ pub mod version_control;
 // Re-export key types for convenience with explicit imports to avoid ambiguity
 pub use advanced_neural::{
     AdvancedNeuralArchitecture, AdvancedNeuralManager, ArchitectureConfig, ArchitectureType,
-    EarlyStoppingConfig, ManagerConfig, ODESolverType, OptimizerType, PerformanceMetrics as NeuralPerformanceMetrics,
-    RegularizationConfig, TrainingData, TrainingState,
+    EarlyStoppingConfig, ManagerConfig, ODESolverType, OptimizerType,
+    PerformanceMetrics as NeuralPerformanceMetrics, RegularizationConfig, TrainingData,
+    TrainingState,
 };
 pub use advanced_pattern_mining::{
     AdvancedPattern, AdvancedPatternMiningConfig, AdvancedPatternMiningEngine, ConstraintType,
-    ItemRole, PatternItem, PatternItemType, PatternMiningStats, PatternType as MiningPatternType, SeasonalityComponent,
-    SuggestedConstraint, TemporalPatternInfo, TrendDirection as MiningTrendDirection,
+    ItemRole, PatternItem, PatternItemType, PatternMiningStats, PatternType as MiningPatternType,
+    SeasonalityComponent, SuggestedConstraint, TemporalPatternInfo,
+    TrendDirection as MiningTrendDirection,
 };
 pub use advanced_visualization::{
     AdvancedVisualizationEngine, ArchitectureVisualizationType, ColorScheme, ExportFormat,
@@ -137,8 +140,10 @@ pub use ai_orchestrator::{
     AdaptiveLearningInsights, AdvancedModelSelector, AiOrchestrator, AiOrchestratorConfig,
     AiOrchestratorStats, ComprehensiveLearningResult, ConfidenceDistribution, ConfidentShape,
     DataCharacteristics, LearningMetadata, ModelPerformanceMetrics, ModelSelectionResult,
-    ModelSelectionStats, ModelSelectionStrategy as AiModelSelectionStrategy, OptimizationRecommendation as OrchestratorOptimizationRecommendation, OrchestrationMetrics,
-    PerformanceRequirements as AiPerformanceRequirements, PredictiveInsights, QualityAnalysis, SelectedModel,
+    ModelSelectionStats, ModelSelectionStrategy as AiModelSelectionStrategy,
+    OptimizationRecommendation as OrchestratorOptimizationRecommendation, OrchestrationMetrics,
+    PerformanceRequirements as AiPerformanceRequirements, PredictiveInsights, QualityAnalysis,
+    SelectedModel,
 };
 pub use analytics::*;
 pub use collaborative_development::*;
@@ -152,7 +157,8 @@ pub use forecasting_models::*;
 pub use insights::*;
 pub use learning::{
     LearningConfig, LearningStatistics, ShapeExample, ShapeLearner,
-    ShapeTrainingData as LearningTrainingData,
+    ShapeTrainingData as LearningTrainingData, TemporalPatterns,
+    LearningPerformanceMetrics, PatternStatistics,
 };
 pub use meta_learning::{
     AdaptationStrategy, AdaptedModel, LearningTask, MetaLearner, MetaLearningConfig,
@@ -198,6 +204,14 @@ pub use optimization_engine::{
 };
 pub use patterns::*;
 pub use performance_analytics::*;
+pub use photonic_computing::{
+    WavelengthRange, PhotonicGate, GateType, OpticalProcessingState, ConnectionType,
+    PhotonicQubit, PolarizationState, PhotonNumberState, SpatialMode, CoherenceProperties,
+    MaterialType, NonlinearProperties, JunctionType, NetworkTopology, PhotonicComputingEngine, 
+    OpticalProcessingUnit, PhotonicQuantumCircuit, InterferenceProcessor, OpticalMemoryBank, 
+    PhotonicEntanglementNetwork, LightSpeedComputationManager, InterferencePattern as PhotonicInterferencePattern, PatternType, 
+    ValidationResult as PhotonicValidationResult,
+};
 pub use prediction::*;
 pub use predictive_analytics::*;
 pub use production_deployment::*;
@@ -223,8 +237,10 @@ pub use realtime_adaptive_query_optimizer::{
     AdaptationRecommendation, AdaptiveOptimizerConfig, AdaptiveOptimizerStats, AdaptivePlanCache,
     CacheStatistics, ComplexityAnalysis, ComplexityFactor, ExecutionMetrics, FeedbackProcessor,
     MLPlanSelector, OnlineLearningEngine, OnlineLearningStats, OptimizationPlanType,
-    OptimizationRecommendation as RealtimeOptimizationRecommendation, PerformanceMetrics as RealtimePerformanceMetrics, PerformanceMonitor, QueryComplexityAnalyzer,
-    QueryPerformanceRecord, RealTimeAdaptiveQueryOptimizer, TrendDirection as RealtimeTrendDirection,
+    OptimizationRecommendation as RealtimeOptimizationRecommendation,
+    PerformanceMetrics as RealtimePerformanceMetrics, PerformanceMonitor, QueryComplexityAnalyzer,
+    QueryPerformanceRecord, RealTimeAdaptiveQueryOptimizer,
+    TrendDirection as RealtimeTrendDirection,
 };
 pub use recommendation_systems::*;
 pub use self_adaptive_ai::*;
@@ -246,9 +262,10 @@ pub use collective_consciousness::{
     QuantumEffect, Reality, SynthesizedReality, ValidationContext, ValidationSpecialization,
 };
 pub use consciousness_validation::{
-    ConsciousnessLevel as ValidatorConsciousnessLevel, ConsciousnessValidationResult, ConsciousnessValidator,
-    ConsciousnessValidatorConfig, ConsciousnessValidatorStats, DreamInsight, DreamState, Emotion,
-    EmotionalContext, IntuitiveInsight, IntuitiveInsightType, ValidationStrategy,
+    ConsciousnessLevel as ValidatorConsciousnessLevel, ConsciousnessValidationResult,
+    ConsciousnessValidator, ConsciousnessValidatorConfig, ConsciousnessValidatorStats,
+    DreamInsight, DreamState, Emotion, EmotionalContext, IntuitiveInsight, IntuitiveInsightType,
+    ValidationStrategy,
 };
 pub use cosmic_scale_processing::{
     CosmicNetworkInitResult, CosmicScaleConfig, CosmicScaleProcessor, CosmicStatistics,
@@ -267,7 +284,8 @@ pub use federated_learning::{
 pub use interdimensional_patterns::{
     BridgeType, CausalDirection, DimensionType, DimensionalBridge, DimensionalCorrelation,
     DiscoveredPattern, InterdimensionalConfig, InterdimensionalPatternEngine,
-    InterdimensionalPatternResult, PatternType as InterdimensionalPatternType, PhysicsVariant, RealityDimension,
+    InterdimensionalPatternResult, PatternType as InterdimensionalPatternType, PhysicsVariant,
+    RealityDimension,
 };
 pub use multimodal_validation::{
     ContentType, MultiModalConfig, MultiModalValidationReport, MultiModalValidator, ValidationIssue,
@@ -281,15 +299,17 @@ pub use streaming_adaptation::{
     StreamingAdaptationEngine, StreamingConfig,
 };
 pub use temporal_paradox_resolution::{
-    CausalRelationship as TemporalCausalRelationship, CausalityAnalysisResult, MultiTimelineValidator, ParadoxDetectionResult,
-    ParadoxResolutionResult, QuantumTemporalEngine, TemporalConsistencyEnforcer,
-    TemporalConstraint as TemporalParadoxConstraint, TemporalParadoxResolutionEngine, TemporalValidationProcessor,
-    TemporalValidationResult, Timeline as TemporalTimeline, TimelineContext as TemporalParadoxTimelineContext,
+    CausalRelationship as TemporalCausalRelationship, CausalityAnalysisResult,
+    MultiTimelineValidator, ParadoxDetectionResult, ParadoxResolutionResult, QuantumTemporalEngine,
+    TemporalConsistencyEnforcer, TemporalConstraint as TemporalParadoxConstraint,
+    TemporalParadoxResolutionEngine, TemporalValidationProcessor, TemporalValidationResult,
+    Timeline as TemporalTimeline, TimelineContext as TemporalParadoxTimelineContext,
 };
 pub use time_space_validation::{
-    CoordinateSystem, InterferencePattern, MultiTimelineValidationResult, ReferenceFrame,
+    CoordinateSystem, InterferencePattern as SpacetimeInterferencePattern, MultiTimelineValidationResult, ReferenceFrame,
     SpacetimeContext, SpacetimeInitResult, SpacetimeStatistics, SpacetimeValidationResult,
-    SpatialCoordinates, TemporalCoordinate, TimeSpaceConfig, TimeSpaceValidator, Timeline as SpacetimeTimeline,
+    SpatialCoordinates, TemporalCoordinate, TimeSpaceConfig, TimeSpaceValidator,
+    Timeline as SpacetimeTimeline,
 };
 
 // Version 2.1 Features - Neuromorphic Evolution
@@ -380,6 +400,9 @@ pub enum ShaclAiError {
     #[error("Data processing error: {0}")]
     DataProcessing(String),
 
+    #[error("Processing error: {0}")]
+    ProcessingError(String),
+
     #[error("Shape management error: {0}")]
     ShapeManagement(String),
 
@@ -412,6 +435,9 @@ pub enum ShaclAiError {
 
     #[error("Model error: {0}")]
     Model(#[from] crate::ml::ModelError),
+
+    #[error("Photonic computing error: {0}")]
+    PhotonicComputing(String),
 
     #[error("Array shape error: {0}")]
     Shape(String),
@@ -616,7 +642,11 @@ impl ShaclAiAssistant {
     }
 
     /// Learn shapes from RDF data with AI assistance
-    pub fn learn_shapes(&mut self, store: &dyn Store, graph_name: Option<&str>) -> Result<Vec<Shape>> {
+    pub fn learn_shapes(
+        &mut self,
+        store: &dyn Store,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Shape>> {
         tracing::info!("Starting AI-powered shape learning");
 
         // Analyze patterns in the data
@@ -673,11 +703,7 @@ impl ShaclAiAssistant {
         &self,
         result: &ComprehensiveLearningResult,
     ) -> Vec<Shape> {
-        result
-            .shapes
-            .iter()
-            .map(|cs| cs.clone())
-            .collect()
+        result.shapes.iter().map(|cs| cs.clone()).collect()
     }
 
     /// Assess data quality with AI insights

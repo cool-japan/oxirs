@@ -1,8 +1,8 @@
 //! Quantum annealing for pattern optimization
 
-use std::f64::consts::PI;
 use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
+use std::f64::consts::PI;
 
 use super::core::QuantumPattern;
 use crate::{Result, ShaclAiError};

@@ -294,7 +294,7 @@ impl StarTriple {
     /// Count the number of quoted triples in this triple (recursively)
     pub fn count_quoted_triples(&self) -> usize {
         let mut count = 0;
-        
+
         // Count quoted triples in each position
         if let StarTerm::QuotedTriple(inner) = &self.subject {
             count += 1 + inner.count_quoted_triples();
@@ -305,7 +305,7 @@ impl StarTriple {
         if let StarTerm::QuotedTriple(inner) = &self.object {
             count += 1 + inner.count_quoted_triples();
         }
-        
+
         count
     }
 
@@ -768,6 +768,7 @@ impl StarGraph {
     pub fn objects(&self) -> impl Iterator<Item = &StarTerm> {
         self.iter().map(|triple| &triple.object)
     }
+
 }
 
 /// Iterator implementation for StarGraph to iterate over all triples

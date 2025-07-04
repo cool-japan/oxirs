@@ -1699,10 +1699,12 @@ mod tests {
         let output = model.quantum_forward(&input).unwrap();
 
         assert_eq!(output.len(), input.len());
-        
+
         // Check values are in expected range with floating-point tolerance
         const TOLERANCE: f64 = 1e-10;
-        assert!(output.iter().all(|&x| x >= -1.0 - TOLERANCE && x <= 1.0 + TOLERANCE));
+        assert!(output
+            .iter()
+            .all(|&x| x >= -1.0 - TOLERANCE && x <= 1.0 + TOLERANCE));
     }
 
     #[tokio::test]

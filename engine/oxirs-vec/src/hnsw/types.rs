@@ -36,6 +36,13 @@ impl Ord for Candidate {
     }
 }
 
+impl Candidate {
+    /// Create a new candidate
+    pub fn new(id: usize, distance: f32) -> Self {
+        Self { id, distance }
+    }
+}
+
 /// Node in the HNSW graph with cache-friendly layout
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -66,6 +73,35 @@ impl Node {
     /// Increment access count for cache optimization
     pub fn record_access(&mut self) {
         self.access_count = self.access_count.saturating_add(1);
+    }
+
+    /// Get the maximum level for this node
+    pub fn level(&self) -> usize {
+        self.connections.len().saturating_sub(1)
+    }
+
+    /// Get connections at a specific level
+    pub fn get_connections(&self, level: usize) -> Option<&HashSet<usize>> {
+        self.connections.get(level)
+    }
+
+    /// Get mutable connections at a specific level
+    pub fn get_connections_mut(&mut self, level: usize) -> Option<&mut HashSet<usize>> {
+        self.connections.get_mut(level)
+    }
+
+    /// Add a connection at a specific level
+    pub fn add_connection(&mut self, level: usize, node_id: usize) {
+        if let Some(connections) = self.connections.get_mut(level) {
+            connections.insert(node_id);
+        }
+    }
+
+    /// Remove a connection at a specific level
+    pub fn remove_connection(&mut self, level: usize, node_id: usize) {
+        if let Some(connections) = self.connections.get_mut(level) {
+            connections.remove(&node_id);
+        }
     }
 }
 

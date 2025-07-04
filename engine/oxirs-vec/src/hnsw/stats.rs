@@ -7,6 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 pub struct HnswPerformanceStats {
     pub total_searches: AtomicU64,
     pub total_insertions: AtomicU64,
+    pub total_deletions: AtomicU64,
+    pub total_updates: AtomicU64,
     pub avg_search_time_us: AtomicU64, // Store as microseconds, will convert to f64 when needed
     pub avg_distance_calculations: AtomicU64, // Store as integer, will convert to f64 when needed
     pub cache_hits: AtomicU64,
@@ -24,6 +26,8 @@ impl Default for HnswPerformanceStats {
         Self {
             total_searches: AtomicU64::new(0),
             total_insertions: AtomicU64::new(0),
+            total_deletions: AtomicU64::new(0),
+            total_updates: AtomicU64::new(0),
             avg_search_time_us: AtomicU64::new(0),
             avg_distance_calculations: AtomicU64::new(0),
             cache_hits: AtomicU64::new(0),
@@ -43,6 +47,8 @@ impl Clone for HnswPerformanceStats {
         Self {
             total_searches: AtomicU64::new(self.total_searches.load(AtomicOrdering::Relaxed)),
             total_insertions: AtomicU64::new(self.total_insertions.load(AtomicOrdering::Relaxed)),
+            total_deletions: AtomicU64::new(self.total_deletions.load(AtomicOrdering::Relaxed)),
+            total_updates: AtomicU64::new(self.total_updates.load(AtomicOrdering::Relaxed)),
             avg_search_time_us: AtomicU64::new(
                 self.avg_search_time_us.load(AtomicOrdering::Relaxed),
             ),

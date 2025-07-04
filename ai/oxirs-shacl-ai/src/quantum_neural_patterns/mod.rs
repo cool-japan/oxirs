@@ -4,23 +4,23 @@
 //! in RDF data, leveraging quantum superposition and entanglement concepts
 //! to enhance shape learning and validation optimization.
 
-pub mod core;
-pub mod teleportation;
 pub mod annealing;
-pub mod fourier;
+pub mod core;
 pub mod eigensolver;
-pub mod supremacy;
+pub mod fourier;
 pub mod recognizer;
+pub mod supremacy;
+pub mod teleportation;
 pub mod utils;
 
 // Re-export main types for convenience
-pub use core::{QuantumState, QuantumPattern, QuantumMetrics};
-pub use teleportation::QuantumTeleportation;
 pub use annealing::QuantumAnnealer;
-pub use fourier::QuantumFourierTransform;
+pub use core::{QuantumMetrics, QuantumPattern, QuantumState};
 pub use eigensolver::VariationalQuantumEigensolver;
-pub use supremacy::QuantumSupremacyDetector;
+pub use fourier::QuantumFourierTransform;
 pub use recognizer::QuantumNeuralPatternRecognizer;
+pub use supremacy::QuantumSupremacyDetector;
+pub use teleportation::QuantumTeleportation;
 pub use utils::*;
 
 use crate::{Result, ShaclAiError};

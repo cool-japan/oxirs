@@ -1,7 +1,7 @@
 //! Quantum algorithms for stream processing
 
-use std::collections::{HashMap, VecDeque};
 use crate::event::StreamEvent;
+use std::collections::{HashMap, VecDeque};
 
 /// Advanced quantum algorithms for stream processing
 #[derive(Debug, Clone)]
@@ -50,16 +50,20 @@ impl QuantumAlgorithmSuite {
         }
 
         // Return first match (simplified)
-        database.iter().position(|event| {
-            match event {
-                StreamEvent::TripleAdded { subject, predicate, object, .. } => {
-                    format!("{} {} {}", subject, predicate, object).contains(target_pattern)
-                }
-                StreamEvent::TripleRemoved { subject, predicate, object, .. } => {
-                    format!("{} {} {}", subject, predicate, object).contains(target_pattern)
-                }
-                _ => false,
-            }
+        database.iter().position(|event| match event {
+            StreamEvent::TripleAdded {
+                subject,
+                predicate,
+                object,
+                ..
+            } => format!("{} {} {}", subject, predicate, object).contains(target_pattern),
+            StreamEvent::TripleRemoved {
+                subject,
+                predicate,
+                object,
+                ..
+            } => format!("{} {} {}", subject, predicate, object).contains(target_pattern),
+            _ => false,
         })
     }
 }

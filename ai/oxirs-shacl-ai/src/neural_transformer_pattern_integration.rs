@@ -11,7 +11,7 @@ use crate::{
     Result, ShaclAiError,
 };
 
-use ndarray::{Array1, Array2, Array3, Array4, Axis, s};
+use ndarray::{s, Array1, Array2, Array3, Array4, Axis};
 use oxirs_core::{
     model::{Term, Variable},
     query::{
@@ -187,8 +187,8 @@ impl MultiHeadAttention {
         input: &Array2<f64>,
         mask: Option<&Array2<bool>>,
     ) -> Result<(Array2<f64>, Array3<f64>)> {
-        let batch_size = input.shape()[0];
-        let seq_len = input.shape()[1];
+        let seq_len = input.shape()[0];  // First dimension is sequence length
+        let model_dim = input.shape()[1]; // Second dimension is model dimension
         let head_dim = self.config.model_dim / self.config.num_heads;
 
         let mut attention_outputs = Vec::new();
@@ -655,7 +655,7 @@ impl AttentionCostPredictor {
         };
 
         // Weighted context vector
-        let mut context_vector = Array1::zeros(self.config.model_dim);
+        let mut context_vector: Array1<f64> = Array1::zeros(self.config.model_dim);
         for (weight, context_emb) in normalized_weights.iter().zip(context_embeddings.iter()) {
             context_vector = context_vector + &(context_emb * *weight);
         }
@@ -664,8 +664,8 @@ impl AttentionCostPredictor {
         let combined = pattern_embedding + &context_vector;
 
         // Predict cost
-        let cost_logits = combined.dot(&self.cost_head.slice(s![.., 0]));
-        let cost = cost_logits.max(0.1); // Ensure positive cost
+        let cost_logits: f64 = combined.dot(&self.cost_head.slice(s![.., 0]));
+        let cost: f64 = cost_logits.max(0.1); // Ensure positive cost
 
         Ok(cost)
     }
@@ -1166,15 +1166,15 @@ mod tests {
     #[test]
     fn test_multi_head_attention() {
         let config = NeuralTransformerConfig::default();
-        let mut attention = MultiHeadAttention::new(config);
+        let mut attention = MultiHeadAttention::new(config.clone());
 
-        let input = Array2::zeros((10, 512)); // 10 sequence length, 512 model dim
+        let input = Array2::zeros((10, config.model_dim)); // 10 sequence length, model_dim
         let result = attention.forward(&input, None);
 
         assert!(result.is_ok());
         let (output, attention_weights) = result.unwrap();
-        assert_eq!(output.shape(), [10, 512]);
-        assert_eq!(attention_weights.shape(), [8, 10, 10]); // 8 heads, 10x10 attention
+        assert_eq!(output.shape(), [10, config.model_dim]);
+        assert_eq!(attention_weights.shape(), [config.num_heads, 10, 10]); // heads x seq_len x seq_len attention
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! Unit tests for service registry and management
 
+use oxirs_federate::service::{AuthType, RateLimit, ServiceAuthConfig, ServiceMetadata};
 use oxirs_federate::*;
-use oxirs_federate::service::{AuthType, RateLimit, ServiceMetadata, ServiceAuthConfig};
 use std::collections::HashSet;
 use std::time::Duration;
 

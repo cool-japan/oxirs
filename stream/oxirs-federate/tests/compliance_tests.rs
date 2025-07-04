@@ -6,8 +6,8 @@
 //! - HTTP protocol compliance
 //! - Authentication protocol compliance
 
-use oxirs_federate::*;
 use oxirs_federate::service::{AuthType, ServiceAuthConfig};
+use oxirs_federate::*;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio;
@@ -234,7 +234,7 @@ mod graphql_federation_compliance {
                     }
                 }
             }
-            
+
             fragment FullType on __Type {
                 kind
                 name
@@ -267,14 +267,14 @@ mod graphql_federation_compliance {
                     ...TypeRef
                 }
             }
-            
+
             fragment InputValue on __InputValue {
                 name
                 description
                 type { ...TypeRef }
                 defaultValue
             }
-            
+
             fragment TypeRef on __Type {
                 kind
                 name
@@ -323,7 +323,7 @@ mod graphql_federation_compliance {
                 id: ID! @external
                 reviews: [Review]
             }
-            
+
             type Review {
                 id: ID!
                 rating: Int
@@ -409,7 +409,7 @@ mod graphql_federation_compliance {
                 name: String
                 email: String
             }
-            
+
             type Query {
                 user(id: ID!): User
                 users: [User]
@@ -421,14 +421,14 @@ mod graphql_federation_compliance {
                 id: ID! @external
                 reviews: [Review]
             }
-            
+
             type Review {
                 id: ID!
                 rating: Int
                 comment: String
                 user: User
             }
-            
+
             extend type Query {
                 review(id: ID!): Review
                 reviews: [Review]
@@ -731,7 +731,9 @@ mod performance_compliance {
                 head: oxirs_federate::executor::SparqlHead { vars: vec![] },
                 results: oxirs_federate::executor::SparqlResultsData { bindings: vec![] },
             };
-            cache.put_service_result(&key, &sparql_result, Some(Duration::from_secs(300))).await;
+            cache
+                .put_service_result(&key, &sparql_result, Some(Duration::from_secs(300)))
+                .await;
         }
 
         // Cache should handle large number of items

@@ -1,35 +1,35 @@
 //! Quantum processing module - modular quantum computing integration for RDF streams
-//! 
+//!
 //! This module provides a refactored, maintainable structure for quantum-enhanced
 //! stream processing with separate concerns for different quantum components.
 
-pub mod quantum_config;
-pub mod quantum_circuit;
 pub mod classical_processor;
-pub mod quantum_optimizer;
-pub mod variational_processor;
-pub mod quantum_ml_engine;
 pub mod entanglement_manager;
 pub mod error_correction;
 pub mod performance_monitor;
+pub mod quantum_circuit;
+pub mod quantum_config;
+pub mod quantum_ml_engine;
+pub mod quantum_optimizer;
+pub mod variational_processor;
 
+use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use anyhow::Result;
 
-use crate::event::StreamEvent;
 use crate::error::StreamResult;
+use crate::event::StreamEvent;
 
-pub use quantum_config::*;
-pub use quantum_circuit::*;
 pub use classical_processor::*;
-pub use quantum_optimizer::*;
-pub use variational_processor::*;
-pub use quantum_ml_engine::*;
 pub use entanglement_manager::*;
 pub use error_correction::*;
 pub use performance_monitor::*;
+pub use quantum_circuit::*;
+pub use quantum_config::*;
+pub use quantum_ml_engine::*;
+pub use quantum_optimizer::*;
+pub use variational_processor::*;
 
 /// Quantum stream processor with hybrid quantum-classical architecture
 pub struct QuantumStreamProcessor {
@@ -63,7 +63,10 @@ impl QuantumStreamProcessor {
     /// Process a stream event using quantum algorithms
     pub async fn process_event(&self, event: StreamEvent) -> StreamResult<StreamEvent> {
         // Start performance monitoring
-        let _monitor = self.performance_monitor.start_operation("process_event").await;
+        let _monitor = self
+            .performance_monitor
+            .start_operation("process_event")
+            .await;
 
         // Classical preprocessing
         let preprocessed = self.classical_processor.preprocess_event(&event).await?;
@@ -72,7 +75,10 @@ impl QuantumStreamProcessor {
         let quantum_result = self.quantum_process(&preprocessed).await?;
 
         // Classical postprocessing
-        let result = self.classical_processor.postprocess_result(quantum_result, preprocessed).await?;
+        let result = self
+            .classical_processor
+            .postprocess_result(quantum_result, preprocessed)
+            .await?;
 
         Ok(result)
     }

@@ -655,7 +655,8 @@ impl ParallelServiceExecutor {
                     if attempt < retry_policy.max_retries {
                         let delay_ms = retry_policy.initial_delay.as_millis() as f64
                             * retry_policy.backoff_multiplier.powi(attempt as i32);
-                        let delay = Duration::from_millis(delay_ms as u64).min(retry_policy.max_delay);
+                        let delay =
+                            Duration::from_millis(delay_ms as u64).min(retry_policy.max_delay);
                         tokio::time::sleep(delay).await;
                     }
                 }
@@ -680,9 +681,7 @@ impl ParallelServiceExecutor {
         request: &ServiceQueryRequest,
         timeout: Duration,
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
-        let client = reqwest::Client::builder()
-            .timeout(timeout)
-            .build()?;
+        let client = reqwest::Client::builder().timeout(timeout).build()?;
 
         let mut http_request = client
             .post(&request.service_url)

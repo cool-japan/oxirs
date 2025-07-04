@@ -623,6 +623,25 @@ fn get_first_attribute(attrs: &HashMap<String, Vec<String>>, attr_name: &str) ->
         .cloned()
 }
 
+/// Create Active Directory LDAP configuration with common defaults
+pub fn active_directory_config(
+    domain: &str,
+    domain_controller: &str,
+    service_account: &str,
+    service_password: &str,
+) -> LdapConfig {
+    LdapConfig {
+        server: format!("ldap://{}", domain_controller),
+        bind_dn: format!("{}@{}", service_account, domain),
+        bind_password: service_password.to_string(),
+        user_base_dn: format!("dc={}", domain.replace('.', ",dc=")),
+        user_filter: "(sAMAccountName={username})".to_string(),
+        group_base_dn: format!("dc={}", domain.replace('.', ",dc=")),
+        group_filter: "(member={userdn})".to_string(),
+        use_tls: false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -660,7 +660,7 @@ impl RedisProducer {
                     // Headers don't directly map to stream events, log for now
                     tracing::debug!("Processing patch header: {} = {}", key, value);
                     continue; // Skip to next operation
-                },
+                }
             };
 
             self.publish(event).await?;

@@ -7,11 +7,10 @@ pub mod core;
 
 // Re-export main types for easy access
 pub use core::{
-    QualityEnhancementEngine, EnhancementConfig, EnhancementStrategy, RecommendationModels,
-    EnhancementAction, EnhancementActionType, ActionStatus, EnhancementStatistics,
-    DataEnhancementModel, ProcessOptimizationModel, AutomationModel, ImpactPredictionModel,
-    CostBenefitModel, EnhancementRecommendation, EnhancementCategory, Priority,
-    ImplementationEffort,
+    ActionStatus, AutomationModel, CostBenefitModel, DataEnhancementModel, EnhancementAction,
+    EnhancementActionType, EnhancementCategory, EnhancementConfig, EnhancementRecommendation,
+    EnhancementStatistics, EnhancementStrategy, ImpactPredictionModel, ImplementationEffort,
+    Priority, ProcessOptimizationModel, QualityEnhancementEngine, RecommendationModels,
 };
 
 use crate::{Result, ShaclAiError};
@@ -65,7 +64,10 @@ mod tests {
         let config = create_conservative_config();
         assert_eq!(config.priority_threshold, 0.8);
         assert_eq!(config.min_recommendation_confidence, 0.85);
-        assert!(matches!(config.strategy_preference, EnhancementStrategy::Conservative));
+        assert!(matches!(
+            config.strategy_preference,
+            EnhancementStrategy::Conservative
+        ));
     }
 
     #[test]
@@ -73,7 +75,10 @@ mod tests {
         let config = create_aggressive_config();
         assert_eq!(config.priority_threshold, 0.5);
         assert_eq!(config.min_recommendation_confidence, 0.65);
-        assert!(matches!(config.strategy_preference, EnhancementStrategy::Aggressive));
+        assert!(matches!(
+            config.strategy_preference,
+            EnhancementStrategy::Aggressive
+        ));
     }
 
     #[test]
@@ -83,7 +88,7 @@ mod tests {
             max_recommendations_per_category: 20,
             ..Default::default()
         };
-        
+
         let engine = create_engine_with_config(config);
         assert!(!engine.config().enable_automated_improvements);
         assert_eq!(engine.config().max_recommendations_per_category, 20);
@@ -98,9 +103,12 @@ mod tests {
             status: ActionStatus::Pending,
             metadata: std::collections::HashMap::new(),
         };
-        
+
         assert_eq!(action.action_id, "test_action");
-        assert!(matches!(action.action_type, EnhancementActionType::DataQualityImprovement));
+        assert!(matches!(
+            action.action_type,
+            EnhancementActionType::DataQualityImprovement
+        ));
         assert!(matches!(action.status, ActionStatus::Pending));
     }
 
@@ -117,7 +125,7 @@ mod tests {
             implementation_effort: ImplementationEffort::Medium,
             automated: false,
         };
-        
+
         assert_eq!(recommendation.id, "test_rec");
         assert_eq!(recommendation.confidence, 0.85);
         assert!(matches!(recommendation.priority, Priority::High));

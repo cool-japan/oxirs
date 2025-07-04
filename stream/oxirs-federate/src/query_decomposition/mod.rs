@@ -36,9 +36,9 @@ mod tests {
     use std::collections::HashSet;
 
     fn create_test_service() -> FederatedService {
-        use crate::service::{ServiceType, ServiceMetadata, ServicePerformance};
+        use crate::service::{ServiceMetadata, ServicePerformance, ServiceType};
         use std::time::Duration;
-        
+
         FederatedService {
             id: "test-service".to_string(),
             name: "Test Service".to_string(),
@@ -68,8 +68,12 @@ mod tests {
     fn create_test_query() -> QueryInfo {
         QueryInfo {
             query_type: QueryType::Select,
-            original_query: "SELECT ?s ?p ?o WHERE { ?s rdf:type foaf:Person . ?s foaf:name ?name }".to_string(),
-            variables: ["?s".to_string(), "?p".to_string(), "?o".to_string()].iter().cloned().collect(),
+            original_query:
+                "SELECT ?s ?p ?o WHERE { ?s rdf:type foaf:Person . ?s foaf:name ?name }".to_string(),
+            variables: ["?s".to_string(), "?p".to_string(), "?o".to_string()]
+                .iter()
+                .cloned()
+                .collect(),
             patterns: vec![
                 TriplePattern {
                     subject: Some("?s".to_string()),

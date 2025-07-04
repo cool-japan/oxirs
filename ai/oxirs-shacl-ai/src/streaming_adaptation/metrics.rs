@@ -73,7 +73,7 @@ impl RealTimeMetricsCollector {
     pub fn update_response_time(&mut self, response_time: Duration) {
         // Simple moving average
         self.average_response_time = Duration::from_millis(
-            (self.average_response_time.as_millis() as u64 + response_time.as_millis() as u64) / 2
+            (self.average_response_time.as_millis() as u64 + response_time.as_millis() as u64) / 2,
         );
     }
 
@@ -119,16 +119,10 @@ impl RealTimeMetricsCollector {
             return Ok(0.01);
         }
 
-        let recent_metrics: Vec<_> = self.metrics_history
-            .iter()
-            .rev()
-            .take(10)
-            .collect();
+        let recent_metrics: Vec<_> = self.metrics_history.iter().rev().take(10).collect();
 
-        let avg_error_rate = recent_metrics
-            .iter()
-            .map(|m| m.error_rate)
-            .sum::<f64>() / recent_metrics.len() as f64;
+        let avg_error_rate =
+            recent_metrics.iter().map(|m| m.error_rate).sum::<f64>() / recent_metrics.len() as f64;
 
         Ok(avg_error_rate)
     }
@@ -149,26 +143,16 @@ impl RealTimeMetricsCollector {
             return 1.0;
         }
 
-        let recent_metrics: Vec<_> = self.metrics_history
-            .iter()
-            .rev()
-            .take(5)
-            .collect();
+        let recent_metrics: Vec<_> = self.metrics_history.iter().rev().take(5).collect();
 
-        let avg_error_rate = recent_metrics
-            .iter()
-            .map(|m| m.error_rate)
-            .sum::<f64>() / recent_metrics.len() as f64;
+        let avg_error_rate =
+            recent_metrics.iter().map(|m| m.error_rate).sum::<f64>() / recent_metrics.len() as f64;
 
-        let avg_cpu_usage = recent_metrics
-            .iter()
-            .map(|m| m.cpu_usage)
-            .sum::<f64>() / recent_metrics.len() as f64;
+        let avg_cpu_usage =
+            recent_metrics.iter().map(|m| m.cpu_usage).sum::<f64>() / recent_metrics.len() as f64;
 
-        let avg_memory_usage = recent_metrics
-            .iter()
-            .map(|m| m.memory_usage)
-            .sum::<f64>() / recent_metrics.len() as f64;
+        let avg_memory_usage = recent_metrics.iter().map(|m| m.memory_usage).sum::<f64>()
+            / recent_metrics.len() as f64;
 
         // Calculate health score (lower is better for error rate, resource usage)
         let health = 1.0 - (avg_error_rate + (avg_cpu_usage * 0.5) + (avg_memory_usage * 0.3));
@@ -225,22 +209,26 @@ impl PerformanceMonitor {
     /// Monitor performance and trigger alerts
     pub async fn monitor_performance(&mut self) -> Result<()> {
         let metrics = self.metrics_collector.collect_current_metrics().await?;
-        
+
         // Check thresholds
         if metrics.cpu_usage > self.performance_thresholds.max_cpu_usage {
-            self.trigger_alert(AlertType::HighCpuUsage, metrics.cpu_usage).await?;
+            self.trigger_alert(AlertType::HighCpuUsage, metrics.cpu_usage)
+                .await?;
         }
 
         if metrics.memory_usage > self.performance_thresholds.max_memory_usage {
-            self.trigger_alert(AlertType::HighMemoryUsage, metrics.memory_usage).await?;
+            self.trigger_alert(AlertType::HighMemoryUsage, metrics.memory_usage)
+                .await?;
         }
 
         if metrics.error_rate > self.performance_thresholds.max_error_rate {
-            self.trigger_alert(AlertType::HighErrorRate, metrics.error_rate).await?;
+            self.trigger_alert(AlertType::HighErrorRate, metrics.error_rate)
+                .await?;
         }
 
         if metrics.latency > self.performance_thresholds.max_latency {
-            self.trigger_alert(AlertType::HighLatency, metrics.latency.as_millis() as f64).await?;
+            self.trigger_alert(AlertType::HighLatency, metrics.latency.as_millis() as f64)
+                .await?;
         }
 
         Ok(())
@@ -263,7 +251,10 @@ impl PerformanceMonitor {
             alert_type: alert_type.clone(),
             timestamp: SystemTime::now(),
             value,
-            message: format!("Performance threshold exceeded: {:?} = {}", alert_type, value),
+            message: format!(
+                "Performance threshold exceeded: {:?} = {}",
+                alert_type, value
+            ),
         };
 
         for handler in &self.alert_handlers {

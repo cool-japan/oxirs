@@ -20,8 +20,8 @@ pub mod query_executor;
 pub mod sparql_functions;
 
 pub use config::{
-    VectorOperation, VectorQuery, VectorQueryOptimizer, VectorQueryResult, VectorServiceArg, VectorServiceConfig,
-    VectorServiceFunction, VectorServiceParameter, VectorServiceResult,
+    VectorOperation, VectorQuery, VectorQueryOptimizer, VectorQueryResult, VectorServiceArg,
+    VectorServiceConfig, VectorServiceFunction, VectorServiceParameter, VectorServiceResult,
 };
 pub use cross_language::CrossLanguageProcessor;
 pub use federation::{FederatedQueryResult, FederationManager};
@@ -189,7 +189,11 @@ impl SparqlVectorService {
     }
 
     /// Add a resource embedding to the service's vector store
-    pub fn add_resource_embedding(&mut self, uri: &str, content: &crate::embeddings::EmbeddableContent) -> Result<()> {
+    pub fn add_resource_embedding(
+        &mut self,
+        uri: &str,
+        content: &crate::embeddings::EmbeddableContent,
+    ) -> Result<()> {
         self.query_executor.add_resource_embedding(uri, content)
     }
 }

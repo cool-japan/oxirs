@@ -23,7 +23,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test basic triple pattern creation
     println!("✅ Triple Pattern Creation:");
     let subject = AlgebraTermPattern::Variable(Variable::new("person")?);
-    let predicate = AlgebraTermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/name")?);
+    let predicate =
+        AlgebraTermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/name")?);
     let object = AlgebraTermPattern::Variable(Variable::new("name")?);
 
     let triple = TriplePattern::new(subject, predicate, object);

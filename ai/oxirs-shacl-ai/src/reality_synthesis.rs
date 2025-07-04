@@ -717,7 +717,7 @@ impl RealityGenerationEngine {
         let reality_laws = self.define_reality_laws(&reality_patterns).await?;
 
         let foundation_strength = self.calculate_foundation_strength(&reality_laws).await?;
-        
+
         Ok(RealityFoundation {
             seeds: reality_seeds,
             structure: foundation_structure,
@@ -1283,7 +1283,7 @@ pub struct DimensionalCoordinationConfig;
 pub struct UniversalHarmonizationConfig;
 
 // Supporting component types with default implementations
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RealitySeedGenerator;
 
 impl RealitySeedGenerator {
@@ -1292,7 +1292,7 @@ impl RealitySeedGenerator {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RealityFoundationBuilder;
 
 impl RealityFoundationBuilder {
@@ -1301,7 +1301,7 @@ impl RealityFoundationBuilder {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RealityElementSynthesizer;
 
 impl RealityElementSynthesizer {
@@ -1310,7 +1310,7 @@ impl RealityElementSynthesizer {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RealityPatternWeaver;
 
 #[derive(Debug, Default, Clone)]

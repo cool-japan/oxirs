@@ -1,10 +1,10 @@
 //! Quantum streaming module components
 
-pub mod types;
 pub mod algorithms;
 pub mod processor;
+pub mod types;
 
 // Re-export main types
-pub use types::*;
 pub use algorithms::*;
 pub use processor::*;
+pub use types::*;

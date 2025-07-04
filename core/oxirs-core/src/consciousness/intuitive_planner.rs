@@ -654,7 +654,7 @@ pub struct ExecutionResults {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Variable, NamedNode, Literal};
+    use crate::{Literal, NamedNode, Variable};
 
     #[test]
     fn test_intuition_network_creation() {

@@ -10,12 +10,15 @@ pub mod model_selection;
 pub mod types;
 
 // Re-export main types and functions
-pub use config::{AiOrchestratorConfig, PerformanceRequirements as ConfigPerformanceRequirements, ModelSelectionStrategy};
+pub use config::{
+    AiOrchestratorConfig, ModelSelectionStrategy,
+    PerformanceRequirements as ConfigPerformanceRequirements,
+};
 pub use core::*;
 pub use metrics::*;
 pub use model_selection::*;
 pub use types::{
-    PerformanceRequirements, AdaptiveLearningInsights, ConfidentShape, LearningMetadata, 
-    OrchestrationMetrics, QualityAnalysis, DataCharacteristics, ModelPerformanceMetrics,
-    ModelSelectionResult, SelectedModel
+    AdaptiveLearningInsights, ConfidentShape, DataCharacteristics, LearningMetadata,
+    ModelPerformanceMetrics, ModelSelectionResult, OrchestrationMetrics, PerformanceRequirements,
+    QualityAnalysis, SelectedModel,
 };

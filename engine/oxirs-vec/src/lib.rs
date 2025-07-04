@@ -131,8 +131,8 @@ pub use advanced_result_merging::{
 };
 pub use automl_optimization::{
     AutoMLConfig, AutoMLOptimizer, AutoMLResults, AutoMLStatistics, IndexConfiguration,
-    IndexParameterSpace, OptimizationMetric, OptimizationTrial, ResourceConstraints,
-    SearchSpace, TrialResult,
+    IndexParameterSpace, OptimizationMetric, OptimizationTrial, ResourceConstraints, SearchSpace,
+    TrialResult,
 };
 pub use benchmarking::{
     BenchmarkConfig, BenchmarkDataset, BenchmarkOutputFormat, BenchmarkResult, BenchmarkRunner,
@@ -182,7 +182,7 @@ pub use faiss_compatibility::{
 };
 pub use federated_search::{
     AuthenticationConfig, FederatedSearchConfig, FederatedVectorSearch, FederationEndpoint,
-    PrivacyMode, SchemaCompatibility, TrustManager, PrivacyEngine,
+    PrivacyEngine, PrivacyMode, SchemaCompatibility, TrustManager,
 };
 pub use gnn_embeddings::{AggregatorType, GraphSAGE, GCN};
 pub use gpu::{
@@ -252,8 +252,8 @@ pub use result_fusion::{
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
     CrossLanguageProcessor, FederatedQueryResult, QueryExecutor, SparqlVectorFunctions,
-    SparqlVectorService, VectorOperation, VectorQuery, VectorQueryResult, VectorServiceArg, VectorServiceConfig,
-    VectorServiceResult,
+    SparqlVectorService, VectorOperation, VectorQuery, VectorQueryResult, VectorServiceArg,
+    VectorServiceConfig, VectorServiceResult,
 };
 pub use sparql_service_endpoint::{
     AuthenticationInfo, AuthenticationType, CustomFunctionRegistry, FederatedOperation,
@@ -736,7 +736,12 @@ pub trait VectorIndex: Send + Sync {
     fn get_vector(&self, uri: &str) -> Option<&Vector>;
 
     /// Add a vector with associated ID and metadata
-    fn add_vector(&mut self, id: VectorId, vector: Vector, metadata: Option<HashMap<String, String>>) -> Result<()> {
+    fn add_vector(
+        &mut self,
+        id: VectorId,
+        vector: Vector,
+        metadata: Option<HashMap<String, String>>,
+    ) -> Result<()> {
         // Default implementation that delegates to insert
         self.insert(id, vector)
     }

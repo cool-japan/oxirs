@@ -1,11 +1,11 @@
 //! Classical processor for hybrid quantum-classical operations
 
-use std::collections::HashMap;
 use anyhow::Result;
+use std::collections::HashMap;
 
-use crate::event::StreamEvent;
-use crate::error::StreamResult;
 use super::QuantumProcessingResult;
+use crate::error::StreamResult;
+use crate::event::StreamEvent;
 
 /// Classical processor for hybrid operations
 pub struct ClassicalProcessor {
@@ -18,10 +18,7 @@ pub struct ClassicalProcessor {
 impl ClassicalProcessor {
     pub fn new() -> Self {
         Self {
-            optimization_algorithms: vec![
-                ClassicalOptimizer::Adam,
-                ClassicalOptimizer::BFGS,
-            ],
+            optimization_algorithms: vec![ClassicalOptimizer::Adam, ClassicalOptimizer::BFGS],
             ml_models: HashMap::new(),
             preprocessing_pipelines: Vec::new(),
             postprocessing_pipelines: Vec::new(),
@@ -33,7 +30,11 @@ impl ClassicalProcessor {
         Ok(event.clone())
     }
 
-    pub async fn postprocess_result(&self, _quantum_result: QuantumProcessingResult, processed_event: StreamEvent) -> StreamResult<StreamEvent> {
+    pub async fn postprocess_result(
+        &self,
+        _quantum_result: QuantumProcessingResult,
+        processed_event: StreamEvent,
+    ) -> StreamResult<StreamEvent> {
         // Classical postprocessing logic
         // For now, return the processed event as-is
         Ok(processed_event)

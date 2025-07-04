@@ -81,7 +81,6 @@ impl Default for ProfileCheckpoint {
     }
 }
 
-
 /// Benchmark comparison result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkComparison {
@@ -285,11 +284,8 @@ impl PerformanceMonitor {
                 let total_duration = session.start_time.elapsed();
                 let end_metrics = self.get_current_metrics()?;
 
-                let performance_summary = self.generate_performance_summary(
-                    &session,
-                    &end_metrics,
-                    total_duration,
-                )?;
+                let performance_summary =
+                    self.generate_performance_summary(&session, &end_metrics, total_duration)?;
 
                 let result = ProfilingResult {
                     session_id: session.session_id.clone(),

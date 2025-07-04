@@ -1,8 +1,8 @@
 //! Main quantum stream processor
 
+use super::algorithms::QuantumAlgorithmSuite;
 use crate::error::{StreamError, StreamResult};
 use crate::event::StreamEvent;
-use super::algorithms::QuantumAlgorithmSuite;
 
 // Re-export the main types (they're implemented in types.rs)
 pub use super::types::{QuantumEvent, QuantumProcessingStats, QuantumStreamProcessor};
@@ -10,9 +10,12 @@ pub use super::types::{QuantumEvent, QuantumProcessingStats, QuantumStreamProces
 /// Additional processor utilities could go here
 impl QuantumStreamProcessor {
     /// Process multiple events in batch
-    pub async fn process_batch(&mut self, events: Vec<StreamEvent>) -> StreamResult<Vec<QuantumEvent>> {
+    pub async fn process_batch(
+        &mut self,
+        events: Vec<StreamEvent>,
+    ) -> StreamResult<Vec<QuantumEvent>> {
         let mut quantum_events = Vec::new();
-        
+
         for event in events {
             // Convert StreamEvent to QuantumEvent
             let quantum_event = QuantumEvent {
@@ -22,12 +25,12 @@ impl QuantumStreamProcessor {
                 operation: super::types::QuantumOperation::Hadamard,
                 metadata: std::collections::HashMap::new(),
             };
-            
+
             // Process the quantum event
             self.process_event(quantum_event.clone()).await?;
             quantum_events.push(quantum_event);
         }
-        
+
         Ok(quantum_events)
     }
 }

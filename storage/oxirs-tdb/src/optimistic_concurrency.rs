@@ -462,7 +462,10 @@ impl OptimisticConcurrencyController {
 
                 // Update conflict statistics
                 if let ValidationResult::Conflict { conflict_type, .. } = &result {
-                    *stats.conflicts_by_type.entry(conflict_type.clone()).or_insert(0) += 1;
+                    *stats
+                        .conflicts_by_type
+                        .entry(conflict_type.clone())
+                        .or_insert(0) += 1;
                     stats.validation_failures += 1;
                 }
             }

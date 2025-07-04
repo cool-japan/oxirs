@@ -113,7 +113,7 @@ impl SimilarityMetric {
     pub fn distance(&self, a: &Vector, b: &Vector) -> Result<f32> {
         let a_f32 = a.as_f32();
         let b_f32 = b.as_f32();
-        
+
         if a_f32.len() != b_f32.len() {
             return Err(anyhow!("Vector dimensions must match"));
         }
@@ -126,7 +126,7 @@ impl SimilarityMetric {
             SimilarityMetric::Hamming => hamming_distance(&a_f32, &b_f32),
             SimilarityMetric::Canberra => canberra_distance(&a_f32, &b_f32),
             SimilarityMetric::Chebyshev => chebyshev_distance(&a_f32, &b_f32),
-            
+
             // Similarity metrics - convert to distance (1 - similarity)
             _ => {
                 let similarity = self.similarity(&a_f32, &b_f32)?;

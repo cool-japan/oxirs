@@ -8,9 +8,8 @@
 
 use anyhow::Result;
 use oxirs_federate::{
-    AuthConfig, AuthCredentials, AutoDiscovery, AutoDiscoveryConfig, FederatedService, ServiceAuthConfig,
-    ServiceDiscovery, ServiceRegistry, ServiceType,
-    service::AuthType,
+    service::AuthType, AuthConfig, AuthCredentials, AutoDiscovery, AutoDiscoveryConfig,
+    FederatedService, ServiceAuthConfig, ServiceDiscovery, ServiceRegistry, ServiceType,
 };
 use std::time::Duration;
 use tokio::time::sleep;

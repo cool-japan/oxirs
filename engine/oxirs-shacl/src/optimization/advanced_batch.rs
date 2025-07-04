@@ -578,7 +578,9 @@ impl AdvancedBatchValidator {
                 batch_cache_hit_rate: cache_effectiveness,
                 memory_efficiency_score: 0.85, // Placeholder
                 grouping_effectiveness: 0.90,  // Placeholder
-                time_saved: Duration::from_millis((total_time.as_millis() / 2).try_into().unwrap_or(0)), // Placeholder
+                time_saved: Duration::from_millis(
+                    (total_time.as_millis() / 2).try_into().unwrap_or(0),
+                ), // Placeholder
             },
             total_execution_time: total_time,
             memory_usage: self.memory_monitor.read().unwrap().clone(),

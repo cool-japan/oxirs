@@ -160,7 +160,10 @@ impl OxiRSChat {
 
         for (session_id, session) in sessions.iter() {
             if let Ok(session_guard) = session.try_lock() {
-                if session_guard.should_expire(chrono::Duration::from_std(self.session_timeout).unwrap_or(chrono::Duration::seconds(3600))) {
+                if session_guard.should_expire(
+                    chrono::Duration::from_std(self.session_timeout)
+                        .unwrap_or(chrono::Duration::seconds(3600)),
+                ) {
                     expired_sessions.push(session_id.clone());
                 }
             }
@@ -212,7 +215,7 @@ impl OxiRSChat {
 
         // Store user message ID before moving
         let user_msg_id = user_msg.id.clone();
-        
+
         // Add user message to session
         session.add_message(user_msg)?;
 
@@ -232,16 +235,14 @@ impl OxiRSChat {
         let (sparql_query, sparql_results) = if self.is_sparql_query(&user_message) {
             debug!("Detected SPARQL query, performing NL2SPARQL translation");
             let mut nl2sparql = self.nl2sparql_engine.lock().await;
-            let query_context = rag::QueryContext::new(session_id.to_string())
-                .add_message(rag::ConversationMessage {
+            let query_context = rag::QueryContext::new(session_id.to_string()).add_message(
+                rag::ConversationMessage {
                     role: rag::MessageRole::User,
                     content: user_message.clone(),
                     timestamp: chrono::Utc::now(),
-                });
-            match nl2sparql
-                .generate_sparql(&query_context)
-                .await
-            {
+                },
+            );
+            match nl2sparql.generate_sparql(&query_context).await {
                 Ok(sparql) => {
                     debug!("Generated SPARQL: {}", sparql.query);
                     // Execute SPARQL query
@@ -331,7 +332,8 @@ impl OxiRSChat {
                 model_used: Some("oxirs-chat-ai".to_string()),
                 temperature: None,
                 max_tokens: None,
-                custom_fields: self.create_response_metadata(&assembled_context, processing_start.elapsed())
+                custom_fields: self
+                    .create_response_metadata(&assembled_context, processing_start.elapsed())
                     .into_iter()
                     .map(|(k, v)| (k, serde_json::Value::String(v)))
                     .collect(),
@@ -551,19 +553,21 @@ impl OxiRSChat {
                 content: prompt.clone(),
                 metadata: None,
             }],
-            system_prompt: Some("You are an advanced AI assistant with access to a knowledge graph.".to_string()),
+            system_prompt: Some(
+                "You are an advanced AI assistant with access to a knowledge graph.".to_string(),
+            ),
             temperature: 0.7,
             max_tokens: Some(1000),
             use_case: llm::UseCase::Conversation,
             priority: llm::Priority::Normal,
             timeout: None,
         };
-        
+
         let response = llm_manager
             .generate_response(llm_request)
             .await
             .context("Failed to generate LLM response")?;
-        
+
         Ok(response.content)
     }
 

@@ -61,7 +61,6 @@ pub enum MfaMethod {
     Backup,
 }
 
-
 /// SAML authentication response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SamlResponse {

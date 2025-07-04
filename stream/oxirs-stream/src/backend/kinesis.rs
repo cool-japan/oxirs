@@ -903,7 +903,10 @@ impl KinesisProducer {
                     metadata,
                 },
                 PatchOperation::TransactionBegin { transaction_id } => StreamEvent::TripleAdded {
-                    subject: format!("transaction:{}", transaction_id.as_deref().unwrap_or("default")),
+                    subject: format!(
+                        "transaction:{}",
+                        transaction_id.as_deref().unwrap_or("default")
+                    ),
                     predicate: "rdf:type".to_string(),
                     object: "oxirs:TransactionBegin".to_string(),
                     graph: None,
@@ -1081,28 +1084,25 @@ impl KinesisConsumer {
 
                         for shard in description.shards {
                             let shard_id = shard.shard_id;
-                                // Get shard iterator starting from latest
-                                match client
-                                    .get_shard_iterator()
-                                    .stream_name(&self.kinesis_config.stream_name)
-                                    .shard_id(&shard_id)
-                                    .shard_iterator_type(ShardIteratorType::Latest)
-                                    .send()
-                                    .await
-                                {
-                                    Ok(iterator_response) => {
-                                        if let Some(iterator) = iterator_response.shard_iterator {
-                                            self.shard_iterators.insert(shard_id.clone(), iterator);
-                                            debug!("Initialized iterator for shard: {}", shard_id);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        warn!(
-                                            "Failed to get iterator for shard {}: {}",
-                                            shard_id, e
-                                        );
+                            // Get shard iterator starting from latest
+                            match client
+                                .get_shard_iterator()
+                                .stream_name(&self.kinesis_config.stream_name)
+                                .shard_id(&shard_id)
+                                .shard_iterator_type(ShardIteratorType::Latest)
+                                .send()
+                                .await
+                            {
+                                Ok(iterator_response) => {
+                                    if let Some(iterator) = iterator_response.shard_iterator {
+                                        self.shard_iterators.insert(shard_id.clone(), iterator);
+                                        debug!("Initialized iterator for shard: {}", shard_id);
                                     }
                                 }
+                                Err(e) => {
+                                    warn!("Failed to get iterator for shard {}: {}", shard_id, e);
+                                }
+                            }
                         }
                     }
                 }

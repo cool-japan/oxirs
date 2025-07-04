@@ -63,10 +63,8 @@ impl GpuVectorIndex {
                 VectorData::F64(data) => {
                     // Convert f64 to f32 for GPU processing
                     self.vector_data.extend(data.iter().map(|&x| x as f32));
-                },
-                _ => {
-                    return Err(anyhow!("Unsupported vector precision for GPU processing"))
                 }
+                _ => return Err(anyhow!("Unsupported vector precision for GPU processing")),
             }
         }
 
@@ -89,7 +87,9 @@ impl GpuVectorIndex {
             VectorData::F32(data) => data.clone(),
             VectorData::F64(data) => data.iter().map(|&x| x as f32).collect(),
             _ => {
-                return Err(anyhow!("Unsupported query vector precision for GPU processing"))
+                return Err(anyhow!(
+                    "Unsupported query vector precision for GPU processing"
+                ))
             }
         };
 

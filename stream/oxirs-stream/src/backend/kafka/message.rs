@@ -45,7 +45,7 @@ impl KafkaEvent {
         let timestamp = self.timestamp;
         let source = self.source.clone();
         let metadata = self.metadata.clone();
-        
+
         self.try_into().unwrap_or_else(|_| {
             // Fallback to a default event if conversion fails
             StreamEvent::Heartbeat {

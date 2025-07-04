@@ -18,7 +18,7 @@ use crate::{
     analytics::AnalyticsEngine,
     learning::ShapeLearner,
     ml::{ModelEnsemble, ShapeLearningModel},
-    neural_patterns::{NeuralPatternRecognizer, types::NeuralPatternConfig},
+    neural_patterns::{types::NeuralPatternConfig, NeuralPatternRecognizer},
     optimization::OptimizationEngine,
     patterns::PatternAnalyzer,
     prediction::ValidationPredictor,
@@ -239,7 +239,9 @@ impl AiOrchestrator {
             validation_predictor: Arc::new(Mutex::new(ValidationPredictor::new())),
             optimization_engine: Arc::new(Mutex::new(OptimizationEngine::new())),
             analytics_engine: Arc::new(Mutex::new(AnalyticsEngine::new())),
-            neural_pattern_recognizer: Arc::new(Mutex::new(NeuralPatternRecognizer::new(NeuralPatternConfig::default()))),
+            neural_pattern_recognizer: Arc::new(Mutex::new(NeuralPatternRecognizer::new(
+                NeuralPatternConfig::default(),
+            ))),
             pattern_analyzer: Arc::new(Mutex::new(crate::patterns::PatternAnalyzer::new())),
             model_selector: Arc::new(Mutex::new(model_selector)),
             config,
@@ -288,7 +290,7 @@ impl AiOrchestrator {
         // Store counts before moving values
         let shapes_count = shapes.len();
         let patterns_count = patterns.len();
-        
+
         // Update statistics
         self.stats
             .update_learning_session(total_learning_time, shapes_count, patterns_count);

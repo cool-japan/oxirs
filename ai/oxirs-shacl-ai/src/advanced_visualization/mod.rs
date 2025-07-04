@@ -9,34 +9,34 @@
 //! - `renderers`: Visualization renderers for different output formats
 //! - `exporters`: Export functionality for various file formats
 
-pub mod core;
 pub mod collectors;
-pub mod renderers;
+pub mod core;
 pub mod exporters;
+pub mod renderers;
 
 // Re-export main types for easy access
 pub use core::{
-    AdvancedVisualizationEngine, VisualizationConfig, VisualizationType, VisualizationData,
-    VisualizationOutput, VisualizationMetadata, ActiveVisualization, RenderOptions,
-    ColorScheme, ExportQuality, ExportFormat, GraphNode, GraphEdge, TimeSeriesData,
-    HeatmapLabels, QuantumStateVisualization, EntanglementVisualization, DashboardLayout,
-    InterpretabilityExplanation, AttentionFlow, PerformanceDebugInfo, ExplorerNode,
-    QuantumClassicalConnection, ArchitectureVisualizationType, QuantumVisualizationMode,
-    ExportResult, InteractiveControls,
+    ActiveVisualization, AdvancedVisualizationEngine, ArchitectureVisualizationType, AttentionFlow,
+    ColorScheme, DashboardLayout, EntanglementVisualization, ExplorerNode, ExportFormat,
+    ExportQuality, ExportResult, GraphEdge, GraphNode, HeatmapLabels, InteractiveControls,
+    InterpretabilityExplanation, PerformanceDebugInfo, QuantumClassicalConnection,
+    QuantumStateVisualization, QuantumVisualizationMode, RenderOptions, TimeSeriesData,
+    VisualizationConfig, VisualizationData, VisualizationMetadata, VisualizationOutput,
+    VisualizationType,
 };
 
 pub use collectors::{
-    DataCollector, CollectorMetadata, NeuralArchitectureCollector, QuantumPatternCollector,
-    FederatedNetworkCollector, PerformanceMetricsCollector,
+    CollectorMetadata, DataCollector, FederatedNetworkCollector, NeuralArchitectureCollector,
+    PerformanceMetricsCollector, QuantumPatternCollector,
 };
 
 pub use renderers::{
-    VisualizationRenderer, RendererCapabilities, Graph3DRenderer, HeatmapRenderer,
-    TimelineRenderer, NetworkTopologyRenderer, QuantumStateRenderer, InterpretabilityRenderer,
+    Graph3DRenderer, HeatmapRenderer, InterpretabilityRenderer, NetworkTopologyRenderer,
+    QuantumStateRenderer, RendererCapabilities, TimelineRenderer, VisualizationRenderer,
 };
 
 pub use exporters::{
-    Exporter, SVGExporter, PNGExporter, HTMLExporter, PDFExporter, JSONExporter, ExportManager,
+    ExportManager, Exporter, HTMLExporter, JSONExporter, PDFExporter, PNGExporter, SVGExporter,
 };
 
 use crate::{Result, ShaclAiError};
@@ -54,25 +54,33 @@ pub fn create_engine_with_config(config: VisualizationConfig) -> AdvancedVisuali
 
 /// Register all default data collectors with an engine
 pub async fn register_default_collectors(engine: &AdvancedVisualizationEngine) -> Result<()> {
-    engine.register_data_collector(
-        "neural_architecture".to_string(),
-        Box::new(NeuralArchitectureCollector::new()),
-    ).await?;
+    engine
+        .register_data_collector(
+            "neural_architecture".to_string(),
+            Box::new(NeuralArchitectureCollector::new()),
+        )
+        .await?;
 
-    engine.register_data_collector(
-        "quantum_patterns".to_string(),
-        Box::new(QuantumPatternCollector::new()),
-    ).await?;
+    engine
+        .register_data_collector(
+            "quantum_patterns".to_string(),
+            Box::new(QuantumPatternCollector::new()),
+        )
+        .await?;
 
-    engine.register_data_collector(
-        "federated_network".to_string(),
-        Box::new(FederatedNetworkCollector::new()),
-    ).await?;
+    engine
+        .register_data_collector(
+            "federated_network".to_string(),
+            Box::new(FederatedNetworkCollector::new()),
+        )
+        .await?;
 
-    engine.register_data_collector(
-        "performance_metrics".to_string(),
-        Box::new(PerformanceMetricsCollector::new()),
-    ).await?;
+    engine
+        .register_data_collector(
+            "performance_metrics".to_string(),
+            Box::new(PerformanceMetricsCollector::new()),
+        )
+        .await?;
 
     tracing::info!("Registered default data collectors");
     Ok(())
@@ -80,35 +88,38 @@ pub async fn register_default_collectors(engine: &AdvancedVisualizationEngine) -
 
 /// Register all default renderers with an engine
 pub async fn register_default_renderers(engine: &AdvancedVisualizationEngine) -> Result<()> {
-    engine.register_renderer(
-        "graph_3d".to_string(),
-        Box::new(Graph3DRenderer::new()),
-    ).await?;
+    engine
+        .register_renderer("graph_3d".to_string(), Box::new(Graph3DRenderer::new()))
+        .await?;
 
-    engine.register_renderer(
-        "heatmap".to_string(),
-        Box::new(HeatmapRenderer::new()),
-    ).await?;
+    engine
+        .register_renderer("heatmap".to_string(), Box::new(HeatmapRenderer::new()))
+        .await?;
 
-    engine.register_renderer(
-        "timeline".to_string(),
-        Box::new(TimelineRenderer::new()),
-    ).await?;
+    engine
+        .register_renderer("timeline".to_string(), Box::new(TimelineRenderer::new()))
+        .await?;
 
-    engine.register_renderer(
-        "network_topology".to_string(),
-        Box::new(NetworkTopologyRenderer::new()),
-    ).await?;
+    engine
+        .register_renderer(
+            "network_topology".to_string(),
+            Box::new(NetworkTopologyRenderer::new()),
+        )
+        .await?;
 
-    engine.register_renderer(
-        "quantum_state".to_string(),
-        Box::new(QuantumStateRenderer::new()),
-    ).await?;
+    engine
+        .register_renderer(
+            "quantum_state".to_string(),
+            Box::new(QuantumStateRenderer::new()),
+        )
+        .await?;
 
-    engine.register_renderer(
-        "interpretability".to_string(),
-        Box::new(InterpretabilityRenderer::new()),
-    ).await?;
+    engine
+        .register_renderer(
+            "interpretability".to_string(),
+            Box::new(InterpretabilityRenderer::new()),
+        )
+        .await?;
 
     tracing::info!("Registered default renderers");
     Ok(())
@@ -137,13 +148,15 @@ pub async fn quick_visualization(
     };
 
     let viz_id = format!("quick_viz_{}", chrono::Utc::now().timestamp());
-    
-    engine.create_visualization(
-        viz_id,
-        collector_name.to_string(),
-        renderer_name.to_string(),
-        options,
-    ).await
+
+    engine
+        .create_visualization(
+            viz_id,
+            collector_name.to_string(),
+            renderer_name.to_string(),
+            options,
+        )
+        .await
 }
 
 #[cfg(test)]
@@ -164,7 +177,7 @@ mod tests {
             enable_animations: false,
             ..Default::default()
         };
-        
+
         let engine = create_engine_with_config(config);
         assert_eq!(engine.config().max_data_points, 5000);
         assert!(!engine.config().enable_animations);
@@ -198,7 +211,7 @@ mod tests {
             ColorScheme::Inferno,
             ColorScheme::Custom(vec!["#ff0000".to_string(), "#00ff00".to_string()]),
         ];
-        
+
         assert_eq!(schemes.len(), 4);
     }
 
@@ -210,7 +223,7 @@ mod tests {
             VisualizationType::Timeline,
             VisualizationType::QuantumClassicalHybrid,
         ];
-        
+
         assert_eq!(types.len(), 4);
     }
 
@@ -223,7 +236,7 @@ mod tests {
             ExportFormat::PDF,
             ExportFormat::JSON,
         ];
-        
+
         assert_eq!(formats.len(), 5);
     }
 

@@ -463,6 +463,7 @@ impl ConsciousnessValidator {
             intuitive_insights,
             dream_insights,
             consciousness_enhancement_factor: consciousness_level.processing_multiplier(),
+            confidence_score: consciousness_level.processing_multiplier() * 0.8,
         })
     }
 
@@ -552,7 +553,7 @@ impl ConsciousnessValidator {
         // Enhanced processing allows for more thorough validation
         if multiplier > 1.0 {
             // More comprehensive validation at higher consciousness levels
-            enhanced_config.max_violations = 
+            enhanced_config.max_violations =
                 (enhanced_config.max_violations as f64 * multiplier) as usize;
         }
 
@@ -788,6 +789,8 @@ pub struct ConsciousnessValidationResult {
     pub dream_insights: Vec<DreamInsight>,
     /// Enhancement factor from consciousness
     pub consciousness_enhancement_factor: f64,
+    /// Confidence score of the validation result
+    pub confidence_score: f64,
 }
 
 /// Intuitive insight discovered during validation

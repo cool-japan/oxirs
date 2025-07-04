@@ -122,6 +122,14 @@ pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
     WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata,
 };
+pub use observability::{
+    AlertConfig, AlertEvent, AlertSeverity, AlertType, BusinessMetrics, SpanLog, SpanStatus,
+    StreamObservability, StreamingMetrics, TelemetryConfig, TraceSpan,
+};
+pub use performance_utils::{
+    AdaptiveRateLimiter, IntelligentMemoryPool,
+    IntelligentPrefetcher, ParallelStreamProcessor, PerformanceUtilsConfig, PoolStats,
+};
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -165,6 +173,8 @@ pub mod time_travel;
 pub mod types;
 pub mod wasm_edge_computing;
 pub mod webhook;
+pub mod observability;
+pub mod performance_utils;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]

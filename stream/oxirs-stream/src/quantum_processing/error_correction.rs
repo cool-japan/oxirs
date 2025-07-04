@@ -1,6 +1,6 @@
 //! Quantum error correction
 
-use super::{QuantumConfig, ErrorCorrectionCode};
+use super::{ErrorCorrectionCode, QuantumConfig};
 
 /// Quantum error correction system
 pub struct QuantumErrorCorrection {

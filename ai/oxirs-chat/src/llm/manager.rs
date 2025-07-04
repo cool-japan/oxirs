@@ -9,13 +9,13 @@ use tracing::{debug, error, info, warn};
 use uuid;
 
 use super::{
-    config::LLMConfig,
-    circuit_breaker::CircuitBreaker,
-    providers::LLMProvider,
-    types::{LLMRequest, LLMResponse, UseCase, Priority},
-    openai_provider::OpenAIProvider,
     anthropic_provider::AnthropicProvider,
+    circuit_breaker::CircuitBreaker,
+    config::LLMConfig,
     local_provider::LocalModelProvider,
+    openai_provider::OpenAIProvider,
+    providers::LLMProvider,
+    types::{LLMRequest, LLMResponse, Priority, UseCase},
 };
 
 /// Usage statistics for external queries
@@ -129,10 +129,11 @@ impl UsageTracker {
         self.total_tokens += tokens;
         self.total_cost += cost;
 
-        let provider_stats = self.provider_usage
+        let provider_stats = self
+            .provider_usage
             .entry(provider.to_string())
             .or_insert_with(|| ProviderUsage::new());
-        
+
         provider_stats.requests += 1;
         provider_stats.tokens += tokens;
         provider_stats.cost += cost;
@@ -225,19 +226,27 @@ impl LLMManager {
 
     fn initialize_circuit_breakers(&mut self) {
         for provider_name in self.config.providers.keys() {
-            let circuit_breaker = Arc::new(CircuitBreaker::new(self.config.circuit_breaker.clone()));
-            self.circuit_breakers.insert(provider_name.clone(), circuit_breaker);
+            let circuit_breaker =
+                Arc::new(CircuitBreaker::new(self.config.circuit_breaker.clone()));
+            self.circuit_breakers
+                .insert(provider_name.clone(), circuit_breaker);
         }
     }
 
     /// Generate response using optimal provider selection
     pub async fn generate_response(&mut self, request: LLMRequest) -> Result<LLMResponse> {
         // For now, simplified implementation - use first available provider
-        let provider_name = self.providers.keys().next()
+        let provider_name = self
+            .providers
+            .keys()
+            .next()
             .ok_or_else(|| anyhow!("No providers configured"))?
             .clone();
-        
-        let model = self.config.providers.get(&provider_name)
+
+        let model = self
+            .config
+            .providers
+            .get(&provider_name)
             .and_then(|p| p.models.first())
             .map(|m| m.name.as_str())
             .unwrap_or("default");
@@ -245,12 +254,17 @@ impl LLMManager {
         // Check circuit breaker
         if let Some(circuit_breaker) = self.circuit_breakers.get(&provider_name) {
             if !circuit_breaker.can_execute().await {
-                return Err(anyhow!("Circuit breaker is open for provider: {}", provider_name));
+                return Err(anyhow!(
+                    "Circuit breaker is open for provider: {}",
+                    provider_name
+                ));
             }
         }
 
         // Get the provider and generate response
-        let provider = self.providers.get(&provider_name)
+        let provider = self
+            .providers
+            .get(&provider_name)
             .ok_or_else(|| anyhow!("Provider {} not found", provider_name))?;
 
         let mut response = provider.generate(model, &request).await?;
@@ -258,7 +272,11 @@ impl LLMManager {
         // Track usage
         {
             let mut tracker = self.usage_tracker.lock().await;
-            tracker.track_usage(&provider_name, response.usage.total_tokens, response.usage.cost);
+            tracker.track_usage(
+                &provider_name,
+                response.usage.total_tokens,
+                response.usage.cost,
+            );
         }
 
         Ok(response)
@@ -266,12 +284,14 @@ impl LLMManager {
 
     pub fn estimate_input_tokens(&self, request: &LLMRequest) -> usize {
         // Simple token estimation - in practice would use proper tokenizer
-        let total_content: String = request.messages.iter()
+        let total_content: String = request
+            .messages
+            .iter()
             .map(|m| m.content.as_str())
             .chain(request.system_prompt.as_ref().map(|s| s.as_str()))
             .collect::<Vec<_>>()
             .join(" ");
-        
+
         // Rough estimate: 1 token ≈ 4 characters
         total_content.len() / 4
     }
@@ -279,12 +299,12 @@ impl LLMManager {
     /// Get circuit breaker statistics for all providers
     pub async fn get_circuit_breaker_stats(&self) -> HashMap<String, super::CircuitBreakerStats> {
         let mut stats = HashMap::new();
-        
+
         for (provider_name, circuit_breaker) in &self.circuit_breakers {
             let provider_stats = circuit_breaker.get_stats().await;
             stats.insert(provider_name.clone(), provider_stats);
         }
-        
+
         stats
     }
 
@@ -294,7 +314,10 @@ impl LLMManager {
             circuit_breaker.reset().await?;
             Ok(())
         } else {
-            Err(anyhow!("Circuit breaker not found for provider: {}", provider_name))
+            Err(anyhow!(
+                "Circuit breaker not found for provider: {}",
+                provider_name
+            ))
         }
     }
 
@@ -329,7 +352,10 @@ impl EnhancedLLMManager {
         })
     }
 
-    pub async fn generate_response_with_limits(&mut self, request: LLMRequest) -> Result<LLMResponse> {
+    pub async fn generate_response_with_limits(
+        &mut self,
+        request: LLMRequest,
+    ) -> Result<LLMResponse> {
         // Check rate limits before processing
         self.rate_limiter.check_rate_limit("default").await?;
 
@@ -351,7 +377,7 @@ impl EnhancedLLMManager {
     /// Get or create a session for the given session ID
     pub async fn get_or_create_session(&self, session_id: String) -> Result<LockedSession> {
         let mut sessions = self.sessions.lock().await;
-        
+
         if let Some(session) = sessions.get(&session_id) {
             Ok(session.clone())
         } else {
@@ -373,7 +399,7 @@ impl EnhancedLLMManager {
         let mut metrics = DetailedMetrics::default();
         metrics.total_sessions = sessions.len();
         metrics.active_sessions = sessions.len(); // Simplified - all sessions are considered active
-        
+
         // Count total messages across all sessions
         let mut total_messages = 0;
         for session in sessions.values() {
@@ -381,12 +407,15 @@ impl EnhancedLLMManager {
             total_messages += session_guard.messages.len();
         }
         metrics.total_messages = total_messages;
-        
+
         metrics
     }
 
     /// Backup sessions to the specified path
-    pub async fn backup_sessions<P: AsRef<std::path::Path>>(&self, backup_path: &P) -> Result<BackupReport> {
+    pub async fn backup_sessions<P: AsRef<std::path::Path>>(
+        &self,
+        backup_path: &P,
+    ) -> Result<BackupReport> {
         let sessions = self.sessions.lock().await;
         // TODO: Implement actual session backup logic
         Ok(BackupReport {
@@ -406,7 +435,10 @@ impl EnhancedLLMManager {
     }
 
     /// Restore sessions from the specified path
-    pub async fn restore_sessions<P: AsRef<std::path::Path>>(&self, restore_path: &P) -> Result<RestoreReport> {
+    pub async fn restore_sessions<P: AsRef<std::path::Path>>(
+        &self,
+        restore_path: &P,
+    ) -> Result<RestoreReport> {
         // TODO: Implement actual session restore logic
         Ok(RestoreReport {
             sessions_restored: 1,
@@ -421,7 +453,7 @@ impl EnhancedLLMManager {
         let mut sessions = self.sessions.lock().await;
         let now = chrono::Utc::now();
         let mut removed_count = 0;
-        
+
         // Remove sessions that are older than 24 hours without activity
         sessions.retain(|_, session| {
             let session_guard = session.try_lock();
@@ -435,7 +467,7 @@ impl EnhancedLLMManager {
                 true // Keep sessions that are currently locked
             }
         });
-        
+
         Ok(removed_count)
     }
 

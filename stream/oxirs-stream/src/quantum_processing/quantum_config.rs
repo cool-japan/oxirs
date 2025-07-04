@@ -70,7 +70,7 @@ pub enum QuantumGate {
     RY(f64),
     RZ(f64),
     U3(f64, f64, f64),
-    
+
     // Two-qubit gates
     CNOT,
     CZ,
@@ -78,12 +78,12 @@ pub enum QuantumGate {
     CRX(f64),
     CRY(f64),
     CRZ(f64),
-    
+
     // Multi-qubit gates
     Toffoli,
     Fredkin,
     CSwap,
-    
+
     // Specialized gates
     QFT,
     InverseQFT,

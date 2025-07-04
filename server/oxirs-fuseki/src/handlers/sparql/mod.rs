@@ -13,7 +13,9 @@ pub mod sparql12_features;
 
 // Re-export main items for backwards compatibility
 pub use core::*;
-pub use sparql12_features::{Sparql12Features, parse_quoted_triple_value, extract_quoted_triple_patterns, ParsedQuotedTriple};
+pub use sparql12_features::{
+    extract_quoted_triple_patterns, parse_quoted_triple_value, ParsedQuotedTriple, Sparql12Features,
+};
 
 // Re-export handlers from sparql_refactored for server routing
 pub use crate::handlers::sparql_refactored::{query_handler, update_handler};

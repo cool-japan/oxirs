@@ -767,7 +767,11 @@ impl AdvancedProfiler {
     }
 
     /// Start a new profiling session
-    pub async fn start_session(&self, name: String, tags: HashMap<String, String>) -> Result<String> {
+    pub async fn start_session(
+        &self,
+        name: String,
+        tags: HashMap<String, String>,
+    ) -> Result<String> {
         let session_id = Uuid::new_v4().to_string();
         let session = ProfilingSession {
             session_id: session_id.clone(),
@@ -779,8 +783,11 @@ impl AdvancedProfiler {
             tags,
         };
 
-        let mut sessions = self.sessions.write().map_err(|e| anyhow!("Lock error: {}", e))?;
-        
+        let mut sessions = self
+            .sessions
+            .write()
+            .map_err(|e| anyhow!("Lock error: {}", e))?;
+
         if sessions.len() >= self.config.max_sessions {
             return Err(anyhow!("Maximum number of sessions reached"));
         }
@@ -791,8 +798,11 @@ impl AdvancedProfiler {
 
     /// Stop a profiling session
     pub async fn stop_session(&self, session_id: &str) -> Result<ProfilingSession> {
-        let mut sessions = self.sessions.write().map_err(|e| anyhow!("Lock error: {}", e))?;
-        
+        let mut sessions = self
+            .sessions
+            .write()
+            .map_err(|e| anyhow!("Lock error: {}", e))?;
+
         if let Some(mut session) = sessions.remove(session_id) {
             session.end_time = Some(Utc::now());
             session.status = SessionStatus::Completed;
@@ -815,8 +825,12 @@ impl AdvancedProfiler {
 
     /// Get profiling results
     pub async fn get_results(&self, session_id: &str) -> Result<ProfilingSession> {
-        let sessions = self.sessions.read().map_err(|e| anyhow!("Lock error: {}", e))?;
-        sessions.get(session_id)
+        let sessions = self
+            .sessions
+            .read()
+            .map_err(|e| anyhow!("Lock error: {}", e))?;
+        sessions
+            .get(session_id)
             .cloned()
             .ok_or_else(|| anyhow!("Session not found: {}", session_id))
     }
@@ -825,12 +839,15 @@ impl AdvancedProfiler {
     pub async fn analyze_performance(&self, session_id: &str) -> Result<PerformanceAnalysisReport> {
         let session = self.get_results(session_id).await?;
         let collector = self.collector.lock().await;
-        
+
         self.analyzer.analyze(&session, &collector.buffer).await
     }
 
     /// Generate optimization recommendations
-    pub async fn generate_recommendations(&self, session_id: &str) -> Result<Vec<OptimizationRecommendation>> {
+    pub async fn generate_recommendations(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<OptimizationRecommendation>> {
         let analysis = self.analyze_performance(session_id).await?;
         self.recommender.generate_recommendations(&analysis).await
     }
@@ -848,14 +865,16 @@ impl PerformanceCollector {
 
     /// Add a metric to the buffer
     pub fn add_metric(&mut self, metric: MetricDataPoint) {
-        if self.buffer.len() >= 100000 { // Buffer size limit
+        if self.buffer.len() >= 100000 {
+            // Buffer size limit
             self.buffer.pop_front();
             self.stats.drop_rate += 1.0;
         }
 
         self.buffer.push_back(metric);
         self.stats.total_points += 1;
-        self.stats.memory_usage_bytes = (self.buffer.len() * std::mem::size_of::<MetricDataPoint>()) as u64;
+        self.stats.memory_usage_bytes =
+            (self.buffer.len() * std::mem::size_of::<MetricDataPoint>()) as u64;
     }
 
     /// Start a performance tracker
@@ -866,7 +885,7 @@ impl PerformanceCollector {
             measurements: Vec::new(),
             state: TrackerState::Active,
         };
-        
+
         self.trackers.insert(name.clone(), tracker);
         name
     }
@@ -915,7 +934,11 @@ impl PerformanceAnalyzer {
     }
 
     /// Analyze performance data
-    pub async fn analyze(&self, session: &ProfilingSession, data: &VecDeque<MetricDataPoint>) -> Result<PerformanceAnalysisReport> {
+    pub async fn analyze(
+        &self,
+        session: &ProfilingSession,
+        data: &VecDeque<MetricDataPoint>,
+    ) -> Result<PerformanceAnalysisReport> {
         let mut report = PerformanceAnalysisReport::new(session.session_id.clone());
 
         // Run analysis algorithms
@@ -936,21 +959,23 @@ impl PerformanceAnalyzer {
     }
 
     /// Run a specific analysis algorithm
-    async fn run_algorithm(&self, algorithm: &AnalysisAlgorithm, data: &VecDeque<MetricDataPoint>) -> Result<AnalysisResult> {
+    async fn run_algorithm(
+        &self,
+        algorithm: &AnalysisAlgorithm,
+        data: &VecDeque<MetricDataPoint>,
+    ) -> Result<AnalysisResult> {
         // Placeholder implementation - would contain actual algorithm logic
         Ok(AnalysisResult {
             algorithm_name: algorithm.name.clone(),
             result_type: algorithm.algorithm_type.clone(),
-            findings: vec![
-                Finding {
-                    title: "Sample Finding".to_string(),
-                    description: "This is a sample finding for demonstration".to_string(),
-                    severity: FindingSeverity::Medium,
-                    confidence: 0.8,
-                    affected_metrics: vec!["latency".to_string()],
-                    recommendations: vec!["Consider optimization".to_string()],
-                }
-            ],
+            findings: vec![Finding {
+                title: "Sample Finding".to_string(),
+                description: "This is a sample finding for demonstration".to_string(),
+                severity: FindingSeverity::Medium,
+                confidence: 0.8,
+                affected_metrics: vec!["latency".to_string()],
+                recommendations: vec!["Consider optimization".to_string()],
+            }],
             execution_time: Duration::from_millis(100),
         })
     }
@@ -967,40 +992,37 @@ impl PatternDetector {
 
     /// Get default pattern templates
     fn default_templates() -> Vec<PatternTemplate> {
-        vec![
-            PatternTemplate {
-                name: "Memory Leak Pattern".to_string(),
-                signature: PatternSignature {
-                    characteristics: vec![
-                        StatisticalCharacteristic {
-                            metric: "memory_usage".to_string(),
-                            property: StatisticalProperty::Mean,
-                            value_range: (0.0, f64::INFINITY),
-                        }
-                    ],
-                    temporal_features: vec![
-                        TemporalFeature {
-                            feature_type: TemporalFeatureType::Trend,
-                            time_scale: Duration::from_secs(3600),
-                            threshold: 0.1,
-                        }
-                    ],
+        vec![PatternTemplate {
+            name: "Memory Leak Pattern".to_string(),
+            signature: PatternSignature {
+                characteristics: vec![StatisticalCharacteristic {
+                    metric: "memory_usage".to_string(),
+                    property: StatisticalProperty::Mean,
+                    value_range: (0.0, f64::INFINITY),
+                }],
+                temporal_features: vec![TemporalFeature {
+                    feature_type: TemporalFeatureType::Trend,
+                    time_scale: Duration::from_secs(3600),
+                    threshold: 0.1,
+                }],
+            },
+            criteria: MatchingCriteria {
+                min_confidence: 0.7,
+                min_data_points: 100,
+                time_window_requirements: TimeWindowRequirements {
+                    min_duration: Duration::from_secs(300),
+                    max_duration: Duration::from_secs(86400),
+                    coverage_ratio: 0.8,
                 },
-                criteria: MatchingCriteria {
-                    min_confidence: 0.7,
-                    min_data_points: 100,
-                    time_window_requirements: TimeWindowRequirements {
-                        min_duration: Duration::from_secs(300),
-                        max_duration: Duration::from_secs(86400),
-                        coverage_ratio: 0.8,
-                    },
-                },
-            }
-        ]
+            },
+        }]
     }
 
     /// Detect patterns in performance data
-    pub async fn detect_patterns(&self, data: &VecDeque<MetricDataPoint>) -> Result<Vec<PerformancePattern>> {
+    pub async fn detect_patterns(
+        &self,
+        data: &VecDeque<MetricDataPoint>,
+    ) -> Result<Vec<PerformancePattern>> {
         let mut detected_patterns = Vec::new();
 
         for template in &self.templates {
@@ -1013,7 +1035,11 @@ impl PatternDetector {
     }
 
     /// Match a template against data
-    async fn match_template(&self, template: &PatternTemplate, data: &VecDeque<MetricDataPoint>) -> Result<Option<PerformancePattern>> {
+    async fn match_template(
+        &self,
+        template: &PatternTemplate,
+        data: &VecDeque<MetricDataPoint>,
+    ) -> Result<Option<PerformancePattern>> {
         // Placeholder implementation
         if data.len() >= template.criteria.min_data_points {
             Ok(Some(PerformancePattern {
@@ -1065,7 +1091,10 @@ impl AnomalyDetector {
     }
 
     /// Detect anomalies in performance data
-    pub async fn detect_anomalies(&self, data: &VecDeque<MetricDataPoint>) -> Result<Vec<PerformanceAnomaly>> {
+    pub async fn detect_anomalies(
+        &self,
+        data: &VecDeque<MetricDataPoint>,
+    ) -> Result<Vec<PerformanceAnomaly>> {
         let mut detected_anomalies = Vec::new();
 
         for algorithm in &self.algorithms {
@@ -1077,30 +1106,32 @@ impl AnomalyDetector {
     }
 
     /// Run anomaly detection algorithm
-    async fn run_anomaly_algorithm(&self, algorithm: &AnomalyAlgorithm, data: &VecDeque<MetricDataPoint>) -> Result<Vec<PerformanceAnomaly>> {
+    async fn run_anomaly_algorithm(
+        &self,
+        algorithm: &AnomalyAlgorithm,
+        data: &VecDeque<MetricDataPoint>,
+    ) -> Result<Vec<PerformanceAnomaly>> {
         // Placeholder implementation
-        Ok(vec![
-            PerformanceAnomaly {
-                id: Uuid::new_v4().to_string(),
-                anomaly_type: AnomalyType::LatencySpike,
-                severity: AnomalySeverity::Medium,
-                detected_at: Utc::now(),
-                affected_metrics: vec!["response_time".to_string()],
-                anomaly_score: 0.85,
-                context: AnomalyContext {
-                    component: "embedding_service".to_string(),
-                    related_events: vec!["high_load_event".to_string()],
-                    environmental_factors: HashMap::from([
-                        ("cpu_usage".to_string(), "high".to_string()),
-                        ("memory_pressure".to_string(), "moderate".to_string()),
-                    ]),
-                    potential_causes: vec![
-                        "Resource contention".to_string(),
-                        "Memory pressure".to_string(),
-                    ],
-                },
-            }
-        ])
+        Ok(vec![PerformanceAnomaly {
+            id: Uuid::new_v4().to_string(),
+            anomaly_type: AnomalyType::LatencySpike,
+            severity: AnomalySeverity::Medium,
+            detected_at: Utc::now(),
+            affected_metrics: vec!["response_time".to_string()],
+            anomaly_score: 0.85,
+            context: AnomalyContext {
+                component: "embedding_service".to_string(),
+                related_events: vec!["high_load_event".to_string()],
+                environmental_factors: HashMap::from([
+                    ("cpu_usage".to_string(), "high".to_string()),
+                    ("memory_pressure".to_string(), "moderate".to_string()),
+                ]),
+                potential_causes: vec![
+                    "Resource contention".to_string(),
+                    "Memory pressure".to_string(),
+                ],
+            },
+        }])
     }
 }
 
@@ -1144,7 +1175,10 @@ impl OptimizationRecommender {
     }
 
     /// Generate optimization recommendations
-    pub async fn generate_recommendations(&self, analysis: &PerformanceAnalysisReport) -> Result<Vec<OptimizationRecommendation>> {
+    pub async fn generate_recommendations(
+        &self,
+        analysis: &PerformanceAnalysisReport,
+    ) -> Result<Vec<OptimizationRecommendation>> {
         let mut recommendations = Vec::new();
 
         // Process each rule
@@ -1159,13 +1193,21 @@ impl OptimizationRecommender {
     }
 
     /// Evaluate rule conditions
-    async fn evaluate_rule_conditions(&self, rule: &RecommendationRule, analysis: &PerformanceAnalysisReport) -> Result<bool> {
+    async fn evaluate_rule_conditions(
+        &self,
+        rule: &RecommendationRule,
+        analysis: &PerformanceAnalysisReport,
+    ) -> Result<bool> {
         // Placeholder implementation - would check actual conditions
         Ok(true)
     }
 
     /// Create recommendation from rule
-    async fn create_recommendation_from_rule(&self, rule: &RecommendationRule, analysis: &PerformanceAnalysisReport) -> Result<OptimizationRecommendation> {
+    async fn create_recommendation_from_rule(
+        &self,
+        rule: &RecommendationRule,
+        analysis: &PerformanceAnalysisReport,
+    ) -> Result<OptimizationRecommendation> {
         Ok(OptimizationRecommendation {
             id: Uuid::new_v4().to_string(),
             recommendation_type: rule.recommendation_template.recommendation_type.clone(),
@@ -1183,14 +1225,12 @@ impl OptimizationRecommender {
             implementation_effort: rule.recommendation_template.default_effort.clone(),
             risk_assessment: RiskAssessment {
                 risk_level: RiskLevel::Low,
-                potential_impacts: vec![
-                    PotentialImpact {
-                        impact_type: ImpactType::ServiceDisruption,
-                        severity: ImpactSeverity::Minor,
-                        probability: 0.1,
-                        description: "Brief service interruption during scaling".to_string(),
-                    }
-                ],
+                potential_impacts: vec![PotentialImpact {
+                    impact_type: ImpactType::ServiceDisruption,
+                    severity: ImpactSeverity::Minor,
+                    probability: 0.1,
+                    description: "Brief service interruption during scaling".to_string(),
+                }],
                 mitigation_strategies: vec![
                     "Schedule during low-traffic period".to_string(),
                     "Use rolling updates".to_string(),
@@ -1351,7 +1391,7 @@ mod tests {
     #[test]
     fn test_performance_collector() {
         let mut collector = PerformanceCollector::new();
-        
+
         let metric = MetricDataPoint {
             timestamp: Utc::now(),
             metric_name: "test_metric".to_string(),
@@ -1371,10 +1411,10 @@ mod tests {
     fn test_performance_tracker() {
         let mut collector = PerformanceCollector::new();
         let tracker_id = collector.start_tracker("test_tracker".to_string());
-        
+
         assert_eq!(tracker_id, "test_tracker");
         assert!(collector.trackers.contains_key("test_tracker"));
-        
+
         let tracker = collector.stop_tracker("test_tracker");
         assert!(tracker.is_some());
         assert!(matches!(tracker.unwrap().state, TrackerState::Stopped));
@@ -1435,8 +1475,16 @@ mod tests {
         };
 
         assert_eq!(recommendation.id, "test-rec");
-        assert!(matches!(recommendation.recommendation_type, RecommendationType::ResourceScaling));
-        assert_eq!(recommendation.expected_improvement.latency_improvement_percent, 20.0);
+        assert!(matches!(
+            recommendation.recommendation_type,
+            RecommendationType::ResourceScaling
+        ));
+        assert_eq!(
+            recommendation
+                .expected_improvement
+                .latency_improvement_percent,
+            20.0
+        );
     }
 
     #[tokio::test]
@@ -1445,7 +1493,10 @@ mod tests {
         let profiler = AdvancedProfiler::new(config);
 
         // Start session
-        let session_id = profiler.start_session("Test Session".to_string(), HashMap::new()).await.unwrap();
+        let session_id = profiler
+            .start_session("Test Session".to_string(), HashMap::new())
+            .await
+            .unwrap();
         assert!(!session_id.is_empty());
 
         // Stop session
@@ -1477,7 +1528,7 @@ mod tests {
     fn test_pattern_detection_components() {
         let detector = PatternDetector::new();
         assert!(!detector.templates.is_empty());
-        
+
         let template = &detector.templates[0];
         assert_eq!(template.name, "Memory Leak Pattern");
         assert!(!template.signature.characteristics.is_empty());
@@ -1487,17 +1538,20 @@ mod tests {
     fn test_anomaly_detection_components() {
         let detector = AnomalyDetector::new();
         assert!(!detector.algorithms.is_empty());
-        
+
         let algorithm = &detector.algorithms[0];
         assert_eq!(algorithm.name, "Statistical Outlier");
-        assert!(matches!(algorithm.algorithm_type, AnomalyAlgorithmType::StatisticalOutlier));
+        assert!(matches!(
+            algorithm.algorithm_type,
+            AnomalyAlgorithmType::StatisticalOutlier
+        ));
     }
 
     #[test]
     fn test_recommendation_rules() {
         let recommender = OptimizationRecommender::new();
         assert!(!recommender.rules.is_empty());
-        
+
         let rule = &recommender.rules[0];
         assert_eq!(rule.name, "High Memory Usage");
         assert!(!rule.conditions.is_empty());

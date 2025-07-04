@@ -28,11 +28,7 @@ impl TimeSeriesProcessor {
     }
 
     pub fn get_recent_data(&self, count: usize) -> Vec<&TimeSeriesDataPoint> {
-        self.data_buffer
-            .iter()
-            .rev()
-            .take(count)
-            .collect()
+        self.data_buffer.iter().rev().take(count).collect()
     }
 }
 

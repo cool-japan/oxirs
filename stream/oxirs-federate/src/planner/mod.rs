@@ -5,21 +5,21 @@
 
 pub mod planning;
 
-use anyhow::Result;
 use crate::query_decomposition::QueryDecomposer;
 use crate::service_optimizer::ServiceOptimizer;
+use anyhow::Result;
 
 // Import specific items from the planning module
 
 // Re-export key types from the planning module - be specific to avoid conflicts
 pub use planning::types::{
-    ExecutionContext, ExecutionPlan, ExecutionStep, StepType, HistoricalPerformance as TypesHistoricalPerformance,
-    QueryType, QueryInfo, TriplePattern, FilterExpression, UnifiedSchema, FederatedSchema, 
-    GraphQLFederationConfig, ParsedQuery, GraphQLOperationType, ServiceQuery, EntityResolutionPlan,
-    EntityResolutionStep, ReoptimizationAnalysis, RetryConfig
+    EntityResolutionPlan, EntityResolutionStep, ExecutionContext, ExecutionPlan, ExecutionStep,
+    FederatedSchema, FilterExpression, GraphQLFederationConfig, GraphQLOperationType,
+    HistoricalPerformance as TypesHistoricalPerformance, ParsedQuery, QueryInfo, QueryType,
+    ReoptimizationAnalysis, RetryConfig, ServiceQuery, StepType, TriplePattern, UnifiedSchema,
 };
 // Re-export main planner types
-pub use self::planning::{PlannerConfig, FederatedQueryPlanner, HistoricalPerformance};
+pub use self::planning::{FederatedQueryPlanner, HistoricalPerformance, PlannerConfig};
 
 /// Main query planner for federated GraphQL queries
 #[derive(Debug)]

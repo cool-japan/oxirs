@@ -221,7 +221,7 @@ pub enum MeasurementBasis {
 }
 
 /// Status of an entanglement relationship
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EntanglementStatus {
     /// Entanglement is being established
     Establishing,
@@ -303,12 +303,10 @@ impl Default for NetworkStats {
 }
 
 /// Quantum state management system
-#[derive(Debug)]
 pub struct QuantumStateManager {
     /// Active quantum states
     active_states: Arc<DashMap<EntanglementId, QuantumEntanglementState>>,
     /// State evolution algorithms
-    #[debug(skip)]
     evolution_algorithms: HashMap<String, Box<dyn QuantumEvolution + Send + Sync>>,
     /// Quantum state predictor
     state_predictor: Arc<QuantumStatePredictor>,
@@ -316,11 +314,20 @@ pub struct QuantumStateManager {
     coherence_monitor: Arc<CoherenceMonitor>,
 }
 
+impl std::fmt::Debug for QuantumStateManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QuantumStateManager")
+            .field("active_states", &self.active_states)
+            .field("evolution_algorithms", &"<trait objects>")
+            .field("state_predictor", &self.state_predictor)
+            .field("coherence_monitor", &self.coherence_monitor)
+            .finish()
+    }
+}
+
 /// Bell state manipulation system
-#[derive(Debug)]
 pub struct BellStateSystem {
     /// Bell state generators
-    #[debug(skip)]
     generators: HashMap<BellState, Box<dyn BellStateGenerator + Send + Sync>>,
     /// Bell state analyzer
     analyzer: Arc<BellStateAnalyzer>,
@@ -328,11 +335,19 @@ pub struct BellStateSystem {
     measurement_apparatus: Arc<BellMeasurementApparatus>,
 }
 
+impl std::fmt::Debug for BellStateSystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BellStateSystem")
+            .field("generators", &"<trait objects>")
+            .field("analyzer", &self.analyzer)
+            .field("measurement_apparatus", &self.measurement_apparatus)
+            .finish()
+    }
+}
+
 /// Quantum measurement system
-#[derive(Debug)]
 pub struct QuantumMeasurementSystem {
     /// Measurement protocols
-    #[debug(skip)]
     protocols: HashMap<String, Box<dyn MeasurementProtocol + Send + Sync>>,
     /// Measurement result analyzer
     result_analyzer: Arc<MeasurementResultAnalyzer>,
@@ -340,8 +355,17 @@ pub struct QuantumMeasurementSystem {
     qnd_measurement: Arc<QNDMeasurement>,
 }
 
+impl std::fmt::Debug for QuantumMeasurementSystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QuantumMeasurementSystem")
+            .field("protocols", &"<trait objects>")
+            .field("result_analyzer", &self.result_analyzer)
+            .field("qnd_measurement", &self.qnd_measurement)
+            .finish()
+    }
+}
+
 /// Decoherence detection and correction system
-#[derive(Debug)]
 pub struct DecoherenceCorrector {
     /// Decoherence detection algorithms
     detection_algorithms: Vec<Box<dyn DecoherenceDetector + Send + Sync>>,
@@ -349,6 +373,16 @@ pub struct DecoherenceCorrector {
     correction_protocols: HashMap<String, Box<dyn ErrorCorrection + Send + Sync>>,
     /// Decoherence prediction model
     decoherence_predictor: Arc<DecoherencePredictor>,
+}
+
+impl std::fmt::Debug for DecoherenceCorrector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DecoherenceCorrector")
+            .field("detection_algorithms", &"<trait objects>")
+            .field("correction_protocols", &"<trait objects>")
+            .field("decoherence_predictor", &self.decoherence_predictor)
+            .finish()
+    }
 }
 
 /// Non-locality correlation tracking system
@@ -363,7 +397,6 @@ pub struct NonlocalityTracker {
 }
 
 /// Quantum channel management for consciousness communication
-#[derive(Debug)]
 pub struct QuantumChannelManager {
     /// Active quantum channels
     active_channels: Arc<DashMap<ChannelId, QuantumChannel>>,
@@ -371,6 +404,16 @@ pub struct QuantumChannelManager {
     capacity_calculator: Arc<ChannelCapacityCalculator>,
     /// Quantum teleportation protocols
     teleportation_protocols: HashMap<String, Box<dyn TeleportationProtocol + Send + Sync>>,
+}
+
+impl std::fmt::Debug for QuantumChannelManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QuantumChannelManager")
+            .field("active_channels", &self.active_channels)
+            .field("capacity_calculator", &self.capacity_calculator)
+            .field("teleportation_protocols", &"<trait objects>")
+            .finish()
+    }
 }
 
 /// Unique identifier for quantum channels
@@ -529,7 +572,6 @@ impl Default for EntanglementMetrics {
 }
 
 /// Result of quantum consciousness entanglement validation
-#[derive(Debug, Clone)]
 pub struct QuantumEntanglementValidationResult {
     /// Entangled consciousness results
     pub entangled_results: HashMap<ConsciousnessId, ConsciousnessValidationResult>,
@@ -551,6 +593,23 @@ pub struct QuantumEntanglementValidationResult {
     pub entanglement_amplification: f64,
     /// Total processing time (should be near-zero)
     pub processing_time: Duration,
+}
+
+impl std::fmt::Debug for QuantumEntanglementValidationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QuantumEntanglementValidationResult")
+            .field("entangled_results", &self.entangled_results)
+            .field("quantum_correlations", &self.quantum_correlations)
+            .field("bell_measurements", &self.bell_measurements)
+            .field("nonlocal_correlations", &self.nonlocal_correlations)
+            .field("instantaneous_communications", &self.instantaneous_communications)
+            .field("coherence_metrics", &self.coherence_metrics)
+            .field("error_corrections", &"<trait objects>")
+            .field("quantum_confidence", &self.quantum_confidence)
+            .field("entanglement_amplification", &self.entanglement_amplification)
+            .field("processing_time", &self.processing_time)
+            .finish()
+    }
 }
 
 /// Quantum correlation measurement
@@ -1358,6 +1417,7 @@ impl QuantumConsciousnessEntanglement {
             intuitive_insights: Vec::new(),
             dream_insights: Vec::new(),
             consciousness_enhancement_factor: 0.95,
+            confidence_score: 0.9,
         })
     }
 

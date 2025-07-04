@@ -1,8 +1,8 @@
 //! Quantum circuit representation and operations
 
-use std::collections::HashMap;
 use nalgebra::DMatrix;
 use num_complex::Complex64;
+use std::collections::HashMap;
 
 use super::quantum_config::QuantumGate;
 
@@ -108,7 +108,7 @@ impl MeasurementOperation {
 /// Measurement basis
 #[derive(Debug, Clone)]
 pub enum MeasurementBasis {
-    Computational,  // Z basis
+    Computational, // Z basis
     Hadamard,      // X basis
     Circular,      // Y basis
     Custom(DMatrix<Complex64>),

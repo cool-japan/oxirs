@@ -3,7 +3,7 @@
 use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 
-use super::core::{QuantumState, QuantumPattern};
+use super::core::{QuantumPattern, QuantumState};
 use crate::{Result, ShaclAiError};
 
 /// Quantum Teleportation Protocol for Pattern Transfer

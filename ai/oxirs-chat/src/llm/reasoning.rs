@@ -5,7 +5,7 @@
 //! through multiple cognitive frameworks including logical, emotional, spatial,
 //! temporal, causal, and other reasoning dimensions.
 
-use std::collections::{HashMap, HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use uuid::Uuid;
 
 /// Multi-dimensional reasoning engine that processes queries across cognitive dimensions
@@ -285,16 +285,20 @@ impl ContextualMemory {
         }
     }
 
-    pub fn store_reasoning_episode(&mut self, session: &ReasoningSession, result: &IntegratedReasoning) {
+    pub fn store_reasoning_episode(
+        &mut self,
+        session: &ReasoningSession,
+        result: &IntegratedReasoning,
+    ) {
         // Simplified implementation
         let episode = ReasoningEpisode {
             session: session.clone(),
             result: result.clone(),
             timestamp: chrono::Utc::now(),
         };
-        
+
         self.episodes.push(episode);
-        
+
         // Maintain capacity limit
         if self.episodes.len() > self.capacity {
             self.episodes.remove(0);
@@ -367,84 +371,124 @@ impl ReasoningDimension {
 
 // Implement Default trait for key structures
 impl Default for LogicalReasoning {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for AnalogicalReasoning {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for CausalReasoning {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for TemporalReasoning {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for SpatialReasoning {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for EmotionalReasoning {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for SocialReasoning {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for CreativeReasoning {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for EthicalReasoning {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for ProbabilisticReasoning {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 // Constructor functions for reasoning processors
 impl LogicalReasoning {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl AnalogicalReasoning {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl CausalReasoning {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl TemporalReasoning {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl SpatialReasoning {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl EmotionalReasoning {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl SocialReasoning {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl CreativeReasoning {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl EthicalReasoning {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl ProbabilisticReasoning {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 // Note: This module contains simplified implementations.

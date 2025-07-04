@@ -509,7 +509,9 @@ impl NodeLifecycleManager {
         }
 
         // Start health monitoring for the new node
-        self.health_monitor.start_monitoring(node_id, address.to_string()).await;
+        self.health_monitor
+            .start_monitoring(node_id, address.to_string())
+            .await;
 
         Ok(())
     }
@@ -770,7 +772,9 @@ impl NodeLifecycleManager {
                     node_status.update_health(health_status.health);
 
                     // Update state based on health
-                    let new_state = if node_status.health.status == crate::health_monitor::NodeHealthLevel::Healthy {
+                    let new_state = if node_status.health.status
+                        == crate::health_monitor::NodeHealthLevel::Healthy
+                    {
                         NodeState::Active
                     } else if node_status.health.system_metrics.cpu_usage > 0.9
                         || node_status.health.system_metrics.memory_usage > 0.95

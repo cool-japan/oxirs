@@ -1,8 +1,8 @@
 //! Type definitions for evolutionary neural architecture system
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 
 /// Configuration for evolutionary neural architecture system
 #[derive(Debug, Clone, Serialize, Deserialize)]

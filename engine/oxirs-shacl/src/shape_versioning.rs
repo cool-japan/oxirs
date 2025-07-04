@@ -20,8 +20,8 @@ use oxirs_core::{
 };
 
 use crate::{
-    constraints::*, report::*, validation::ValidationEngine, Result as ShaclResult, Shape, ShapeId, ShapeType,
-    ValidationConfig, ValidationReport, ConstraintComponentId, Constraint, Severity,
+    constraints::*, report::*, validation::ValidationEngine, Constraint, ConstraintComponentId,
+    Result as ShaclResult, Severity, Shape, ShapeId, ShapeType, ValidationConfig, ValidationReport,
 };
 
 /// Shape version identifier
@@ -40,8 +40,8 @@ pub struct ShapeVersionId {
 
 // Custom serde implementation for semver::Version
 mod version_serde {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use semver::Version;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     pub fn serialize<S>(version: &Version, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -917,7 +917,9 @@ mod tests {
         let mut constraints = IndexMap::new();
         constraints.insert(
             ConstraintComponentId::new("minCount"),
-            Constraint::MinCount(crate::constraints::cardinality_constraints::MinCountConstraint { min_count: 1 }),
+            Constraint::MinCount(
+                crate::constraints::cardinality_constraints::MinCountConstraint { min_count: 1 },
+            ),
         );
 
         let shape = Shape {

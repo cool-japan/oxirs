@@ -1099,10 +1099,12 @@ mod tests {
             _ => {
                 // Other methods are also acceptable for high-dimensional data
                 // Just verify the method is reasonable
-                assert!(matches!(analysis.recommended_method, 
-                    CompressionMethod::Pca { .. } | 
-                    CompressionMethod::Quantization { .. } | 
-                    CompressionMethod::Zstd { .. }));
+                assert!(matches!(
+                    analysis.recommended_method,
+                    CompressionMethod::Pca { .. }
+                        | CompressionMethod::Quantization { .. }
+                        | CompressionMethod::Zstd { .. }
+                ));
             }
         }
 
@@ -1110,25 +1112,30 @@ mod tests {
         let original = &vectors[0];
         println!("Original vector length: {}", original.dimensions);
         println!("Recommended method: {:?}", analysis.recommended_method);
-        
+
         let compressed = adaptive.compress(original).unwrap();
         println!("Compressed size: {} bytes", compressed.len());
-        
+
         // Test that compression works and produces reasonable output
         assert!(compressed.len() > 0);
         assert!(compressed.len() < original.dimensions * 4); // Some compression achieved
-        
+
         // Note: PCA decompression may require additional implementation for full compatibility
         // For now, we verify that compression works correctly
         match &analysis.recommended_method {
             CompressionMethod::Pca { components } => {
                 // PCA compression should reduce the effective storage
                 assert!(*components < original.dimensions);
-                println!("PCA compression: {} → {} components", original.dimensions, components);
+                println!(
+                    "PCA compression: {} → {} components",
+                    original.dimensions, components
+                );
             }
             _ => {
                 // For other methods, test full round-trip
-                let decompressed = adaptive.decompress(&compressed, original.dimensions).unwrap();
+                let decompressed = adaptive
+                    .decompress(&compressed, original.dimensions)
+                    .unwrap();
                 let dec = decompressed.as_f32();
                 let orig = original.as_f32();
                 assert_eq!(dec.len(), orig.len());

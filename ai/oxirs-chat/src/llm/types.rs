@@ -6,7 +6,11 @@
 use anyhow::Result;
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, pin::Pin, time::{Duration, Instant}};
+use std::{
+    collections::HashMap,
+    pin::Pin,
+    time::{Duration, Instant},
+};
 
 /// LLM request context
 #[derive(Debug, Clone)]

@@ -733,7 +733,11 @@ pub trait ConsensusEngine: Send + Sync + std::fmt::Debug {
 #[async_trait::async_trait]
 pub trait PrivacyProtocol: Send + Sync + std::fmt::Debug {
     async fn setup(&self) -> Result<()>;
-    async fn generate_validation_proof(&self, store: &dyn Store, shapes: &[Shape]) -> Result<ZkProof>;
+    async fn generate_validation_proof(
+        &self,
+        store: &dyn Store,
+        shapes: &[Shape],
+    ) -> Result<ZkProof>;
     async fn verify_proof(&self, proof: &ZkProof) -> Result<ProofVerificationResult>;
     fn clone_box(&self) -> Box<dyn PrivacyProtocol>;
 }

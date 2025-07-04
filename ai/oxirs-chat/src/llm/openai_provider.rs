@@ -13,7 +13,10 @@ use async_openai::{
     Client as OpenAIClient,
 };
 use async_trait::async_trait;
-use std::{collections::HashMap, time::{Duration, Instant}};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use super::{
     config::ProviderConfig,

@@ -10,13 +10,13 @@ use crate::{Result, ShaclAiError};
 pub struct EnsembleCostPredictor {
     /// Base models
     base_models: Vec<BaseModel>,
-    
+
     /// Model weights
     model_weights: Array1<f64>,
-    
+
     /// Configuration
     config: EnsembleConfig,
-    
+
     /// Performance history
     performance_history: Vec<EnsemblePerformanceRecord>,
 }
@@ -43,7 +43,7 @@ pub struct EnsemblePerformanceRecord {
 impl EnsembleCostPredictor {
     pub fn new(config: EnsembleConfig) -> Self {
         let mut base_models = Vec::new();
-        
+
         // Create base models
         for i in 0..config.num_base_models {
             base_models.push(BaseModel::new(
@@ -56,9 +56,10 @@ impl EnsembleCostPredictor {
                 1,  // output dimension
             ));
         }
-        
-        let model_weights = Array1::from_elem(config.num_base_models, 1.0 / config.num_base_models as f64);
-        
+
+        let model_weights =
+            Array1::from_elem(config.num_base_models, 1.0 / config.num_base_models as f64);
+
         Self {
             base_models,
             model_weights,
@@ -70,33 +71,34 @@ impl EnsembleCostPredictor {
     /// Make prediction using ensemble
     pub fn predict(&mut self, features: &Array1<f64>) -> Result<CostPrediction> {
         let mut predictions = Vec::new();
-        
+
         // Get predictions from all base models
         for model in &self.base_models {
             let prediction = model.predict(features)?;
             predictions.push(prediction);
         }
-        
+
         // Combine predictions based on strategy
         let ensemble_prediction = match self.config.ensemble_strategy {
             EnsembleStrategy::Averaging => {
                 predictions.iter().sum::<f64>() / predictions.len() as f64
-            },
-            EnsembleStrategy::WeightedAveraging => {
-                predictions.iter()
-                    .zip(self.model_weights.iter())
-                    .map(|(pred, weight)| pred * weight)
-                    .sum::<f64>()
-            },
+            }
+            EnsembleStrategy::WeightedAveraging => predictions
+                .iter()
+                .zip(self.model_weights.iter())
+                .map(|(pred, weight)| pred * weight)
+                .sum::<f64>(),
             _ => predictions.iter().sum::<f64>() / predictions.len() as f64, // Default to averaging
         };
-        
+
         // Calculate uncertainty based on prediction variance
-        let variance = predictions.iter()
+        let variance = predictions
+            .iter()
             .map(|pred| (pred - ensemble_prediction).powi(2))
-            .sum::<f64>() / predictions.len() as f64;
+            .sum::<f64>()
+            / predictions.len() as f64;
         let uncertainty = variance.sqrt();
-        
+
         Ok(CostPrediction {
             estimated_cost: ensemble_prediction,
             execution_time: std::time::Duration::from_millis((ensemble_prediction * 1000.0) as u64),
@@ -119,10 +121,10 @@ impl EnsembleCostPredictor {
         for model in &mut self.base_models {
             model.update(features, target)?;
         }
-        
+
         // Update model weights based on performance
         self.update_model_weights()?;
-        
+
         Ok(())
     }
 
@@ -132,18 +134,19 @@ impl EnsembleCostPredictor {
         for model in &mut self.base_models {
             model.train_batch(features, targets)?;
         }
-        
+
         // Update ensemble weights
         self.update_model_weights()?;
-        
+
         Ok(())
     }
 
     /// Optimize ensemble composition
     pub fn optimize_composition(&mut self) -> Result<()> {
         // Remove underperforming models
-        self.base_models.retain(|model| model.performance_score > 0.3);
-        
+        self.base_models
+            .retain(|model| model.performance_score > 0.3);
+
         // Add new models if needed
         while self.base_models.len() < self.config.num_base_models {
             self.base_models.push(BaseModel::new(
@@ -152,35 +155,39 @@ impl EnsembleCostPredictor {
                 1,  // output dimension
             ));
         }
-        
+
         // Recompute weights
         let num_models = self.base_models.len();
         self.model_weights = Array1::from_elem(num_models, 1.0 / num_models as f64);
-        
+
         Ok(())
     }
 
     fn update_model_weights(&mut self) -> Result<()> {
         // Update weights based on individual model performance
-        let total_performance: f64 = self.base_models.iter()
+        let total_performance: f64 = self
+            .base_models
+            .iter()
             .map(|model| model.performance_score)
             .sum();
-        
+
         if total_performance > 0.0 {
             for (i, model) in self.base_models.iter().enumerate() {
                 self.model_weights[i] = model.performance_score / total_performance;
             }
         }
-        
+
         Ok(())
     }
 }
 
 impl BaseModel {
     pub fn new(model_type: ModelType, input_dim: usize, output_dim: usize) -> Self {
-        let weights = Array2::random((output_dim, input_dim), rand::distributions::Uniform::new(-0.1, 0.1));
+        let weights = Array2::from_shape_fn((output_dim, input_dim), |(_i, _j)| {
+            (rand::random::<f64>() - 0.5) * 0.2 // Random values between -0.1 and 0.1
+        });
         let bias = Array1::zeros(output_dim);
-        
+
         Self {
             model_type,
             weights,
@@ -199,7 +206,7 @@ impl BaseModel {
         let prediction = self.predict(features)?;
         let error = prediction - target;
         let learning_rate = 0.001;
-        
+
         // Update weights and bias
         for i in 0..self.weights.nrows() {
             for j in 0..self.weights.ncols() {
@@ -207,30 +214,30 @@ impl BaseModel {
             }
             self.bias[i] -= learning_rate * error;
         }
-        
+
         // Update performance score
         let accuracy = 1.0 - (error.abs() / target.abs().max(1.0)).min(1.0);
         self.performance_score = 0.9 * self.performance_score + 0.1 * accuracy;
-        
+
         Ok(())
     }
 
     pub fn train_batch(&mut self, features: &Array2<f64>, targets: &Array1<f64>) -> Result<()> {
         let mut total_error = 0.0;
         let batch_size = features.nrows();
-        
+
         for (i, target) in targets.iter().enumerate() {
             let feature_row = features.row(i).to_owned();
             self.update(&feature_row, *target)?;
-            
+
             let prediction = self.predict(&feature_row)?;
             total_error += (prediction - target).abs();
         }
-        
+
         // Update performance based on batch performance
         let batch_accuracy = 1.0 - (total_error / batch_size as f64).min(1.0);
         self.performance_score = 0.8 * self.performance_score + 0.2 * batch_accuracy;
-        
+
         Ok(())
     }
 }

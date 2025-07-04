@@ -24,7 +24,7 @@ use tokio::sync::{mpsc, Semaphore};
 #[cfg(feature = "async")]
 use oxirs_core::{
     model::{GraphName, NamedNode, Quad, Term, Triple},
-    Store, ConcreteStore,
+    ConcreteStore, Store,
 };
 
 #[cfg(feature = "async")]
@@ -549,9 +549,13 @@ impl MultiGraphValidationEngine {
                 // Check if any targets in this shape have focus nodes in this graph
                 let mut target_selector = TargetSelector::new();
                 let mut has_focus_nodes = false;
-                
+
                 for target in &shape.targets {
-                    let focus_nodes = target_selector.select_targets(store.as_ref(), target, Some(graph_name.as_ref()))?;
+                    let focus_nodes = target_selector.select_targets(
+                        store.as_ref(),
+                        target,
+                        Some(graph_name.as_ref()),
+                    )?;
                     if !focus_nodes.is_empty() {
                         has_focus_nodes = true;
                         break;
@@ -760,7 +764,8 @@ impl MultiGraphValidationEngine {
                     .values()
                     .map(|r| r.stats.validation_duration.as_nanos())
                     .sum::<u128>()
-                    / total_graphs as u128).min(u64::MAX as u128) as u64,
+                    / total_graphs as u128)
+                    .min(u64::MAX as u128) as u64,
             )
         } else {
             Duration::from_millis(0)
@@ -810,16 +815,20 @@ impl MultiGraphValidationEngine {
 
         // Find all focus nodes for this shape across all graphs
         let mut target_selector = TargetSelector::new();
-        
+
         for (graph_name, store) in stores {
             let mut all_focus_nodes = Vec::new();
-            
+
             // Iterate over each target and collect focus nodes
             for target in &shape.targets {
-                let focus_nodes = target_selector.select_targets(store.as_ref(), target, Some(graph_name.as_ref()))?;
+                let focus_nodes = target_selector.select_targets(
+                    store.as_ref(),
+                    target,
+                    Some(graph_name.as_ref()),
+                )?;
                 all_focus_nodes.extend(focus_nodes);
             }
-            
+
             let focus_nodes = all_focus_nodes;
 
             for focus_node in focus_nodes {
@@ -923,11 +932,15 @@ impl MultiGraphValidationEngine {
                         );
 
                         // Check for conflicting values
-                        let has_different_value = other_store.as_ref().find_quads(None, None, None, None)?.iter().any(|q| {
-                            q.subject() == subject
-                                && q.predicate() == predicate
-                                && q.object() != object
-                        });
+                        let has_different_value = other_store
+                            .as_ref()
+                            .find_quads(None, None, None, None)?
+                            .iter()
+                            .any(|q| {
+                                q.subject() == subject
+                                    && q.predicate() == predicate
+                                    && q.object() != object
+                            });
 
                         if has_different_value {
                             let mut contributing_triples = HashMap::new();
@@ -978,7 +991,11 @@ impl MultiGraphValidationEngine {
                 // Check if the same subject exists in other graphs (violating disjointness)
                 for (other_graph_name, other_store) in stores {
                     if graph_name != other_graph_name {
-                        let exists_in_other = other_store.as_ref().find_quads(None, None, None, None)?.iter().any(|q| q.subject() == subject);
+                        let exists_in_other = other_store
+                            .as_ref()
+                            .find_quads(None, None, None, None)?
+                            .iter()
+                            .any(|q| q.subject() == subject);
 
                         if exists_in_other {
                             let mut contributing_triples = HashMap::new();

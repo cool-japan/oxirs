@@ -6,13 +6,13 @@ use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, info, warn};
 
-use super::types::*;
-use super::search_engine::NeuralArchitectureSearchEngine;
 use super::genetic_programming::GeneticProgrammingSystem;
-use super::population::{ArchitecturePopulationManager, EvolutionStrategyCoordinator};
-use super::performance::ArchitecturePerformanceEvaluator;
 use super::optimization::MultiObjectiveOptimizer;
+use super::performance::ArchitecturePerformanceEvaluator;
+use super::population::{ArchitecturePopulationManager, EvolutionStrategyCoordinator};
+use super::search_engine::NeuralArchitectureSearchEngine;
 use super::self_modification::SelfModificationEngine;
+use super::types::*;
 use crate::{Result, ShaclAiError};
 
 /// Evolutionary neural architecture system for self-designing networks

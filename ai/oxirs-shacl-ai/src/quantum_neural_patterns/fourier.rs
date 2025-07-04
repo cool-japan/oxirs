@@ -1,8 +1,8 @@
 //! Quantum Fourier Transform for pattern analysis
 
-use std::f64::consts::PI;
 use nalgebra::DMatrix;
 use num_complex::Complex64;
+use std::f64::consts::PI;
 
 use super::core::QuantumPattern;
 use crate::{Result, ShaclAiError};

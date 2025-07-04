@@ -22,9 +22,8 @@ use crate::self_adaptive_ai::{AdaptationStats, PerformanceMetrics, SelfAdaptiveA
 use crate::{Result, ShaclAiError};
 
 use super::{
+    metrics::RealTimeMetricsCollector, online_learning::OnlineLearningEngine,
     processors::StreamProcessor,
-    metrics::RealTimeMetricsCollector,
-    online_learning::OnlineLearningEngine,
 };
 
 /// Real-time streaming adaptation engine
@@ -320,10 +319,12 @@ impl AdaptationTrigger {
 
         // Check threshold condition
         match self.condition {
-            TriggerCondition::PerformanceDegraded
-            | TriggerCondition::ErrorRateExceeded => current_value > self.threshold,
-            TriggerCondition::ThroughputDropped
-            | TriggerCondition::AccuracyDeclined => current_value < self.threshold,
+            TriggerCondition::PerformanceDegraded | TriggerCondition::ErrorRateExceeded => {
+                current_value > self.threshold
+            }
+            TriggerCondition::ThroughputDropped | TriggerCondition::AccuracyDeclined => {
+                current_value < self.threshold
+            }
             _ => false,
         }
     }

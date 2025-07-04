@@ -803,7 +803,10 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess timeliness dimension
-    fn assess_timeliness_dimension(&mut self, _store: &dyn Store) -> Result<QualityDimensionResult> {
+    fn assess_timeliness_dimension(
+        &mut self,
+        _store: &dyn Store,
+    ) -> Result<QualityDimensionResult> {
         // Placeholder implementation
         Ok(QualityDimensionResult {
             score: 0.68,
@@ -820,7 +823,10 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess accessibility dimension
-    fn assess_accessibility_dimension(&mut self, _store: &dyn Store) -> Result<QualityDimensionResult> {
+    fn assess_accessibility_dimension(
+        &mut self,
+        _store: &dyn Store,
+    ) -> Result<QualityDimensionResult> {
         // Placeholder implementation
         Ok(QualityDimensionResult {
             score: 0.81,
@@ -946,7 +952,10 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Measure information content
-    fn measure_information_content(&mut self, _store: &dyn Store) -> Result<InformationContentMeasure> {
+    fn measure_information_content(
+        &mut self,
+        _store: &dyn Store,
+    ) -> Result<InformationContentMeasure> {
         // Placeholder implementation
         Ok(InformationContentMeasure {
             total_information_content: 8.75,

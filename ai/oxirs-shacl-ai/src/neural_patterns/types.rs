@@ -428,6 +428,17 @@ pub struct AttentionConfig {
     pub scaled_attention: bool,
 }
 
+impl Default for AttentionConfig {
+    fn default() -> Self {
+        Self {
+            num_heads: 8,
+            attention_dim: 512,
+            dropout_rate: 0.1,
+            scaled_attention: true,
+        }
+    }
+}
+
 /// Analysis quality metrics for pattern evaluation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisQualityMetrics {
@@ -441,6 +452,7 @@ pub struct AnalysisQualityMetrics {
 /// Attention flow dynamics between pattern layers
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttentionFlowDynamics {
+    #[serde(skip)]
     pub flow_vectors: Vec<Array1<f64>>,
     pub temporal_evolution: Vec<f64>,
     pub intensity_patterns: HashMap<String, f64>,

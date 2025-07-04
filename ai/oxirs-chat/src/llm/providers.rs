@@ -12,7 +12,8 @@ use super::types::{LLMRequest, LLMResponse, LLMResponseStream};
 #[async_trait]
 pub trait LLMProvider: Send + Sync {
     async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse>;
-    async fn generate_stream(&self, model: &str, request: &LLMRequest) -> Result<LLMResponseStream>;
+    async fn generate_stream(&self, model: &str, request: &LLMRequest)
+        -> Result<LLMResponseStream>;
     fn get_available_models(&self) -> Vec<String>;
     fn supports_streaming(&self) -> bool;
     fn get_provider_name(&self) -> &str;

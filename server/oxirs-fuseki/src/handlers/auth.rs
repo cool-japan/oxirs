@@ -169,8 +169,9 @@ pub async fn login_handler(
                 Json(serde_json::json!({
                     "error": "Invalid username or password",
                     "message": "Authentication failed"
-                }))
-            ).into_response())
+                })),
+            )
+                .into_response())
         }
         AuthResult::Locked => {
             warn!("Login attempt for locked user '{}'", request.username);
@@ -180,8 +181,9 @@ pub async fn login_handler(
                 Json(serde_json::json!({
                     "error": "Account locked",
                     "message": "Account is temporarily locked due to failed login attempts"
-                }))
-            ).into_response())
+                })),
+            )
+                .into_response())
         }
         AuthResult::Forbidden => {
             warn!("Login attempt for disabled user '{}'", request.username);
@@ -191,8 +193,9 @@ pub async fn login_handler(
                 Json(serde_json::json!({
                     "error": "Account disabled",
                     "message": "Account is disabled"
-                }))
-            ).into_response())
+                })),
+            )
+                .into_response())
         }
         _ => {
             error!(
@@ -205,8 +208,9 @@ pub async fn login_handler(
                 Json(serde_json::json!({
                     "error": "Authentication error",
                     "message": "An unexpected error occurred during authentication"
-                }))
-            ).into_response())
+                })),
+            )
+                .into_response())
         }
     }
 }

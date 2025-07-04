@@ -708,6 +708,16 @@ impl GraphQLQueryCache {
     pub async fn health_check(&self) -> Result<bool> {
         self.cache.health_check().await
     }
+
+    /// Raw cache get for internal use
+    pub async fn raw_get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+        self.cache.get(key).await
+    }
+
+    /// Raw cache set for internal use  
+    pub async fn raw_set(&self, key: &str, value: Vec<u8>, ttl: Option<Duration>) -> Result<()> {
+        self.cache.set(key, value, ttl).await
+    }
 }
 
 #[cfg(test)]

@@ -533,14 +533,14 @@ impl TdbStore {
     /// let store = TdbStore::new(TdbConfig::default())?;
     ///
     /// let triples = vec![
-    ///     (Term::iri("http://example.org/alice"), 
-    ///      Term::iri("http://xmlns.com/foaf/0.1/name"), 
+    ///     (Term::iri("http://example.org/alice"),
+    ///      Term::iri("http://xmlns.com/foaf/0.1/name"),
     ///      Term::literal("Alice")),
-    ///     (Term::iri("http://example.org/bob"), 
-    ///      Term::iri("http://xmlns.com/foaf/0.1/name"), 
+    ///     (Term::iri("http://example.org/bob"),
+    ///      Term::iri("http://xmlns.com/foaf/0.1/name"),
     ///      Term::literal("Bob")),
-    ///     (Term::iri("http://example.org/alice"), 
-    ///      Term::iri("http://xmlns.com/foaf/0.1/age"), 
+    ///     (Term::iri("http://example.org/alice"),
+    ///      Term::iri("http://xmlns.com/foaf/0.1/age"),
     ///      Term::literal("30")),
     /// ];
     ///
@@ -563,7 +563,7 @@ impl TdbStore {
 
         // Convert terms to IDs and create Triple objects
         let mut triple_objects = Vec::with_capacity(triples.len());
-        
+
         for (subject, predicate, object) in triples {
             // Fast validation
             match subject {
@@ -718,17 +718,26 @@ impl TdbStore {
         object: Option<&Term>,
     ) -> Result<Vec<(Term, Term, Term)>> {
         let subject_id = if let Some(s) = subject {
-            self.triple_store.get_node_id(s)?
+            match self.triple_store.get_node_id(s)? {
+                Some(id) => Some(id),
+                None => return Ok(Vec::new()), // Term doesn't exist, no results
+            }
         } else {
             None
         };
         let predicate_id = if let Some(p) = predicate {
-            self.triple_store.get_node_id(p)?
+            match self.triple_store.get_node_id(p)? {
+                Some(id) => Some(id),
+                None => return Ok(Vec::new()), // Term doesn't exist, no results
+            }
         } else {
             None
         };
         let object_id = if let Some(o) = object {
-            self.triple_store.get_node_id(o)?
+            match self.triple_store.get_node_id(o)? {
+                Some(id) => Some(id),
+                None => return Ok(Vec::new()), // Term doesn't exist, no results
+            }
         } else {
             None
         };

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::{FederatedService, ServiceCapability, ServiceRegistry, service::ServiceMetadata};
+use crate::{service::ServiceMetadata, FederatedService, ServiceCapability, ServiceRegistry};
 
 /// Triple pattern for SPARQL queries
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

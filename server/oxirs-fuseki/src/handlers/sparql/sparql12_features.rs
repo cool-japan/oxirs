@@ -7,6 +7,7 @@
 //! - BIND and VALUES clause enhancements
 
 use crate::error::FusekiResult;
+use crate::handlers::sparql::optimizers::InjectionDetector;
 use crate::property_path_optimizer::AdvancedPropertyPathOptimizer;
 use crate::subquery_optimizer::AdvancedSubqueryOptimizer;
 use chrono::{DateTime, Utc};
@@ -28,7 +29,7 @@ pub struct Sparql12Features {
 /// Property Path Optimizer for SPARQL 1.2
 #[derive(Debug, Clone)]
 pub struct PropertyPathOptimizer {
-    path_cache: Arc<RwLock<HashMap<String, OptimizedPath>>>,
+    pub path_cache: Arc<RwLock<HashMap<String, OptimizedPath>>>,
     statistics: Arc<RwLock<PathStatistics>>,
 }
 
@@ -55,6 +56,7 @@ pub struct PathStatistics {
 pub struct AggregationEngine {
     function_registry: Arc<RwLock<HashMap<String, AggregationFunction>>>,
     optimization_cache: Arc<RwLock<HashMap<String, OptimizedAggregation>>>,
+    pub supported_functions: Vec<String>,
 }
 
 /// Aggregation function definition
@@ -81,6 +83,7 @@ pub struct OptimizedAggregation {
 pub struct SubqueryOptimizer {
     subquery_cache: Arc<RwLock<HashMap<String, OptimizedSubquery>>>,
     correlation_analysis: Arc<RwLock<CorrelationAnalysis>>,
+    pub rewrite_rules: Vec<String>,
 }
 
 /// Optimized subquery representation
@@ -105,6 +108,7 @@ pub struct CorrelationAnalysis {
 pub struct BindValuesProcessor {
     bind_optimizer: BindOptimizer,
     values_optimizer: ValuesOptimizer,
+    pub injection_detector: InjectionDetector,
 }
 
 /// BIND clause optimizer
@@ -258,6 +262,34 @@ impl PropertyPathOptimizer {
         let optimized_path = advanced_optimizer.optimize_path(query).await?;
         Ok(optimized_path.optimized_pattern)
     }
+
+    /// Optimize a specific property path
+    pub async fn optimize_path(&self, path: &str) -> FusekiResult<OptimizedPath> {
+        // Check cache first
+        {
+            let cache = self.path_cache.read().unwrap();
+            if let Some(cached) = cache.get(path) {
+                return Ok(cached.clone());
+            }
+        }
+
+        // Create optimized path
+        let optimized = OptimizedPath {
+            original_path: path.to_string(),
+            optimized_path: format!("OPTIMIZED({})", path),
+            estimated_cost: 1.0,
+            optimization_applied: vec!["path_optimization".to_string()],
+            cache_key: format!("path_{}", path.len()),
+        };
+
+        // Cache the result
+        {
+            let mut cache = self.path_cache.write().unwrap();
+            cache.insert(path.to_string(), optimized.clone());
+        }
+
+        Ok(optimized)
+    }
 }
 
 impl AggregationEngine {
@@ -290,6 +322,7 @@ impl AggregationEngine {
         Self {
             function_registry: Arc::new(RwLock::new(function_registry)),
             optimization_cache: Arc::new(RwLock::new(HashMap::new())),
+            supported_functions: vec!["COUNT".to_string(), "SUM".to_string(), "AVG".to_string(), "MIN".to_string(), "MAX".to_string(), "GROUP_CONCAT".to_string(), "SAMPLE".to_string()],
         }
     }
 
@@ -307,6 +340,11 @@ impl AggregationEngine {
         }
 
         Ok(optimized)
+    }
+
+    /// Optimize aggregation functions in a query
+    pub async fn optimize_aggregation(&self, query: &str) -> FusekiResult<String> {
+        self.optimize_query(query).await
     }
 
     fn extract_aggregation_functions(&self, query: &str) -> FusekiResult<Vec<String>> {
@@ -418,6 +456,7 @@ impl SubqueryOptimizer {
         Self {
             subquery_cache: Arc::new(RwLock::new(HashMap::new())),
             correlation_analysis: Arc::new(RwLock::new(CorrelationAnalysis::default())),
+            rewrite_rules: vec!["unnest_exists".to_string(), "push_predicates".to_string(), "join_elimination".to_string()],
         }
     }
 
@@ -433,6 +472,11 @@ impl SubqueryOptimizer {
         }
 
         Ok(optimized)
+    }
+
+    /// Optimize subqueries in a query
+    pub async fn optimize_subqueries(&self, query: &str) -> FusekiResult<String> {
+        self.optimize_query(query).await
     }
 
     fn extract_subqueries(&self, query: &str) -> FusekiResult<Vec<String>> {
@@ -553,6 +597,7 @@ impl BindValuesProcessor {
         Self {
             bind_optimizer: BindOptimizer::new(),
             values_optimizer: ValuesOptimizer::new(),
+            injection_detector: InjectionDetector::new(),
         }
     }
 
@@ -566,6 +611,11 @@ impl BindValuesProcessor {
         optimized = self.values_optimizer.optimize_query(&optimized).await?;
 
         Ok(optimized)
+    }
+
+    /// Process BIND values in a query
+    pub async fn process_bind_values(&self, query: &str) -> FusekiResult<String> {
+        self.optimize_query(query).await
     }
 }
 
@@ -852,30 +902,30 @@ pub struct ParsedQuotedTriple {
 }
 
 /// Parse a quoted triple value from SPARQL-star syntax
-/// 
+///
 /// Example: `<< <http://example.org/alice> <http://example.org/knows> <http://example.org/bob> >>`
 pub fn parse_quoted_triple_value(quoted_triple: &str) -> FusekiResult<ParsedQuotedTriple> {
     let trimmed = quoted_triple.trim();
-    
+
     // Check if it starts and ends with << >>
     if !trimmed.starts_with("<<") || !trimmed.ends_with(">>") {
         return Err(crate::error::FusekiError::parse(
-            "Quoted triple must start with << and end with >>"
+            "Quoted triple must start with << and end with >>",
         ));
     }
-    
+
     // Remove outer << >>
-    let inner = &trimmed[2..trimmed.len()-2].trim();
-    
+    let inner = &trimmed[2..trimmed.len() - 2].trim();
+
     // Simple parsing - split by whitespace while preserving quoted strings
     let parts = parse_triple_parts(inner)?;
-    
+
     if parts.len() != 3 {
         return Err(crate::error::FusekiError::parse(
-            "Quoted triple must have exactly three parts: subject predicate object"
+            "Quoted triple must have exactly three parts: subject predicate object",
         ));
     }
-    
+
     Ok(ParsedQuotedTriple {
         subject: parts[0].clone(),
         predicate: parts[1].clone(),
@@ -887,11 +937,11 @@ pub fn parse_quoted_triple_value(quoted_triple: &str) -> FusekiResult<ParsedQuot
 pub fn extract_quoted_triple_patterns(query: &str) -> FusekiResult<Vec<String>> {
     let mut patterns = Vec::new();
     let mut pos = 0;
-    
+
     while let Some(start) = query[pos..].find("<<") {
         let abs_start = pos + start;
         let remaining = &query[abs_start..];
-        
+
         if let Some(pattern) = extract_single_quoted_pattern(remaining)? {
             patterns.push(pattern);
             pos = abs_start + 2; // Move past the << we just found
@@ -899,7 +949,7 @@ pub fn extract_quoted_triple_patterns(query: &str) -> FusekiResult<Vec<String>> 
             pos = abs_start + 2; // Skip this << if we couldn't parse it
         }
     }
-    
+
     Ok(patterns)
 }
 
@@ -911,7 +961,7 @@ fn parse_triple_parts(text: &str) -> FusekiResult<Vec<String>> {
     let mut in_angle_brackets = false;
     let mut nested_depth = 0;
     let mut chars = text.chars().peekable();
-    
+
     while let Some(ch) = chars.next() {
         match ch {
             '"' => {
@@ -949,11 +999,11 @@ fn parse_triple_parts(text: &str) -> FusekiResult<Vec<String>> {
             }
         }
     }
-    
+
     if !current_part.is_empty() {
         parts.push(current_part.trim().to_string());
     }
-    
+
     Ok(parts)
 }
 
@@ -962,11 +1012,11 @@ fn extract_single_quoted_pattern(text: &str) -> FusekiResult<Option<String>> {
     if !text.starts_with("<<") {
         return Ok(None);
     }
-    
+
     let mut depth = 0;
     let mut pos = 0;
     let chars: Vec<char> = text.chars().collect();
-    
+
     for i in 0..chars.len() {
         if i + 1 < chars.len() && chars[i] == '<' && chars[i + 1] == '<' {
             depth += 1;
@@ -978,7 +1028,7 @@ fn extract_single_quoted_pattern(text: &str) -> FusekiResult<Option<String>> {
             }
         }
     }
-    
+
     if pos > 0 {
         Ok(Some(text[..pos].to_string()))
     } else {

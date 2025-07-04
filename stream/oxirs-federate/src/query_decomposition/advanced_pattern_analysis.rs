@@ -76,17 +76,22 @@ impl ConsciousnessPatternEngine {
         services: &[&FederatedService],
     ) -> Result<ConsciousnessAnalysis> {
         use anyhow::Result;
-        
+
         // Simplified consciousness analysis
         let consciousness_score = patterns.len() as f64 * 0.1;
         let awareness_level = if services.len() > 3 { "high" } else { "medium" }.to_string();
         let pattern_complexity = patterns.len() + filters.len();
-        
+
         Ok(ConsciousnessAnalysis {
             consciousness_score,
             awareness_level,
-            pattern_insights: patterns.iter().map(|(idx, p)| format!("Pattern {}: {}", idx, p.pattern_string)).collect(),
-            optimization_suggestions: vec!["Consider pattern reordering for better performance".to_string()],
+            pattern_insights: patterns
+                .iter()
+                .map(|(idx, p)| format!("Pattern {}: {}", idx, p.pattern_string))
+                .collect(),
+            optimization_suggestions: vec![
+                "Consider pattern reordering for better performance".to_string()
+            ],
             complexity_metrics: vec![pattern_complexity as f64],
         })
     }
@@ -329,7 +334,7 @@ impl AdvancedPatternAnalyzer {
         let adaptive_cache = Arc::new(RwLock::new(AdaptivePatternCache::with_config(
             config.cache_config.clone(),
         )));
-        
+
         Self {
             config,
             pattern_statistics: HashMap::new(),
@@ -359,7 +364,13 @@ impl AdvancedPatternAnalyzer {
 
         // Check adaptive cache first
         let cache_key = self.generate_pattern_cache_key(patterns, filters);
-        if let Some(cached_result) = self.adaptive_cache.read().await.cache_entries.get(&cache_key) {
+        if let Some(cached_result) = self
+            .adaptive_cache
+            .read()
+            .await
+            .cache_entries
+            .get(&cache_key)
+        {
             if !cached_result.is_expired() {
                 debug!("Using cached pattern analysis result");
                 self.update_metrics("cache_hit", start_time.elapsed()).await;
@@ -400,9 +411,13 @@ impl AdvancedPatternAnalyzer {
                 .read()
                 .await
                 .analyze_pattern_consciousness(
-                    &patterns.iter().enumerate().map(|(i, p)| (i, p.clone())).collect::<Vec<_>>(),
+                    &patterns
+                        .iter()
+                        .enumerate()
+                        .map(|(i, p)| (i, p.clone()))
+                        .collect::<Vec<_>>(),
                     filters,
-                    &services.iter().collect::<Vec<_>>()
+                    &services.iter().collect::<Vec<_>>(),
                 )
                 .await?;
             analysis.consciousness_analysis = Some(ConsciousnessPatternAnalysis {
@@ -695,7 +710,10 @@ impl AdvancedPatternAnalyzer {
         if let Some(ref predicate) = pattern.predicate {
             if let Some(ref _metadata) = service.extended_metadata {
                 // Check basic capability match instead
-                if predicate.contains("rdf:") || predicate.contains("rdfs:") || predicate.contains("owl:") {
+                if predicate.contains("rdf:")
+                    || predicate.contains("rdfs:")
+                    || predicate.contains("owl:")
+                {
                     score += 0.2;
                 }
             }
@@ -1229,11 +1247,14 @@ impl AdvancedPatternAnalyzer {
         if let Some(enhancement) = quantum_insights.pattern_enhancements.get(&pattern_key) {
             // Convert enhanced_complexity to PatternComplexity enum
             if enhancement.enhanced_complexity < 0.3 {
-                features.pattern_complexity = crate::service_optimizer::types::PatternComplexity::Simple;
+                features.pattern_complexity =
+                    crate::service_optimizer::types::PatternComplexity::Simple;
             } else if enhancement.enhanced_complexity < 0.7 {
-                features.pattern_complexity = crate::service_optimizer::types::PatternComplexity::Medium;
+                features.pattern_complexity =
+                    crate::service_optimizer::types::PatternComplexity::Medium;
             } else {
-                features.pattern_complexity = crate::service_optimizer::types::PatternComplexity::Complex;
+                features.pattern_complexity =
+                    crate::service_optimizer::types::PatternComplexity::Complex;
             }
             features.subject_specificity *= enhancement.selectivity_multiplier;
             features.object_specificity *= enhancement.selectivity_multiplier;
@@ -1896,4 +1917,3 @@ pub struct QuantumOptimizationParameters {
     pub coherence_threshold: f64,
     pub entanglement_depth: usize,
 }
-

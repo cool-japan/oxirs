@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use crate::{Result, ShaclAiError};
 
 use super::core::{
-    VisualizationData, VisualizationOutput, VisualizationMetadata, VisualizationType,
-    RenderOptions, ExportFormat,
+    ExportFormat, RenderOptions, VisualizationData, VisualizationMetadata, VisualizationOutput,
+    VisualizationType,
 };
 
 /// Trait for visualization renderers
@@ -18,10 +18,10 @@ pub trait VisualizationRenderer: Send + Sync + std::fmt::Debug {
         data: &VisualizationData,
         options: &RenderOptions,
     ) -> Result<VisualizationOutput>;
-    
+
     /// Get supported visualization types
     fn supported_types(&self) -> Vec<VisualizationType>;
-    
+
     /// Get renderer capabilities
     fn get_capabilities(&self) -> RendererCapabilities;
 }
@@ -68,17 +68,21 @@ impl VisualizationRenderer for Graph3DRenderer {
                     metadata: VisualizationMetadata {
                         created_at: std::time::SystemTime::now(),
                         title: "3D Graph Visualization".to_string(),
-                        description: format!("3D graph with {} nodes and {} edges", nodes.len(), edges.len()),
+                        description: format!(
+                            "3D graph with {} nodes and {} edges",
+                            nodes.len(),
+                            edges.len()
+                        ),
                         interactive: options.interactive,
                         real_time: false,
                     },
                     export_formats: vec![ExportFormat::HTML, ExportFormat::PNG],
                 };
-                
+
                 Ok(output)
             }
             _ => Err(ShaclAiError::Visualization(
-                "Graph3DRenderer only supports Graph data".to_string()
+                "Graph3DRenderer only supports Graph data".to_string(),
             )),
         }
     }
@@ -133,18 +137,21 @@ impl VisualizationRenderer for HeatmapRenderer {
                     metadata: VisualizationMetadata {
                         created_at: std::time::SystemTime::now(),
                         title: "Heatmap Visualization".to_string(),
-                        description: format!("Heatmap with {}x{} matrix", matrix.len(), 
-                            matrix.first().map(|row| row.len()).unwrap_or(0)),
+                        description: format!(
+                            "Heatmap with {}x{} matrix",
+                            matrix.len(),
+                            matrix.first().map(|row| row.len()).unwrap_or(0)
+                        ),
                         interactive: options.interactive,
                         real_time: false,
                     },
                     export_formats: vec![ExportFormat::PNG, ExportFormat::SVG],
                 };
-                
+
                 Ok(output)
             }
             _ => Err(ShaclAiError::Visualization(
-                "HeatmapRenderer only supports Heatmap data".to_string()
+                "HeatmapRenderer only supports Heatmap data".to_string(),
             )),
         }
     }
@@ -201,11 +208,11 @@ impl VisualizationRenderer for TimelineRenderer {
                     },
                     export_formats: vec![ExportFormat::HTML, ExportFormat::PNG],
                 };
-                
+
                 Ok(output)
             }
             _ => Err(ShaclAiError::Visualization(
-                "TimelineRenderer only supports TimeSeries data".to_string()
+                "TimelineRenderer only supports TimeSeries data".to_string(),
             )),
         }
     }
@@ -256,23 +263,30 @@ impl VisualizationRenderer for NetworkTopologyRenderer {
                     metadata: VisualizationMetadata {
                         created_at: std::time::SystemTime::now(),
                         title: "Network Topology".to_string(),
-                        description: format!("Network topology with {} nodes and {} edges", nodes.len(), edges.len()),
+                        description: format!(
+                            "Network topology with {} nodes and {} edges",
+                            nodes.len(),
+                            edges.len()
+                        ),
                         interactive: options.interactive,
                         real_time: true,
                     },
                     export_formats: vec![ExportFormat::HTML, ExportFormat::SVG],
                 };
-                
+
                 Ok(output)
             }
             _ => Err(ShaclAiError::Visualization(
-                "NetworkTopologyRenderer only supports Graph data".to_string()
+                "NetworkTopologyRenderer only supports Graph data".to_string(),
             )),
         }
     }
 
     fn supported_types(&self) -> Vec<VisualizationType> {
-        vec![VisualizationType::NetworkGraph, VisualizationType::FlowDiagram]
+        vec![
+            VisualizationType::NetworkGraph,
+            VisualizationType::FlowDiagram,
+        ]
     }
 
     fn get_capabilities(&self) -> RendererCapabilities {
@@ -309,7 +323,10 @@ impl VisualizationRenderer for QuantumStateRenderer {
         options: &RenderOptions,
     ) -> Result<VisualizationOutput> {
         match data {
-            VisualizationData::Quantum { states, entanglements } => {
+            VisualizationData::Quantum {
+                states,
+                entanglements,
+            } => {
                 let output = VisualizationOutput {
                     id: uuid::Uuid::new_v4().to_string(),
                     visualization_type: VisualizationType::ComplexPlane,
@@ -317,24 +334,30 @@ impl VisualizationRenderer for QuantumStateRenderer {
                     metadata: VisualizationMetadata {
                         created_at: std::time::SystemTime::now(),
                         title: "Quantum State Visualization".to_string(),
-                        description: format!("Quantum states with {} qubits and {} entanglements", 
-                            states.len(), entanglements.len()),
+                        description: format!(
+                            "Quantum states with {} qubits and {} entanglements",
+                            states.len(),
+                            entanglements.len()
+                        ),
                         interactive: options.interactive,
                         real_time: true,
                     },
                     export_formats: vec![ExportFormat::HTML, ExportFormat::PNG],
                 };
-                
+
                 Ok(output)
             }
             _ => Err(ShaclAiError::Visualization(
-                "QuantumStateRenderer only supports Quantum data".to_string()
+                "QuantumStateRenderer only supports Quantum data".to_string(),
             )),
         }
     }
 
     fn supported_types(&self) -> Vec<VisualizationType> {
-        vec![VisualizationType::ComplexPlane, VisualizationType::QuantumClassicalHybrid]
+        vec![
+            VisualizationType::ComplexPlane,
+            VisualizationType::QuantumClassicalHybrid,
+        ]
     }
 
     fn get_capabilities(&self) -> RendererCapabilities {
@@ -379,17 +402,20 @@ impl VisualizationRenderer for InterpretabilityRenderer {
                     metadata: VisualizationMetadata {
                         created_at: std::time::SystemTime::now(),
                         title: "Model Interpretability".to_string(),
-                        description: format!("Feature explanations with {} features", explanations.len()),
+                        description: format!(
+                            "Feature explanations with {} features",
+                            explanations.len()
+                        ),
                         interactive: options.interactive,
                         real_time: false,
                     },
                     export_formats: vec![ExportFormat::HTML, ExportFormat::PDF],
                 };
-                
+
                 Ok(output)
             }
             _ => Err(ShaclAiError::Visualization(
-                "InterpretabilityRenderer only supports Interpretability data".to_string()
+                "InterpretabilityRenderer only supports Interpretability data".to_string(),
             )),
         }
     }

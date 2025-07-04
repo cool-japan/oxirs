@@ -268,7 +268,7 @@ impl PatternOptimizer {
     }
 
     /// Analyze a single pattern and generate strategies
-    fn analyze_pattern(&self, pattern: &AlgebraTriplePattern) -> Vec<PatternStrategy> {
+    pub fn analyze_pattern(&self, pattern: &AlgebraTriplePattern) -> Vec<PatternStrategy> {
         let mut strategies = Vec::new();
 
         // Analyze which components are bound vs variable

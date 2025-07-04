@@ -48,10 +48,10 @@ impl OnlineLearningEngine {
     ) -> Result<UpdateResult> {
         // Extract features
         let features = self.feature_extractor.extract_features(data).await?;
-        
+
         // Check for concept drift
         let drift_detected = self.drift_detector.check_drift(&features).await?;
-        
+
         if drift_detected {
             tracing::warn!("Concept drift detected, adapting model");
             self.handle_concept_drift().await?;
@@ -77,10 +77,10 @@ impl OnlineLearningEngine {
         // Reset or adapt model parameters
         let mut state = self.model_state.write().await;
         state.adapt_to_drift()?;
-        
+
         // Adjust learning rate
         self.learning_rate_scheduler.increase_rate_for_drift();
-        
+
         Ok(())
     }
 
@@ -126,19 +126,23 @@ impl OnlineModelState {
     }
 
     /// Update model with new sample
-    pub fn update_with_sample(&mut self, features: &HashMap<String, f64>, learning_rate: f64) -> Result<()> {
+    pub fn update_with_sample(
+        &mut self,
+        features: &HashMap<String, f64>,
+        learning_rate: f64,
+    ) -> Result<()> {
         for (feature, value) in features {
             let weight = self.weights.entry(feature.clone()).or_insert(0.0);
             *weight += learning_rate * value;
         }
-        
+
         self.update_count += 1;
         self.last_update = Some(SystemTime::now());
-        
+
         // Update accuracy and loss (simplified)
         self.accuracy = 0.85 + (self.update_count as f64 * 0.001).min(0.1);
         self.loss = 1.0 / (1.0 + self.update_count as f64 * 0.01);
-        
+
         Ok(())
     }
 
@@ -148,9 +152,9 @@ impl OnlineModelState {
         for weight in self.weights.values_mut() {
             *weight *= 0.9; // Decay existing weights
         }
-        
+
         self.bias *= 0.9;
-        
+
         tracing::info!("Model adapted to concept drift");
         Ok(())
     }
@@ -192,8 +196,8 @@ impl AdaptiveLearningRateScheduler {
     /// Get current learning rate
     pub fn get_current_rate(&mut self) -> f64 {
         self.step_count += 1;
-        self.current_rate = (self.initial_rate * self.decay_factor.powi(self.step_count as i32))
-            .max(self.min_rate);
+        self.current_rate =
+            (self.initial_rate * self.decay_factor.powi(self.step_count as i32)).max(self.min_rate);
         self.current_rate
     }
 
@@ -228,15 +232,25 @@ impl ConceptDriftDetector {
         let mut drift_detected = false;
 
         for (feature_name, value) in features {
-            let current_mean = self.feature_means.entry(feature_name.clone()).or_insert(*value);
-            let current_variance = self.feature_variances.entry(feature_name.clone()).or_insert(1.0);
+            let current_mean = self
+                .feature_means
+                .entry(feature_name.clone())
+                .or_insert(*value);
+            let current_variance = self
+                .feature_variances
+                .entry(feature_name.clone())
+                .or_insert(1.0);
 
             // Simple drift detection based on deviation from mean
             let deviation = (*value - *current_mean).abs() / current_variance.sqrt();
-            
+
             if deviation > self.drift_threshold {
                 drift_detected = true;
-                tracing::debug!("Drift detected in feature {}: deviation = {:.3}", feature_name, deviation);
+                tracing::debug!(
+                    "Drift detected in feature {}: deviation = {:.3}",
+                    feature_name,
+                    deviation
+                );
             }
 
             // Update statistics (exponential moving average)
@@ -270,23 +284,41 @@ impl StreamingFeatureExtractor {
     }
 
     /// Extract features from streaming data
-    pub async fn extract_features(&mut self, data: &StreamingDataPoint) -> Result<HashMap<String, f64>> {
+    pub async fn extract_features(
+        &mut self,
+        data: &StreamingDataPoint,
+    ) -> Result<HashMap<String, f64>> {
         let mut features = HashMap::new();
 
         // Extract basic features
-        features.insert("timestamp".to_string(), data.timestamp.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs_f64());
+        features.insert(
+            "timestamp".to_string(),
+            data.timestamp
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs_f64(),
+        );
         features.insert("data_size".to_string(), data.data.len() as f64);
 
         // Extract domain-specific features based on data type
         match &data.data_type {
             StreamingDataType::RdfTriple => {
-                features.insert("rdf_complexity".to_string(), self.calculate_rdf_complexity(&data.data)?);
+                features.insert(
+                    "rdf_complexity".to_string(),
+                    self.calculate_rdf_complexity(&data.data)?,
+                );
             }
             StreamingDataType::ValidationResult => {
-                features.insert("validation_score".to_string(), self.calculate_validation_score(&data.data)?);
+                features.insert(
+                    "validation_score".to_string(),
+                    self.calculate_validation_score(&data.data)?,
+                );
             }
             StreamingDataType::Performance => {
-                features.insert("performance_metric".to_string(), self.extract_performance_metric(&data.data)?);
+                features.insert(
+                    "performance_metric".to_string(),
+                    self.extract_performance_metric(&data.data)?,
+                );
             }
         }
 

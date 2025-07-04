@@ -1,9 +1,9 @@
 //! Quantum streaming types and enums
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use anyhow::Result;
 
 /// Quantum error correction codes
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,4 +101,3 @@ impl QuantumStreamProcessor {
         &self.stats
     }
 }
-

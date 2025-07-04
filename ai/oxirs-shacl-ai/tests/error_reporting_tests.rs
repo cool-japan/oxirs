@@ -1,8 +1,7 @@
 //! Tests for advanced error reporting functionality
 
 use oxirs_shacl_ai::error_handling::{
-    ActionableInsight, AdvancedErrorReport, ErrorHandlingConfig, ExecutiveSummary,
-    IntelligentErrorHandler, SmartErrorAnalysis,
+    ErrorHandlingConfig, IntelligentErrorHandler, SmartErrorAnalysis,
 };
 use std::time::Duration;
 
@@ -13,9 +12,9 @@ mod tests {
     #[test]
     fn test_intelligent_error_handler_creation() {
         let handler = IntelligentErrorHandler::new();
-        assert_eq!(handler.config.min_repair_confidence, 0.7);
-        assert!(handler.config.enable_ml_classification);
-        assert!(handler.config.enable_impact_assessment);
+        assert_eq!(handler.config().min_repair_confidence, 0.7);
+        assert!(handler.config().enable_ml_classification);
+        assert!(handler.config().enable_impact_assessment);
     }
 
     #[test]
@@ -31,16 +30,16 @@ mod tests {
         };
 
         let handler = IntelligentErrorHandler::with_config(config.clone());
-        assert_eq!(handler.config.min_repair_confidence, 0.9);
-        assert!(!handler.config.enable_ml_classification);
-        assert_eq!(handler.config.max_repair_suggestions, 3);
+        assert_eq!(handler.config().min_repair_confidence, 0.9);
+        assert!(!handler.config().enable_ml_classification);
+        assert_eq!(handler.config().max_repair_suggestions, 3);
     }
 
     #[test]
     fn test_error_handler_default() {
         let handler = IntelligentErrorHandler::default();
-        assert_eq!(handler.config.min_repair_confidence, 0.7);
-        assert!(handler.config.enable_ml_classification);
+        assert_eq!(handler.config().min_repair_confidence, 0.7);
+        assert!(handler.config().enable_ml_classification);
     }
 
     #[test]

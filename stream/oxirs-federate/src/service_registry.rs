@@ -77,10 +77,7 @@ pub struct SparqlEndpoint {
     /// Human-readable name
     pub name: String,
     /// Endpoint URL
-    #[serde(
-        serialize_with = "serialize_url", 
-        deserialize_with = "deserialize_url"
-    )]
+    #[serde(serialize_with = "serialize_url", deserialize_with = "deserialize_url")]
     pub url: Url,
     /// Authentication configuration
     pub auth: Option<AuthConfig>,
@@ -106,10 +103,7 @@ pub struct GraphQLService {
     /// Human-readable name
     pub name: String,
     /// Service URL
-    #[serde(
-        serialize_with = "serialize_url", 
-        deserialize_with = "deserialize_url"
-    )]
+    #[serde(serialize_with = "serialize_url", deserialize_with = "deserialize_url")]
     pub url: Url,
     /// Authentication configuration
     pub auth: Option<AuthConfig>,
@@ -197,11 +191,12 @@ impl Default for SparqlCapabilities {
             result_formats: vec![
                 "application/sparql-results+json".to_string(),
                 "application/sparql-results+xml".to_string(),
-            ].into_iter().collect(),
-            graph_formats: vec![
-                "text/turtle".to_string(),
-                "application/rdf+xml".to_string(),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
+            graph_formats: vec!["text/turtle".to_string(), "application/rdf+xml".to_string()]
+                .into_iter()
+                .collect(),
             custom_functions: HashSet::new(),
             max_query_complexity: Some(1000),
             supports_federation: true,
@@ -901,16 +896,24 @@ impl ServiceRegistry {
         Ok(RegistryStats {
             total_sparql_endpoints: self.sparql_endpoints.len(),
             total_graphql_services: self.graphql_services.len(),
-            healthy_services: self.health_status.iter()
+            healthy_services: self
+                .health_status
+                .iter()
                 .filter(|entry| entry.status == HealthState::Healthy)
                 .count(),
-            degraded_services: self.health_status.iter()
+            degraded_services: self
+                .health_status
+                .iter()
                 .filter(|entry| entry.status == HealthState::Degraded)
                 .count(),
-            unhealthy_services: self.health_status.iter()
+            unhealthy_services: self
+                .health_status
+                .iter()
                 .filter(|entry| entry.status == HealthState::Unhealthy)
                 .count(),
-            last_health_check: self.health_status.iter()
+            last_health_check: self
+                .health_status
+                .iter()
                 .map(|entry| entry.last_check)
                 .max(),
         })
@@ -919,12 +922,13 @@ impl ServiceRegistry {
     /// Perform health check on all services
     pub async fn health_check(&self) -> Result<Vec<HealthStatus>> {
         let mut results = Vec::new();
-        
+
         // Check SPARQL endpoints
         for entry in self.sparql_endpoints.iter() {
             let endpoint = entry.value();
             let health = Self::check_sparql_health(&self.http_client, endpoint).await;
-            self.health_status.insert(endpoint.id.clone(), health.clone());
+            self.health_status
+                .insert(endpoint.id.clone(), health.clone());
             results.push(health);
         }
 
@@ -932,7 +936,8 @@ impl ServiceRegistry {
         for entry in self.graphql_services.iter() {
             let service = entry.value();
             let health = Self::check_graphql_health(&self.http_client, service).await;
-            self.health_status.insert(service.id.clone(), health.clone());
+            self.health_status
+                .insert(service.id.clone(), health.clone());
             results.push(health);
         }
 

@@ -17,9 +17,7 @@ use oxirs_core::{
 };
 
 use crate::{
-    constraints::{
-        ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator,
-    },
+    constraints::{ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator},
     validation::constraint_validators::ConstraintValidator,
     Result, Severity, ShaclError, ShapeId,
 };
@@ -120,14 +118,18 @@ impl SparqlConstraint {
         // Basic validation - check if query is not empty
         if self.query.trim().is_empty() {
             return Err(ShaclError::SparqlExecution(
-                "SPARQL query cannot be empty".to_string()
+                "SPARQL query cannot be empty".to_string(),
             ));
         }
         Ok(())
     }
 
     /// Evaluate the SPARQL constraint
-    pub fn evaluate(&self, context: &ConstraintContext, store: &dyn Store) -> Result<ConstraintEvaluationResult> {
+    pub fn evaluate(
+        &self,
+        context: &ConstraintContext,
+        store: &dyn Store,
+    ) -> Result<ConstraintEvaluationResult> {
         // Basic implementation - in a real system this would execute SPARQL queries
         // For now, return satisfied to allow compilation
         Ok(ConstraintEvaluationResult::Satisfied)
@@ -142,9 +144,20 @@ impl ConstraintValidator for SparqlConstraint {
         _graph_name: Option<&str>,
     ) -> Result<crate::validation::ConstraintEvaluationResult> {
         match self.evaluate(context, store)? {
-            crate::constraints::ConstraintEvaluationResult::Satisfied => Ok(crate::validation::ConstraintEvaluationResult::Satisfied),
-            crate::constraints::ConstraintEvaluationResult::Violated { violating_value, message, details: _ } => Ok(crate::validation::ConstraintEvaluationResult::Violated { violating_value, message }),
-            crate::constraints::ConstraintEvaluationResult::Error { message, .. } => Err(crate::ShaclError::ValidationEngine(message)),
+            crate::constraints::ConstraintEvaluationResult::Satisfied => {
+                Ok(crate::validation::ConstraintEvaluationResult::Satisfied)
+            }
+            crate::constraints::ConstraintEvaluationResult::Violated {
+                violating_value,
+                message,
+                details: _,
+            } => Ok(crate::validation::ConstraintEvaluationResult::Violated {
+                violating_value,
+                message,
+            }),
+            crate::constraints::ConstraintEvaluationResult::Error { message, .. } => {
+                Err(crate::ShaclError::ValidationEngine(message))
+            }
         }
     }
 }

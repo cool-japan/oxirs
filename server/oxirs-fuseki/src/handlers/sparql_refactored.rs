@@ -23,9 +23,9 @@ use axum::{
     response::IntoResponse,
     Form,
 };
+use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{info, instrument};
-use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 struct TestUpdateParams {
@@ -41,9 +41,7 @@ pub async fn query_handler(
 }
 
 /// Main SPARQL update endpoint with enhanced features
-pub async fn update_handler(
-    State(_state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn update_handler(State(_state): State<AppState>) -> impl IntoResponse {
     "Update endpoint works"
 }
 
@@ -86,7 +84,9 @@ impl EnhancedSparqlService {
     ) -> FusekiResult<String> {
         // 1. Security validation
         if self.injection_detector.detect_injection(query)? {
-            return Err(FusekiError::authorization("Potential SPARQL injection detected"));
+            return Err(FusekiError::authorization(
+                "Potential SPARQL injection detected",
+            ));
         }
 
         // 2. Complexity analysis
@@ -97,31 +97,41 @@ impl EnhancedSparqlService {
 
         // 3. Apply optimizations
         let mut optimized_query = query.to_string();
-        
+
         // Apply SPARQL 1.2 features and optimizations
-        optimized_query = self.sparql12_features.optimize_query(&optimized_query).await?;
-        
+        optimized_query = self
+            .sparql12_features
+            .optimize_query(&optimized_query)
+            .await?;
+
         // Apply performance optimizations
         optimized_query = self.performance_optimizer.optimize(&optimized_query)?;
-        
+
         // Process SERVICE clauses if present
         if optimized_query.to_uppercase().contains("SERVICE") {
-            optimized_query = self.service_delegator.process_service_clauses(&optimized_query).await?;
+            optimized_query = self
+                .service_delegator
+                .process_service_clauses(&optimized_query)
+                .await?;
         }
-        
+
         // Process aggregations
         if contains_aggregation_functions(&optimized_query) {
-            optimized_query = self.aggregation_processor.process_aggregations(&optimized_query)?;
+            optimized_query = self
+                .aggregation_processor
+                .process_aggregations(&optimized_query)?;
         }
-        
+
         // Process BIND clauses
         if optimized_query.to_uppercase().contains("BIND") {
             optimized_query = self.bind_processor.process_bind_clauses(&optimized_query)?;
         }
-        
+
         // Process VALUES clauses
         if optimized_query.to_uppercase().contains("VALUES") {
-            optimized_query = self.values_processor.process_values_clauses(&optimized_query)?;
+            optimized_query = self
+                .values_processor
+                .process_values_clauses(&optimized_query)?;
         }
 
         Ok(optimized_query)
@@ -135,7 +145,9 @@ impl EnhancedSparqlService {
     ) -> FusekiResult<String> {
         // Security validation for updates
         if self.injection_detector.detect_injection(update)? {
-            return Err(FusekiError::authorization("Potential SPARQL injection detected in update"));
+            return Err(FusekiError::authorization(
+                "Potential SPARQL injection detected in update",
+            ));
         }
 
         // Apply update-specific optimizations
@@ -171,16 +183,26 @@ impl Default for EnhancedSparqlService {
 pub fn validate_sparql_query(query: &str) -> FusekiResult<()> {
     // Basic SPARQL validation - check for basic syntax
     if query.trim().is_empty() {
-        return Err(crate::error::FusekiError::bad_request("Empty query".to_string()));
+        return Err(crate::error::FusekiError::bad_request(
+            "Empty query".to_string(),
+        ));
     }
     Ok(())
 }
 
 pub fn contains_aggregation_functions(query: &str) -> bool {
     let upper = query.to_uppercase();
-    ["COUNT", "SUM", "AVG", "MIN", "MAX", "GROUP_CONCAT", "SAMPLE"]
-        .iter()
-        .any(|func| upper.contains(&format!("{}(", func)))
+    [
+        "COUNT",
+        "SUM",
+        "AVG",
+        "MIN",
+        "MAX",
+        "GROUP_CONCAT",
+        "SAMPLE",
+    ]
+    .iter()
+    .any(|func| upper.contains(&format!("{}(", func)))
 }
 
 pub fn contains_sparql_star_features(query: &str) -> bool {
@@ -190,7 +212,11 @@ pub fn contains_sparql_star_features(query: &str) -> bool {
 
 pub fn contains_property_paths(query: &str) -> bool {
     let upper = query.to_uppercase();
-    upper.contains("/") || upper.contains("|") || upper.contains("*") || upper.contains("+") || upper.contains("?")
+    upper.contains("/")
+        || upper.contains("|")
+        || upper.contains("*")
+        || upper.contains("+")
+        || upper.contains("?")
 }
 
 pub fn contains_subqueries(query: &str) -> bool {
@@ -226,21 +252,33 @@ mod tests {
 
     #[test]
     fn test_feature_detection() {
-        assert!(contains_aggregation_functions("SELECT (COUNT(?s) as ?count) WHERE { ?s ?p ?o }"));
-        assert!(!contains_aggregation_functions("SELECT ?s WHERE { ?s ?p ?o }"));
-        
-        assert!(contains_property_paths("SELECT ?s WHERE { ?s foaf:knows+ ?friend }"));
-        assert!(!contains_property_paths("SELECT ?s WHERE { ?s foaf:knows ?friend }"));
-        
-        assert!(contains_sparql_star_features("SELECT ?s WHERE { <<?s ?p ?o>> ?meta ?value }"));
-        assert!(!contains_sparql_star_features("SELECT ?s WHERE { ?s ?p ?o }"));
+        assert!(contains_aggregation_functions(
+            "SELECT (COUNT(?s) as ?count) WHERE { ?s ?p ?o }"
+        ));
+        assert!(!contains_aggregation_functions(
+            "SELECT ?s WHERE { ?s ?p ?o }"
+        ));
+
+        assert!(contains_property_paths(
+            "SELECT ?s WHERE { ?s foaf:knows+ ?friend }"
+        ));
+        assert!(!contains_property_paths(
+            "SELECT ?s WHERE { ?s foaf:knows ?friend }"
+        ));
+
+        assert!(contains_sparql_star_features(
+            "SELECT ?s WHERE { <<?s ?p ?o>> ?meta ?value }"
+        ));
+        assert!(!contains_sparql_star_features(
+            "SELECT ?s WHERE { ?s ?p ?o }"
+        ));
     }
 
     #[test]
     fn test_content_negotiation() {
         let service = EnhancedSparqlService::new();
         let mut headers = HeaderMap::new();
-        
+
         headers.insert("accept", "application/json".parse().unwrap());
         let content_type = service.negotiate_content_type(&headers);
         assert_eq!(content_type, "application/json");

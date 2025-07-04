@@ -19,12 +19,12 @@
 use super::{KafkaEvent, KafkaProducerConfig, KafkaProducerStats};
 
 use crate::backend::{StreamBackend as StreamBackendTrait, StreamBackendConfig};
+use crate::consumer::ConsumerGroup;
 use crate::error::{StreamError, StreamResult};
 use crate::types::{Offset, PartitionId, StreamPosition, TopicName};
 use crate::{StreamBackend, StreamConfig, StreamEvent};
 use anyhow::Result;
 use async_trait::async_trait;
-use crate::consumer::ConsumerGroup;
 use rdkafka::producer::Producer;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -59,7 +59,8 @@ pub struct KafkaBackend {
 impl KafkaBackend {
     /// Create a new Kafka backend with the given configuration
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let kafka_config = if let crate::StreamBackendType::Kafka { brokers, .. } = &config.backend {
+        let kafka_config = if let crate::StreamBackendType::Kafka { brokers, .. } = &config.backend
+        {
             KafkaProducerConfig {
                 brokers: brokers.clone(),
                 ..Default::default()

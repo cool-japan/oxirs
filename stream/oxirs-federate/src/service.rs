@@ -949,7 +949,11 @@ impl ServiceRegistry {
     }
 
     /// Add authentication header based on auth configuration
-    async fn add_auth_header(&self, headers: &mut HeaderMap, auth: &ServiceAuthConfig) -> Result<()> {
+    async fn add_auth_header(
+        &self,
+        headers: &mut HeaderMap,
+        auth: &ServiceAuthConfig,
+    ) -> Result<()> {
         match &auth.auth_type {
             AuthType::Basic => {
                 if let (Some(username), Some(password)) =

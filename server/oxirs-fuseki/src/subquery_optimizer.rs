@@ -893,7 +893,10 @@ impl MaterializationManager {
 
         if current_size + new_size > max_size {
             // Evict least recently used
-            let mut entries: Vec<_> = views.iter().map(|(k, v)| (k.clone(), v.last_accessed)).collect();
+            let mut entries: Vec<_> = views
+                .iter()
+                .map(|(k, v)| (k.clone(), v.last_accessed))
+                .collect();
             entries.sort_by_key(|(_, last_accessed)| *last_accessed);
 
             let mut freed = 0;

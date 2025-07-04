@@ -800,9 +800,8 @@ impl FaissGpuIndex {
 
         // Execute operation
         let result =
-            Self::execute_operation_on_device(operation, device_id, stream_id, gpu_config)
-                .await?;
-        
+            Self::execute_operation_on_device(operation, device_id, stream_id, gpu_config).await?;
+
         // Send result back if callback provided
         if let Some(sender) = result_sender {
             let _ = sender.send(result.clone());

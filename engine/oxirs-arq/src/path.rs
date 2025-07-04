@@ -50,7 +50,9 @@ impl std::fmt::Display for PropertyPath {
             PropertyPath::NegatedPropertySet(terms) => {
                 write!(f, "!(")?;
                 for (i, term) in terms.iter().enumerate() {
-                    if i > 0 { write!(f, "|")?; }
+                    if i > 0 {
+                        write!(f, "|")?;
+                    }
                     write!(f, "{:?}", term)?;
                 }
                 write!(f, ")")

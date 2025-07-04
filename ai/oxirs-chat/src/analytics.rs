@@ -14,27 +14,15 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::{
-    rag::{QueryIntent, ExtractedEntity, EntityType}, 
-    ChatSession, 
-    Message, 
-    MessageContent,
-    session_manager::TopicTransition,
-    MessageMetadata, 
-    MessageRole,
-    SessionMetrics,
-    types::*,
     message_analytics::{
-        ComplexityFactor, 
-        MessageAnalytics, 
-        SentimentAnalysis,
+        ComplexityFactor, ComplexityLevel, ComplexityScore, ConfidenceTracking, ConfidenceTrend,
+        IntentClassification, MessageAnalytics, QualityAssessment, SentimentAnalysis,
         SuccessMetrics,
-        IntentClassification,
-        ComplexityScore,
-        ConfidenceTracking,
-        QualityAssessment,
-        ComplexityLevel,
-        ConfidenceTrend,
     },
+    rag::{EntityType, ExtractedEntity, QueryIntent},
+    session_manager::TopicTransition,
+    types::*,
+    ChatSession, Message, MessageContent, MessageMetadata, MessageRole, SessionMetrics,
 };
 
 /// Message intent classification with confidence
@@ -335,8 +323,8 @@ impl ConversationTracker {
             match message.role {
                 MessageRole::User => analytics.user_message_count += 1,
                 MessageRole::Assistant => analytics.assistant_message_count += 1,
-                MessageRole::System => {}, // Don't count system messages
-                MessageRole::Function => {}, // Don't count function messages
+                MessageRole::System => {}   // Don't count system messages
+                MessageRole::Function => {} // Don't count function messages
             }
 
             if let Some(token_count) = message.token_count {
@@ -1113,14 +1101,12 @@ impl QualityAnalyzer {
             }
 
             // Update relevance score (simplified)
-            let context_used = metadata.custom_fields.get("context_used")
+            let context_used = metadata
+                .custom_fields
+                .get("context_used")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            let relevance = if context_used {
-                0.8
-            } else {
-                0.5
-            };
+            let relevance = if context_used { 0.8 } else { 0.5 };
             quality.relevance_score = (quality.relevance_score
                 * (analytics.assistant_message_count - 1) as f32
                 + relevance)
@@ -1298,7 +1284,7 @@ impl MessageAnalyticsProcessor {
             });
         }
 
-        // Metadata confidence factor  
+        // Metadata confidence factor
         let data_confidence = if let Some(ref metadata) = message.metadata {
             metadata.confidence.unwrap_or(0.5) as f32
         } else {
@@ -1442,7 +1428,7 @@ impl MessageAnalyticsProcessor {
     // Conversion functions to bridge between analytics types and message_analytics types
     fn convert_to_intent_classification(intent: MessageIntent) -> IntentClassification {
         use crate::message_analytics::Intent;
-        
+
         let primary_intent = match intent.intent_type {
             IntentType::Question => Intent::Query,
             IntentType::Request => Intent::Query,
@@ -1457,7 +1443,7 @@ impl MessageAnalyticsProcessor {
             IntentType::Complex => Intent::Query,
             IntentType::Exploration => Intent::Query,
         };
-        
+
         IntentClassification {
             primary_intent,
             secondary_intents: vec![],
@@ -1465,10 +1451,10 @@ impl MessageAnalyticsProcessor {
             intent_scores: HashMap::new(),
         }
     }
-    
+
     fn convert_to_complexity_score(complexity: ComplexityMetrics) -> ComplexityScore {
-        use crate::message_analytics::{ComplexityLevel};
-        
+        use crate::message_analytics::ComplexityLevel;
+
         ComplexityScore {
             overall_complexity: if complexity.overall_complexity > 0.8 {
                 ComplexityLevel::VeryComplex
@@ -1484,10 +1470,10 @@ impl MessageAnalyticsProcessor {
             readability_score: complexity.semantic_complexity as f32,
         }
     }
-    
+
     fn convert_to_confidence_tracking(confidence: ConfidenceMetrics) -> ConfidenceTracking {
-        use crate::message_analytics::{ConfidenceTrend};
-        
+        use crate::message_analytics::ConfidenceTrend;
+
         ConfidenceTracking {
             overall_confidence: confidence.overall_confidence as f32,
             confidence_components: vec![],
@@ -1495,7 +1481,7 @@ impl MessageAnalyticsProcessor {
             confidence_trend: ConfidenceTrend::Stable,
         }
     }
-    
+
     fn convert_to_quality_assessment(satisfaction: SatisfactionMetrics) -> QualityAssessment {
         QualityAssessment {
             clarity_score: satisfaction.overall_satisfaction as f32,
@@ -2039,5 +2025,4 @@ impl EntityExtractor {
 
         Ok(entities)
     }
-
 }

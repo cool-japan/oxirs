@@ -1,15 +1,10 @@
 //! Multi-dimensional feature extraction for neural cost estimation
 
 use ndarray::{Array1, Array2};
-use oxirs_core::{
-    query::{
-        algebra::AlgebraTriplePattern,
-        pattern_optimizer::IndexType,
-    },
-};
+use oxirs_core::query::{algebra::AlgebraTriplePattern, pattern_optimizer::IndexType};
 use std::collections::HashMap;
 
-use super::{config::*, types::*, core::QueryExecutionContext};
+use super::{config::*, core::QueryExecutionContext, types::*};
 use crate::{Result, ShaclAiError};
 
 /// Multi-dimensional feature extractor
@@ -174,9 +169,11 @@ impl MultiDimensionalFeatureExtractor {
 
     fn extract_temporal_features(&self, context: &QueryExecutionContext) -> Result<Vec<f64>> {
         let now = std::time::SystemTime::now();
-        let timestamp = context.timestamp.duration_since(std::time::UNIX_EPOCH)
+        let timestamp = context
+            .timestamp
+            .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| ShaclAiError::DataProcessing(format!("Invalid timestamp: {}", e)))?;
-        
+
         Ok(vec![
             (timestamp.as_secs() % 86400) as f64 / 86400.0, // Time of day
             (timestamp.as_secs() % 604800) as f64 / 604800.0, // Day of week
@@ -197,7 +194,7 @@ impl MultiDimensionalFeatureExtractor {
         let pattern_count = patterns.len() as f64;
         let variable_count = self.count_unique_variables(patterns) as f64;
         let complexity_score = pattern_count * variable_count.sqrt();
-        
+
         Ok(vec![pattern_count, variable_count, complexity_score])
     }
 
@@ -214,9 +211,12 @@ impl PatternStructureAnalyzer {
         }
     }
 
-    pub fn analyze(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<PatternStructureFeatures> {
+    pub fn analyze(
+        &mut self,
+        patterns: &[AlgebraTriplePattern],
+    ) -> Result<PatternStructureFeatures> {
         let pattern_key = format!("{:?}", patterns);
-        
+
         if let Some(cached_features) = self.pattern_cache.get(&pattern_key) {
             return Ok(cached_features.clone());
         }
@@ -262,17 +262,22 @@ impl IndexUsageAnalyzer {
         }
     }
 
-    pub fn analyze(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<&HashMap<IndexType, IndexUsageStats>> {
+    pub fn analyze(
+        &mut self,
+        patterns: &[AlgebraTriplePattern],
+    ) -> Result<&HashMap<IndexType, IndexUsageStats>> {
         // Analyze index usage for patterns (simplified)
         for _ in patterns {
-            self.index_stats.entry(IndexType::SPO).or_insert_with(|| IndexUsageStats {
-                usage_frequency: 0.8,
-                average_performance: 0.9,
-                selectivity_distribution: Array1::from(vec![0.1, 0.3, 0.6]),
-                cache_hit_rate: 0.85,
-            });
+            self.index_stats
+                .entry(IndexType::SPO)
+                .or_insert_with(|| IndexUsageStats {
+                    usage_frequency: 0.8,
+                    average_performance: 0.9,
+                    selectivity_distribution: Array1::from(vec![0.1, 0.3, 0.6]),
+                    cache_hit_rate: 0.85,
+                });
         }
-        
+
         Ok(&self.index_stats)
     }
 }
@@ -315,7 +320,7 @@ impl JoinComplexityAnalyzer {
 
     pub fn analyze(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<JoinComplexityFeatures> {
         let pattern_key = format!("{:?}", patterns);
-        
+
         if let Some(cached_features) = self.join_cache.get(&pattern_key) {
             return Ok(cached_features.clone());
         }
@@ -378,8 +383,8 @@ impl HistoricalPerformanceAnalyzer {
     ) -> Result<Vec<f64>> {
         // Simplified historical analysis
         Ok(vec![
-            0.5, // Average historical performance
-            0.8, // Confidence in historical data
+            0.5,                         // Average historical performance
+            0.8,                         // Confidence in historical data
             patterns.len() as f64 * 0.1, // Pattern similarity score
         ])
     }

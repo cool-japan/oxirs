@@ -8,11 +8,11 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+use crate::planner::planning::types::QueryInfo as PlanningQueryInfo;
 use crate::{
     planner::{ExecutionPlan, ExecutionStep, StepType},
     FederatedService, ServiceCapability, ServiceRegistry,
 };
-use crate::planner::planning::types::QueryInfo as PlanningQueryInfo;
 
 use super::{
     cost_estimation::*, graph_analysis::*, pattern_analysis::*, plan_generation::*, types::*,

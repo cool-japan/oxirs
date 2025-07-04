@@ -36,7 +36,10 @@ pub struct MatrixFactorizationModel {
 
 impl MatrixFactorizationModel {
     pub fn new(rank: usize, learning_rate: f64) -> Self {
-        Self { rank, learning_rate }
+        Self {
+            rank,
+            learning_rate,
+        }
     }
 }
 
@@ -49,6 +52,9 @@ pub struct DeepRecommendationModel {
 
 impl DeepRecommendationModel {
     pub fn new(layers: Vec<usize>, dropout_rate: f64) -> Self {
-        Self { layers, dropout_rate }
+        Self {
+            layers,
+            dropout_rate,
+        }
     }
 }

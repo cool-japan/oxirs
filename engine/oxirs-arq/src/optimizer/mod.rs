@@ -295,10 +295,17 @@ impl Optimizer {
                 let optimized_right = self.apply_dead_code_elimination(*right)?;
 
                 match (&optimized_left, &optimized_right) {
-                    (Algebra::Bgp(ref left_patterns), Algebra::Bgp(ref right_patterns)) 
-                        if left_patterns.is_empty() || right_patterns.is_empty() => Ok(Algebra::Bgp(vec![])),
-                    (Algebra::Bgp(ref patterns), _) if patterns.is_empty() => Ok(Algebra::Bgp(vec![])),
-                    (_, Algebra::Bgp(ref patterns)) if patterns.is_empty() => Ok(Algebra::Bgp(vec![])),
+                    (Algebra::Bgp(ref left_patterns), Algebra::Bgp(ref right_patterns))
+                        if left_patterns.is_empty() || right_patterns.is_empty() =>
+                    {
+                        Ok(Algebra::Bgp(vec![]))
+                    }
+                    (Algebra::Bgp(ref patterns), _) if patterns.is_empty() => {
+                        Ok(Algebra::Bgp(vec![]))
+                    }
+                    (_, Algebra::Bgp(ref patterns)) if patterns.is_empty() => {
+                        Ok(Algebra::Bgp(vec![]))
+                    }
                     _ => Ok(Algebra::Join {
                         left: Box::new(optimized_left),
                         right: Box::new(optimized_right),

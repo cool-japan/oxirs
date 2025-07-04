@@ -44,9 +44,9 @@ pub use issue_detection::{
 
 // Re-export quality enhancement types
 pub use enhancement::{
-    ActionStatus, EnhancementAction, EnhancementActionType, EnhancementConfig,
-    EnhancementStatistics, EnhancementStrategy, QualityEnhancementEngine,
-    RecommendationModels, DataEnhancementModel, ProcessOptimizationModel, AutomationModel,
-    ImpactPredictionModel, CostBenefitModel, EnhancementRecommendation, EnhancementCategory,
-    Priority, ImplementationEffort as EnhancementImplementationEffort,
+    ActionStatus, AutomationModel, CostBenefitModel, DataEnhancementModel, EnhancementAction,
+    EnhancementActionType, EnhancementCategory, EnhancementConfig, EnhancementRecommendation,
+    EnhancementStatistics, EnhancementStrategy, ImpactPredictionModel,
+    ImplementationEffort as EnhancementImplementationEffort, Priority, ProcessOptimizationModel,
+    QualityEnhancementEngine, RecommendationModels,
 };

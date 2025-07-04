@@ -6,7 +6,7 @@
 //! similarity scoring for knowledge graphs with multilingual content.
 
 use crate::{
-    embeddings::{EmbeddingStrategy, EmbeddingGenerator},
+    embeddings::{EmbeddingGenerator, EmbeddingStrategy},
     similarity::{SimilarityMetric, SimilarityResult},
     Vector, VectorError,
 };
@@ -181,7 +181,7 @@ pub struct CrossLanguageAligner {
 pub trait LanguageDetector {
     /// Detect language of given text
     fn detect_language(&self, text: &str) -> Result<LanguageDetection>;
-    
+
     /// Check if language is supported
     fn is_supported(&self, language: &str) -> bool;
 }
@@ -203,21 +203,42 @@ impl LanguageDetector for SimpleLanguageDetector {
     fn detect_language(&self, text: &str) -> Result<LanguageDetection> {
         // Simplified language detection based on character sets and patterns
         let text_lower = text.to_lowercase();
-        
+
         // Simple heuristics for language detection
-        let language = if text_lower.chars().any(|c| matches!(c, 'ñ' | 'ü' | 'é' | 'á' | 'í' | 'ó' | 'ú')) {
+        let language = if text_lower
+            .chars()
+            .any(|c| matches!(c, 'ñ' | 'ü' | 'é' | 'á' | 'í' | 'ó' | 'ú'))
+        {
             "es" // Spanish
-        } else if text_lower.chars().any(|c| matches!(c, 'ç' | 'à' | 'è' | 'ù' | 'ê' | 'ô')) {
+        } else if text_lower
+            .chars()
+            .any(|c| matches!(c, 'ç' | 'à' | 'è' | 'ù' | 'ê' | 'ô'))
+        {
             "fr" // French
-        } else if text_lower.chars().any(|c| matches!(c, 'ä' | 'ö' | 'ü' | 'ß')) {
+        } else if text_lower
+            .chars()
+            .any(|c| matches!(c, 'ä' | 'ö' | 'ü' | 'ß'))
+        {
             "de" // German
-        } else if text_lower.chars().any(|c| c >= '\u{4e00}' && c <= '\u{9fff}') {
+        } else if text_lower
+            .chars()
+            .any(|c| c >= '\u{4e00}' && c <= '\u{9fff}')
+        {
             "zh" // Chinese
-        } else if text_lower.chars().any(|c| c >= '\u{3040}' && c <= '\u{309f}') {
+        } else if text_lower
+            .chars()
+            .any(|c| c >= '\u{3040}' && c <= '\u{309f}')
+        {
             "ja" // Japanese
-        } else if text_lower.chars().any(|c| c >= '\u{0600}' && c <= '\u{06ff}') {
+        } else if text_lower
+            .chars()
+            .any(|c| c >= '\u{0600}' && c <= '\u{06ff}')
+        {
             "ar" // Arabic
-        } else if text_lower.chars().any(|c| c >= '\u{0400}' && c <= '\u{04ff}') {
+        } else if text_lower
+            .chars()
+            .any(|c| c >= '\u{0400}' && c <= '\u{04ff}')
+        {
             "ru" // Russian
         } else {
             "en" // Default to English
@@ -276,7 +297,7 @@ impl CrossLanguageAligner {
         embedding_generator: Box<dyn EmbeddingGenerator + Send + Sync>,
     ) -> Self {
         let language_detector = Box::new(SimpleLanguageDetector::new(
-            config.supported_languages.clone()
+            config.supported_languages.clone(),
         ));
 
         Self {
@@ -307,11 +328,15 @@ impl CrossLanguageAligner {
 
         // Generate primary vector embedding
         let embeddable_content = crate::embeddings::EmbeddableContent::Text(content.to_string());
-        let vector = self.embedding_generator.generate(&embeddable_content)
+        let vector = self
+            .embedding_generator
+            .generate(&embeddable_content)
             .context("Failed to generate embedding")?;
 
         // Create aligned vectors for other languages
-        let aligned_vectors = self.create_aligned_vectors(content, &detection.language, &vector).await?;
+        let aligned_vectors = self
+            .create_aligned_vectors(content, &detection.language, &vector)
+            .await?;
 
         Ok(CrossLanguageContent {
             id: id.to_string(),
@@ -337,7 +362,8 @@ impl CrossLanguageAligner {
                 // Use multilingual embedding model directly
                 for target_lang in &self.config.supported_languages {
                     if target_lang != source_language {
-                        let aligned_vector = self.create_multilingual_embedding(content, target_lang)?;
+                        let aligned_vector =
+                            self.create_multilingual_embedding(content, target_lang)?;
                         aligned_vectors.insert(target_lang.clone(), aligned_vector);
                     }
                 }
@@ -346,9 +372,13 @@ impl CrossLanguageAligner {
                 // Translate content and generate embeddings
                 for target_lang in &self.config.supported_languages {
                     if target_lang != source_language {
-                        let translated_text = self.translate_text(content, source_language, target_lang).await?;
-                        let embeddable_content = crate::embeddings::EmbeddableContent::Text(translated_text);
-                        let translated_vector = self.embedding_generator.generate(&embeddable_content)?;
+                        let translated_text = self
+                            .translate_text(content, source_language, target_lang)
+                            .await?;
+                        let embeddable_content =
+                            crate::embeddings::EmbeddableContent::Text(translated_text);
+                        let translated_vector =
+                            self.embedding_generator.generate(&embeddable_content)?;
                         aligned_vectors.insert(target_lang.clone(), translated_vector);
                     }
                 }
@@ -357,13 +387,19 @@ impl CrossLanguageAligner {
                 // Use both multilingual embeddings and translation
                 for target_lang in &self.config.supported_languages {
                     if target_lang != source_language {
-                        let multilingual_vector = self.create_multilingual_embedding(content, target_lang)?;
-                        let translated_text = self.translate_text(content, source_language, target_lang).await?;
-                        let embeddable_content = crate::embeddings::EmbeddableContent::Text(translated_text);
-                        let translated_vector = self.embedding_generator.generate(&embeddable_content)?;
-                        
+                        let multilingual_vector =
+                            self.create_multilingual_embedding(content, target_lang)?;
+                        let translated_text = self
+                            .translate_text(content, source_language, target_lang)
+                            .await?;
+                        let embeddable_content =
+                            crate::embeddings::EmbeddableContent::Text(translated_text);
+                        let translated_vector =
+                            self.embedding_generator.generate(&embeddable_content)?;
+
                         // Combine vectors (simple average for now)
-                        let combined_vector = self.combine_vectors(&multilingual_vector, &translated_vector)?;
+                        let combined_vector =
+                            self.combine_vectors(&multilingual_vector, &translated_vector)?;
                         aligned_vectors.insert(target_lang.clone(), combined_vector);
                     }
                 }
@@ -372,7 +408,11 @@ impl CrossLanguageAligner {
                 // Apply learned transformation mappings
                 for target_lang in &self.config.supported_languages {
                     if target_lang != source_language {
-                        let mapped_vector = self.apply_learned_mapping(source_vector, source_language, target_lang)?;
+                        let mapped_vector = self.apply_learned_mapping(
+                            source_vector,
+                            source_language,
+                            target_lang,
+                        )?;
                         aligned_vectors.insert(target_lang.clone(), mapped_vector);
                     }
                 }
@@ -383,7 +423,11 @@ impl CrossLanguageAligner {
     }
 
     /// Create multilingual embedding
-    fn create_multilingual_embedding(&self, content: &str, target_language: &str) -> Result<Vector> {
+    fn create_multilingual_embedding(
+        &self,
+        content: &str,
+        target_language: &str,
+    ) -> Result<Vector> {
         // For now, use the same embedding generator with language prefix
         let prefixed_content = format!("[{}] {}", target_language, content);
         let embeddable_content = crate::embeddings::EmbeddableContent::Text(prefixed_content);
@@ -391,9 +435,14 @@ impl CrossLanguageAligner {
     }
 
     /// Translate text between languages
-    async fn translate_text(&self, text: &str, source_lang: &str, target_lang: &str) -> Result<String> {
+    async fn translate_text(
+        &self,
+        text: &str,
+        source_lang: &str,
+        target_lang: &str,
+    ) -> Result<String> {
         let cache_key = format!("{}:{}:{}", source_lang, target_lang, text);
-        
+
         // Check cache first
         {
             let cache = self.translation_cache.read().unwrap();
@@ -416,8 +465,14 @@ impl CrossLanguageAligner {
         // Cache the translation
         {
             let mut cache = self.translation_cache.write().unwrap();
-            if cache.len() >= self.config.translation_config.as_ref()
-                .map(|c| c.max_cache_size).unwrap_or(10000) {
+            if cache.len()
+                >= self
+                    .config
+                    .translation_config
+                    .as_ref()
+                    .map(|c| c.max_cache_size)
+                    .unwrap_or(10000)
+            {
                 // Simple cache eviction: remove first entry
                 if let Some(key) = cache.keys().next().cloned() {
                     cache.remove(&key);
@@ -438,7 +493,8 @@ impl CrossLanguageAligner {
             return Err(anyhow!("Vector dimensions must match for combination"));
         }
 
-        let combined: Vec<f32> = v1_f32.iter()
+        let combined: Vec<f32> = v1_f32
+            .iter()
             .zip(v2_f32.iter())
             .map(|(a, b)| (a + b) / 2.0)
             .collect();
@@ -447,10 +503,15 @@ impl CrossLanguageAligner {
     }
 
     /// Apply learned mapping transformation
-    fn apply_learned_mapping(&self, source_vector: &Vector, source_lang: &str, target_lang: &str) -> Result<Vector> {
+    fn apply_learned_mapping(
+        &self,
+        source_vector: &Vector,
+        source_lang: &str,
+        target_lang: &str,
+    ) -> Result<Vector> {
         let mapping_key = format!("{}:{}", source_lang, target_lang);
         let mappings = self.alignment_mappings.read().unwrap();
-        
+
         if let Some(mapping) = mappings.get(&mapping_key) {
             if let Some(ref matrix) = mapping.transformation_matrix {
                 return self.apply_matrix_transformation(source_vector, matrix);
@@ -464,18 +525,14 @@ impl CrossLanguageAligner {
     /// Apply matrix transformation to vector
     fn apply_matrix_transformation(&self, vector: &Vector, matrix: &[Vec<f32>]) -> Result<Vector> {
         let v_f32 = vector.as_f32();
-        
+
         if matrix.is_empty() || matrix[0].len() != v_f32.len() {
             return Err(anyhow!("Matrix dimensions incompatible with vector"));
         }
 
-        let transformed: Vec<f32> = matrix.iter()
-            .map(|row| {
-                row.iter()
-                    .zip(v_f32.iter())
-                    .map(|(m, v)| m * v)
-                    .sum()
-            })
+        let transformed: Vec<f32> = matrix
+            .iter()
+            .map(|row| row.iter().zip(v_f32.iter()).map(|(m, v)| m * v).sum())
             .collect();
 
         Ok(Vector::new(transformed))
@@ -513,13 +570,17 @@ impl CrossLanguageAligner {
             // Compute cross-lingual similarity using aligned vectors
             let mut cross_lingual_similarities = HashMap::new();
             if let Some(aligned_vector) = content.aligned_vectors.get(query_language) {
-                let cross_similarity = SimilarityMetric::Cosine.compute(&query_vector, aligned_vector)?;
+                let cross_similarity =
+                    SimilarityMetric::Cosine.compute(&query_vector, aligned_vector)?;
                 cross_lingual_similarities.insert("cosine".to_string(), cross_similarity);
             }
 
             // Determine the best similarity score
             let best_similarity = primary_similarity.max(
-                cross_lingual_similarities.values().copied().fold(0.0, f32::max)
+                cross_lingual_similarities
+                    .values()
+                    .copied()
+                    .fold(0.0, f32::max),
             );
 
             if best_similarity >= self.config.cross_lingual_threshold {
@@ -561,16 +622,21 @@ impl CrossLanguageAligner {
             let target_embeddable = crate::embeddings::EmbeddableContent::Text(target_text.clone());
             let source_vector = self.embedding_generator.generate(&source_embeddable)?;
             let target_vector = self.embedding_generator.generate(&target_embeddable)?;
-            
+
             source_vectors.push(source_vector.as_f32());
             target_vectors.push(target_vector.as_f32());
         }
 
         // Learn transformation matrix (simplified - in practice would use more sophisticated methods)
-        let transformation_matrix = self.compute_transformation_matrix(&source_vectors, &target_vectors)?;
-        
+        let transformation_matrix =
+            self.compute_transformation_matrix(&source_vectors, &target_vectors)?;
+
         // Evaluate mapping quality
-        let quality_score = self.evaluate_mapping_quality(&source_vectors, &target_vectors, &transformation_matrix)?;
+        let quality_score = self.evaluate_mapping_quality(
+            &source_vectors,
+            &target_vectors,
+            &transformation_matrix,
+        )?;
 
         let mapping = AlignmentMapping {
             source_language: source_language.to_string(),
@@ -584,18 +650,25 @@ impl CrossLanguageAligner {
         let mut mappings = self.alignment_mappings.write().unwrap();
         mappings.insert(mapping_key, mapping);
 
-        info!("Learned alignment mapping with quality score: {:.3}", quality_score);
+        info!(
+            "Learned alignment mapping with quality score: {:.3}",
+            quality_score
+        );
         Ok(())
     }
 
     /// Compute transformation matrix using simple linear regression
-    fn compute_transformation_matrix(&self, source_vectors: &[Vec<f32>], target_vectors: &[Vec<f32>]) -> Result<Vec<Vec<f32>>> {
+    fn compute_transformation_matrix(
+        &self,
+        source_vectors: &[Vec<f32>],
+        target_vectors: &[Vec<f32>],
+    ) -> Result<Vec<Vec<f32>>> {
         if source_vectors.is_empty() || source_vectors.len() != target_vectors.len() {
             return Err(anyhow!("Invalid vector sets for learning transformation"));
         }
 
         let dim = source_vectors[0].len();
-        
+
         // Simple identity matrix as baseline (in practice, would use proper linear algebra)
         let mut matrix = vec![vec![0.0; dim]; dim];
         for i in 0..dim {
@@ -615,7 +688,12 @@ impl CrossLanguageAligner {
     }
 
     /// Evaluate quality of learned mapping
-    fn evaluate_mapping_quality(&self, source_vectors: &[Vec<f32>], target_vectors: &[Vec<f32>], matrix: &[Vec<f32>]) -> Result<f32> {
+    fn evaluate_mapping_quality(
+        &self,
+        source_vectors: &[Vec<f32>],
+        target_vectors: &[Vec<f32>],
+        matrix: &[Vec<f32>],
+    ) -> Result<f32> {
         let mut total_similarity = 0.0;
         let mut count = 0;
 
@@ -623,24 +701,28 @@ impl CrossLanguageAligner {
             let transformed_vector = Vector::new(source.clone());
             let transformed = self.apply_matrix_transformation(&transformed_vector, matrix)?;
             let target_vector = Vector::new(target.clone());
-            
+
             let similarity = SimilarityMetric::Cosine.compute(&transformed, &target_vector)?;
             total_similarity += similarity;
             count += 1;
         }
 
-        Ok(if count > 0 { total_similarity / count as f32 } else { 0.0 })
+        Ok(if count > 0 {
+            total_similarity / count as f32
+        } else {
+            0.0
+        })
     }
 
     /// Get language statistics
     pub fn get_language_statistics(&self) -> HashMap<String, usize> {
         let embeddings = self.multilingual_embeddings.read().unwrap();
         let mut stats = HashMap::new();
-        
+
         for lang in &self.config.supported_languages {
             stats.insert(lang.clone(), embeddings.len());
         }
-        
+
         stats
     }
 
@@ -667,7 +749,7 @@ mod tests {
     fn test_language_detector_creation() {
         let languages = vec!["en".to_string(), "es".to_string(), "fr".to_string()];
         let detector = SimpleLanguageDetector::new(languages.clone());
-        
+
         assert!(detector.is_supported("en"));
         assert!(detector.is_supported("es"));
         assert!(!detector.is_supported("de"));
@@ -676,11 +758,11 @@ mod tests {
     #[test]
     fn test_language_detection() {
         let detector = SimpleLanguageDetector::new(vec!["en".to_string(), "es".to_string()]);
-        
+
         let detection = detector.detect_language("Hello world").unwrap();
         assert_eq!(detection.language, "en");
         assert!(detection.confidence > 0.0);
-        
+
         let detection = detector.detect_language("Hola mundo").unwrap();
         assert_eq!(detection.language, "en"); // Simple detector defaults to English
     }
@@ -693,7 +775,7 @@ mod tests {
             AlignmentStrategy::Hybrid,
             AlignmentStrategy::LearnedMappings,
         ];
-        
+
         for strategy in strategies {
             let config = CrossLanguageConfig {
                 alignment_strategy: strategy.clone(),
@@ -707,7 +789,7 @@ mod tests {
     async fn test_cross_language_aligner_creation() {
         let config = CrossLanguageConfig::default();
         let embedding_generator = Box::new(MockEmbeddingGenerator::new());
-        
+
         let aligner = CrossLanguageAligner::new(config, embedding_generator);
         assert_eq!(aligner.get_supported_languages().len(), 10);
     }
@@ -716,10 +798,13 @@ mod tests {
     async fn test_content_processing() {
         let config = CrossLanguageConfig::default();
         let embedding_generator = Box::new(MockEmbeddingGenerator::new());
-        
+
         let aligner = CrossLanguageAligner::new(config, embedding_generator);
-        let content = aligner.process_content("Hello world", "test_id").await.unwrap();
-        
+        let content = aligner
+            .process_content("Hello world", "test_id")
+            .await
+            .unwrap();
+
         assert_eq!(content.id, "test_id");
         assert_eq!(content.text, "Hello world");
         assert!(content.vector.is_some());
@@ -731,13 +816,13 @@ mod tests {
         let config = CrossLanguageConfig::default();
         let embedding_generator = Box::new(MockEmbeddingGenerator::new());
         let aligner = CrossLanguageAligner::new(config, embedding_generator);
-        
+
         let vector1 = Vector::new(vec![1.0, 2.0, 3.0]);
         let vector2 = Vector::new(vec![2.0, 4.0, 6.0]);
-        
+
         let combined = aligner.combine_vectors(&vector1, &vector2).unwrap();
         let combined_f32 = combined.as_f32();
-        
+
         assert_eq!(combined_f32, vec![1.5, 3.0, 4.5]);
     }
 
@@ -751,7 +836,7 @@ mod tests {
             translated_text: Some("contenido de prueba".to_string()),
             cross_lingual_metrics: HashMap::new(),
         };
-        
+
         assert_eq!(result.id, "test");
         assert_eq!(result.similarity, 0.8);
         assert_eq!(result.language, "en");

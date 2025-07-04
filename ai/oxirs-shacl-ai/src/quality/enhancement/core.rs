@@ -7,8 +7,8 @@ use oxirs_core::{model::Term, Store};
 use oxirs_shacl::{Shape, ValidationReport};
 
 use crate::quality::{
-    AiQualityMetricsResult, IssueDetectionResult, MultiDimensionalQualityAssessment, 
-    QualityReport, QualitySnapshot,
+    AiQualityMetricsResult, IssueDetectionResult, MultiDimensionalQualityAssessment, QualityReport,
+    QualitySnapshot,
 };
 use crate::{Result, ShaclAiError};
 
@@ -26,28 +26,28 @@ pub struct QualityEnhancementEngine {
 pub struct EnhancementConfig {
     /// Enable data enhancement recommendations
     pub enable_data_enhancement: bool,
-    
+
     /// Enable process optimization recommendations
     pub enable_process_optimization: bool,
-    
+
     /// Enable automated improvements
     pub enable_automated_improvements: bool,
-    
+
     /// Enhancement priority threshold
     pub priority_threshold: f64,
-    
+
     /// Maximum recommendations per category
     pub max_recommendations_per_category: usize,
-    
+
     /// Minimum confidence for recommendations
     pub min_recommendation_confidence: f64,
-    
+
     /// Enable cost-benefit analysis
     pub enable_cost_benefit_analysis: bool,
-    
+
     /// Enable impact prediction
     pub enable_impact_prediction: bool,
-    
+
     /// Enhancement strategy preference
     pub strategy_preference: EnhancementStrategy,
 }
@@ -183,15 +183,24 @@ impl QualityEnhancementEngine {
         let mut recommendations = Vec::new();
 
         if self.config.enable_data_enhancement {
-            recommendations.extend(self.generate_data_enhancement_recommendations(quality_report).await?);
+            recommendations.extend(
+                self.generate_data_enhancement_recommendations(quality_report)
+                    .await?,
+            );
         }
 
         if self.config.enable_process_optimization {
-            recommendations.extend(self.generate_process_optimization_recommendations(quality_report).await?);
+            recommendations.extend(
+                self.generate_process_optimization_recommendations(quality_report)
+                    .await?,
+            );
         }
 
         if self.config.enable_automated_improvements {
-            recommendations.extend(self.generate_automation_recommendations(quality_report).await?);
+            recommendations.extend(
+                self.generate_automation_recommendations(quality_report)
+                    .await?,
+            );
         }
 
         // Filter by confidence threshold
@@ -216,19 +225,17 @@ impl QualityEnhancementEngine {
         _quality_report: &QualityReport,
     ) -> Result<Vec<EnhancementRecommendation>> {
         // Simplified data enhancement recommendations
-        Ok(vec![
-            EnhancementRecommendation {
-                id: "data_quality_1".to_string(),
-                title: "Improve data consistency".to_string(),
-                description: "Address inconsistent data patterns".to_string(),
-                category: EnhancementCategory::DataQuality,
-                priority: Priority::High,
-                confidence: 0.85,
-                estimated_impact: 0.7,
-                implementation_effort: ImplementationEffort::Medium,
-                automated: false,
-            }
-        ])
+        Ok(vec![EnhancementRecommendation {
+            id: "data_quality_1".to_string(),
+            title: "Improve data consistency".to_string(),
+            description: "Address inconsistent data patterns".to_string(),
+            category: EnhancementCategory::DataQuality,
+            priority: Priority::High,
+            confidence: 0.85,
+            estimated_impact: 0.7,
+            implementation_effort: ImplementationEffort::Medium,
+            automated: false,
+        }])
     }
 
     async fn generate_process_optimization_recommendations(
@@ -236,19 +243,17 @@ impl QualityEnhancementEngine {
         _quality_report: &QualityReport,
     ) -> Result<Vec<EnhancementRecommendation>> {
         // Simplified process optimization recommendations
-        Ok(vec![
-            EnhancementRecommendation {
-                id: "process_opt_1".to_string(),
-                title: "Optimize validation workflow".to_string(),
-                description: "Streamline validation process for better performance".to_string(),
-                category: EnhancementCategory::ProcessOptimization,
-                priority: Priority::Medium,
-                confidence: 0.8,
-                estimated_impact: 0.6,
-                implementation_effort: ImplementationEffort::High,
-                automated: false,
-            }
-        ])
+        Ok(vec![EnhancementRecommendation {
+            id: "process_opt_1".to_string(),
+            title: "Optimize validation workflow".to_string(),
+            description: "Streamline validation process for better performance".to_string(),
+            category: EnhancementCategory::ProcessOptimization,
+            priority: Priority::Medium,
+            confidence: 0.8,
+            estimated_impact: 0.6,
+            implementation_effort: ImplementationEffort::High,
+            automated: false,
+        }])
     }
 
     async fn generate_automation_recommendations(
@@ -256,19 +261,17 @@ impl QualityEnhancementEngine {
         _quality_report: &QualityReport,
     ) -> Result<Vec<EnhancementRecommendation>> {
         // Simplified automation recommendations
-        Ok(vec![
-            EnhancementRecommendation {
-                id: "automation_1".to_string(),
-                title: "Automated error correction".to_string(),
-                description: "Implement automated correction for common errors".to_string(),
-                category: EnhancementCategory::Automation,
-                priority: Priority::Medium,
-                confidence: 0.75,
-                estimated_impact: 0.8,
-                implementation_effort: ImplementationEffort::High,
-                automated: true,
-            }
-        ])
+        Ok(vec![EnhancementRecommendation {
+            id: "automation_1".to_string(),
+            title: "Automated error correction".to_string(),
+            description: "Implement automated correction for common errors".to_string(),
+            category: EnhancementCategory::Automation,
+            priority: Priority::Medium,
+            confidence: 0.75,
+            estimated_impact: 0.8,
+            implementation_effort: ImplementationEffort::High,
+            automated: true,
+        }])
     }
 }
 

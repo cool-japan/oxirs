@@ -29,16 +29,10 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use super::{
-    config::*,
-    types::*,
-    deep_predictor::DeepCostPredictor,
-    feature_extractor::MultiDimensionalFeatureExtractor,
-    historical_data::HistoricalDataManager,
-    feedback::RealTimeFeedbackProcessor,
-    ensemble::EnsembleCostPredictor,
-    context::ContextAwareCostAdjuster,
-    uncertainty::UncertaintyQuantifier,
-    profiler::PerformanceProfiler,
+    config::*, context::ContextAwareCostAdjuster, deep_predictor::DeepCostPredictor,
+    ensemble::EnsembleCostPredictor, feature_extractor::MultiDimensionalFeatureExtractor,
+    feedback::RealTimeFeedbackProcessor, historical_data::HistoricalDataManager,
+    profiler::PerformanceProfiler, types::*, uncertainty::UncertaintyQuantifier,
 };
 
 /// Neural cost estimation engine with multi-dimensional analysis
@@ -236,10 +230,9 @@ impl NeuralCostEstimationEngine {
         let training_stats = if let Ok(mut network) = self.deep_network.lock() {
             network.train_on_batch(&historical_data.features, &historical_data.targets)?
         } else {
-            return Err(ShaclAiError::DataProcessing(
-                "Failed to lock deep network".to_string(),
-            )
-            .into());
+            return Err(
+                ShaclAiError::DataProcessing("Failed to lock deep network".to_string()).into(),
+            );
         };
 
         // Update ensemble models
@@ -284,4 +277,13 @@ pub struct QueryExecutionContext {
 pub struct TrainingData {
     pub features: Array2<f64>,
     pub targets: Array1<f64>,
+}
+
+impl Default for TrainingData {
+    fn default() -> Self {
+        Self {
+            features: Array2::zeros((0, 0)),
+            targets: Array1::zeros(0),
+        }
+    }
 }

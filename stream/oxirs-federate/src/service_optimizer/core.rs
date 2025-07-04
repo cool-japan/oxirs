@@ -580,7 +580,6 @@ impl ServiceOptimizer {
         joins
     }
 
-
     /// Determine overall execution strategy
     pub fn determine_execution_strategy(
         &self,
@@ -768,7 +767,6 @@ impl ServiceOptimizer {
         };
         base_cost * complexity_factor
     }
-
 
     /// Calculate pattern complexity for cost estimation
     pub fn calculate_pattern_complexity(&self, pattern: &TriplePattern) -> PatternComplexity {

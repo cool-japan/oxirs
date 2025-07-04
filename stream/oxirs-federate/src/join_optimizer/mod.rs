@@ -19,9 +19,7 @@ use tokio::sync::RwLock;
 use tracing::info;
 
 use crate::{
-    planner::planning::{
-        FilterExpression as PlanningFilterExpression, TriplePattern,
-    },
+    planner::planning::{FilterExpression as PlanningFilterExpression, TriplePattern},
     service_optimizer::{JoinAlgorithm, JoinOperation, JoinOperationType, JoinPlan},
     ServiceRegistry,
 };

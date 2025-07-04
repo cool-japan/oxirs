@@ -10,13 +10,13 @@ use crate::{Result, ShaclAiError};
 pub struct UncertaintyQuantifier {
     /// Configuration
     config: UncertaintyConfig,
-    
+
     /// Bootstrap samples storage
     bootstrap_samples: Vec<f64>,
-    
+
     /// Uncertainty model
     uncertainty_model: UncertaintyModel,
-    
+
     /// Statistics
     uncertainty_stats: UncertaintyStatistics,
 }
@@ -26,10 +26,10 @@ pub struct UncertaintyQuantifier {
 pub struct UncertaintyModel {
     /// Model parameters
     parameters: Array1<f64>,
-    
+
     /// Confidence intervals cache
     confidence_intervals: Vec<ConfidenceInterval>,
-    
+
     /// Historical uncertainty data
     historical_uncertainties: Vec<UncertaintyRecord>,
 }
@@ -82,17 +82,17 @@ impl UncertaintyQuantifier {
         }
 
         let uncertainty = match self.config.uncertainty_method {
-            UncertaintyMethod::Bootstrap => self.bootstrap_uncertainty(base_prediction, features)?,
+            UncertaintyMethod::Bootstrap => {
+                self.bootstrap_uncertainty(base_prediction, features)?
+            }
             UncertaintyMethod::Bayesian => self.bayesian_uncertainty(base_prediction, features)?,
             UncertaintyMethod::Ensemble => self.ensemble_uncertainty(base_prediction, features)?,
             UncertaintyMethod::Dropout => self.dropout_uncertainty(base_prediction, features)?,
             UncertaintyMethod::Gaussian => self.gaussian_uncertainty(base_prediction, features)?,
         };
 
-        let confidence_intervals = self.calculate_confidence_intervals(
-            base_prediction.estimated_cost,
-            uncertainty,
-        )?;
+        let confidence_intervals =
+            self.calculate_confidence_intervals(base_prediction.estimated_cost, uncertainty)?;
 
         let mut enhanced_prediction = base_prediction.clone();
         enhanced_prediction.uncertainty = uncertainty;
@@ -100,16 +100,18 @@ impl UncertaintyQuantifier {
 
         // Add confidence intervals to contributing factors
         for interval in confidence_intervals {
-            enhanced_prediction.contributing_factors.push(ContributingFactor {
-                factor_type: FactorType::PatternComplexity, // Placeholder
-                importance: interval.confidence_level,
-                description: format!(
-                    "{}% CI: [{:.3}, {:.3}]",
-                    interval.confidence_level * 100.0,
-                    interval.lower_bound,
-                    interval.upper_bound
-                ),
-            });
+            enhanced_prediction
+                .contributing_factors
+                .push(ContributingFactor {
+                    factor_type: FactorType::PatternComplexity, // Placeholder
+                    importance: interval.confidence_level,
+                    description: format!(
+                        "{}% CI: [{:.3}, {:.3}]",
+                        interval.confidence_level * 100.0,
+                        interval.lower_bound,
+                        interval.upper_bound
+                    ),
+                });
         }
 
         // Update statistics
@@ -130,7 +132,7 @@ impl UncertaintyQuantifier {
         for _ in 0..num_samples {
             // Add noise to features for bootstrap sampling
             let noisy_features = self.add_noise_to_features(features, 0.1);
-            
+
             // Simple bootstrap estimate (in practice, this would retrain models)
             let sample_prediction = prediction.estimated_cost * (0.8 + 0.4 * fastrand::f64());
             samples.push(sample_prediction);
@@ -138,10 +140,9 @@ impl UncertaintyQuantifier {
 
         // Calculate uncertainty as standard deviation of samples
         let mean = samples.iter().sum::<f64>() / samples.len() as f64;
-        let variance = samples.iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / samples.len() as f64;
-        
+        let variance =
+            samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / samples.len() as f64;
+
         self.bootstrap_samples = samples;
         Ok(variance.sqrt() / mean) // Coefficient of variation
     }
@@ -155,8 +156,11 @@ impl UncertaintyQuantifier {
         // In practice, this would use proper Bayesian inference
         let epistemic_uncertainty = 0.1 * prediction.estimated_cost;
         let aleatoric_uncertainty = 0.05 * prediction.estimated_cost;
-        
-        Ok((epistemic_uncertainty.powi(2) + aleatoric_uncertainty.powi(2)).sqrt() / prediction.estimated_cost)
+
+        Ok(
+            (epistemic_uncertainty.powi(2) + aleatoric_uncertainty.powi(2)).sqrt()
+                / prediction.estimated_cost,
+        )
     }
 
     fn ensemble_uncertainty(
@@ -176,18 +180,17 @@ impl UncertaintyQuantifier {
         // Simplified Monte Carlo dropout
         let num_samples = 50;
         let mut predictions = Vec::with_capacity(num_samples);
-        
+
         for _ in 0..num_samples {
             // Simulate dropout by scaling prediction randomly
             let dropout_prediction = prediction.estimated_cost * (0.7 + 0.6 * fastrand::f64());
             predictions.push(dropout_prediction);
         }
-        
+
         let mean = predictions.iter().sum::<f64>() / predictions.len() as f64;
-        let variance = predictions.iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / predictions.len() as f64;
-        
+        let variance =
+            predictions.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / predictions.len() as f64;
+
         Ok(variance.sqrt() / mean)
     }
 
@@ -197,9 +200,10 @@ impl UncertaintyQuantifier {
         features: &Array1<f64>,
     ) -> Result<f64> {
         // Simple Gaussian uncertainty based on feature complexity
-        let feature_complexity = features.iter().map(|x| x.abs()).sum::<f64>() / features.len() as f64;
+        let feature_complexity =
+            features.iter().map(|x| x.abs()).sum::<f64>() / features.len() as f64;
         let base_uncertainty = 0.05 + 0.1 * feature_complexity.min(1.0);
-        
+
         Ok(base_uncertainty)
     }
 
@@ -209,7 +213,7 @@ impl UncertaintyQuantifier {
         uncertainty: f64,
     ) -> Result<Vec<ConfidenceInterval>> {
         let mut intervals = Vec::new();
-        
+
         for &confidence_level in &self.config.confidence_levels {
             // Calculate z-score for confidence level (simplified)
             let z_score = match confidence_level {
@@ -218,9 +222,9 @@ impl UncertaintyQuantifier {
                 0.90 => 1.645,
                 _ => 1.96, // Default to 95%
             };
-            
+
             let margin = z_score * uncertainty * point_estimate;
-            
+
             intervals.push(ConfidenceInterval {
                 confidence_level,
                 lower_bound: (point_estimate - margin).max(0.0),
@@ -228,7 +232,7 @@ impl UncertaintyQuantifier {
                 point_estimate,
             });
         }
-        
+
         Ok(intervals)
     }
 
@@ -238,9 +242,9 @@ impl UncertaintyQuantifier {
 
     fn update_uncertainty_stats(&mut self, uncertainty: f64) {
         self.uncertainty_stats.total_predictions += 1;
-        
+
         let n = self.uncertainty_stats.total_predictions as f64;
-        self.uncertainty_stats.average_uncertainty = 
+        self.uncertainty_stats.average_uncertainty =
             (self.uncertainty_stats.average_uncertainty * (n - 1.0) + uncertainty) / n;
     }
 
@@ -257,17 +261,19 @@ impl UncertaintyQuantifier {
             features: features.clone(),
             timestamp: std::time::SystemTime::now(),
         };
-        
+
         self.uncertainty_model.historical_uncertainties.push(record);
-        
+
         // Update calibration statistics
         self.update_calibration_stats(predicted_uncertainty, actual_error);
-        
+
         // Keep only recent records
         if self.uncertainty_model.historical_uncertainties.len() > 1000 {
-            self.uncertainty_model.historical_uncertainties.drain(0..100);
+            self.uncertainty_model
+                .historical_uncertainties
+                .drain(0..100);
         }
-        
+
         Ok(())
     }
 
@@ -275,8 +281,8 @@ impl UncertaintyQuantifier {
         // Simple calibration metric
         let calibration_error = (predicted_uncertainty - actual_error).abs();
         let n = self.uncertainty_stats.total_predictions as f64;
-        
-        self.uncertainty_stats.uncertainty_calibration = 
+
+        self.uncertainty_stats.uncertainty_calibration =
             (self.uncertainty_stats.uncertainty_calibration * (n - 1.0) + calibration_error) / n;
     }
 

@@ -7,7 +7,7 @@ use crate::{
     constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator},
     PropertyPath, Result, ShaclError, ShapeId,
 };
-use oxirs_core::{model::Term, Store, RdfTerm};
+use oxirs_core::{model::Term, RdfTerm, Store};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};

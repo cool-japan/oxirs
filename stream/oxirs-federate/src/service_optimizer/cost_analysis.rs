@@ -29,7 +29,8 @@ impl ServiceOptimizer {
                 estimated_size = stats.avg_result_size;
 
                 // Adjust based on pattern selectivity
-                let selectivity = self.calculate_pattern_selectivity_local(pattern, service, registry);
+                let selectivity =
+                    self.calculate_pattern_selectivity_local(pattern, service, registry);
                 estimated_size = (estimated_size as f64 * selectivity) as u64;
             }
         }

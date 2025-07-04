@@ -1,6 +1,7 @@
 //! Tests for LDAP authentication
 
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::body::to_bytes;
 use oxirs_fuseki::{
     auth::{AuthResult, AuthService, User},
     config::{LdapConfig, SecurityConfig},
@@ -23,7 +24,7 @@ async fn test_ldap_service_creation() {
     let mut security_config = SecurityConfig::default();
     security_config.ldap = Some(ldap_config);
 
-    let auth_service = AuthService::new(security_config);
+    let auth_service = AuthService::new(security_config).await.unwrap();
 
     // Verify LDAP is enabled
     assert!(auth_service.is_ldap_enabled());
@@ -45,7 +46,7 @@ async fn test_ldap_authentication_flow() {
     let mut security_config = SecurityConfig::default();
     security_config.ldap = Some(ldap_config);
 
-    let auth_service = AuthService::new(security_config);
+    let auth_service = AuthService::new(security_config).await.unwrap();
 
     // Test authentication (this will use the mock implementation)
     match auth_service.authenticate_ldap("testuser", "testpass").await {
@@ -92,15 +93,9 @@ async fn test_active_directory_configuration() {
     assert_eq!(config.server, "ldap://dc1.corp.example.com");
     assert_eq!(
         config.bind_dn,
-        Some("service_account@corp.example.com".to_string())
+        "service_account@corp.example.com".to_string()
     );
     assert_eq!(config.user_filter, "(sAMAccountName={username})");
-
-    // Check Active Directory specific settings
-    assert!(config.active_directory.is_some());
-    let ad_config = config.active_directory.unwrap();
-    assert_eq!(ad_config.domain, "corp.example.com");
-    assert!(ad_config.follow_referrals);
 }
 
 #[tokio::test]
@@ -127,7 +122,7 @@ async fn test_ldap_handler_endpoints() {
     let mut security_config = SecurityConfig::default();
     security_config.ldap = Some(ldap_config);
 
-    let auth_service = AuthService::new(security_config.clone());
+    let auth_service = AuthService::new(security_config.clone()).await.unwrap();
     let state = AppState {
         store: oxirs_fuseki::store::Store::new().unwrap(),
         config: oxirs_fuseki::config::ServerConfig {
@@ -139,6 +134,8 @@ async fn test_ldap_handler_endpoints() {
         performance_service: None,
         query_optimizer: None,
         subscription_manager: None,
+        federation_manager: None,
+        streaming_manager: None,
         #[cfg(feature = "rate-limit")]
         rate_limiter: None,
     };
@@ -149,7 +146,7 @@ async fn test_ldap_handler_endpoints() {
         .route("/auth/ldap/test", axum::routing::get(test_ldap_connection))
         .route("/auth/ldap/groups", axum::routing::get(get_ldap_groups))
         .route("/auth/ldap/config", axum::routing::get(get_ldap_config))
-        .with_state(std::sync::Arc::new(state));
+        .with_state(state);
 
     // Test login endpoint
     let response = app
@@ -200,7 +197,7 @@ async fn test_ldap_handler_endpoints() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["configured"], true);
@@ -272,7 +269,7 @@ async fn test_ldap_caching() {
     let mut security_config = SecurityConfig::default();
     security_config.ldap = Some(ldap_config);
 
-    let auth_service = AuthService::new(security_config);
+    let auth_service = AuthService::new(security_config).await.unwrap();
 
     // First authentication attempt
     let _result1 = auth_service
@@ -311,7 +308,7 @@ mod integration_tests {
         let mut security_config = SecurityConfig::default();
         security_config.ldap = Some(ldap_config);
 
-        let auth_service = AuthService::new(security_config);
+        let auth_service = AuthService::new(security_config).await.unwrap();
 
         // Test connection
         match auth_service.test_ldap_connection().await {

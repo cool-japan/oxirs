@@ -1,7 +1,7 @@
 //! Tests for pattern matching optimization
 
 use oxirs_core::model::*;
-use oxirs_core::query::algebra::{TermPattern as AlgebraTermPattern, AlgebraTriplePattern};
+use oxirs_core::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
 use oxirs_core::query::pattern_optimizer::IndexStats;
 use oxirs_core::query::{IndexType, OptimizedPatternPlan, PatternExecutor, PatternOptimizer};
 use oxirs_core::store::IndexedGraph;
@@ -17,7 +17,9 @@ fn test_pattern_optimizer_basic() {
     // Create a simple pattern: ?s <http://example.org/type> <http://example.org/Person>
     let pattern = AlgebraTriplePattern {
         subject: AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-        predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+        predicate: AlgebraTermPattern::NamedNode(
+            NamedNode::new("http://example.org/type").unwrap(),
+        ),
         object: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
     };
 
@@ -37,19 +39,27 @@ fn test_pattern_optimizer_with_multiple_patterns() {
         // ?person <http://example.org/type> <http://example.org/Person>
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
-            object: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/type").unwrap(),
+            ),
+            object: AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/Person").unwrap(),
+            ),
         },
         // ?person <http://example.org/name> ?name
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/name").unwrap(),
+            ),
             object: AlgebraTermPattern::Variable(Variable::new("name").unwrap()),
         },
         // ?person <http://example.org/age> ?age
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/age").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/age").unwrap(),
+            ),
             object: AlgebraTermPattern::Variable(Variable::new("age").unwrap()),
         },
     ];
@@ -246,19 +256,25 @@ fn test_pattern_optimization_performance() {
         // Find people of specific age
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/age").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/age").unwrap(),
+            ),
             object: AlgebraTermPattern::Literal(Literal::new("25")),
         },
         // Get their type
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/type").unwrap(),
+            ),
             object: AlgebraTermPattern::Variable(Variable::new("type").unwrap()),
         },
         // Get their name
         AlgebraTriplePattern {
             subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/name").unwrap(),
+            ),
             object: AlgebraTermPattern::Variable(Variable::new("name").unwrap()),
         },
     ];

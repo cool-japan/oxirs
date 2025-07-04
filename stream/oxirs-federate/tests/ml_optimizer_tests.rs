@@ -4,8 +4,9 @@
 //! source selection learning, and predictive analytics.
 
 use oxirs_federate::{
-    ml_optimizer::*, planner::{QueryInfo, planning::QueryComplexity}, FederatedService, QueryType, ServiceRegistry,
-    TriplePattern,
+    ml_optimizer::*,
+    planner::{planning::QueryComplexity, QueryInfo},
+    FederatedService, QueryType, ServiceRegistry, TriplePattern,
 };
 use std::collections::HashMap;
 use std::time::{Duration, Instant, SystemTime};
@@ -60,7 +61,9 @@ async fn test_query_performance_prediction() {
             pattern_string: "?s ?p ?o".to_string(),
         }],
         filters: vec![],
-        variables: ["?s".to_string(), "?p".to_string(), "?o".to_string()].into_iter().collect(),
+        variables: ["?s".to_string(), "?p".to_string(), "?o".to_string()]
+            .into_iter()
+            .collect(),
         complexity: 1,
         estimated_cost: 10,
     };
@@ -168,39 +171,37 @@ async fn test_source_selection_learning() {
     ];
 
     // Create training samples instead - SourceSelectionPrediction has different structure
-    let training_samples = vec![
-        TrainingSample {
-            features: QueryFeatures {
-                pattern_count: 3,
-                join_count: 1,
-                filter_count: 1,
-                complexity_score: 2.0,
-                selectivity: 0.8,
-                service_count: 2,
-                avg_service_latency: 80.0,
-                data_size_estimate: 1024,
-                query_depth: 1,
-                has_optional: false,
-                has_union: false,
-                has_aggregation: false,
-                variable_count: 3,
-            },
-            outcome: PerformanceOutcome {
-                execution_time_ms: 80.0,
-                memory_usage_bytes: 1024,
-                network_io_ms: 20.0,
-                cpu_usage_percent: 50.0,
-                success_rate: 1.0,
-                error_count: 0,
-                cache_hit_rate: 0.8,
-                timestamp: SystemTime::now(),
-            },
-            service_selections: vec!["fast-service".to_string()],
-            join_order: vec!["pattern1".to_string()],
-            caching_decisions: std::collections::HashMap::new(),
-            query_id: "query1".to_string(),
+    let training_samples = vec![TrainingSample {
+        features: QueryFeatures {
+            pattern_count: 3,
+            join_count: 1,
+            filter_count: 1,
+            complexity_score: 2.0,
+            selectivity: 0.8,
+            service_count: 2,
+            avg_service_latency: 80.0,
+            data_size_estimate: 1024,
+            query_depth: 1,
+            has_optional: false,
+            has_union: false,
+            has_aggregation: false,
+            variable_count: 3,
         },
-    ];
+        outcome: PerformanceOutcome {
+            execution_time_ms: 80.0,
+            memory_usage_bytes: 1024,
+            network_io_ms: 20.0,
+            cpu_usage_percent: 50.0,
+            success_rate: 1.0,
+            error_count: 0,
+            cache_hit_rate: 0.8,
+            timestamp: SystemTime::now(),
+        },
+        service_selections: vec!["fast-service".to_string()],
+        join_order: vec!["pattern1".to_string()],
+        caching_decisions: std::collections::HashMap::new(),
+        query_id: "query1".to_string(),
+    }];
 
     // Train source selection model
     for sample in training_samples {
@@ -358,10 +359,16 @@ async fn test_join_order_optimization() {
         has_optional: false,
         has_union: false,
     };
-    let optimal_order = optimizer.optimize_join_order(&pattern_strings, &join_features).await.unwrap();
+    let optimal_order = optimizer
+        .optimize_join_order(&pattern_strings, &join_features)
+        .await
+        .unwrap();
 
     // Should recommend the most efficient order (type first)
-    assert_eq!(optimal_order.recommended_order, vec!["0".to_string(), "1".to_string(), "2".to_string()]);
+    assert_eq!(
+        optimal_order.recommended_order,
+        vec!["0".to_string(), "1".to_string(), "2".to_string()]
+    );
     assert!(optimal_order.expected_cost > 0.0);
     assert!(optimal_order.confidence >= 0.0 && optimal_order.confidence <= 1.0);
 }
@@ -475,9 +482,15 @@ async fn test_caching_strategy_learning() {
         .unwrap();
 
     // Should recommend caching for type patterns
-    assert!(caching_recommendation.expected_hit_rate >= 0.0 && caching_recommendation.expected_hit_rate <= 1.0);
+    assert!(
+        caching_recommendation.expected_hit_rate >= 0.0
+            && caching_recommendation.expected_hit_rate <= 1.0
+    );
     assert!(caching_recommendation.memory_requirements >= 0);
-    assert!(!caching_recommendation.cache_items.is_empty() || caching_recommendation.cache_items.is_empty()); // Can be empty if no recommendations
+    assert!(
+        !caching_recommendation.cache_items.is_empty()
+            || caching_recommendation.cache_items.is_empty()
+    ); // Can be empty if no recommendations
 }
 
 #[tokio::test]
@@ -527,28 +540,30 @@ async fn test_anomaly_detection() {
             cache_hit_rate: 0.85,
             timestamp: SystemTime::now(),
         };
-        optimizer.add_training_sample(TrainingSample {
-            features: QueryFeatures {
-                pattern_count: 1,
-                variable_count: 3,
-                filter_count: 0,
-                service_count: 1,
-                join_count: 0,
-                has_aggregation: false,
-                complexity_score: 0.2,
-                selectivity: 0.8,
-                avg_service_latency: 100.0,
-                data_size_estimate: 1024,
-                query_depth: 1,
-                has_optional: false,
-                has_union: false,
-            },
-            outcome: data,
-            service_selections: vec!["service1".to_string()],
-            join_order: vec!["0".to_string()],
-            caching_decisions: HashMap::new(),
-            query_id: format!("perf_test_{}", i),
-        }).await;
+        optimizer
+            .add_training_sample(TrainingSample {
+                features: QueryFeatures {
+                    pattern_count: 1,
+                    variable_count: 3,
+                    filter_count: 0,
+                    service_count: 1,
+                    join_count: 0,
+                    has_aggregation: false,
+                    complexity_score: 0.2,
+                    selectivity: 0.8,
+                    avg_service_latency: 100.0,
+                    data_size_estimate: 1024,
+                    query_depth: 1,
+                    has_optional: false,
+                    has_union: false,
+                },
+                outcome: data,
+                service_selections: vec!["service1".to_string()],
+                join_order: vec!["0".to_string()],
+                caching_decisions: HashMap::new(),
+                query_id: format!("perf_test_{}", i),
+            })
+            .await;
     }
 
     // Train anomaly detection model
@@ -581,7 +596,10 @@ async fn test_anomaly_detection() {
         has_optional: false,
         has_union: false,
     };
-    let anomaly_result = optimizer.detect_anomalies(&anomaly_features, &anomalous_data).await.unwrap();
+    let anomaly_result = optimizer
+        .detect_anomalies(&anomaly_features, &anomalous_data)
+        .await
+        .unwrap();
 
     // Should detect as anomaly
     assert!(anomaly_result.is_anomalous);
@@ -600,7 +618,10 @@ async fn test_anomaly_detection() {
         timestamp: SystemTime::now(),
     };
 
-    let normal_result = optimizer.detect_anomalies(&anomaly_features, &normal_data).await.unwrap();
+    let normal_result = optimizer
+        .detect_anomalies(&anomaly_features, &normal_data)
+        .await
+        .unwrap();
 
     // Should not detect as anomaly
     assert!(!normal_result.is_anomalous);
@@ -639,28 +660,30 @@ async fn test_feature_importance_analysis() {
     // Train model with sufficient data
     for i in 0..20 {
         for (j, data) in training_data.iter().enumerate() {
-            optimizer.add_training_sample(TrainingSample {
-                features: QueryFeatures {
-                    pattern_count: 1,
-                    variable_count: 3,
-                    filter_count: 0,
-                    service_count: 1,
-                    join_count: 0,
-                    has_aggregation: false,
-                    complexity_score: 0.2,
-                    selectivity: 0.8,
-                    avg_service_latency: 100.0,
-                    data_size_estimate: 1024,
-                    query_depth: 1,
-                    has_optional: false,
-                    has_union: false,
-                },
-                outcome: data.clone(),
-                service_selections: vec!["service1".to_string()],
-                join_order: vec!["0".to_string()],
-                caching_decisions: HashMap::new(),
-                query_id: format!("perf_test_{}_{}", i, j),
-            }).await;
+            optimizer
+                .add_training_sample(TrainingSample {
+                    features: QueryFeatures {
+                        pattern_count: 1,
+                        variable_count: 3,
+                        filter_count: 0,
+                        service_count: 1,
+                        join_count: 0,
+                        has_aggregation: false,
+                        complexity_score: 0.2,
+                        selectivity: 0.8,
+                        avg_service_latency: 100.0,
+                        data_size_estimate: 1024,
+                        query_depth: 1,
+                        has_optional: false,
+                        has_union: false,
+                    },
+                    outcome: data.clone(),
+                    service_selections: vec!["service1".to_string()],
+                    join_order: vec!["0".to_string()],
+                    caching_decisions: HashMap::new(),
+                    query_id: format!("perf_test_{}_{}", i, j),
+                })
+                .await;
         }
     }
 
@@ -697,28 +720,30 @@ async fn test_model_retraining() {
 
     // Record initial data multiple times
     for i in 0..10 {
-        optimizer.add_training_sample(TrainingSample {
-            features: QueryFeatures {
-                pattern_count: 1,
-                variable_count: 3,
-                filter_count: 0,
-                service_count: 1,
-                join_count: 0,
-                has_aggregation: false,
-                complexity_score: 0.2,
-                selectivity: 0.8,
-                avg_service_latency: 100.0,
-                data_size_estimate: 1024,
-                query_depth: 1,
-                has_optional: false,
-                has_union: false,
-            },
-            outcome: initial_data.clone(),
-            service_selections: vec!["service1".to_string()],
-            join_order: vec!["0".to_string()],
-            caching_decisions: HashMap::new(),
-            query_id: format!("initial_test_{}", i),
-        }).await;
+        optimizer
+            .add_training_sample(TrainingSample {
+                features: QueryFeatures {
+                    pattern_count: 1,
+                    variable_count: 3,
+                    filter_count: 0,
+                    service_count: 1,
+                    join_count: 0,
+                    has_aggregation: false,
+                    complexity_score: 0.2,
+                    selectivity: 0.8,
+                    avg_service_latency: 100.0,
+                    data_size_estimate: 1024,
+                    query_depth: 1,
+                    has_optional: false,
+                    has_union: false,
+                },
+                outcome: initial_data.clone(),
+                service_selections: vec!["service1".to_string()],
+                join_order: vec!["0".to_string()],
+                caching_decisions: HashMap::new(),
+                query_id: format!("initial_test_{}", i),
+            })
+            .await;
     }
 
     // Train initial model
@@ -732,28 +757,30 @@ async fn test_model_retraining() {
 
     // Record more data to trigger retraining
     for i in 0..5 {
-        optimizer.add_training_sample(TrainingSample {
-            features: QueryFeatures {
-                pattern_count: 1,
-                variable_count: 3,
-                filter_count: 0,
-                service_count: 1,
-                join_count: 0,
-                has_aggregation: false,
-                complexity_score: 0.2,
-                selectivity: 0.8,
-                avg_service_latency: 100.0,
-                data_size_estimate: 1024,
-                query_depth: 1,
-                has_optional: false,
-                has_union: false,
-            },
-            outcome: initial_data.clone(),
-            service_selections: vec!["service1".to_string()],
-            join_order: vec!["0".to_string()],
-            caching_decisions: HashMap::new(),
-            query_id: format!("retrain_test_{}", i),
-        }).await;
+        optimizer
+            .add_training_sample(TrainingSample {
+                features: QueryFeatures {
+                    pattern_count: 1,
+                    variable_count: 3,
+                    filter_count: 0,
+                    service_count: 1,
+                    join_count: 0,
+                    has_aggregation: false,
+                    complexity_score: 0.2,
+                    selectivity: 0.8,
+                    avg_service_latency: 100.0,
+                    data_size_estimate: 1024,
+                    query_depth: 1,
+                    has_optional: false,
+                    has_union: false,
+                },
+                outcome: initial_data.clone(),
+                service_selections: vec!["service1".to_string()],
+                join_order: vec!["0".to_string()],
+                caching_decisions: HashMap::new(),
+                query_id: format!("retrain_test_{}", i),
+            })
+            .await;
     }
 
     // Check if model was retrained
@@ -787,28 +814,30 @@ async fn test_cross_validation() {
 
     // Record training data
     for (i, data) in training_data.into_iter().enumerate() {
-        optimizer.add_training_sample(TrainingSample {
-            features: QueryFeatures {
-                pattern_count: 1,
-                variable_count: 3,
-                filter_count: 0,
-                service_count: 1,
-                join_count: 0,
-                has_aggregation: false,
-                complexity_score: 0.2,
-                selectivity: 0.8,
-                avg_service_latency: 100.0,
-                data_size_estimate: 1024,
-                query_depth: 1,
-                has_optional: false,
-                has_union: false,
-            },
-            outcome: data,
-            service_selections: vec!["service1".to_string()],
-            join_order: vec!["0".to_string()],
-            caching_decisions: HashMap::new(),
-            query_id: format!("perf_test_{}", i),
-        }).await;
+        optimizer
+            .add_training_sample(TrainingSample {
+                features: QueryFeatures {
+                    pattern_count: 1,
+                    variable_count: 3,
+                    filter_count: 0,
+                    service_count: 1,
+                    join_count: 0,
+                    has_aggregation: false,
+                    complexity_score: 0.2,
+                    selectivity: 0.8,
+                    avg_service_latency: 100.0,
+                    data_size_estimate: 1024,
+                    query_depth: 1,
+                    has_optional: false,
+                    has_union: false,
+                },
+                outcome: data,
+                service_selections: vec!["service1".to_string()],
+                join_order: vec!["0".to_string()],
+                caching_decisions: HashMap::new(),
+                query_id: format!("perf_test_{}", i),
+            })
+            .await;
     }
 
     // Validate model training with statistical analysis
@@ -818,7 +847,7 @@ async fn test_cross_validation() {
     assert!(statistics.training_samples_count >= 50); // We added 50 samples
     assert!(statistics.model_accuracy >= 0.0 && statistics.model_accuracy <= 1.0);
     assert!(statistics.last_training.is_some());
-    
+
     // Test prediction functionality
     let test_features = QueryFeatures {
         pattern_count: 1,
@@ -835,7 +864,7 @@ async fn test_cross_validation() {
         has_optional: false,
         has_union: false,
     };
-    
+
     // Should be able to make predictions after training
     let prediction_result = optimizer.predict_performance(&test_features).await;
     assert!(prediction_result.is_ok());
@@ -863,28 +892,30 @@ async fn test_prediction_confidence_thresholding() {
 
     // Record minimal training data
     for (i, data) in limited_training_data.into_iter().enumerate() {
-        optimizer.add_training_sample(TrainingSample {
-            features: QueryFeatures {
-                pattern_count: 1,
-                variable_count: 3,
-                filter_count: 0,
-                service_count: 1,
-                join_count: 0,
-                has_aggregation: false,
-                complexity_score: 0.2,
-                selectivity: 0.8,
-                avg_service_latency: 100.0,
-                data_size_estimate: 1024,
-                query_depth: 1,
-                has_optional: false,
-                has_union: false,
-            },
-            outcome: data,
-            service_selections: vec!["service1".to_string()],
-            join_order: vec!["0".to_string()],
-            caching_decisions: HashMap::new(),
-            query_id: format!("perf_test_{}", i),
-        }).await;
+        optimizer
+            .add_training_sample(TrainingSample {
+                features: QueryFeatures {
+                    pattern_count: 1,
+                    variable_count: 3,
+                    filter_count: 0,
+                    service_count: 1,
+                    join_count: 0,
+                    has_aggregation: false,
+                    complexity_score: 0.2,
+                    selectivity: 0.8,
+                    avg_service_latency: 100.0,
+                    data_size_estimate: 1024,
+                    query_depth: 1,
+                    has_optional: false,
+                    has_union: false,
+                },
+                outcome: data,
+                service_selections: vec!["service1".to_string()],
+                join_order: vec!["0".to_string()],
+                caching_decisions: HashMap::new(),
+                query_id: format!("perf_test_{}", i),
+            })
+            .await;
     }
 
     optimizer.retrain_models().await.unwrap();
@@ -900,7 +931,9 @@ async fn test_prediction_confidence_thresholding() {
             pattern_string: "?x ?y ?z".to_string(),
         }],
         filters: vec![],
-        variables: ["?x".to_string(), "?y".to_string(), "?z".to_string()].into_iter().collect(),
+        variables: ["?x".to_string(), "?y".to_string(), "?z".to_string()]
+            .into_iter()
+            .collect(),
         complexity: 1,
         estimated_cost: 10,
     };

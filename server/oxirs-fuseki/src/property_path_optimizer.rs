@@ -1215,10 +1215,7 @@ impl AdvancedPropertyPathOptimizer {
     }
 
     /// Convert local TraversalDirection (no conversion needed since using same type)
-    fn convert_direction(
-        &self,
-        direction: TraversalDirection,
-    ) -> TraversalDirection {
+    fn convert_direction(&self, direction: TraversalDirection) -> TraversalDirection {
         direction // No conversion needed since we're using the same type
     }
 
@@ -1240,16 +1237,10 @@ impl AdvancedPropertyPathOptimizer {
                         Some(predicate.clone()),
                         TraversalDirection::Forward,
                     ),
-                    PathOperation::Union(_) => (
-                        "union".to_string(),
-                        None,
-                        TraversalDirection::Forward,
-                    ),
-                    _ => (
-                        "unknown".to_string(),
-                        None,
-                        TraversalDirection::Forward,
-                    ),
+                    PathOperation::Union(_) => {
+                        ("union".to_string(), None, TraversalDirection::Forward)
+                    }
+                    _ => ("unknown".to_string(), None, TraversalDirection::Forward),
                 };
 
                 PathStep {

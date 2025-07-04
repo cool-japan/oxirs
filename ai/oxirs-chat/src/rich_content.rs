@@ -388,8 +388,33 @@ impl RichMessage {
     /// Add a table
     pub fn add_table(&mut self, headers: Vec<String>, rows: Vec<Vec<String>>) {
         self.add_content(RichContent::Table {
-            headers: headers.into_iter().map(|h| TableHeader { name: h, data_type: TableDataType::Text, sortable: true, filterable: true, width: None, alignment: TextAlignment::Left }).collect(),
-            rows: rows.into_iter().map(|r| TableRow { cells: r.into_iter().map(|c| TableCell { value: c, data_type: TableDataType::Text, formatting: None, link: None }).collect(), metadata: HashMap::new(), styling: None }).collect(),
+            headers: headers
+                .into_iter()
+                .map(|h| TableHeader {
+                    name: h,
+                    data_type: TableDataType::Text,
+                    sortable: true,
+                    filterable: true,
+                    width: None,
+                    alignment: TextAlignment::Left,
+                })
+                .collect(),
+            rows: rows
+                .into_iter()
+                .map(|r| TableRow {
+                    cells: r
+                        .into_iter()
+                        .map(|c| TableCell {
+                            value: c,
+                            data_type: TableDataType::Text,
+                            formatting: None,
+                            link: None,
+                        })
+                        .collect(),
+                    metadata: HashMap::new(),
+                    styling: None,
+                })
+                .collect(),
             pagination: None,
             sorting: None,
             filtering: None,
@@ -440,12 +465,26 @@ impl RichMessage {
                 RichContent::Table { headers, rows, .. } => {
                     // Convert to markdown table
                     if !headers.is_empty() {
-                        markdown.push_str(&format!("| {} |\n", headers.iter().map(|h| h.name.as_str()).collect::<Vec<_>>().join(" | ")));
+                        markdown.push_str(&format!(
+                            "| {} |\n",
+                            headers
+                                .iter()
+                                .map(|h| h.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(" | ")
+                        ));
                         markdown
                             .push_str(&format!("| {} |\n", vec!["---"; headers.len()].join(" | ")));
 
                         for row in rows {
-                            markdown.push_str(&format!("| {} |\n", row.cells.iter().map(|c| c.value.as_str()).collect::<Vec<_>>().join(" | ")));
+                            markdown.push_str(&format!(
+                                "| {} |\n",
+                                row.cells
+                                    .iter()
+                                    .map(|c| c.value.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(" | ")
+                            ));
                         }
                         markdown.push_str("\n");
                     }
@@ -463,11 +502,20 @@ impl RichMessage {
                 RichContent::Timeline { events, .. } => {
                     markdown.push_str(&format!("📅 **Timeline**: {} events\n\n", events.len()));
                 }
-                RichContent::Map { map_type, markers, .. } => {
-                    markdown.push_str(&format!("🗺️ **Map**: {:?} with {} markers\n\n", map_type, markers.len()));
+                RichContent::Map {
+                    map_type, markers, ..
+                } => {
+                    markdown.push_str(&format!(
+                        "🗺️ **Map**: {:?} with {} markers\n\n",
+                        map_type,
+                        markers.len()
+                    ));
                 }
                 RichContent::ThreeDVisualization { objects, .. } => {
-                    markdown.push_str(&format!("🎯 **3D Visualization**: {} objects\n\n", objects.len()));
+                    markdown.push_str(&format!(
+                        "🎯 **3D Visualization**: {} objects\n\n",
+                        objects.len()
+                    ));
                 }
                 RichContent::Dashboard { widgets, .. } => {
                     markdown.push_str(&format!("📊 **Dashboard**: {} widgets\n\n", widgets.len()));
@@ -595,10 +643,13 @@ impl RichMessage {
                         events.len()
                     ));
                 }
-                RichContent::Map { map_type, markers, .. } => {
+                RichContent::Map {
+                    map_type, markers, ..
+                } => {
                     html.push_str(&format!(
                         "<div class=\"map\">🗺️ <strong>Map</strong>: {:?} with {} markers</div>",
-                        map_type, markers.len()
+                        map_type,
+                        markers.len()
                     ));
                 }
                 RichContent::ThreeDVisualization { objects, .. } => {
@@ -620,7 +671,9 @@ impl RichMessage {
                     html.push_str("<div class=\"video\">🎥 <strong>Video Content</strong></div>");
                 }
                 RichContent::Widget { .. } => {
-                    html.push_str("<div class=\"widget\">🔧 <strong>Interactive Widget</strong></div>");
+                    html.push_str(
+                        "<div class=\"widget\">🔧 <strong>Interactive Widget</strong></div>",
+                    );
                 }
             }
         }

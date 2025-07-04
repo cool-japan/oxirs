@@ -1,7 +1,7 @@
 //! Quantum performance monitoring
 
-use std::time::Instant;
 use super::{QuantumConfig, QuantumProcessingStatistics};
+use std::time::Instant;
 
 /// Quantum performance monitor
 pub struct QuantumPerformanceMonitor {

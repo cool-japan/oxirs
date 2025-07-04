@@ -8,7 +8,6 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use uuid::Uuid;
 
-
 /// Execution context for query processing
 #[derive(Debug, Clone)]
 pub struct ExecutionContext {
@@ -638,7 +637,7 @@ impl std::fmt::Display for StepType {
 }
 
 /// Retry configuration for execution steps
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryConfig {
     pub max_attempts: usize,
     pub initial_delay: Duration,

@@ -610,7 +610,7 @@ impl FaissMigrationTool {
             } else {
                 source_path.to_path_buf()
             };
-            
+
             if let Ok(file_content) = std::fs::read(read_path) {
                 if file_content.len() >= 5 && &file_content[0..5] == b"FAISS" {
                     debug!("Detected FAISS native format");

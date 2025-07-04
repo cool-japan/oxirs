@@ -182,7 +182,8 @@ impl ChatSession {
 
     pub fn get_context_for_query(&self) -> Vec<&Message> {
         let context_message_ids = self.context_window.get_context_messages();
-        self.messages.iter()
+        self.messages
+            .iter()
             .filter(|msg| context_message_ids.contains(&msg.id))
             .collect()
     }

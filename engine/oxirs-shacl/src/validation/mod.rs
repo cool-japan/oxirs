@@ -266,7 +266,7 @@ impl ValidationViolation {
 impl std::hash::Hash for ValidationViolation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         use std::hash::Hash;
-        
+
         self.focus_node.hash(state);
         self.result_path.hash(state);
         self.value.hash(state);

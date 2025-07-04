@@ -2,7 +2,7 @@
 
 use oxirs_core::query::algebra::AlgebraTriplePattern;
 
-use super::{types::*, core::QueryExecutionContext};
+use super::{core::QueryExecutionContext, types::*};
 use crate::{Result, ShaclAiError};
 
 /// Real-time feedback processor
@@ -10,10 +10,10 @@ use crate::{Result, ShaclAiError};
 pub struct RealTimeFeedbackProcessor {
     /// Feedback history
     feedback_history: Vec<FeedbackRecord>,
-    
+
     /// Adaptation parameters
     adaptation_rate: f64,
-    
+
     /// Performance metrics
     metrics: FeedbackMetrics,
 }
@@ -61,7 +61,7 @@ impl RealTimeFeedbackProcessor {
         prediction: &CostPrediction,
     ) -> Result<()> {
         let error = (prediction.estimated_cost - actual_cost).abs() / actual_cost.max(1.0);
-        
+
         let feedback_record = FeedbackRecord {
             patterns: patterns.to_vec(),
             context: context.clone(),
@@ -72,10 +72,10 @@ impl RealTimeFeedbackProcessor {
         };
 
         self.feedback_history.push(feedback_record);
-        
+
         // Update metrics
         self.update_metrics();
-        
+
         // Trigger adaptation if needed
         if self.should_adapt() {
             self.adapt_parameters()?;
@@ -91,30 +91,32 @@ impl RealTimeFeedbackProcessor {
 
     fn update_metrics(&mut self) {
         self.metrics.total_feedback_count = self.feedback_history.len();
-        
+
         if !self.feedback_history.is_empty() {
-            self.metrics.average_error = self.feedback_history
-                .iter()
-                .map(|r| r.error)
-                .sum::<f64>() / self.feedback_history.len() as f64;
-            
+            self.metrics.average_error = self.feedback_history.iter().map(|r| r.error).sum::<f64>()
+                / self.feedback_history.len() as f64;
+
             // Calculate error trend (simplified)
             if self.feedback_history.len() >= 10 {
-                let recent_error: f64 = self.feedback_history
+                let recent_error: f64 = self
+                    .feedback_history
                     .iter()
                     .rev()
                     .take(5)
                     .map(|r| r.error)
-                    .sum::<f64>() / 5.0;
-                
-                let older_error: f64 = self.feedback_history
+                    .sum::<f64>()
+                    / 5.0;
+
+                let older_error: f64 = self
+                    .feedback_history
                     .iter()
                     .rev()
                     .skip(5)
                     .take(5)
                     .map(|r| r.error)
-                    .sum::<f64>() / 5.0;
-                
+                    .sum::<f64>()
+                    / 5.0;
+
                 self.metrics.error_trend = recent_error - older_error;
             }
         }
@@ -132,10 +134,10 @@ impl RealTimeFeedbackProcessor {
         } else {
             self.adaptation_rate *= 0.95; // Decrease learning rate
         }
-        
+
         self.adaptation_rate = self.adaptation_rate.clamp(0.001, 0.1);
         self.metrics.adaptation_count += 1;
-        
+
         Ok(())
     }
 

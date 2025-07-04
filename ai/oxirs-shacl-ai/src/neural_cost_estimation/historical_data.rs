@@ -3,7 +3,11 @@
 use oxirs_core::query::algebra::AlgebraTriplePattern;
 use std::collections::VecDeque;
 
-use super::{config::HistoricalDataConfig, types::*, core::{QueryExecutionContext, TrainingData}};
+use super::{
+    config::HistoricalDataConfig,
+    core::{QueryExecutionContext, TrainingData},
+    types::*,
+};
 use crate::{Result, ShaclAiError};
 
 /// Historical data manager
@@ -11,10 +15,10 @@ use crate::{Result, ShaclAiError};
 pub struct HistoricalDataManager {
     /// Configuration
     config: HistoricalDataConfig,
-    
+
     /// Performance records
     performance_records: VecDeque<HistoricalPerformanceRecord>,
-    
+
     /// Training data cache
     training_data_cache: Option<TrainingData>,
 }
@@ -76,11 +80,12 @@ impl HistoricalDataManager {
 
     /// Clear old records
     pub fn cleanup_old_records(&mut self) -> Result<()> {
-        let cutoff_time = std::time::SystemTime::now() - 
-            std::time::Duration::from_secs(self.config.retention_period_days as u64 * 24 * 3600);
+        let cutoff_time = std::time::SystemTime::now()
+            - std::time::Duration::from_secs(self.config.retention_period_days as u64 * 24 * 3600);
 
-        self.performance_records.retain(|record| record.timestamp > cutoff_time);
-        
+        self.performance_records
+            .retain(|record| record.timestamp > cutoff_time);
+
         Ok(())
     }
 
@@ -98,10 +103,12 @@ impl HistoricalDataManager {
             return 0.0;
         }
 
-        let total_error: f64 = self.performance_records
+        let total_error: f64 = self
+            .performance_records
             .iter()
             .map(|record| {
-                (record.prediction.estimated_cost - record.actual_cost).abs() / record.actual_cost.max(1.0)
+                (record.prediction.estimated_cost - record.actual_cost).abs()
+                    / record.actual_cost.max(1.0)
             })
             .sum();
 

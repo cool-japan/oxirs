@@ -514,8 +514,8 @@ impl StreamingProcessor {
         let publishers = self.event_publishers.read().await;
         if let Some(publisher) = publishers.get(stream_id) {
             let receiver = publisher.subscribe();
-            Ok(Box::pin(
-                BroadcastStream::new(receiver).filter_map(|result| async move {
+            Ok(Box::pin(BroadcastStream::new(receiver).filter_map(
+                |result| async move {
                     match result {
                         Ok(event) => Some(event),
                         Err(e) => {
@@ -523,8 +523,8 @@ impl StreamingProcessor {
                             None
                         }
                     }
-                }),
-            ))
+                },
+            )))
         } else {
             Err(anyhow!("Stream not found: {}", stream_id))
         }

@@ -144,25 +144,29 @@ enum ShapeSource {
 impl std::fmt::Debug for ShapeSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ShapeSource::RdfData { data, format, base_iri } => {
-                f.debug_struct("RdfData")
-                    .field("data", &format!("<{} bytes>", data.len()))
-                    .field("format", format)
-                    .field("base_iri", base_iri)
-                    .finish()
-            }
-            ShapeSource::Store { store: _, graph_name } => {
-                f.debug_struct("Store")
-                    .field("store", &"<Store>")
-                    .field("graph_name", graph_name)
-                    .finish()
-            }
-            ShapeSource::File { path, format } => {
-                f.debug_struct("File")
-                    .field("path", path)
-                    .field("format", format)
-                    .finish()
-            }
+            ShapeSource::RdfData {
+                data,
+                format,
+                base_iri,
+            } => f
+                .debug_struct("RdfData")
+                .field("data", &format!("<{} bytes>", data.len()))
+                .field("format", format)
+                .field("base_iri", base_iri)
+                .finish(),
+            ShapeSource::Store {
+                store: _,
+                graph_name,
+            } => f
+                .debug_struct("Store")
+                .field("store", &"<Store>")
+                .field("graph_name", graph_name)
+                .finish(),
+            ShapeSource::File { path, format } => f
+                .debug_struct("File")
+                .field("path", path)
+                .field("format", format)
+                .finish(),
         }
     }
 }

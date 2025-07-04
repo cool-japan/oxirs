@@ -144,7 +144,11 @@ pub struct TripleKey {
 impl TripleKey {
     /// Create a new triple key
     pub fn new(first: NodeId, second: NodeId, third: NodeId) -> Self {
-        Self { first, second, third }
+        Self {
+            first,
+            second,
+            third,
+        }
     }
 
     /// Convert to bytes for storage
@@ -161,7 +165,7 @@ impl TripleKey {
         if bytes.len() != 24 {
             return Err(anyhow!("Invalid TripleKey bytes length: {}", bytes.len()));
         }
-        
+
         let first = NodeId::from_le_bytes([
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
         ]);
@@ -324,7 +328,6 @@ impl Display for QuadKey {
     }
 }
 
-
 /// Triple store configuration
 #[derive(Debug, Clone)]
 pub struct TripleStoreConfig {
@@ -481,10 +484,10 @@ impl TripleStore {
     /// Begin a new transaction
     pub fn begin_transaction(&self) -> Result<TransactionId> {
         let tx_id = self.mvcc_storage.begin_transaction(false)?;
-        
+
         // For now, we'll handle quad operations differently to avoid transaction ID conflicts
         // In a proper implementation, we should use a single MVCC instance for both triples and quads
-        
+
         // Update stats (non-blocking for performance)
         if let Ok(mut stats) = self.stats.try_lock() {
             stats.active_transactions += 1;
@@ -508,7 +511,7 @@ impl TripleStore {
     /// Commit a transaction
     pub fn commit_transaction(&self, tx_id: TransactionId) -> Result<Version> {
         let version = self.mvcc_storage.commit_transaction(tx_id)?;
-        
+
         // For quad operations, we need to handle the quad storage differently
         // For now, we'll ignore quad storage transaction errors as a workaround
         let _ = self.quad_storage.commit_transaction(tx_id);
@@ -525,7 +528,7 @@ impl TripleStore {
     /// Abort a transaction
     pub fn abort_transaction(&self, tx_id: TransactionId) -> Result<()> {
         self.mvcc_storage.abort_transaction(tx_id)?;
-        
+
         // Also try to abort in quad storage (ignore errors for now)
         let _ = self.quad_storage.abort_transaction(tx_id);
 
@@ -547,10 +550,10 @@ impl TripleStore {
 
         for (&index_type, btree) in indices.iter() {
             let key = index_type.triple_to_key(triple);
-            
+
             // Create a prefixed key to distinguish between different indices
             let prefixed_key = TripleKey::new(
-                index_type as u64,  // Use index type as prefix
+                index_type as u64, // Use index type as prefix
                 key.first,
                 key.second * 1000000 + key.third, // Combine second and third for uniqueness
             );
@@ -571,16 +574,16 @@ impl TripleStore {
     pub fn insert_quad_tx(&self, tx_id: TransactionId, quad: &Quad) -> Result<()> {
         // For now, store quads as extended triples in the main MVCC storage
         // This avoids the transaction synchronization issue between separate MVCC instances
-        
+
         // Create a unique key for the quad using a special encoding
         // We'll use the graph ID as the first component to distinguish from regular triples
         let quad_key = TripleKey::new(
             quad.graph.unwrap_or(self.default_graph),
             quad.subject,
             // Combine predicate and object into a composite key (simplified approach)
-            quad.predicate + quad.object, 
+            quad.predicate + quad.object,
         );
-        
+
         // Store in main MVCC storage
         self.mvcc_storage.put_tx(tx_id, quad_key, true)?;
 
@@ -1171,10 +1174,10 @@ impl TripleStore {
                 let combined_third = triple_key.third;
                 let third_part = combined_third % 1000000;
                 let second_orig = combined_third / 1000000;
-                
+
                 // Reconstruct the original key
                 let orig_key = TripleKey::new(second_part, second_orig, third_part);
-                
+
                 // Convert back to triple using the index type
                 let triple = self.key_to_triple(index_type, &orig_key);
 

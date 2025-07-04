@@ -338,7 +338,8 @@ impl EnhancedSnapshotManager {
         }
 
         let metadata_data = tokio::fs::read(&metadata_path).await?;
-        let metadata: EnhancedSnapshotMetadata = self.serializer.lock().await.deserialize(&metadata_data)?;
+        let metadata: EnhancedSnapshotMetadata =
+            self.serializer.lock().await.deserialize(&metadata_data)?;
 
         // Cache metadata
         {
@@ -605,7 +606,9 @@ impl Clone for EnhancedSnapshotManager {
         Self {
             node_id: self.node_id,
             data_dir: self.data_dir.clone(),
-            serializer: Arc::new(Mutex::new(BinarySerializer::new(SerializationConfig::default()))),
+            serializer: Arc::new(Mutex::new(BinarySerializer::new(
+                SerializationConfig::default(),
+            ))),
             corruption_detector: CorruptionDetector::new(true),
             active_transfers: Arc::clone(&self.active_transfers),
             snapshot_cache: Arc::clone(&self.snapshot_cache),

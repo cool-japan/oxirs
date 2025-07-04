@@ -13,12 +13,9 @@ use std::collections::HashSet;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
-use crate::{
-    FederatedService,
-    ServiceCapability, service::ServiceMetadata, ServicePerformance,
-};
 use crate::service::ServiceRegistry;
 use crate::service::ServiceType;
+use crate::{service::ServiceMetadata, FederatedService, ServiceCapability, ServicePerformance};
 
 /// Service discovery manager
 #[derive(Debug)]

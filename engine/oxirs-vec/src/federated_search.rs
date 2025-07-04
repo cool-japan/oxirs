@@ -6,8 +6,8 @@
 //! organizations, and trust domains while maintaining security and privacy.
 
 use crate::{
-    distributed_vector_search::{DistributedVectorSearch, DistributedNodeConfig, NodeHealthStatus},
-    quantum_search::{QuantumVectorSearch, QuantumSearchResult},
+    distributed_vector_search::{DistributedNodeConfig, DistributedVectorSearch, NodeHealthStatus},
+    quantum_search::{QuantumSearchResult, QuantumVectorSearch},
     similarity::{SimilarityMetric, SimilarityResult},
     Vector, VectorError,
 };
@@ -597,8 +597,10 @@ impl FederatedVectorSearch {
     /// Create a new federated vector search coordinator
     pub async fn new(config: FederatedSearchConfig) -> Result<Self> {
         let distributed_search = Arc::new(
-            DistributedVectorSearch::new(crate::distributed_vector_search::PartitioningStrategy::Hash)
-                .context("Failed to create distributed search coordinator")?
+            DistributedVectorSearch::new(
+                crate::distributed_vector_search::PartitioningStrategy::Hash,
+            )
+            .context("Failed to create distributed search coordinator")?,
         );
 
         let quantum_search = Arc::new(QuantumVectorSearch::with_default_config());
@@ -618,7 +620,8 @@ impl FederatedVectorSearch {
 
     /// Register a new federation endpoint
     pub async fn register_federation(&self, endpoint: FederationEndpoint) -> Result<()> {
-        let span = span!(Level::DEBUG, "register_federation", federation_id = %endpoint.federation_id);
+        let span =
+            span!(Level::DEBUG, "register_federation", federation_id = %endpoint.federation_id);
         let _enter = span.enter();
 
         // Validate endpoint configuration
@@ -643,10 +646,14 @@ impl FederatedVectorSearch {
         // Initialize trust tracking
         {
             let mut trust_manager = self.trust_manager.write().unwrap();
-            trust_manager.initialize_federation_trust(&endpoint.federation_id, endpoint.trust_level);
+            trust_manager
+                .initialize_federation_trust(&endpoint.federation_id, endpoint.trust_level);
         }
 
-        info!("Successfully registered federation: {}", endpoint.federation_id);
+        info!(
+            "Successfully registered federation: {}",
+            endpoint.federation_id
+        );
         Ok(())
     }
 
@@ -667,30 +674,35 @@ impl FederatedVectorSearch {
         let target_federations = self.select_target_federations(&query).await?;
 
         // Execute parallel federated queries
-        let federation_results = self.execute_parallel_federated_queries(&query, &target_federations).await?;
+        let federation_results = self
+            .execute_parallel_federated_queries(&query, &target_federations)
+            .await?;
 
         // Apply privacy preservation
         let privacy_preserved_results = if self.config.enable_result_aggregation {
-            self.apply_privacy_preservation(&federation_results, &query.privacy_requirements).await?
+            self.apply_privacy_preservation(&federation_results, &query.privacy_requirements)
+                .await?
         } else {
             federation_results
         };
 
         // Aggregate results
-        let aggregated_response = self.aggregate_federated_results(
-            &query,
-            privacy_preserved_results,
-            start_time,
-        ).await?;
+        let aggregated_response = self
+            .aggregate_federated_results(&query, privacy_preserved_results, start_time)
+            .await?;
 
         // Cache the response
         self.cache_response(&aggregated_response).await;
 
         // Update metrics
-        self.update_metrics(&aggregated_response, start_time.elapsed()).await;
+        self.update_metrics(&aggregated_response, start_time.elapsed())
+            .await;
 
-        info!("Federated search completed for query {} with {} results", 
-              query.query_id, aggregated_response.results.len());
+        info!(
+            "Federated search completed for query {} with {} results",
+            query.query_id,
+            aggregated_response.results.len()
+        );
 
         Ok(aggregated_response)
     }
@@ -698,23 +710,26 @@ impl FederatedVectorSearch {
     /// Get federation health status
     pub fn get_federation_health(&self) -> HashMap<String, NodeHealthStatus> {
         let federations = self.federations.read().unwrap();
-        federations.iter().map(|(id, endpoint)| {
-            // Determine health based on trust scores and recent performance
-            let trust_manager = self.trust_manager.read().unwrap();
-            let trust_score = trust_manager.get_trust_score(id).unwrap_or(0.0);
-            
-            let health = if trust_score >= 0.8 {
-                NodeHealthStatus::Healthy
-            } else if trust_score >= 0.5 {
-                NodeHealthStatus::Degraded
-            } else if trust_score >= 0.2 {
-                NodeHealthStatus::Unhealthy
-            } else {
-                NodeHealthStatus::Offline
-            };
+        federations
+            .iter()
+            .map(|(id, endpoint)| {
+                // Determine health based on trust scores and recent performance
+                let trust_manager = self.trust_manager.read().unwrap();
+                let trust_score = trust_manager.get_trust_score(id).unwrap_or(0.0);
 
-            (id.clone(), health)
-        }).collect()
+                let health = if trust_score >= 0.8 {
+                    NodeHealthStatus::Healthy
+                } else if trust_score >= 0.5 {
+                    NodeHealthStatus::Degraded
+                } else if trust_score >= 0.2 {
+                    NodeHealthStatus::Unhealthy
+                } else {
+                    NodeHealthStatus::Offline
+                };
+
+                (id.clone(), health)
+            })
+            .collect()
     }
 
     /// Get federation performance metrics
@@ -723,16 +738,16 @@ impl FederatedVectorSearch {
     }
 
     // Private implementation methods
-    
+
     fn validate_federation_endpoint(&self, endpoint: &FederationEndpoint) -> Result<()> {
         if endpoint.federation_id.is_empty() {
             return Err(anyhow!("Federation ID cannot be empty"));
         }
-        
+
         if endpoint.base_url.is_empty() {
             return Err(anyhow!("Base URL cannot be empty"));
         }
-        
+
         if endpoint.trust_level < 0.0 || endpoint.trust_level > 1.0 {
             return Err(anyhow!("Trust level must be between 0.0 and 1.0"));
         }
@@ -778,7 +793,10 @@ impl FederatedVectorSearch {
             }
 
             // Check dimension compatibility
-            if !endpoint.supported_dimensions.contains(&query.vector.dimensions) {
+            if !endpoint
+                .supported_dimensions
+                .contains(&query.vector.dimensions)
+            {
                 continue;
             }
 
@@ -805,7 +823,7 @@ impl FederatedVectorSearch {
 
         // For this implementation, we'll simulate federated query execution
         // In a real implementation, this would involve HTTP requests to federation endpoints
-        
+
         for federation_id in target_federations {
             if let Some(endpoint) = self.federations.read().unwrap().get(federation_id) {
                 // Simulate query execution with some example results
@@ -863,7 +881,7 @@ impl FederatedVectorSearch {
 
         // Simple aggregation strategy for this implementation
         let mut aggregated_results = results.clone();
-        
+
         // Sort by trust-weighted similarity score
         aggregated_results.sort_by(|a, b| {
             let score_a = a.result.similarity * a.trust_score * a.confidence;
@@ -880,9 +898,11 @@ impl FederatedVectorSearch {
             total_raw_results: results.len(),
             aggregated_results: aggregated_results.len(),
             avg_response_time_ms: processing_time.as_millis() as u64,
-            trust_weighted_quality: aggregated_results.iter()
+            trust_weighted_quality: aggregated_results
+                .iter()
                 .map(|r| r.result.similarity * r.trust_score)
-                .sum::<f32>() / aggregated_results.len() as f32,
+                .sum::<f32>()
+                / aggregated_results.len() as f32,
         };
 
         let aggregation_metadata = AggregationMetadata {
@@ -917,15 +937,16 @@ impl FederatedVectorSearch {
     async fn update_metrics(&self, response: &FederatedSearchResponse, elapsed: Duration) {
         let mut metrics = self.metrics.write().unwrap();
         metrics.total_queries += 1;
-        
+
         if !response.results.is_empty() {
             metrics.successful_queries += 1;
         } else {
             metrics.failed_queries += 1;
         }
 
-        metrics.avg_response_time_ms = 
-            (metrics.avg_response_time_ms * (metrics.total_queries - 1) as f64 + elapsed.as_millis() as f64) 
+        metrics.avg_response_time_ms = (metrics.avg_response_time_ms
+            * (metrics.total_queries - 1) as f64
+            + elapsed.as_millis() as f64)
             / metrics.total_queries as f64;
     }
 }
@@ -951,8 +972,10 @@ impl TrustManager {
     }
 
     fn initialize_federation_trust(&mut self, federation_id: &str, initial_trust: f32) {
-        self.trust_scores.insert(federation_id.to_string(), initial_trust);
-        self.trust_history.insert(federation_id.to_string(), Vec::new());
+        self.trust_scores
+            .insert(federation_id.to_string(), initial_trust);
+        self.trust_history
+            .insert(federation_id.to_string(), Vec::new());
     }
 
     fn get_trust_score(&self, federation_id: &str) -> Option<f32> {
@@ -1041,7 +1064,10 @@ mod tests {
 
         let health_status = federated_search.get_federation_health();
         assert_eq!(health_status.len(), 1);
-        assert_eq!(health_status.get("test_federation"), Some(&NodeHealthStatus::Healthy));
+        assert_eq!(
+            health_status.get("test_federation"),
+            Some(&NodeHealthStatus::Healthy)
+        );
     }
 
     #[tokio::test]
@@ -1090,7 +1116,10 @@ mod tests {
             },
         };
 
-        federated_search.register_federation(endpoint).await.unwrap();
+        federated_search
+            .register_federation(endpoint)
+            .await
+            .unwrap();
 
         // Create a test query
         let query = FederatedQuery {
@@ -1139,7 +1168,7 @@ mod tests {
     fn test_trust_manager_initialization() {
         let mut trust_manager = TrustManager::new();
         trust_manager.initialize_federation_trust("test_fed", 0.75);
-        
+
         assert_eq!(trust_manager.get_trust_score("test_fed"), Some(0.75));
         assert_eq!(trust_manager.get_trust_score("nonexistent"), None);
     }

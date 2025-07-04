@@ -8,7 +8,7 @@ use super::types::*;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use oxirs_core::Store;
-use oxirs_vec::{SearchResult as VectorSearchResult, VectorIndex, Vector};
+use oxirs_vec::{SearchResult as VectorSearchResult, Vector, VectorIndex};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

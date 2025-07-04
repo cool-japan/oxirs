@@ -1104,9 +1104,9 @@ mod tests {
         let results: Vec<_> = all_triples
             .iter()
             .filter(|triple| {
-                triple.subject() == &Subject::NamedNode(subject.clone()) &&
-                triple.predicate() == &Predicate::NamedNode(predicate.clone()) &&
-                triple.object() == &Object::NamedNode(mortal_type.clone())
+                triple.subject() == &Subject::NamedNode(subject.clone())
+                    && triple.predicate() == &Predicate::NamedNode(predicate.clone())
+                    && triple.object() == &Object::NamedNode(mortal_type.clone())
             })
             .collect();
 

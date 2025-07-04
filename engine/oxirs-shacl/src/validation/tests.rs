@@ -2,7 +2,10 @@
 
 use super::*;
 use crate::{PropertyPath, Shape, ShapeType};
-use oxirs_core::{model::{Literal, NamedNode, Term}, ConcreteStore};
+use oxirs_core::{
+    model::{Literal, NamedNode, Term},
+    ConcreteStore,
+};
 
 #[test]
 fn test_validation_engine_creation() {

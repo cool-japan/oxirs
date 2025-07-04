@@ -44,7 +44,11 @@ impl ForecastingModels {
         }
 
         // Generate quality forecasts
-        if let Ok(mut quality_forecasts) = self.quality_forecaster.forecast_quality(quality_report).await {
+        if let Ok(mut quality_forecasts) = self
+            .quality_forecaster
+            .forecast_quality(quality_report)
+            .await
+        {
             forecasts.append(&mut quality_forecasts);
         }
 

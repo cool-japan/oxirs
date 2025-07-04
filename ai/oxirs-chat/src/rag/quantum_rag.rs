@@ -383,7 +383,8 @@ impl QuantumEntanglementManager {
     /// Apply quantum correlation to search results
     pub fn apply_quantum_correlations(&self, results: &mut Vec<QuantumSearchResult>) -> Result<()> {
         // Collect document data first to avoid borrowing conflicts
-        let document_data: Vec<_> = results.iter()
+        let document_data: Vec<_> = results
+            .iter()
             .map(|r| (r.document.id.clone(), r.quantum_probability))
             .collect();
 
@@ -394,8 +395,7 @@ impl QuantumEntanglementManager {
             // Check for entangled documents in the result set
             for (other_id, other_probability) in &document_data {
                 if result.document.id != *other_id {
-                    let strength = self
-                        .get_entanglement_strength(&result.document.id, other_id);
+                    let strength = self.get_entanglement_strength(&result.document.id, other_id);
                     if strength > 0.0 {
                         correlation_boost += strength * other_probability;
                         correlation_count += 1;
@@ -597,15 +597,15 @@ impl QuantumAnnealingOptimizer {
         Ok(QuantumRetrievalParams {
             amplitude_factor: (current.amplitude_factor
                 + (fastrand::f64() * 2.0 - 1.0) * perturbation)
-            .clamp(0.1, 2.0),
+                .clamp(0.1, 2.0),
             phase_factor: (current.phase_factor + (fastrand::f64() * 2.0 - 1.0) * perturbation)
                 .clamp(0.1, 2.0),
             entanglement_strength: (current.entanglement_strength
                 + (fastrand::f64() * 2.0 - 1.0) * perturbation)
-            .clamp(0.0, 1.0),
+                .clamp(0.0, 1.0),
             coherence_factor: (current.coherence_factor
                 + (fastrand::f64() * 2.0 - 1.0) * perturbation)
-            .clamp(0.1, 2.0),
+                .clamp(0.1, 2.0),
         })
     }
 

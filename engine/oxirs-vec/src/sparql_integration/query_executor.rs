@@ -174,7 +174,8 @@ impl QueryExecutor {
             .clone();
 
         // Calculate similarity
-        let similarity = crate::similarity::cosine_similarity(&vector1.as_slice(), &vector2.as_slice());
+        let similarity =
+            crate::similarity::cosine_similarity(&vector1.as_slice(), &vector2.as_slice());
 
         Ok(vec![(format!("{}-{}", resource1, resource2), similarity)])
     }
@@ -427,7 +428,9 @@ impl QueryExecutor {
 
         // Store the vector with a generated ID
         let id = format!("embedded_{}", hash_string(text));
-        self.vector_store.index.add_vector(id.clone(), vector, None)?;
+        self.vector_store
+            .index
+            .add_vector(id.clone(), vector, None)?;
 
         Ok(vec![(id, 1.0)])
     }
@@ -496,10 +499,10 @@ impl QueryExecutor {
     pub fn add_resource_embedding(&mut self, uri: &str, content: &EmbeddableContent) -> Result<()> {
         // Generate embedding for the content
         let vector = self.embedding_manager.get_embedding(content)?;
-        
+
         // Insert the vector into the store with the URI as the key
         self.vector_store.index.insert(uri.to_string(), vector)?;
-        
+
         Ok(())
     }
 }

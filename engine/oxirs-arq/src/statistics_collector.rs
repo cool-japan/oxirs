@@ -387,9 +387,10 @@ impl StatisticsCollector {
                 _ => 1.0,
             };
 
-            self.stats
-                .filter_selectivities
-                .insert(format!("var:{}", var.as_str()), (current * position_factor).clamp(0.001, 1.0));
+            self.stats.filter_selectivities.insert(
+                format!("var:{}", var.as_str()),
+                (current * position_factor).clamp(0.001, 1.0),
+            );
         }
 
         Ok(())
@@ -429,9 +430,13 @@ impl StatisticsCollector {
     /// Compute join selectivities between patterns
     fn compute_join_selectivities(&mut self) -> Result<()> {
         // Analyze co-occurrence of predicates to estimate join selectivity
-        let predicates: Vec<_> = self.stats.cardinalities.keys()
+        let predicates: Vec<_> = self
+            .stats
+            .cardinalities
+            .keys()
             .filter(|k| k.starts_with("predicate:"))
-            .cloned().collect();
+            .cloned()
+            .collect();
 
         for i in 0..predicates.len() {
             for j in i + 1..predicates.len() {
@@ -439,19 +444,12 @@ impl StatisticsCollector {
                 let pred2 = &predicates[j];
 
                 // Estimate selectivity based on frequencies
-                let freq1 = self
+                let freq1 = self.stats.cardinalities.get(pred1).copied().unwrap_or(1) as f64;
+                let freq2 = self.stats.cardinalities.get(pred2).copied().unwrap_or(1) as f64;
+                let total = self
                     .stats
                     .cardinalities
-                    .get(pred1)
-                    .copied()
-                    .unwrap_or(1) as f64;
-                let freq2 = self
-                    .stats
-                    .cardinalities
-                    .get(pred2)
-                    .copied()
-                    .unwrap_or(1) as f64;
-                let total = self.stats.cardinalities.values()
+                    .values()
                     .filter(|_| true) // All cardinalities contribute to total
                     .sum::<usize>() as f64;
 
@@ -480,7 +478,8 @@ impl StatisticsCollector {
             / self.stats.predicate_frequency.len().max(1) as f64;
 
         // Get or create IndexStatistics for SubjectPredicate index
-        let sp_stats = self.stats
+        let sp_stats = self
+            .stats
             .index_stats
             .entry(IndexType::SubjectPredicate)
             .or_insert_with(IndexStatistics::default);
@@ -495,7 +494,8 @@ impl StatisticsCollector {
             / self.histograms.len().max(1) as f64;
 
         // Get or create IndexStatistics for PredicateObject index
-        let po_stats = self.stats
+        let po_stats = self
+            .stats
             .index_stats
             .entry(IndexType::PredicateObject)
             .or_insert_with(IndexStatistics::default);
@@ -505,7 +505,9 @@ impl StatisticsCollector {
         for (index_type, index_stats) in &mut self.stats.index_stats {
             let selectivity = index_stats.index_selectivity;
             let cost = (1.0 - selectivity) * 10.0 + 1.0;
-            index_stats.index_access_cost.insert(index_type.clone(), cost);
+            index_stats
+                .index_access_cost
+                .insert(index_type.clone(), cost);
         }
 
         Ok(())

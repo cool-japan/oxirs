@@ -11,8 +11,8 @@ use std::time::Duration;
 use tracing::{debug, info};
 
 use crate::{
-    ExecutionMetadata, ExecutionStatus, FederatedResult, FederationError,
-    QueryResult, QueryResultData, SparqlBinding, SparqlResults, SparqlValue, StepResult,
+    ExecutionMetadata, ExecutionStatus, FederatedResult, FederationError, QueryResult,
+    QueryResultData, SparqlBinding, SparqlResults, SparqlValue, StepResult,
 };
 
 /// Result integrator for federated queries

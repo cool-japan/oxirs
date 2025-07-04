@@ -13,12 +13,12 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+use crate::service::ServiceAuthConfig;
+use crate::service::ServiceType;
 use crate::{
     metadata::{CapabilityDetail, QueryPattern},
     FederatedService, ServiceCapability,
 };
-use crate::service::ServiceAuthConfig;
-use crate::service::ServiceType;
 
 /// Capability assessor for detailed service analysis
 #[derive(Debug)]

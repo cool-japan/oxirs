@@ -167,8 +167,8 @@ impl FederatedQueryPlanner {
                 retry_config: self.config.default_retry_config.as_ref().map(|rc| {
                     crate::planner::planning::types::RetryConfig {
                         max_attempts: rc.max_attempts as usize,
-                        initial_delay: std::time::Duration::from_millis(rc.initial_delay_ms),
-                        max_delay: std::time::Duration::from_millis(rc.max_delay_ms),
+                        initial_delay: rc.initial_delay,
+                        max_delay: rc.max_delay,
                         backoff_multiplier: rc.backoff_multiplier,
                     }
                 }),
@@ -190,8 +190,8 @@ impl FederatedQueryPlanner {
                     retry_config: self.config.default_retry_config.as_ref().map(|rc| {
                         crate::planner::planning::types::RetryConfig {
                             max_attempts: rc.max_attempts as usize,
-                            initial_delay: std::time::Duration::from_millis(rc.initial_delay_ms),
-                            max_delay: std::time::Duration::from_millis(rc.max_delay_ms),
+                            initial_delay: rc.initial_delay,
+                            max_delay: rc.max_delay,
                             backoff_multiplier: rc.backoff_multiplier,
                         }
                     }),
@@ -263,8 +263,8 @@ impl FederatedQueryPlanner {
             retry_config: self.config.default_retry_config.as_ref().map(|rc| {
                 crate::planner::planning::types::RetryConfig {
                     max_attempts: rc.max_attempts as usize,
-                    initial_delay: std::time::Duration::from_millis(rc.initial_delay_ms),
-                    max_delay: std::time::Duration::from_millis(rc.max_delay_ms),
+                    initial_delay: rc.initial_delay,
+                    max_delay: rc.max_delay,
                     backoff_multiplier: rc.backoff_multiplier,
                 }
             }),
@@ -413,7 +413,7 @@ impl FederatedQueryPlanner {
         // Parse SPARQL query and extract information
         let patterns = Vec::new(); // Simplified - would parse actual SPARQL
         let variables = std::collections::HashSet::new(); // Would extract from query
-        
+
         Ok(QueryInfo {
             query_type: QueryType::Sparql,
             original_query: query.to_string(),
@@ -436,7 +436,7 @@ impl FederatedQueryPlanner {
 
         // For SPARQL queries, we skip GraphQL parsing and validation
         // and go directly to execution planning based on the QueryInfo
-        
+
         let context = ExecutionContext {
             query_id: "sparql_query".to_string(),
             execution_id: "exec_1".to_string(),
@@ -448,35 +448,28 @@ impl FederatedQueryPlanner {
 
         // Create execution plan directly from SPARQL query info
         let plan = ExecutionPlan {
-            id: context.execution_id.clone(),
             query_id: context.query_id.clone(),
-            steps: vec![
-                ExecutionStep {
-                    id: "sparql_step_1".to_string(),
-                    step_type: StepType::ServiceQuery,
-                    service_ids: vec!["test-1".to_string()], // Use first available service for now
-                    query: ServiceQuery {
-                        query_text: query_info.original_query.clone(),
-                        variables: query_info.variables.iter()
-                            .map(|v| (v.clone(), serde_json::Value::Null))
-                            .collect(),
-                        timeout: Some(std::time::Duration::from_secs(30)),
-                    },
-                    dependencies: vec![],
-                    estimated_cost: query_info.estimated_cost,
-                    timeout: Some(std::time::Duration::from_secs(30)),
-                    retry_config: Some(RetryConfig {
-                        max_retries: 3,
-                        initial_delay: std::time::Duration::from_millis(100),
-                        max_delay: std::time::Duration::from_secs(5),
-                        backoff_factor: 2.0,
-                    }),
-                }
-            ],
-            estimated_total_cost: query_info.estimated_cost,
-            optimization_level: "basic".to_string(),
-            created_at: start_time,
-            timeout: Some(std::time::Duration::from_secs(30)),
+            steps: vec![ExecutionStep {
+                step_id: "sparql_step_1".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("test-1".to_string()), // Use first available service for now
+                query_fragment: query_info.original_query.clone(),
+                dependencies: vec![],
+                estimated_cost: query_info.estimated_cost as f64,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: Some(types::RetryConfig {
+                    max_attempts: 3,
+                    initial_delay: std::time::Duration::from_millis(100),
+                    max_delay: std::time::Duration::from_secs(5),
+                    backoff_multiplier: 2.0,
+                }),
+            }],
+            estimated_total_cost: query_info.estimated_cost as f64,
+            max_parallelism: 4,
+            planning_time: start_time.elapsed(),
+            cache_key: None,
+            metadata: std::collections::HashMap::new(),
+            parallelizable_steps: vec![vec!["sparql_step_1".to_string()]],
         };
 
         Ok(plan)
@@ -491,7 +484,7 @@ impl FederatedQueryPlanner {
         // Parse GraphQL query and extract information
         let patterns = Vec::new(); // Simplified - would parse actual GraphQL
         let variables_set = std::collections::HashSet::new(); // Would extract from query
-        
+
         Ok(QueryInfo {
             query_type: QueryType::GraphQL,
             original_query: query.to_string(),
@@ -517,13 +510,9 @@ impl FederatedQueryPlanner {
             variables: std::collections::HashMap::new(),
             metadata: std::collections::HashMap::new(),
         };
-        
-        self.plan_federated_query(
-            &query_info.original_query,
-            None,
-            &context,
-            service_registry,
-        ).await
+
+        self.plan_federated_query(&query_info.original_query, None, &context, service_registry)
+            .await
     }
 }
 
@@ -543,7 +532,7 @@ pub struct PlannerConfig {
     pub max_query_complexity: f64,
     pub enable_performance_analysis: bool,
     pub optimization_config: performance_optimizer::OptimizationConfig,
-    pub default_retry_config: Option<RetryConfig>,
+    pub default_retry_config: Option<types::RetryConfig>,
 }
 
 impl Default for PlannerConfig {
@@ -556,21 +545,12 @@ impl Default for PlannerConfig {
             max_query_complexity: 1000.0,
             enable_performance_analysis: true,
             optimization_config: performance_optimizer::OptimizationConfig::default(),
-            default_retry_config: Some(RetryConfig {
+            default_retry_config: Some(types::RetryConfig {
                 max_attempts: 3,
-                initial_delay_ms: 100,
-                max_delay_ms: 5000,
+                initial_delay: std::time::Duration::from_millis(100),
+                max_delay: std::time::Duration::from_secs(5),
                 backoff_multiplier: 2.0,
             }),
         }
     }
-}
-
-/// Retry configuration for execution steps
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RetryConfig {
-    pub max_attempts: u32,
-    pub initial_delay_ms: u64,
-    pub max_delay_ms: u64,
-    pub backoff_multiplier: f64,
 }

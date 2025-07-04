@@ -137,7 +137,10 @@ impl SessionManager {
 
     /// Validate JWT token
     #[cfg(feature = "auth")]
-    pub fn validate_jwt_token(&self, token: &str) -> FusekiResult<crate::auth::types::TokenValidation> {
+    pub fn validate_jwt_token(
+        &self,
+        token: &str,
+    ) -> FusekiResult<crate::auth::types::TokenValidation> {
         // TODO: Implement actual JWT token validation
         // For now, return a placeholder validation for valid tokens
         if token.starts_with("jwt_token_for_") {
@@ -160,7 +163,10 @@ impl SessionManager {
 
     /// Validate JWT token (feature-gated fallback)
     #[cfg(not(feature = "auth"))]
-    pub fn validate_jwt_token(&self, _token: &str) -> FusekiResult<crate::auth::types::TokenValidation> {
+    pub fn validate_jwt_token(
+        &self,
+        _token: &str,
+    ) -> FusekiResult<crate::auth::types::TokenValidation> {
         Err(FusekiError::service_unavailable("JWT auth not enabled"))
     }
 }

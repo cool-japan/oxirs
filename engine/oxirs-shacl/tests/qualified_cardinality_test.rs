@@ -1,6 +1,6 @@
 //! Tests for SHACL qualified cardinality constraints
 
-use oxirs_core::{model::*, Store, ConcreteStore};
+use oxirs_core::{model::*, ConcreteStore, Store};
 use oxirs_shacl::*;
 
 // Helper function to insert quads with graceful handling of unimplemented store features
@@ -9,9 +9,10 @@ fn try_insert_quad(store: &mut ConcreteStore, quad: Quad) -> bool {
         Ok(_) => true,
         Err(e) => {
             let error_msg = format!("{}", e);
-            if error_msg.contains("not yet implemented") 
-                || error_msg.contains("not implemented") 
-                || error_msg.contains("mutable access") {
+            if error_msg.contains("not yet implemented")
+                || error_msg.contains("not implemented")
+                || error_msg.contains("mutable access")
+            {
                 false // Store insertion not available
             } else {
                 panic!("Unexpected error: {}", e);
@@ -38,50 +39,75 @@ fn test_qualified_cardinality_validation() {
 
     // Alice knows Bob (who is a Friend) and Charlie (who is just a Person)
     // Try to insert data, but handle the case where Store insertion is not yet implemented
-    if !try_insert_quad(&mut store, Quad::new(
-        alice.clone(),
-        knows_pred.clone(),
-        bob.clone(),
-        GraphName::DefaultGraph,
-    )) {
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
+            alice.clone(),
+            knows_pred.clone(),
+            bob.clone(),
+            GraphName::DefaultGraph,
+        ),
+    ) {
         // Skip this test since Store insertion is not yet available
         return;
     }
-    if !try_insert_quad(&mut store, Quad::new(
-        alice.clone(),
-        knows_pred.clone(),
-        charlie.clone(),
-        GraphName::DefaultGraph,
-    )) { return; }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
+            alice.clone(),
+            knows_pred.clone(),
+            charlie.clone(),
+            GraphName::DefaultGraph,
+        ),
+    ) {
+        return;
+    }
 
     // Type information
-    if !try_insert_quad(&mut store, Quad::new(
-        alice.clone(),
-        type_pred.clone(),
-        person_type.clone(),
-        GraphName::DefaultGraph,
-    )) { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
+            alice.clone(),
+            type_pred.clone(),
+            person_type.clone(),
+            GraphName::DefaultGraph,
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             bob.clone(),
             type_pred.clone(),
             person_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             bob.clone(),
             type_pred.clone(),
             friend_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             charlie.clone(),
             type_pred.clone(),
             person_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
+        ),
+    ) {
+        return;
+    }
 
     // Create a shape that validates Friends
     let mut friend_shape = Shape::node_shape(ShapeId::new("http://example.org/FriendShape"));
@@ -146,27 +172,39 @@ fn test_qualified_cardinality_min_violation() {
     let friend_type = NamedNode::new("http://example.org/Friend").unwrap();
 
     // Alice knows Charlie (who is NOT a Friend)
-    if !try_insert_quad(&mut store, Quad::new(
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             alice.clone(),
             knows_pred.clone(),
             charlie.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             alice.clone(),
             type_pred.clone(),
             person_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             charlie.clone(),
             type_pred.clone(),
             person_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
+        ),
+    ) {
+        return;
+    }
     // Charlie is NOT a Friend
 
     // Friend shape
@@ -223,43 +261,63 @@ fn test_qualified_cardinality_max_violation() {
     let friend_type = NamedNode::new("http://example.org/Friend").unwrap();
 
     // Alice knows Bob and David (both are Friends)
-    if !try_insert_quad(&mut store, Quad::new(
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             alice.clone(),
             knows_pred.clone(),
             bob.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             alice.clone(),
             knows_pred.clone(),
             david.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
+        ),
+    ) {
+        return;
+    }
 
     // Type information
-    if !try_insert_quad(&mut store, Quad::new(
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             alice.clone(),
             type_pred.clone(),
             person_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             bob.clone(),
             type_pred.clone(),
             friend_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             david.clone(),
             type_pred.clone(),
             friend_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
+        ),
+    ) {
+        return;
+    }
 
     // Friend shape
     let mut friend_shape = Shape::node_shape(ShapeId::new("http://example.org/FriendShape"));
@@ -316,57 +374,85 @@ fn test_qualified_cardinality_range_success() {
     let friend_type = NamedNode::new("http://example.org/Friend").unwrap();
 
     // Alice knows Bob and David (both Friends) and Charlie (not a Friend)
-    if !try_insert_quad(&mut store, Quad::new(
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             alice.clone(),
             knows_pred.clone(),
             bob.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             alice.clone(),
             knows_pred.clone(),
             david.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             alice.clone(),
             knows_pred.clone(),
             charlie.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
+        ),
+    ) {
+        return;
+    }
 
     // Type information
-    if !try_insert_quad(&mut store, Quad::new(
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             alice.clone(),
             type_pred.clone(),
             person_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             bob.clone(),
             type_pred.clone(),
             friend_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             david.clone(),
             type_pred.clone(),
             friend_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
-    if !try_insert_quad(&mut store, Quad::new(
+        ),
+    ) {
+        return;
+    }
+    if !try_insert_quad(
+        &mut store,
+        Quad::new(
             charlie.clone(),
             type_pred.clone(),
             person_type.clone(),
             GraphName::DefaultGraph,
-        ))
- { return; }
+        ),
+    ) {
+        return;
+    }
 
     // Friend shape
     let mut friend_shape = Shape::node_shape(ShapeId::new("http://example.org/FriendShape"));

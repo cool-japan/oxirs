@@ -932,7 +932,8 @@ mod tests {
                     }
                     AnomalyDetectionMethod::LstmTimeSeriesAnomaly => {
                         // Implement LSTM anomaly detection inline
-                        self.detect_statistical_outliers(data_points, detector).await?
+                        self.detect_statistical_outliers(data_points, detector)
+                            .await?
                     }
                     AnomalyDetectionMethod::MultivariateAnomaly => {
                         // Implement multivariate anomaly detection inline
@@ -1057,7 +1058,7 @@ mod tests {
         )> {
             if data_points.len() < 2 {
                 return Err(FusekiError::invalid_query(
-                    "Insufficient data for forecasting"
+                    "Insufficient data for forecasting",
                 ));
             }
 

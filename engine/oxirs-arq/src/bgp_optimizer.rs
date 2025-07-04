@@ -1291,7 +1291,7 @@ impl<'a> BGPOptimizer<'a> {
                 self.is_bound(&pattern.subject)
             }
             IndexType::POSC => {
-                // POSC index is optimal when predicate is bound  
+                // POSC index is optimal when predicate is bound
                 self.is_bound(&pattern.predicate)
             }
             IndexType::OSPC => {
@@ -2394,12 +2394,20 @@ mod tests {
 
         // Add available indexes - create a default IndexStatistics with available indexes
         let mut subject_predicate_stats = IndexStatistics::default();
-        subject_predicate_stats.available_indexes.insert(IndexType::SubjectPredicate);
-        stats.index_stats.insert(IndexType::SubjectPredicate, subject_predicate_stats);
-        
+        subject_predicate_stats
+            .available_indexes
+            .insert(IndexType::SubjectPredicate);
+        stats
+            .index_stats
+            .insert(IndexType::SubjectPredicate, subject_predicate_stats);
+
         let mut predicate_object_stats = IndexStatistics::default();
-        predicate_object_stats.available_indexes.insert(IndexType::PredicateObject);
-        stats.index_stats.insert(IndexType::PredicateObject, predicate_object_stats);
+        predicate_object_stats
+            .available_indexes
+            .insert(IndexType::PredicateObject);
+        stats
+            .index_stats
+            .insert(IndexType::PredicateObject, predicate_object_stats);
 
         stats
     }

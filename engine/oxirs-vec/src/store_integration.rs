@@ -25,7 +25,6 @@ use std::sync::{
 };
 use std::time::{Duration, Instant, SystemTime};
 
-
 /// Configuration for store integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoreIntegrationConfig {
@@ -659,9 +658,12 @@ impl IntegratedVectorStore {
         let vector_store_wrapper = VectorStoreWrapper {
             store: vector_store.clone(),
         };
-        let vector_store_trait: Arc<std::sync::RwLock<dyn VectorStoreTrait>> = 
+        let vector_store_trait: Arc<std::sync::RwLock<dyn VectorStoreTrait>> =
             Arc::new(std::sync::RwLock::new(vector_store_wrapper));
-        let rdf_integration = Arc::new(RwLock::new(RdfVectorIntegration::new(rdf_config, vector_store_trait)));
+        let rdf_integration = Arc::new(RwLock::new(RdfVectorIntegration::new(
+            rdf_config,
+            vector_store_trait,
+        )));
 
         let sparql_config = crate::sparql_integration::VectorServiceConfig::default();
         let sparql_service = Arc::new(RwLock::new(SparqlVectorService::new(
@@ -866,29 +868,32 @@ impl IntegratedVectorStore {
         graph_context: Option<&str>,
     ) -> Result<Vec<(String, f32)>> {
         let rdf_integration = self.rdf_integration.read();
-        
+
         // Convert string to Term - assuming it's a NamedNode for now
         let term = oxirs_core::model::Term::NamedNode(
             oxirs_core::model::NamedNode::new(rdf_term)
-                .map_err(|e| anyhow!("Invalid IRI: {}", e))?
+                .map_err(|e| anyhow!("Invalid IRI: {}", e))?,
         );
-        
+
         // Convert graph context if provided
-        let graph_name = graph_context.map(|ctx| -> Result<oxirs_core::model::GraphName> {
-            Ok(oxirs_core::model::GraphName::NamedNode(
-                oxirs_core::model::NamedNode::new(ctx)
-                    .map_err(|e| anyhow!("Invalid graph IRI: {}", e))?
-            ))
-        }).transpose()?;
-        
+        let graph_name = graph_context
+            .map(|ctx| -> Result<oxirs_core::model::GraphName> {
+                Ok(oxirs_core::model::GraphName::NamedNode(
+                    oxirs_core::model::NamedNode::new(ctx)
+                        .map_err(|e| anyhow!("Invalid graph IRI: {}", e))?,
+                ))
+            })
+            .transpose()?;
+
         // Call find_similar_terms and convert result
         let results = rdf_integration.find_similar_terms(&term, k, None, graph_name.as_ref())?;
-        
+
         // Convert RdfVectorSearchResult to (String, f32)
-        let converted_results = results.into_iter()
+        let converted_results = results
+            .into_iter()
             .map(|result| (result.term.to_string(), result.score))
             .collect();
-            
+
         Ok(converted_results)
     }
 

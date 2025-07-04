@@ -7,8 +7,8 @@ use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tracing::debug;
 
-use crate::planner::planning::types::{ExecutionPlan, ExecutionStep, StepType};
 use super::types::*;
+use crate::planner::planning::types::{ExecutionPlan, ExecutionStep, StepType};
 
 impl GraphQLFederation {
     /// Decompose a GraphQL query for federation with advanced planning
@@ -268,7 +268,6 @@ impl GraphQLFederation {
 
         Ok(service_queries)
     }
-
 
     /// Parse a GraphQL query string into a structured representation
     pub fn parse_graphql_query(&self, query: &str) -> Result<ParsedQuery> {

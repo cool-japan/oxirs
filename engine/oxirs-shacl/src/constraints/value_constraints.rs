@@ -156,7 +156,16 @@ impl ClassConstraint {
                 let predicate = quad.predicate();
                 let object = quad.object();
                 let graph_name = quad.graph_name();
-                if !store.find_quads(Some(subject), Some(predicate), Some(object), Some(graph_name)).unwrap_or_default().is_empty() {
+                if !store
+                    .find_quads(
+                        Some(subject),
+                        Some(predicate),
+                        Some(object),
+                        Some(graph_name),
+                    )
+                    .unwrap_or_default()
+                    .is_empty()
+                {
                     return Ok(true);
                 }
 

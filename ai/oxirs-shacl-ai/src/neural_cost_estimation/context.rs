@@ -1,6 +1,6 @@
 //! Context-aware cost adjustment for neural cost estimation
 
-use super::{types::*, core::QueryExecutionContext};
+use super::{core::QueryExecutionContext, types::*};
 use crate::{Result, ShaclAiError};
 
 /// Context-aware cost adjuster
@@ -8,10 +8,10 @@ use crate::{Result, ShaclAiError};
 pub struct ContextAwareCostAdjuster {
     /// Context adjustment factors
     adjustment_factors: ContextAdjustmentFactors,
-    
+
     /// Historical context patterns
     context_patterns: Vec<ContextPattern>,
-    
+
     /// Adjustment statistics
     adjustment_stats: AdjustmentStatistics,
 }
@@ -69,80 +69,83 @@ impl ContextAwareCostAdjuster {
         context: &QueryExecutionContext,
     ) -> Result<CostPrediction> {
         let adjustment_factor = self.calculate_adjustment_factor(context)?;
-        
+
         let adjusted_cost = base_prediction.estimated_cost * adjustment_factor;
-        
+
         let mut adjusted_prediction = base_prediction.clone();
         adjusted_prediction.estimated_cost = adjusted_cost;
-        adjusted_prediction.execution_time = 
+        adjusted_prediction.execution_time =
             std::time::Duration::from_millis((adjusted_cost * 1000.0) as u64);
-        
+
         // Adjust resource usage proportionally
         adjusted_prediction.resource_usage.cpu_usage *= adjustment_factor;
         adjusted_prediction.resource_usage.memory_usage *= adjustment_factor;
         adjusted_prediction.resource_usage.disk_io *= adjustment_factor;
         adjusted_prediction.resource_usage.network_io *= adjustment_factor;
-        
+
         // Update uncertainty based on context confidence
         let context_confidence = self.calculate_context_confidence(context);
         adjusted_prediction.uncertainty = base_prediction.uncertainty * (2.0 - context_confidence);
         adjusted_prediction.confidence = base_prediction.confidence * context_confidence;
-        
+
         // Update statistics
         self.update_adjustment_stats(adjustment_factor);
-        
+
         Ok(adjusted_prediction)
     }
 
     fn calculate_adjustment_factor(&mut self, context: &QueryExecutionContext) -> Result<f64> {
         let mut total_factor = 1.0;
-        
+
         // System load adjustment
-        total_factor *= 1.0 + (context.system_load - 0.5) * self.adjustment_factors.system_load_factor;
-        
+        total_factor *=
+            1.0 + (context.system_load - 0.5) * self.adjustment_factors.system_load_factor;
+
         // Memory pressure adjustment
         let memory_usage = context.available_memory as f64 / (8.0 * 1024.0 * 1024.0 * 1024.0); // Normalize to 8GB
         total_factor *= 1.0 + (1.0 - memory_usage) * self.adjustment_factors.memory_pressure_factor;
-        
+
         // Concurrent query adjustment
         let concurrent_factor = (context.concurrent_queries as f64 / 10.0).min(2.0);
         total_factor *= 1.0 + concurrent_factor * self.adjustment_factors.concurrent_query_factor;
-        
+
         // Time of day adjustment
         let hour = self.extract_hour_from_timestamp(context.timestamp);
         let time_factor = self.get_time_of_day_factor(hour);
         total_factor *= time_factor;
-        
+
         // Apply pattern-based adjustments
         if let Some(pattern_factor) = self.find_matching_pattern(context) {
             total_factor *= pattern_factor;
         }
-        
+
         Ok(total_factor.max(0.1).min(10.0)) // Clamp to reasonable range
     }
 
     fn calculate_context_confidence(&self, context: &QueryExecutionContext) -> f64 {
-        let mut confidence = 1.0;
-        
+        let mut confidence: f64 = 1.0;
+
         // Reduce confidence for extreme conditions
         if context.system_load > 0.9 {
             confidence *= 0.7;
         }
-        
+
         if context.concurrent_queries > 20 {
             confidence *= 0.8;
         }
-        
-        let memory_pressure = 1.0 - (context.available_memory as f64 / (8.0 * 1024.0 * 1024.0 * 1024.0));
+
+        let memory_pressure =
+            1.0 - (context.available_memory as f64 / (8.0 * 1024.0 * 1024.0 * 1024.0));
         if memory_pressure > 0.9 {
             confidence *= 0.6;
         }
-        
+
         confidence.max(0.1f64)
     }
 
     fn extract_hour_from_timestamp(&self, timestamp: std::time::SystemTime) -> usize {
-        let duration = timestamp.duration_since(std::time::UNIX_EPOCH)
+        let duration = timestamp
+            .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or(std::time::Duration::from_secs(0));
         ((duration.as_secs() / 3600) % 24) as usize
     }
@@ -168,7 +171,7 @@ impl ContextAwareCostAdjuster {
                 break;
             }
         }
-        
+
         // Then update the pattern if found
         if let Some(index) = matching_index {
             let pattern = &mut self.context_patterns[index];
@@ -179,25 +182,29 @@ impl ContextAwareCostAdjuster {
         }
     }
 
-    fn matches_pattern(&self, signature: &ContextSignature, context: &QueryExecutionContext) -> bool {
+    fn matches_pattern(
+        &self,
+        signature: &ContextSignature,
+        context: &QueryExecutionContext,
+    ) -> bool {
         let hour = self.extract_hour_from_timestamp(context.timestamp);
         let memory_usage = context.available_memory as f64 / (8.0 * 1024.0 * 1024.0 * 1024.0);
-        
-        context.system_load >= signature.system_load_range.0 &&
-        context.system_load <= signature.system_load_range.1 &&
-        memory_usage >= signature.memory_usage_range.0 &&
-        memory_usage <= signature.memory_usage_range.1 &&
-        context.concurrent_queries >= signature.concurrent_queries_range.0 &&
-        context.concurrent_queries <= signature.concurrent_queries_range.1 &&
-        hour == signature.time_bucket
+
+        context.system_load >= signature.system_load_range.0
+            && context.system_load <= signature.system_load_range.1
+            && memory_usage >= signature.memory_usage_range.0
+            && memory_usage <= signature.memory_usage_range.1
+            && context.concurrent_queries >= signature.concurrent_queries_range.0
+            && context.concurrent_queries <= signature.concurrent_queries_range.1
+            && hour == signature.time_bucket
     }
 
     fn update_adjustment_stats(&mut self, adjustment_factor: f64) {
         self.adjustment_stats.total_adjustments += 1;
-        
+
         // Update running average
         let n = self.adjustment_stats.total_adjustments as f64;
-        self.adjustment_stats.average_adjustment_factor = 
+        self.adjustment_stats.average_adjustment_factor =
             (self.adjustment_stats.average_adjustment_factor * (n - 1.0) + adjustment_factor) / n;
     }
 
@@ -231,7 +238,8 @@ impl ContextAwareCostAdjuster {
 
         // Keep only the most useful patterns
         if self.context_patterns.len() > 100 {
-            self.context_patterns.sort_by(|a, b| b.usage_count.cmp(&a.usage_count));
+            self.context_patterns
+                .sort_by(|a, b| b.usage_count.cmp(&a.usage_count));
             self.context_patterns.truncate(100);
         }
 

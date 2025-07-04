@@ -432,10 +432,7 @@ impl TrainingMetrics {
 
     /// Add custom metric
     pub fn add_metric(&mut self, name: String, value: f32) {
-        self.additional_metrics
-            .entry(name)
-            .or_default()
-            .push(value);
+        self.additional_metrics.entry(name).or_default().push(value);
     }
 }
 

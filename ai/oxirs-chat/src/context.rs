@@ -969,8 +969,14 @@ pub mod neuromorphic_context {
         }
 
         fn calculate_attention_distribution(&self) -> AttentionDistribution {
-            let max_attention = self.attention_weights.iter().fold(0.0_f64, |a, b| a.max(*b));
-            let min_attention = self.attention_weights.iter().fold(1.0_f64, |a, b| a.min(*b));
+            let max_attention = self
+                .attention_weights
+                .iter()
+                .fold(0.0_f64, |a, b| a.max(*b));
+            let min_attention = self
+                .attention_weights
+                .iter()
+                .fold(1.0_f64, |a, b| a.min(*b));
             let mean_attention = if !self.attention_weights.is_empty() {
                 self.attention_weights.iter().sum::<f64>() / self.attention_weights.len() as f64
             } else {
@@ -1473,7 +1479,11 @@ impl AdvancedContextManager {
         if !messages.is_empty() {
             let relevance_sum: f32 = messages
                 .iter()
-                .filter_map(|m| m.metadata.as_ref().and_then(|meta| meta.confidence.map(|c| c as f32)))
+                .filter_map(|m| {
+                    m.metadata
+                        .as_ref()
+                        .and_then(|meta| meta.confidence.map(|c| c as f32))
+                })
                 .sum();
             quality += relevance_sum / messages.len() as f32 * 0.4;
         }
@@ -1528,7 +1538,9 @@ impl AdvancedContextManager {
             if let Some(metadata) = &message.metadata {
                 // Extract entities from custom fields
                 if let Some(extracted_entities) = metadata.custom_fields.get("entities_extracted") {
-                    if let Ok(entities_list) = serde_json::from_value::<Vec<String>>(extracted_entities.clone()) {
+                    if let Ok(entities_list) =
+                        serde_json::from_value::<Vec<String>>(extracted_entities.clone())
+                    {
                         entities.extend(entities_list);
                     }
                 }
@@ -1542,7 +1554,8 @@ impl AdvancedContextManager {
 
                 // Extract facts from retrieved triples in custom fields
                 if let Some(triples) = metadata.custom_fields.get("retrieved_triples") {
-                    if let Ok(triples_list) = serde_json::from_value::<Vec<String>>(triples.clone()) {
+                    if let Ok(triples_list) = serde_json::from_value::<Vec<String>>(triples.clone())
+                    {
                         facts.extend(triples_list);
                     }
                 }

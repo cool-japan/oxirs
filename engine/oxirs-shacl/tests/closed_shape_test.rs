@@ -2,7 +2,7 @@
 
 use oxirs_core::{
     model::{NamedNode, Term},
-    Store, ConcreteStore,
+    ConcreteStore, Store,
 };
 use oxirs_shacl::{
     constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,

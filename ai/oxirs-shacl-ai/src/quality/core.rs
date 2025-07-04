@@ -1052,14 +1052,22 @@ impl QualityAssessor {
         })
     }
 
-    fn check_shape_consistency(&self, _store: &dyn Store, _shape: &Shape) -> Result<ConsistencyCheck> {
+    fn check_shape_consistency(
+        &self,
+        _store: &dyn Store,
+        _shape: &Shape,
+    ) -> Result<ConsistencyCheck> {
         Ok(ConsistencyCheck {
             total: 50,
             consistent: 48,
         })
     }
 
-    fn check_datatype_accuracy(&self, store: &dyn Store, shapes: &[Shape]) -> Result<AccuracyCheck> {
+    fn check_datatype_accuracy(
+        &self,
+        store: &dyn Store,
+        shapes: &[Shape],
+    ) -> Result<AccuracyCheck> {
         let mut total_checks = 0;
         let mut accurate_checks = 0;
 
@@ -1163,7 +1171,11 @@ impl QualityAssessor {
         })
     }
 
-    fn check_pattern_accuracy(&self, _store: &dyn Store, _shapes: &[Shape]) -> Result<AccuracyCheck> {
+    fn check_pattern_accuracy(
+        &self,
+        _store: &dyn Store,
+        _shapes: &[Shape],
+    ) -> Result<AccuracyCheck> {
         Ok(AccuracyCheck {
             total: 75,
             accurate: 70,
@@ -1189,7 +1201,11 @@ impl QualityAssessor {
         0.8 // Placeholder
     }
 
-    fn check_class_adherence(&self, _store: &dyn Store, _shapes: &[Shape]) -> Result<AdherenceCheck> {
+    fn check_class_adherence(
+        &self,
+        _store: &dyn Store,
+        _shapes: &[Shape],
+    ) -> Result<AdherenceCheck> {
         Ok(AdherenceCheck {
             total: 100,
             adherent: 95,

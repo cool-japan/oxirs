@@ -7,9 +7,9 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tracing::debug;
 
+use crate::planner::planning::types::QueryInfo;
 use crate::planner::planning::TriplePattern;
 use crate::ServiceRegistry;
-use crate::planner::planning::types::QueryInfo;
 
 use super::types::*;
 

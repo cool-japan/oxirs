@@ -1,8 +1,8 @@
 //! Utility types and functions for quantum neural patterns
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 
 /// Gate count analyzer for circuit complexity
 #[derive(Debug, Clone)]

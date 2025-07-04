@@ -513,11 +513,19 @@ impl AdvancedCacheManager {
     /// Cache assembled context
     pub async fn cache_context(&self, key: String, context: &AssembledContext) -> Result<()> {
         let cached_context = CachedContext {
-            context_text: format!("{} semantic results, {} graph results", context.semantic_results.len(), context.graph_results.len()),
+            context_text: format!(
+                "{} semantic results, {} graph results",
+                context.semantic_results.len(),
+                context.graph_results.len()
+            ),
             quality_score: context.context_score,
             coverage_score: context.context_score,
             entity_count: context.extracted_entities.len(),
-            fact_count: context.retrieved_triples.as_ref().map(|t| t.len()).unwrap_or(0),
+            fact_count: context
+                .retrieved_triples
+                .as_ref()
+                .map(|t| t.len())
+                .unwrap_or(0),
         };
 
         let size = bincode::serialize(&cached_context)?.len();

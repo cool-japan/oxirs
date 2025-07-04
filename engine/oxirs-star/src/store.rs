@@ -596,8 +596,7 @@ impl StarStore {
         // Insert into core store (convert triple to quad in default graph)
         let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
         let mut core_store = self.core_store.write().unwrap();
-        CoreStore::insert_quad(&mut *core_store, core_quad)
-            .map_err(|e| StarError::CoreError(e))?;
+        CoreStore::insert_quad(&mut *core_store, core_quad).map_err(|e| StarError::CoreError(e))?;
 
         Ok(())
     }

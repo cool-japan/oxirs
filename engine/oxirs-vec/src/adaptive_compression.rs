@@ -978,7 +978,11 @@ mod tests {
         // Should achieve significant compression on this larger, repetitive vector
         // Original size would be 256 * 4 = 1024 bytes
         // Multi-level compression includes metadata overhead, so expect reasonable compression
-        println!("Compressed size: {} bytes, original size: {} bytes", compressed.len(), vector.dimensions * 4);
+        println!(
+            "Compressed size: {} bytes, original size: {} bytes",
+            compressed.len(),
+            vector.dimensions * 4
+        );
         assert!(compressed.len() < vector.dimensions * 4); // At least some compression
         assert!(compressed.len() < 900); // Should achieve at least 12% compression
     }

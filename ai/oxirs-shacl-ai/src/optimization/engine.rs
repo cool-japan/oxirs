@@ -734,7 +734,11 @@ impl OptimizationEngine {
         self.merge_shapes_union(shape1, shape2)
     }
 
-    fn apply_genetic_optimization(&self, shapes: Vec<Shape>, _store: &dyn Store) -> Result<Vec<Shape>> {
+    fn apply_genetic_optimization(
+        &self,
+        shapes: Vec<Shape>,
+        _store: &dyn Store,
+    ) -> Result<Vec<Shape>> {
         // TODO: Implement genetic algorithm optimization
         Ok(shapes)
     }

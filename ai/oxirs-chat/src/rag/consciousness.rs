@@ -518,7 +518,11 @@ impl ConsciousnessModel {
 
     fn update_attention_focus(&mut self, query: &str, context: &AssembledContext) -> Result<()> {
         // Use the attention mechanism to update focus
-        let _ = self.attention_mechanism.allocate_attention(query, context, &NeuralActivation::default())?;
+        let _ = self.attention_mechanism.allocate_attention(
+            query,
+            context,
+            &NeuralActivation::default(),
+        )?;
         Ok(())
     }
 
@@ -536,7 +540,10 @@ impl ConsciousnessModel {
         };
 
         // Store trace in multi-layer memory system
-        if let Err(e) = self.multi_layer_memory.store_episodic_memory(&trace.query, &trace.context_summary) {
+        if let Err(e) = self
+            .multi_layer_memory
+            .store_episodic_memory(&trace.query, &trace.context_summary)
+        {
             warn!("Failed to store memory trace: {}", e);
         }
     }
@@ -1170,11 +1177,12 @@ impl MultiLayerMemorySystem {
 
         Ok((working_health + episodic_health + semantic_health) / 3.0)
     }
-    
+
     /// Store episodic memory entry
     pub fn store_episodic_memory(&mut self, query: &str, context_summary: &str) -> Result<()> {
         // Create a simple episodic memory entry
-        self.episodic_memory.store_simple_entry(query, context_summary.to_string())?;
+        self.episodic_memory
+            .store_simple_entry(query, context_summary.to_string())?;
         Ok(())
     }
 }
@@ -1265,20 +1273,32 @@ impl AdvancedEmotionalState {
     pub fn calculate_resonance(&self, query: &str) -> f64 {
         // Calculate emotional resonance based on query content and current state
         let query_lower = query.to_lowercase();
-        
+
         // Check for emotional keywords
         let emotional_words = [
-            "feel", "feeling", "emotion", "emotional", "mood", "happy", "sad", 
-            "angry", "excited", "worried", "anxious", "calm", "stressed"
+            "feel",
+            "feeling",
+            "emotion",
+            "emotional",
+            "mood",
+            "happy",
+            "sad",
+            "angry",
+            "excited",
+            "worried",
+            "anxious",
+            "calm",
+            "stressed",
         ];
-        
-        let emotion_score = emotional_words.iter()
+
+        let emotion_score = emotional_words
+            .iter()
             .map(|&word| if query_lower.contains(word) { 0.2 } else { 0.0 })
             .sum::<f64>();
-            
+
         // Factor in current emotional state
         let state_resonance = (self.valence.abs() + self.arousal + self.dominance) / 3.0;
-        
+
         // Combine scores and normalize
         (emotion_score + state_resonance * 0.5).min(1.0)
     }
@@ -1980,7 +2000,7 @@ impl ConsciousnessStateMachine {
             _ => StateProcessingParameters::default(),
         }
     }
-    
+
     /// Evaluate transition condition
     fn evaluate_condition(
         &mut self,
@@ -2001,13 +2021,21 @@ impl ConsciousnessStateMachine {
                 let query_lower = query.to_lowercase();
                 Ok(keywords.iter().any(|keyword| query_lower.contains(keyword)))
             }
-            TransitionCondition::LogicalPattern => {
-                Ok(query.contains("because") || query.contains("therefore") || query.contains("thus"))
-            }
+            TransitionCondition::LogicalPattern => Ok(query.contains("because")
+                || query.contains("therefore")
+                || query.contains("thus")),
             TransitionCondition::PhilosophicalContent => {
-                let philosophical_keywords = ["meaning", "purpose", "existence", "consciousness", "reality"];
+                let philosophical_keywords = [
+                    "meaning",
+                    "purpose",
+                    "existence",
+                    "consciousness",
+                    "reality",
+                ];
                 let query_lower = query.to_lowercase();
-                Ok(philosophical_keywords.iter().any(|&keyword| query_lower.contains(keyword)))
+                Ok(philosophical_keywords
+                    .iter()
+                    .any(|&keyword| query_lower.contains(keyword)))
             }
             TransitionCondition::TimeElapsed(_duration) => {
                 // For simplicity, always return false for time-based conditions
@@ -2015,32 +2043,54 @@ impl ConsciousnessStateMachine {
             }
         }
     }
-    
+
     /// Identify the trigger for state transition
-    fn identify_trigger(&self, query: &str, _context: &AssembledContext) -> Result<TransitionTrigger> {
+    fn identify_trigger(
+        &self,
+        query: &str,
+        _context: &AssembledContext,
+    ) -> Result<TransitionTrigger> {
         // Simple trigger identification based on query content
         if query.len() > 100 {
-            Ok(TransitionTrigger::QueryComplexity(query.len() as f64 / 100.0))
+            Ok(TransitionTrigger::QueryComplexity(
+                query.len() as f64 / 100.0,
+            ))
         } else if query.contains('?') {
-            Ok(TransitionTrigger::AttentionShift("Question pattern detected".to_string()))
+            Ok(TransitionTrigger::AttentionShift(
+                "Question pattern detected".to_string(),
+            ))
         } else {
-            Ok(TransitionTrigger::ExternalStimulus("General content trigger".to_string()))
+            Ok(TransitionTrigger::ExternalStimulus(
+                "General content trigger".to_string(),
+            ))
         }
     }
-    
+
     /// Calculate query complexity
     fn calculate_query_complexity(&self, query: &str) -> Result<f64> {
         let word_count = query.split_whitespace().count();
-        let unique_words = query.split_whitespace().collect::<std::collections::HashSet<_>>().len();
+        let unique_words = query
+            .split_whitespace()
+            .collect::<std::collections::HashSet<_>>()
+            .len();
         let complexity = (word_count as f64 * 0.1 + unique_words as f64 * 0.2).min(1.0);
         Ok(complexity)
     }
-    
+
     /// Calculate emotional content score
     fn calculate_emotional_content(&self, query: &str) -> Result<f64> {
-        let emotional_keywords = ["happy", "sad", "angry", "excited", "disappointed", "love", "hate"];
+        let emotional_keywords = [
+            "happy",
+            "sad",
+            "angry",
+            "excited",
+            "disappointed",
+            "love",
+            "hate",
+        ];
         let query_lower = query.to_lowercase();
-        let emotional_count = emotional_keywords.iter()
+        let emotional_count = emotional_keywords
+            .iter()
             .filter(|&keyword| query_lower.contains(keyword))
             .count();
         Ok((emotional_count as f64 / emotional_keywords.len() as f64).min(1.0))
@@ -2087,7 +2137,10 @@ pub enum EmotionalTone {
     Positive,
     Negative,
     Neutral,
-    Mixed { positive_weight: f64, negative_weight: f64 },
+    Mixed {
+        positive_weight: f64,
+        negative_weight: f64,
+    },
 }
 
 /// Dream State Processing System
@@ -2171,7 +2224,8 @@ impl DreamStateProcessor {
             (self.memory_fragments.len() as f64 * self.dream_intensity * 0.3) as usize;
 
         // Pre-compute similar fragments for each content
-        let similar_fragments: Vec<Option<String>> = self.memory_fragments
+        let similar_fragments: Vec<Option<String>> = self
+            .memory_fragments
             .iter()
             .take(consolidation_count)
             .map(|f| {
@@ -2180,7 +2234,12 @@ impl DreamStateProcessor {
             })
             .collect();
 
-        for (i, fragment) in self.memory_fragments.iter_mut().take(consolidation_count).enumerate() {
+        for (i, fragment) in self
+            .memory_fragments
+            .iter_mut()
+            .take(consolidation_count)
+            .enumerate()
+        {
             // Strengthen important memories
             fragment.consolidation_priority *= 1.1;
 
@@ -2256,24 +2315,29 @@ impl DreamStateProcessor {
 
     /// Find similar memory to given content
     fn find_similar_memory(&self, content: &str) -> Option<&MemoryFragment> {
-        self.memory_fragments.iter()
-            .find(|fragment| 
-                fragment.content.to_lowercase().contains(&content.to_lowercase()) ||
-                content.to_lowercase().contains(&fragment.content.to_lowercase())
-            )
+        self.memory_fragments.iter().find(|fragment| {
+            fragment
+                .content
+                .to_lowercase()
+                .contains(&content.to_lowercase())
+                || content
+                    .to_lowercase()
+                    .contains(&fragment.content.to_lowercase())
+        })
     }
 
     /// Weave narrative from memory fragments
     fn weave_narrative(&self, memory_indices: &[usize]) -> Result<String> {
-        let contents: Vec<String> = memory_indices.iter()
+        let contents: Vec<String> = memory_indices
+            .iter()
             .filter_map(|&idx| self.memory_fragments.get(idx))
             .map(|fragment| fragment.content.clone())
             .collect();
-        
+
         if contents.is_empty() {
             return Ok("Empty dream narrative".to_string());
         }
-        
+
         Ok(format!("Dream narrative: {}", contents.join(" -> ")))
     }
 
@@ -2281,30 +2345,32 @@ impl DreamStateProcessor {
     fn determine_emotional_tone(&self, memory_indices: &[usize]) -> Result<EmotionalTone> {
         let positive_keywords = ["happy", "joy", "love", "success", "achievement"];
         let negative_keywords = ["sad", "anger", "fear", "failure", "loss"];
-        
+
         let mut positive_score = 0.0;
         let mut negative_score = 0.0;
-        
+
         for &idx in memory_indices {
             if let Some(fragment) = self.memory_fragments.get(idx) {
                 let content_lower = fragment.content.to_lowercase();
-                positive_score += positive_keywords.iter()
+                positive_score += positive_keywords
+                    .iter()
                     .filter(|&keyword| content_lower.contains(keyword))
                     .count() as f64;
-                negative_score += negative_keywords.iter()
+                negative_score += negative_keywords
+                    .iter()
                     .filter(|&keyword| content_lower.contains(keyword))
                     .count() as f64;
             }
         }
-        
+
         if positive_score > negative_score * 1.2 {
             Ok(EmotionalTone::Positive)
         } else if negative_score > positive_score * 1.2 {
             Ok(EmotionalTone::Negative)
         } else if positive_score > 0.0 && negative_score > 0.0 {
-            Ok(EmotionalTone::Mixed { 
+            Ok(EmotionalTone::Mixed {
                 positive_weight: positive_score / (positive_score + negative_score),
-                negative_weight: negative_score / (positive_score + negative_score)
+                negative_weight: negative_score / (positive_score + negative_score),
             })
         } else {
             Ok(EmotionalTone::Neutral)
@@ -2314,8 +2380,10 @@ impl DreamStateProcessor {
     /// Extract symbolic elements from memories
     fn extract_symbolic_elements(&self, memory_indices: &[usize]) -> Result<Vec<String>> {
         let mut elements = Vec::new();
-        let symbolic_keywords = ["light", "dark", "water", "fire", "earth", "air", "journey", "path", "door", "key"];
-        
+        let symbolic_keywords = [
+            "light", "dark", "water", "fire", "earth", "air", "journey", "path", "door", "key",
+        ];
+
         for &idx in memory_indices {
             if let Some(fragment) = self.memory_fragments.get(idx) {
                 let content_lower = fragment.content.to_lowercase();
@@ -2326,11 +2394,11 @@ impl DreamStateProcessor {
                 }
             }
         }
-        
+
         if elements.is_empty() {
             elements.push("abstract".to_string());
         }
-        
+
         Ok(elements)
     }
 }
@@ -2350,12 +2418,13 @@ impl TemporalPatternRecognition {
             confidence: 0.0,
         }
     }
-    
+
     /// Find patterns relevant to the given query
     pub fn find_relevant_patterns(&self, query: &str) -> Result<Vec<String>> {
         // Simple pattern matching based on keyword overlap
         let query_words: Vec<&str> = query.split_whitespace().collect();
-        let relevant_patterns = self.patterns
+        let relevant_patterns = self
+            .patterns
             .iter()
             .filter(|pattern| {
                 let pattern_words: Vec<&str> = pattern.split_whitespace().collect();
@@ -2365,7 +2434,7 @@ impl TemporalPatternRecognition {
             .collect();
         Ok(relevant_patterns)
     }
-    
+
     /// Update patterns with new information
     pub fn update_patterns(&mut self, new_patterns: Vec<String>) {
         for pattern in new_patterns {
@@ -2392,29 +2461,36 @@ impl FutureProjectionEngine {
             horizon: Duration::from_secs(3600),
         }
     }
-    
+
     /// Project future implications based on current events
-    pub fn project_implications(&self, query: &str, events: &[TemporalEvent]) -> Result<Vec<String>> {
+    pub fn project_implications(
+        &self,
+        query: &str,
+        events: &[TemporalEvent],
+    ) -> Result<Vec<String>> {
         let mut implications = Vec::new();
-        
+
         // Analyze events for potential future implications
         for event in events {
-            if event.content.contains(&query.to_lowercase()) || 
-               query.to_lowercase().contains(&event.content.to_lowercase()) {
+            if event.content.contains(&query.to_lowercase())
+                || query.to_lowercase().contains(&event.content.to_lowercase())
+            {
                 let implication = format!(
                     "Based on recent event '{}', potential future development could involve {}",
-                    event.content,
-                    query
+                    event.content, query
                 );
                 implications.push(implication);
             }
         }
-        
+
         // Add general implications based on existing predictions
         if implications.is_empty() {
-            implications.push(format!("Future implications for '{}' will depend on emerging patterns", query));
+            implications.push(format!(
+                "Future implications for '{}' will depend on emerging patterns",
+                query
+            ));
         }
-        
+
         Ok(implications)
     }
 }
@@ -2490,7 +2566,7 @@ impl TemporalMemoryBank {
             cyclic_patterns: HashMap::new(),
         }
     }
-    
+
     /// Get recent events within the specified duration
     pub fn get_recent_events(&self, duration: Duration) -> Vec<TemporalEvent> {
         let now = std::time::Instant::now();
@@ -2567,49 +2643,55 @@ impl TemporalConsciousness {
         }
 
         // Update patterns
-        let event_contents: Vec<String> = self.temporal_memory.short_term
+        let event_contents: Vec<String> = self
+            .temporal_memory
+            .short_term
             .iter()
             .map(|e| e.content.clone())
             .collect();
-        self.pattern_recognition
-            .update_patterns(event_contents);
+        self.pattern_recognition.update_patterns(event_contents);
 
         Ok(())
     }
-    
+
     /// Calculate temporal coherence based on memory patterns
     fn calculate_temporal_coherence(&self) -> f64 {
         if self.temporal_memory.short_term.is_empty() {
             return 0.5; // Neutral coherence when no events
         }
-        
+
         // Calculate coherence based on event timestamps and significance
         let total_events = self.temporal_memory.short_term.len() as f64;
-        let avg_significance: f64 = self.temporal_memory.short_term
+        let avg_significance: f64 = self
+            .temporal_memory
+            .short_term
             .iter()
             .map(|e| e.significance)
-            .sum::<f64>() / total_events;
-            
+            .sum::<f64>()
+            / total_events;
+
         // Normalize to 0-1 range
         avg_significance.clamp(0.0, 1.0)
     }
-    
+
     /// Calculate time awareness based on current time and recent events
     fn calculate_time_awareness(&self, current_time: std::time::Instant) -> f64 {
         if self.temporal_memory.short_term.is_empty() {
             return 0.5; // Neutral awareness when no events
         }
-        
+
         // Calculate awareness based on how recent the events are
         let recent_threshold = Duration::from_secs(300); // 5 minutes
-        let recent_events = self.temporal_memory.short_term
+        let recent_events = self
+            .temporal_memory
+            .short_term
             .iter()
             .filter(|e| current_time.duration_since(e.timestamp) <= recent_threshold)
             .count();
-            
+
         let total_events = self.temporal_memory.short_term.len();
         let recent_ratio = recent_events as f64 / total_events as f64;
-        
+
         // High ratio of recent events = high time awareness
         recent_ratio.clamp(0.0, 1.0)
     }
@@ -2624,7 +2706,11 @@ pub struct TransitionRule {
 }
 
 impl TransitionRule {
-    pub fn new(target_state: ConsciousnessState, condition: TransitionCondition, probability: f64) -> Self {
+    pub fn new(
+        target_state: ConsciousnessState,
+        condition: TransitionCondition,
+        probability: f64,
+    ) -> Self {
         Self {
             target_state,
             condition,

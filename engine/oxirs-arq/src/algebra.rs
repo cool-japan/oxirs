@@ -469,7 +469,7 @@ pub enum Algebra {
 
     /// Zero matches
     Zero,
-    
+
     /// Empty result set
     Empty,
 }

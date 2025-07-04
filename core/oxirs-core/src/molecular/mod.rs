@@ -16,7 +16,6 @@
 //! the original 2544-line file into focused, logical components while preserving
 //! all original functionality.
 
-
 // Sub-modules
 mod cellular_division;
 mod dna_structures;
@@ -31,9 +30,9 @@ pub use cellular_division::{
 };
 pub use dna_structures::{DnaDataStructure, NucleotideData, SpecialMarker};
 pub use genetic_optimizer::{
-    default_fitness_function, AccessGenes, AccessPattern, CachingGene, ClusteringGene, CompressionGene, 
-    ConcurrencyGene, GenerationStats, GeneticGraphOptimizer, GraphStructure, IndexGene,
-    IndexingGenes, MutationType, PartitioningGene, QueryPreferences, StorageGenes,
+    default_fitness_function, AccessGenes, AccessPattern, CachingGene, ClusteringGene,
+    CompressionGene, ConcurrencyGene, GenerationStats, GeneticGraphOptimizer, GraphStructure,
+    IndexGene, IndexingGenes, MutationType, PartitioningGene, QueryPreferences, StorageGenes,
 };
 pub use regulatory::{CheckpointResult, CheckpointSystem, RegulatoryProtein};
 pub use replication::{

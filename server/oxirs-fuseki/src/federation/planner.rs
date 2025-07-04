@@ -896,8 +896,8 @@ impl QueryPlanner {
 
         // For now, create a simple placeholder query
         // In a real implementation, this would use proper SPARQL parsing
-        use oxirs_arq::Algebra;
         use oxirs_arq::query::QueryType;
+        use oxirs_arq::Algebra;
         Ok(Query {
             query_type: QueryType::Select,
             select_variables: vec![],

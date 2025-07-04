@@ -163,7 +163,9 @@ impl ConstraintEvaluationResult {
                 details,
             } => Some(ValidationViolation {
                 value: violating_value,
-                source_constraint_component: ConstraintComponentId::new("http://example.org/constraint"),
+                source_constraint_component: ConstraintComponentId::new(
+                    "http://example.org/constraint",
+                ),
                 source_shape: ShapeId::new("http://example.org/shape"),
                 focus_node: Term::NamedNode(NamedNode::new("http://example.org/focus").unwrap()),
                 result_path: None,

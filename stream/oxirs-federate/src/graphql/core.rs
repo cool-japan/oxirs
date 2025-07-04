@@ -462,10 +462,13 @@ impl GraphQLFederation {
                 let subscription_query = self.build_service_subscription_query(fields, query)?;
 
                 // Convert VariableDefinition to actual values (using default values where available)
-                let variable_values: HashMap<String, serde_json::Value> = query.variables
+                let variable_values: HashMap<String, serde_json::Value> = query
+                    .variables
                     .iter()
                     .filter_map(|(name, def)| {
-                        def.default_value.as_ref().map(|val| (name.clone(), val.clone()))
+                        def.default_value
+                            .as_ref()
+                            .map(|val| (name.clone(), val.clone()))
                     })
                     .collect();
 
@@ -527,16 +530,19 @@ impl GraphQLFederation {
             }
 
             // Convert graphql::types::GraphQLError to executor::types::GraphQLError
-            let converted_errors: Vec<crate::executor::types::GraphQLError> = event.errors
+            let converted_errors: Vec<crate::executor::types::GraphQLError> = event
+                .errors
                 .into_iter()
                 .map(|err| crate::executor::types::GraphQLError {
                     message: err.message,
-                    locations: err.locations.map(|locs| 
-                        locs.into_iter().map(|loc| crate::executor::types::GraphQLLocation {
-                            line: loc.line,
-                            column: loc.column,
-                        }).collect()
-                    ),
+                    locations: err.locations.map(|locs| {
+                        locs.into_iter()
+                            .map(|loc| crate::executor::types::GraphQLLocation {
+                                line: loc.line,
+                                column: loc.column,
+                            })
+                            .collect()
+                    }),
                     path: err.path,
                 })
                 .collect();

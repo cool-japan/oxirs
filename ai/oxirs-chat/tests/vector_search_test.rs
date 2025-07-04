@@ -1,5 +1,5 @@
 use oxirs_chat::rag::{QueryContext, QueryIntent, RAGConfig, RAGSystem, SimpleEmbeddingModel};
-use oxirs_core::{Literal, NamedNode, Store, ConcreteStore, Triple};
+use oxirs_core::{ConcreteStore, Literal, NamedNode, Store, Triple};
 use oxirs_embed::EmbeddingModel;
 use oxirs_vec::{
     index::AdvancedVectorIndex,
@@ -191,7 +191,8 @@ async fn test_rag_system_with_vector_index() {
 
             match system.retrieve(query).await {
                 Ok(knowledge) => {
-                    let triple_count = knowledge.retrieved_triples
+                    let triple_count = knowledge
+                        .retrieved_triples
                         .as_ref()
                         .map(|t| t.len())
                         .unwrap_or(0);

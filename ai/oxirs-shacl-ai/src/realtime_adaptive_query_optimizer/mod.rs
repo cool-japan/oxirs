@@ -36,7 +36,7 @@ use oxirs_core::{
 use serde::{Deserialize, Serialize};
 
 // Re-export main types
-pub use caching::{AccessPattern, AdaptivePlanCache, CachedPlan, CacheStatistics};
+pub use caching::{AccessPattern, AdaptivePlanCache, CacheStatistics, CachedPlan};
 pub use config::AdaptiveOptimizerConfig;
 pub use performance::{
     OptimizationPlanType, PatternPerformanceStats, PerformanceMetrics, PerformanceMonitor,
@@ -382,17 +382,15 @@ impl RealTimeAdaptiveQueryOptimizer {
             } else {
                 None
             },
-            neural_transformer: Arc::new(Mutex::new(
-                NeuralTransformerPatternIntegration::new(NeuralTransformerConfig::default())?,
-            )),
+            neural_transformer: Arc::new(Mutex::new(NeuralTransformerPatternIntegration::new(
+                NeuralTransformerConfig::default(),
+            )?)),
             performance_monitor: Arc::new(Mutex::new(PerformanceMonitor::new(config.clone()))),
             plan_cache: Arc::new(RwLock::new(AdaptivePlanCache::new(config.clone()))),
             plan_selector: Arc::new(Mutex::new(MLPlanSelector::new(config.clone()))),
             feedback_processor: Arc::new(Mutex::new(FeedbackProcessor::new(config.clone()))),
             online_learner: Arc::new(Mutex::new(OnlineLearningEngine::new(config.clone()))),
-            complexity_analyzer: Arc::new(Mutex::new(QueryComplexityAnalyzer::new(
-                config.clone(),
-            ))),
+            complexity_analyzer: Arc::new(Mutex::new(QueryComplexityAnalyzer::new(config.clone()))),
             config,
             stats: AdaptiveOptimizerStats::default(),
         })

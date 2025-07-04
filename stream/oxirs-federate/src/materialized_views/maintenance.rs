@@ -9,7 +9,6 @@ use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
-
 use super::types::*;
 
 /// Maintenance scheduler for materialized views

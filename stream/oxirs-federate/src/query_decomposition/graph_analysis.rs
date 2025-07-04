@@ -8,8 +8,8 @@ use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::debug;
 
-use crate::planner::{TriplePattern};
 use crate::planner::planning::types::QueryInfo as PlanningQueryInfo;
+use crate::planner::TriplePattern;
 
 use super::types::*;
 

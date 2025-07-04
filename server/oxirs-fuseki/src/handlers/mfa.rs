@@ -205,7 +205,9 @@ pub async fn create_mfa_challenge(
     };
 
     // Store challenge in auth service
-    auth_service.store_mfa_challenge(&challenge.challenge_id, challenge.clone()).await?;
+    auth_service
+        .store_mfa_challenge(&challenge.challenge_id, challenge.clone())
+        .await?;
 
     Ok(Json(MfaChallengeResponse {
         success: true,
@@ -345,7 +347,7 @@ pub async fn disable_mfa(
 
     let user = extract_authenticated_user(&headers, auth_service).await?;
     let parsed_mfa_type = parse_mfa_type(&mfa_type)?;
-    
+
     // Convert MfaType to MfaMethod
     let mfa_method = match parsed_mfa_type {
         MfaType::Totp => MfaMethod::Totp,
@@ -669,7 +671,7 @@ async fn create_email_challenge(
 ) -> FusekiResult<MfaChallenge> {
     // Generate and send email code
     let code = generate_email_verification_code();
-    // TODO: Implement get_user_mfa_email method  
+    // TODO: Implement get_user_mfa_email method
     let email = "placeholder@example.com".to_string();
 
     send_verification_email(&email, &code).await?;

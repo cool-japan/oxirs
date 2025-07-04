@@ -11,7 +11,10 @@ use tokio::sync::{RwLock, Semaphore};
 
 use crate::{
     shape::{AiShape, PropertyConstraint},
-    shape_management::{EffortLevel, OptimizationOpportunity, OptimizationPriority, OptimizationType, PerformanceProfile},
+    shape_management::{
+        EffortLevel, OptimizationOpportunity, OptimizationPriority, OptimizationType,
+        PerformanceProfile,
+    },
     Result, ShaclAiError,
 };
 

@@ -839,7 +839,10 @@ impl CollectiveConsciousnessNetwork {
             source_agent: agent_id,
             consciousness_level: agent.consciousness_level,
             emotional_state: agent.emotional_state.clone(),
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
         })
         .await?;
 
@@ -994,11 +997,7 @@ impl CollectiveConsciousnessNetwork {
         // Execute validation with consciousness enhancement
         let result = agent
             .validator
-            .validate_with_consciousness(
-                store,
-                shapes,
-                &enhanced_config,
-            )
+            .validate_with_consciousness(store, shapes, &enhanced_config)
             .await?;
 
         // Update agent statistics

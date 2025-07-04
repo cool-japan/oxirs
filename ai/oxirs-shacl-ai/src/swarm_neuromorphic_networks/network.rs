@@ -13,7 +13,9 @@ use super::{
     config::{SwarmNetworkConfig, SwarmNodeConfig},
     coordination::{CollectiveDecisionEngine, SwarmIntelligenceCoordinator},
     learning::{BioInspiredOptimizationEngine, DistributedLearningCoordinator},
-    network_management::{EmergentBehaviorAnalyzer, NetworkTopologyManager, SwarmCommunicationManager},
+    network_management::{
+        EmergentBehaviorAnalyzer, NetworkTopologyManager, SwarmCommunicationManager,
+    },
     resilience::SwarmResilienceManager,
     results::SwarmMetrics,
     types::{SwarmNodeId, SwarmPosition, SwarmValidationContext},
@@ -121,7 +123,6 @@ impl SwarmNeuromorphicNode {
     }
 }
 
-
 // Result types
 #[derive(Debug)]
 pub struct SwarmNodeDeploymentResult {
@@ -133,4 +134,3 @@ pub struct TaskAssignment {
     pub task_id: Uuid,
     pub processing_time_estimate: f64,
 }
-

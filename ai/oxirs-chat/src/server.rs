@@ -25,7 +25,7 @@ use tower_http::{
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{ChatSession, Message, MessageRole, ThreadInfo, OxiRSChat};
+use crate::{ChatSession, Message, MessageRole, OxiRSChat, ThreadInfo};
 
 /// Server state shared across handlers
 #[derive(Clone)]
@@ -283,7 +283,11 @@ async fn send_message(
     Json(request): Json<SendMessageRequest>,
 ) -> Result<Json<MessageResponse>, StatusCode> {
     if let Some(_session_arc) = state.chat.get_session(&session_id).await {
-        match state.chat.process_message(&session_id, request.content).await {
+        match state
+            .chat
+            .process_message(&session_id, request.content)
+            .await
+        {
             Ok(message) => {
                 // Session is automatically managed by OxiRSChat
 
@@ -483,7 +487,7 @@ async fn add_reaction(
                 user_id: Some(request.user_id),
                 timestamp: chrono::Utc::now(),
             });
-            
+
             // Session is automatically managed
             Ok(StatusCode::OK)
         } else {
@@ -498,7 +502,7 @@ async fn get_stats(State(state): State<AppState>) -> Result<Json<crate::SessionS
     // Calculate basic stats from available methods
     let total_sessions = state.chat.session_count().await;
     let session_list = state.chat.list_sessions().await;
-    
+
     // Create basic stats (detailed stats would require iterating over all sessions)
     let stats = crate::SessionStats {
         total_sessions,
@@ -508,7 +512,7 @@ async fn get_stats(State(state): State<AppState>) -> Result<Json<crate::SessionS
         suspended_sessions: 0,
         total_messages: 0, // Would need to aggregate from all sessions
     };
-    
+
     Ok(Json(stats))
 }
 
@@ -584,42 +588,39 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                     parent_message_id,
                                 } => {
                                     // Process message using OxiRSChat
-                                    if let Ok(response_msg) = state.chat
-                                        .process_message(&session_id, content)
-                                        .await
-                                        {
-                                            let response = WebSocketResponse::Message {
-                                                message_id: response_msg.id,
-                                                content: response_msg.content.to_string(),
-                                                role: match response_msg.role {
-                                                    MessageRole::User => "user".to_string(),
-                                                    MessageRole::Assistant => {
-                                                        "assistant".to_string()
-                                                    }
-                                                    MessageRole::System => "system".to_string(),
-                                                    MessageRole::Function => "function".to_string(),
-                                                },
-                                                timestamp: response_msg.timestamp.to_rfc3339(),
-                                                metadata: response_msg.metadata.map(|m| {
-                                                    serde_json::to_value(m).unwrap_or_default()
-                                                }),
-                                            };
+                                    if let Ok(response_msg) =
+                                        state.chat.process_message(&session_id, content).await
+                                    {
+                                        let response = WebSocketResponse::Message {
+                                            message_id: response_msg.id,
+                                            content: response_msg.content.to_string(),
+                                            role: match response_msg.role {
+                                                MessageRole::User => "user".to_string(),
+                                                MessageRole::Assistant => "assistant".to_string(),
+                                                MessageRole::System => "system".to_string(),
+                                                MessageRole::Function => "function".to_string(),
+                                            },
+                                            timestamp: response_msg.timestamp.to_rfc3339(),
+                                            metadata: response_msg.metadata.map(|m| {
+                                                serde_json::to_value(m).unwrap_or_default()
+                                            }),
+                                        };
 
-                                            // Session is automatically managed by OxiRSChat
+                                        // Session is automatically managed by OxiRSChat
 
-                                            if let Ok(json) = serde_json::to_string(&response) {
-                                                let _ = tx.send(json).await;
-                                            }
-                                        } else {
-                                            // Handle message processing error
-                                            let error_response = WebSocketResponse::Error {
-                                                code: "PROCESSING_ERROR".to_string(),
-                                                message: "Failed to process message".to_string(),
-                                            };
-                                            if let Ok(json) = serde_json::to_string(&error_response) {
-                                                let _ = tx.send(json).await;
-                                            }
+                                        if let Ok(json) = serde_json::to_string(&response) {
+                                            let _ = tx.send(json).await;
                                         }
+                                    } else {
+                                        // Handle message processing error
+                                        let error_response = WebSocketResponse::Error {
+                                            code: "PROCESSING_ERROR".to_string(),
+                                            message: "Failed to process message".to_string(),
+                                        };
+                                        if let Ok(json) = serde_json::to_string(&error_response) {
+                                            let _ = tx.send(json).await;
+                                        }
+                                    }
                                 }
                                 WebSocketMessage::Ping => {
                                     let pong = WebSocketResponse::Pong;
@@ -644,15 +645,19 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                             "👍" | "like" => crate::ReactionType::Like,
                                             "👎" | "dislike" => crate::ReactionType::Dislike,
                                             "✅" | "helpful" => crate::ReactionType::Helpful,
-                                            "❌" | "not_helpful" => crate::ReactionType::NotHelpful,
+                                            "❌" | "not_helpful" => {
+                                                crate::ReactionType::NotHelpful
+                                            }
                                             "✔️" | "accurate" => crate::ReactionType::Accurate,
                                             "❌" | "inaccurate" => crate::ReactionType::Inaccurate,
                                             "💭" | "clear" => crate::ReactionType::Clear,
                                             "😵" | "confusing" => crate::ReactionType::Confusing,
                                             _ => crate::ReactionType::Like,
                                         };
-                                        
-                                        if let Some(message) = session.messages.iter_mut().find(|m| m.id == message_id) {
+
+                                        if let Some(message) =
+                                            session.messages.iter_mut().find(|m| m.id == message_id)
+                                        {
                                             message.reactions.push(crate::MessageReaction {
                                                 reaction_type,
                                                 user_id: Some(user_id),
@@ -676,7 +681,8 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                                 code: "NOT_FOUND".to_string(),
                                                 message: "Message not found".to_string(),
                                             };
-                                            if let Ok(json) = serde_json::to_string(&error_response) {
+                                            if let Ok(json) = serde_json::to_string(&error_response)
+                                            {
                                                 let _ = tx.send(json).await;
                                             }
                                         }

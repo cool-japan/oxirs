@@ -564,7 +564,10 @@ impl AnomalyDetector {
                 .baselines
                 .entry(constraint_key.clone())
                 .or_insert_with(StatisticalBaseline::default);
-            (baseline.expected_execution_time, baseline.expected_memory_usage)
+            (
+                baseline.expected_execution_time,
+                baseline.expected_memory_usage,
+            )
         };
 
         // Check for time anomaly
@@ -590,9 +593,7 @@ impl AnomalyDetector {
         }
 
         // Check for memory anomaly
-        if record.memory_used
-            > expected_memory_usage * self.thresholds.memory_usage_multiplier
-        {
+        if record.memory_used > expected_memory_usage * self.thresholds.memory_usage_multiplier {
             self.record_anomaly(DetectedAnomaly {
                 anomaly_type: AnomalyType::HighMemoryUsage,
                 constraint_id: record.constraint_id.clone(),

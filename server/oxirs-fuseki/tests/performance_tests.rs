@@ -458,8 +458,8 @@ mod performance_tests {
 
     // Helper function to create test endpoints
     fn create_test_endpoint(url: &str) -> oxirs_fuseki::federation::ServiceEndpoint {
-        use oxirs_fuseki::federation::{EndpointCapabilities, ServiceEndpoint};
         use oxirs_fuseki::clustering::HealthStatus;
+        use oxirs_fuseki::federation::{EndpointCapabilities, ServiceEndpoint};
         use std::collections::HashSet;
 
         ServiceEndpoint {

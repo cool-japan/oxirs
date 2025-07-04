@@ -370,7 +370,11 @@ impl AdvancedPatternMiningEngine {
     }
 
     /// Build frequency tables from store data
-    fn build_frequency_tables(&mut self, store: &dyn Store, graph_name: Option<&str>) -> Result<()> {
+    fn build_frequency_tables(
+        &mut self,
+        store: &dyn Store,
+        graph_name: Option<&str>,
+    ) -> Result<()> {
         debug!("Building frequency tables");
 
         // TODO: Implement proper SPARQL query for frequency analysis

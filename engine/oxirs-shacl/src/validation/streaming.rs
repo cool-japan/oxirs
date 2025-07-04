@@ -29,9 +29,9 @@ use tokio_stream;
 
 #[cfg(feature = "async")]
 use oxirs_core::{
-    model::{NamedNode, Term, Triple, Quad, Subject, Predicate, Object, GraphName},
-    Store, Result as OxirsResult,
+    model::{GraphName, NamedNode, Object, Predicate, Quad, Subject, Term, Triple},
     rdf_store::{OxirsQueryResults, PreparedQuery},
+    Result as OxirsResult, Store,
 };
 
 #[cfg(feature = "async")]

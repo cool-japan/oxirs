@@ -227,7 +227,8 @@ impl ShapeLibrary {
 
     pub fn add_shape(&mut self, shape: &AiShape, entry: ShapeEntry) -> Result<()> {
         // Add shape to catalog
-        self.shape_catalog.insert(shape.id().clone().into(), entry.clone());
+        self.shape_catalog
+            .insert(shape.id().clone().into(), entry.clone());
 
         // Update search indices
         self.update_search_indices(&entry)?;

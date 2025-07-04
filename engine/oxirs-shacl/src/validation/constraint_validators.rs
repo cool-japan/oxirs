@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
-    Store, ConcreteStore,
+    ConcreteStore, Store,
 };
 
 use crate::{constraints::*, PropertyPath, Result, ShaclError};

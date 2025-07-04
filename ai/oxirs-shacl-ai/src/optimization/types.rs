@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-use oxirs_shacl::{Shape, ShapeId, ValidationReport};
 use crate::shape::{AiShape, PropertyConstraint};
 use crate::shape_management::{OptimizationOpportunity, PerformanceProfile};
+use oxirs_shacl::{Shape, ShapeId, ValidationReport};
 
 /// Optimized validation strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -249,18 +249,18 @@ impl ConstraintSelectivityAnalyzer {
             }
 
             // Recalculate selectivity
-            selectivity_stats.selectivity =
-                selectivity_stats.total_violations as f64 / selectivity_stats.total_evaluations as f64;
+            selectivity_stats.selectivity = selectivity_stats.total_violations as f64
+                / selectivity_stats.total_evaluations as f64;
 
             let total_evaluations = selectivity_stats.total_evaluations;
             selectivity_stats.last_updated = Instant::now();
-            
+
             (total_evaluations, total_evaluations)
         };
-        
+
         // Calculate confidence after releasing the mutable borrow
         let confidence = self.calculate_confidence(confidence);
-        
+
         // Update confidence
         if let Some(stats) = self.constraint_selectivity.get_mut(&constraint_key) {
             stats.confidence = confidence;
@@ -417,9 +417,13 @@ impl ConstraintSelectivityAnalyzer {
         let mut reordered = Vec::new();
         reordered.extend(independent_constraints);
         reordered.extend(dependent_constraints);
-        
+
         // Copy back to the slice (up to its capacity)
-        for (i, constraint) in reordered.into_iter().take(ordered_constraints.len()).enumerate() {
+        for (i, constraint) in reordered
+            .into_iter()
+            .take(ordered_constraints.len())
+            .enumerate()
+        {
             ordered_constraints[i] = constraint;
         }
 

@@ -356,7 +356,9 @@ impl SparqlVectorFunctions {
     /// Execute vector similarity function directly on vectors
     fn execute_vector_similarity(&self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
         if args.len() != 2 {
-            return Err(anyhow!("vector_similarity requires exactly 2 vector arguments"));
+            return Err(anyhow!(
+                "vector_similarity requires exactly 2 vector arguments"
+            ));
         }
 
         let vector1 = match &args[0] {
@@ -374,7 +376,11 @@ impl SparqlVectorFunctions {
     }
 
     /// Execute embed text function
-    fn execute_embed_text(&self, args: &[VectorServiceArg], executor: &mut QueryExecutor) -> Result<VectorServiceResult> {
+    fn execute_embed_text(
+        &self,
+        args: &[VectorServiceArg],
+        executor: &mut QueryExecutor,
+    ) -> Result<VectorServiceResult> {
         if args.is_empty() {
             return Err(anyhow!("embed_text requires at least 1 argument"));
         }
@@ -543,7 +549,8 @@ impl CustomVectorFunction for CosineSimilarityFunction {
             _ => return Err(anyhow!("Second argument must be a vector")),
         };
 
-        let similarity = crate::similarity::cosine_similarity(&vector1.as_slice(), &vector2.as_slice());
+        let similarity =
+            crate::similarity::cosine_similarity(&vector1.as_slice(), &vector2.as_slice());
 
         Ok(VectorServiceResult::Number(similarity))
     }

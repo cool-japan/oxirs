@@ -40,9 +40,7 @@ impl EnhancedVectorIndex {
         metadata: HashMap<String, String>,
     ) -> Result<()> {
         // Generate embedding for the content
-        let vector = self
-            .embedding_manager
-            .get_embedding(&content, None).await?;
+        let vector = self.embedding_manager.get_embedding(&content, None).await?;
 
         // Add to vector index
         self.index.insert(id.clone(), vector.clone())?;
@@ -68,9 +66,7 @@ impl EnhancedVectorIndex {
     /// Search for similar documents using semantic similarity
     pub async fn search(&mut self, query: &str, limit: usize) -> Result<Vec<SearchDocument>> {
         // Generate embedding for query
-        let query_vector = self
-            .embedding_manager
-            .get_embedding(query, None).await?;
+        let query_vector = self.embedding_manager.get_embedding(query, None).await?;
 
         // Search the vector index
         let search_results: Vec<VecSearchResult> =

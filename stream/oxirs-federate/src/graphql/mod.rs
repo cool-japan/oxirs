@@ -19,8 +19,8 @@ pub mod translation;
 pub mod types;
 
 // Re-export main types and structs for public API
-pub use types::{GraphQLFederation, GraphQLFederationConfig};
 pub use types::*;
+pub use types::{GraphQLFederation, GraphQLFederationConfig};
 
 #[cfg(test)]
 mod tests {

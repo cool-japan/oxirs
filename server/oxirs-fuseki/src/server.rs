@@ -421,7 +421,6 @@ impl Runtime {
         Ok(app.with_state((*state).clone()))
     }
 
-
     /// Graceful shutdown with configurable timeout
     async fn create_graceful_shutdown(graceful_shutdown_timeout_secs: u64) {
         let shutdown_timeout = Duration::from_secs(graceful_shutdown_timeout_secs);
@@ -608,10 +607,10 @@ pub async fn ping_handler() -> &'static str {
 }
 
 // Aliases for test compatibility
+pub use cache_stats_handler as stats_handler;
 pub use health_handler as health_check;
 pub use liveness_handler as liveness_check;
 pub use readiness_handler as readiness_check;
-pub use cache_stats_handler as stats_handler;
 
 /// Server information handler
 pub async fn server_info_handler(

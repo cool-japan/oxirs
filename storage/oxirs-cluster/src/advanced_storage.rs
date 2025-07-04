@@ -305,8 +305,7 @@ impl WriteAheadLog {
                     if entry.checksum == computed_checksum {
                         let sequence = entry.sequence;
                         recovered_entries.push(entry);
-                        self.current_sequence
-                            .store(sequence + 1, Ordering::SeqCst);
+                        self.current_sequence.store(sequence + 1, Ordering::SeqCst);
                     } else {
                         tracing::warn!(
                             "WAL entry {} has invalid checksum, stopping recovery",
@@ -482,7 +481,9 @@ impl AdvancedStorageBackend {
             },
             ..Default::default()
         };
-        let serializer = Arc::new(Mutex::new(MessageSerializer::with_config(serializer_config)));
+        let serializer = Arc::new(Mutex::new(MessageSerializer::with_config(
+            serializer_config,
+        )));
 
         let mut backend = Self {
             config,
@@ -714,7 +715,7 @@ impl AdvancedStorageBackend {
                 let mut serializer = self.serializer.lock().await;
                 serializer.serialize(&metadata)?
             };
-            
+
             let env = self.environment.lock().await;
             let mut txn = env.begin_rw_txn()?;
             txn.put(

@@ -3,10 +3,11 @@
 use clap::Parser;
 use oxirs_chat::{
     server::{ChatServer, ServerConfig},
-    OxiRSChat,
-    ChatConfig,
+    ChatConfig, OxiRSChat,
 };
-use oxirs_core::{format::RdfFormat, GraphName, Literal, NamedNode, Quad, Store, ConcreteStore, Triple};
+use oxirs_core::{
+    format::RdfFormat, ConcreteStore, GraphName, Literal, NamedNode, Quad, Store, Triple,
+};
 use std::{path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
 

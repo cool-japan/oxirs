@@ -87,11 +87,12 @@ impl RdfStore {
         match self.query(query)? {
             QueryResults::Solutions(solutions) => {
                 if let Some(solution) = solutions.first() {
-                    if let Some(Term::Literal(lit)) = solution.get(&Variable::new("count").unwrap())
-                    {
-                        if let Ok(count) = lit.value().parse::<usize>() {
-                            return Ok(count);
-                        }
+                    let count_var = Variable::new("count")
+                        .map_err(|e| anyhow::anyhow!("Failed to create count variable: {}", e))?;
+                    if let Some(Term::Literal(lit)) = solution.get(&count_var) {
+                        let count = lit.value().parse::<usize>()
+                            .map_err(|e| anyhow::anyhow!("Failed to parse count value '{}': {}", lit.value(), e))?;
+                        return Ok(count);
                     }
                 }
             }
@@ -110,10 +111,13 @@ impl RdfStore {
         let query = format!("SELECT DISTINCT ?s WHERE {{ ?s ?p ?o }}{}", limit_clause);
         let mut subjects = Vec::new();
 
+        let subject_var = Variable::new("s")
+            .map_err(|e| anyhow::anyhow!("Failed to create subject variable: {}", e))?;
+
         match self.query(&query)? {
             QueryResults::Solutions(solutions) => {
                 for solution in &solutions {
-                    if let Some(subject) = solution.get(&Variable::new("s").unwrap()) {
+                    if let Some(subject) = solution.get(&subject_var) {
                         subjects.push(subject.to_string());
                     }
                 }
@@ -134,10 +138,13 @@ impl RdfStore {
         let query = format!("SELECT DISTINCT ?p WHERE {{ ?s ?p ?o }}{}", limit_clause);
         let mut predicates = Vec::new();
 
+        let predicate_var = Variable::new("p")
+            .map_err(|e| anyhow::anyhow!("Failed to create predicate variable: {}", e))?;
+
         match self.query(&query)? {
             QueryResults::Solutions(solutions) => {
                 for solution in &solutions {
-                    if let Some(predicate) = solution.get(&Variable::new("p").unwrap()) {
+                    if let Some(predicate) = solution.get(&predicate_var) {
                         predicates.push(predicate.to_string());
                     }
                 }
@@ -158,10 +165,13 @@ impl RdfStore {
         let query = format!("SELECT DISTINCT ?o WHERE {{ ?s ?p ?o }}{}", limit_clause);
         let mut objects = Vec::new();
 
+        let object_var = Variable::new("o")
+            .map_err(|e| anyhow::anyhow!("Failed to create object variable: {}", e))?;
+
         match self.query(&query)? {
             QueryResults::Solutions(solutions) => {
                 for solution in &solutions {
-                    if let Some(object) = solution.get(&Variable::new("o").unwrap()) {
+                    if let Some(object) = solution.get(&object_var) {
                         let object_type = match object {
                             Term::NamedNode(_) => "IRI".to_string(),
                             Term::BlankNode(_) => "BlankNode".to_string(),
@@ -264,6 +274,7 @@ pub mod execution;
 pub mod federation;
 pub mod hybrid_optimizer;
 pub mod intelligent_federation_gateway;
+pub mod intelligent_query_cache;
 pub mod introspection;
 pub mod mapping;
 pub mod ml_optimizer;
@@ -308,6 +319,11 @@ pub use juniper_schema::{create_schema, GraphQLContext, Schema as JuniperSchema}
 pub use simple_juniper_server::{
     start_graphql_server, start_graphql_server_with_config, GraphQLServerBuilder,
     GraphQLServerConfig, JuniperGraphQLServer,
+};
+
+// Intelligent query caching
+pub use intelligent_query_cache::{
+    IntelligentQueryCache, IntelligentCacheConfig, QueryPattern, QueryUsageStats
 };
 
 // Advanced Juniper server with full Hyper v1 support
@@ -364,14 +380,15 @@ impl GraphQLServer {
         }
     }
 
-    pub fn new_with_mock(store: Arc<MockStore>) -> Self {
+    pub fn new_with_mock(store: Arc<MockStore>) -> Result<Self> {
         // For backward compatibility during transition
-        let rdf_store = Arc::new(RdfStore::new().expect("Failed to create RDF store"));
-        Self {
+        let rdf_store = Arc::new(RdfStore::new()
+            .map_err(|e| anyhow::anyhow!("Failed to create RDF store for mock: {}", e))?);
+        Ok(Self {
             config: GraphQLConfig::default(),
             store: rdf_store,
             cache: None,
-        }
+        })
     }
 
     pub fn with_config(mut self, config: GraphQLConfig) -> Self {

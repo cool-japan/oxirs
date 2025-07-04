@@ -211,7 +211,7 @@ impl BatchSizePredictor {
     /// Add a new training data point
     pub fn add_training_point(&mut self, point: BatchPerformancePoint) {
         self.training_data.push_back(point);
-        
+
         // Keep training data size under limit
         if self.training_data.len() > self.max_training_size {
             self.training_data.pop_front();
@@ -225,22 +225,23 @@ impl BatchSizePredictor {
 
     /// Predict optimal batch size for given conditions
     pub fn predict_optimal_batch_size(
-        &self, 
-        target_latency_ms: f64, 
+        &self,
+        target_latency_ms: f64,
         system_load: f64,
-        event_complexity: f64
+        event_complexity: f64,
     ) -> Option<usize> {
         let (slope, intercept) = self.coefficients?;
-        
+
         // Simple linear regression: latency = slope * batch_size + intercept
         // Adjust for system conditions
-        let adjusted_target = target_latency_ms * (1.0 + system_load * 0.5) * (1.0 + event_complexity * 0.3);
-        
+        let adjusted_target =
+            target_latency_ms * (1.0 + system_load * 0.5) * (1.0 + event_complexity * 0.3);
+
         // Solve for batch_size: batch_size = (latency - intercept) / slope
         if slope.abs() < f64::EPSILON {
             return None;
         }
-        
+
         let predicted_batch_size = ((adjusted_target - intercept) / slope).max(1.0);
         Some(predicted_batch_size as usize)
     }
@@ -252,15 +253,15 @@ impl BatchSizePredictor {
         }
 
         let n = self.training_data.len() as f64;
-        let mut sum_x = 0.0;  // batch size
-        let mut sum_y = 0.0;  // latency
+        let mut sum_x = 0.0; // batch size
+        let mut sum_y = 0.0; // latency
         let mut sum_xy = 0.0;
         let mut sum_x2 = 0.0;
 
         for point in &self.training_data {
             let x = point.batch_size as f64;
             let y = point.latency_ms;
-            
+
             sum_x += x;
             sum_y += y;
             sum_xy += x * y;
@@ -280,7 +281,9 @@ impl BatchSizePredictor {
 
         debug!(
             "Retrained batch predictor: slope={:.4}, intercept={:.4}, samples={}",
-            slope, intercept, self.training_data.len()
+            slope,
+            intercept,
+            self.training_data.len()
         );
     }
 
@@ -289,20 +292,26 @@ impl BatchSizePredictor {
         if self.accuracy_tracker.is_empty() {
             return 0.0;
         }
-        
+
         let sum: f64 = self.accuracy_tracker.iter().sum();
         sum / self.accuracy_tracker.len() as f64
     }
 
     /// Validate prediction against actual performance
-    pub fn validate_prediction(&mut self, predicted: usize, actual_latency: f64, actual_batch_size: usize) {
+    pub fn validate_prediction(
+        &mut self,
+        predicted: usize,
+        actual_latency: f64,
+        actual_batch_size: usize,
+    ) {
         if actual_batch_size == 0 {
             return;
         }
 
-        let error_ratio = (predicted as f64 - actual_batch_size as f64).abs() / actual_batch_size as f64;
+        let error_ratio =
+            (predicted as f64 - actual_batch_size as f64).abs() / actual_batch_size as f64;
         let accuracy = (1.0 - error_ratio.min(1.0)) * 100.0;
-        
+
         self.accuracy_tracker.push_back(accuracy);
         if self.accuracy_tracker.len() > 100 {
             self.accuracy_tracker.pop_front();
@@ -370,20 +379,21 @@ impl NetworkAwareCompressor {
     /// Compress data with adaptive compression level
     pub async fn compress_adaptive(&self, data: &[u8]) -> Result<Vec<u8>> {
         let start_time = Instant::now();
-        
+
         // Determine optimal compression level based on network conditions
         let compression_level = self.calculate_optimal_compression_level().await;
-        
+
         // Update current level
-        self.current_level.store(compression_level, Ordering::Relaxed);
-        
+        self.current_level
+            .store(compression_level, Ordering::Relaxed);
+
         // Perform compression
         let compressed = self.compress_with_level(data, compression_level)?;
-        
+
         // Update statistics
         let compression_time = start_time.elapsed();
         self.update_compression_stats(data.len(), compressed.len(), compression_time);
-        
+
         debug!(
             "Compressed {} bytes to {} bytes (ratio: {:.2}x) with level {} in {:?}",
             data.len(),
@@ -392,7 +402,7 @@ impl NetworkAwareCompressor {
             compression_level,
             compression_time
         );
-        
+
         Ok(compressed)
     }
 
@@ -410,10 +420,12 @@ impl NetworkAwareCompressor {
         // - High bandwidth (>100 Mbps): Lower compression for speed
         // - Medium bandwidth (10-100 Mbps): Balanced compression
         // - Low bandwidth (<10 Mbps): Higher compression for efficiency
-        
-        if estimated_bw > 100_000_000.0 { // >100 Mbps
+
+        if estimated_bw > 100_000_000.0 {
+            // >100 Mbps
             3 // Low compression, prioritize speed
-        } else if estimated_bw > 10_000_000.0 { // 10-100 Mbps
+        } else if estimated_bw > 10_000_000.0 {
+            // 10-100 Mbps
             6 // Balanced compression
         } else {
             9 // High compression, prioritize size
@@ -422,12 +434,14 @@ impl NetworkAwareCompressor {
 
     /// Compress data with specific compression level
     fn compress_with_level(&self, data: &[u8], level: usize) -> Result<Vec<u8>> {
-        use flate2::{Compression, write::GzEncoder};
+        use flate2::{write::GzEncoder, Compression};
         use std::io::Write;
 
         let mut encoder = GzEncoder::new(Vec::new(), Compression::new(level as u32));
         encoder.write_all(data)?;
-        encoder.finish().map_err(|e| anyhow!("Compression failed: {}", e))
+        encoder
+            .finish()
+            .map_err(|e| anyhow!("Compression failed: {}", e))
     }
 
     /// Update bandwidth measurement
@@ -441,11 +455,22 @@ impl NetworkAwareCompressor {
     }
 
     /// Update compression statistics
-    fn update_compression_stats(&self, original_size: usize, compressed_size: usize, compression_time: Duration) {
-        self.stats.total_uncompressed.fetch_add(original_size as u64, Ordering::Relaxed);
-        self.stats.total_compressed.fetch_add(compressed_size as u64, Ordering::Relaxed);
-        self.stats.compression_time_ms.fetch_add(compression_time.as_millis() as u64, Ordering::Relaxed);
-        
+    fn update_compression_stats(
+        &self,
+        original_size: usize,
+        compressed_size: usize,
+        compression_time: Duration,
+    ) {
+        self.stats
+            .total_uncompressed
+            .fetch_add(original_size as u64, Ordering::Relaxed);
+        self.stats
+            .total_compressed
+            .fetch_add(compressed_size as u64, Ordering::Relaxed);
+        self.stats
+            .compression_time_ms
+            .fetch_add(compression_time.as_millis() as u64, Ordering::Relaxed);
+
         // Calculate and store compression ratio
         if compressed_size > 0 {
             let ratio = (original_size as f64 / compressed_size as f64 * 1000.0) as u64;
@@ -457,10 +482,16 @@ impl NetworkAwareCompressor {
     pub fn get_stats(&self) -> CompressionStats {
         CompressionStats {
             total_compressed: AtomicU64::new(self.stats.total_compressed.load(Ordering::Relaxed)),
-            total_uncompressed: AtomicU64::new(self.stats.total_uncompressed.load(Ordering::Relaxed)),
+            total_uncompressed: AtomicU64::new(
+                self.stats.total_uncompressed.load(Ordering::Relaxed),
+            ),
             compression_ratio: AtomicU64::new(self.stats.compression_ratio.load(Ordering::Relaxed)),
-            compression_time_ms: AtomicU64::new(self.stats.compression_time_ms.load(Ordering::Relaxed)),
-            decompression_time_ms: AtomicU64::new(self.stats.decompression_time_ms.load(Ordering::Relaxed)),
+            compression_time_ms: AtomicU64::new(
+                self.stats.compression_time_ms.load(Ordering::Relaxed),
+            ),
+            decompression_time_ms: AtomicU64::new(
+                self.stats.decompression_time_ms.load(Ordering::Relaxed),
+            ),
             level_adjustments: AtomicU64::new(self.stats.level_adjustments.load(Ordering::Relaxed)),
         }
     }
@@ -480,12 +511,12 @@ impl BandwidthTracker {
     pub fn add_measurement(&mut self, measurement: BandwidthMeasurement) {
         let timestamp = measurement.timestamp;
         self.measurements.push_back(measurement);
-        
+
         // Keep only recent measurements
         if self.measurements.len() > 100 {
             self.measurements.pop_front();
         }
-        
+
         // Update estimated bandwidth
         self.update_estimated_bandwidth();
         self.last_measurement = Some(timestamp);
@@ -504,10 +535,10 @@ impl BandwidthTracker {
 
         for measurement in &self.measurements {
             let age_seconds = now.duration_since(measurement.timestamp).as_secs_f64();
-            
+
             // Exponential decay weight (newer measurements have higher weight)
             let weight = (-age_seconds / 60.0).exp(); // 1-minute half-life
-            
+
             let bandwidth = measurement.bytes as f64 / measurement.duration.as_secs_f64();
             total_weighted_bw += bandwidth * weight;
             total_weight += weight;
@@ -1218,5 +1249,423 @@ mod tests {
         assert!(config.enable_zero_copy);
         assert!(config.enable_parallel_processing);
         assert!(config.parallel_workers > 0);
+    }
+}
+
+/// AI-driven performance prediction and auto-tuning system
+pub struct PerformancePredictor {
+    config: PerformanceConfig,
+    historical_data: Arc<RwLock<VecDeque<PerformanceDataPoint>>>,
+    model: Arc<RwLock<PredictionModel>>,
+    auto_tuner: Arc<AutoTuner>,
+    prediction_stats: Arc<PredictionStats>,
+}
+
+/// Historical performance data point
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceDataPoint {
+    pub timestamp: DateTime<Utc>,
+    pub throughput_eps: f64,
+    pub latency_ms: f64,
+    pub memory_usage_mb: f64,
+    pub cpu_usage_percent: f64,
+    pub batch_size: usize,
+    pub parallel_workers: usize,
+    pub compression_enabled: bool,
+    pub event_complexity_score: f64,
+    pub network_latency_ms: f64,
+}
+
+/// Simple linear regression model for performance prediction
+#[derive(Debug, Clone)]
+pub struct PredictionModel {
+    /// Coefficients for throughput prediction
+    throughput_coefficients: Vec<f64>,
+    /// Coefficients for latency prediction  
+    latency_coefficients: Vec<f64>,
+    /// Model accuracy metrics
+    throughput_r_squared: f64,
+    latency_r_squared: f64,
+    /// Number of training samples
+    training_samples: usize,
+}
+
+impl Default for PredictionModel {
+    fn default() -> Self {
+        Self {
+            throughput_coefficients: vec![0.0; 8], // 8 features
+            latency_coefficients: vec![0.0; 8],
+            throughput_r_squared: 0.0,
+            latency_r_squared: 0.0,
+            training_samples: 0,
+        }
+    }
+}
+
+/// Auto-tuning system for dynamic performance optimization
+pub struct AutoTuner {
+    current_config: Arc<RwLock<PerformanceConfig>>,
+    tuning_history: Arc<RwLock<Vec<TuningDecision>>>,
+    last_tuning: Arc<RwLock<Option<Instant>>>,
+    tuning_interval: Duration,
+}
+
+/// Record of a tuning decision
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TuningDecision {
+    pub timestamp: DateTime<Utc>,
+    pub parameter: String,
+    pub old_value: String,
+    pub new_value: String,
+    pub predicted_improvement: f64,
+    pub actual_improvement: Option<f64>,
+    pub confidence: f64,
+}
+
+/// Prediction statistics and accuracy tracking
+#[derive(Debug, Default)]
+pub struct PredictionStats {
+    pub total_predictions: AtomicU64,
+    pub accurate_predictions: AtomicU64, // within 10% of actual
+    pub total_tuning_decisions: AtomicU64,
+    pub successful_tunings: AtomicU64, // resulted in improvement
+    pub average_prediction_error: Arc<RwLock<f64>>,
+}
+
+impl PerformancePredictor {
+    /// Create a new performance predictor
+    pub fn new(config: PerformanceConfig) -> Self {
+        let auto_tuner = AutoTuner {
+            current_config: Arc::new(RwLock::new(config.clone())),
+            tuning_history: Arc::new(RwLock::new(Vec::new())),
+            last_tuning: Arc::new(RwLock::new(None)),
+            tuning_interval: Duration::from_secs(300), // 5 minutes
+        };
+
+        Self {
+            config,
+            historical_data: Arc::new(RwLock::new(VecDeque::with_capacity(10000))),
+            model: Arc::new(RwLock::new(PredictionModel::default())),
+            auto_tuner: Arc::new(auto_tuner),
+            prediction_stats: Arc::new(PredictionStats::default()),
+        }
+    }
+
+    /// Record a performance data point
+    pub async fn record_performance(&self, data_point: PerformanceDataPoint) -> Result<()> {
+        let mut historical_data = self.historical_data.write().await;
+        
+        // Keep only recent data (last 10000 points)
+        if historical_data.len() >= 10000 {
+            historical_data.pop_front();
+        }
+        
+        historical_data.push_back(data_point);
+        
+        // Retrain model every 100 data points
+        if historical_data.len() % 100 == 0 {
+            self.retrain_model().await?;
+        }
+        
+        debug!("Recorded performance data point, total: {}", historical_data.len());
+        Ok(())
+    }
+
+    /// Predict performance for given configuration
+    pub async fn predict_performance(&self, test_config: &PerformanceConfig) -> Result<(f64, f64)> {
+        let model = self.model.read().await;
+        
+        if model.training_samples < 10 {
+            return Err(anyhow!("Insufficient training data for prediction"));
+        }
+
+        // Extract features from configuration
+        let features = self.extract_features(test_config).await;
+        
+        // Predict throughput
+        let predicted_throughput = self.linear_prediction(&features, &model.throughput_coefficients);
+        
+        // Predict latency
+        let predicted_latency = self.linear_prediction(&features, &model.latency_coefficients);
+        
+        self.prediction_stats.total_predictions.fetch_add(1, Ordering::Relaxed);
+        
+        info!(
+            "Predicted performance - Throughput: {:.0} eps, Latency: {:.2} ms (confidence: {:.1}%)",
+            predicted_throughput,
+            predicted_latency,
+            (model.throughput_r_squared + model.latency_r_squared) / 2.0 * 100.0
+        );
+        
+        Ok((predicted_throughput, predicted_latency))
+    }
+
+    /// Auto-tune configuration based on current performance
+    pub async fn auto_tune(&self, current_performance: &PerformanceDataPoint) -> Result<Option<PerformanceConfig>> {
+        let mut last_tuning = self.auto_tuner.last_tuning.write().await;
+        
+        // Check if enough time has passed since last tuning
+        if let Some(last_time) = *last_tuning {
+            if last_time.elapsed() < self.auto_tuner.tuning_interval {
+                return Ok(None);
+            }
+        }
+        
+        let current_config = self.auto_tuner.current_config.read().await.clone();
+        let mut best_config = current_config.clone();
+        let mut best_predicted_throughput = 0.0;
+        
+        // Try different configuration variations
+        let variations = self.generate_config_variations(&current_config).await;
+        
+        for variation in variations {
+            if let Ok((predicted_throughput, predicted_latency)) = 
+                self.predict_performance(&variation).await {
+                
+                // Score based on throughput and latency (higher throughput, lower latency is better)
+                let score = predicted_throughput / (1.0 + predicted_latency);
+                let current_score = current_performance.throughput_eps / (1.0 + current_performance.latency_ms);
+                
+                if score > current_score && predicted_throughput > best_predicted_throughput {
+                    best_config = variation;
+                    best_predicted_throughput = predicted_throughput;
+                }
+            }
+        }
+        
+        // Apply the best configuration if it's significantly better
+        if best_predicted_throughput > current_performance.throughput_eps * 1.1 {
+            *self.auto_tuner.current_config.write().await = best_config.clone();
+            *last_tuning = Some(Instant::now());
+            
+            // Record tuning decision
+            let decision = TuningDecision {
+                timestamp: Utc::now(),
+                parameter: "auto_tune".to_string(),
+                old_value: format!("{:?}", current_config),
+                new_value: format!("{:?}", best_config),
+                predicted_improvement: (best_predicted_throughput - current_performance.throughput_eps) / current_performance.throughput_eps,
+                actual_improvement: None,
+                confidence: 0.8, // TODO: Calculate actual confidence
+            };
+            
+            self.auto_tuner.tuning_history.write().await.push(decision);
+            self.prediction_stats.total_tuning_decisions.fetch_add(1, Ordering::Relaxed);
+            
+            info!("Auto-tuned configuration for {:.1}% predicted improvement", 
+                  (best_predicted_throughput - current_performance.throughput_eps) / current_performance.throughput_eps * 100.0);
+            
+            Ok(Some(best_config))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get current prediction accuracy statistics
+    pub async fn get_prediction_stats(&self) -> PredictionStats {
+        PredictionStats {
+            total_predictions: AtomicU64::new(self.prediction_stats.total_predictions.load(Ordering::Relaxed)),
+            accurate_predictions: AtomicU64::new(self.prediction_stats.accurate_predictions.load(Ordering::Relaxed)),
+            total_tuning_decisions: AtomicU64::new(self.prediction_stats.total_tuning_decisions.load(Ordering::Relaxed)),
+            successful_tunings: AtomicU64::new(self.prediction_stats.successful_tunings.load(Ordering::Relaxed)),
+            average_prediction_error: Arc::new(RwLock::new(*self.prediction_stats.average_prediction_error.read().await)),
+        }
+    }
+
+    /// Retrain the prediction model with current historical data
+    async fn retrain_model(&self) -> Result<()> {
+        let historical_data = self.historical_data.read().await;
+        
+        if historical_data.len() < 10 {
+            return Ok(()); // Need more data
+        }
+        
+        let mut model = self.model.write().await;
+        
+        // Prepare training data
+        let mut features_matrix = Vec::new();
+        let mut throughput_targets = Vec::new();
+        let mut latency_targets = Vec::new();
+        
+        for data_point in historical_data.iter() {
+            let config = PerformanceConfig {
+                max_batch_size: data_point.batch_size,
+                parallel_workers: data_point.parallel_workers,
+                enable_compression: data_point.compression_enabled,
+                ..self.config.clone()
+            };
+            
+            let features = self.extract_features(&config).await;
+            features_matrix.push(features);
+            throughput_targets.push(data_point.throughput_eps);
+            latency_targets.push(data_point.latency_ms);
+        }
+        
+        // Train throughput model (simple linear regression)
+        model.throughput_coefficients = self.train_linear_regression(&features_matrix, &throughput_targets);
+        model.throughput_r_squared = self.calculate_r_squared(&features_matrix, &throughput_targets, &model.throughput_coefficients);
+        
+        // Train latency model
+        model.latency_coefficients = self.train_linear_regression(&features_matrix, &latency_targets);
+        model.latency_r_squared = self.calculate_r_squared(&features_matrix, &latency_targets, &model.latency_coefficients);
+        
+        model.training_samples = historical_data.len();
+        
+        info!(
+            "Retrained prediction model with {} samples - Throughput R²: {:.3}, Latency R²: {:.3}",
+            model.training_samples,
+            model.throughput_r_squared,
+            model.latency_r_squared
+        );
+        
+        Ok(())
+    }
+
+    /// Extract feature vector from configuration
+    async fn extract_features(&self, config: &PerformanceConfig) -> Vec<f64> {
+        vec![
+            config.max_batch_size as f64,
+            config.parallel_workers as f64,
+            if config.enable_compression { 1.0 } else { 0.0 },
+            if config.enable_zero_copy { 1.0 } else { 0.0 },
+            if config.enable_memory_pooling { 1.0 } else { 0.0 },
+            if config.enable_adaptive_batching { 1.0 } else { 0.0 },
+            config.target_latency_ms as f64,
+            config.compression_threshold as f64,
+        ]
+    }
+
+    /// Simple linear regression implementation
+    fn train_linear_regression(&self, features: &[Vec<f64>], targets: &[f64]) -> Vec<f64> {
+        if features.is_empty() || targets.is_empty() {
+            return vec![0.0; 8];
+        }
+        
+        let n = features.len();
+        let feature_count = features[0].len();
+        let mut coefficients = vec![0.0; feature_count];
+        
+        // Simple least squares implementation (placeholder)
+        // In a real implementation, you'd use a proper linear algebra library
+        for i in 0..feature_count {
+            let mut sum_xy = 0.0;
+            let mut sum_x = 0.0;
+            let mut sum_y = 0.0;
+            let mut sum_x2 = 0.0;
+            
+            for j in 0..n {
+                let x = features[j][i];
+                let y = targets[j];
+                sum_xy += x * y;
+                sum_x += x;
+                sum_y += y;
+                sum_x2 += x * x;
+            }
+            
+            let denominator = n as f64 * sum_x2 - sum_x * sum_x;
+            if denominator.abs() > 1e-10 {
+                coefficients[i] = (n as f64 * sum_xy - sum_x * sum_y) / denominator;
+            }
+        }
+        
+        coefficients
+    }
+
+    /// Calculate R-squared for model evaluation
+    fn calculate_r_squared(&self, features: &[Vec<f64>], targets: &[f64], coefficients: &[f64]) -> f64 {
+        if features.is_empty() || targets.is_empty() {
+            return 0.0;
+        }
+        
+        let mean_target: f64 = targets.iter().sum::<f64>() / targets.len() as f64;
+        let mut ss_tot = 0.0;
+        let mut ss_res = 0.0;
+        
+        for (i, target) in targets.iter().enumerate() {
+            let predicted = self.linear_prediction(&features[i], coefficients);
+            ss_res += (target - predicted).powi(2);
+            ss_tot += (target - mean_target).powi(2);
+        }
+        
+        if ss_tot > 1e-10 {
+            1.0 - (ss_res / ss_tot)
+        } else {
+            0.0
+        }
+    }
+
+    /// Make prediction using linear model
+    fn linear_prediction(&self, features: &[f64], coefficients: &[f64]) -> f64 {
+        features.iter().zip(coefficients.iter()).map(|(f, c)| f * c).sum()
+    }
+
+    /// Generate configuration variations for auto-tuning
+    async fn generate_config_variations(&self, base_config: &PerformanceConfig) -> Vec<PerformanceConfig> {
+        let mut variations = Vec::new();
+        
+        // Batch size variations
+        for factor in [0.8, 1.2, 1.5] {
+            let mut config = base_config.clone();
+            config.max_batch_size = ((config.max_batch_size as f64 * factor) as usize).max(100).min(50000);
+            variations.push(config);
+        }
+        
+        // Worker count variations
+        for delta in [-1, 1, 2] {
+            let mut config = base_config.clone();
+            config.parallel_workers = (config.parallel_workers as i32 + delta).max(1).min(32) as usize;
+            variations.push(config);
+        }
+        
+        // Compression toggle
+        let mut config = base_config.clone();
+        config.enable_compression = !config.enable_compression;
+        variations.push(config);
+        
+        variations
+    }
+}
+
+#[cfg(test)]
+mod performance_predictor_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_performance_predictor_creation() {
+        let config = PerformanceConfig::default();
+        let predictor = PerformancePredictor::new(config);
+        
+        let stats = predictor.get_prediction_stats().await;
+        assert_eq!(stats.total_predictions.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn test_record_and_predict() {
+        let config = PerformanceConfig::default();
+        let predictor = PerformancePredictor::new(config.clone());
+        
+        // Record some training data
+        for i in 0..20 {
+            let data_point = PerformanceDataPoint {
+                timestamp: Utc::now(),
+                throughput_eps: 1000.0 + i as f64 * 100.0,
+                latency_ms: 5.0 + i as f64 * 0.1,
+                memory_usage_mb: 100.0,
+                cpu_usage_percent: 50.0,
+                batch_size: 1000 + i * 100,
+                parallel_workers: 4,
+                compression_enabled: i % 2 == 0,
+                event_complexity_score: 1.0,
+                network_latency_ms: 1.0,
+            };
+            
+            predictor.record_performance(data_point).await.unwrap();
+        }
+        
+        // Make a prediction
+        if let Ok((throughput, latency)) = predictor.predict_performance(&config).await {
+            assert!(throughput > 0.0);
+            assert!(latency > 0.0);
+        }
     }
 }

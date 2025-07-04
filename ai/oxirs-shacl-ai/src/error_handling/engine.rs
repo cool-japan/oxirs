@@ -40,6 +40,11 @@ impl IntelligentErrorHandler {
             config,
         }
     }
+
+    /// Get the current configuration
+    pub fn config(&self) -> &ErrorHandlingConfig {
+        &self.config
+    }
 }
 
 impl Default for IntelligentErrorHandler {

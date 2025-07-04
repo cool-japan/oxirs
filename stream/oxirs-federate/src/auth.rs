@@ -52,9 +52,14 @@ impl Default for AuthConfig {
             jwt_secret: "oxirs-federation-secret".to_string(),
             token_expiry: Duration::from_secs(3600), // 1 hour
             enable_identity_propagation: true,
-            supported_auth_methods: [AuthMethod::Bearer, AuthMethod::ApiKey, AuthMethod::Basic, AuthMethod::ServiceToService]
-                .into_iter()
-                .collect(),
+            supported_auth_methods: [
+                AuthMethod::Bearer,
+                AuthMethod::ApiKey,
+                AuthMethod::Basic,
+                AuthMethod::ServiceToService,
+            ]
+            .into_iter()
+            .collect(),
             enable_service_auth: true,
             service_auth_key: "oxirs-service-key".to_string(),
             enable_rbac: true,
@@ -944,11 +949,11 @@ mod tests {
             .authenticate(AuthMethod::ServiceToService, credentials)
             .await
             .unwrap();
-        
+
         if !result.success {
             println!("Authentication failed with error: {:?}", result.error);
         }
-        
+
         assert!(result.success);
         assert!(result.identity.is_some());
     }
@@ -967,9 +972,12 @@ mod tests {
             .authenticate(AuthMethod::Basic, credentials)
             .await
             .unwrap();
-        
+
         if !auth_result.success {
-            println!("Initial authentication failed with error: {:?}", auth_result.error);
+            println!(
+                "Initial authentication failed with error: {:?}",
+                auth_result.error
+            );
         }
         assert!(auth_result.success);
 
@@ -978,7 +986,10 @@ mod tests {
         // Now validate the token
         let validation_result = auth_manager.validate_token(&token.token).await.unwrap();
         if !validation_result.success {
-            println!("Token validation failed with error: {:?}", validation_result.error);
+            println!(
+                "Token validation failed with error: {:?}",
+                validation_result.error
+            );
         }
         assert!(validation_result.success);
     }

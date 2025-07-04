@@ -504,27 +504,18 @@ impl OptimizedGraph {
 
         // Insert into SPO index
         let spo_entry = self.spo.entry(subject.clone()).or_default();
-        let mut po_entry = spo_entry
-            .entry(predicate.clone())
-            .or_default();
+        let mut po_entry = spo_entry.entry(predicate.clone()).or_default();
         let was_new = po_entry.insert(object.clone());
 
         if was_new {
             // Insert into POS index
-            let pos_entry = self
-                .pos
-                .entry(predicate.clone())
-                .or_default();
-            let mut os_entry = pos_entry
-                .entry(object.clone())
-                .or_default();
+            let pos_entry = self.pos.entry(predicate.clone()).or_default();
+            let mut os_entry = pos_entry.entry(object.clone()).or_default();
             os_entry.insert(subject.clone());
 
             // Insert into OSP index
             let osp_entry = self.osp.entry(object.clone()).or_default();
-            let mut sp_entry = osp_entry
-                .entry(subject.clone())
-                .or_default();
+            let mut sp_entry = osp_entry.entry(subject.clone()).or_default();
             sp_entry.insert(predicate);
 
             // Update statistics

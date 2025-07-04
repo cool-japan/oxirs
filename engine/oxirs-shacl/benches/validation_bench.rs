@@ -1,15 +1,15 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
-    Store,
+    ConcreteStore, Store,
 };
 use oxirs_shacl::{
     constraints::*, shapes::ShapeFactory, Constraint, ConstraintComponentId, PropertyPath,
     Severity, Shape, ShapeId, ShapeType, Target, ValidationConfig, Validator,
 };
 
-fn create_test_data(size: usize) -> (Store, Vec<Shape>) {
-    let store = Store::new().unwrap();
+fn create_test_data(size: usize) -> (ConcreteStore, Vec<Shape>) {
+    let store = ConcreteStore::new().unwrap();
     let mut shapes = Vec::new();
 
     // Create test data in the store
@@ -265,7 +265,7 @@ fn bench_shape_parsing(c: &mut Criterion) {
 fn bench_property_path_evaluation(c: &mut Criterion) {
     let mut group = c.benchmark_group("property_path_evaluation");
 
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
     // TODO: Add test data to store when API is available
 
     let paths = vec![

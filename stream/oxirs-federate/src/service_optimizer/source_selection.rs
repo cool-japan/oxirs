@@ -799,9 +799,9 @@ impl ServiceOptimizer {
             pattern_count: patterns.len(),
             variable_count: self.count_variables(patterns),
             join_count: self.count_joins(patterns),
-            filter_count: 0, // TODO: implement filter counting
+            filter_count: 0,     // TODO: implement filter counting
             has_optional: false, // TODO: implement optional detection
-            has_union: false, // TODO: implement union detection
+            has_union: false,    // TODO: implement union detection
             complexity_score: self.calculate_patterns_complexity(patterns),
             estimated_selectivity: self.estimate_query_selectivity(patterns),
             selectivity_estimate: self.estimate_query_selectivity(patterns),
@@ -1098,22 +1098,31 @@ impl ServiceOptimizer {
         }
 
         let mut variable_patterns: HashMap<String, Vec<usize>> = HashMap::new();
-        
+
         // Track which patterns each variable appears in
         for (pattern_idx, pattern) in patterns.iter().enumerate() {
             if let Some(ref subject) = pattern.subject {
                 if subject.starts_with('?') {
-                    variable_patterns.entry(subject.clone()).or_insert_with(Vec::new).push(pattern_idx);
+                    variable_patterns
+                        .entry(subject.clone())
+                        .or_insert_with(Vec::new)
+                        .push(pattern_idx);
                 }
             }
             if let Some(ref predicate) = pattern.predicate {
                 if predicate.starts_with('?') {
-                    variable_patterns.entry(predicate.clone()).or_insert_with(Vec::new).push(pattern_idx);
+                    variable_patterns
+                        .entry(predicate.clone())
+                        .or_insert_with(Vec::new)
+                        .push(pattern_idx);
                 }
             }
             if let Some(ref object) = pattern.object {
                 if object.starts_with('?') {
-                    variable_patterns.entry(object.clone()).or_insert_with(Vec::new).push(pattern_idx);
+                    variable_patterns
+                        .entry(object.clone())
+                        .or_insert_with(Vec::new)
+                        .push(pattern_idx);
                 }
             }
         }

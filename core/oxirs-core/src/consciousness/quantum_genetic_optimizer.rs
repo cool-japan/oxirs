@@ -141,7 +141,7 @@ impl QuantumGeneticOptimizer {
         // Initialize quantum optimization superposition
         let mut strategy_amplitudes = HashMap::new();
         let mut strategy_phases = HashMap::new();
-        
+
         // Set initial amplitudes based on pattern complexity
         let base_amplitude = 1.0 / 6.0_f64.sqrt(); // Equal superposition for 6 strategies
         for strategy in [
@@ -159,12 +159,20 @@ impl QuantumGeneticOptimizer {
         // Adjust amplitudes based on pattern complexity
         if pattern_complexity > 0.8 {
             // High complexity patterns benefit from quantum tunneling and intuitive leaps
-            *strategy_amplitudes.get_mut(&OptimizationStrategy::QuantumTunneling).unwrap() *= 1.3;
-            *strategy_amplitudes.get_mut(&OptimizationStrategy::IntuitiveLeap).unwrap() *= 1.2;
+            *strategy_amplitudes
+                .get_mut(&OptimizationStrategy::QuantumTunneling)
+                .unwrap() *= 1.3;
+            *strategy_amplitudes
+                .get_mut(&OptimizationStrategy::IntuitiveLeap)
+                .unwrap() *= 1.2;
         } else if pattern_complexity < 0.3 {
             // Simple patterns benefit from consciousness guidance and emotional resonance
-            *strategy_amplitudes.get_mut(&OptimizationStrategy::ConsciousnessGuided).unwrap() *= 1.3;
-            *strategy_amplitudes.get_mut(&OptimizationStrategy::EmotionalResonance).unwrap() *= 1.2;
+            *strategy_amplitudes
+                .get_mut(&OptimizationStrategy::ConsciousnessGuided)
+                .unwrap() *= 1.3;
+            *strategy_amplitudes
+                .get_mut(&OptimizationStrategy::EmotionalResonance)
+                .unwrap() *= 1.2;
         }
 
         // Renormalize amplitudes to maintain quantum probability conservation
@@ -182,7 +190,7 @@ impl QuantumGeneticOptimizer {
 
         // Create genetic optimizer with consciousness-enhanced fitness function
         let genetic_optimizer = GeneticGraphOptimizer::new(
-            50,  // population_size
+            50, // population_size
             Box::new(|structure| {
                 // Consciousness-enhanced fitness function
                 Self::consciousness_fitness_function(structure)
@@ -204,12 +212,12 @@ impl QuantumGeneticOptimizer {
     fn consciousness_fitness_function(structure: &GraphStructure) -> f64 {
         // Base fitness from traditional metrics
         let mut fitness = structure.dna.primary_strand.len() as f64 * 0.1;
-        
+
         // Add consciousness-inspired factors
         fitness += Self::calculate_pattern_harmony(&structure) * 0.3;
         fitness += Self::calculate_emotional_resonance(&structure) * 0.2;
         fitness += Self::calculate_quantum_advantage(&structure) * 0.4;
-        
+
         fitness.min(100.0) // Cap at 100 for numerical stability
     }
 
@@ -218,8 +226,12 @@ impl QuantumGeneticOptimizer {
         // Analyze the harmony between different genes
         let indexing_harmony = structure.indexing_genes.secondary_indexes.len() as f64 * 0.1;
         let storage_harmony = structure.storage_genes.block_size as f64 / 1000.0;
-        let access_harmony = if structure.access_genes.concurrency.max_readers > 1 { 1.0 } else { 0.5 };
-        
+        let access_harmony = if structure.access_genes.concurrency.max_readers > 1 {
+            1.0
+        } else {
+            0.5
+        };
+
         (indexing_harmony + storage_harmony + access_harmony) / 3.0
     }
 
@@ -227,18 +239,18 @@ impl QuantumGeneticOptimizer {
     fn calculate_emotional_resonance(structure: &GraphStructure) -> f64 {
         // Structures that feel "right" get higher scores
         let mut resonance = 0.0;
-        
+
         // Balanced structures have good resonance
         if structure.storage_genes.block_size > 1000 && structure.storage_genes.block_size < 10000 {
             resonance += 0.5;
         }
-        
+
         // Diverse indexing strategies feel more creative
         resonance += structure.indexing_genes.secondary_indexes.len() as f64 * 0.1;
-        
+
         // Adaptive triggers show responsiveness
         resonance += structure.indexing_genes.adaptive_triggers.len() as f64 * 0.1;
-        
+
         resonance.min(1.0)
     }
 
@@ -246,20 +258,22 @@ impl QuantumGeneticOptimizer {
     fn calculate_quantum_advantage(structure: &GraphStructure) -> f64 {
         // Quantum-inspired evaluation of optimization potential
         let mut quantum_score = 0.0;
-        
+
         // Superposition of multiple strategies
         if structure.indexing_genes.secondary_indexes.len() > 2 {
             quantum_score += 0.3; // Multiple indexes create superposition
         }
-        
+
         // Entanglement between storage and access patterns
-        if structure.access_genes.concurrency.max_readers > 1 && structure.storage_genes.block_size > 5000 {
+        if structure.access_genes.concurrency.max_readers > 1
+            && structure.storage_genes.block_size > 5000
+        {
             quantum_score += 0.4; // Entangled optimization
         }
-        
+
         // Quantum tunneling through optimization barriers
         quantum_score += structure.mutations.len() as f64 * 0.05; // Mutations as quantum jumps
-        
+
         quantum_score.min(1.0)
     }
 
@@ -270,7 +284,7 @@ impl QuantumGeneticOptimizer {
     ) -> Result<QuantumEvolutionResult, OxirsError> {
         let start_time = Instant::now();
         let mut evolution_insights = Vec::new();
-        
+
         // Get consciousness state for evolution guidance
         let consciousness_state = {
             if let Ok(consciousness) = self.consciousness.read() {
@@ -285,33 +299,36 @@ impl QuantumGeneticOptimizer {
         };
 
         // Adjust mutation rate based on emotional state
-        let emotional_modifier = self.emotional_mutation_modifiers
+        let emotional_modifier = self
+            .emotional_mutation_modifiers
             .get(&consciousness_state.1)
             .copied()
             .unwrap_or(1.0);
-        
+
         // Quantum superposition collapse to select optimization strategy
         let selected_strategy = self.collapse_strategy_superposition();
-        
+
         // Apply consciousness-guided evolution
-        for generation in 0..100 { // Fixed number of generations for this example
+        for generation in 0..100 {
+            // Fixed number of generations for this example
             // Update quantum coherence based on progress
             self.update_quantum_coherence(generation);
-            
+
             // Apply quantum entanglement effects
             self.apply_quantum_entanglement_effects(patterns)?;
-            
+
             // Check for consciousness insights
-            if let Some(insight) = self.detect_consciousness_insight(generation, &selected_strategy) {
+            if let Some(insight) = self.detect_consciousness_insight(generation, &selected_strategy)
+            {
                 evolution_insights.push(insight.clone());
                 self.consciousness_insights.push(insight);
             }
-            
+
             // Apply dream state consolidation every 10 generations
             if generation % 10 == 0 {
                 self.apply_dream_consolidation()?;
             }
-            
+
             // Update consciousness with evolution feedback
             if let Ok(mut consciousness) = self.consciousness.write() {
                 let fitness_improvement = if generation > 0 {
@@ -324,7 +341,7 @@ impl QuantumGeneticOptimizer {
         }
 
         let evolution_time = start_time.elapsed();
-        
+
         Ok(QuantumEvolutionResult {
             best_structure: self.get_best_structure().cloned().unwrap_or_else(|| {
                 // Create a default structure if none exists
@@ -404,7 +421,7 @@ impl QuantumGeneticOptimizer {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         let random_value: f64 = rng.gen();
-        
+
         let mut cumulative_probability = 0.0;
         for (strategy, amplitude) in &self.strategy_superposition.strategy_amplitudes {
             let probability = amplitude * amplitude;
@@ -413,7 +430,7 @@ impl QuantumGeneticOptimizer {
                 return *strategy;
             }
         }
-        
+
         // Fallback to consciousness-guided strategy
         OptimizationStrategy::ConsciousnessGuided
     }
@@ -423,7 +440,7 @@ impl QuantumGeneticOptimizer {
         // Coherence decreases over time but can be restored by insights
         let decoherence_rate = 0.01;
         self.quantum_coherence = (self.quantum_coherence - decoherence_rate).max(0.1);
-        
+
         // Restore coherence based on insights
         if self.consciousness_insights.len() > generation / 20 {
             self.quantum_coherence = (self.quantum_coherence + 0.05).min(1.0);
@@ -441,20 +458,21 @@ impl QuantumGeneticOptimizer {
                 if self.patterns_should_entangle(pattern1, pattern2) {
                     let pattern1_key = format!("pattern_{i}");
                     let pattern2_key = format!("pattern_{j}");
-                    
+
                     let entanglement = QuantumEntanglementLevel {
                         strength: 0.8,
                         coherence_time: 10.0,
                         phase: 0.0,
                         bell_state: BellStateType::PhiPlus,
                     };
-                    
-                    self.pattern_entanglement.insert(pattern1_key, entanglement.clone());
+
+                    self.pattern_entanglement
+                        .insert(pattern1_key, entanglement.clone());
                     self.pattern_entanglement.insert(pattern2_key, entanglement);
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -478,7 +496,7 @@ impl QuantumGeneticOptimizer {
         // Randomly generate insights based on quantum coherence
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        
+
         if rng.gen::<f64>() < self.quantum_coherence * 0.1 {
             Some(ConsciousnessEvolutionInsight {
                 generation,
@@ -505,13 +523,16 @@ impl QuantumGeneticOptimizer {
     fn apply_dream_consolidation(&mut self) -> Result<(), OxirsError> {
         // Use consciousness dream processor to consolidate patterns
         if let Ok(mut consciousness) = self.consciousness.write() {
-            let dream_input = vec![format!("optimization_patterns_{}", self.consciousness_insights.len())];
+            let dream_input = vec![format!(
+                "optimization_patterns_{}",
+                self.consciousness_insights.len()
+            )];
             let _dream_result = consciousness.dream_processor.process_dream_sequence(
                 &dream_input,
                 crate::consciousness::dream_processing::DreamState::REM,
             );
         }
-        
+
         Ok(())
     }
 
@@ -597,10 +618,10 @@ mod tests {
     fn test_quantum_genetic_optimizer_creation() {
         let stats = Arc::new(IndexStats::new());
         let consciousness = Arc::new(RwLock::new(ConsciousnessModule::new(stats)));
-        
+
         let optimizer = QuantumGeneticOptimizer::new(consciousness, 0.5);
         assert!(optimizer.is_ok());
-        
+
         let optimizer = optimizer.unwrap();
         assert!(optimizer.quantum_coherence > 0.0);
         assert_eq!(optimizer.emotional_mutation_modifiers.len(), 6);
@@ -611,9 +632,9 @@ mod tests {
         let stats = Arc::new(IndexStats::new());
         let consciousness = Arc::new(RwLock::new(ConsciousnessModule::new(stats)));
         let mut optimizer = QuantumGeneticOptimizer::new(consciousness, 0.5).unwrap();
-        
+
         let strategy = optimizer.collapse_strategy_superposition();
-        
+
         // Should return one of the valid strategies
         match strategy {
             OptimizationStrategy::ConsciousnessGuided
@@ -632,10 +653,10 @@ mod tests {
         let stats = Arc::new(IndexStats::new());
         let consciousness = Arc::new(RwLock::new(ConsciousnessModule::new(stats)));
         let mut optimizer = QuantumGeneticOptimizer::new(consciousness, 0.5).unwrap();
-        
+
         let initial_coherence = optimizer.quantum_coherence;
         optimizer.update_quantum_coherence(10);
-        
+
         // Coherence should decrease due to decoherence
         assert!(optimizer.quantum_coherence <= initial_coherence);
     }

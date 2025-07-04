@@ -38,7 +38,9 @@ impl Default for NatsConfig {
 
 impl From<crate::streaming::NatsConfig> for NatsConfig {
     fn from(config: crate::streaming::NatsConfig) -> Self {
-        let url = config.servers.first()
+        let url = config
+            .servers
+            .first()
             .map(|u| u.to_string())
             .unwrap_or_else(|| "nats://localhost:4222".to_string());
 
@@ -46,9 +48,7 @@ impl From<crate::streaming::NatsConfig> for NatsConfig {
             Some(crate::streaming::NatsAuth::UserPass { username, password }) => {
                 (Some(username), Some(password), None)
             }
-            Some(crate::streaming::NatsAuth::Token(token)) => {
-                (None, None, Some(token))
-            }
+            Some(crate::streaming::NatsAuth::Token(token)) => (None, None, Some(token)),
             Some(crate::streaming::NatsAuth::NKey { .. }) => {
                 // NKey not supported in simple config, fallback to no auth
                 (None, None, None)

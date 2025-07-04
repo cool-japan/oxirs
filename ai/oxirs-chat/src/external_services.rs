@@ -832,8 +832,14 @@ impl ExternalServicesManager {
 
         Ok(LanguageDetectionResult {
             service: config.name.clone(),
-            language_code: detection_response["language_code"].as_str().unwrap_or("unknown").to_string(),
-            language_name: detection_response["language_name"].as_str().unwrap_or("Unknown").to_string(),
+            language_code: detection_response["language_code"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_string(),
+            language_name: detection_response["language_name"]
+                .as_str()
+                .unwrap_or("Unknown")
+                .to_string(),
             confidence: detection_response["confidence"].as_f64().unwrap_or(0.0) as f32,
             alternative_languages: Vec::new(),
             text_sample: text.chars().take(50).collect(),

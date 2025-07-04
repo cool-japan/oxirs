@@ -257,7 +257,9 @@ impl FederatedLearningCoordinator {
             global_model: Arc::new(RwLock::new(GlobalModel::default())),
             config,
             shape_learner: Arc::new(Mutex::new(ShapeLearner::new())),
-            pattern_recognizer: Arc::new(Mutex::new(NeuralPatternRecognizer::new(crate::neural_patterns::types::NeuralPatternConfig::default()))),
+            pattern_recognizer: Arc::new(Mutex::new(NeuralPatternRecognizer::new(
+                crate::neural_patterns::types::NeuralPatternConfig::default(),
+            ))),
             quantum_recognizer: Arc::new(Mutex::new(QuantumNeuralPatternRecognizer::new(8, 4))),
             consensus: Arc::new(Mutex::new(ConsensusManager::new())),
         }

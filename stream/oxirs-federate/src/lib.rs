@@ -32,6 +32,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 // PlannerConfig will be imported via planner module re-exports
 
+pub mod adaptive_load_balancer;
 pub mod auth;
 pub mod auto_discovery;
 pub mod cache;
@@ -51,6 +52,7 @@ pub mod ml_optimizer;
 pub mod monitoring;
 pub mod nats_federation;
 pub mod network_optimizer;
+pub mod optimization_cache;
 pub mod performance_analyzer;
 pub mod planner;
 pub mod privacy;
@@ -66,7 +68,9 @@ pub mod service_registry;
 pub mod source_selection;
 pub mod streaming;
 pub mod streaming_optimizer;
+pub mod test_infrastructure;
 
+pub use adaptive_load_balancer::*;
 pub use auth::*;
 pub use auto_discovery::*;
 pub use cache::*;
@@ -88,14 +92,14 @@ pub use ml_optimizer::*;
 pub use monitoring::*;
 pub use nats_federation::*;
 pub use network_optimizer::*;
+pub use optimization_cache::*;
 pub use performance_analyzer::*;
 // Import from planner module excluding GraphQLFederationConfig to avoid conflict
 pub use planner::{
-    QueryPlanner, PlannerConfig, HistoricalPerformance, ExecutionContext, ExecutionPlan, 
-    ExecutionStep, StepType, QueryType, QueryInfo, TriplePattern, FilterExpression, 
-    UnifiedSchema, FederatedSchema, ParsedQuery, GraphQLOperationType, ServiceQuery, 
-    EntityResolutionPlan, EntityResolutionStep, ReoptimizationAnalysis, RetryConfig,
-    FederatedQueryPlanner
+    EntityResolutionPlan, EntityResolutionStep, ExecutionContext, ExecutionPlan, ExecutionStep,
+    FederatedQueryPlanner, FederatedSchema, FilterExpression, GraphQLOperationType,
+    HistoricalPerformance, ParsedQuery, PlannerConfig, QueryInfo, QueryPlanner, QueryType,
+    ReoptimizationAnalysis, RetryConfig, ServiceQuery, StepType, TriplePattern, UnifiedSchema,
 };
 pub use privacy::*;
 pub use query_decomposition::advanced_pattern_analysis::{
@@ -108,21 +112,21 @@ pub use result_streaming::*;
 pub use semantic_enhancer::*;
 // Export main service types (from service.rs)
 pub use service::{
-    ServiceRegistry, ServiceType, ServiceCapability, FederatedService, 
-    ServiceRegistryConfig, ServiceRegistryStats, ServicePerformance,
-    ServiceAuthConfig, AuthCredentials
+    AuthCredentials, FederatedService, ServiceAuthConfig, ServiceCapability, ServicePerformance,
+    ServiceRegistry, ServiceRegistryConfig, ServiceRegistryStats, ServiceType,
 };
 pub use service_client::*;
 pub use service_executor::*;
 pub use service_optimizer::*;
 // Export specific types from service_registry (non-conflicting types only)
 pub use service_registry::{
-    RegistryConfig, SparqlEndpoint, GraphQLService, HealthStatus as ServiceHealthStatus,
-    ServiceCapabilities
+    GraphQLService, HealthStatus as ServiceHealthStatus, RegistryConfig, ServiceCapabilities,
+    SparqlEndpoint,
 };
 pub use source_selection::*;
 pub use streaming::*;
 pub use streaming_optimizer::*;
+pub use test_infrastructure::*;
 
 /// Main federation engine that coordinates all federated query processing
 #[derive(Debug, Clone)]
@@ -688,7 +692,6 @@ pub struct FederationConfig {
     pub monitor_config: FederationMonitorConfig,
     pub cache_config: CacheConfig,
 }
-
 
 /// Result of a federated query execution
 #[derive(Debug, Clone)]

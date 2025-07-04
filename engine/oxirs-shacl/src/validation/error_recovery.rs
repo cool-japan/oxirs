@@ -538,9 +538,14 @@ impl ErrorRecoveryManager {
             crate::constraints::ConstraintEvaluationResult::Satisfied => {
                 Ok(crate::validation::ConstraintEvaluationResult::Satisfied)
             }
-            crate::constraints::ConstraintEvaluationResult::Violated { violating_value, message, details: _ } => {
-                Ok(crate::validation::ConstraintEvaluationResult::Violated { violating_value, message })
-            }
+            crate::constraints::ConstraintEvaluationResult::Violated {
+                violating_value,
+                message,
+                details: _,
+            } => Ok(crate::validation::ConstraintEvaluationResult::Violated {
+                violating_value,
+                message,
+            }),
             crate::constraints::ConstraintEvaluationResult::Error { message, .. } => {
                 Err(crate::ShaclError::ValidationEngine(message))
             }

@@ -54,7 +54,7 @@ impl RdfStreamProcessor {
         {
             let mut buffer = self.triple_buffer.write().await;
             buffer.push(triple.clone());
-            
+
             // Keep buffer size manageable
             if buffer.len() > 1000 {
                 buffer.drain(0..500);
@@ -90,7 +90,7 @@ impl StreamProcessor for RdfStreamProcessor {
                 ));
             }
         };
-        
+
         // Now we can safely await without holding Any references
         self.process_triple(&triple_owned).await?;
         Ok(())
@@ -132,7 +132,7 @@ impl ValidationStreamProcessor {
             let mut cache = self.validation_cache.write().await;
             let report_id = format!("report_{}", chrono::Utc::now().timestamp_millis());
             cache.insert(report_id, report.clone());
-            
+
             // Keep cache size manageable
             if cache.len() > 500 {
                 let keys_to_remove: Vec<_> = cache.keys().take(250).cloned().collect();
@@ -148,7 +148,10 @@ impl ValidationStreamProcessor {
             *count += 1;
         }
 
-        tracing::debug!("Processed validation report with {} violations", report.violations.len());
+        tracing::debug!(
+            "Processed validation report with {} violations",
+            report.violations.len()
+        );
         Ok(())
     }
 }
@@ -170,7 +173,7 @@ impl StreamProcessor for ValidationStreamProcessor {
                 ));
             }
         };
-        
+
         // Now we can safely await without holding Any references
         self.process_validation_report(&report_owned).await?;
         Ok(())
@@ -216,7 +219,7 @@ impl MetricsStreamProcessor {
         {
             let mut history = self.metrics_history.write().await;
             history.push(metrics.clone());
-            
+
             // Keep history size manageable (last 1000 entries)
             if history.len() > 1000 {
                 history.drain(0..500);
@@ -229,8 +232,11 @@ impl MetricsStreamProcessor {
             *count += 1;
         }
 
-        tracing::debug!("Processed performance metrics: accuracy={:.3}, throughput={:.1}", 
-            metrics.accuracy, metrics.throughput);
+        tracing::debug!(
+            "Processed performance metrics: accuracy={:.3}, throughput={:.1}",
+            metrics.accuracy,
+            metrics.throughput
+        );
         Ok(())
     }
 }
@@ -244,7 +250,8 @@ impl StreamProcessor for MetricsStreamProcessor {
 
     async fn process(&self, data: Box<dyn StreamData>) -> Result<()> {
         // Extract and own the metrics completely before any async operations
-        let metrics_owned = match (data as Box<dyn std::any::Any>).downcast::<PerformanceMetrics>() {
+        let metrics_owned = match (data as Box<dyn std::any::Any>).downcast::<PerformanceMetrics>()
+        {
             Ok(metrics) => *metrics,
             Err(_) => {
                 return Err(ShaclAiError::StreamingAdaptation(
@@ -252,7 +259,7 @@ impl StreamProcessor for MetricsStreamProcessor {
                 ));
             }
         };
-        
+
         // Now we can safely await without holding Any references
         self.process_metrics(&metrics_owned).await?;
         Ok(())
@@ -299,7 +306,7 @@ impl PatternStreamProcessor {
             let mut library = self.pattern_library.write().await;
             let pattern_id = format!("pattern_{}", chrono::Utc::now().timestamp_millis());
             library.insert(pattern_id, pattern.clone());
-            
+
             // Keep library size manageable
             if library.len() > 200 {
                 let keys_to_remove: Vec<_> = library.keys().take(100).cloned().collect();
@@ -315,7 +322,10 @@ impl PatternStreamProcessor {
             *count += 1;
         }
 
-        tracing::debug!("Processed neural pattern with {} features", pattern.features.len());
+        tracing::debug!(
+            "Processed neural pattern with {} features",
+            pattern.features.len()
+        );
         Ok(())
     }
 }
@@ -337,7 +347,7 @@ impl StreamProcessor for PatternStreamProcessor {
                 ));
             }
         };
-        
+
         // Now we can safely await without holding Any references
         self.process_neural_pattern(&pattern_owned).await?;
         Ok(())

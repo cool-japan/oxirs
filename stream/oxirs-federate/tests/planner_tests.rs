@@ -1,7 +1,7 @@
 //! Unit tests for query planner module
 
-use oxirs_federate::*;
 use oxirs_federate::planner::planning::performance_optimizer;
+use oxirs_federate::*;
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -106,7 +106,7 @@ async fn test_service_clause_parsing() {
     let result = planner.analyze_sparql(query).await.unwrap();
     // QueryInfo doesn't have service_clauses field - test patterns instead
     assert!(result.patterns.len() >= 2);
-    
+
     // Check that the query was parsed successfully
     assert!(!result.variables.is_empty());
 }
@@ -323,10 +323,7 @@ async fn test_advanced_query_decomposition() {
         estimated_cost: 30,
     };
 
-    let plan = planner
-        .plan_sparql(&query_info, &registry)
-        .await
-        .unwrap();
+    let plan = planner.plan_sparql(&query_info, &registry).await.unwrap();
 
     // Should have created an execution plan
     assert!(!plan.steps.is_empty());

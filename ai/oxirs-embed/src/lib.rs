@@ -113,10 +113,10 @@
 //! - `gpu_acceleration_demo.rs` - GPU acceleration features  
 //! - `integrated_ai_platform_demo.rs` - Complete AI platform showcase
 
-#[cfg(feature = "api-server")]
-pub mod api;
 pub mod adaptive_learning;
 pub mod advanced_profiler;
+#[cfg(feature = "api-server")]
+pub mod api;
 pub mod application_tasks;
 pub mod batch_processing;
 pub mod biological_computing;
@@ -160,8 +160,8 @@ pub use oxirs_vec::Vector as VecVector;
 
 // Adaptive Learning System exports
 pub use adaptive_learning::{
-    AdaptiveLearningConfig, AdaptiveLearningSystem, AdaptationStrategy,
-    AdaptationMetrics, QualityFeedback,
+    AdaptationMetrics, AdaptationStrategy, AdaptiveLearningConfig, AdaptiveLearningSystem,
+    QualityFeedback,
 };
 
 use anyhow::Result;
@@ -645,7 +645,7 @@ pub use crate::model_registry::{
 pub mod quick_start {
     use super::*;
     use crate::models::TransE;
-    
+
     /// Create a TransE model with sensible defaults for experimentation
     pub fn create_simple_transe_model() -> TransE {
         let config = ModelConfig::default()
@@ -654,31 +654,33 @@ pub mod quick_start {
             .with_max_epochs(100);
         TransE::new(config)
     }
-    
+
     /// Create a biomedical embedding model for life sciences applications
     pub fn create_biomedical_model() -> BiomedicalEmbedding {
         let config = BiomedicalEmbeddingConfig::default();
         BiomedicalEmbedding::new(config)
     }
-    
+
     /// Parse a triple from simple string format "subject predicate object"
     pub fn parse_triple_from_string(triple_str: &str) -> Result<Triple> {
         let parts: Vec<&str> = triple_str.split_whitespace().collect();
         if parts.len() != 3 {
-            return Err(anyhow::anyhow!("Triple must have exactly 3 parts separated by spaces"));
+            return Err(anyhow::anyhow!(
+                "Triple must have exactly 3 parts separated by spaces"
+            ));
         }
-        
+
         Ok(Triple::new(
             NamedNode::new(parts[0])?,
             NamedNode::new(parts[1])?,
             NamedNode::new(parts[2])?,
         ))
     }
-    
+
     /// Helper to add multiple triples from string format
     pub fn add_triples_from_strings<T: EmbeddingModel>(
         model: &mut T,
-        triple_strings: &[&str]
+        triple_strings: &[&str],
     ) -> Result<usize> {
         let mut count = 0;
         for triple_str in triple_strings {
@@ -694,7 +696,7 @@ pub mod quick_start {
 mod quick_start_tests {
     use super::*;
     use crate::quick_start::*;
-    
+
     #[test]
     fn test_create_simple_transe_model() {
         let model = create_simple_transe_model();
@@ -703,7 +705,7 @@ mod quick_start_tests {
         assert_eq!(config.learning_rate, 0.01);
         assert_eq!(config.max_epochs, 100);
     }
-    
+
     #[test]
     fn test_parse_triple_from_string() {
         let triple_str = "http://example.org/alice http://example.org/knows http://example.org/bob";
@@ -712,14 +714,14 @@ mod quick_start_tests {
         assert_eq!(triple.predicate.iri, "http://example.org/knows");
         assert_eq!(triple.object.iri, "http://example.org/bob");
     }
-    
+
     #[test]
     fn test_parse_triple_from_string_invalid() {
         let triple_str = "http://example.org/alice http://example.org/knows";
         let result = parse_triple_from_string(triple_str);
         assert!(result.is_err());
     }
-    
+
     #[test]
     fn test_add_triples_from_strings() {
         let mut model = create_simple_transe_model();
@@ -727,7 +729,7 @@ mod quick_start_tests {
             "http://example.org/alice http://example.org/knows http://example.org/bob",
             "http://example.org/bob http://example.org/likes http://example.org/music",
         ];
-        
+
         let count = add_triples_from_strings(&mut model, &triple_strings).unwrap();
         assert_eq!(count, 2);
     }

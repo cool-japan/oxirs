@@ -2,8 +2,8 @@
 //!
 //! These tests verify the integration of various components in the federation engine.
 
+use oxirs_federate::service::{AuthType, ServiceAuthConfig, ServiceMetadata};
 use oxirs_federate::*;
-use oxirs_federate::service::{AuthType, ServiceMetadata, ServiceAuthConfig};
 use std::collections::HashSet;
 use std::time::Duration;
 use tokio;

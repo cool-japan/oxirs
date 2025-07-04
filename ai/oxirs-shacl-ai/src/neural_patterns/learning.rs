@@ -180,7 +180,7 @@ impl NeuralPatternLearner {
             auc_roc: 0.0,   // TODO: Implement proper AUC computation
             confusion_matrix: vec![vec![0; 2]; 2], // TODO: Implement proper confusion matrix
             per_class_metrics: std::collections::HashMap::new(), // TODO: Implement per-class metrics
-            training_time: std::time::Duration::from_secs(0), // TODO: Track actual training time
+            training_time: std::time::Duration::from_secs(0),    // TODO: Track actual training time
         })
     }
 

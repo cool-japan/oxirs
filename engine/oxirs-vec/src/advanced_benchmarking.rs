@@ -1780,7 +1780,9 @@ mod tests {
             mean_ms: 1.0,
             std_ms: 0.1,
             percentiles: HashMap::new(),
-            distribution: vec![0.9, 1.0, 1.1, 0.95, 1.05, 0.98, 1.02, 0.92, 1.08, 0.97, 1.03],
+            distribution: vec![
+                0.9, 1.0, 1.1, 0.95, 1.05, 0.98, 1.02, 0.92, 1.08, 0.97, 1.03,
+            ],
             max_ms: 1.1,
             min_ms: 0.9,
         };

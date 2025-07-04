@@ -121,8 +121,10 @@ pub async fn initiate_oauth2_flow(
     let use_pkce = params.use_pkce.unwrap_or(true);
 
     // TODO: Implement generate_oauth2_auth_url method
-    match Ok(("https://example.com/oauth2/auth".to_string(), "placeholder_state".to_string()))
-    {
+    match Ok((
+        "https://example.com/oauth2/auth".to_string(),
+        "placeholder_state".to_string(),
+    )) {
         Ok((authorization_url, state_param)) => {
             info!(
                 "Generated OAuth2 authorization URL with state: {}",
@@ -195,8 +197,7 @@ pub async fn handle_oauth2_callback(
     );
 
     // TODO: Implement complete_oauth2_flow method
-    match Err(FusekiError::authentication("OAuth2 flow not implemented"))
-    {
+    match Err(FusekiError::authentication("OAuth2 flow not implemented")) {
         Ok(AuthResult::Authenticated(user)) => {
             info!(
                 "OAuth2 authentication successful for user: {}",
@@ -268,7 +269,9 @@ pub async fn refresh_oauth2_token(
     ));
 
     // TODO: Implement refresh_oauth2_token method
-    Err(FusekiError::authentication("OAuth2 refresh not implemented"))
+    Err(FusekiError::authentication(
+        "OAuth2 refresh not implemented",
+    ))
 }
 
 /// Get OAuth2 user information
@@ -293,7 +296,10 @@ pub async fn get_oauth2_user_info(
         .ok_or_else(|| FusekiError::authentication("Missing or invalid authorization header"))?;
 
     // TODO: Implement get_oidc_user_info method
-    match Err(FusekiError::authentication("OIDC user info not implemented")) as Result<_, FusekiError> {
+    match Err(FusekiError::authentication(
+        "OIDC user info not implemented",
+    )) as Result<_, FusekiError>
+    {
         Ok(user_info) => {
             info!("Retrieved OAuth2 user info");
 
@@ -332,7 +338,10 @@ pub async fn validate_oauth2_token(
         .ok_or_else(|| FusekiError::authentication("Missing or invalid authorization header"))?;
 
     // TODO: Implement validate_oauth2_token method
-    match Err(FusekiError::authentication("OAuth2 token validation not implemented")) as Result<bool, FusekiError> {
+    match Err(FusekiError::authentication(
+        "OAuth2 token validation not implemented",
+    )) as Result<bool, FusekiError>
+    {
         Ok(is_valid) => Ok(Json(serde_json::json!({
             "valid": is_valid,
             "message": if is_valid { "Token is valid" } else { "Token is invalid or expired" },
@@ -400,7 +409,9 @@ pub async fn oauth2_discovery(
     ));
 
     // TODO: Implement oauth2_service() method
-    Err(FusekiError::service_unavailable("OAuth2 service not available"))
+    Err(FusekiError::service_unavailable(
+        "OAuth2 service not available",
+    ))
 }
 
 /// Extract Bearer token from Authorization header

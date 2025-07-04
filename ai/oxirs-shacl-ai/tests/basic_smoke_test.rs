@@ -53,11 +53,12 @@ mod tests {
 
     #[test]
     fn test_predictive_analytics_creation() {
-        let analytics_engine = PredictiveAnalyticsEngine::new();
+        let config = PredictiveAnalyticsConfig::default();
+        let analytics_engine = PredictiveAnalyticsEngine::new(config);
         let stats = analytics_engine.get_statistics();
 
-        assert_eq!(stats.forecasts_generated, 0);
-        assert_eq!(stats.recommendations_generated, 0);
+        assert_eq!(stats.total_forecasts_generated, 0);
+        assert_eq!(stats.total_recommendations_generated, 0);
     }
 
     // Note: Additional modules can be tested once their APIs are stabilized

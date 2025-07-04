@@ -357,10 +357,18 @@ impl GraphQLFederation {
             let self_ref = self;
             let context_clone = context.clone();
             let cache_clone = cache.clone();
-            
+
             let fut = async move {
-                let entity_refs: Vec<&EntityReference> = service_entities_owned.iter().map(|e| *e).collect();
-                self_ref.resolve_service_entity_batch(&service_id_owned, &entity_refs[..], &context_clone, &cache_clone).await
+                let entity_refs: Vec<&EntityReference> =
+                    service_entities_owned.iter().map(|e| *e).collect();
+                self_ref
+                    .resolve_service_entity_batch(
+                        &service_id_owned,
+                        &entity_refs[..],
+                        &context_clone,
+                        &cache_clone,
+                    )
+                    .await
             };
             futures.push(fut);
         }

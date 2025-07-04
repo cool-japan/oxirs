@@ -11,46 +11,48 @@
 //! - `online_learning`: Online learning algorithms and concept drift detection
 
 pub mod core;
-pub mod processors;
 pub mod metrics;
 pub mod online_learning;
+pub mod processors;
 
 // Re-export main types for easy access
 pub use core::{
-    StreamingAdaptationEngine, StreamingConfig, StreamType, StreamChannel,
-    AdaptationTrigger, TriggerCondition, AdaptationAction, AdaptationEvent,
-    AdaptationEventType, StreamData,
+    AdaptationAction, AdaptationEvent, AdaptationEventType, AdaptationTrigger, StreamChannel,
+    StreamData, StreamType, StreamingAdaptationEngine, StreamingConfig, TriggerCondition,
 };
 
 pub use processors::{
-    StreamProcessor, RdfStreamProcessor, ValidationStreamProcessor,
-    MetricsStreamProcessor, PatternStreamProcessor,
+    MetricsStreamProcessor, PatternStreamProcessor, RdfStreamProcessor, StreamProcessor,
+    ValidationStreamProcessor,
 };
 
 pub use metrics::{
-    RealTimeMetricsCollector, RealTimeMetrics, RealTimeAdaptationStats,
-    PerformanceMonitor, PerformanceThresholds, Alert, AlertType, AlertHandler,
-    LoggingAlertHandler,
+    Alert, AlertHandler, AlertType, LoggingAlertHandler, PerformanceMonitor, PerformanceThresholds,
+    RealTimeAdaptationStats, RealTimeMetrics, RealTimeMetricsCollector,
 };
 
 pub use online_learning::{
-    OnlineLearningEngine, OnlineLearningAlgorithm, OnlineModelState,
-    AdaptiveLearningRateScheduler, ConceptDriftDetector, StreamingFeatureExtractor,
-    StreamingDataPoint, StreamingDataType, UpdateResult, ModelPerformanceMetrics,
+    AdaptiveLearningRateScheduler, ConceptDriftDetector, ModelPerformanceMetrics,
+    OnlineLearningAlgorithm, OnlineLearningEngine, OnlineModelState, StreamingDataPoint,
+    StreamingDataType, StreamingFeatureExtractor, UpdateResult,
 };
 
 use crate::{Result, ShaclAiError};
 
 /// Create a default streaming adaptation engine with standard configuration
 pub fn create_default_engine() -> Result<StreamingAdaptationEngine> {
-    let adaptive_ai = crate::self_adaptive_ai::SelfAdaptiveAI::new(crate::self_adaptive_ai::SelfAdaptiveConfig::default());
+    let adaptive_ai = crate::self_adaptive_ai::SelfAdaptiveAI::new(
+        crate::self_adaptive_ai::SelfAdaptiveConfig::default(),
+    );
     let config = StreamingConfig::default();
     Ok(StreamingAdaptationEngine::new(adaptive_ai, config))
 }
 
 /// Create a streaming adaptation engine with custom configuration
 pub fn create_engine_with_config(config: StreamingConfig) -> Result<StreamingAdaptationEngine> {
-    let adaptive_ai = crate::self_adaptive_ai::SelfAdaptiveAI::new(crate::self_adaptive_ai::SelfAdaptiveConfig::default());
+    let adaptive_ai = crate::self_adaptive_ai::SelfAdaptiveAI::new(
+        crate::self_adaptive_ai::SelfAdaptiveConfig::default(),
+    );
     Ok(StreamingAdaptationEngine::new(adaptive_ai, config))
 }
 
@@ -87,7 +89,7 @@ mod tests {
             max_concurrent_streams: 20,
             ..Default::default()
         };
-        
+
         let engine = create_engine_with_config(config);
         assert!(engine.is_ok());
     }
@@ -108,7 +110,7 @@ mod tests {
             data: vec![1, 2, 3, 4, 5],
             metadata: std::collections::HashMap::new(),
         };
-        
+
         let result = engine.process_streaming_update(&data_point).await;
         assert!(result.is_ok());
     }
@@ -119,7 +121,7 @@ mod tests {
         let mut features = std::collections::HashMap::new();
         features.insert("feature1".to_string(), 1.0);
         features.insert("feature2".to_string(), 2.0);
-        
+
         let drift = detector.check_drift(&features).await;
         assert!(drift.is_ok());
     }
@@ -133,9 +135,9 @@ mod tests {
             0.5,
             Duration::from_secs(60),
         );
-        
+
         assert!(!trigger.should_trigger(0.3)); // Below threshold
-        assert!(trigger.should_trigger(0.7));  // Above threshold
+        assert!(trigger.should_trigger(0.7)); // Above threshold
     }
 
     #[test]

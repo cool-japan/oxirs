@@ -5,12 +5,12 @@ use std::f64::consts::PI;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use tokio::sync::RwLock;
-use tracing;
 use oxirs_core::{model::Triple, Store};
 use rand_distr::{Distribution, Normal};
+use tokio::sync::RwLock;
+use tracing;
 
-use super::core::{QuantumPattern, QuantumMetrics, QuantumAdvantageMetrics};
+use super::core::{QuantumAdvantageMetrics, QuantumMetrics, QuantumPattern};
 use crate::neural_patterns::NeuralPattern;
 use crate::{Result, ShaclAiError};
 

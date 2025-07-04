@@ -11,19 +11,19 @@ use crate::{Result, ShaclAiError};
 pub struct PerformanceProfiler {
     /// Configuration
     config: PerformanceProfilingConfig,
-    
+
     /// Performance metrics
     metrics: PerformanceMetrics,
-    
+
     /// Resource usage history
     resource_history: Vec<ResourceSnapshot>,
-    
+
     /// Timing measurements
     timing_measurements: HashMap<String, TimingStats>,
-    
+
     /// Cache analysis data
     cache_analysis: CacheAnalysisData,
-    
+
     /// I/O analysis data
     io_analysis: IoAnalysisData,
 }
@@ -103,22 +103,23 @@ impl PerformanceProfiler {
     /// Record completed operation
     pub fn record_operation(&mut self, operation_profiler: OperationProfiler) -> Result<()> {
         let stats = operation_profiler.finish()?;
-        
+
         // Update timing measurements
-        let timing_entry = self.timing_measurements
+        let timing_entry = self
+            .timing_measurements
             .entry(stats.operation_name.clone())
             .or_insert_with(|| TimingStats::new(stats.operation_name.clone()));
-        
+
         timing_entry.add_measurement(stats.execution_time);
-        
+
         // Update overall metrics
         self.update_overall_metrics(&stats);
-        
+
         // Record resource snapshot if enabled
         if self.config.monitor_resources {
             self.record_resource_snapshot(&stats.operation_name)?;
         }
-        
+
         Ok(())
     }
 
@@ -131,16 +132,20 @@ impl PerformanceProfiler {
         match operation_type {
             CacheOperation::Hit => {
                 self.cache_analysis.cache_hits += 1;
-                *self.cache_analysis.hit_patterns.entry(key.to_string()).or_insert(0) += 1;
-            },
+                *self
+                    .cache_analysis
+                    .hit_patterns
+                    .entry(key.to_string())
+                    .or_insert(0) += 1;
+            }
             CacheOperation::Miss => {
                 self.cache_analysis.cache_misses += 1;
-            },
+            }
             CacheOperation::Eviction => {
                 self.cache_analysis.cache_evictions += 1;
-            },
+            }
         }
-        
+
         // Update cache utilization
         let total_operations = self.cache_analysis.cache_hits + self.cache_analysis.cache_misses;
         if total_operations > 0 {
@@ -158,43 +163,53 @@ impl PerformanceProfiler {
             IoOperationType::DiskRead => {
                 self.io_analysis.disk_reads += 1;
                 self.io_analysis.total_bytes_read += operation.bytes;
-            },
+            }
             IoOperationType::DiskWrite => {
                 self.io_analysis.disk_writes += 1;
                 self.io_analysis.total_bytes_written += operation.bytes;
-            },
+            }
             IoOperationType::NetworkRequest => {
                 self.io_analysis.network_requests += 1;
-            },
+            }
         }
 
         // Update average latency
-        let total_ops = self.io_analysis.disk_reads + self.io_analysis.disk_writes + self.io_analysis.network_requests;
+        let total_ops = self.io_analysis.disk_reads
+            + self.io_analysis.disk_writes
+            + self.io_analysis.network_requests;
         if total_ops > 0 {
             self.io_analysis.average_latency = Duration::from_nanos(
-                (self.io_analysis.average_latency.as_nanos() as u64 * (total_ops - 1) as u64 + 
-                 operation.latency.as_nanos() as u64) / total_ops as u64
+                (self.io_analysis.average_latency.as_nanos() as u64 * (total_ops - 1) as u64
+                    + operation.latency.as_nanos() as u64)
+                    / total_ops as u64,
             );
         }
     }
 
     fn update_overall_metrics(&mut self, stats: &OperationStats) {
         self.metrics.total_operations += 1;
-        
+
         // Update average execution time
         let n = self.metrics.total_operations as u64;
         let current_avg_nanos = self.metrics.average_execution_time.as_nanos() as u64;
-        let new_avg_nanos = (current_avg_nanos * (n - 1) + stats.execution_time.as_nanos() as u64) / n;
+        let new_avg_nanos =
+            (current_avg_nanos * (n - 1) + stats.execution_time.as_nanos() as u64) / n;
         self.metrics.average_execution_time = Duration::from_nanos(new_avg_nanos);
-        
+
         // Update peak memory usage
-        self.metrics.peak_memory_usage = self.metrics.peak_memory_usage.max(stats.peak_memory_usage);
-        
+        self.metrics.peak_memory_usage =
+            self.metrics.peak_memory_usage.max(stats.peak_memory_usage);
+
         // Update throughput (operations per second)
         if !self.resource_history.is_empty() {
-            let time_span = self.resource_history.last().unwrap().timestamp
+            let time_span = self
+                .resource_history
+                .last()
+                .unwrap()
+                .timestamp
                 .duration_since(self.resource_history.first().unwrap().timestamp);
-            self.metrics.throughput = self.metrics.total_operations as f64 / time_span.as_secs_f64();
+            self.metrics.throughput =
+                self.metrics.total_operations as f64 / time_span.as_secs_f64();
         }
     }
 
@@ -260,21 +275,31 @@ impl PerformanceProfiler {
             return ResourceUtilization::default();
         }
 
-        let avg_cpu = self.resource_history.iter()
+        let avg_cpu = self
+            .resource_history
+            .iter()
             .map(|s| s.cpu_usage)
-            .sum::<f64>() / self.resource_history.len() as f64;
+            .sum::<f64>()
+            / self.resource_history.len() as f64;
 
-        let avg_memory = self.resource_history.iter()
+        let avg_memory = self
+            .resource_history
+            .iter()
             .map(|s| s.memory_usage)
-            .sum::<usize>() / self.resource_history.len();
+            .sum::<usize>()
+            / self.resource_history.len();
 
         ResourceUtilization {
             average_cpu_usage: avg_cpu,
             average_memory_usage: avg_memory,
-            peak_cpu_usage: self.resource_history.iter()
+            peak_cpu_usage: self
+                .resource_history
+                .iter()
                 .map(|s| s.cpu_usage)
                 .fold(0.0, f64::max),
-            peak_memory_usage: self.resource_history.iter()
+            peak_memory_usage: self
+                .resource_history
+                .iter()
                 .map(|s| s.memory_usage)
                 .max()
                 .unwrap_or(0),
@@ -405,11 +430,9 @@ impl TimingStats {
         self.average_time = self.total_time / self.total_calls as u32;
         self.min_time = self.min_time.min(duration);
         self.max_time = self.max_time.max(duration);
-        
+
         // Simplified 95th percentile calculation
-        self.percentile_95 = Duration::from_nanos(
-            (self.max_time.as_nanos() as f64 * 0.95) as u64
-        );
+        self.percentile_95 = Duration::from_nanos((self.max_time.as_nanos() as f64 * 0.95) as u64);
     }
 }
 

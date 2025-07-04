@@ -4,9 +4,10 @@
 //! and optimization recommendation capabilities.
 
 use oxirs_federate::{
-    performance_analyzer::*, FederatedService, FederationEngine, ServiceRegistry,
-    monitoring::{PredictionType, OptimizationCategory, AnomalyType, RegressionType},
+    monitoring::{AnomalyType, OptimizationCategory, PredictionType, RegressionType},
+    performance_analyzer::*,
     semantic_enhancer::Priority,
+    FederatedService, FederationEngine, ServiceRegistry,
 };
 use std::time::{Duration, Instant, SystemTime};
 use tokio;
@@ -156,18 +157,18 @@ async fn test_bottleneck_detection() {
 
     // Should detect high latency bottleneck
     // assert!(bottlenecks
-        // .iter()
-        // .any(|b| matches!(b.bottleneck_type, BottleneckType::HighLatency)));
+    // .iter()
+    // .any(|b| matches!(b.bottleneck_type, BottleneckType::HighLatency)));
 
     // Should detect high error rate bottleneck
     // assert!(bottlenecks
-        // .iter()
-        // .any(|b| matches!(b.bottleneck_type, BottleneckType::HighErrorRate)));
+    // .iter()
+    // .any(|b| matches!(b.bottleneck_type, BottleneckType::HighErrorRate)));
 
     // Should detect resource constraints
     // assert!(bottlenecks
-        // .iter()
-        // .any(|b| matches!(b.bottleneck_type, BottleneckType::ResourceConstraint)));
+    // .iter()
+    // .any(|b| matches!(b.bottleneck_type, BottleneckType::ResourceConstraint)));
 }
 
 #[tokio::test]
@@ -208,13 +209,13 @@ async fn test_performance_prediction() {
 
     // Should predict performance degradation trends
     // assert!(predictions
-        // .iter()
-        // .any(|p| matches!(p.prediction_type, PredictionType::PerformanceDegradation)));
+    // .iter()
+    // .any(|p| matches!(p.prediction_type, PredictionType::PerformanceDegradation)));
 
     // Should predict resource exhaustion
     // assert!(predictions
-        // .iter()
-        // .any(|p| matches!(p.prediction_type, PredictionType::ResourceExhaustion)));
+    // .iter()
+    // .any(|p| matches!(p.prediction_type, PredictionType::ResourceExhaustion)));
 }
 
 #[tokio::test]
@@ -248,16 +249,20 @@ async fn test_optimization_recommendations() {
     }
 
     // Generate optimization recommendations
-    let recommendations = analyzer
-        .generate_recommendations()
-        .await
-        .unwrap();
+    let recommendations = analyzer.generate_recommendations().await.unwrap();
 
     // Should have recommendations
-    assert!(!recommendations.high_priority.is_empty() || !recommendations.medium_priority.is_empty() || !recommendations.low_priority.is_empty() || !recommendations.long_term.is_empty());
+    assert!(
+        !recommendations.high_priority.is_empty()
+            || !recommendations.medium_priority.is_empty()
+            || !recommendations.low_priority.is_empty()
+            || !recommendations.long_term.is_empty()
+    );
 
     // Should recommend caching improvements
-    let all_recommendations: Vec<_> = recommendations.high_priority.iter()
+    let all_recommendations: Vec<_> = recommendations
+        .high_priority
+        .iter()
         .chain(recommendations.medium_priority.iter())
         .chain(recommendations.low_priority.iter())
         .chain(recommendations.long_term.iter())
@@ -322,7 +327,7 @@ async fn test_baseline_establishment() {
     // For now, just verify that analysis can be performed
     let analysis_result = analyzer.analyze_performance().await;
     // Analysis might fail due to insufficient data, which is expected
-    
+
     // Just verify we can analyze trends
     let trends = analyzer.analyze_trends().await.unwrap();
     // trends.len() is always >= 0, no need to assert this

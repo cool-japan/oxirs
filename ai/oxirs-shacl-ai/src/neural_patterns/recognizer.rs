@@ -16,12 +16,12 @@ use crate::{
 use super::types::{GraphStatistics, PatternRelationshipGraph};
 
 use super::{
-    attention::CrossPatternAttention,
+    attention::{CrossPatternAttention, AttentionConfig},
     correlation::AdvancedPatternCorrelationAnalyzer,
     hierarchies::PatternHierarchyAnalyzer,
     learning::NeuralPatternLearner,
     types::{
-        AttentionAnalysisResult, AttentionConfig, CorrelationAnalysisConfig,
+        AttentionAnalysisResult, AttentionConfig as TypesAttentionConfig, CorrelationAnalysisConfig,
         CorrelationAnalysisResult, CorrelationType, NeuralPatternConfig, PatternCorrelation,
         PatternHierarchy,
     },
@@ -287,8 +287,7 @@ impl NeuralPatternRecognizer {
         // For now, create a simple placeholder
 
         if let Some(first_pattern) = patterns.first() {
-            let mut composite = first_pattern.clone();
-            composite.id = format!("composite_{}", uuid::Uuid::new_v4());
+            let composite = first_pattern.clone().with_id(format!("composite_{}", uuid::Uuid::new_v4()));
             Ok(composite)
         } else {
             Err(
@@ -309,8 +308,7 @@ impl NeuralPatternRecognizer {
         // For now, create a simple placeholder
 
         if let Some(first_pattern) = patterns.first() {
-            let mut merged = first_pattern.clone();
-            merged.id = format!("merged_{}_{}", pattern1_id, pattern2_id);
+            let merged = first_pattern.clone().with_id(format!("merged_{}_{}", pattern1_id, pattern2_id));
             Ok(merged)
         } else {
             Err(

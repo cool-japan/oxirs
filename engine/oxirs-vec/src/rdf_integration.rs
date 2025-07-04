@@ -329,7 +329,11 @@ impl RdfVectorIntegration {
         let query_vector = self.generate_text_embedding(query_text)?;
 
         // Register temporary term (optional - for caching)
-        let temp_vector_id = self.vector_store.write().unwrap().add_vector(query_vector.clone())?;
+        let temp_vector_id = self
+            .vector_store
+            .write()
+            .unwrap()
+            .add_vector(query_vector.clone())?;
 
         // Perform similarity search against all terms
         let candidate_vectors = if let Some(graph) = graph_context {
@@ -376,7 +380,11 @@ impl RdfVectorIntegration {
         }
 
         // Clean up temporary vector
-        let _ = self.vector_store.write().unwrap().remove_vector(&temp_vector_id);
+        let _ = self
+            .vector_store
+            .write()
+            .unwrap()
+            .remove_vector(&temp_vector_id);
 
         // Sort and limit results
         results.sort_by(|a, b| {

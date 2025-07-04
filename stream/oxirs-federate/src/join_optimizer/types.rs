@@ -6,9 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use crate::planner::planning::TriplePattern;
-use crate::service_optimizer::{
-    JoinAlgorithm, JoinEdge, StrategyPerformance,
-};
+use crate::service_optimizer::{JoinAlgorithm, JoinEdge, StrategyPerformance};
 
 /// Join graph representation for optimization
 #[derive(Debug, Clone)]

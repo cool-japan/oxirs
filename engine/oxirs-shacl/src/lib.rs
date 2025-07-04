@@ -1029,7 +1029,8 @@ impl ValidationConfig {
 
     /// Enable inference during validation
     pub fn with_inference_enabled(mut self, enabled: bool) -> Self {
-        self.context.insert("inference_enabled".to_string(), enabled.to_string());
+        self.context
+            .insert("inference_enabled".to_string(), enabled.to_string());
         self
     }
 }
