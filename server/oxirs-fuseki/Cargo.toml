@@ -82,7 +82,7 @@ dashmap = "6.1"
 parking_lot = "0.12"
 
 # Streaming
-rdkafka = { version = "0.36", optional = true }
+rdkafka = { version = "0.37", optional = true }
 async-nats = { version = "0.37", optional = true }
 bytes = "1.8"
 
