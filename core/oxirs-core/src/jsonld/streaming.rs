@@ -305,7 +305,7 @@ impl UltraStreamingJsonLdParser {
         let triples = Self::extract_triples_standard(&json_value, &context, term_interner).await?;
 
         // Record performance metrics
-        let processing_time = start.elapsed();
+        let _processing_time = start.elapsed();
         // performance_monitor.record_chunk_processing_time(processing_time);
 
         Ok(triples)
@@ -458,7 +458,7 @@ impl UltraStreamingJsonLdParser {
         subject: Subject,
         predicate: NamedNode,
         value: &Value,
-        context: &Value,
+        _context: &Value,
         term_interner: &TermInterner,
     ) -> Result<Option<Triple>, JsonLdParseError> {
         let object: Object = match value {
@@ -526,18 +526,18 @@ impl UltraStreamingJsonLdParser {
                 if let Some(iri) = expanded.as_str() {
                     Ok(iri.to_string())
                 } else {
-                    Ok(format!("http://example.org/{}", property))
+                    Ok(format!("http://example.org/{property}"))
                 }
             } else {
-                Ok(format!("http://example.org/{}", property))
+                Ok(format!("http://example.org/{property}"))
             }
         } else {
-            Ok(format!("http://example.org/{}", property))
+            Ok(format!("http://example.org/{property}"))
         }
     }
 
     /// Resolve remote context (simplified)
-    async fn resolve_remote_context(context_iri: &str) -> Result<Value, JsonLdParseError> {
+    async fn resolve_remote_context(_context_iri: &str) -> Result<Value, JsonLdParseError> {
         // In real implementation, this would fetch remote contexts
         // For now, return empty context
         Ok(Value::Object(Map::new()))
@@ -710,6 +710,12 @@ pub struct MemoryStreamingSink {
     triples: Arc<RwLock<Vec<Triple>>>,
     quads: Arc<RwLock<Vec<Quad>>>,
     statistics: Arc<RwLock<SinkStatistics>>,
+}
+
+impl Default for MemoryStreamingSink {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MemoryStreamingSink {

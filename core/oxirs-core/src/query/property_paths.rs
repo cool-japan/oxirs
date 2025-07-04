@@ -255,7 +255,6 @@ impl PropertyPathPattern {
                     TermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
                     TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
                     TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
-                    _ => None,
                 };
 
                 Some(TriplePattern {
@@ -326,7 +325,7 @@ impl PropertyPathEvaluator {
 
     /// Evaluate a property path pattern
     /// This is a placeholder - actual implementation would query the graph
-    pub fn evaluate(&self, pattern: &PropertyPathPattern) -> Result<Vec<(Term, Term)>, OxirsError> {
+    pub fn evaluate(&self, _pattern: &PropertyPathPattern) -> Result<Vec<(Term, Term)>, OxirsError> {
         // Placeholder implementation
         Ok(Vec::new())
     }
@@ -456,8 +455,8 @@ mod tests {
             PropertyPath::zero_or_more(PropertyPath::predicate(p2.clone())),
         );
 
-        let expected = format!("{}/{}*", p1, p2);
-        assert_eq!(format!("{}", path), expected);
+        let expected = format!("{p1}/{p2}*");
+        assert_eq!(format!("{path}"), expected);
     }
 
     #[test]

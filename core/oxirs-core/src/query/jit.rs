@@ -242,7 +242,7 @@ impl JitCompiler {
         let start = Instant::now();
 
         // Scan triples
-        for (idx, triple) in context.data.triples.iter().enumerate() {
+        for (_idx, triple) in context.data.triples.iter().enumerate() {
             stats.triples_scanned += 1;
 
             if let Some(bindings) = self.match_triple(triple, pattern, &context.bindings) {

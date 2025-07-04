@@ -55,7 +55,7 @@ impl JsonLdParser {
     }
 
     /// Parse JSON-LD from a reader
-    pub fn parse_reader<R: Read>(&self, reader: R) -> ParseResult<Vec<Quad>> {
+    pub fn parse_reader<R: Read>(&self, _reader: R) -> ParseResult<Vec<Quad>> {
         // TODO: Implement actual JSON-LD parsing
         // This would involve:
         // 1. JSON parsing
@@ -301,7 +301,7 @@ pub mod context {
     use super::*;
 
     /// Load context from URL or embedded definition
-    pub fn load_context(context_ref: &str) -> ParseResult<serde_json::Value> {
+    pub fn load_context(_context_ref: &str) -> ParseResult<serde_json::Value> {
         // TODO: Implement context loading
         // This would handle:
         // 1. URL dereferencing
@@ -313,19 +313,19 @@ pub mod context {
     }
 
     /// Merge multiple contexts
-    pub fn merge_contexts(contexts: &[serde_json::Value]) -> ParseResult<serde_json::Value> {
+    pub fn merge_contexts(_contexts: &[serde_json::Value]) -> ParseResult<serde_json::Value> {
         // TODO: Implement context merging algorithm
         Ok(serde_json::json!({}))
     }
 
     /// Expand a term using context
-    pub fn expand_term(term: &str, context: &serde_json::Value) -> ParseResult<String> {
+    pub fn expand_term(term: &str, _context: &serde_json::Value) -> ParseResult<String> {
         // TODO: Implement term expansion
         Ok(term.to_string())
     }
 
     /// Compact an IRI using context
-    pub fn compact_iri(iri: &str, context: &serde_json::Value) -> ParseResult<String> {
+    pub fn compact_iri(iri: &str, _context: &serde_json::Value) -> ParseResult<String> {
         // TODO: Implement IRI compaction
         Ok(iri.to_string())
     }

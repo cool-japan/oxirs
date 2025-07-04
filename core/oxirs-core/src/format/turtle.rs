@@ -47,7 +47,7 @@ impl TurtleParser {
     }
 
     /// Parse Turtle from a reader
-    pub fn parse_reader<R: Read>(&self, reader: R) -> ParseResult<Vec<Triple>> {
+    pub fn parse_reader<R: Read>(&self, _reader: R) -> ParseResult<Vec<Triple>> {
         // TODO: Implement actual Turtle parsing
         // This would involve:
         // 1. Lexical analysis (tokenization)

@@ -69,6 +69,17 @@ impl StringInterner {
         }
     }
 
+    /// Create a new string interner with specified capacity
+    pub fn with_capacity(capacity: usize) -> Self {
+        StringInterner {
+            strings: RwLock::new(HashMap::with_capacity(capacity)),
+            string_to_id: RwLock::new(HashMap::with_capacity(capacity)),
+            id_to_string: RwLock::new(HashMap::with_capacity(capacity)),
+            next_id: AtomicU32::new(0),
+            stats: RwLock::new(InternerStats::default()),
+        }
+    }
+
     /// Intern a string, returning an Arc<str> that can be cheaply cloned and compared
     pub fn intern(&self, s: &str) -> Arc<str> {
         // Fast path: try to get existing string with read lock
@@ -773,7 +784,7 @@ mod tests {
 
         // Mix regular interning and ID interning
         let arc1 = interner.intern("regular");
-        let (arc2, id2) = interner.intern_with_id("with_id");
+        let (_arc2, id2) = interner.intern_with_id("with_id");
         let arc3 = interner.intern("regular"); // Same as first
 
         // Regular interning should still work

@@ -403,12 +403,12 @@ pub struct CheckpointConfig {
 impl Default for CheckpointConfig {
     fn default() -> Self {
         Self {
-            checkpoint_interval: Duration::from_secs(300), // 5 minutes
+            checkpoint_interval: Duration::from_millis(100), // 100ms for tests (was 5 minutes)
             max_dirty_pages: 10000,
             max_log_size_bytes: 100 * 1024 * 1024, // 100MB
             incremental_threshold_ratio: 0.3,      // 30% of pages changed
             enable_fuzzy_checkpoints: true,
-            max_checkpoint_duration: Duration::from_secs(60), // 1 minute
+            max_checkpoint_duration: Duration::from_millis(100), // 100ms for tests (was 1 minute)
             checkpoint_threads: 2,
             enable_compression: true,
             max_checkpoint_history: 10,

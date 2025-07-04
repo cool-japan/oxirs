@@ -121,6 +121,17 @@ pub struct PatternHierarchy {
     pub hierarchy_metrics: HierarchyMetrics,
 }
 
+impl PatternHierarchy {
+    pub fn new() -> Self {
+        Self {
+            hierarchy_id: "default".to_string(),
+            root_patterns: Vec::new(),
+            hierarchy_levels: Vec::new(),
+            hierarchy_metrics: HierarchyMetrics::default(),
+        }
+    }
+}
+
 /// Level in the pattern hierarchy
 #[derive(Debug, Clone)]
 pub struct HierarchyLevel {
@@ -138,6 +149,18 @@ pub struct HierarchyMetrics {
     pub coherence_score: f64,
     pub coverage_percentage: f64,
     pub stability_measure: f64,
+}
+
+impl Default for HierarchyMetrics {
+    fn default() -> Self {
+        Self {
+            hierarchy_depth: 0,
+            branching_factor: 0.0,
+            coherence_score: 0.0,
+            coverage_percentage: 0.0,
+            stability_measure: 0.0,
+        }
+    }
 }
 
 /// Temporal dynamics of pattern relationships

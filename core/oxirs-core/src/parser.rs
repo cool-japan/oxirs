@@ -143,7 +143,7 @@ impl Parser {
     }
 
     /// Parse RDF data with a custom handler for each quad
-    pub fn parse_str_with_handler<F>(&self, data: &str, mut handler: F) -> Result<()>
+    pub fn parse_str_with_handler<F>(&self, data: &str, handler: F) -> Result<()>
     where
         F: FnMut(Quad) -> Result<()>,
     {
@@ -479,7 +479,7 @@ impl Parser {
         }
     }
 
-    fn parse_trig<F>(&self, data: &str, mut handler: F) -> Result<()>
+    fn parse_trig<F>(&self, data: &str, handler: F) -> Result<()>
     where
         F: FnMut(Quad) -> Result<()>,
     {

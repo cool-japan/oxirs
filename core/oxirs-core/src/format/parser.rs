@@ -145,7 +145,7 @@ impl RdfParser {
 
     // Format-specific parser implementations
 
-    fn parse_turtle_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
+    fn parse_turtle_reader<R: Read + Send>(self, _reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement actual Turtle parsing using extracted oxttl components
         // For now, return empty iterator
         ReaderQuadParser::new(Box::new(std::iter::empty()))
@@ -156,7 +156,7 @@ impl RdfParser {
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
 
-    fn parse_ntriples_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
+    fn parse_ntriples_reader<R: Read + Send>(self, _reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement N-Triples parsing
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
@@ -166,7 +166,7 @@ impl RdfParser {
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
 
-    fn parse_nquads_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
+    fn parse_nquads_reader<R: Read + Send>(self, _reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement N-Quads parsing
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
@@ -176,7 +176,7 @@ impl RdfParser {
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
 
-    fn parse_trig_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
+    fn parse_trig_reader<R: Read + Send>(self, _reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement TriG parsing
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
@@ -186,7 +186,7 @@ impl RdfParser {
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
 
-    fn parse_rdfxml_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
+    fn parse_rdfxml_reader<R: Read + Send>(self, _reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement RDF/XML parsing using extracted oxrdfxml components
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
@@ -196,7 +196,7 @@ impl RdfParser {
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
 
-    fn parse_jsonld_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
+    fn parse_jsonld_reader<R: Read + Send>(self, _reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement JSON-LD parsing using extracted oxjsonld components
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
@@ -206,7 +206,7 @@ impl RdfParser {
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
 
-    fn parse_n3_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
+    fn parse_n3_reader<R: Read + Send>(self, _reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement N3 parsing
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }

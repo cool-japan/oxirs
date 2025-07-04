@@ -550,7 +550,7 @@ impl NeuromorphicQueryProcessor {
         let mut memory_patterns = self.memory_patterns.write().await;
         
         // Check if pattern is sufficiently novel
-        let mut max_similarity = 0.0;
+        let mut max_similarity: f32 = 0.0;
         for pattern in memory_patterns.values() {
             let similarity = self.calculate_pattern_similarity(activation, &pattern.activation_pattern);
             max_similarity = max_similarity.max(similarity);

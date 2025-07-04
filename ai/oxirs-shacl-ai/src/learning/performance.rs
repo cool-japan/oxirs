@@ -1,7 +1,7 @@
 //! Performance metrics and analysis for shape learning
 
-use serde::{Deserialize, Serialize};
 use crate::patterns::{Pattern, PatternType};
+use serde::{Deserialize, Serialize};
 
 /// Performance metrics for learning efficiency analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]

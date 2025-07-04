@@ -497,7 +497,7 @@ impl CellularDivision {
         self.mitotic_apparatus.reset()?;
 
         // Distribute DNA content to daughter cells
-        let (daughter1, daughter2) = self.distribute_dna_content()?;
+        let (daughter1, _daughter2) = self.distribute_dna_content()?;
 
         // For simulation, we keep one daughter cell's content
         self.dna_content = daughter1;
@@ -772,7 +772,7 @@ impl Centriole {
 }
 
 impl Microtubule {
-    pub fn new(id: String) -> Self {
+    pub fn new(_id: String) -> Self {
         Self {
             protofilaments: Vec::new(),
             length: 10.0,

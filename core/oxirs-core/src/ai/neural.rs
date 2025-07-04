@@ -351,7 +351,7 @@ impl MultiHeadAttentionLayer {
 
 impl NeuralLayer for MultiHeadAttentionLayer {
     fn forward(&self, input: &Array2<f32>) -> Result<Array2<f32>> {
-        let batch_size = input.nrows();
+        let _batch_size = input.nrows();
 
         // Project to query, key, value
         let query = self.query_proj.forward(input)?;

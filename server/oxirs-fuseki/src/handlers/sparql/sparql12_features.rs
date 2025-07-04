@@ -322,7 +322,15 @@ impl AggregationEngine {
         Self {
             function_registry: Arc::new(RwLock::new(function_registry)),
             optimization_cache: Arc::new(RwLock::new(HashMap::new())),
-            supported_functions: vec!["COUNT".to_string(), "SUM".to_string(), "AVG".to_string(), "MIN".to_string(), "MAX".to_string(), "GROUP_CONCAT".to_string(), "SAMPLE".to_string()],
+            supported_functions: vec![
+                "COUNT".to_string(),
+                "SUM".to_string(),
+                "AVG".to_string(),
+                "MIN".to_string(),
+                "MAX".to_string(),
+                "GROUP_CONCAT".to_string(),
+                "SAMPLE".to_string(),
+            ],
         }
     }
 
@@ -456,7 +464,11 @@ impl SubqueryOptimizer {
         Self {
             subquery_cache: Arc::new(RwLock::new(HashMap::new())),
             correlation_analysis: Arc::new(RwLock::new(CorrelationAnalysis::default())),
-            rewrite_rules: vec!["unnest_exists".to_string(), "push_predicates".to_string(), "join_elimination".to_string()],
+            rewrite_rules: vec![
+                "unnest_exists".to_string(),
+                "push_predicates".to_string(),
+                "join_elimination".to_string(),
+            ],
         }
     }
 

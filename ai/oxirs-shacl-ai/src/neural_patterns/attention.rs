@@ -26,7 +26,7 @@ pub struct CrossPatternAttention {
 }
 
 /// Individual attention head for multi-scale analysis
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AttentionHead {
     pub scale: f64,
     pub query_proj: Array2<f64>,

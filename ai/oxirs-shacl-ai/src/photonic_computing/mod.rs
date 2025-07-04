@@ -4,19 +4,19 @@
 //! processing for ultra-fast validation with the speed of light computation and
 //! infinite parallel processing through optical interference patterns.
 
-pub mod types;
 pub mod engine;
+pub mod types;
 
 // Re-export main types for easy access
-pub use types::{
-    WavelengthRange, PhotonicGate, GateType, OpticalProcessingState, ConnectionType,
-    PhotonicQubit, PolarizationState, PhotonNumberState, SpatialMode, CoherenceProperties,
-    MaterialType, NonlinearProperties, JunctionType, NetworkTopology
-};
 pub use engine::{
-    PhotonicComputingEngine, OpticalProcessingUnit, PhotonicQuantumCircuit,
-    InterferenceProcessor, OpticalMemoryBank, PhotonicEntanglementNetwork,
-    LightSpeedComputationManager, InterferencePattern, PatternType, ValidationResult
+    InterferencePattern, InterferenceProcessor, LightSpeedComputationManager, OpticalMemoryBank,
+    OpticalProcessingUnit, PatternType, PhotonicComputingEngine, PhotonicEntanglementNetwork,
+    PhotonicQuantumCircuit, ValidationResult,
+};
+pub use types::{
+    CoherenceProperties, ConnectionType, GateType, JunctionType, MaterialType, NetworkTopology,
+    NonlinearProperties, OpticalProcessingState, PhotonNumberState, PhotonicGate, PhotonicQubit,
+    PolarizationState, SpatialMode, WavelengthRange,
 };
 
 #[cfg(test)]
@@ -34,7 +34,7 @@ mod tests {
         let mut engine = PhotonicComputingEngine::new();
         let result = engine.create_entangled_pair();
         assert!(result.is_ok());
-        
+
         let (qubit1, qubit2) = result.unwrap();
         assert_ne!(qubit1.id, qubit2.id);
         assert_eq!(qubit1.frequency, qubit2.frequency);
@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn test_optical_unit_addition() {
         let engine = PhotonicComputingEngine::new();
-        
+
         let unit = OpticalProcessingUnit {
             id: "test_unit".to_string(),
             wavelength_range: WavelengthRange {
@@ -65,10 +65,10 @@ mod tests {
     fn test_validation_processing() {
         let engine = PhotonicComputingEngine::new();
         let validation_data = b"test validation data";
-        
+
         let result = engine.process_shacl_validation(validation_data);
         assert!(result.is_ok());
-        
+
         let validation_result = result.unwrap();
         assert!(validation_result.success);
         assert!(validation_result.processing_time_fs > 0);

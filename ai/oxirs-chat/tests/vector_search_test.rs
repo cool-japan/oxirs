@@ -173,7 +173,8 @@ async fn test_rag_system_with_vector_index() {
             triple.object().clone(),
             oxirs_core::GraphName::DefaultGraph,
         );
-        store.insert_quad(quad).expect("Failed to insert quad");
+        // Use mutable reference to call direct insert_quad method on ConcreteStore
+        ConcreteStore::insert_quad(&mut store, quad).expect("Failed to insert quad");
     }
 
     let store_arc = Arc::new(store);

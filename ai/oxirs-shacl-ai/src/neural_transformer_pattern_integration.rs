@@ -187,7 +187,7 @@ impl MultiHeadAttention {
         input: &Array2<f64>,
         mask: Option<&Array2<bool>>,
     ) -> Result<(Array2<f64>, Array3<f64>)> {
-        let seq_len = input.shape()[0];  // First dimension is sequence length
+        let seq_len = input.shape()[0]; // First dimension is sequence length
         let model_dim = input.shape()[1]; // Second dimension is model dimension
         let head_dim = self.config.model_dim / self.config.num_heads;
 
@@ -752,7 +752,7 @@ impl PositionalEncoder {
 }
 
 /// Memory bank for storing and retrieving pattern information
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PatternMemoryBank {
     /// Memory storage
     memory: Vec<PatternMemoryEntry>,

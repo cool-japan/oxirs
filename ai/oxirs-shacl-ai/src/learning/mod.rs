@@ -3,21 +3,21 @@
 //! This module implements AI-powered shape learning from RDF data, providing
 //! automatic constraint discovery, pattern recognition, and shape optimization.
 
-pub mod types;
 pub mod learner;
 pub mod performance;
+pub mod types;
 
 // Re-export key types for convenience
 pub use types::{
-    LearningConfig, LearningStatistics, LearningQueryResult, 
-    ShapeTrainingData, ShapeExample, TemporalPatterns,
+    LearningConfig, LearningQueryResult, LearningStatistics, ShapeExample, ShapeTrainingData,
+    TemporalPatterns,
 };
 
 pub use learner::ShapeLearner;
 
 pub use performance::{
-    LearningPerformanceMetrics, PatternStatistics, 
-    analyze_pattern_statistics, calculate_performance_metrics,
+    analyze_pattern_statistics, calculate_performance_metrics, LearningPerformanceMetrics,
+    PatternStatistics,
 };
 
 #[cfg(test)]

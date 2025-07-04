@@ -72,7 +72,7 @@ pub struct QueryAnalysis {
 }
 
 /// Subscription priority levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SubscriptionPriority {
     Low = 0,
     Normal = 1,

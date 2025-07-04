@@ -410,7 +410,6 @@ impl QueryEngine {
             SparqlTermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
             SparqlTermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
             SparqlTermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
-            _ => None,
         };
 
         Ok(crate::model::pattern::TriplePattern {
@@ -445,7 +444,6 @@ impl QueryEngine {
             TermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
             TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
             TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
-            _ => None,
         };
 
         Ok(crate::model::pattern::TriplePattern {
@@ -663,7 +661,6 @@ impl QueryEngine {
             SparqlTermPattern::NamedNode(n) => Object::NamedNode(n.clone()),
             SparqlTermPattern::BlankNode(b) => Object::BlankNode(b.clone()),
             SparqlTermPattern::Literal(l) => Object::Literal(l.clone()),
-            _ => return Ok(None), // Invalid object pattern
         };
 
         Ok(Some(Triple::new(subject, predicate, object)))

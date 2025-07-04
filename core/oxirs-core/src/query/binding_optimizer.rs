@@ -486,7 +486,7 @@ impl BindingOptimizer {
             if var != root {
                 // Copy constraints from root to var
                 if let Some(root_constraints) = constraint_graph.get(root) {
-                    for &constraint in root_constraints {
+                    for &_constraint in root_constraints {
                         // Would add derived constraints here
                     }
                 }
@@ -571,7 +571,7 @@ impl BindingIterator {
         }
 
         // Check if we've exhausted all combinations
-        if self.current_position.iter().all(|&p| p == 0) && self.current_position.len() > 0 {
+        if self.current_position.iter().all(|&p| p == 0) && !self.current_position.is_empty() {
             // First iteration
         } else if self.current_position.is_empty() {
             return None;

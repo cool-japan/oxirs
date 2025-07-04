@@ -380,7 +380,6 @@ fn decode_gosp_quad(cursor: &mut Cursor<&[u8]>) -> Result<EncodedQuad, OxirsErro
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::*;
 
     #[test]
     fn test_term_encoding_roundtrip() {

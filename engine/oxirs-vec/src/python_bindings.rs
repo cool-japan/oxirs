@@ -6,16 +6,34 @@
 
 use crate::{
     advanced_analytics::{VectorAnalyticsEngine, VectorQualityAssessment},
-    compression::{CompressionMetrics, CompressionStrategy},
+    compression::CompressionMetrics,
     embeddings::{EmbeddingManager, EmbeddingStrategy},
-    index::{IndexType, VectorId, VectorIndex},
+    index::{IndexType, VectorIndex},
     similarity::{SimilarityMetric, SimilarityResult},
-    sparql_integration::SparqlVectorSearch,
-    SearchResult, VectorSearchParams, VectorStore,
+    sparql_integration::SparqlVectorService,
+    SearchResult, VectorStore, VectorId,
 };
 
 use anyhow::{Context, Result};
 use chrono;
+
+/// Simple search parameters for vector queries
+#[derive(Debug, Clone)]
+struct VectorSearchParams {
+    limit: usize,
+    threshold: Option<f32>,
+    metric: SimilarityMetric,
+}
+
+impl Default for VectorSearchParams {
+    fn default() -> Self {
+        Self {
+            limit: 10,
+            threshold: None,
+            metric: SimilarityMetric::Cosine,
+        }
+    }
+}
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
@@ -557,7 +575,7 @@ impl PyVectorAnalytics {
 /// Python wrapper for SPARQL integration
 #[pyclass(name = "SparqlVectorSearch")]
 pub struct PySparqlVectorSearch {
-    sparql_search: SparqlVectorSearch,
+    sparql_search: SparqlVectorService,
 }
 
 #[pymethods]
@@ -823,12 +841,16 @@ impl PyJupyterVectorTools {
                         .get_vector(id2)
                         .map_err(|e| VectorSearchError::new_err(e.to_string()))?
                     {
-                        let similarity = crate::similarity::compute_similarity(
-                            &vector1,
-                            &vector2,
-                            similarity_metric,
-                        )
-                        .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
+                        let similarity = match similarity_metric {
+                            SimilarityMetric::Cosine => crate::similarity::cosine_similarity(
+                                &vector1.as_f32(),
+                                &vector2.as_f32()
+                            ),
+                            _ => crate::similarity::cosine_similarity(
+                                &vector1.as_f32(),
+                                &vector2.as_f32()
+                            ), // TODO: implement other metrics
+                        };
                         row.push(similarity);
                     } else {
                         row.push(0.0);
@@ -1365,7 +1387,8 @@ fn batch_normalize(py: Python, vectors: PyReadonlyArray2<f32>) -> PyResult<PyObj
 
 /// Module initialization
 #[pymodule]
-fn oxirs_vec(py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn oxirs_vec(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    let py = m.py();
     // Add core classes
     m.add_class::<PyVectorStore>()?;
     m.add_class::<PyVectorAnalytics>()?;
@@ -1383,9 +1406,9 @@ fn oxirs_vec(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(batch_normalize, m)?)?;
 
     // Add exceptions
-    m.add("VectorSearchError", py.get_type::<VectorSearchError>())?;
-    m.add("EmbeddingError", py.get_type::<EmbeddingError>())?;
-    m.add("IndexError", py.get_type::<IndexError>())?;
+    m.add("VectorSearchError", py.get_type_bound::<VectorSearchError>())?;
+    m.add("EmbeddingError", py.get_type_bound::<EmbeddingError>())?;
+    m.add("IndexError", py.get_type_bound::<IndexError>())?;
 
     // Add version info
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
@@ -1408,8 +1431,7 @@ fn oxirs_vec(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-// Re-export for easier access
-pub use oxirs_vec as python_module;
+// Module successfully initialized
 
 #[cfg(test)]
 mod tests {

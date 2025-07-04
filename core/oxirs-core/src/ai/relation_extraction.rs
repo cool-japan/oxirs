@@ -193,7 +193,7 @@ pub struct KnowledgeBaseInfo {
 
 impl RelationExtractor {
     /// Create new relation extractor
-    pub fn new(config: &AiConfig) -> Result<Self> {
+    pub fn new(_config: &AiConfig) -> Result<Self> {
         let extraction_config = ExtractionConfig::default();
 
         // Create NER model

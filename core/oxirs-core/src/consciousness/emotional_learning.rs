@@ -623,7 +623,7 @@ impl EmotionalLearningNetwork {
     }
 
     /// Calculate mood complexity
-    fn calculate_mood_complexity(&self, emotion: &EmotionalState) -> f64 {
+    fn calculate_mood_complexity(&self, _emotion: &EmotionalState) -> f64 {
         // Simple complexity based on emotional state variety in recent history
         let recent_emotions: std::collections::HashSet<_> = self
             .mood_tracker

@@ -5,7 +5,8 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use oxirs_tdb::{
-    compression::{AdaptiveCompressor, ColumnStoreCompressor, RunLengthEncoder},
+    compression::{AdaptiveCompressor, ColumnStoreCompressor, RunLengthEncoder, CompressionAlgorithm},
+    config::TdbConfig,
     nodes::NodeTableConfig,
     SimpleTdbConfig, TdbStore, Term,
 };
@@ -125,7 +126,7 @@ fn bench_query(c: &mut Criterion) {
         .into_iter()
         .map(|size| {
             let temp_dir = TempDir::new().unwrap();
-            let config = TdbConfig {
+            let config = SimpleTdbConfig {
                 location: temp_dir.path().to_string_lossy().to_string(),
                 ..Default::default()
             };
@@ -184,7 +185,7 @@ fn bench_concurrent(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
 
     let temp_dir = TempDir::new().unwrap();
-    let config = TdbConfig {
+    let config = SimpleTdbConfig {
         location: temp_dir.path().to_string_lossy().to_string(),
         ..Default::default()
     };
@@ -230,9 +231,8 @@ fn bench_mvcc(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(5));
 
     let temp_dir = TempDir::new().unwrap();
-    let config = TdbConfig {
+    let config = SimpleTdbConfig {
         location: temp_dir.path().to_string_lossy().to_string(),
-        enable_mvcc: true,
         ..Default::default()
     };
     let store = TdbStore::new(config).unwrap();
@@ -280,7 +280,7 @@ fn bench_large_scale(c: &mut Criterion) {
         b.iter_batched_ref(
             || {
                 let temp_dir = TempDir::new().unwrap();
-                let config = TdbConfig {
+                let config = SimpleTdbConfig {
                     location: temp_dir.path().to_string_lossy().to_string(),
                     cache_size: 1024 * 1024 * 500, // 500MB cache for large dataset
                     ..Default::default()
@@ -371,9 +371,8 @@ fn bench_compression_configs(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let temp_dir = TempDir::new().unwrap();
-                    let mut config = TdbConfig {
+                    let mut config = SimpleTdbConfig {
                         location: temp_dir.path().to_string_lossy().to_string(),
-                        cache_size: 1024 * 1024 * 100, // 100MB
                         ..Default::default()
                     };
 
@@ -417,7 +416,7 @@ fn bench_memory_usage(c: &mut Criterion) {
                 b.iter_batched_ref(
                     || {
                         let temp_dir = TempDir::new().unwrap();
-                        let config = TdbConfig {
+                        let config = SimpleTdbConfig {
                             location: temp_dir.path().to_string_lossy().to_string(),
                             cache_size,
                             ..Default::default()
@@ -458,7 +457,7 @@ fn bench_index_patterns(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(15));
 
     let temp_dir = TempDir::new().unwrap();
-    let config = TdbConfig {
+    let config = SimpleTdbConfig {
         location: temp_dir.path().to_string_lossy().to_string(),
         cache_size: 1024 * 1024 * 200, // 200MB for large dataset
         ..Default::default()
@@ -549,7 +548,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(20));
 
     let temp_dir = TempDir::new().unwrap();
-    let config = TdbConfig {
+    let config = SimpleTdbConfig {
         location: temp_dir.path().to_string_lossy().to_string(),
         cache_size: 1024 * 1024 * 300, // 300MB
         ..Default::default()
@@ -693,7 +692,7 @@ fn bench_recovery(c: &mut Criterion) {
         b.iter_batched_ref(
             || {
                 let temp_dir = TempDir::new().unwrap();
-                let config = TdbConfig {
+                let config = SimpleTdbConfig {
                     location: temp_dir.path().to_string_lossy().to_string(),
                     enable_transactions: true,
                     ..Default::default()

@@ -684,7 +684,7 @@ impl MvccStore {
     }
 
     /// Update indexes for delete
-    fn update_indexes_for_delete(&self, key: &TripleKey) {
+    fn update_indexes_for_delete(&self, _key: &TripleKey) {
         // Note: We don't actually remove from indexes during transaction
         // This happens during GC when versions are cleaned up
     }

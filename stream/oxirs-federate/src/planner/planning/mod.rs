@@ -411,15 +411,95 @@ impl FederatedQueryPlanner {
     /// Analyze a SPARQL query and extract query information
     pub async fn analyze_sparql(&self, query: &str) -> Result<QueryInfo> {
         // Parse SPARQL query and extract information
-        let patterns = Vec::new(); // Simplified - would parse actual SPARQL
-        let variables = std::collections::HashSet::new(); // Would extract from query
+        let query_upper = query.to_uppercase();
+        
+        // Determine query type based on the first keyword
+        let query_type = if query_upper.trim_start().starts_with("SELECT") {
+            QueryType::Select
+        } else if query_upper.trim_start().starts_with("CONSTRUCT") {
+            QueryType::Construct
+        } else if query_upper.trim_start().starts_with("ASK") {
+            QueryType::Ask
+        } else if query_upper.trim_start().starts_with("DESCRIBE") {
+            QueryType::Describe
+        } else if query_upper.trim_start().starts_with("INSERT") {
+            QueryType::Update
+        } else if query_upper.trim_start().starts_with("DELETE") {
+            QueryType::Update
+        } else {
+            QueryType::Sparql // fallback for other cases
+        };
+
+        // Extract variables (simplified - look for ?variable patterns)
+        let mut variables = std::collections::HashSet::new();
+        let var_regex = regex::Regex::new(r"\?[a-zA-Z_][a-zA-Z0-9_]*")?;
+        for mat in var_regex.find_iter(query) {
+            variables.insert(mat.as_str().to_string());
+        }
+
+        // Extract basic triple patterns (simplified - look for WHERE clause content)
+        let mut patterns = Vec::new();
+        if let Some(where_start) = query_upper.find("WHERE") {
+            let where_clause = &query[where_start + 5..];
+            if let Some(brace_start) = where_clause.find('{') {
+                if let Some(brace_end) = where_clause.rfind('}') {
+                    let where_content = &where_clause[brace_start + 1..brace_end];
+                    
+                    // Extract triple patterns by splitting on '.' and parsing each triple
+                    let statements: Vec<&str> = where_content.split('.').collect();
+                    for statement in statements {
+                        let trimmed = statement.trim();
+                        if !trimmed.is_empty() 
+                            && !trimmed.to_uppercase().contains("SERVICE") 
+                            && !trimmed.starts_with('}')
+                            && !trimmed.starts_with('{')
+                            && trimmed.contains('?') {
+                            
+                            // Parse the triple pattern (subject predicate object)
+                            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                            if parts.len() >= 3 {
+                                let subject = parts[0].to_string();
+                                let predicate = parts[1].to_string();
+                                let object = parts[2..].join(" ").trim_end_matches('.').to_string();
+                                
+                                patterns.push(TriplePattern {
+                                    subject: Some(subject),
+                                    predicate: Some(predicate),
+                                    object: Some(object),
+                                    pattern_string: trimmed.to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract filters (look for FILTER expressions)
+        let mut filters = Vec::new();
+        let filter_regex = regex::Regex::new(r"FILTER\s*\(\s*([^)]+)\s*\)")?;
+        for cap in filter_regex.captures_iter(query) {
+            let filter_expr = cap[1].to_string();
+            
+            // Extract variables from the filter expression
+            let mut filter_variables = Vec::new();
+            let var_regex = regex::Regex::new(r"\?[a-zA-Z_][a-zA-Z0-9_]*")?;
+            for mat in var_regex.find_iter(&filter_expr) {
+                filter_variables.push(mat.as_str().to_string());
+            }
+            
+            filters.push(FilterExpression {
+                expression: filter_expr,
+                variables: filter_variables,
+            });
+        }
 
         Ok(QueryInfo {
-            query_type: QueryType::Sparql,
+            query_type,
             original_query: query.to_string(),
             patterns,
             variables,
-            filters: Vec::new(),
+            filters,
             complexity: query.len() as u64 / 10, // Simple complexity estimate
             estimated_cost: query.len() as u64,
         })
@@ -446,13 +526,22 @@ impl FederatedQueryPlanner {
             metadata: std::collections::HashMap::new(),
         };
 
+        // Analyze query patterns to determine required capabilities
+        let required_capabilities = self.analyze_query_capabilities(query_info);
+        
+        // Select the most appropriate service based on capabilities
+        let selected_service_id = self.select_service_for_capabilities(
+            &required_capabilities, 
+            service_registry
+        ).await?;
+
         // Create execution plan directly from SPARQL query info
         let plan = ExecutionPlan {
             query_id: context.query_id.clone(),
             steps: vec![ExecutionStep {
                 step_id: "sparql_step_1".to_string(),
                 step_type: StepType::ServiceQuery,
-                service_id: Some("test-1".to_string()), // Use first available service for now
+                service_id: Some(selected_service_id),
                 query_fragment: query_info.original_query.clone(),
                 dependencies: vec![],
                 estimated_cost: query_info.estimated_cost as f64,
@@ -513,6 +602,74 @@ impl FederatedQueryPlanner {
 
         self.plan_federated_query(&query_info.original_query, None, &context, service_registry)
             .await
+    }
+
+    /// Analyze query patterns to determine required service capabilities
+    fn analyze_query_capabilities(&self, query_info: &QueryInfo) -> Vec<crate::ServiceCapability> {
+        let mut capabilities = Vec::new();
+        
+        // Basic SPARQL support is always required
+        capabilities.push(crate::ServiceCapability::SparqlQuery);
+        
+        // Analyze patterns to detect specific capability requirements
+        for pattern in &query_info.patterns {
+            // Check for geospatial patterns
+            if pattern.predicate.as_ref().map_or(false, |p| {
+                p.contains("geo:") || p.contains("wgs84") || p.contains("geof:")
+            }) || pattern.pattern_string.contains("geo:") {
+                capabilities.push(crate::ServiceCapability::Geospatial);
+            }
+            
+            // Check for full-text search patterns
+            if pattern.predicate.as_ref().map_or(false, |p| {
+                p.contains("pf:") || p.contains("text:") || p.contains("lucene:")
+            }) {
+                capabilities.push(crate::ServiceCapability::FullTextSearch);
+            }
+        }
+        
+        // Check original query for additional capabilities
+        let query_lower = query_info.original_query.to_lowercase();
+        if query_lower.contains("insert") || query_lower.contains("delete") || query_lower.contains("update") {
+            capabilities.push(crate::ServiceCapability::SparqlUpdate);
+        }
+        
+        capabilities
+    }
+
+    /// Select the most appropriate service based on required capabilities
+    async fn select_service_for_capabilities(
+        &self,
+        required_capabilities: &[crate::ServiceCapability],
+        service_registry: &ServiceRegistry,
+    ) -> Result<String> {
+        let services = service_registry.get_all_services();
+        
+        // Find services that have all required capabilities
+        let mut suitable_services = Vec::new();
+        
+        for service in services {
+            let has_all_capabilities = required_capabilities.iter().all(|cap| {
+                service.capabilities.contains(cap)
+            });
+            
+            if has_all_capabilities {
+                suitable_services.push(service);
+            }
+        }
+        
+        // If no suitable services found, fall back to any available service
+        if suitable_services.is_empty() {
+            let mut all_services = service_registry.get_all_services();
+            if let Some(service) = all_services.next() {
+                return Ok(service.id.clone());
+            } else {
+                return Err(anyhow!("No services available in registry"));
+            }
+        }
+        
+        // Select the first suitable service (could be enhanced with more sophisticated selection)
+        Ok(suitable_services[0].id.clone())
     }
 }
 

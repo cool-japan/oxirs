@@ -11,6 +11,7 @@ pub mod core;
 pub mod integration;
 pub mod memory;
 pub mod parallel;
+pub mod quantum_analytics;
 
 // Re-export key types from core
 pub use core::{
@@ -56,4 +57,12 @@ pub use memory::{
     compact::{CompactConverter, CompactShape, CompactViolation},
     InternedString, MemoryMonitor, MemoryOptimizationConfig, MemoryOptimizationStats,
     MemoryOptimizer, MemoryPressureLevel, MemoryTrend, OptimizationResult, StringInterner,
+};
+
+// Re-export quantum analytics types
+pub use quantum_analytics::{
+    ConsciousnessInsight, ConsciousnessState, EntanglementInfo, EntanglementType,
+    MeditationState, QuantumAnalyticsConfig, QuantumOptimizationStrategy,
+    QuantumPerformanceAnalytics, QuantumPerformanceInsight, RecommendationCategory,
+    TranscendenceComplexity, TranscendentRecommendation,
 };

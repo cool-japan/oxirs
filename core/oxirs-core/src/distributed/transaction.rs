@@ -344,7 +344,7 @@ impl TransactionCoordinator {
                 operation,
                 TransactionOp::Insert(_) | TransactionOp::Remove(_)
             ) {
-                let mut state = transaction.state.write();
+                let state = transaction.state.write();
                 drop(state); // Release lock before updating atomic
                              // Can't modify is_read_only directly, would need to refactor
             }
@@ -432,7 +432,7 @@ impl TransactionCoordinator {
         let mut prepare_futures = Vec::new();
 
         for shard_id in participants {
-            let (reply_tx, reply_rx) = oneshot::channel();
+            let (reply_tx, _reply_rx) = oneshot::channel();
 
             let _message = ParticipantMessage::Prepare {
                 transaction_id,
@@ -513,7 +513,7 @@ impl TransactionCoordinator {
 
         // Send commit messages to all participants
         for shard_id in participants {
-            let message = ParticipantMessage::Commit { transaction_id };
+            let _message = ParticipantMessage::Commit { transaction_id };
             // In real implementation, would send to actual shard nodes
             self.simulate_participant_commit(shard_id, transaction_id)?;
         }
@@ -533,7 +533,7 @@ impl TransactionCoordinator {
 
         // Send abort messages to all participants
         for shard_id in participants {
-            let message = ParticipantMessage::Abort { transaction_id };
+            let _message = ParticipantMessage::Abort { transaction_id };
             // In real implementation, would send to actual shard nodes
             self.simulate_participant_abort(shard_id, transaction_id)?;
         }
@@ -595,7 +595,7 @@ impl TransactionCoordinator {
             .ok_or_else(|| anyhow!("No participants"))?;
 
         // Direct commit without prepare phase
-        let message = ParticipantMessage::Commit { transaction_id };
+        let _message = ParticipantMessage::Commit { transaction_id };
         self.simulate_participant_commit(shard_id, transaction_id)?;
 
         self.complete_transaction(transaction_id, true).await
@@ -608,7 +608,7 @@ impl TransactionCoordinator {
                 let t = self.deserialize_triple(triple)?;
                 Ok(vec![self.shard_manager.get_shard_for_triple(&t)])
             }
-            TransactionOp::Read(query) => {
+            TransactionOp::Read(_query) => {
                 // For reads, might need multiple shards
                 // Simplified: return all shards for now
                 Ok((0..16).collect()) // Assuming 16 shards

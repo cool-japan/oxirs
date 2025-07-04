@@ -525,7 +525,7 @@ impl BftNode {
     /// Handle checkpoint message
     async fn handle_checkpoint(
         &self,
-        sequence: SequenceNumber,
+        _sequence: SequenceNumber,
         state_digest: Vec<u8>,
         node_id: NodeId,
     ) -> Result<()> {

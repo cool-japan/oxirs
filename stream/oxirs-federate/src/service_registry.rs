@@ -163,6 +163,12 @@ pub struct SparqlCapabilities {
     pub supports_update: bool,
     /// Supports named graphs
     pub supports_named_graphs: bool,
+    /// Supports full text search
+    pub supports_full_text_search: bool,
+    /// Supports geospatial queries
+    pub supports_geospatial: bool,
+    /// Supports RDF-star (RDF*)
+    pub supports_rdf_star: bool,
     /// Service description (SD) vocabulary support
     pub service_description: Option<ServiceDescription>,
 }
@@ -202,6 +208,9 @@ impl Default for SparqlCapabilities {
             supports_federation: true,
             supports_update: false,
             supports_named_graphs: true,
+            supports_full_text_search: false,
+            supports_geospatial: false,
+            supports_rdf_star: false,
             service_description: None,
         }
     }
@@ -444,6 +453,11 @@ impl ServiceRegistry {
             endpoint.name, endpoint.url
         );
 
+        // Check if endpoint already exists
+        if self.sparql_endpoints.contains_key(&endpoint.id) {
+            return Err(anyhow!("SPARQL endpoint with ID '{}' already registered", endpoint.id));
+        }
+
         // Validate endpoint
         self.validate_sparql_endpoint(&endpoint).await?;
 
@@ -479,6 +493,11 @@ impl ServiceRegistry {
             "Registering GraphQL service: {} ({})",
             service.name, service.url
         );
+
+        // Check if service already exists
+        if self.graphql_services.contains_key(&service.id) {
+            return Err(anyhow!("GraphQL service with ID '{}' already registered", service.id));
+        }
 
         // Validate service
         self.validate_graphql_service(&service).await?;
@@ -651,6 +670,9 @@ impl ServiceRegistry {
             supports_federation: true,
             supports_update: false,
             supports_named_graphs: true,
+            supports_full_text_search: false,
+            supports_geospatial: false,
+            supports_rdf_star: false,
             service_description: None,
         })
     }
@@ -830,14 +852,57 @@ impl ServiceRegistry {
 
     /// Register a federated service (generic method)
     pub async fn register(&self, service: crate::FederatedService) -> Result<()> {
+        // Check if service already exists
         match service.service_type {
             crate::ServiceType::Sparql => {
+                if self.sparql_endpoints.contains_key(&service.id) {
+                    return Err(anyhow!("Service with ID '{}' already registered", service.id));
+                }
+            }
+            crate::ServiceType::GraphQL => {
+                if self.graphql_services.contains_key(&service.id) {
+                    return Err(anyhow!("Service with ID '{}' already registered", service.id));
+                }
+            }
+            _ => {
+                // For other types, check both collections
+                if self.sparql_endpoints.contains_key(&service.id) || self.graphql_services.contains_key(&service.id) {
+                    return Err(anyhow!("Service with ID '{}' already registered", service.id));
+                }
+            }
+        }
+        
+        match service.service_type {
+            crate::ServiceType::Sparql => {
+                let mut capabilities = SparqlCapabilities::default();
+                
+                // Convert FederatedService capabilities to SparqlCapabilities
+                for cap in &service.capabilities {
+                    match cap {
+                        crate::ServiceCapability::FullTextSearch => {
+                            capabilities.supports_full_text_search = true;
+                        }
+                        crate::ServiceCapability::Geospatial => {
+                            capabilities.supports_geospatial = true;
+                        }
+                        crate::ServiceCapability::SparqlUpdate => {
+                            capabilities.supports_update = true;
+                        }
+                        crate::ServiceCapability::RdfStar => {
+                            capabilities.supports_rdf_star = true;
+                        }
+                        _ => {
+                            // Other capabilities are set to true by default or handled elsewhere
+                        }
+                    }
+                }
+                
                 let sparql_endpoint = SparqlEndpoint {
                     id: service.id,
                     name: service.name,
                     url: Url::parse(&service.endpoint)?,
                     auth: None, // Convert from service.auth if needed
-                    capabilities: SparqlCapabilities::default(),
+                    capabilities,
                     statistics: PerformanceStats::default(),
                     registered_at: Utc::now(),
                     last_access: None,
@@ -943,6 +1008,86 @@ impl ServiceRegistry {
 
         Ok(results)
     }
+
+    /// Get all registered services as FederatedService objects
+    pub fn get_all_services(&self) -> Vec<crate::FederatedService> {
+        let mut services = Vec::new();
+
+        // Convert SPARQL endpoints to FederatedService
+        for entry in self.sparql_endpoints.iter() {
+            let endpoint = entry.value();
+            let mut service = crate::FederatedService::new_sparql(
+                endpoint.id.clone(),
+                endpoint.name.clone(),
+                endpoint.url.to_string(),
+            );
+            
+            // Convert capabilities from endpoint to service
+            if endpoint.capabilities.supports_full_text_search {
+                service.capabilities.insert(crate::ServiceCapability::FullTextSearch);
+            }
+            if endpoint.capabilities.supports_geospatial {
+                service.capabilities.insert(crate::ServiceCapability::Geospatial);
+            }
+            
+            services.push(service);
+        }
+
+        // Convert GraphQL services to FederatedService
+        for entry in self.graphql_services.iter() {
+            let gql_service = entry.value();
+            let service = crate::FederatedService::new_graphql(
+                gql_service.id.clone(),
+                gql_service.name.clone(),
+                gql_service.url.to_string(),
+            );
+            
+            services.push(service);
+        }
+
+        services
+    }
+
+    /// Get a specific service by ID
+    pub fn get_service(&self, service_id: &str) -> Option<crate::FederatedService> {
+        // Check SPARQL endpoints first
+        if let Some(endpoint) = self.sparql_endpoints.get(service_id) {
+            let mut service = crate::FederatedService::new_sparql(
+                endpoint.id.clone(),
+                endpoint.name.clone(),
+                endpoint.url.to_string(),
+            );
+            
+            // Convert capabilities from endpoint to service
+            if endpoint.capabilities.supports_full_text_search {
+                service.capabilities.insert(crate::ServiceCapability::FullTextSearch);
+            }
+            if endpoint.capabilities.supports_geospatial {
+                service.capabilities.insert(crate::ServiceCapability::Geospatial);
+            }
+            if endpoint.capabilities.supports_update {
+                service.capabilities.insert(crate::ServiceCapability::SparqlUpdate);
+            }
+            if endpoint.capabilities.supports_rdf_star {
+                service.capabilities.insert(crate::ServiceCapability::RdfStar);
+            }
+            
+            return Some(service);
+        }
+
+        // Check GraphQL services
+        if let Some(gql_service) = self.graphql_services.get(service_id) {
+            let service = crate::FederatedService::new_graphql(
+                gql_service.id.clone(),
+                gql_service.name.clone(),
+                gql_service.url.to_string(),
+            );
+            
+            return Some(service);
+        }
+
+        None
+    }
 }
 
 // Helper functions for URL serialization
@@ -993,6 +1138,9 @@ mod tests {
                 supports_federation: true,
                 supports_update: false,
                 supports_named_graphs: true,
+                supports_full_text_search: false,
+                supports_geospatial: false,
+                supports_rdf_star: false,
                 service_description: None,
             },
             statistics: PerformanceStats::default(),

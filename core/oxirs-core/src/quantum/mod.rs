@@ -344,7 +344,7 @@ impl QuantumGraphProcessor {
 
     /// Create entanglement between quantum states
     pub fn entangle(&mut self, state1_id: &str, state2_id: &str) -> OxirsResult<()> {
-        if let (Some(state1), Some(state2)) =
+        if let (Some(_state1), Some(_state2)) =
             (self.states.get(state1_id), self.states.get(state2_id))
         {
             // Create entanglement - simplified implementation

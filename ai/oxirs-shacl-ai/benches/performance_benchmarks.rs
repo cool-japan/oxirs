@@ -6,8 +6,10 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::model::{Literal, NamedNode, Term, Triple};
 use oxirs_core::Store;
+use oxirs_shacl_ai::insights::ValidationData;
 use oxirs_shacl_ai::*;
 use std::time::Duration;
+use uuid;
 
 /// Generate test RDF data for benchmarking
 fn generate_benchmark_data(size: usize) -> Vec<Triple> {
@@ -23,51 +25,35 @@ fn generate_benchmark_data(size: usize) -> Vec<Triple> {
         let person_class = NamedNode::new("http://example.org/Person").unwrap();
 
         // Add type triple
-        triples.push(Triple::new(
-            subject.clone().into(),
-            type_predicate.into(),
-            person_class.into(),
-        ));
+        triples.push(Triple::new(subject.clone(), type_predicate, person_class));
 
         // Add name triple
         let name_literal = Literal::new_simple_literal(format!("Person {}", i));
-        triples.push(Triple::new(
-            subject.clone().into(),
-            name_predicate.into(),
-            name_literal.into(),
-        ));
+        triples.push(Triple::new(subject.clone(), name_predicate, name_literal));
 
         // Add age triple
         let age_literal = Literal::new_typed_literal(
             format!("{}", 20 + (i % 50)),
             NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
         );
-        triples.push(Triple::new(
-            subject.clone().into(),
-            age_predicate.into(),
-            age_literal.into(),
-        ));
+        triples.push(Triple::new(subject.clone(), age_predicate, age_literal));
 
         // Add email triple (for variety)
         let email_literal = Literal::new_simple_literal(format!("person{}@example.org", i));
-        triples.push(Triple::new(
-            subject.into(),
-            email_predicate.into(),
-            email_literal.into(),
-        ));
+        triples.push(Triple::new(subject, email_predicate, email_literal));
     }
 
     triples
 }
 
 /// Create a store with benchmark data
-fn create_benchmark_store(size: usize) -> Store {
-    let mut store = Store::new();
+fn create_benchmark_store(size: usize) -> impl Store {
+    let store = oxirs_core::rdf_store::RdfStore::new().expect("Failed to create store");
     let data = generate_benchmark_data(size);
 
     for triple in data {
         store
-            .insert(&triple)
+            .insert(&triple.into())
             .expect("Failed to insert benchmark data");
     }
 
@@ -100,10 +86,11 @@ fn bench_pattern_discovery(c: &mut Criterion) {
 
     for size in [100, 500, 1000, 2000].iter() {
         let store = create_benchmark_store(*size);
-        let analyzer = patterns::PatternAnalyzer::new();
+        let mut analyzer = patterns::PatternAnalyzer::new();
 
         group.bench_with_input(BenchmarkId::new("discover_patterns", size), size, |b, _| {
-            b.iter(|| black_box(analyzer.discover_patterns(&store, None)))
+            let store2 = create_benchmark_store(*size / 2);
+            b.iter(|| black_box(analyzer.discover_similar_patterns(&store, &store2)))
         });
     }
 
@@ -117,13 +104,13 @@ fn bench_quality_assessment(c: &mut Criterion) {
 
     for size in [100, 500, 1000, 2000].iter() {
         let store = create_benchmark_store(*size);
-        let assessor = quality::QualityAssessor::new();
+        let mut assessor = quality::QualityAssessor::new();
 
         // Create some dummy shapes for assessment
         let shapes = vec![]; // In practice, would have learned shapes
 
         group.bench_with_input(BenchmarkId::new("assess_quality", size), size, |b, _| {
-            b.iter(|| black_box(assessor.assess_quality(&store, &shapes, None)))
+            b.iter(|| black_box(assessor.assess_comprehensive_quality(&store, &shapes)))
         });
     }
 
@@ -137,13 +124,14 @@ fn bench_validation_prediction(c: &mut Criterion) {
 
     for size in [100, 500, 1000, 2000].iter() {
         let store = create_benchmark_store(*size);
-        let predictor = prediction::ValidationPredictor::new();
+        let mut predictor = prediction::ValidationPredictor::new();
 
         // Create some dummy shapes for prediction
         let shapes = vec![]; // In practice, would have learned shapes
 
         group.bench_with_input(BenchmarkId::new("predict_outcomes", size), size, |b, _| {
-            b.iter(|| black_box(predictor.predict_validation_outcomes(&store, &shapes, None)))
+            let config = oxirs_shacl::ValidationConfig::default();
+            b.iter(|| black_box(predictor.predict_validation_outcome(&store, &shapes, &config)))
         });
     }
 
@@ -157,7 +145,7 @@ fn bench_optimization(c: &mut Criterion) {
 
     for size in [100, 500, 1000].iter() {
         let store = create_benchmark_store(*size);
-        let optimizer = optimization::ValidationOptimizer::new();
+        let mut optimizer = optimization::OptimizationEngine::new();
 
         // Create some dummy shapes for optimization
         let shapes = vec![]; // In practice, would have learned shapes
@@ -165,9 +153,7 @@ fn bench_optimization(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("optimize_validation", size),
             size,
-            |b, _| {
-                b.iter(|| black_box(optimizer.optimize_validation_strategy(&store, &shapes, None)))
-            },
+            |b, _| b.iter(|| black_box(optimizer.optimize_validation_strategy(&store, &shapes))),
         );
     }
 
@@ -181,17 +167,24 @@ fn bench_analytics(c: &mut Criterion) {
 
     for size in [100, 500, 1000].iter() {
         let store = create_benchmark_store(*size);
-        let analyzer = analytics::AnalyticsEngine::new();
+        let mut analyzer = analytics::AnalyticsEngine::new();
 
         // Create some dummy validation reports
-        let reports = vec![]; // In practice, would have validation reports
+        let reports: Vec<oxirs_shacl::report::core::ValidationReport> = vec![]; // In practice, would have validation reports
 
         group.bench_with_input(
             BenchmarkId::new("generate_analytics", size),
             size,
             |b, _| {
                 b.iter(|| {
-                    black_box(analyzer.generate_comprehensive_analytics(&store, &reports, None))
+                    let empty_shapes: Vec<oxirs_shacl::Shape> = Vec::new();
+                    let empty_reports: Vec<oxirs_shacl::report::core::ValidationReport> =
+                        Vec::new();
+                    black_box(analyzer.generate_comprehensive_insights(
+                        &store,
+                        &empty_shapes,
+                        &empty_reports,
+                    ))
                 })
             },
         );
@@ -207,19 +200,16 @@ fn bench_insights(c: &mut Criterion) {
 
     for size in [100, 500, 1000].iter() {
         // Create dummy analytics data
-        let analytics_data = analytics::AnalyticsData::default();
+        let analytics_data = analytics::ValidationInsights::default();
         let quality_report = quality::QualityReport::new();
-        let patterns = vec![]; // Would have discovered patterns
+        let patterns: Vec<patterns::Pattern> = vec![]; // Would have discovered patterns
 
-        let insight_engine = insights::InsightEngine::new();
+        let insight_engine = insights::InsightGenerator::new();
 
         group.bench_with_input(BenchmarkId::new("generate_insights", size), size, |b, _| {
             b.iter(|| {
-                black_box(insight_engine.generate_comprehensive_insights(
-                    &analytics_data,
-                    &quality_report,
-                    &patterns,
-                ))
+                let validation_data = insights::ValidationData {};
+                black_box(insight_engine.generate_insights(&validation_data))
             })
         });
     }
@@ -235,7 +225,7 @@ fn bench_memory_usage(c: &mut Criterion) {
     group.bench_function("large_dataset_memory", |b| {
         b.iter(|| {
             let store = black_box(create_benchmark_store(5000));
-            let assistant = ShaclAiAssistant::new(ShaclAiConfig::default());
+            let assistant = ShaclAiAssistant::new();
 
             // This simulates memory allocation patterns for large datasets
             let _result = std::thread::scope(|_| {
@@ -264,8 +254,9 @@ fn bench_concurrent_operations(c: &mut Criterion) {
                     .map(|_| {
                         let store_ref = store_clone.clone();
                         s.spawn(move || {
-                            let analyzer = patterns::PatternAnalyzer::new();
-                            black_box(analyzer.discover_patterns(&*store_ref, None))
+                            let mut analyzer = patterns::PatternAnalyzer::new();
+                            let store2 = create_benchmark_store(500);
+                            black_box(analyzer.discover_similar_patterns(&*store_ref, &store2))
                         })
                     })
                     .collect();
@@ -288,6 +279,7 @@ fn bench_data_structures(c: &mut Criterion) {
         b.iter(|| {
             let class = NamedNode::new("http://example.org/Person").unwrap();
             black_box(patterns::Pattern::ClassUsage {
+                id: uuid::Uuid::new_v4().to_string(),
                 class,
                 instance_count: 100,
                 support: 0.8,
@@ -324,7 +316,7 @@ fn bench_configuration(c: &mut Criterion) {
     group.bench_function("assistant_creation", |b| {
         b.iter(|| {
             let config = ShaclAiConfig::default();
-            black_box(ShaclAiAssistant::new(config))
+            black_box(ShaclAiAssistant::new())
         })
     });
 

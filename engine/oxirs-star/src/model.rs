@@ -768,7 +768,6 @@ impl StarGraph {
     pub fn objects(&self) -> impl Iterator<Item = &StarTerm> {
         self.iter().map(|triple| &triple.object)
     }
-
 }
 
 /// Iterator implementation for StarGraph to iterate over all triples

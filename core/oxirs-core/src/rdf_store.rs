@@ -948,7 +948,7 @@ impl RdfStore {
     }
 
     /// Load data from a URL into a graph
-    pub fn load_from_url(&mut self, url: &str, graph: Option<&NamedNode>) -> Result<usize> {
+    pub fn load_from_url(&mut self, url: &str, _graph: Option<&NamedNode>) -> Result<usize> {
         // TODO: Implement HTTP fetching and parsing
         // For now, return an error
         Err(OxirsError::Store(format!(
@@ -967,7 +967,7 @@ impl Default for RdfStore {
 // Implement the Store trait for RdfStore
 #[async_trait]
 impl Store for RdfStore {
-    fn insert_quad(&self, quad: Quad) -> Result<bool> {
+    fn insert_quad(&self, _quad: Quad) -> Result<bool> {
         // For RdfStore, we need mutable access, so this trait method should not be used
         // Use ConcreteStore directly for mutations
         Err(crate::OxirsError::Store(
@@ -975,7 +975,7 @@ impl Store for RdfStore {
         ))
     }
 
-    fn remove_quad(&self, quad: &Quad) -> Result<bool> {
+    fn remove_quad(&self, _quad: &Quad) -> Result<bool> {
         // For RdfStore, we need mutable access, so this trait method should not be used
         // Use ConcreteStore directly for mutations
         Err(crate::OxirsError::Store(
@@ -1058,7 +1058,7 @@ impl Default for ConcreteStore {
 // Implement Store trait for ConcreteStore
 #[async_trait]
 impl Store for ConcreteStore {
-    fn insert_quad(&self, quad: Quad) -> Result<bool> {
+    fn insert_quad(&self, _quad: Quad) -> Result<bool> {
         // This is a limitation - we need to use interior mutability
         // For now, we'll return an error indicating this operation needs a mutable reference
         Err(crate::OxirsError::Store(
@@ -1066,7 +1066,7 @@ impl Store for ConcreteStore {
         ))
     }
 
-    fn remove_quad(&self, quad: &Quad) -> Result<bool> {
+    fn remove_quad(&self, _quad: &Quad) -> Result<bool> {
         // This is a limitation - we need to use interior mutability
         // For now, we'll return an error indicating this operation needs a mutable reference
         Err(crate::OxirsError::Store(
@@ -1324,9 +1324,9 @@ mod tests {
 
         // Insert some data
         for i in 0..5 {
-            let subject = NamedNode::new(format!("http://example.org/subject{}", i)).unwrap();
+            let subject = NamedNode::new(format!("http://example.org/subject{i}")).unwrap();
             let predicate = NamedNode::new("http://example.org/predicate").unwrap();
-            let object = Literal::new(format!("object{}", i));
+            let object = Literal::new(format!("object{i}"));
 
             let triple = Triple::new(subject, predicate, object);
             store.insert_triple(triple).unwrap();
@@ -1346,9 +1346,9 @@ mod tests {
 
         let mut quads = Vec::new();
         for i in 0..100 {
-            let subject = NamedNode::new(format!("http://example.org/subject{}", i)).unwrap();
+            let subject = NamedNode::new(format!("http://example.org/subject{i}")).unwrap();
             let predicate = NamedNode::new("http://example.org/predicate").unwrap();
-            let object = Literal::new(format!("object{}", i));
+            let object = Literal::new(format!("object{i}"));
             let graph = NamedNode::new("http://example.org/graph").unwrap();
 
             quads.push(Quad::new(subject, predicate, object, graph));

@@ -418,7 +418,7 @@ impl WasmQueryCompiler {
     fn generate_triple_scan(
         &self,
         builder: &mut WasmModuleBuilder,
-        pattern: &crate::model::pattern::TriplePattern,
+        _pattern: &crate::model::pattern::TriplePattern,
     ) -> Result<(), OxirsError> {
         builder.add_function(
             "query_exec",
@@ -448,7 +448,7 @@ impl WasmQueryCompiler {
         builder: &mut WasmModuleBuilder,
         left: &ExecutionPlan,
         right: &ExecutionPlan,
-        join_vars: &[Variable],
+        _join_vars: &[Variable],
     ) -> Result<(), OxirsError> {
         // Generate left and right sub-plans
         self.generate_query_function(builder, left)?;

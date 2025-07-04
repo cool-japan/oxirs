@@ -4,12 +4,12 @@
 //! understand and process time-based patterns, temporal relationships, and
 //! chronological dependencies in RDF data.
 
-use super::{ConsciousnessModule, EmotionalState};
+use super::EmotionalState;
 use crate::query::algebra::AlgebraTriplePattern;
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, BTreeMap, VecDeque};
-use std::time::{Duration, Instant, SystemTime};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::time::{Duration, SystemTime};
 
 /// Temporal consciousness for understanding time-based patterns and relationships
 pub struct TemporalConsciousness {
@@ -665,7 +665,7 @@ pub enum AnomalyType {
 pub trait SequenceMatchingAlgorithm: std::fmt::Debug + Send + Sync {
     /// Match temporal sequences
     fn match_sequence(&self, sequence: &TemporalSequence, data: &[TemporalDataPoint]) -> f64;
-    
+
     /// Algorithm name
     fn name(&self) -> &str;
 }
@@ -673,8 +673,12 @@ pub trait SequenceMatchingAlgorithm: std::fmt::Debug + Send + Sync {
 /// Trait for pattern search algorithms
 pub trait PatternSearchAlgorithm: std::fmt::Debug + Send + Sync {
     /// Search for patterns matching criteria
-    fn search(&self, criteria: &SearchCriteria, database: &HistoricalPatternDatabase) -> SearchResult;
-    
+    fn search(
+        &self,
+        criteria: &SearchCriteria,
+        database: &HistoricalPatternDatabase,
+    ) -> SearchResult;
+
     /// Algorithm name
     fn name(&self) -> &str;
 }
@@ -706,8 +710,12 @@ pub struct SearchResult {
 /// Trait for similarity metrics
 pub trait SimilarityMetric: std::fmt::Debug + Send + Sync {
     /// Calculate similarity between contexts
-    fn calculate_similarity(&self, context1: &HashMap<String, f64>, context2: &HashMap<String, f64>) -> f64;
-    
+    fn calculate_similarity(
+        &self,
+        context1: &HashMap<String, f64>,
+        context2: &HashMap<String, f64>,
+    ) -> f64;
+
     /// Metric name
     fn name(&self) -> &str;
 }
@@ -740,10 +748,10 @@ pub struct LessonValidationCriterion {
 pub trait AnomalyDetectionAlgorithm: std::fmt::Debug + Send + Sync {
     /// Detect anomalies in temporal data
     fn detect_anomalies(&self, data: &[TemporalDataPoint]) -> Vec<TemporalAnomaly>;
-    
+
     /// Algorithm name
     fn name(&self) -> &str;
-    
+
     /// Detection sensitivity
     fn sensitivity(&self) -> f64;
 }
@@ -764,7 +772,8 @@ impl TemporalConsciousness {
     /// Record a temporal experience
     pub fn record_experience(&mut self, experience: TemporalExperience) -> Result<(), OxirsError> {
         self.temporal_memory.add_experience(experience.clone())?;
-        self.temporal_emotions.record_emotional_state(experience.timestamp, experience.emotional_context.clone())?;
+        self.temporal_emotions
+            .record_emotional_state(experience.timestamp, experience.emotional_context.clone())?;
         self.update_patterns(&experience)?;
         Ok(())
     }
@@ -779,7 +788,7 @@ impl TemporalConsciousness {
         let predictions = self.future_predictor.predict_outcomes(patterns)?;
         let historical_context = self.historical_analyzer.find_similar_contexts(patterns)?;
         let coherence = self.coherence_monitor.assess_coherence()?;
-        
+
         let recommendations = self.generate_recommendations(&sequence_analysis, &predictions)?;
 
         Ok(TemporalAnalysisResult {
@@ -795,7 +804,8 @@ impl TemporalConsciousness {
     /// Update pattern understanding based on experience
     fn update_patterns(&mut self, experience: &TemporalExperience) -> Result<(), OxirsError> {
         self.pattern_analyzer.update_with_experience(experience)?;
-        self.temporal_emotions.update_emotional_patterns(experience)?;
+        self.temporal_emotions
+            .update_emotional_patterns(experience)?;
         self.future_predictor.incorporate_feedback(experience)?;
         Ok(())
     }
@@ -811,7 +821,8 @@ impl TemporalConsciousness {
         if sequence_analysis.confidence > 0.8 {
             recommendations.push(TemporalRecommendation {
                 recommendation_type: RecommendationType::SequenceOptimization,
-                description: "High confidence sequence detected - optimize for temporal ordering".to_string(),
+                description: "High confidence sequence detected - optimize for temporal ordering"
+                    .to_string(),
                 confidence: sequence_analysis.confidence,
                 expected_benefit: 0.15,
             });
@@ -970,7 +981,10 @@ impl ChronologicalPatternAnalyzer {
         }
     }
 
-    fn analyze_patterns(&self, _patterns: &[AlgebraTriplePattern]) -> Result<SequenceAnalysisResult, OxirsError> {
+    fn analyze_patterns(
+        &self,
+        _patterns: &[AlgebraTriplePattern],
+    ) -> Result<SequenceAnalysisResult, OxirsError> {
         Ok(SequenceAnalysisResult {
             sequences: vec![],
             confidence: 0.5,
@@ -978,7 +992,10 @@ impl ChronologicalPatternAnalyzer {
         })
     }
 
-    fn update_with_experience(&mut self, _experience: &TemporalExperience) -> Result<(), OxirsError> {
+    fn update_with_experience(
+        &mut self,
+        _experience: &TemporalExperience,
+    ) -> Result<(), OxirsError> {
         Ok(())
     }
 }
@@ -1003,7 +1020,11 @@ impl TemporalEmotionalProcessor {
         }
     }
 
-    fn record_emotional_state(&mut self, timestamp: SystemTime, state: EmotionalState) -> Result<(), OxirsError> {
+    fn record_emotional_state(
+        &mut self,
+        timestamp: SystemTime,
+        state: EmotionalState,
+    ) -> Result<(), OxirsError> {
         self.emotional_history.insert(timestamp, state);
         Ok(())
     }
@@ -1022,7 +1043,10 @@ impl TemporalEmotionalProcessor {
         })
     }
 
-    fn update_emotional_patterns(&mut self, _experience: &TemporalExperience) -> Result<(), OxirsError> {
+    fn update_emotional_patterns(
+        &mut self,
+        _experience: &TemporalExperience,
+    ) -> Result<(), OxirsError> {
         Ok(())
     }
 }
@@ -1076,7 +1100,10 @@ impl FuturePredictionEngine {
         }
     }
 
-    fn predict_outcomes(&self, _patterns: &[AlgebraTriplePattern]) -> Result<PredictionResult, OxirsError> {
+    fn predict_outcomes(
+        &self,
+        _patterns: &[AlgebraTriplePattern],
+    ) -> Result<PredictionResult, OxirsError> {
         Ok(PredictionResult {
             outcomes: vec![],
             uncertainty: 0.4,
@@ -1117,7 +1144,10 @@ impl HistoricalContextAnalyzer {
         }
     }
 
-    fn find_similar_contexts(&self, _patterns: &[AlgebraTriplePattern]) -> Result<HistoricalContextResult, OxirsError> {
+    fn find_similar_contexts(
+        &self,
+        _patterns: &[AlgebraTriplePattern],
+    ) -> Result<HistoricalContextResult, OxirsError> {
         Ok(HistoricalContextResult {
             similar_patterns: vec![],
             similarity_scores: vec![],
@@ -1204,16 +1234,22 @@ mod tests {
     #[test]
     fn test_temporal_consciousness_creation() {
         let temporal_consciousness = TemporalConsciousness::new();
-        
+
         // Basic structure validation
         assert_eq!(temporal_consciousness.temporal_memory.experiences.len(), 0);
-        assert_eq!(temporal_consciousness.pattern_analyzer.temporal_sequences.len(), 0);
+        assert_eq!(
+            temporal_consciousness
+                .pattern_analyzer
+                .temporal_sequences
+                .len(),
+            0
+        );
     }
 
     #[test]
     fn test_temporal_experience_recording() {
         let mut temporal_consciousness = TemporalConsciousness::new();
-        
+
         let experience = TemporalExperience {
             id: "test_exp_1".to_string(),
             timestamp: SystemTime::now(),

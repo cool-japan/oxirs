@@ -483,7 +483,7 @@ impl RdfCrdt {
             crate::model::Subject::NamedNode(nn) => nn.as_str(),
             crate::model::Subject::BlankNode(bn) => bn.as_str(),
             crate::model::Subject::Variable(v) => v.as_str(),
-            crate::model::Subject::QuotedTriple(qt) => "<<quoted-triple>>",
+            crate::model::Subject::QuotedTriple(_qt) => "<<quoted-triple>>",
         };
         self.subject_index
             .entry(subject_str.to_string())
@@ -518,7 +518,7 @@ impl RdfCrdt {
             crate::model::Subject::NamedNode(nn) => nn.as_str(),
             crate::model::Subject::BlankNode(bn) => bn.as_str(),
             crate::model::Subject::Variable(v) => v.as_str(),
-            crate::model::Subject::QuotedTriple(qt) => "<<quoted-triple>>",
+            crate::model::Subject::QuotedTriple(_qt) => "<<quoted-triple>>",
         };
         if let Some(subject_set) = self.subject_index.get_mut(subject_str) {
             subject_set.remove(triple);
@@ -536,7 +536,7 @@ impl RdfCrdt {
     /// Query triples by pattern
     pub async fn query(&self, pattern: &TriplePattern) -> Result<Vec<Triple>, OxirsError> {
         let results = match (pattern.subject(), pattern.predicate(), pattern.object()) {
-            (Some(subject), Some(predicate), _) => {
+            (Some(subject), Some(_predicate), _) => {
                 // Use both subject and predicate index
                 if let Some(subject_set) = self.subject_index.get(subject.as_str()) {
                     subject_set

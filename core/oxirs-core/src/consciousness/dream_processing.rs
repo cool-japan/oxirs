@@ -873,7 +873,7 @@ impl DreamProcessor {
         self.dream_state = dream_state.clone();
 
         // Process each input in the dream sequence
-        for (index, input) in dream_input.iter().enumerate() {
+        for (index, _input) in dream_input.iter().enumerate() {
             match dream_state {
                 DreamState::REM => {
                     // REM sleep processing focuses on creative synthesis

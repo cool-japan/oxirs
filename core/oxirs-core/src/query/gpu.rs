@@ -247,8 +247,8 @@ impl GpuQueryExecutor {
     /// Check if triple matches pattern
     fn triple_matches_pattern(
         &self,
-        triple: &GpuTriple,
-        pattern: &crate::model::pattern::TriplePattern,
+        _triple: &GpuTriple,
+        _pattern: &crate::model::pattern::TriplePattern,
     ) -> bool {
         // Simplified matching - would use actual term resolution
         true

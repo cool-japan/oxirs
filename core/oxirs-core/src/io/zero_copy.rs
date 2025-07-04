@@ -630,7 +630,7 @@ impl MmapWriter {
         Ok(())
     }
 
-    pub fn finalize(mut self) -> io::Result<()> {
+    pub fn finalize(self) -> io::Result<()> {
         // Truncate file to actual size
         self.file.set_len(self.position as u64)?;
         self.mmap.flush()?;

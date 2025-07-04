@@ -483,12 +483,6 @@ impl InnerJsonLdWriter {
             ObjectRef::BlankNode(b) => TermRef::BlankNode(b.as_str()),
             ObjectRef::Literal(l) => TermRef::from_literal(l),
             ObjectRef::Variable(v) => TermRef::Variable(v.as_str()),
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "JSON-LD does not support quoted triples as objects",
-                ))
-            }
         };
         self.serialize_term(object_ref, output)
     }
@@ -586,7 +580,7 @@ impl InnerJsonLdWriter {
     fn id_value_from_str<'a>(&self, id: &'a str, is_blank_node: bool) -> Cow<'a, str> {
         if is_blank_node {
             // For blank nodes, add the "_:" prefix
-            format!("_:{}", id).into()
+            format!("_:{id}").into()
         } else {
             // For IRIs, apply base IRI relativization
             if let Some(base_iri) = &self.base_iri {

@@ -51,7 +51,7 @@ pub struct ProviderConfig {
 impl ProviderConfig {
     pub fn openai_default() -> Self {
         Self {
-            enabled: true,
+            enabled: std::env::var("OPENAI_API_KEY").is_ok(),
             api_key: std::env::var("OPENAI_API_KEY").ok(),
             base_url: None,
             models: vec![
@@ -77,7 +77,7 @@ impl ProviderConfig {
 
     pub fn anthropic_default() -> Self {
         Self {
-            enabled: true,
+            enabled: std::env::var("ANTHROPIC_API_KEY").is_ok(),
             api_key: std::env::var("ANTHROPIC_API_KEY").ok(),
             base_url: Some("https://api.anthropic.com".to_string()),
             models: vec![

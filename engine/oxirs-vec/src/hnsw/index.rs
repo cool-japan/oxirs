@@ -136,13 +136,13 @@ impl HnswIndex {
 
     /// Check if GPU acceleration is available and enabled
     #[cfg(feature = "gpu")]
-    pub fn is_gpu_enabled(&self) -> bool {
+    pub fn is_gpu_available(&self) -> bool {
         self.config.enable_gpu
             && (self.gpu_accelerator.is_some() || !self.multi_gpu_accelerators.is_empty())
     }
 
     #[cfg(not(feature = "gpu"))]
-    pub fn is_gpu_enabled(&self) -> bool {
+    pub fn is_gpu_available(&self) -> bool {
         false
     }
 

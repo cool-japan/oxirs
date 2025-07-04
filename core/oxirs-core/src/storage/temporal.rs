@@ -429,34 +429,34 @@ impl TemporalStorage {
     ) -> Result<TemporalResult, OxirsError> {
         match query {
             TemporalQuery::AllenRelation {
-                triple1,
-                triple2,
-                relation,
+                triple1: _,
+                triple2: _,
+                relation: _,
             } => {
                 // Implement Allen's interval algebra
                 Ok(TemporalResult::Boolean(false)) // Placeholder
             }
             TemporalQuery::TemporalPath {
-                start,
-                end,
-                predicate,
-                max_hops,
+                start: _,
+                end: _,
+                predicate: _,
+                max_hops: _,
             } => {
                 // Find temporal paths between entities
                 Ok(TemporalResult::Paths(Vec::new())) // Placeholder
             }
             TemporalQuery::ChangeDetection {
-                entity,
-                property,
-                threshold,
+                entity: _,
+                property: _,
+                threshold: _,
             } => {
                 // Detect significant changes
                 Ok(TemporalResult::Changes(Vec::new())) // Placeholder
             }
             TemporalQuery::TrendAnalysis {
-                entity,
-                property,
-                window,
+                entity: _,
+                property: _,
+                window: _,
             } => {
                 // Analyze trends over time
                 Ok(TemporalResult::Trend(TrendData::default())) // Placeholder

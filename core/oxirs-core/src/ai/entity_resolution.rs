@@ -247,7 +247,7 @@ pub trait BlockingStrategy: Send + Sync {
 
 impl EntityResolver {
     /// Create new entity resolver
-    pub fn new(config: &AiConfig) -> Result<Self> {
+    pub fn new(_config: &AiConfig) -> Result<Self> {
         let resolution_config = ResolutionConfig::default();
 
         // Create components
@@ -303,7 +303,7 @@ impl EntityResolver {
     /// Extract entity records from triples
     fn extract_entity_records(&self, triples: &[Triple]) -> Result<Vec<EntityRecord>> {
         let mut entity_map: HashMap<String, EntityRecord> = HashMap::new();
-        let mut entity_counter = std::cell::RefCell::new(0);
+        let entity_counter = std::cell::RefCell::new(0);
 
         for triple in triples {
             let subject_uri = triple.subject().to_string();

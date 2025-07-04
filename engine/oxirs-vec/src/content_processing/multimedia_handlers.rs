@@ -338,14 +338,6 @@ fn extract_image_features(data: &[u8], config: &ContentExtractionConfig) -> Resu
         visual_features: None,
         embedding: None, // Would generate using vision model if config.generate_image_embeddings
         detected_objects: Vec::new(),
-        classification_labels: Vec::new(),
-        complexity_metrics: Some(ImageComplexityMetrics {
-            edge_density: 0.5,
-            color_diversity: 0.5,
-            texture_complexity: 0.5,
-            entropy: 5.0,
-        }),
-        visual_similarity_hash: None,
     })
 }
 

@@ -1,6 +1,6 @@
 use crate::rdfxml::error::{RdfXmlParseError, RdfXmlSyntaxError};
 use crate::rdfxml::utils::*;
-use crate::model::{BlankNode, Literal, NamedNode, Term, Triple, NamedOrBlankNode, NamedOrBlankNodeRef};
+use crate::model::{BlankNode, Literal, NamedNode, Term, Triple, NamedOrBlankNode};
 use crate::model::term::{Object, Subject, Predicate};
 use crate::model::literal::LanguageTag;
 use crate::model::iri::{Iri, IriParseError};

@@ -56,18 +56,17 @@ pub use quantum_genetic_optimizer::{
 };
 
 pub use enhanced_coordinator::{
-    EnhancedConsciousnessCoordinator, IntegrationPattern, SyncRequirements,
-    PatternPerformanceMetrics, ActivationCondition, ConditionType, EvolutionCheckpoint,
-    PerformanceImprovement, SynchronizationMonitor, ConsciousnessOptimizer,
-    OptimizationResult, PatternAnalysis, CoordinationResult,
+    ActivationCondition, ConditionType, ConsciousnessOptimizer, CoordinationResult,
+    EnhancedConsciousnessCoordinator, EvolutionCheckpoint, IntegrationPattern, OptimizationResult,
+    PatternAnalysis, PatternPerformanceMetrics, PerformanceImprovement, SyncRequirements,
+    SynchronizationMonitor,
 };
 
 pub use temporal_consciousness::{
-    TemporalConsciousness, TemporalExperience, TemporalSequence, SequenceStep,
-    PatternEvolutionTracker, EvolutionSnapshot, TrendAnalysis, TrendDirection,
-    FutureProjection, EmotionalTrend, TemporalAnalysisResult, SequenceAnalysisResult,
-    EmotionalContextResult, PredictionResult, HistoricalContextResult,
-    TemporalRecommendation, RecommendationType,
+    EmotionalContextResult, EmotionalTrend, EvolutionSnapshot, FutureProjection,
+    HistoricalContextResult, PatternEvolutionTracker, PredictionResult, RecommendationType,
+    SequenceAnalysisResult, SequenceStep, TemporalAnalysisResult, TemporalConsciousness,
+    TemporalExperience, TemporalRecommendation, TemporalSequence, TrendAnalysis, TrendDirection,
 };
 
 // Integrated consciousness types are defined below as structs
@@ -223,7 +222,7 @@ impl ConsciousnessModule {
     /// Adjust consciousness level based on system performance
     pub fn adjust_consciousness(&mut self, performance_feedback: f64) {
         // Consciousness evolves based on success
-        let previous_state = self.emotional_state.clone();
+        let _previous_state = self.emotional_state.clone();
 
         if performance_feedback > 0.8 {
             self.consciousness_level = (self.consciousness_level + 0.1).min(1.0);
@@ -263,11 +262,11 @@ impl ConsciousnessModule {
     pub fn emotional_influence(&self) -> f64 {
         // Try to get from cache first
         if let Ok(cache) = self.optimization_cache.read() {
-            if let Some(&cached_influence) =
+            if let Some(&_cached_influence) =
                 cache.emotional_influence_cache.get(&self.emotional_state)
             {
                 // Verify cache is still valid based on consciousness/integration levels
-                let cache_key = self.create_emotional_cache_key();
+                let _cache_key = self.create_emotional_cache_key();
                 if let Some(cached_value) =
                     cache.emotional_influence_cache.get(&self.emotional_state)
                 {
@@ -542,7 +541,7 @@ impl ConsciousnessModule {
         // Check for cached pattern analysis first
         let cached_analysis = self.get_cached_pattern_analysis(patterns);
 
-        let (complexity, quantum_potential, emotional_relevance) =
+        let (complexity, quantum_potential, _emotional_relevance) =
             if let Some(ref cached) = cached_analysis {
                 (
                     cached.complexity,
@@ -683,7 +682,7 @@ impl ConsciousnessModule {
     fn calculate_optimal_approach(
         &self,
         pattern_count: usize,
-        complexity: f64,
+        _complexity: f64,
     ) -> ConsciousnessApproach {
         if self.integration_level > 0.8 && self.consciousness_level > 0.7 {
             // High integration - use full consciousness capabilities

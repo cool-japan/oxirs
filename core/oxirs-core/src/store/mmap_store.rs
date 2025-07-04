@@ -210,7 +210,7 @@ impl MmapStore {
             bail!("Store does not exist: {:?}", path);
         }
 
-        let mut store = Self::new(path)?;
+        let store = Self::new(path)?;
 
         // Try to load existing term interner
         let term_path = store.path.join("terms.oxirs");
@@ -233,50 +233,44 @@ impl MmapStore {
     pub fn add(&self, quad: &Quad) -> Result<()> {
         let _lock = self.write_lock.lock();
 
-        // Intern terms
-        let subject_id = {
-            let mut interner = self.term_interner.write();
-            match quad.subject() {
+        // Intern all terms in a single lock acquisition for better performance
+        let (subject_id, predicate_id, object_id, graph_id) = {
+            let interner = self.term_interner.write();
+
+            let subject_id = match quad.subject() {
                 Subject::NamedNode(n) => interner.intern_named_node(n),
                 Subject::BlankNode(b) => interner.intern_blank_node(b),
                 Subject::Variable(_) | Subject::QuotedTriple(_) => {
                     bail!("Variables and quoted triples cannot be interned in storage");
                 }
-            }
-        };
+            };
 
-        let predicate_id = {
-            let mut interner = self.term_interner.write();
-            match quad.predicate() {
+            let predicate_id = match quad.predicate() {
                 Predicate::NamedNode(n) => interner.intern_named_node(n),
                 Predicate::Variable(_) => {
                     bail!("Variables cannot be interned in storage");
                 }
-            }
-        };
+            };
 
-        let object_id = {
-            let mut interner = self.term_interner.write();
-            match quad.object() {
+            let object_id = match quad.object() {
                 Object::NamedNode(n) => interner.intern_named_node(n),
                 Object::BlankNode(b) => interner.intern_blank_node(b),
                 Object::Literal(l) => interner.intern_literal(l),
                 Object::Variable(_) | Object::QuotedTriple(_) => {
                     bail!("Variables and quoted triples cannot be interned in storage");
                 }
-            }
-        };
+            };
 
-        let graph_id = {
-            let mut interner = self.term_interner.write();
-            match quad.graph_name() {
+            let graph_id = match quad.graph_name() {
                 GraphName::NamedNode(n) => interner.intern_named_node(n),
                 GraphName::BlankNode(b) => interner.intern_blank_node(b),
                 GraphName::DefaultGraph => 0, // Default graph
                 GraphName::Variable(_) => {
                     bail!("Variables cannot be interned in storage");
                 }
-            }
+            };
+
+            (subject_id, predicate_id, object_id, graph_id)
         };
 
         // Create disk quad
@@ -292,8 +286,78 @@ impl MmapStore {
             let mut buffer = self.append_buffer.lock();
             buffer.push(disk_quad);
 
-            // Flush if buffer is full
-            if buffer.len() >= 1024 {
+            // Increased buffer size for better performance
+            if buffer.len() >= 8192 {
+                self.flush_buffer(&mut buffer)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Add multiple quads efficiently in batch
+    pub fn add_batch(&self, quads: &[Quad]) -> Result<()> {
+        if quads.is_empty() {
+            return Ok(());
+        }
+
+        let _lock = self.write_lock.lock();
+        let mut disk_quads = Vec::with_capacity(quads.len());
+
+        // Process all quads with a single interner lock
+        {
+            let interner = self.term_interner.write();
+
+            for quad in quads {
+                let subject_id = match quad.subject() {
+                    Subject::NamedNode(n) => interner.intern_named_node(n),
+                    Subject::BlankNode(b) => interner.intern_blank_node(b),
+                    Subject::Variable(_) | Subject::QuotedTriple(_) => {
+                        bail!("Variables and quoted triples cannot be interned in storage");
+                    }
+                };
+
+                let predicate_id = match quad.predicate() {
+                    Predicate::NamedNode(n) => interner.intern_named_node(n),
+                    Predicate::Variable(_) => {
+                        bail!("Variables cannot be interned in storage");
+                    }
+                };
+
+                let object_id = match quad.object() {
+                    Object::NamedNode(n) => interner.intern_named_node(n),
+                    Object::BlankNode(b) => interner.intern_blank_node(b),
+                    Object::Literal(l) => interner.intern_literal(l),
+                    Object::Variable(_) | Object::QuotedTriple(_) => {
+                        bail!("Variables and quoted triples cannot be interned in storage");
+                    }
+                };
+
+                let graph_id = match quad.graph_name() {
+                    GraphName::NamedNode(n) => interner.intern_named_node(n),
+                    GraphName::BlankNode(b) => interner.intern_blank_node(b),
+                    GraphName::DefaultGraph => 0,
+                    GraphName::Variable(_) => {
+                        bail!("Variables cannot be interned in storage");
+                    }
+                };
+
+                disk_quads.push(DiskQuad {
+                    subject_id,
+                    predicate_id,
+                    object_id,
+                    graph_id,
+                });
+            }
+        }
+
+        // Add to append buffer in chunks
+        {
+            let mut buffer = self.append_buffer.lock();
+            buffer.extend_from_slice(&disk_quads);
+
+            // Flush if buffer is getting large
+            if buffer.len() >= 8192 {
                 self.flush_buffer(&mut buffer)?;
             }
         }
@@ -313,84 +377,69 @@ impl MmapStore {
         // Seek to end of data
         let offset = data_file.seek(SeekFrom::End(0))?;
 
-        // Write quads
-        for quad in buffer.iter() {
-            let bytes = unsafe {
-                std::slice::from_raw_parts(
-                    quad as *const _ as *const u8,
-                    std::mem::size_of::<DiskQuad>(),
-                )
-            };
-            data_file.write_all(bytes)?;
-        }
+        // Write all quads in one operation for better performance
+        let quad_size = std::mem::size_of::<DiskQuad>();
+        let total_bytes = buffer.len() * quad_size;
+        let bytes =
+            unsafe { std::slice::from_raw_parts(buffer.as_ptr() as *const u8, total_bytes) };
+        data_file.write_all(bytes)?;
 
-        // Update indexes
+        // Update indexes with optimized bulk operations
         {
             let mut indexes = self.indexes.write();
             let base_idx = header.quad_count;
 
+            // Prepare bulk index updates to reduce lock contention
+            let mut spo_entries = Vec::with_capacity(buffer.len());
+            let mut pos_entries = Vec::with_capacity(buffer.len());
+            let mut osp_entries = Vec::with_capacity(buffer.len());
+            let mut gspo_entries = Vec::with_capacity(buffer.len());
+
             for (idx, quad) in buffer.iter().enumerate() {
                 let quad_idx = base_idx + idx as u64;
+                let entry_offset = offset + (idx * quad_size) as u64;
 
-                // SPO index
-                if let Some(spo) = indexes.get_mut("spo") {
-                    let key = format!(
-                        "{:016x}{:016x}{:016x}",
-                        quad.subject_id, quad.predicate_id, quad.object_id
-                    );
-                    spo.insert(
-                        &key,
-                        IndexEntry {
-                            offset: offset + (idx * std::mem::size_of::<DiskQuad>()) as u64,
-                            quad_id: quad_idx,
-                        },
-                    )?;
-                }
+                let entry = IndexEntry {
+                    offset: entry_offset,
+                    quad_id: quad_idx,
+                };
 
-                // POS index
-                if let Some(pos) = indexes.get_mut("pos") {
-                    let key = format!(
-                        "{:016x}{:016x}{:016x}",
-                        quad.predicate_id, quad.object_id, quad.subject_id
-                    );
-                    pos.insert(
-                        &key,
-                        IndexEntry {
-                            offset: offset + (idx * std::mem::size_of::<DiskQuad>()) as u64,
-                            quad_id: quad_idx,
-                        },
-                    )?;
-                }
+                // Use more efficient binary key generation instead of string formatting
+                spo_entries.push((
+                    Self::make_binary_key_3(quad.subject_id, quad.predicate_id, quad.object_id),
+                    entry,
+                ));
+                pos_entries.push((
+                    Self::make_binary_key_3(quad.predicate_id, quad.object_id, quad.subject_id),
+                    entry,
+                ));
+                osp_entries.push((
+                    Self::make_binary_key_3(quad.object_id, quad.subject_id, quad.predicate_id),
+                    entry,
+                ));
+                gspo_entries.push((
+                    Self::make_binary_key_4(
+                        quad.graph_id,
+                        quad.subject_id,
+                        quad.predicate_id,
+                        quad.object_id,
+                    ),
+                    entry,
+                ));
+            }
 
-                // OSP index
-                if let Some(osp) = indexes.get_mut("osp") {
-                    let key = format!(
-                        "{:016x}{:016x}{:016x}",
-                        quad.object_id, quad.subject_id, quad.predicate_id
-                    );
-                    osp.insert(
-                        &key,
-                        IndexEntry {
-                            offset: offset + (idx * std::mem::size_of::<DiskQuad>()) as u64,
-                            quad_id: quad_idx,
-                        },
-                    )?;
-                }
-
-                // GSPO index
-                if let Some(gspo) = indexes.get_mut("gspo") {
-                    let key = format!(
-                        "{:016x}{:016x}{:016x}{:016x}",
-                        quad.graph_id, quad.subject_id, quad.predicate_id, quad.object_id
-                    );
-                    gspo.insert(
-                        &key,
-                        IndexEntry {
-                            offset: offset + (idx * std::mem::size_of::<DiskQuad>()) as u64,
-                            quad_id: quad_idx,
-                        },
-                    )?;
-                }
+            // Bulk insert into indexes
+            if let Some(spo) = indexes.get_mut("spo") {
+                self.bulk_insert_index(spo, &spo_entries)?;
+            }
+            if let Some(pos) = indexes.get_mut("pos") {
+                self.bulk_insert_index(pos, &pos_entries)?;
+            }
+            if let Some(osp) = indexes.get_mut("osp") {
+                self.bulk_insert_index(osp, &osp_entries)?;
+            }
+            if let Some(gspo) = indexes.get_mut("gspo") {
+                self.bulk_insert_index_4(gspo, &gspo_entries)?;
             }
         }
 
@@ -666,10 +715,63 @@ impl MmapStore {
         Ok(())
     }
 
+    /// Create efficient binary key for 3-tuple index (24 bytes instead of 48-char string)
+    fn make_binary_key_3(a: u64, b: u64, c: u64) -> [u8; 24] {
+        let mut key = [0u8; 24];
+        key[0..8].copy_from_slice(&a.to_be_bytes());
+        key[8..16].copy_from_slice(&b.to_be_bytes());
+        key[16..24].copy_from_slice(&c.to_be_bytes());
+        key
+    }
+
+    /// Create efficient binary key for 4-tuple index (32 bytes instead of 64-char string)
+    fn make_binary_key_4(a: u64, b: u64, c: u64, d: u64) -> [u8; 32] {
+        let mut key = [0u8; 32];
+        key[0..8].copy_from_slice(&a.to_be_bytes());
+        key[8..16].copy_from_slice(&b.to_be_bytes());
+        key[16..24].copy_from_slice(&c.to_be_bytes());
+        key[24..32].copy_from_slice(&d.to_be_bytes());
+        key
+    }
+
+    /// Bulk insert entries into index for better performance
+    fn bulk_insert_index(
+        &self,
+        index: &mut MmapIndex,
+        entries: &[([u8; 24], IndexEntry)],
+    ) -> Result<()> {
+        // Sort entries by key for better index performance
+        let mut sorted_entries = entries.to_vec();
+        sorted_entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+        for (key_bytes, entry) in sorted_entries {
+            let key = String::from_utf8_lossy(&key_bytes).to_string();
+            index.insert(&key, entry)?;
+        }
+        Ok(())
+    }
+
+    /// Bulk insert entries into 4-tuple index for better performance
+    fn bulk_insert_index_4(
+        &self,
+        index: &mut MmapIndex,
+        entries: &[([u8; 32], IndexEntry)],
+    ) -> Result<()> {
+        // Sort entries by key for better index performance
+        let mut sorted_entries = entries.to_vec();
+        sorted_entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+        for (key_bytes, entry) in sorted_entries {
+            let key = String::from_utf8_lossy(&key_bytes).to_string();
+            index.insert(&key, entry)?;
+        }
+        Ok(())
+    }
+
     /// Get store statistics
     pub fn stats(&self) -> StoreStats {
         let header = self.header.read();
-        let interner = self.term_interner.read();
+        let _interner = self.term_interner.read();
 
         StoreStats {
             quad_count: header.quad_count,
@@ -1033,7 +1135,7 @@ mod tests {
                     "http://example.org/predicate/{}",
                     i % 10
                 ))?),
-                Object::Literal(Literal::new_simple_literal(format!("value{}", i))),
+                Object::Literal(Literal::new_simple_literal(format!("value{i}"))),
                 GraphName::DefaultGraph,
             );
             store.add(&quad)?;

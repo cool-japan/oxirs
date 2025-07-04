@@ -17,7 +17,7 @@
 //! - Context-aware validation strategies
 //! - Machine learning-based constraint refinement
 //!
-//! ## Usage
+//! ## Basic Usage
 //!
 //! ```rust
 //! use oxirs_shacl_ai::{ShapeLearner, QualityAssessor, ValidationPredictor};
@@ -37,6 +37,124 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! ## Advanced Shape Learning Examples
+//!
+//! ### Custom Learning Configuration
+//!
+//! ```rust
+//! use oxirs_shacl_ai::{ShapeLearner, LearningConfig};
+//! use std::collections::HashMap;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let config = LearningConfig {
+//!     enable_shape_generation: true,
+//!     min_support: 0.3,           // Higher threshold for more selective patterns
+//!     min_confidence: 0.85,       // Higher confidence for better quality
+//!     max_shapes: 50,             // Limit number of generated shapes
+//!     enable_training: true,      // Enable ML training
+//!     algorithm_params: HashMap::new(),
+//!     enable_reinforcement_learning: true,
+//!     rl_config: None,
+//! };
+//!
+//! let mut learner = ShapeLearner::with_config(config);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Performance-Optimized Learning
+//!
+//! ```rust
+//! use oxirs_shacl_ai::{ShapeLearner, LearningConfig, PatternStatistics};
+//! use std::collections::HashMap;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Configure for high-performance learning
+//! let mut config = LearningConfig::default();
+//! config.min_support = 0.1;      // Lower threshold for comprehensive coverage
+//! config.max_shapes = 200;       // Allow more shapes for complex datasets
+//! config.enable_training = true;
+//!
+//! let mut learner = ShapeLearner::with_config(config);
+//!
+//! // Monitor learning performance
+//! let stats = learner.get_statistics();
+//! println!("Learning efficiency: {:.2}%", stats.success_rate * 100.0);
+//! 
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Integration with OxiRS Core
+//!
+//! ### SHACL Validation Integration
+//!
+//! ```rust
+//! use oxirs_shacl_ai::{ShapeLearner, ValidationPredictor};
+//! use oxirs_shacl::{Validator, ValidationConfig};
+//! use oxirs_core::store::Store;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let store = Store::new()?;
+//! let mut learner = ShapeLearner::new();
+//!
+//! // 1. Learn shapes from existing data
+//! let learned_shapes = learner.learn_shapes_from_store(&store, None)?;
+//!
+//! // 2. Create SHACL validator with learned shapes
+//! let validator = Validator::new();
+//! let validation_config = ValidationConfig::default();
+//!
+//! // 3. Use AI predictor for optimization
+//! let predictor = ValidationPredictor::new();
+//! 
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Quantum Consciousness Integration
+//!
+//! ```rust
+//! use oxirs_shacl_ai::{
+//!     QuantumConsciousnessSynthesisEngine, 
+//!     QuantumConsciousnessLevel,
+//!     ShapeLearner
+//! };
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Initialize quantum consciousness synthesis
+//! let consciousness_engine = QuantumConsciousnessSynthesisEngine::new();
+//! 
+//! // Configure consciousness-guided learning
+//! let mut learner = ShapeLearner::new();
+//! 
+//! // Enhanced learning with quantum consciousness
+//! let consciousness_level = QuantumConsciousnessLevel::UltraTranscendent;
+//! 
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Performance Tuning Guide
+//!
+//! ### Memory Optimization
+//!
+//! - Set appropriate `max_shapes` limit based on available memory
+//! - Use higher `min_support` thresholds for large datasets to reduce memory usage
+//! - Enable caching for repeated validation operations
+//!
+//! ### CPU Optimization
+//!
+//! - Lower `min_confidence` for faster processing with moderate accuracy trade-offs
+//! - Disable reinforcement learning for CPU-constrained environments
+//! - Use parallel processing features for multi-core systems
+//!
+//! ### Quality vs Speed Trade-offs
+//!
+//! - **High Quality**: `min_confidence >= 0.9`, `min_support >= 0.3`
+//! - **Balanced**: `min_confidence >= 0.8`, `min_support >= 0.2` (default)
+//! - **High Speed**: `min_confidence >= 0.7`, `min_support >= 0.1`
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -99,7 +217,7 @@ pub mod predictive_analytics;
 pub mod production_deployment;
 pub mod quality;
 pub mod quantum_consciousness_entanglement;
-// pub mod quantum_consciousness_synthesis;
+pub mod quantum_consciousness_synthesis;
 pub mod quantum_enhanced_pattern_optimizer;
 pub mod quantum_neural_patterns;
 pub mod quantum_neuromorphic_fusion;
@@ -156,9 +274,8 @@ pub use evolution_strategies::*;
 pub use forecasting_models::*;
 pub use insights::*;
 pub use learning::{
-    LearningConfig, LearningStatistics, ShapeExample, ShapeLearner,
-    ShapeTrainingData as LearningTrainingData, TemporalPatterns,
-    LearningPerformanceMetrics, PatternStatistics,
+    LearningConfig, LearningPerformanceMetrics, LearningStatistics, PatternStatistics,
+    ShapeExample, ShapeLearner, ShapeTrainingData as LearningTrainingData, TemporalPatterns,
 };
 pub use meta_learning::{
     AdaptationStrategy, AdaptedModel, LearningTask, MetaLearner, MetaLearningConfig,
@@ -205,12 +322,13 @@ pub use optimization_engine::{
 pub use patterns::*;
 pub use performance_analytics::*;
 pub use photonic_computing::{
-    WavelengthRange, PhotonicGate, GateType, OpticalProcessingState, ConnectionType,
-    PhotonicQubit, PolarizationState, PhotonNumberState, SpatialMode, CoherenceProperties,
-    MaterialType, NonlinearProperties, JunctionType, NetworkTopology, PhotonicComputingEngine, 
-    OpticalProcessingUnit, PhotonicQuantumCircuit, InterferenceProcessor, OpticalMemoryBank, 
-    PhotonicEntanglementNetwork, LightSpeedComputationManager, InterferencePattern as PhotonicInterferencePattern, PatternType, 
-    ValidationResult as PhotonicValidationResult,
+    CoherenceProperties, ConnectionType, GateType,
+    InterferencePattern as PhotonicInterferencePattern, InterferenceProcessor, JunctionType,
+    LightSpeedComputationManager, MaterialType, NetworkTopology, NonlinearProperties,
+    OpticalMemoryBank, OpticalProcessingState, OpticalProcessingUnit, PatternType,
+    PhotonNumberState, PhotonicComputingEngine, PhotonicEntanglementNetwork, PhotonicGate,
+    PhotonicQuantumCircuit, PhotonicQubit, PolarizationState, SpatialMode,
+    ValidationResult as PhotonicValidationResult, WavelengthRange,
 };
 pub use prediction::*;
 pub use predictive_analytics::*;
@@ -221,12 +339,12 @@ pub use quantum_consciousness_entanglement::{
     QuantumConsciousnessEntanglement, QuantumEntanglementConfig, QuantumEntanglementState,
     QuantumEntanglementValidationResult, QuantumInformation,
 };
-// pub use quantum_consciousness_synthesis::{
-//     ConsciousnessLevel as QuantumConsciousnessLevel, ConsciousnessStateSynthesizer, MultiDimensionalAwarenessSystem,
-//     QuantumCognitionEnhancer, QuantumConsciousnessProcessor, QuantumConsciousnessSynthesisEngine,
-//     QuantumConsciousnessValidationResult, QuantumIntuitionEngine, SentientReasoningValidator,
-//     SyntheticMind, ValidationOutcome,
-// };
+pub use quantum_consciousness_synthesis::{
+    ConsciousnessLevel as QuantumConsciousnessLevel, ConsciousnessStateSynthesizer,
+    MultiDimensionalAwarenessSystem, QuantumCognitionEnhancer, QuantumConsciousnessProcessor,
+    QuantumConsciousnessSynthesisEngine, QuantumConsciousnessValidationResult,
+    QuantumIntuitionEngine, SentientReasoningValidator, SyntheticMind, ValidationOutcome,
+};
 pub use quantum_enhanced_pattern_optimizer::{
     AnnealingSchedule, NeuralPredictor, PerformanceRecord, QuantumAnnealer,
     QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig, QuantumOptimizerStats,
@@ -288,7 +406,7 @@ pub use interdimensional_patterns::{
     RealityDimension,
 };
 pub use multimodal_validation::{
-    ContentType, MultiModalConfig, MultiModalValidationReport, MultiModalValidator, ValidationIssue,
+    ContentType, MultiModalConfig, MultiModalValidationReport, MultiModalValidator, ValidationResult,
 };
 pub use neuromorphic_validation::{
     NeuromorphicValidationNetwork, NeuromorphicValidationResult, NeuronState, NeuronType,
@@ -306,10 +424,10 @@ pub use temporal_paradox_resolution::{
     Timeline as TemporalTimeline, TimelineContext as TemporalParadoxTimelineContext,
 };
 pub use time_space_validation::{
-    CoordinateSystem, InterferencePattern as SpacetimeInterferencePattern, MultiTimelineValidationResult, ReferenceFrame,
-    SpacetimeContext, SpacetimeInitResult, SpacetimeStatistics, SpacetimeValidationResult,
-    SpatialCoordinates, TemporalCoordinate, TimeSpaceConfig, TimeSpaceValidator,
-    Timeline as SpacetimeTimeline,
+    CoordinateSystem, InterferencePattern as SpacetimeInterferencePattern,
+    MultiTimelineValidationResult, ReferenceFrame, SpacetimeContext, SpacetimeInitResult,
+    SpacetimeStatistics, SpacetimeValidationResult, SpatialCoordinates, TemporalCoordinate,
+    TimeSpaceConfig, TimeSpaceValidator, Timeline as SpacetimeTimeline,
 };
 
 // Version 2.1 Features - Neuromorphic Evolution

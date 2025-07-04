@@ -65,7 +65,7 @@ impl Store {
         &self,
         quads: impl IntoIterator<Item = impl Into<QuadRef<'a>>>,
     ) -> Result<()> {
-        let mut store = self
+        let store = self
             .inner
             .write()
             .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
@@ -96,7 +96,7 @@ impl Store {
             quad_ref.graph_name().to_owned(),
         );
 
-        let mut store = self
+        let store = self
             .inner
             .write()
             .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
@@ -131,7 +131,7 @@ impl Store {
         let quads = parser.parse_str_to_quads(&data)?;
 
         // Get write lock on store
-        let mut store = self
+        let store = self
             .inner
             .write()
             .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
@@ -364,7 +364,7 @@ impl Store {
         let graph_ref = graph_name.into();
         let graph = graph_ref.to_owned();
 
-        let mut store = self
+        let store = self
             .inner
             .write()
             .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
@@ -391,14 +391,14 @@ impl Store {
     }
 
     /// Executes a SPARQL update
-    pub fn update(&self, update: &str) -> Result<()> {
+    pub fn update(&self, _update: &str) -> Result<()> {
         unimplemented!("SPARQL UPDATE not yet implemented")
     }
 
     /// Creates a transaction for the store
     pub fn transaction<T, E>(
         &self,
-        f: impl FnOnce(&mut Transaction) -> std::result::Result<T, E>,
+        _f: impl FnOnce(&mut Transaction) -> std::result::Result<T, E>,
     ) -> std::result::Result<T, E>
     where
         E: From<OxirsError>,
@@ -424,7 +424,7 @@ impl Store {
     }
 
     /// Backs up the store to a path
-    pub fn backup<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+    pub fn backup<P: AsRef<Path>>(&self, _path: P) -> Result<()> {
         unimplemented!("Backup not yet implemented")
     }
 

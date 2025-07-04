@@ -249,7 +249,7 @@ impl TransE {
     ) -> Vec<(String, String, String)> {
         let mut negatives = Vec::new();
         let entities: Vec<String> = self.entity_vocab.keys().cloned().collect();
-        let relations: Vec<String> = self.relation_vocab.keys().cloned().collect();
+        let _relations: Vec<String> = self.relation_vocab.keys().cloned().collect();
 
         for _ in 0..num_negatives {
             // Randomly corrupt head or tail
@@ -356,7 +356,7 @@ impl KnowledgeGraphEmbedding for TransE {
     async fn train(
         &mut self,
         triples: &[Triple],
-        config: &TrainingConfig,
+        _config: &TrainingConfig,
     ) -> Result<TrainingMetrics> {
         // Initialize embeddings
         self.initialize_embeddings(triples).await?;
@@ -376,7 +376,7 @@ impl KnowledgeGraphEmbedding for TransE {
         let mut total_loss = 0.0;
         let margin = 1.0; // Margin for margin-based loss
 
-        for epoch in 0..self.config.max_epochs {
+        for _epoch in 0..self.config.max_epochs {
             let mut epoch_loss = 0.0;
 
             // Generate negative samples
@@ -419,12 +419,12 @@ impl KnowledgeGraphEmbedding for TransE {
         })
     }
 
-    async fn save(&self, path: &str) -> Result<()> {
+    async fn save(&self, _path: &str) -> Result<()> {
         // TODO: Implement model serialization
         Ok(())
     }
 
-    async fn load(&mut self, path: &str) -> Result<()> {
+    async fn load(&mut self, _path: &str) -> Result<()> {
         // TODO: Implement model deserialization
         Ok(())
     }
@@ -549,8 +549,8 @@ impl KnowledgeGraphEmbedding for DistMult {
 
     async fn train(
         &mut self,
-        triples: &[Triple],
-        config: &TrainingConfig,
+        _triples: &[Triple],
+        _config: &TrainingConfig,
     ) -> Result<TrainingMetrics> {
         // TODO: Implement DistMult training
         self.trained = true;
@@ -562,11 +562,11 @@ impl KnowledgeGraphEmbedding for DistMult {
         })
     }
 
-    async fn save(&self, path: &str) -> Result<()> {
+    async fn save(&self, _path: &str) -> Result<()> {
         Ok(())
     }
 
-    async fn load(&mut self, path: &str) -> Result<()> {
+    async fn load(&mut self, _path: &str) -> Result<()> {
         Ok(())
     }
 }
@@ -721,8 +721,8 @@ impl KnowledgeGraphEmbedding for ComplEx {
 
     async fn train(
         &mut self,
-        triples: &[Triple],
-        config: &TrainingConfig,
+        _triples: &[Triple],
+        _config: &TrainingConfig,
     ) -> Result<TrainingMetrics> {
         // TODO: Implement ComplEx training
         self.trained = true;
@@ -734,11 +734,11 @@ impl KnowledgeGraphEmbedding for ComplEx {
         })
     }
 
-    async fn save(&self, path: &str) -> Result<()> {
+    async fn save(&self, _path: &str) -> Result<()> {
         Ok(())
     }
 
-    async fn load(&mut self, path: &str) -> Result<()> {
+    async fn load(&mut self, _path: &str) -> Result<()> {
         Ok(())
     }
 }

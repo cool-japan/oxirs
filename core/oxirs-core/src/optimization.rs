@@ -872,7 +872,7 @@ pub mod simd {
 
         // Process 32 bytes at a time using SIMD
         let chunks = len / 32;
-        let remainder = len % 32;
+        let _remainder = len % 32;
 
         for i in 0..chunks {
             let start = i * 32;

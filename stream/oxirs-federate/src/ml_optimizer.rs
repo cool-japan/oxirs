@@ -719,7 +719,9 @@ impl MLOptimizer {
 
         // Score each service based on learned patterns
         for service in available_services {
-            let score = model.get(service).copied().unwrap_or(0.5);
+            // Use confidence threshold as default score for new services to ensure they get considered
+            let default_score = self.config.confidence_threshold + 0.1;
+            let score = model.get(service).copied().unwrap_or(default_score);
 
             // Adjust score based on query features
             let adjusted_score = self.adjust_service_score(service, features, score).await;
@@ -735,11 +737,26 @@ impl MLOptimizer {
 
         recommended.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-        let recommended_services: Vec<String> = recommended
+        let mut recommended_services: Vec<String> = recommended
             .iter()
             .take(3) // Top 3 services
             .map(|(service, _)| service.clone())
             .collect();
+
+        // If no services meet the threshold, fall back to top services by score
+        if recommended_services.is_empty() {
+            let mut all_services: Vec<_> = service_scores
+                .iter()
+                .map(|(service, &score)| (service.clone(), score))
+                .collect();
+            all_services.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            
+            recommended_services = all_services
+                .iter()
+                .take(3)
+                .map(|(service, _)| service.clone())
+                .collect();
+        }
 
         // Generate alternatives
         let alternatives = self
@@ -1023,11 +1040,15 @@ impl MLOptimizer {
         features: &QueryFeatures,
         base_score: f64,
     ) -> f64 {
-        // Adjust score based on query complexity
-        let complexity_factor = 1.0 - (features.complexity_score / 10.0).min(0.5);
-        let service_factor = 1.0 - (features.service_count as f64 / 10.0).min(0.3);
+        // Adjust score based on query complexity (less aggressive reduction)
+        let complexity_factor = 1.0 - (features.complexity_score / 20.0).min(0.2);
+        let service_factor = 1.0 - (features.service_count as f64 / 20.0).min(0.15);
 
-        base_score * complexity_factor * service_factor
+        let adjusted_score = base_score * complexity_factor * service_factor;
+        
+        // Ensure the adjusted score doesn't fall below a minimum threshold
+        // for new services to still be considered
+        adjusted_score.max(self.config.confidence_threshold + 0.01)
     }
 
     async fn generate_source_alternatives(

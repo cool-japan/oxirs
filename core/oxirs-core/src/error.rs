@@ -129,7 +129,7 @@ pub mod validation {
     }
 
     /// Check that dimensions match
-    pub fn check_dimensions(expected: usize, actual: usize, context: &str) -> CoreResult<()> {
+    pub fn check_dimensions(expected: usize, actual: usize, _context: &str) -> CoreResult<()> {
         if expected != actual {
             Err(CoreError::DimensionMismatch { expected, actual })
         } else {

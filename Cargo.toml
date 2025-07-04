@@ -134,6 +134,12 @@ num_cpus = "1.16"
 url = { version = "2.5", features = ["serde"] }
 rayon = "1.10"
 
+# OpenTelemetry for observability
+opentelemetry = { version = "0.21", features = ["trace", "metrics"] }
+opentelemetry-jaeger = { version = "0.20", features = ["collector_client", "rt-tokio"] }
+opentelemetry_sdk = { version = "0.21", features = ["trace", "rt-tokio"] }
+opentelemetry-semantic-conventions = "0.28"
+
 [workspace.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

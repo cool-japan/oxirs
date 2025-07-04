@@ -196,6 +196,25 @@ impl AuthService {
         Ok(AuthResult::Unauthenticated)
     }
 
+    /// Check if OAuth2 authentication is enabled
+    pub fn is_oauth2_enabled(&self) -> bool {
+        self.oauth2_service.is_some()
+    }
+
+    /// Generate OAuth2 authorization URL (delegating to OAuth2Service)
+    pub async fn generate_oauth2_auth_url(
+        &self,
+        redirect_uri: &str,
+        scopes: &[String],
+        use_pkce: bool,
+    ) -> FusekiResult<(String, String)> {
+        self.oauth2_service
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?
+            .generate_authorization_url(redirect_uri, scopes, use_pkce)
+            .await
+    }
+
     /// SAML authentication methods
     #[cfg(feature = "saml")]
     pub async fn generate_saml_auth_request(

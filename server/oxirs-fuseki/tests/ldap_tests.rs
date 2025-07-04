@@ -1,7 +1,7 @@
 //! Tests for LDAP authentication
 
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::body::to_bytes;
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use oxirs_fuseki::{
     auth::{AuthResult, AuthService, User},
     config::{LdapConfig, SecurityConfig},

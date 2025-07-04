@@ -71,7 +71,9 @@ fn test_large_dataset() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let store = MmapStore::new(temp_dir.path())?;
 
-    // Add 10,000 quads
+    // Generate 10,000 quads and add them in batches for better performance
+    let mut quads = Vec::with_capacity(1000);
+
     for i in 0..10_000 {
         let quad = Quad::new(
             Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
@@ -87,12 +89,18 @@ fn test_large_dataset() -> Result<()> {
                 GraphName::DefaultGraph
             },
         );
-        store.add(&quad)?;
+        quads.push(quad);
 
-        // Flush periodically
-        if i % 1000 == 999 {
-            store.flush()?;
+        // Process in batches of 1000 for optimal performance
+        if quads.len() >= 1000 {
+            store.add_batch(&quads)?;
+            quads.clear();
         }
+    }
+
+    // Add any remaining quads
+    if !quads.is_empty() {
+        store.add_batch(&quads)?;
     }
 
     store.flush()?;

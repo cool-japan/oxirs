@@ -1,24 +1,77 @@
 //! # OxiRS Core
 //!
-//! Core RDF and SPARQL functionality for OxiRS - a thin, safe re-export of oxigraph
-//! with additional abstractions for the OxiRS ecosystem.
+//! Advanced RDF and SPARQL foundation with consciousness-inspired computing, quantum optimization,
+//! and distributed processing. This crate provides the foundational RDF and SPARQL operations
+//! that all other OxiRS crates depend on, extended with next-generation AI capabilities.
 //!
-//! This crate provides the foundational RDF and SPARQL operations that all other
-//! OxiRS crates depend on, including:
+//! ## Core Features
 //!
+//! ### 🧠 Consciousness-Inspired Computing
+//! - Intuitive query optimization with temporal reasoning
+//! - Dream processing for memory consolidation  
+//! - Emotional learning networks for context understanding
+//! - Multi-level consciousness integration
+//! - Quantum consciousness states for enhanced reasoning
+//!
+//! ### ⚛️ Quantum-Enhanced Processing
+//! - Quantum-inspired query optimization algorithms
+//! - Superposition-based search strategies
+//! - Entanglement correlation analysis
+//! - Quantum genetic optimization for performance
+//! - Coherence-based result ranking
+//!
+//! ### 🗃️ Advanced Storage Systems
 //! - RDF 1.2 parsing and serialization
-//! - Triple store operations
-//! - SPARQL query execution
-//! - Memory and disk storage backends
+//! - Multi-backend triple store operations
+//! - Distributed storage with consensus algorithms
+//! - Temporal data management with versioning
+//! - Memory-mapped and immutable storage options
 //!
-//! ## Examples
+//! ### 🔍 Enhanced Query Processing  
+//! - SPARQL 1.2 query execution with optimizations
+//! - Materialized views for performance
+//! - Property path optimization
+//! - Statistical query planning
+//! - Parallel execution engines
 //!
-//! ```rust
-//! use oxirs_core::store::Store;
+//! ## Quick Start Examples
 //!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let store = Store::new()?;
-//! // Use the store for RDF operations
+//! ### Basic Store Operations
+//!
+//! ```rust,no_run
+//! use oxirs_core::store::ConcreteStore;
+//! use oxirs_core::model::{NamedNode, Triple};
+//!
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create a new RDF store
+//! let store = ConcreteStore::new();
+//!
+//! // Add RDF data
+//! let subject = NamedNode::new("http://example.org/alice")?;
+//! let predicate = NamedNode::new("http://example.org/knows")?;
+//! let object = NamedNode::new("http://example.org/bob")?;
+//! let triple = Triple::new(subject, predicate, object);
+//!
+//! store.insert_triple(triple)?;
+//! println!("Triple added successfully");
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Consciousness-Inspired Processing
+//!
+//! ```rust,no_run
+//! use oxirs_core::consciousness::{ConsciousnessCoordinator, ConsciousnessLevel};
+//!
+//! # async fn consciousness_example() -> Result<(), Box<dyn std::error::Error>> {
+//! let mut coordinator = ConsciousnessCoordinator::new();
+//!
+//! // Configure consciousness-inspired optimization
+//! coordinator.set_consciousness_level(ConsciousnessLevel::SelfAware);
+//! coordinator.enable_dream_processing(true);
+//! coordinator.enable_emotional_learning(true);
+//!
+//! println!("Consciousness coordinator initialized");
 //! # Ok(())
 //! # }
 //! ```
@@ -45,7 +98,7 @@ pub mod store;
 pub mod vocab;
 // pub mod config;
 pub mod jsonld; // Re-enabled after fixing StringInterner method calls
-                // pub mod rdfxml; // TODO: Fix lifetime issues in serializer
+pub mod rdfxml;
 pub mod oxigraph_compat; // Oxigraph compatibility layer
 
 // Core abstractions for OxiRS ecosystem

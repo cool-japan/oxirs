@@ -35,7 +35,7 @@ pub struct MetricsCollector {
 }
 
 /// Comprehensive streaming metrics
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamingMetrics {
     // Producer metrics
     pub producer_events_published: u64,
@@ -86,9 +86,89 @@ pub struct StreamingMetrics {
     pub success_rate: f64,
     pub availability: f64,
 
+    // Dead Letter Queue metrics
+    pub dlq_messages_count: u64,
+    pub dlq_messages_per_second: f64,
+    pub dlq_processing_rate: f64,
+    pub dlq_oldest_message_age_ms: u64,
+    pub dlq_replay_success_rate: f64,
+    pub dlq_total_replayed: u64,
+    pub dlq_size_bytes: u64,
+    pub dlq_error_categories: HashMap<String, u64>,
+
     // Timestamps
     pub last_updated: DateTime<Utc>,
     pub collection_start_time: DateTime<Utc>,
+}
+
+impl Default for StreamingMetrics {
+    fn default() -> Self {
+        let now = Utc::now();
+        Self {
+            // Producer metrics
+            producer_events_published: 0,
+            producer_events_failed: 0,
+            producer_bytes_sent: 0,
+            producer_batches_sent: 0,
+            producer_average_latency_ms: 0.0,
+            producer_throughput_eps: 0.0,
+
+            // Consumer metrics
+            consumer_events_consumed: 0,
+            consumer_events_processed: 0,
+            consumer_events_filtered: 0,
+            consumer_events_failed: 0,
+            consumer_bytes_received: 0,
+            consumer_batches_received: 0,
+            consumer_average_processing_time_ms: 0.0,
+            consumer_throughput_eps: 0.0,
+            consumer_lag_ms: None,
+
+            // System metrics
+            system_memory_usage_bytes: 0,
+            system_cpu_usage_percent: 0.0,
+            system_network_bytes_in: 0,
+            system_network_bytes_out: 0,
+            system_gc_collections: 0,
+            system_gc_time_ms: 0,
+
+            // Backend metrics
+            backend_connections_active: 0,
+            backend_connections_idle: 0,
+            backend_connection_errors: 0,
+            backend_circuit_breaker_trips: 0,
+            backend_retry_attempts: 0,
+
+            // Stream processing metrics
+            window_operations_count: 0,
+            aggregation_operations_count: 0,
+            pattern_matches_found: 0,
+            state_store_operations: 0,
+            subscriptions_active: 0,
+
+            // Quality metrics
+            message_loss_rate: 0.0,
+            duplicate_rate: 0.0,
+            out_of_order_rate: 0.0,
+            error_rate: 0.0,
+            success_rate: 100.0, // Start with 100% success rate
+            availability: 100.0, // Start with 100% availability
+
+            // Dead Letter Queue metrics
+            dlq_messages_count: 0,
+            dlq_messages_per_second: 0.0,
+            dlq_processing_rate: 0.0,
+            dlq_oldest_message_age_ms: 0,
+            dlq_replay_success_rate: 100.0, // Start with 100% replay success rate
+            dlq_total_replayed: 0,
+            dlq_size_bytes: 0,
+            dlq_error_categories: HashMap::new(),
+
+            // Timestamps
+            last_updated: now,
+            collection_start_time: now,
+        }
+    }
 }
 
 /// Health checker for system health monitoring

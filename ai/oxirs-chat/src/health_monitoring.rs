@@ -948,6 +948,339 @@ impl NotificationManager {
     }
 }
 
+/// Self-healing system for automated recovery from health issues
+pub struct SelfHealingSystem {
+    config: SelfHealingConfig,
+    healing_actions: HashMap<String, HealingAction>,
+    recovery_stats: RecoveryStats,
+}
+
+/// Self-healing configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelfHealingConfig {
+    pub enabled: bool,
+    pub max_recovery_attempts: u32,
+    pub recovery_cooldown: Duration,
+    pub auto_restart_threshold: f32,
+    pub memory_cleanup_threshold: f32,
+    pub circuit_breaker_reset_interval: Duration,
+}
+
+impl Default for SelfHealingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_recovery_attempts: 3,
+            recovery_cooldown: Duration::from_secs(300), // 5 minutes
+            auto_restart_threshold: 95.0, // 95% resource usage
+            memory_cleanup_threshold: 85.0, // 85% memory usage
+            circuit_breaker_reset_interval: Duration::from_secs(600), // 10 minutes
+        }
+    }
+}
+
+/// Healing action that can be taken to recover from issues
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealingAction {
+    pub id: String,
+    pub action_type: HealingActionType,
+    pub target_component: String,
+    pub description: String,
+    pub attempts: u32,
+    pub last_attempt: Option<SystemTime>,
+    pub success_rate: f32,
+}
+
+/// Types of healing actions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HealingActionType {
+    RestartComponent,
+    ClearCache,
+    MemoryCleanup,
+    ResetCircuitBreaker,
+    ScaleResources,
+    RollbackConfiguration,
+    FlushConnections,
+    CompactDatabase,
+}
+
+/// Recovery statistics tracking
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct RecoveryStats {
+    pub total_recoveries: u64,
+    pub successful_recoveries: u64,
+    pub failed_recoveries: u64,
+    pub average_recovery_time: Duration,
+    pub recovery_by_type: HashMap<String, u32>,
+}
+
+impl SelfHealingSystem {
+    /// Create a new self-healing system
+    pub fn new(config: SelfHealingConfig) -> Self {
+        Self {
+            config,
+            healing_actions: HashMap::new(),
+            recovery_stats: RecoveryStats::default(),
+        }
+    }
+
+    /// Analyze health issues and trigger appropriate healing actions
+    pub async fn analyze_and_heal(&mut self, health_report: &SystemHealthReport) -> Result<Vec<HealingAction>> {
+        if !self.config.enabled {
+            return Ok(Vec::new());
+        }
+
+        let mut triggered_actions = Vec::new();
+
+        // High CPU usage healing
+        if health_report.system_metrics.cpu_usage > self.config.auto_restart_threshold {
+            if let Some(action) = self.create_healing_action(
+                "cpu_cleanup".to_string(),
+                HealingActionType::MemoryCleanup,
+                "system".to_string(),
+                "Clean up memory to reduce CPU pressure".to_string(),
+            ).await {
+                triggered_actions.push(action);
+            }
+        }
+
+        // High memory usage healing
+        if health_report.system_metrics.memory_usage > self.config.memory_cleanup_threshold {
+            if let Some(action) = self.create_healing_action(
+                "memory_cleanup".to_string(),
+                HealingActionType::MemoryCleanup,
+                "system".to_string(),
+                "Trigger garbage collection and cache cleanup".to_string(),
+            ).await {
+                triggered_actions.push(action);
+            }
+        }
+
+        // Service availability issues
+        for component in &health_report.component_statuses {
+            if component.1.status == HealthStatus::Critical {
+                if let Some(action) = self.create_healing_action(
+                    format!("{}_restart", component.0),
+                    HealingActionType::RestartComponent,
+                    component.0.clone(),
+                    format!("Restart {} due to critical status", component.0),
+                ).await {
+                    triggered_actions.push(action);
+                }
+            }
+        }
+
+        // High error rates
+        if health_report.error_metrics.error_rate > 0.1 { // 10% error rate
+            if let Some(action) = self.create_healing_action(
+                "circuit_breaker_reset".to_string(),
+                HealingActionType::ResetCircuitBreaker,
+                "llm_service".to_string(),
+                "Reset circuit breakers due to high error rate".to_string(),
+            ).await {
+                triggered_actions.push(action);
+            }
+        }
+
+        // Execute healing actions
+        for action in &triggered_actions {
+            if let Err(e) = self.execute_healing_action(action).await {
+                eprintln!("Failed to execute healing action {}: {}", action.id, e);
+            }
+        }
+
+        Ok(triggered_actions)
+    }
+
+    /// Create a healing action if it hasn't been attempted too recently
+    async fn create_healing_action(
+        &mut self,
+        id: String,
+        action_type: HealingActionType,
+        target_component: String,
+        description: String,
+    ) -> Option<HealingAction> {
+        // Check if we already have this action and it's in cooldown
+        if let Some(existing_action) = self.healing_actions.get(&id) {
+            if let Some(last_attempt) = existing_action.last_attempt {
+                if SystemTime::now()
+                    .duration_since(last_attempt)
+                    .unwrap_or(Duration::ZERO) < self.config.recovery_cooldown
+                {
+                    return None; // Still in cooldown
+                }
+            }
+
+            if existing_action.attempts >= self.config.max_recovery_attempts {
+                return None; // Too many attempts
+            }
+        }
+
+        let action = HealingAction {
+            id: id.clone(),
+            action_type,
+            target_component,
+            description,
+            attempts: self.healing_actions.get(&id).map(|a| a.attempts + 1).unwrap_or(1),
+            last_attempt: Some(SystemTime::now()),
+            success_rate: self.healing_actions.get(&id).map(|a| a.success_rate).unwrap_or(0.0),
+        };
+
+        self.healing_actions.insert(id, action.clone());
+        Some(action)
+    }
+
+    /// Execute a healing action
+    async fn execute_healing_action(&mut self, action: &HealingAction) -> Result<()> {
+        let start_time = SystemTime::now();
+        let success = match &action.action_type {
+            HealingActionType::MemoryCleanup => {
+                self.perform_memory_cleanup().await?;
+                true
+            }
+            HealingActionType::ClearCache => {
+                self.clear_caches().await?;
+                true
+            }
+            HealingActionType::RestartComponent => {
+                self.restart_component(&action.target_component).await?;
+                true
+            }
+            HealingActionType::ResetCircuitBreaker => {
+                self.reset_circuit_breaker(&action.target_component).await?;
+                true
+            }
+            HealingActionType::ScaleResources => {
+                self.scale_resources(&action.target_component).await?;
+                true
+            }
+            HealingActionType::RollbackConfiguration => {
+                self.rollback_configuration(&action.target_component).await?;
+                true
+            }
+            HealingActionType::FlushConnections => {
+                self.flush_connections(&action.target_component).await?;
+                true
+            }
+            HealingActionType::CompactDatabase => {
+                self.compact_database().await?;
+                true
+            }
+        };
+
+        // Update statistics
+        self.recovery_stats.total_recoveries += 1;
+        if success {
+            self.recovery_stats.successful_recoveries += 1;
+        } else {
+            self.recovery_stats.failed_recoveries += 1;
+        }
+
+        let recovery_time = SystemTime::now().duration_since(start_time).unwrap_or(Duration::ZERO);
+        self.update_average_recovery_time(recovery_time);
+
+        // Update action success rate
+        if let Some(mut stored_action) = self.healing_actions.get_mut(&action.id) {
+            stored_action.success_rate = self.recovery_stats.successful_recoveries as f32 
+                / self.recovery_stats.total_recoveries as f32;
+        }
+
+        Ok(())
+    }
+
+    /// Perform memory cleanup operations
+    async fn perform_memory_cleanup(&self) -> Result<()> {
+        // Force garbage collection in Rust is limited, but we can suggest cleanup
+        // In a real implementation, this might clear caches, drop unused connections, etc.
+        tokio::time::sleep(Duration::from_millis(100)).await; // Simulate cleanup
+        Ok(())
+    }
+
+    /// Clear various system caches
+    async fn clear_caches(&self) -> Result<()> {
+        // Would clear application caches, connection pools, etc.
+        tokio::time::sleep(Duration::from_millis(200)).await; // Simulate cache clearing
+        Ok(())
+    }
+
+    /// Restart a specific component
+    async fn restart_component(&self, _component: &str) -> Result<()> {
+        // Would restart the specified component/service
+        tokio::time::sleep(Duration::from_millis(500)).await; // Simulate restart
+        Ok(())
+    }
+
+    /// Reset circuit breakers for a component
+    async fn reset_circuit_breaker(&self, _component: &str) -> Result<()> {
+        // Would reset circuit breakers to allow new requests
+        tokio::time::sleep(Duration::from_millis(50)).await; // Simulate reset
+        Ok(())
+    }
+
+    /// Scale resources for a component
+    async fn scale_resources(&self, _component: &str) -> Result<()> {
+        // Would scale up resources (CPU, memory, instances)
+        tokio::time::sleep(Duration::from_millis(1000)).await; // Simulate scaling
+        Ok(())
+    }
+
+    /// Rollback to a previous configuration
+    async fn rollback_configuration(&self, _component: &str) -> Result<()> {
+        // Would rollback to last known good configuration
+        tokio::time::sleep(Duration::from_millis(300)).await; // Simulate rollback
+        Ok(())
+    }
+
+    /// Flush network connections
+    async fn flush_connections(&self, _component: &str) -> Result<()> {
+        // Would flush stale network connections
+        tokio::time::sleep(Duration::from_millis(100)).await; // Simulate flush
+        Ok(())
+    }
+
+    /// Compact database to reclaim space
+    async fn compact_database(&self) -> Result<()> {
+        // Would perform database compaction/optimization
+        tokio::time::sleep(Duration::from_millis(2000)).await; // Simulate compaction
+        Ok(())
+    }
+
+    /// Update average recovery time
+    fn update_average_recovery_time(&mut self, recovery_time: Duration) {
+        if self.recovery_stats.total_recoveries == 1 {
+            self.recovery_stats.average_recovery_time = recovery_time;
+        } else {
+            // Calculate weighted average
+            let current_total = self.recovery_stats.average_recovery_time.as_millis() 
+                * (self.recovery_stats.total_recoveries - 1) as u128;
+            let new_total = current_total + recovery_time.as_millis();
+            self.recovery_stats.average_recovery_time = 
+                Duration::from_millis((new_total / self.recovery_stats.total_recoveries as u128) as u64);
+        }
+    }
+
+    /// Get recovery statistics
+    pub fn get_recovery_stats(&self) -> &RecoveryStats {
+        &self.recovery_stats
+    }
+
+    /// Get active healing actions
+    pub fn get_active_healing_actions(&self) -> Vec<&HealingAction> {
+        self.healing_actions.values().collect()
+    }
+
+    /// Check if system is in recovery mode
+    pub fn is_in_recovery_mode(&self) -> bool {
+        self.healing_actions.iter().any(|(_, action)| {
+            action.last_attempt.map_or(false, |last| {
+                SystemTime::now()
+                    .duration_since(last)
+                    .unwrap_or(Duration::MAX) < self.config.recovery_cooldown
+            })
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

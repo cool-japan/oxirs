@@ -754,7 +754,7 @@ impl PatternExecutor {
     fn execute_pattern_with_strategy(
         &self,
         pattern: &AlgebraTriplePattern,
-        strategy: &PatternStrategy,
+        _strategy: &PatternStrategy,
         bindings: Vec<HashMap<Variable, Term>>,
     ) -> Result<Vec<HashMap<Variable, Term>>, OxirsError> {
         let mut new_results = Vec::new();

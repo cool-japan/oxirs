@@ -624,7 +624,7 @@ pub struct ConstraintSolution {
 
 impl TemporalReasoner {
     /// Create new temporal reasoner
-    pub fn new(config: &AiConfig) -> Result<Self> {
+    pub fn new(_config: &AiConfig) -> Result<Self> {
         let temporal_config = TemporalConfig::default();
 
         Ok(Self {
@@ -714,7 +714,7 @@ impl TemporalReasoner {
         // Get facts based on query type
         match &query.query_type {
             TemporalQueryType::ValidAt { time } => {
-                for (timestamp, time_facts) in &self.temporal_kb.facts_by_time {
+                for (_timestamp, time_facts) in &self.temporal_kb.facts_by_time {
                     for fact in time_facts {
                         if fact.validity.contains(*time) {
                             facts.push(fact.clone());
@@ -723,7 +723,7 @@ impl TemporalReasoner {
                 }
             }
             TemporalQueryType::ValidDuring { interval } => {
-                for (timestamp, time_facts) in &self.temporal_kb.facts_by_time {
+                for (_timestamp, time_facts) in &self.temporal_kb.facts_by_time {
                     for fact in time_facts {
                         if fact.validity.overlaps(interval) {
                             facts.push(fact.clone());
@@ -805,8 +805,8 @@ impl DefaultTemporalInferenceEngine {
 impl TemporalInferenceEngine for DefaultTemporalInferenceEngine {
     fn infer(
         &self,
-        kb: &TemporalKnowledgeBase,
-        query: &TemporalQuery,
+        _kb: &TemporalKnowledgeBase,
+        _query: &TemporalQuery,
     ) -> Result<Vec<TemporalFact>> {
         // Placeholder implementation
         Ok(Vec::new())
@@ -814,8 +814,8 @@ impl TemporalInferenceEngine for DefaultTemporalInferenceEngine {
 
     fn apply_rules(
         &self,
-        facts: &[TemporalFact],
-        rules: &[TemporalRule],
+        _facts: &[TemporalFact],
+        _rules: &[TemporalRule],
     ) -> Result<Vec<TemporalFact>> {
         // Placeholder implementation
         Ok(Vec::new())
@@ -834,8 +834,8 @@ impl DefaultEventDetector {
 impl EventDetector for DefaultEventDetector {
     fn detect_events(
         &self,
-        facts: &[TemporalFact],
-        event_definitions: &[EventDefinition],
+        _facts: &[TemporalFact],
+        _event_definitions: &[EventDefinition],
     ) -> Result<Vec<DetectedEvent>> {
         // Placeholder implementation
         Ok(Vec::new())
@@ -856,7 +856,7 @@ impl DefaultConstraintSolver {
 }
 
 impl TemporalConstraintSolver for DefaultConstraintSolver {
-    fn solve_constraints(&self, constraints: &[TemporalConstraint]) -> Result<ConstraintSolution> {
+    fn solve_constraints(&self, _constraints: &[TemporalConstraint]) -> Result<ConstraintSolution> {
         // Placeholder implementation
         Ok(ConstraintSolution {
             assignments: HashMap::new(),
@@ -867,8 +867,8 @@ impl TemporalConstraintSolver for DefaultConstraintSolver {
 
     fn check_satisfaction(
         &self,
-        constraints: &[TemporalConstraint],
-        assignments: &HashMap<String, Timestamp>,
+        _constraints: &[TemporalConstraint],
+        _assignments: &HashMap<String, Timestamp>,
     ) -> Result<bool> {
         // Placeholder implementation
         Ok(true)

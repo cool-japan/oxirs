@@ -189,7 +189,7 @@ pub enum RaftMessage {
     /// Append entries (heartbeat/replication)
     AppendEntries {
         term: u64,
-        leader_id: String,
+        _leader_id: String,
         prev_log_index: u64,
         prev_log_term: u64,
         entries: Vec<RaftLogEntry>,
@@ -206,7 +206,7 @@ pub enum RaftMessage {
     /// Install snapshot
     InstallSnapshot {
         term: u64,
-        leader_id: String,
+        _leader_id: String,
         last_included_index: u64,
         last_included_term: u64,
         offset: u64,
@@ -518,7 +518,7 @@ impl RaftNode {
                     }
                     RaftMessage::AppendEntries {
                         term,
-                        leader_id,
+                        _leader_id,
                         prev_log_index,
                         prev_log_term,
                         entries,
@@ -530,7 +530,7 @@ impl RaftNode {
                             &log,
                             &commit_index,
                             term,
-                            leader_id,
+                            _leader_id,
                             prev_log_index,
                             prev_log_term,
                             entries,
@@ -735,7 +735,7 @@ impl RaftNode {
         log: &Arc<RwLock<RaftLog>>,
         commit_index: &Arc<RwLock<u64>>,
         request_term: u64,
-        leader_id: String,
+        _leader_id: String,
         prev_log_index: u64,
         prev_log_term: u64,
         entries: Vec<RaftLogEntry>,
@@ -933,7 +933,7 @@ impl RaftNode {
     }
 
     /// Create snapshot
-    async fn create_snapshot(log: &Arc<RwLock<RaftLog>>, last_index: u64, config: &SnapshotConfig) {
+    async fn create_snapshot(log: &Arc<RwLock<RaftLog>>, last_index: u64, _config: &SnapshotConfig) {
         tracing::info!("Creating snapshot at index {}", last_index);
 
         // In real implementation, would create actual snapshot

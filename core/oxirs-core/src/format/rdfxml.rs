@@ -46,7 +46,7 @@ impl RdfXmlParser {
     }
 
     /// Parse RDF/XML from a reader
-    pub fn parse_reader<R: Read>(&self, reader: R) -> ParseResult<Vec<Triple>> {
+    pub fn parse_reader<R: Read>(&self, _reader: R) -> ParseResult<Vec<Triple>> {
         // TODO: Implement actual RDF/XML parsing
         // This would involve:
         // 1. XML parsing with namespace awareness
@@ -345,7 +345,7 @@ pub mod namespaces {
     }
 
     /// Generate prefix for namespace
-    pub fn generate_prefix(namespace: &str, existing_prefixes: &HashMap<String, String>) -> String {
+    pub fn generate_prefix(_namespace: &str, existing_prefixes: &HashMap<String, String>) -> String {
         // TODO: Implement smart prefix generation
         // For now, use simple numbering
         let mut counter = 1;

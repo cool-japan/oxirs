@@ -91,7 +91,10 @@ pub enum PolarizationState {
     /// Right circular polarization
     RightCircular,
     /// Superposition of polarizations
-    Superposition { amplitudes: Vec<f64>, phases: Vec<f64> },
+    Superposition {
+        amplitudes: Vec<f64>,
+        phases: Vec<f64>,
+    },
 }
 
 /// Photon number state

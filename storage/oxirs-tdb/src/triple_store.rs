@@ -616,10 +616,17 @@ impl TripleStore {
         for (&index_type, _btree) in indices.iter() {
             let key = index_type.triple_to_key(triple);
 
+            // Create the same prefixed key structure used in insert_triple_tx
+            let prefixed_key = TripleKey::new(
+                index_type as u64, // Use index type as prefix
+                key.first,
+                key.second * 1000000 + key.third, // Combine second and third for uniqueness
+            );
+
             // Check if triple exists before deletion
-            if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
+            if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &prefixed_key)? {
                 if exists {
-                    self.mvcc_storage.delete_tx(tx_id, key)?;
+                    self.mvcc_storage.delete_tx(tx_id, prefixed_key)?;
                     deleted = true;
                 }
             }
@@ -658,7 +665,14 @@ impl TripleStore {
                 let triple = Triple::new(s, p, o);
                 let key = best_index.triple_to_key(&triple);
 
-                if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
+                // Create the same prefixed key structure used in insert_triple_tx
+                let prefixed_key = TripleKey::new(
+                    best_index as u64, // Use index type as prefix
+                    key.first,
+                    key.second * 1000000 + key.third, // Combine second and third for uniqueness
+                );
+
+                if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &prefixed_key)? {
                     if exists {
                         results.push(triple);
                     }

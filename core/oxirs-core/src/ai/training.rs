@@ -617,7 +617,7 @@ impl DefaultTrainer {
         // Simplified negative sampling
         // In a real implementation, this would be more sophisticated
         let num_negatives = (positive_triples.len() as f32 * ratio) as usize;
-        let mut negatives = Vec::with_capacity(num_negatives);
+        let negatives = Vec::with_capacity(num_negatives);
 
         // TODO: Implement proper negative sampling strategies
         // - Random corruption of head/tail entities
@@ -664,8 +664,8 @@ impl DefaultTrainer {
     /// Compute evaluation metrics
     fn compute_metrics(
         &self,
-        test_triples: &[Triple],
-        model: &dyn KnowledgeGraphEmbedding,
+        _test_triples: &[Triple],
+        _model: &dyn KnowledgeGraphEmbedding,
     ) -> HashMap<String, f32> {
         let mut metrics = HashMap::new();
 
@@ -709,11 +709,11 @@ impl Trainer for DefaultTrainer {
                 let batch = &training_data[start_idx..end_idx];
 
                 // Generate negative samples
-                let negatives = self.generate_negative_samples(batch, 1.0);
+                let _negatives = self.generate_negative_samples(batch, 1.0);
 
                 // Forward pass (simplified)
                 let mut positive_scores = Vec::new();
-                let mut negative_scores = Vec::new();
+                let negative_scores = Vec::new();
 
                 for triple in batch {
                     if let Ok(score) = model
@@ -809,9 +809,9 @@ impl Trainer for DefaultTrainer {
 
     async fn train_gnn(
         &mut self,
-        model: Arc<dyn GraphNeuralNetwork>,
-        training_data: &[Triple],
-        validation_data: &[Triple],
+        _model: Arc<dyn GraphNeuralNetwork>,
+        _training_data: &[Triple],
+        _validation_data: &[Triple],
     ) -> Result<TrainingMetrics> {
         // TODO: Implement GNN training
         Ok(TrainingMetrics::new())
@@ -819,9 +819,9 @@ impl Trainer for DefaultTrainer {
 
     async fn resume_training(
         &mut self,
-        checkpoint_path: &str,
-        training_data: &[Triple],
-        validation_data: &[Triple],
+        _checkpoint_path: &str,
+        _training_data: &[Triple],
+        _validation_data: &[Triple],
     ) -> Result<TrainingMetrics> {
         // TODO: Implement checkpoint loading and resume training
         Err(anyhow!("Resume training not yet implemented"))
@@ -831,7 +831,7 @@ impl Trainer for DefaultTrainer {
         &self,
         model: Arc<dyn KnowledgeGraphEmbedding>,
         test_data: &[Triple],
-        metrics: &[TrainingMetric],
+        _metrics: &[TrainingMetric],
     ) -> Result<HashMap<String, f32>> {
         let computed_metrics = self.compute_metrics(test_data, model.as_ref());
         Ok(computed_metrics)
@@ -891,7 +891,7 @@ impl HyperparameterOptimizer {
     /// Optimize hyperparameters
     pub async fn optimize(
         &self,
-        objective_fn: impl Fn(TrainingConfig) -> f32,
+        _objective_fn: impl Fn(TrainingConfig) -> f32,
     ) -> Result<TrainingConfig> {
         // TODO: Implement hyperparameter optimization
         Err(anyhow!("Hyperparameter optimization not yet implemented"))

@@ -3,7 +3,7 @@
 //! This module provides a temporary wrapper to bridge the gap between
 //! the RDF/XML parser implementation and OxiRS native types.
 
-use crate::model::{Triple, Quad};
+use crate::model::{Quad};
 use crate::OxirsError;
 use crate::rdfxml::parser::RdfXmlParser;
 use std::io::Read;
@@ -20,7 +20,7 @@ pub fn parse_rdfxml<R: Read>(
     if let Some(base) = base_iri {
         parser = parser
             .with_base_iri(base)
-            .map_err(|e| OxirsError::Parse(format!("Invalid base IRI: {}", e)))?;
+            .map_err(|e| OxirsError::Parse(format!("Invalid base IRI: {e}")))?;
     }
     
     if lenient {
@@ -40,7 +40,7 @@ pub fn parse_rdfxml<R: Read>(
                     tracing::warn!("RDF/XML parse error (ignored): {}", e);
                     continue;
                 } else {
-                    return Err(OxirsError::Parse(format!("RDF/XML parse error: {}", e)));
+                    return Err(OxirsError::Parse(format!("RDF/XML parse error: {e}")));
                 }
             }
         }

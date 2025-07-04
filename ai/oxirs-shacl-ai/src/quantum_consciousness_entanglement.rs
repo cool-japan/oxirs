@@ -602,11 +602,17 @@ impl std::fmt::Debug for QuantumEntanglementValidationResult {
             .field("quantum_correlations", &self.quantum_correlations)
             .field("bell_measurements", &self.bell_measurements)
             .field("nonlocal_correlations", &self.nonlocal_correlations)
-            .field("instantaneous_communications", &self.instantaneous_communications)
+            .field(
+                "instantaneous_communications",
+                &self.instantaneous_communications,
+            )
             .field("coherence_metrics", &self.coherence_metrics)
             .field("error_corrections", &"<trait objects>")
             .field("quantum_confidence", &self.quantum_confidence)
-            .field("entanglement_amplification", &self.entanglement_amplification)
+            .field(
+                "entanglement_amplification",
+                &self.entanglement_amplification,
+            )
             .field("processing_time", &self.processing_time)
             .finish()
     }

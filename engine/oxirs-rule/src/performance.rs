@@ -1430,9 +1430,10 @@ impl HybridReasoningEngine {
 
         let results = match strategy_choice {
             "parallel" => {
-                // Add facts to parallel engine's fact store
-                // Note: This is a simplified implementation
-                // In practice, you'd need to manage the fact store properly
+                // Add facts to parallel engine's fact store before reasoning
+                if let Ok(mut facts) = self.parallel_engine.facts.lock() {
+                    facts.extend(new_facts);
+                }
                 self.parallel_engine.parallel_forward_chain()
             }
             "incremental" => self.incremental_engine.add_facts_incremental(new_facts),

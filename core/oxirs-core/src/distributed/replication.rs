@@ -411,8 +411,8 @@ struct PeerConnection {
 enum NetworkMessage {
     /// Incoming operation
     IncomingOp {
-        from_region: String,
-        op: ReplicationOp,
+        _from_region: String,
+        _op: ReplicationOp,
     },
     /// Connection event
     ConnectionEvent {
@@ -763,7 +763,7 @@ impl ReplicationManager {
             let mut rx = network.message_rx.lock().await;
             while let Some(msg) = rx.recv().await {
                 match msg {
-                    NetworkMessage::IncomingOp { from_region, op } => {
+                    NetworkMessage::IncomingOp { _from_region, _op } => {
                         // Handle in separate task to avoid blocking
                         let storage = storage.clone();
                         let state = state.clone();
@@ -772,8 +772,8 @@ impl ReplicationManager {
 
                         tokio::spawn(async move {
                             if let Err(e) = Self::handle_incoming_op_static(
-                                from_region,
-                                op,
+                                _from_region,
+                                _op,
                                 storage,
                                 state,
                                 resolver,
@@ -818,13 +818,83 @@ impl ReplicationManager {
         stats: Arc<RwLock<ReplicationStats>>,
     ) -> Result<(), OxirsError> {
         // Implementation similar to instance method
+        let mut stats_guard = stats.write().await;
+        stats_guard.ops_received += 1;
+        drop(stats_guard);
+
+        match &op {
+            ReplicationOp::Insert(versioned) | ReplicationOp::Delete(versioned) => {
+                let mut storage_guard = storage.write().await;
+                let mut state_guard = state.write().await;
+
+                // Check for conflicts
+                if let Some(existing) = storage_guard.triples.get(&versioned.triple) {
+                    if existing.version.is_concurrent(&versioned.version) {
+                        // Conflict detected
+                        let mut stats_guard = stats.write().await;
+                        stats_guard.conflicts_detected += 1;
+                        drop(stats_guard);
+
+                        // Resolve conflict
+                        let winner = resolver.resolve_conflict(existing, &versioned).await?;
+                        storage_guard.triples.insert(versioned.triple.clone(), winner);
+
+                        // Store conflict for later analysis
+                        storage_guard
+                            .conflicts
+                            .entry(versioned.triple.clone())
+                            .or_insert_with(Vec::new)
+                            .push(versioned.clone());
+                    } else if versioned.version.happens_before(&existing.version) {
+                        // Incoming is older, ignore
+                        return Ok(());
+                    } else {
+                        // Incoming is newer, apply
+                        storage_guard
+                            .triples
+                            .insert(versioned.triple.clone(), versioned.clone());
+                    }
+                } else {
+                    // No conflict, apply
+                    if matches!(op, ReplicationOp::Insert(_)) {
+                        storage_guard
+                            .triples
+                            .insert(versioned.triple.clone(), versioned.clone());
+                    }
+                }
+
+                // Update vector clock
+                state_guard.vector_clock.merge(&versioned.version);
+            }
+            ReplicationOp::Batch(ops) => {
+                for op_item in ops {
+                    Box::pin(Self::handle_incoming_op_static(
+                        from_region.clone(),
+                        op_item.clone(),
+                        storage.clone(),
+                        state.clone(),
+                        resolver.clone(),
+                        stats.clone(),
+                    )).await?;
+                }
+            }
+            ReplicationOp::Heartbeat(info) => {
+                let mut state_guard = state.write().await;
+                if let Some(peer) = state_guard.peer_states.get_mut(&from_region) {
+                    peer.last_seen = std::time::Instant::now();
+                    peer.lag_ms = info.lag_ms;
+                }
+            }
+            _ => {}
+        }
+
         Ok(())
     }
 
     /// Spawn heartbeat sender
     fn spawn_heartbeat_sender(&self) {
         let config = self.config.clone();
-        let state = self.state.clone();
+        let _state = self.state.clone();
         let network = self.network.clone();
 
         tokio::spawn(async move {
@@ -942,7 +1012,7 @@ impl ReplicationManager {
         let connections = self.network.connections.read().await;
         let mut futures = Vec::new();
 
-        for (region_id, conn) in connections.iter() {
+        for (_region_id, conn) in connections.iter() {
             let tx = conn.send_tx.clone();
             let op_clone = op.clone();
             let future = async move { tx.send(op_clone).await };

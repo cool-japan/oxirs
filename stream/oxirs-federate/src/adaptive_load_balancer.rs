@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 /// Load balancing strategy
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum LoadBalancingStrategy {
     /// Round-robin distribution
     RoundRobin,
@@ -165,9 +165,15 @@ impl ServiceMetrics {
         let load_factor = 1.0 - self.load_score;
         let response_time_factor = 1.0 / (self.avg_response_time.as_millis() as f64 + 1.0);
         let success_factor = self.success_rate;
-        let capacity_factor = (self.estimated_capacity - self.active_connections) as f64 / self.estimated_capacity as f64;
+        let capacity_factor = (self.estimated_capacity - self.active_connections) as f64
+            / self.estimated_capacity as f64;
 
-        health_factor * load_factor * response_time_factor * success_factor * capacity_factor * self.weight
+        health_factor
+            * load_factor
+            * response_time_factor
+            * success_factor
+            * capacity_factor
+            * self.weight
     }
 
     /// Update metrics from query execution
@@ -185,7 +191,8 @@ impl ServiceMetrics {
         self.avg_response_time = Duration::from_millis(updated_ms as u64);
 
         // Update success rate
-        self.success_rate = (self.recent_requests - self.recent_errors) as f64 / self.recent_requests as f64;
+        self.success_rate =
+            (self.recent_requests - self.recent_errors) as f64 / self.recent_requests as f64;
 
         // Update load score based on connections and response time
         let connection_load = self.active_connections as f64 / self.estimated_capacity as f64;
@@ -265,7 +272,10 @@ impl AdaptiveLoadBalancer {
             metrics.estimated_capacity = capacity;
         }
 
-        self.service_metrics.write().await.insert(service_id.clone(), metrics);
+        self.service_metrics
+            .write()
+            .await
+            .insert(service_id.clone(), metrics);
         info!("Registered service {} with load balancer", service_id);
     }
 
@@ -276,9 +286,13 @@ impl AdaptiveLoadBalancer {
     }
 
     /// Select the best service for a query
-    pub async fn select_service(&self, query_hash: Option<u64>, query_type: &str) -> Result<String> {
+    pub async fn select_service(
+        &self,
+        query_hash: Option<u64>,
+        query_type: &str,
+    ) -> Result<String> {
         let start_time = Instant::now();
-        
+
         // Check query affinity cache first
         if let Some(hash) = query_hash {
             if self.config.enable_query_affinity {
@@ -291,7 +305,9 @@ impl AdaptiveLoadBalancer {
 
         let service_id = match self.config.strategy {
             LoadBalancingStrategy::RoundRobin => self.round_robin_selection().await,
-            LoadBalancingStrategy::WeightedRoundRobin => self.weighted_round_robin_selection().await,
+            LoadBalancingStrategy::WeightedRoundRobin => {
+                self.weighted_round_robin_selection().await
+            }
             LoadBalancingStrategy::LeastConnections => self.least_connections_selection().await,
             LoadBalancingStrategy::LeastResponseTime => self.least_response_time_selection().await,
             LoadBalancingStrategy::Adaptive => self.adaptive_selection().await,
@@ -322,7 +338,8 @@ impl AdaptiveLoadBalancer {
 
         // Record selection statistics
         let selection_time = start_time.elapsed();
-        self.record_selection(service_id.clone(), selection_time).await;
+        self.record_selection(service_id.clone(), selection_time)
+            .await;
 
         Ok(service_id)
     }
@@ -337,17 +354,14 @@ impl AdaptiveLoadBalancer {
         let mut state = self.round_robin_state.write().await;
         let index = *state % services.len();
         *state = (*state + 1) % services.len();
-        
+
         Ok(services[index].clone())
     }
 
     /// Weighted round-robin service selection
     async fn weighted_round_robin_selection(&self) -> Result<String> {
         let metrics = self.service_metrics.read().await;
-        let available_services: Vec<_> = metrics
-            .values()
-            .filter(|m| m.is_available())
-            .collect();
+        let available_services: Vec<_> = metrics.values().filter(|m| m.is_available()).collect();
 
         if available_services.is_empty() {
             return Err(anyhow!("No available services"));
@@ -374,10 +388,7 @@ impl AdaptiveLoadBalancer {
     /// Least connections service selection
     async fn least_connections_selection(&self) -> Result<String> {
         let metrics = self.service_metrics.read().await;
-        let available_services: Vec<_> = metrics
-            .values()
-            .filter(|m| m.is_available())
-            .collect();
+        let available_services: Vec<_> = metrics.values().filter(|m| m.is_available()).collect();
 
         if available_services.is_empty() {
             return Err(anyhow!("No available services"));
@@ -394,10 +405,7 @@ impl AdaptiveLoadBalancer {
     /// Least response time service selection
     async fn least_response_time_selection(&self) -> Result<String> {
         let metrics = self.service_metrics.read().await;
-        let available_services: Vec<_> = metrics
-            .values()
-            .filter(|m| m.is_available())
-            .collect();
+        let available_services: Vec<_> = metrics.values().filter(|m| m.is_available()).collect();
 
         if available_services.is_empty() {
             return Err(anyhow!("No available services"));
@@ -414,10 +422,7 @@ impl AdaptiveLoadBalancer {
     /// Adaptive service selection based on multiple factors
     async fn adaptive_selection(&self) -> Result<String> {
         let metrics = self.service_metrics.read().await;
-        let available_services: Vec<_> = metrics
-            .values()
-            .filter(|m| m.is_available())
-            .collect();
+        let available_services: Vec<_> = metrics.values().filter(|m| m.is_available()).collect();
 
         if available_services.is_empty() {
             return Err(anyhow!("No available services"));
@@ -450,10 +455,7 @@ impl AdaptiveLoadBalancer {
     /// Load-aware service selection
     async fn load_aware_selection(&self) -> Result<String> {
         let metrics = self.service_metrics.read().await;
-        let available_services: Vec<_> = metrics
-            .values()
-            .filter(|m| m.is_available())
-            .collect();
+        let available_services: Vec<_> = metrics.values().filter(|m| m.is_available()).collect();
 
         if available_services.is_empty() {
             return Err(anyhow!("No available services"));
@@ -504,7 +506,8 @@ impl AdaptiveLoadBalancer {
         if let Some(entry) = cache.get(&query_hash) {
             // Check if entry is still valid and service is available
             if let Ok(elapsed) = entry.last_used.elapsed() {
-                if elapsed < Duration::from_secs(300) { // 5 minute TTL
+                if elapsed < Duration::from_secs(300) {
+                    // 5 minute TTL
                     let metrics = self.service_metrics.read().await;
                     if let Some(service_metrics) = metrics.get(&entry.service_id) {
                         if service_metrics.is_available() {
@@ -520,13 +523,13 @@ impl AdaptiveLoadBalancer {
     /// Update affinity cache
     async fn update_affinity_cache(&self, query_hash: u64, service_id: String) {
         let mut cache = self.affinity_cache.write().await;
-        
+
         // Clean cache if it's full
         if cache.len() >= self.config.affinity_cache_size {
             // Remove oldest entries
             let cutoff = SystemTime::now() - Duration::from_secs(300);
             cache.retain(|_, entry| entry.last_used > cutoff);
-            
+
             // If still full, remove random entries
             if cache.len() >= self.config.affinity_cache_size {
                 let keys_to_remove: Vec<_> = cache.keys().take(cache.len() / 10).cloned().collect();
@@ -556,8 +559,13 @@ impl AdaptiveLoadBalancer {
 
         // Add to performance history
         let mut history = self.performance_history.write().await;
-        history.push_back((service_id.to_string(), response_time, success, SystemTime::now()));
-        
+        history.push_back((
+            service_id.to_string(),
+            response_time,
+            success,
+            SystemTime::now(),
+        ));
+
         // Limit history size
         while history.len() > 10000 {
             history.pop_front();
@@ -590,11 +598,12 @@ impl AdaptiveLoadBalancer {
         let mut stats = self.statistics.write().await;
         stats.total_requests += 1;
         *stats.requests_per_service.entry(service_id).or_insert(0) += 1;
-        
+
         // Update average selection time
         let current_avg_ns = stats.avg_selection_time.as_nanos() as f64;
         let new_time_ns = selection_time.as_nanos() as f64;
-        let updated_avg_ns = (current_avg_ns * (stats.total_requests - 1) as f64 + new_time_ns) / stats.total_requests as f64;
+        let updated_avg_ns = (current_avg_ns * (stats.total_requests - 1) as f64 + new_time_ns)
+            / stats.total_requests as f64;
         stats.avg_selection_time = Duration::from_nanos(updated_avg_ns as u64);
     }
 
@@ -647,11 +656,13 @@ impl AdaptiveLoadBalancer {
 
         // Calculate performance baselines
         let mut service_performance: HashMap<String, (f64, usize)> = HashMap::new();
-        
+
         let cutoff = SystemTime::now() - self.config.performance_window;
         for (service_id, response_time, success, timestamp) in history.iter() {
             if *timestamp > cutoff && *success {
-                let (total_time, count) = service_performance.entry(service_id.clone()).or_insert((0.0, 0));
+                let (total_time, count) = service_performance
+                    .entry(service_id.clone())
+                    .or_insert((0.0, 0));
                 *total_time += response_time.as_millis() as f64;
                 *count += 1;
             }
@@ -667,14 +678,15 @@ impl AdaptiveLoadBalancer {
             return Ok(());
         }
 
-        let overall_avg = avg_response_times.values().sum::<f64>() / avg_response_times.len() as f64;
+        let overall_avg =
+            avg_response_times.values().sum::<f64>() / avg_response_times.len() as f64;
 
         // Adjust weights based on relative performance
         for (service_id, service_metrics) in metrics.iter_mut() {
             if let Some(&avg_time) = avg_response_times.get(&service_metrics.service_id) {
                 let performance_ratio = overall_avg / avg_time;
                 let target_weight = performance_ratio.min(2.0).max(0.1); // Limit weight range
-                
+
                 // Gradually adjust weight
                 let weight_diff = target_weight - service_metrics.weight;
                 service_metrics.weight += weight_diff * self.config.weight_adjustment_rate;
@@ -700,9 +712,10 @@ mod tests {
     #[tokio::test]
     async fn test_service_registration() {
         let lb = AdaptiveLoadBalancer::default();
-        
+
         lb.register_service("service-1".to_string(), Some(50)).await;
-        lb.register_service("service-2".to_string(), Some(100)).await;
+        lb.register_service("service-2".to_string(), Some(100))
+            .await;
 
         let metrics = lb.get_service_metrics().await;
         assert_eq!(metrics.len(), 2);
@@ -715,7 +728,7 @@ mod tests {
         let mut config = LoadBalancerConfig::default();
         config.strategy = LoadBalancingStrategy::RoundRobin;
         let lb = AdaptiveLoadBalancer::new(config);
-        
+
         lb.register_service("service-1".to_string(), None).await;
         lb.register_service("service-2".to_string(), None).await;
 
@@ -731,13 +744,17 @@ mod tests {
     #[tokio::test]
     async fn test_adaptive_selection() {
         let lb = AdaptiveLoadBalancer::default();
-        
-        lb.register_service("fast-service".to_string(), Some(100)).await;
-        lb.register_service("slow-service".to_string(), Some(50)).await;
+
+        lb.register_service("fast-service".to_string(), Some(100))
+            .await;
+        lb.register_service("slow-service".to_string(), Some(50))
+            .await;
 
         // Simulate different performance
-        lb.record_execution("fast-service", Duration::from_millis(50), true).await;
-        lb.record_execution("slow-service", Duration::from_millis(200), true).await;
+        lb.record_execution("fast-service", Duration::from_millis(50), true)
+            .await;
+        lb.record_execution("slow-service", Duration::from_millis(200), true)
+            .await;
 
         let selected = lb.select_service(None, "test").await.unwrap();
         // Should prefer the faster service
@@ -747,7 +764,7 @@ mod tests {
     #[tokio::test]
     async fn test_service_metrics_update() {
         let mut metrics = ServiceMetrics::new("test-service".to_string());
-        
+
         assert_eq!(metrics.success_rate, 1.0);
         assert_eq!(metrics.recent_requests, 0);
 

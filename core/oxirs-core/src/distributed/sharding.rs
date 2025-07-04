@@ -387,7 +387,7 @@ impl ShardManager {
         let shard_id = self.get_shard_for_triple(&triple);
 
         // Update local shard if we have it
-        if let Some(mut shard) = self.local_shards.get_mut(&shard_id) {
+        if let Some(shard) = self.local_shards.get_mut(&shard_id) {
             shard.insert(&triple);
 
             // Update statistics
@@ -552,7 +552,7 @@ impl ShardManager {
 
         // Plan migrations from overloaded to underloaded
         for (over_shard, over_size) in overloaded {
-            for (under_shard, under_size) in &underloaded {
+            for (_under_shard, under_size) in &underloaded {
                 let to_move = (*over_size - avg_size).min(avg_size - *under_size);
                 if to_move > 0 {
                     // In a real implementation, would select specific triples to move
@@ -629,7 +629,7 @@ impl ShardRouter {
     }
 
     /// Route a SPARQL query to appropriate shards
-    pub fn route_query(&self, query: &str) -> Result<Vec<ShardId>> {
+    pub fn route_query(&self, _query: &str) -> Result<Vec<ShardId>> {
         // In a real implementation, would parse SPARQL and analyze patterns
         // For now, return all shards for complex queries
         Ok((0..self.manager.config.shard_count)

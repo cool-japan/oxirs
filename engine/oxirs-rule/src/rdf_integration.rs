@@ -245,25 +245,32 @@ pub fn convert_term(term: &RuleTerm, namespaces: &NamespaceManager) -> Result<Rd
             Ok(RdfTerm::Variable(var))
         }
         RuleTerm::Constant(value) => {
-            // Try to parse as IRI
-            let expanded = namespaces.expand(value)?;
-
-            // Check if it looks like an IRI
-            if expanded.starts_with("http://")
-                || expanded.starts_with("https://")
-                || expanded.starts_with("urn:")
-                || expanded.starts_with("file://")
+            // Check if it's already a full IRI
+            if value.starts_with("http://")
+                || value.starts_with("https://")
+                || value.starts_with("urn:")
+                || value.starts_with("file://")
             {
-                let node = NamedNode::new(&expanded)?;
+                let node = NamedNode::new(value)?;
                 Ok(RdfTerm::NamedNode(node))
-            } else if expanded.starts_with("_:") {
+            } else if value.starts_with("_:") {
                 // Blank node
-                let blank = BlankNode::new(&expanded[2..])?;
+                let blank = BlankNode::new(&value[2..])?;
                 Ok(RdfTerm::BlankNode(blank))
             } else {
-                // Default to literal if not an IRI
-                let lit = Literal::new_simple_literal(expanded);
-                Ok(RdfTerm::Literal(lit))
+                // Try to expand as prefixed name
+                match namespaces.expand(value) {
+                    Ok(expanded_iri) => {
+                        // Successfully expanded to IRI, create NamedNode
+                        let node = NamedNode::new(&expanded_iri)?;
+                        Ok(RdfTerm::NamedNode(node))
+                    }
+                    Err(_) => {
+                        // Failed to expand, treat as literal
+                        let lit = Literal::new_simple_literal(value);
+                        Ok(RdfTerm::Literal(lit))
+                    }
+                }
             }
         }
         RuleTerm::Literal(value) => {

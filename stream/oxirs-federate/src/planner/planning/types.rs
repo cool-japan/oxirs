@@ -545,6 +545,8 @@ pub enum QueryType {
     Construct,
     Ask,
     Describe,
+    Insert,
+    Delete,
     Update,
     Sparql,
     GraphQL,
@@ -579,7 +581,7 @@ pub struct FilterExpression {
 }
 
 /// Execution plan for federated queries
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionPlan {
     pub query_id: String,
     pub steps: Vec<ExecutionStep>,
@@ -592,7 +594,7 @@ pub struct ExecutionPlan {
 }
 
 /// Individual step in an execution plan
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionStep {
     pub step_id: String,
     pub step_type: StepType,
@@ -605,7 +607,7 @@ pub struct ExecutionStep {
 }
 
 /// Types of execution steps
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum StepType {
     ServiceQuery,
     GraphQLQuery,

@@ -726,7 +726,7 @@ impl IndexedGraph {
             .fold(|| init.clone(), |acc, triple| fold_fn(acc, &triple))
             .reduce(
                 || init.clone(),
-                |acc1, acc2| {
+                |acc1, _acc2| {
                     // For a proper fold, we need a reduce function that makes sense
                     // This is a simplified version - in practice, you'd want a proper combine function
                     acc1
@@ -936,9 +936,9 @@ mod tests {
         // Insert some triples
         for i in 0..10 {
             let triple = create_test_triple(
-                &format!("http://example.org/s{}", i),
+                &format!("http://example.org/s{i}"),
                 "http://example.org/p1",
-                &format!("object{}", i),
+                &format!("object{i}"),
             );
             graph.insert(&triple);
         }
@@ -980,9 +980,9 @@ mod tests {
             let graph_clone = Arc::clone(&graph);
             let handle = thread::spawn(move || {
                 let triple = create_test_triple(
-                    &format!("http://example.org/s{}", i),
+                    &format!("http://example.org/s{i}"),
                     "http://example.org/p1",
-                    &format!("o{}", i),
+                    &format!("o{i}"),
                 );
                 graph_clone.insert(&triple)
             });

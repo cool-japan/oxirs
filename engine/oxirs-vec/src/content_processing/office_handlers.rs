@@ -205,7 +205,7 @@ impl DocxHandler {
                                 page: None,
                                 section: None,
                                 char_offset: None,
-                                line: Some(i as u32 + 1),
+                                line: Some(i + 1),
                                 column: None,
                             },
                         });

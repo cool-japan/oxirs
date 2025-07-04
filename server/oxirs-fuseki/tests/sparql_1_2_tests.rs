@@ -6,11 +6,12 @@ use std::collections::HashMap;
 
 // Test data structures for SPARQL 1.2 features
 use oxirs_arq::extensions::CustomAggregate;
-use oxirs_fuseki::handlers::sparql::{Sparql12Features, extract_quoted_triple_patterns, OptimizedPath};
+use oxirs_fuseki::handlers::sparql::{extract_quoted_triple_patterns, Sparql12Features};
 use oxirs_fuseki::handlers::sparql_refactored::{
-    contains_sparql_star_features, contains_aggregation_functions, AggregationEngine, BindValuesProcessor, PropertyPathOptimizer,
-    ServiceDelegator, SubqueryOptimizer,
+    contains_aggregation_functions, contains_sparql_star_features, AggregationEngine,
+    BindValuesProcessor, PropertyPathOptimizer, ServiceDelegator, SubqueryOptimizer,
 };
+use oxirs_fuseki::property_path_optimizer::OptimizedPath;
 
 #[cfg(test)]
 mod property_path_tests {
@@ -84,16 +85,22 @@ mod aggregation_tests {
         let engine = AggregationEngine::new();
 
         // Check standard SPARQL 1.1 functions are supported
-        assert!(engine.supported_functions.contains("COUNT"));
-        assert!(engine.supported_functions.contains("SUM"));
-        assert!(engine.supported_functions.contains("AVG"));
-        assert!(engine.supported_functions.contains("GROUP_CONCAT"));
+        assert!(engine.supported_functions.contains(&"COUNT".to_string()));
+        assert!(engine.supported_functions.contains(&"SUM".to_string()));
+        assert!(engine.supported_functions.contains(&"AVG".to_string()));
+        assert!(engine
+            .supported_functions
+            .contains(&"GROUP_CONCAT".to_string()));
 
         // Check SPARQL 1.2 enhanced functions
-        assert!(engine.supported_functions.contains("MEDIAN"));
-        assert!(engine.supported_functions.contains("STDDEV"));
-        assert!(engine.supported_functions.contains("PERCENTILE"));
-        assert!(engine.supported_functions.contains("DISTINCT_COUNT"));
+        assert!(engine.supported_functions.contains(&"MEDIAN".to_string()));
+        assert!(engine.supported_functions.contains(&"STDDEV".to_string()));
+        assert!(engine
+            .supported_functions
+            .contains(&"PERCENTILE".to_string()));
+        assert!(engine
+            .supported_functions
+            .contains(&"DISTINCT_COUNT".to_string()));
     }
 
     #[tokio::test]
@@ -103,8 +110,8 @@ mod aggregation_tests {
         // Test that the aggregation engine can be created and has basic functionality
         // Note: CustomAggregate is a trait, not a struct, so direct instantiation
         // would require implementing the trait. For now, test basic engine functionality.
-        assert!(engine.supported_functions.contains("COUNT"));
-        assert!(engine.supported_functions.contains("SUM"));
+        assert!(engine.supported_functions.contains(&"COUNT".to_string()));
+        assert!(engine.supported_functions.contains(&"SUM".to_string()));
 
         // In a real implementation, custom aggregates would be registered through
         // trait implementations rather than struct literals
@@ -135,11 +142,11 @@ mod subquery_tests {
         assert!(optimizer
             .rewrite_rules
             .iter()
-            .any(|rule| rule.name == "EXISTS_TO_JOIN"));
+            .any(|rule| rule == "EXISTS_TO_JOIN"));
         assert!(optimizer
             .rewrite_rules
             .iter()
-            .any(|rule| rule.name == "SUBQUERY_PULLUP"));
+            .any(|rule| rule == "SUBQUERY_PULLUP"));
     }
 
     #[tokio::test]
@@ -497,24 +504,21 @@ mod sparql_star_tests {
     async fn test_quoted_triple_pattern_extraction() {
         // Single quoted triple pattern
         let query = "SELECT ?s WHERE { << ?s ?p ?o >> :confidence ?value }";
-        let patterns =
-            extract_quoted_triple_patterns(query).unwrap();
+        let patterns = extract_quoted_triple_patterns(query).unwrap();
         assert_eq!(patterns.len(), 1);
         assert_eq!(patterns[0], "<< ?s ?p ?o >>");
 
         // Multiple quoted triple patterns
         let query =
             "SELECT ?s WHERE { << ?s ?p ?o >> :confidence ?c . << ?x ?y ?z >> :source ?src }";
-        let patterns =
-            extract_quoted_triple_patterns(query).unwrap();
+        let patterns = extract_quoted_triple_patterns(query).unwrap();
         assert_eq!(patterns.len(), 2);
         assert!(patterns.contains(&"<< ?s ?p ?o >>".to_string()));
         assert!(patterns.contains(&"<< ?x ?y ?z >>".to_string()));
 
         // Nested quoted triples
         let query = "SELECT ?s WHERE { << << ?a ?b ?c >> ?p ?o >> :confidence ?value }";
-        let patterns =
-            extract_quoted_triple_patterns(query).unwrap();
+        let patterns = extract_quoted_triple_patterns(query).unwrap();
         assert_eq!(patterns.len(), 2);
         assert!(patterns.contains(&"<< ?a ?b ?c >>".to_string()));
         assert!(patterns.contains(&"<< << ?a ?b ?c >> ?p ?o >>".to_string()));
@@ -587,8 +591,7 @@ mod sparql_star_tests {
         assert!(contains_sparql_star_features(query));
 
         // Extract quoted triple patterns
-        let patterns =
-            extract_quoted_triple_patterns(query).unwrap();
+        let patterns = extract_quoted_triple_patterns(query).unwrap();
         assert_eq!(patterns.len(), 2);
         assert!(patterns.contains(&"<< ?person foaf:knows ?friend >>".to_string()));
         assert!(patterns.contains(&"<< ?friend foaf:age ?age >>".to_string()));

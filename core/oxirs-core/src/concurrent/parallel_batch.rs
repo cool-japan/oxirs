@@ -604,7 +604,7 @@ mod tests {
         processor.cancel();
 
         // Wait for completion
-        let result = handle.join().unwrap();
+        let _result = handle.join().unwrap();
 
         // Should have processed some but not all
         let stats = processor.stats();

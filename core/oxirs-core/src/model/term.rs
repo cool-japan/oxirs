@@ -126,12 +126,16 @@ fn validate_variable_name(name: &str) -> Result<(), OxirsError> {
 ///
 /// Blank nodes are local identifiers used in RDF graphs that don't have global meaning.
 /// Supports both named identifiers and efficient numerical IDs.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct BlankNode {
     content: BlankNodeContent,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 enum BlankNodeContent {
     Named(String),
     Anonymous { id: u128, str: String },
@@ -428,7 +432,9 @@ impl<'a> From<&'a BlankNode> for BlankNodeRef<'a> {
 /// A SPARQL variable
 ///
 /// Variables are used in SPARQL queries and updates to represent unknown values.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct Variable {
     name: String,
 }
@@ -506,7 +512,9 @@ impl RdfTerm for Variable {
 ///
 /// This enum can hold any type of RDF term and is used when the specific
 /// type is not known at compile time.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Term {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -714,7 +722,9 @@ impl From<Object> for Term {
 }
 
 /// Union type for terms that can be subjects in RDF triples
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Subject {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -770,7 +780,9 @@ impl RdfTerm for Subject {
 impl SubjectTerm for Subject {}
 
 /// Union type for terms that can be predicates in RDF triples
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Predicate {
     NamedNode(NamedNode),
     Variable(Variable),
@@ -808,7 +820,9 @@ impl RdfTerm for Predicate {
 impl PredicateTerm for Predicate {}
 
 /// Union type for terms that can be objects in RDF triples
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Object {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -1003,6 +1017,7 @@ impl<'a> From<&'a Term> for TermRef<'a> {
             Term::BlankNode(b) => TermRef::BlankNode(b.as_ref()),
             Term::Literal(l) => TermRef::Literal(l.as_ref()),
             Term::Variable(v) => TermRef::Variable(v),
+            #[allow(unused_variables)]
             Term::QuotedTriple(t) => {
                 #[cfg(feature = "rdf-star")]
                 {

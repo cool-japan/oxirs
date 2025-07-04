@@ -481,7 +481,7 @@ impl BetaJoinNode {
             let matches = self
                 .memory
                 .find_matches_indexed(&token, true, &self.join_variables);
-
+            
             for right_token in matches {
                 if let Ok(joined) = self.try_join(&token, &right_token) {
                     results.push(joined);
@@ -495,7 +495,7 @@ impl BetaJoinNode {
             let matches = self
                 .memory
                 .find_matches_indexed(&token, false, &self.join_variables);
-
+            
             for left_token in matches {
                 if let Ok(joined) = self.try_join(&left_token, &token) {
                     results.push(joined);

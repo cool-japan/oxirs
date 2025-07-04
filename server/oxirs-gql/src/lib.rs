@@ -90,8 +90,9 @@ impl RdfStore {
                     let count_var = Variable::new("count")
                         .map_err(|e| anyhow::anyhow!("Failed to create count variable: {}", e))?;
                     if let Some(Term::Literal(lit)) = solution.get(&count_var) {
-                        let count = lit.value().parse::<usize>()
-                            .map_err(|e| anyhow::anyhow!("Failed to parse count value '{}': {}", lit.value(), e))?;
+                        let count = lit.value().parse::<usize>().map_err(|e| {
+                            anyhow::anyhow!("Failed to parse count value '{}': {}", lit.value(), e)
+                        })?;
                         return Ok(count);
                     }
                 }
@@ -323,7 +324,7 @@ pub use simple_juniper_server::{
 
 // Intelligent query caching
 pub use intelligent_query_cache::{
-    IntelligentQueryCache, IntelligentCacheConfig, QueryPattern, QueryUsageStats
+    IntelligentCacheConfig, IntelligentQueryCache, QueryPattern, QueryUsageStats,
 };
 
 // Advanced Juniper server with full Hyper v1 support
@@ -382,8 +383,10 @@ impl GraphQLServer {
 
     pub fn new_with_mock(store: Arc<MockStore>) -> Result<Self> {
         // For backward compatibility during transition
-        let rdf_store = Arc::new(RdfStore::new()
-            .map_err(|e| anyhow::anyhow!("Failed to create RDF store for mock: {}", e))?);
+        let rdf_store = Arc::new(
+            RdfStore::new()
+                .map_err(|e| anyhow::anyhow!("Failed to create RDF store for mock: {}", e))?,
+        );
         Ok(Self {
             config: GraphQLConfig::default(),
             store: rdf_store,
@@ -613,3 +616,6 @@ impl GraphQLServer {
         server.start(socket_addr).await
     }
 }
+
+// Comprehensive module declarations moved to top of file to avoid duplicates
+

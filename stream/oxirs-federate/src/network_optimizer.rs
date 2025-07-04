@@ -634,7 +634,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_statistics_tracking() {
-        let optimizer = NetworkOptimizer::new();
+        // Create optimizer with lower compression threshold
+        let config = NetworkOptimizerConfig {
+            compression_threshold: 10, // Lower threshold so test data gets compressed
+            ..Default::default()
+        };
+        let optimizer = NetworkOptimizer::with_config(config);
         let test_data = b"Test data for statistics tracking.";
 
         // Perform some compressions

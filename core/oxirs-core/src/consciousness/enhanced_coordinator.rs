@@ -3,11 +3,7 @@
 //! This module provides advanced coordination between all consciousness components,
 //! implementing ultra-advanced integration patterns and optimization strategies.
 
-use super::{
-    ConsciousnessModule, EmotionalState, DreamState, QuantumConsciousnessState,
-    EmotionalLearningNetwork, DreamProcessor, MetaConsciousness, ConsciousnessMessage,
-    MessageType, IntegrationSyncState,
-};
+use super::{ConsciousnessModule, EmotionalState, IntegrationSyncState, MetaConsciousness};
 use crate::query::algebra::AlgebraTriplePattern;
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
@@ -178,11 +174,14 @@ pub enum SyncEventType {
 /// Trait for consciousness optimization algorithms
 pub trait ConsciousnessOptimizer: std::fmt::Debug + Send + Sync {
     /// Apply optimization to consciousness configuration
-    fn optimize(&self, consciousness: &mut ConsciousnessModule) -> Result<OptimizationResult, OxirsError>;
-    
+    fn optimize(
+        &self,
+        consciousness: &mut ConsciousnessModule,
+    ) -> Result<OptimizationResult, OxirsError>;
+
     /// Get optimizer name
     fn name(&self) -> &str;
-    
+
     /// Get expected performance improvement
     fn expected_improvement(&self) -> f64;
 }
@@ -206,7 +205,7 @@ impl EnhancedConsciousnessCoordinator {
     /// Create a new enhanced consciousness coordinator
     pub fn new(consciousness: Arc<RwLock<ConsciousnessModule>>) -> Self {
         let meta_consciousness = Arc::new(RwLock::new(MetaConsciousness::new()));
-        
+
         Self {
             consciousness,
             meta_consciousness,
@@ -265,7 +264,11 @@ impl EnhancedConsciousnessCoordinator {
             "dream_integration".to_string(),
             IntegrationPattern {
                 name: "Dream State Integration".to_string(),
-                components: vec!["dream".to_string(), "quantum".to_string(), "emotional".to_string()],
+                components: vec![
+                    "dream".to_string(),
+                    "quantum".to_string(),
+                    "emotional".to_string(),
+                ],
                 sync_requirements: SyncRequirements {
                     max_sync_latency: Duration::from_millis(100),
                     required_coherence: 0.9,
@@ -355,19 +358,19 @@ impl EnhancedConsciousnessCoordinator {
 
         // Analyze query patterns to determine optimal integration approach
         let pattern_analysis = self.analyze_patterns(patterns)?;
-        
+
         // Select optimal integration pattern
         let selected_pattern = self.select_integration_pattern(&pattern_analysis)?;
-        
+
         // Synchronize components according to selected pattern
         self.synchronize_components(&selected_pattern)?;
-        
+
         // Apply consciousness optimizations
         let optimization_results = self.apply_optimizations()?;
-        
+
         // Update performance metrics
         self.update_pattern_metrics(&selected_pattern.name, &optimization_results)?;
-        
+
         // Create evolution checkpoint
         self.create_evolution_checkpoint()?;
 
@@ -381,16 +384,23 @@ impl EnhancedConsciousnessCoordinator {
     }
 
     /// Analyze query patterns to determine integration requirements
-    fn analyze_patterns(&self, patterns: &[AlgebraTriplePattern]) -> Result<PatternAnalysis, OxirsError> {
+    fn analyze_patterns(
+        &self,
+        patterns: &[AlgebraTriplePattern],
+    ) -> Result<PatternAnalysis, OxirsError> {
         let complexity = self.calculate_pattern_complexity(patterns);
         let entanglement_potential = self.calculate_entanglement_potential(patterns);
         let emotional_relevance = self.calculate_emotional_relevance(patterns);
-        
+
         Ok(PatternAnalysis {
             complexity_score: complexity,
             entanglement_potential,
             emotional_relevance,
-            recommended_components: self.recommend_components(complexity, entanglement_potential, emotional_relevance),
+            recommended_components: self.recommend_components(
+                complexity,
+                entanglement_potential,
+                emotional_relevance,
+            ),
             sync_requirements: self.calculate_sync_requirements(complexity),
         })
     }
@@ -417,11 +427,9 @@ impl EnhancedConsciousnessCoordinator {
     /// Calculate pattern diversity score
     fn calculate_pattern_diversity(&self, patterns: &[AlgebraTriplePattern]) -> f64 {
         // Use predicate diversity as a proxy for pattern complexity
-        let unique_predicates: std::collections::HashSet<_> = patterns
-            .iter()
-            .map(|p| &p.predicate)
-            .collect();
-        
+        let unique_predicates: std::collections::HashSet<_> =
+            patterns.iter().map(|p| &p.predicate).collect();
+
         if patterns.is_empty() {
             0.0
         } else {
@@ -433,10 +441,10 @@ impl EnhancedConsciousnessCoordinator {
     fn calculate_entanglement_potential(&self, patterns: &[AlgebraTriplePattern]) -> f64 {
         let pattern_count = patterns.len() as f64;
         let base_potential = (pattern_count / 20.0).min(1.0);
-        
+
         // Higher potential for patterns with shared variables
         let shared_variable_bonus = self.calculate_shared_variable_bonus(patterns);
-        
+
         (base_potential + shared_variable_bonus * 0.3).min(1.0)
     }
 
@@ -467,7 +475,12 @@ impl EnhancedConsciousnessCoordinator {
     }
 
     /// Recommend components for integration based on analysis
-    fn recommend_components(&self, complexity: f64, entanglement: f64, emotional: f64) -> Vec<String> {
+    fn recommend_components(
+        &self,
+        complexity: f64,
+        entanglement: f64,
+        emotional: f64,
+    ) -> Vec<String> {
         let mut components = vec!["quantum".to_string()]; // Always include quantum
 
         if emotional > 0.5 {
@@ -496,7 +509,10 @@ impl EnhancedConsciousnessCoordinator {
     }
 
     /// Select optimal integration pattern based on analysis
-    fn select_integration_pattern(&self, analysis: &PatternAnalysis) -> Result<IntegrationPattern, OxirsError> {
+    fn select_integration_pattern(
+        &self,
+        analysis: &PatternAnalysis,
+    ) -> Result<IntegrationPattern, OxirsError> {
         let mut best_pattern = None;
         let mut best_score = 0.0;
 
@@ -508,18 +524,24 @@ impl EnhancedConsciousnessCoordinator {
             }
         }
 
-        best_pattern.ok_or_else(|| OxirsError::Query("No suitable integration pattern found".to_string()))
+        best_pattern
+            .ok_or_else(|| OxirsError::Query("No suitable integration pattern found".to_string()))
     }
 
     /// Calculate pattern suitability score
-    fn calculate_pattern_score(&self, pattern: &IntegrationPattern, analysis: &PatternAnalysis) -> f64 {
+    fn calculate_pattern_score(
+        &self,
+        pattern: &IntegrationPattern,
+        analysis: &PatternAnalysis,
+    ) -> f64 {
         let mut score = 0.0;
 
         // Check if required components are included
-        let component_match = analysis.recommended_components
+        let component_match = analysis
+            .recommended_components
             .iter()
             .all(|comp| pattern.components.contains(comp));
-        
+
         if !component_match {
             return 0.0; // Pattern doesn't include required components
         }
@@ -533,8 +555,12 @@ impl EnhancedConsciousnessCoordinator {
         for condition in &pattern.activation_conditions {
             let condition_met = match condition.condition_type {
                 ConditionType::QueryComplexity => analysis.complexity_score >= condition.threshold,
-                ConditionType::QuantumCoherence => analysis.entanglement_potential >= condition.threshold,
-                ConditionType::EmotionalIntensity => analysis.emotional_relevance >= condition.threshold,
+                ConditionType::QuantumCoherence => {
+                    analysis.entanglement_potential >= condition.threshold
+                }
+                ConditionType::EmotionalIntensity => {
+                    analysis.emotional_relevance >= condition.threshold
+                }
                 _ => true, // Other conditions assumed met for now
             };
 
@@ -603,17 +629,19 @@ impl EnhancedConsciousnessCoordinator {
             let avg_improvement: f64 = optimization_results
                 .iter()
                 .map(|r| r.performance_gain)
-                .sum::<f64>() / optimization_results.len().max(1) as f64;
+                .sum::<f64>()
+                / optimization_results.len().max(1) as f64;
 
-            pattern.performance_metrics.execution_improvement = 
+            pattern.performance_metrics.execution_improvement =
                 pattern.performance_metrics.execution_improvement * 0.8 + avg_improvement * 0.2;
 
             let avg_confidence: f64 = optimization_results
                 .iter()
                 .map(|r| r.confidence)
-                .sum::<f64>() / optimization_results.len().max(1) as f64;
+                .sum::<f64>()
+                / optimization_results.len().max(1) as f64;
 
-            pattern.performance_metrics.success_rate = 
+            pattern.performance_metrics.success_rate =
                 pattern.performance_metrics.success_rate * 0.9 + avg_confidence * 0.1;
         }
 
@@ -646,7 +674,7 @@ impl EnhancedConsciousnessCoordinator {
     /// Calculate emotional distribution
     fn calculate_emotional_distribution(&self) -> Result<HashMap<EmotionalState, f64>, OxirsError> {
         let mut distribution = HashMap::new();
-        
+
         if let Ok(consciousness) = self.consciousness.read() {
             distribution.insert(consciousness.emotional_state.clone(), 1.0);
         }
@@ -656,20 +684,21 @@ impl EnhancedConsciousnessCoordinator {
 
     /// Calculate recent performance improvements
     fn calculate_recent_improvements(&self) -> Vec<PerformanceImprovement> {
-        vec![
-            PerformanceImprovement {
-                area: "Integration Coordination".to_string(),
-                improvement_percentage: 15.0,
-                confidence: 0.85,
-                method: "Enhanced Consciousness Coordination".to_string(),
-            }
-        ]
+        vec![PerformanceImprovement {
+            area: "Integration Coordination".to_string(),
+            improvement_percentage: 15.0,
+            confidence: 0.85,
+            method: "Enhanced Consciousness Coordination".to_string(),
+        }]
     }
 
     /// Calculate current coherence level
     fn calculate_current_coherence(&self) -> Result<f64, OxirsError> {
         if let Ok(consciousness) = self.consciousness.read() {
-            let quantum_coherence = consciousness.quantum_consciousness.get_quantum_metrics().coherence_quality;
+            let quantum_coherence = consciousness
+                .quantum_consciousness
+                .get_quantum_metrics()
+                .coherence_quality;
             let integration_coherence = consciousness.integration_level;
             Ok((quantum_coherence + integration_coherence) / 2.0)
         } else {
@@ -678,7 +707,10 @@ impl EnhancedConsciousnessCoordinator {
     }
 
     /// Calculate performance improvement for pattern
-    fn calculate_performance_improvement(&self, pattern: &IntegrationPattern) -> Result<f64, OxirsError> {
+    fn calculate_performance_improvement(
+        &self,
+        pattern: &IntegrationPattern,
+    ) -> Result<f64, OxirsError> {
         Ok(pattern.performance_metrics.execution_improvement)
     }
 }
@@ -747,10 +779,15 @@ impl QuantumCoherenceOptimizer {
 }
 
 impl ConsciousnessOptimizer for QuantumCoherenceOptimizer {
-    fn optimize(&self, consciousness: &mut ConsciousnessModule) -> Result<OptimizationResult, OxirsError> {
+    fn optimize(
+        &self,
+        consciousness: &mut ConsciousnessModule,
+    ) -> Result<OptimizationResult, OxirsError> {
         // Optimize quantum coherence levels
-        let _ = consciousness.quantum_consciousness.apply_quantum_error_correction();
-        
+        let _ = consciousness
+            .quantum_consciousness
+            .apply_quantum_error_correction();
+
         Ok(OptimizationResult {
             method: "Quantum Coherence Optimization".to_string(),
             performance_gain: 0.12,
@@ -780,10 +817,13 @@ impl EmotionalBalanceOptimizer {
 }
 
 impl ConsciousnessOptimizer for EmotionalBalanceOptimizer {
-    fn optimize(&self, consciousness: &mut ConsciousnessModule) -> Result<OptimizationResult, OxirsError> {
+    fn optimize(
+        &self,
+        consciousness: &mut ConsciousnessModule,
+    ) -> Result<OptimizationResult, OxirsError> {
         // Balance emotional state for optimal performance
         let current_influence = consciousness.emotional_influence();
-        
+
         if current_influence > 1.4 {
             consciousness.return_to_calm();
         } else if current_influence < 0.9 {
@@ -819,7 +859,10 @@ impl IntegrationDepthOptimizer {
 }
 
 impl ConsciousnessOptimizer for IntegrationDepthOptimizer {
-    fn optimize(&self, consciousness: &mut ConsciousnessModule) -> Result<OptimizationResult, OxirsError> {
+    fn optimize(
+        &self,
+        consciousness: &mut ConsciousnessModule,
+    ) -> Result<OptimizationResult, OxirsError> {
         // Optimize integration between consciousness components
         consciousness.optimize_performance();
 
@@ -852,10 +895,13 @@ impl PatternMemoryOptimizer {
 }
 
 impl ConsciousnessOptimizer for PatternMemoryOptimizer {
-    fn optimize(&self, consciousness: &mut ConsciousnessModule) -> Result<OptimizationResult, OxirsError> {
+    fn optimize(
+        &self,
+        consciousness: &mut ConsciousnessModule,
+    ) -> Result<OptimizationResult, OxirsError> {
         // Optimize pattern memory and caching
         let metrics = consciousness.get_performance_metrics();
-        
+
         let improvement = if metrics.cache_hit_rate < 0.7 {
             0.15
         } else {

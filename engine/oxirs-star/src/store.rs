@@ -565,9 +565,15 @@ impl StarStore {
         crate::validate_nesting_depth(&triple.object, self.config.max_nesting_depth)?;
 
         // Insert into appropriate storage
+        eprintln!(
+            "DEBUG INSERT: Triple contains quoted triples: {}",
+            triple.contains_quoted_triples()
+        );
         if triple.contains_quoted_triples() {
+            eprintln!("DEBUG INSERT: Inserting as star triple");
             self.insert_star_triple(triple)?;
         } else {
+            eprintln!("DEBUG INSERT: Inserting as regular triple");
             self.insert_regular_triple(triple)?;
         }
 
@@ -588,16 +594,22 @@ impl StarStore {
 
     /// Insert a regular RDF triple (no quoted triples) into core store
     fn insert_regular_triple(&self, triple: &StarTriple) -> StarResult<()> {
-        debug!("Inserting regular triple into core store");
+        eprintln!("DEBUG: Inserting regular triple into core store");
 
         // Convert StarTriple to core RDF triple
         let core_triple = self.convert_to_core_triple(triple)?;
+        eprintln!("DEBUG: Converted to core triple successfully");
 
         // Insert into core store (convert triple to quad in default graph)
         let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
+        eprintln!("DEBUG: Created core quad for insertion: {:?}", core_quad);
         let mut core_store = self.core_store.write().unwrap();
-        CoreStore::insert_quad(&mut *core_store, core_quad).map_err(|e| StarError::CoreError(e))?;
+        let result = CoreStore::insert_quad(&mut *core_store, core_quad)
+            .map_err(|e| StarError::CoreError(e));
+        eprintln!("DEBUG: Core store insert result: {:?}", result);
+        result?;
 
+        eprintln!("DEBUG: Successfully inserted regular triple");
         Ok(())
     }
 
@@ -802,6 +814,12 @@ impl StarStore {
         let span = span!(Level::DEBUG, "remove_triple");
         let _enter = span.enter();
 
+        eprintln!("DEBUG: Attempting to remove triple: {}", triple);
+        eprintln!(
+            "DEBUG: Triple contains quoted triples: {}",
+            triple.contains_quoted_triples()
+        );
+
         // First try to remove from star triples
         if triple.contains_quoted_triples() {
             let mut star_triples = self.star_triples.write().unwrap();
@@ -842,15 +860,30 @@ impl StarStore {
             }
         } else {
             // Try to remove from core store for regular triples
+            eprintln!("DEBUG: Attempting to remove regular triple from core store");
             let mut core_store = self.core_store.write().unwrap();
             if let Ok(core_triple) = self.convert_to_core_triple(triple) {
+                eprintln!("DEBUG: Successfully converted to core triple");
                 let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
-                if let Ok(removed) = core_store.remove_quad(&core_quad) {
-                    if removed {
-                        debug!("Removed regular triple: {}", triple);
-                        return Ok(true);
+                eprintln!("DEBUG: Created core quad: {:?}", core_quad);
+                match CoreStore::remove_quad(&mut *core_store, &core_quad) {
+                    Ok(removed) => {
+                        eprintln!("DEBUG: Core store remove_quad returned: {}", removed);
+                        if removed {
+                            eprintln!("DEBUG: Removed regular triple: {}", triple);
+                            return Ok(true);
+                        } else {
+                            eprintln!(
+                                "DEBUG: Core store remove_quad returned false - triple not found"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("DEBUG: Core store remove_quad failed with error: {:?}", e);
                     }
                 }
+            } else {
+                eprintln!("DEBUG: Failed to convert triple to core triple");
             }
         }
 

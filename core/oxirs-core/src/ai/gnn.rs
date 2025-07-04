@@ -460,9 +460,9 @@ impl GraphNeuralNetwork for GraphConvolutionalNetwork {
 
     async fn train(
         &mut self,
-        graph: &RdfGraph,
-        features: &Array2<f32>,
-        labels: &Array2<f32>,
+        _graph: &RdfGraph,
+        _features: &Array2<f32>,
+        _labels: &Array2<f32>,
         config: &TrainingConfig,
     ) -> Result<TrainingMetrics> {
         // TODO: Implement training loop with backpropagation
@@ -486,9 +486,9 @@ impl GraphNeuralNetwork for GraphConvolutionalNetwork {
 
     async fn predict_links(
         &self,
-        graph: &RdfGraph,
+        _graph: &RdfGraph,
         source_nodes: &[usize],
-        target_nodes: &[usize],
+        _target_nodes: &[usize],
     ) -> Result<Array1<f32>> {
         // TODO: Implement link prediction
         let predictions = Array1::zeros(source_nodes.len());

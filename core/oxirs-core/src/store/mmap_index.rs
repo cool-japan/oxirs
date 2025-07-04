@@ -584,7 +584,7 @@ impl MmapIndex {
     /// Update memory map after writes
     fn update_mmap(&self) -> Result<()> {
         let file = self.file.lock();
-        let file_len = file.metadata()?.len();
+        let _file_len = file.metadata()?.len();
 
         let mut mmap = self.mmap.write();
         *mmap = Some(unsafe { MmapOptions::new().map(&*file)? });

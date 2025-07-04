@@ -1,7 +1,7 @@
 //! Main photonic computing engine
 
-use crate::{Result, ShaclAiError};
 use super::types::*;
+use crate::{Result, ShaclAiError};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -137,7 +137,7 @@ impl PhotonicComputingEngine {
             },
             light_speed_manager: LightSpeedComputationManager {
                 speed_of_light: 299_792_458.0, // m/s in vacuum
-                computation_delay: 1e-15, // 1 femtosecond
+                computation_delay: 1e-15,      // 1 femtosecond
                 parallel_channels: 1000,
             },
         }
@@ -181,7 +181,7 @@ impl PhotonicComputingEngine {
             },
             coherence: CoherenceProperties {
                 coherence_length: 1e-3, // 1 mm
-                coherence_time: 1e-12, // 1 ps
+                coherence_time: 1e-12,  // 1 ps
                 spatial_coherence: 0.9,
                 temporal_coherence: 0.9,
             },
@@ -203,13 +203,15 @@ impl PhotonicComputingEngine {
             },
             coherence: CoherenceProperties {
                 coherence_length: 1e-3, // 1 mm
-                coherence_time: 1e-12, // 1 ps
+                coherence_time: 1e-12,  // 1 ps
                 spatial_coherence: 0.9,
                 temporal_coherence: 0.9,
             },
         };
 
-        self.entanglement_network.entangled_pairs.push((qubit1.clone(), qubit2.clone()));
+        self.entanglement_network
+            .entangled_pairs
+            .push((qubit1.clone(), qubit2.clone()));
         Ok((qubit1, qubit2))
     }
 }

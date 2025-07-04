@@ -60,6 +60,11 @@ dashmap = "6.1"
 num_cpus = "1.16"
 nalgebra = "0.33"
 num-complex = "0.4"
+# OpenTelemetry for enhanced observability (optional)
+opentelemetry = { workspace = true, optional = true }
+opentelemetry-jaeger = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-semantic-conventions = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
@@ -74,6 +79,7 @@ nats = ["async-nats", "time"]
 kinesis = ["aws-config", "aws-sdk-kinesis", "aws-smithy-types"]
 redis = ["dep:redis"]
 pulsar = ["dep:pulsar"]
+opentelemetry = ["dep:opentelemetry", "dep:opentelemetry-jaeger", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
 all-backends = ["kafka", "nats", "kinesis", "redis", "pulsar"]
 
 [[bench]]

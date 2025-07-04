@@ -256,8 +256,9 @@ impl Reificator {
 
         let mut star_graph = StarGraph::new();
         let mut processed_statements = std::collections::HashSet::new();
+        let mut reconstructed_triples = std::collections::HashMap::new();
 
-        // Find all rdf:Statement instances
+        // First pass: Find all rdf:Statement instances and reconstruct them
         for triple in reified_graph.triples() {
             if let (StarTerm::NamedNode(predicate), StarTerm::NamedNode(object)) =
                 (&triple.predicate, &triple.object)
@@ -268,7 +269,7 @@ impl Reificator {
                             if let Some(star_triple) =
                                 self.reconstruct_quoted_triple(reified_graph, &stmt_node.iri)?
                             {
-                                star_graph.insert(star_triple)?;
+                                reconstructed_triples.insert(stmt_node.iri.clone(), star_triple);
                                 processed_statements.insert(stmt_node.iri.clone());
                             }
                         }
@@ -277,9 +278,27 @@ impl Reificator {
             }
         }
 
-        // Process remaining triples that don't involve reified statements
+        // Second pass: Process remaining triples and convert statement references to quoted triples
         for triple in reified_graph.triples() {
-            if !self.involves_reified_statement(triple, &processed_statements) {
+            // Skip reification meta-triples (rdf:type, rdf:subject, rdf:predicate, rdf:object)
+            if self.is_reification_meta_triple(triple, &processed_statements) {
+                continue;
+            }
+
+            // Check if this triple uses a reified statement as subject
+            if let StarTerm::NamedNode(subject_node) = &triple.subject {
+                if let Some(quoted_triple) = reconstructed_triples.get(&subject_node.iri) {
+                    // Create a new triple with the quoted triple as subject
+                    let new_triple = StarTriple::new(
+                        StarTerm::quoted_triple(quoted_triple.clone()),
+                        triple.predicate.clone(),
+                        triple.object.clone(),
+                    );
+                    star_graph.insert(new_triple)?;
+                } else {
+                    star_graph.insert(triple.clone())?;
+                }
+            } else {
                 star_graph.insert(triple.clone())?;
             }
         }
@@ -325,20 +344,27 @@ impl Reificator {
         }
     }
 
-    /// Check if a triple involves a reified statement
-    fn involves_reified_statement(
+    /// Check if a triple is a reification meta-triple (rdf:type, rdf:subject, rdf:predicate, rdf:object)
+    fn is_reification_meta_triple(
         &self,
         triple: &StarTriple,
         processed_statements: &std::collections::HashSet<String>,
     ) -> bool {
+        // Check if this triple has a processed statement as subject
         if let StarTerm::NamedNode(subj_node) = &triple.subject {
             if processed_statements.contains(&subj_node.iri) {
-                return true;
-            }
-        }
-        if let StarTerm::NamedNode(obj_node) = &triple.object {
-            if processed_statements.contains(&obj_node.iri) {
-                return true;
+                // Check if this is a reification meta-predicate
+                if let StarTerm::NamedNode(pred_node) = &triple.predicate {
+                    match pred_node.iri.as_str() {
+                        vocab::RDF_TYPE
+                        | vocab::RDF_SUBJECT
+                        | vocab::RDF_PREDICATE
+                        | vocab::RDF_OBJECT => {
+                            return true;
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
         false

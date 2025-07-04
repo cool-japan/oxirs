@@ -579,7 +579,7 @@ impl VirtualStorage {
                     endpoint
                 )))
             }
-            BackendType::Cloud { provider } => {
+            BackendType::Cloud { provider: _ } => {
                 // Create cloud backend
                 Err(OxirsError::Store(
                     "Cloud backend not implemented".to_string(),
@@ -742,13 +742,13 @@ impl VirtualStorage {
     async fn spawn_migration_worker(
         &self,
         job_id: String,
-        source: String,
-        target: String,
-        criteria: SelectionCriteria,
+        _source: String,
+        _target: String,
+        _criteria: SelectionCriteria,
     ) -> Result<(), OxirsError> {
-        let backends = self.backends.clone();
+        let _backends = self.backends.clone();
         let migration_state = self.migration_state.clone();
-        let config = self.config.clone();
+        let _config = self.config.clone();
 
         tokio::spawn(async move {
             // Migration logic would go here
@@ -775,7 +775,7 @@ impl VirtualStorage {
 
 #[async_trait]
 impl StorageEngine for VirtualStorage {
-    async fn init(&mut self, config: super::StorageConfig) -> Result<(), OxirsError> {
+    async fn init(&mut self, _config: super::StorageConfig) -> Result<(), OxirsError> {
         self.initialize_backends().await
     }
 

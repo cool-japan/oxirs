@@ -1354,107 +1354,125 @@ impl PerformancePredictor {
     /// Record a performance data point
     pub async fn record_performance(&self, data_point: PerformanceDataPoint) -> Result<()> {
         let mut historical_data = self.historical_data.write().await;
-        
+
         // Keep only recent data (last 10000 points)
         if historical_data.len() >= 10000 {
             historical_data.pop_front();
         }
-        
+
         historical_data.push_back(data_point);
-        
+
         // Retrain model every 100 data points
         if historical_data.len() % 100 == 0 {
             self.retrain_model().await?;
         }
-        
-        debug!("Recorded performance data point, total: {}", historical_data.len());
+
+        debug!(
+            "Recorded performance data point, total: {}",
+            historical_data.len()
+        );
         Ok(())
     }
 
     /// Predict performance for given configuration
     pub async fn predict_performance(&self, test_config: &PerformanceConfig) -> Result<(f64, f64)> {
         let model = self.model.read().await;
-        
+
         if model.training_samples < 10 {
             return Err(anyhow!("Insufficient training data for prediction"));
         }
 
         // Extract features from configuration
         let features = self.extract_features(test_config).await;
-        
+
         // Predict throughput
-        let predicted_throughput = self.linear_prediction(&features, &model.throughput_coefficients);
-        
+        let predicted_throughput =
+            self.linear_prediction(&features, &model.throughput_coefficients);
+
         // Predict latency
         let predicted_latency = self.linear_prediction(&features, &model.latency_coefficients);
-        
-        self.prediction_stats.total_predictions.fetch_add(1, Ordering::Relaxed);
-        
+
+        self.prediction_stats
+            .total_predictions
+            .fetch_add(1, Ordering::Relaxed);
+
         info!(
             "Predicted performance - Throughput: {:.0} eps, Latency: {:.2} ms (confidence: {:.1}%)",
             predicted_throughput,
             predicted_latency,
             (model.throughput_r_squared + model.latency_r_squared) / 2.0 * 100.0
         );
-        
+
         Ok((predicted_throughput, predicted_latency))
     }
 
     /// Auto-tune configuration based on current performance
-    pub async fn auto_tune(&self, current_performance: &PerformanceDataPoint) -> Result<Option<PerformanceConfig>> {
+    pub async fn auto_tune(
+        &self,
+        current_performance: &PerformanceDataPoint,
+    ) -> Result<Option<PerformanceConfig>> {
         let mut last_tuning = self.auto_tuner.last_tuning.write().await;
-        
+
         // Check if enough time has passed since last tuning
         if let Some(last_time) = *last_tuning {
             if last_time.elapsed() < self.auto_tuner.tuning_interval {
                 return Ok(None);
             }
         }
-        
+
         let current_config = self.auto_tuner.current_config.read().await.clone();
         let mut best_config = current_config.clone();
         let mut best_predicted_throughput = 0.0;
-        
+
         // Try different configuration variations
         let variations = self.generate_config_variations(&current_config).await;
-        
+
         for variation in variations {
-            if let Ok((predicted_throughput, predicted_latency)) = 
-                self.predict_performance(&variation).await {
-                
+            if let Ok((predicted_throughput, predicted_latency)) =
+                self.predict_performance(&variation).await
+            {
                 // Score based on throughput and latency (higher throughput, lower latency is better)
                 let score = predicted_throughput / (1.0 + predicted_latency);
-                let current_score = current_performance.throughput_eps / (1.0 + current_performance.latency_ms);
-                
+                let current_score =
+                    current_performance.throughput_eps / (1.0 + current_performance.latency_ms);
+
                 if score > current_score && predicted_throughput > best_predicted_throughput {
                     best_config = variation;
                     best_predicted_throughput = predicted_throughput;
                 }
             }
         }
-        
+
         // Apply the best configuration if it's significantly better
         if best_predicted_throughput > current_performance.throughput_eps * 1.1 {
             *self.auto_tuner.current_config.write().await = best_config.clone();
             *last_tuning = Some(Instant::now());
-            
+
             // Record tuning decision
             let decision = TuningDecision {
                 timestamp: Utc::now(),
                 parameter: "auto_tune".to_string(),
                 old_value: format!("{:?}", current_config),
                 new_value: format!("{:?}", best_config),
-                predicted_improvement: (best_predicted_throughput - current_performance.throughput_eps) / current_performance.throughput_eps,
+                predicted_improvement: (best_predicted_throughput
+                    - current_performance.throughput_eps)
+                    / current_performance.throughput_eps,
                 actual_improvement: None,
                 confidence: 0.8, // TODO: Calculate actual confidence
             };
-            
+
             self.auto_tuner.tuning_history.write().await.push(decision);
-            self.prediction_stats.total_tuning_decisions.fetch_add(1, Ordering::Relaxed);
-            
-            info!("Auto-tuned configuration for {:.1}% predicted improvement", 
-                  (best_predicted_throughput - current_performance.throughput_eps) / current_performance.throughput_eps * 100.0);
-            
+            self.prediction_stats
+                .total_tuning_decisions
+                .fetch_add(1, Ordering::Relaxed);
+
+            info!(
+                "Auto-tuned configuration for {:.1}% predicted improvement",
+                (best_predicted_throughput - current_performance.throughput_eps)
+                    / current_performance.throughput_eps
+                    * 100.0
+            );
+
             Ok(Some(best_config))
         } else {
             Ok(None)
@@ -1464,29 +1482,47 @@ impl PerformancePredictor {
     /// Get current prediction accuracy statistics
     pub async fn get_prediction_stats(&self) -> PredictionStats {
         PredictionStats {
-            total_predictions: AtomicU64::new(self.prediction_stats.total_predictions.load(Ordering::Relaxed)),
-            accurate_predictions: AtomicU64::new(self.prediction_stats.accurate_predictions.load(Ordering::Relaxed)),
-            total_tuning_decisions: AtomicU64::new(self.prediction_stats.total_tuning_decisions.load(Ordering::Relaxed)),
-            successful_tunings: AtomicU64::new(self.prediction_stats.successful_tunings.load(Ordering::Relaxed)),
-            average_prediction_error: Arc::new(RwLock::new(*self.prediction_stats.average_prediction_error.read().await)),
+            total_predictions: AtomicU64::new(
+                self.prediction_stats
+                    .total_predictions
+                    .load(Ordering::Relaxed),
+            ),
+            accurate_predictions: AtomicU64::new(
+                self.prediction_stats
+                    .accurate_predictions
+                    .load(Ordering::Relaxed),
+            ),
+            total_tuning_decisions: AtomicU64::new(
+                self.prediction_stats
+                    .total_tuning_decisions
+                    .load(Ordering::Relaxed),
+            ),
+            successful_tunings: AtomicU64::new(
+                self.prediction_stats
+                    .successful_tunings
+                    .load(Ordering::Relaxed),
+            ),
+            average_prediction_error: Arc::new(RwLock::new(
+                *self.prediction_stats.average_prediction_error.read().await,
+            )),
         }
     }
 
     /// Retrain the prediction model with current historical data
     async fn retrain_model(&self) -> Result<()> {
         let historical_data = self.historical_data.read().await;
-        
+
         if historical_data.len() < 10 {
             return Ok(()); // Need more data
         }
-        
+
         let mut model = self.model.write().await;
-        
+
         // Prepare training data
         let mut features_matrix = Vec::new();
         let mut throughput_targets = Vec::new();
         let mut latency_targets = Vec::new();
-        
+
         for data_point in historical_data.iter() {
             let config = PerformanceConfig {
                 max_batch_size: data_point.batch_size,
@@ -1494,30 +1530,38 @@ impl PerformancePredictor {
                 enable_compression: data_point.compression_enabled,
                 ..self.config.clone()
             };
-            
+
             let features = self.extract_features(&config).await;
             features_matrix.push(features);
             throughput_targets.push(data_point.throughput_eps);
             latency_targets.push(data_point.latency_ms);
         }
-        
+
         // Train throughput model (simple linear regression)
-        model.throughput_coefficients = self.train_linear_regression(&features_matrix, &throughput_targets);
-        model.throughput_r_squared = self.calculate_r_squared(&features_matrix, &throughput_targets, &model.throughput_coefficients);
-        
+        model.throughput_coefficients =
+            self.train_linear_regression(&features_matrix, &throughput_targets);
+        model.throughput_r_squared = self.calculate_r_squared(
+            &features_matrix,
+            &throughput_targets,
+            &model.throughput_coefficients,
+        );
+
         // Train latency model
-        model.latency_coefficients = self.train_linear_regression(&features_matrix, &latency_targets);
-        model.latency_r_squared = self.calculate_r_squared(&features_matrix, &latency_targets, &model.latency_coefficients);
-        
+        model.latency_coefficients =
+            self.train_linear_regression(&features_matrix, &latency_targets);
+        model.latency_r_squared = self.calculate_r_squared(
+            &features_matrix,
+            &latency_targets,
+            &model.latency_coefficients,
+        );
+
         model.training_samples = historical_data.len();
-        
+
         info!(
             "Retrained prediction model with {} samples - Throughput R²: {:.3}, Latency R²: {:.3}",
-            model.training_samples,
-            model.throughput_r_squared,
-            model.latency_r_squared
+            model.training_samples, model.throughput_r_squared, model.latency_r_squared
         );
-        
+
         Ok(())
     }
 
@@ -1528,8 +1572,16 @@ impl PerformancePredictor {
             config.parallel_workers as f64,
             if config.enable_compression { 1.0 } else { 0.0 },
             if config.enable_zero_copy { 1.0 } else { 0.0 },
-            if config.enable_memory_pooling { 1.0 } else { 0.0 },
-            if config.enable_adaptive_batching { 1.0 } else { 0.0 },
+            if config.enable_memory_pooling {
+                1.0
+            } else {
+                0.0
+            },
+            if config.enable_adaptive_batching {
+                1.0
+            } else {
+                0.0
+            },
             config.target_latency_ms as f64,
             config.compression_threshold as f64,
         ]
@@ -1540,11 +1592,11 @@ impl PerformancePredictor {
         if features.is_empty() || targets.is_empty() {
             return vec![0.0; 8];
         }
-        
+
         let n = features.len();
         let feature_count = features[0].len();
         let mut coefficients = vec![0.0; feature_count];
-        
+
         // Simple least squares implementation (placeholder)
         // In a real implementation, you'd use a proper linear algebra library
         for i in 0..feature_count {
@@ -1552,7 +1604,7 @@ impl PerformancePredictor {
             let mut sum_x = 0.0;
             let mut sum_y = 0.0;
             let mut sum_x2 = 0.0;
-            
+
             for j in 0..n {
                 let x = features[j][i];
                 let y = targets[j];
@@ -1561,32 +1613,37 @@ impl PerformancePredictor {
                 sum_y += y;
                 sum_x2 += x * x;
             }
-            
+
             let denominator = n as f64 * sum_x2 - sum_x * sum_x;
             if denominator.abs() > 1e-10 {
                 coefficients[i] = (n as f64 * sum_xy - sum_x * sum_y) / denominator;
             }
         }
-        
+
         coefficients
     }
 
     /// Calculate R-squared for model evaluation
-    fn calculate_r_squared(&self, features: &[Vec<f64>], targets: &[f64], coefficients: &[f64]) -> f64 {
+    fn calculate_r_squared(
+        &self,
+        features: &[Vec<f64>],
+        targets: &[f64],
+        coefficients: &[f64],
+    ) -> f64 {
         if features.is_empty() || targets.is_empty() {
             return 0.0;
         }
-        
+
         let mean_target: f64 = targets.iter().sum::<f64>() / targets.len() as f64;
         let mut ss_tot = 0.0;
         let mut ss_res = 0.0;
-        
+
         for (i, target) in targets.iter().enumerate() {
             let predicted = self.linear_prediction(&features[i], coefficients);
             ss_res += (target - predicted).powi(2);
             ss_tot += (target - mean_target).powi(2);
         }
-        
+
         if ss_tot > 1e-10 {
             1.0 - (ss_res / ss_tot)
         } else {
@@ -1596,32 +1653,42 @@ impl PerformancePredictor {
 
     /// Make prediction using linear model
     fn linear_prediction(&self, features: &[f64], coefficients: &[f64]) -> f64 {
-        features.iter().zip(coefficients.iter()).map(|(f, c)| f * c).sum()
+        features
+            .iter()
+            .zip(coefficients.iter())
+            .map(|(f, c)| f * c)
+            .sum()
     }
 
     /// Generate configuration variations for auto-tuning
-    async fn generate_config_variations(&self, base_config: &PerformanceConfig) -> Vec<PerformanceConfig> {
+    async fn generate_config_variations(
+        &self,
+        base_config: &PerformanceConfig,
+    ) -> Vec<PerformanceConfig> {
         let mut variations = Vec::new();
-        
+
         // Batch size variations
         for factor in [0.8, 1.2, 1.5] {
             let mut config = base_config.clone();
-            config.max_batch_size = ((config.max_batch_size as f64 * factor) as usize).max(100).min(50000);
+            config.max_batch_size = ((config.max_batch_size as f64 * factor) as usize)
+                .max(100)
+                .min(50000);
             variations.push(config);
         }
-        
+
         // Worker count variations
         for delta in [-1, 1, 2] {
             let mut config = base_config.clone();
-            config.parallel_workers = (config.parallel_workers as i32 + delta).max(1).min(32) as usize;
+            config.parallel_workers =
+                (config.parallel_workers as i32 + delta).max(1).min(32) as usize;
             variations.push(config);
         }
-        
+
         // Compression toggle
         let mut config = base_config.clone();
         config.enable_compression = !config.enable_compression;
         variations.push(config);
-        
+
         variations
     }
 }
@@ -1634,7 +1701,7 @@ mod performance_predictor_tests {
     async fn test_performance_predictor_creation() {
         let config = PerformanceConfig::default();
         let predictor = PerformancePredictor::new(config);
-        
+
         let stats = predictor.get_prediction_stats().await;
         assert_eq!(stats.total_predictions.load(Ordering::Relaxed), 0);
     }
@@ -1643,7 +1710,7 @@ mod performance_predictor_tests {
     async fn test_record_and_predict() {
         let config = PerformanceConfig::default();
         let predictor = PerformancePredictor::new(config.clone());
-        
+
         // Record some training data
         for i in 0..20 {
             let data_point = PerformanceDataPoint {
@@ -1658,10 +1725,10 @@ mod performance_predictor_tests {
                 event_complexity_score: 1.0,
                 network_latency_ms: 1.0,
             };
-            
+
             predictor.record_performance(data_point).await.unwrap();
         }
-        
+
         // Make a prediction
         if let Ok((throughput, latency)) = predictor.predict_performance(&config).await {
             assert!(throughput > 0.0);

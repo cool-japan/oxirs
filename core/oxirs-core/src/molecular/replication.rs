@@ -291,7 +291,7 @@ impl Ligase {
     }
 
     /// Join DNA fragments
-    pub fn join_fragments(&self, strand: &mut Vec<NucleotideData>) -> OxirsResult<()> {
+    pub fn join_fragments(&self, _strand: &mut Vec<NucleotideData>) -> OxirsResult<()> {
         // Simulate ligation process
         // In this simplified model, we just ensure strand continuity
         Ok(())
@@ -377,7 +377,7 @@ impl ProofreadingSystem {
             NucleotideData::Guanine(term) => Ok(NucleotideData::Cytosine(SpecialMarker::Enhancer(
                 term.to_string(),
             ))),
-            NucleotideData::Cytosine(marker) => Ok(template.clone()),
+            NucleotideData::Cytosine(_marker) => Ok(template.clone()),
         }
     }
 

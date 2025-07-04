@@ -35,7 +35,7 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use oxirs_embed::{TransE, ModelConfig, Triple, NamedNode};
+//! use oxirs_embed::{TransE, ModelConfig, Triple, NamedNode, EmbeddingModel};
 //!
 //! # async fn example() -> anyhow::Result<()> {
 //! // Create a knowledge graph embedding model
@@ -60,7 +60,7 @@
 //! ## Biomedical Example
 //!
 //! ```rust,no_run
-//! use oxirs_embed::{BiomedicalEmbedding, BiomedicalEmbeddingConfig};
+//! use oxirs_embed::{BiomedicalEmbedding, BiomedicalEmbeddingConfig, EmbeddingModel};
 //!
 //! # async fn example() -> anyhow::Result<()> {
 //! // Create biomedical embedding model
@@ -177,24 +177,34 @@ use uuid::Uuid;
 pub struct Vector {
     pub values: Vec<f32>,
     pub dimensions: usize,
-    inner: VecVector,
+    #[serde(skip)]
+    inner: Option<VecVector>,
 }
 
 impl Vector {
     pub fn new(values: Vec<f32>) -> Self {
         let dimensions = values.len();
-        let inner = VecVector::new(values.clone());
         Self {
             values,
             dimensions,
-            inner,
+            inner: None,
         }
     }
 
-    /// Update internal state when values or dimensions change
+    /// Get or create the inner VecVector
+    fn get_inner(&self) -> VecVector {
+        // Create a new VecVector from values if needed
+        if let Some(ref inner) = self.inner {
+            inner.clone()
+        } else {
+            VecVector::new(self.values.clone())
+        }
+    }
+
+    /// Update internal state when values change
     fn sync_internal(&mut self) {
         self.dimensions = self.values.len();
-        self.inner = VecVector::new(self.values.clone());
+        self.inner = None; // Will be recreated on next access
     }
 
     /// Create from ndarray Array1
@@ -226,23 +236,23 @@ impl Vector {
     }
 
     /// Get the inner VecVector for advanced operations
-    pub fn inner(&self) -> &VecVector {
-        &self.inner
+    pub fn inner(&self) -> VecVector {
+        self.get_inner()
     }
 
     /// Convert into the inner VecVector
     pub fn into_inner(self) -> VecVector {
-        self.inner
+        self.inner.unwrap_or_else(|| VecVector::new(self.values))
     }
 
     /// Create from VecVector
     pub fn from_vec_vector(vec_vector: VecVector) -> Self {
-        let values = vec_vector.as_f32();
+        let values = vec_vector.as_f32().to_vec();
         let dimensions = values.len();
         Self {
             values,
             dimensions,
-            inner: vec_vector,
+            inner: Some(vec_vector),
         }
     }
 }
@@ -253,23 +263,24 @@ impl Add for &Vector {
 
     fn add(self, other: &Vector) -> Vector {
         // Use the sophisticated vector addition from oxirs-vec
-        if let Ok(result) = self.inner.add(&other.inner) {
-            Vector::from_vec_vector(result)
-        } else {
-            // Fallback to element-wise addition for compatibility
-            assert_eq!(
-                self.values.len(),
-                other.values.len(),
-                "Vector dimensions must match"
-            );
-            let result_values: Vec<f32> = self
-                .values
-                .iter()
-                .zip(other.values.iter())
-                .map(|(a, b)| a + b)
-                .collect();
-            Vector::new(result_values)
+        if let (Some(ref self_inner), Some(ref other_inner)) = (&self.inner, &other.inner) {
+            if let Ok(result) = self_inner.add(other_inner) {
+                return Vector::from_vec_vector(result);
+            }
         }
+        // Fallback to element-wise addition for compatibility
+        assert_eq!(
+            self.values.len(),
+            other.values.len(),
+            "Vector dimensions must match"
+        );
+        let result_values: Vec<f32> = self
+            .values
+            .iter()
+            .zip(other.values.iter())
+            .map(|(a, b)| a + b)
+            .collect();
+        Vector::new(result_values)
     }
 }
 
@@ -278,23 +289,24 @@ impl Sub for &Vector {
 
     fn sub(self, other: &Vector) -> Vector {
         // Use the sophisticated vector subtraction from oxirs-vec
-        if let Ok(result) = self.inner.subtract(&other.inner) {
-            Vector::from_vec_vector(result)
-        } else {
-            // Fallback to element-wise subtraction for compatibility
-            assert_eq!(
-                self.values.len(),
-                other.values.len(),
-                "Vector dimensions must match"
-            );
-            let result_values: Vec<f32> = self
-                .values
-                .iter()
-                .zip(other.values.iter())
-                .map(|(a, b)| a - b)
-                .collect();
-            Vector::new(result_values)
+        if let (Some(ref self_inner), Some(ref other_inner)) = (&self.inner, &other.inner) {
+            if let Ok(result) = self_inner.subtract(other_inner) {
+                return Vector::from_vec_vector(result);
+            }
         }
+        // Fallback to element-wise subtraction for compatibility
+        assert_eq!(
+            self.values.len(),
+            other.values.len(),
+            "Vector dimensions must match"
+        );
+        let result_values: Vec<f32> = self
+            .values
+            .iter()
+            .zip(other.values.iter())
+            .map(|(a, b)| a - b)
+            .collect();
+        Vector::new(result_values)
     }
 }
 
@@ -670,10 +682,19 @@ pub mod quick_start {
             ));
         }
 
+        // Helper function to convert short names to full URIs
+        let expand_uri = |s: &str| -> String {
+            if s.starts_with("http://") || s.starts_with("https://") {
+                s.to_string()
+            } else {
+                format!("http://example.org/{}", s)
+            }
+        };
+
         Ok(Triple::new(
-            NamedNode::new(parts[0])?,
-            NamedNode::new(parts[1])?,
-            NamedNode::new(parts[2])?,
+            NamedNode::new(&expand_uri(parts[0]))?,
+            NamedNode::new(&expand_uri(parts[1]))?,
+            NamedNode::new(&expand_uri(parts[2]))?,
         ))
     }
 
@@ -689,6 +710,69 @@ pub mod quick_start {
             count += 1;
         }
         Ok(count)
+    }
+    
+    /// Quick function to compute cosine similarity between two embedding vectors
+    pub fn cosine_similarity(a: &[f64], b: &[f64]) -> Result<f64> {
+        if a.len() != b.len() {
+            return Err(anyhow::anyhow!("Vector dimensions don't match: {} vs {}", a.len(), b.len()));
+        }
+        
+        let dot_product: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let norm_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+        
+        if norm_a == 0.0 || norm_b == 0.0 {
+            return Ok(0.0);
+        }
+        
+        Ok(dot_product / (norm_a * norm_b))
+    }
+    
+    /// Generate sample knowledge graph data for testing and prototyping
+    pub fn generate_sample_kg_data(num_entities: usize, num_relations: usize) -> Vec<(String, String, String)> {
+        use rand::prelude::*;
+        
+        let mut rng = thread_rng();
+        let mut triples = Vec::new();
+        
+        let entities: Vec<String> = (0..num_entities)
+            .map(|i| format!("http://example.org/entity_{}", i))
+            .collect();
+            
+        let relations: Vec<String> = (0..num_relations)
+            .map(|i| format!("http://example.org/relation_{}", i))
+            .collect();
+            
+        // Generate random triples (avoid self-loops)
+        for _ in 0..(num_entities * 2) {
+            let subject = entities.choose(&mut rng).unwrap().clone();
+            let relation = relations.choose(&mut rng).unwrap().clone();
+            let object = entities.choose(&mut rng).unwrap().clone();
+            
+            if subject != object {
+                triples.push((subject, relation, object));
+            }
+        }
+        
+        triples
+    }
+    
+    /// Quick performance measurement utility
+    pub fn quick_performance_test<F>(name: &str, iterations: usize, operation: F) -> std::time::Duration
+    where
+        F: Fn() -> (),
+    {
+        let start = std::time::Instant::now();
+        for _ in 0..iterations {
+            operation();
+        }
+        let duration = start.elapsed();
+        
+        println!("Performance test '{}': {} iterations in {:?} ({:.2} ops/sec)", 
+                name, iterations, duration, iterations as f64 / duration.as_secs_f64());
+        
+        duration
     }
 }
 
@@ -732,5 +816,45 @@ mod quick_start_tests {
 
         let count = add_triples_from_strings(&mut model, &triple_strings).unwrap();
         assert_eq!(count, 2);
+    }
+    
+    #[test]
+    fn test_cosine_similarity() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![1.0, 0.0, 0.0];
+        let similarity = cosine_similarity(&a, &b).unwrap();
+        assert!((similarity - 1.0).abs() < 1e-10);
+        
+        let c = vec![0.0, 1.0, 0.0];
+        let similarity2 = cosine_similarity(&a, &c).unwrap();
+        assert!((similarity2 - 0.0).abs() < 1e-10);
+        
+        // Test different dimensions should fail
+        let d = vec![1.0, 0.0];
+        assert!(cosine_similarity(&a, &d).is_err());
+    }
+    
+    #[test]
+    fn test_generate_sample_kg_data() {
+        let triples = generate_sample_kg_data(5, 3);
+        assert!(!triples.is_empty());
+        
+        // Check that all subjects and objects are in the expected format
+        for (subject, relation, object) in &triples {
+            assert!(subject.starts_with("http://example.org/entity_"));
+            assert!(relation.starts_with("http://example.org/relation_"));
+            assert!(object.starts_with("http://example.org/entity_"));
+            assert_ne!(subject, object); // No self-loops
+        }
+    }
+    
+    #[test]
+    fn test_quick_performance_test() {
+        let duration = quick_performance_test("test_operation", 100, || {
+            // Simple operation for testing
+            let _sum: i32 = (1..10).sum();
+        });
+        
+        assert!(duration.as_nanos() > 0);
     }
 }

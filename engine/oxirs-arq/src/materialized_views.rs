@@ -248,6 +248,8 @@ pub struct ViewStorage {
     memory_storage: HashMap<String, ViewData>,
     /// Disk-based storage path
     disk_storage_path: Option<std::path::PathBuf>,
+    /// Maximum memory usage allowed
+    max_memory: usize,
     /// Current memory usage
     memory_usage: usize,
     /// Storage statistics
@@ -1280,6 +1282,7 @@ impl ViewStorage {
         Self {
             memory_storage: HashMap::new(),
             disk_storage_path: None,
+            max_memory,
             memory_usage: 0,
             storage_stats: StorageStatistics::default(),
         }
@@ -1288,7 +1291,7 @@ impl ViewStorage {
     fn store_view_data(&mut self, view_id: String, data: ViewData) -> Result<()> {
         // Store in memory if under threshold
         let data_size = data.size_bytes;
-        if self.memory_usage + data_size <= self.memory_usage {
+        if self.memory_usage + data_size <= self.max_memory {
             self.memory_storage.insert(view_id, data);
             self.memory_usage += data_size;
             self.storage_stats.memory_view_count += 1;

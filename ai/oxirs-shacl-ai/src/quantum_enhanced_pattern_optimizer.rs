@@ -843,7 +843,7 @@ impl QuantumEnhancedPatternOptimizer {
                     if correlation > self.config.entanglement_threshold {
                         let _ = entanglement.create_entanglement(
                             uuid::Uuid::new_v4(), // agent_a
-                            uuid::Uuid::new_v4(), // agent_b  
+                            uuid::Uuid::new_v4(), // agent_b
                             crate::quantum_consciousness_entanglement::BellState::PhiPlus,
                         );
                     }

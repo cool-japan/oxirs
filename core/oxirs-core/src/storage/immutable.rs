@@ -377,7 +377,7 @@ impl ImmutableStorage {
         };
 
         // Verify all blocks
-        for (hash, metadata) in &blocks.metadata {
+        for (hash, _metadata) in &blocks.metadata {
             report.total_blocks += 1;
 
             if let Ok(block) = self.load_block(&blocks, hash).await {
@@ -475,7 +475,7 @@ impl ImmutableStorage {
     }
 
     /// Create index blocks for efficient querying
-    fn create_index_blocks(&self, data_blocks: &[ContentHash]) -> Result<Vec<Block>, OxirsError> {
+    fn create_index_blocks(&self, _data_blocks: &[ContentHash]) -> Result<Vec<Block>, OxirsError> {
         // Simplified - would create actual index structures
         Ok(Vec::new())
     }

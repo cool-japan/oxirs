@@ -356,29 +356,33 @@ impl BftNodeState {
 
     /// Check for double voting (Byzantine behavior)
     fn check_double_voting(&mut self, vote_req: &RequestVoteRequest) -> FusekiResult<()> {
-        // First, check if there's a previous vote to detect conflict
+        // Check if this node has already voted for a different candidate in this term
         let previous_candidate_id = {
             let term_votes = self
                 .vote_tracking
                 .entry(vote_req.term)
                 .or_insert_with(HashMap::new);
 
-            if let Some(previous_vote) = term_votes.get(&vote_req.candidate_id) {
+            // Use this node's ID as key to track its votes
+            let node_id = &self.identity.node_id;
+            
+            if let Some(previous_vote) = term_votes.get(node_id) {
                 if previous_vote.candidate_id != vote_req.candidate_id {
                     Some(previous_vote.candidate_id.clone())
                 } else {
                     None
                 }
             } else {
-                term_votes.insert(vote_req.candidate_id.clone(), vote_req.clone());
+                term_votes.insert(node_id.clone(), vote_req.clone());
                 None
             }
         };
 
         // Now record byzantine behavior if detected (after borrow is dropped)
         if let Some(prev_candidate) = previous_candidate_id {
+            let node_id = self.identity.node_id.clone();
             self.record_byzantine_behavior(
-                &vote_req.candidate_id,
+                &node_id,
                 ByzantineBehavior::DoubleVoting,
                 format!(
                     "Double vote in term {}: {} vs {}",
@@ -633,9 +637,9 @@ mod tests {
 
     #[test]
     fn test_leading_zeros_count() {
-        assert_eq!(count_leading_zeros(&[0, 0, 0xFF]), 24);
-        assert_eq!(count_leading_zeros(&[0x80, 0xFF]), 0);
-        assert_eq!(count_leading_zeros(&[0x40, 0xFF]), 1);
-        assert_eq!(count_leading_zeros(&[0x20, 0xFF]), 2);
+        assert_eq!(count_leading_zeros(&[0, 0, 0xFF]), 16); // Two zero bytes = 16 zeros
+        assert_eq!(count_leading_zeros(&[0x80, 0xFF]), 0);  // 0x80 = 10000000 = 0 leading zeros
+        assert_eq!(count_leading_zeros(&[0x40, 0xFF]), 1);  // 0x40 = 01000000 = 1 leading zero
+        assert_eq!(count_leading_zeros(&[0x20, 0xFF]), 2);  // 0x20 = 00100000 = 2 leading zeros
     }
 }

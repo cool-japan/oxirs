@@ -11,7 +11,7 @@ use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, info, warn};
 
-use crate::planner::planning::types::{QueryInfo, QueryType, TriplePattern, FilterExpression};
+use crate::planner::planning::types::{FilterExpression, QueryInfo, QueryType, TriplePattern};
 
 /// Test configuration for federation testing
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,18 +187,27 @@ impl TestInfrastructure {
 
     /// Initialize test infrastructure with mock services
     pub async fn initialize(&mut self) -> Result<()> {
-        info!("Initializing test infrastructure with {} mock services", self.config.mock_service_count);
-        
+        info!(
+            "Initializing test infrastructure with {} mock services",
+            self.config.mock_service_count
+        );
+
         // Create mock SPARQL services
         for i in 0..self.config.mock_service_count {
             let service = self.create_mock_sparql_service(i).await?;
-            self.mock_sparql_services.write().await.insert(service.service_id.clone(), service);
+            self.mock_sparql_services
+                .write()
+                .await
+                .insert(service.service_id.clone(), service);
         }
 
         // Create mock GraphQL services
         for i in 0..self.config.mock_service_count {
             let service = self.create_mock_graphql_service(i).await?;
-            self.mock_graphql_services.write().await.insert(service.service_id.clone(), service);
+            self.mock_graphql_services
+                .write()
+                .await
+                .insert(service.service_id.clone(), service);
         }
 
         // Generate test data if enabled
@@ -217,13 +226,13 @@ impl TestInfrastructure {
     async fn create_mock_sparql_service(&self, index: usize) -> Result<MockSparqlService> {
         let service_id = format!("mock-sparql-service-{}", index);
         let endpoint_url = format!("http://localhost:{}/sparql", 8080 + index);
-        
+
         let mut capabilities = HashSet::new();
         capabilities.insert("SELECT".to_string());
         capabilities.insert("CONSTRUCT".to_string());
         capabilities.insert("ASK".to_string());
         capabilities.insert("DESCRIBE".to_string());
-        
+
         // Add random capabilities
         if index % 2 == 0 {
             capabilities.insert("SERVICE".to_string());
@@ -235,9 +244,10 @@ impl TestInfrastructure {
         }
 
         let response_delay = Duration::from_millis(
-            (self.config.mock_response_delay_range.0.as_millis() + 
-             (index as u128) % (self.config.mock_response_delay_range.1.as_millis() - 
-                                self.config.mock_response_delay_range.0.as_millis())) as u64
+            (self.config.mock_response_delay_range.0.as_millis()
+                + (index as u128)
+                    % (self.config.mock_response_delay_range.1.as_millis()
+                        - self.config.mock_response_delay_range.0.as_millis())) as u64,
         );
 
         Ok(MockSparqlService {
@@ -255,7 +265,7 @@ impl TestInfrastructure {
     async fn create_mock_graphql_service(&self, index: usize) -> Result<MockGraphQLService> {
         let service_id = format!("mock-graphql-service-{}", index);
         let endpoint_url = format!("http://localhost:{}/graphql", 9080 + index);
-        
+
         let schema = self.generate_mock_graphql_schema(index);
         let entities = vec![
             format!("User_{}", index),
@@ -264,20 +274,24 @@ impl TestInfrastructure {
         ];
 
         let mut resolvers = HashMap::new();
-        resolvers.insert("user".to_string(), MockResolver {
-            field_name: "user".to_string(),
-            return_type: "User".to_string(),
-            mock_data: serde_json::json!({
-                "id": format!("user_{}", index),
-                "name": format!("User {}", index),
-                "email": format!("user{}@example.com", index)
-            }),
-        });
+        resolvers.insert(
+            "user".to_string(),
+            MockResolver {
+                field_name: "user".to_string(),
+                return_type: "User".to_string(),
+                mock_data: serde_json::json!({
+                    "id": format!("user_{}", index),
+                    "name": format!("User {}", index),
+                    "email": format!("user{}@example.com", index)
+                }),
+            },
+        );
 
         let response_delay = Duration::from_millis(
-            (self.config.mock_response_delay_range.0.as_millis() + 
-             (index as u128) % (self.config.mock_response_delay_range.1.as_millis() - 
-                                self.config.mock_response_delay_range.0.as_millis())) as u64
+            (self.config.mock_response_delay_range.0.as_millis()
+                + (index as u128)
+                    % (self.config.mock_response_delay_range.1.as_millis()
+                        - self.config.mock_response_delay_range.0.as_millis())) as u64,
         );
 
         Ok(MockGraphQLService {
@@ -345,21 +359,25 @@ input CreateCommentInput {
     authorId: ID!
     postId: ID!
 }
-        "#.to_string()
+        "#
+        .to_string()
     }
 
     /// Generate test data for mock services
     async fn generate_test_data(&self) -> Result<()> {
-        info!("Generating test data for {} services", self.config.mock_service_count);
-        
+        info!(
+            "Generating test data for {} services",
+            self.config.mock_service_count
+        );
+
         let services = self.mock_sparql_services.read().await;
-        
+
         for (service_id, service) in services.iter() {
             let mut data = service.data.write().await;
-            
+
             // Generate different types of triples
             let mut triples = Vec::new();
-            
+
             // Person data
             for i in 0..self.config.test_data_size / 4 {
                 triples.push(MockTriple {
@@ -381,7 +399,7 @@ input CreateCommentInput {
                     graph: None,
                 });
             }
-            
+
             // Organization data
             for i in 0..self.config.test_data_size / 8 {
                 triples.push(MockTriple {
@@ -397,7 +415,7 @@ input CreateCommentInput {
                     graph: None,
                 });
             }
-            
+
             // Relationships
             for i in 0..self.config.test_data_size / 8 {
                 let person_id = i % (self.config.test_data_size / 4);
@@ -409,11 +427,15 @@ input CreateCommentInput {
                     graph: None,
                 });
             }
-            
+
             data.insert("default".to_string(), triples);
-            debug!("Generated {} triples for service {}", data.get("default").unwrap().len(), service_id);
+            debug!(
+                "Generated {} triples for service {}",
+                data.get("default").unwrap().len(),
+                service_id
+            );
         }
-        
+
         info!("Test data generation completed");
         Ok(())
     }
@@ -424,7 +446,8 @@ input CreateCommentInput {
             TestScenario {
                 name: "simple_select".to_string(),
                 description: "Simple SELECT query with single triple pattern".to_string(),
-                query: "SELECT ?name WHERE { ?person <http://xmlns.com/foaf/0.1/name> ?name }".to_string(),
+                query: "SELECT ?name WHERE { ?person <http://xmlns.com/foaf/0.1/name> ?name }"
+                    .to_string(),
                 expected_result_count: Some(self.config.test_data_size / 4),
                 expected_services: vec!["mock-sparql-service-0".to_string()],
                 timeout: Duration::from_secs(5),
@@ -438,7 +461,8 @@ input CreateCommentInput {
                         ?person <http://xmlns.com/foaf/0.1/name> ?name .
                         ?person <http://www.w3.org/ns/org#memberOf> ?org
                     }
-                "#.to_string(),
+                "#
+                .to_string(),
                 expected_result_count: Some(self.config.test_data_size / 8),
                 expected_services: vec!["mock-sparql-service-0".to_string()],
                 timeout: Duration::from_secs(10),
@@ -456,7 +480,8 @@ input CreateCommentInput {
                         ?person <http://xmlns.com/foaf/0.1/age> ?age .
                         FILTER(?age > 30)
                     }
-                "#.to_string(),
+                "#
+                .to_string(),
                 expected_result_count: None,
                 expected_services: vec!["mock-sparql-service-0".to_string()],
                 timeout: Duration::from_secs(10),
@@ -470,7 +495,8 @@ input CreateCommentInput {
                         ?person <http://xmlns.com/foaf/0.1/name> ?name .
                         OPTIONAL { ?person <http://xmlns.com/foaf/0.1/age> ?age }
                     }
-                "#.to_string(),
+                "#
+                .to_string(),
                 expected_result_count: Some(self.config.test_data_size / 4),
                 expected_services: vec!["mock-sparql-service-0".to_string()],
                 timeout: Duration::from_secs(10),
@@ -487,7 +513,8 @@ input CreateCommentInput {
                             ?entity <http://www.w3.org/2000/01/rdf-schema#label> ?label
                         }
                     }
-                "#.to_string(),
+                "#
+                .to_string(),
                 expected_result_count: None,
                 expected_services: vec!["mock-sparql-service-0".to_string()],
                 timeout: Duration::from_secs(15),
@@ -505,11 +532,12 @@ input CreateCommentInput {
                             ?person <http://www.w3.org/ns/org#memberOf> ?org
                         }
                     }
-                "#.to_string(),
+                "#
+                .to_string(),
                 expected_result_count: None,
                 expected_services: vec![
                     "mock-sparql-service-0".to_string(),
-                    "mock-sparql-service-1".to_string()
+                    "mock-sparql-service-1".to_string(),
                 ],
                 timeout: Duration::from_secs(20),
                 performance_thresholds: PerformanceThresholds {
@@ -519,15 +547,18 @@ input CreateCommentInput {
                 },
             },
         ];
-        
-        info!("Created {} standard test scenarios", self.test_scenarios.len());
+
+        info!(
+            "Created {} standard test scenarios",
+            self.test_scenarios.len()
+        );
     }
 
     /// Execute a single test scenario
     pub async fn execute_test_scenario(&self, scenario: &TestScenario) -> Result<TestResult> {
         let start_time = Instant::now();
         info!("Executing test scenario: {}", scenario.name);
-        
+
         let mut result = TestResult {
             test_name: scenario.name.clone(),
             success: false,
@@ -541,19 +572,23 @@ input CreateCommentInput {
         // Mock the test execution since we don't have a full federation engine integrated
         // In a real implementation, this would use the actual federation engine
         let execution_result = self.mock_query_execution(scenario).await;
-        
+
         match execution_result {
             Ok(metrics) => {
                 result.success = true;
-                result.performance_metrics = metrics;
-                
+                result.performance_metrics = metrics.clone();
+
                 // Validate performance thresholds
-                if metrics.query_execution_time > scenario.performance_thresholds.max_execution_time {
+                if metrics.query_execution_time > scenario.performance_thresholds.max_execution_time
+                {
                     result.assertions_failed += 1;
                     result.error_message = Some(format!(
                         "Execution time {}ms exceeds threshold {}ms",
                         metrics.query_execution_time.as_millis(),
-                        scenario.performance_thresholds.max_execution_time.as_millis()
+                        scenario
+                            .performance_thresholds
+                            .max_execution_time
+                            .as_millis()
                     ));
                 } else {
                     result.assertions_passed += 1;
@@ -590,8 +625,8 @@ input CreateCommentInput {
 
         result.execution_time = start_time.elapsed();
         info!(
-            "Test scenario {} completed in {}ms - Success: {}, Assertions: {}/{}", 
-            scenario.name, 
+            "Test scenario {} completed in {}ms - Success: {}, Assertions: {}/{}",
+            scenario.name,
             result.execution_time.as_millis(),
             result.success,
             result.assertions_passed,
@@ -602,31 +637,37 @@ input CreateCommentInput {
     }
 
     /// Mock query execution for testing
-    async fn mock_query_execution(&self, scenario: &TestScenario) -> Result<TestPerformanceMetrics> {
+    async fn mock_query_execution(
+        &self,
+        scenario: &TestScenario,
+    ) -> Result<TestPerformanceMetrics> {
         // Simulate query planning
         let planning_start = Instant::now();
-        tokio::time::sleep(Duration::from_millis(10 + (scenario.query.len() / 10) as u64)).await;
+        tokio::time::sleep(Duration::from_millis(
+            10 + (scenario.query.len() / 10) as u64,
+        ))
+        .await;
         let planning_time = planning_start.elapsed();
 
         // Simulate query execution
         let execution_start = Instant::now();
-        
+
         // Simulate network calls to services
         let service_calls = scenario.expected_services.len();
         let mut total_network_time = Duration::from_millis(0);
-        
+
         for service_id in &scenario.expected_services {
             if let Some(service) = self.mock_sparql_services.read().await.get(service_id) {
                 tokio::time::sleep(service.response_delay).await;
                 total_network_time += service.response_delay;
-                
+
                 // Simulate error injection
                 if rand::random::<f64>() < service.error_rate {
                     return Err(anyhow!("Mock service error from {}", service_id));
                 }
             }
         }
-        
+
         let execution_time = execution_start.elapsed();
 
         // Simulate result processing
@@ -661,9 +702,12 @@ input CreateCommentInput {
 
         let passed = results.iter().filter(|r| r.success).count();
         let total = results.len();
-        
-        info!("Test execution completed: {}/{} tests passed", passed, total);
-        
+
+        info!(
+            "Test execution completed: {}/{} tests passed",
+            passed, total
+        );
+
         Ok(results)
     }
 
@@ -673,66 +717,69 @@ input CreateCommentInput {
             return self.execute_all_tests().await;
         }
 
-        info!("Executing {} test scenarios with concurrency {}", self.test_scenarios.len(), concurrency);
-        
-        let (tx, mut rx) = mpsc::channel(100);
-        let scenarios = &self.test_scenarios;
-        
-        // Spawn concurrent test executions
-        for scenario in scenarios {
-            let scenario_clone = scenario.clone();
-            let tx_clone = tx.clone();
-            let self_ref = self.clone(); // Would need to implement Clone for this to work
-            
-            tokio::spawn(async move {
-                let result = self_ref.execute_test_scenario(&scenario_clone).await.unwrap_or_else(|e| {
-                    TestResult {
-                        test_name: scenario_clone.name.clone(),
-                        success: false,
-                        execution_time: Duration::from_millis(0),
-                        error_message: Some(e.to_string()),
-                        assertions_passed: 0,
-                        assertions_failed: 1,
-                        performance_metrics: TestPerformanceMetrics::default(),
-                    }
-                });
-                let _ = tx_clone.send(result).await;
-            });
-        }
-        
-        drop(tx);
-        
+        info!(
+            "Executing {} test scenarios with concurrency {}",
+            self.test_scenarios.len(),
+            concurrency
+        );
+
+        // Execute scenarios sequentially instead of concurrently to avoid lifetime issues
+        // In a production implementation, you would need to refactor the struct to be Clone
+        // or use Arc<Self> throughout the codebase
         let mut results = Vec::new();
-        while let Some(result) = rx.recv().await {
+        for scenario in &self.test_scenarios {
+            let result = self
+                .execute_test_scenario(scenario)
+                .await
+                .unwrap_or_else(|e| TestResult {
+                    test_name: scenario.name.clone(),
+                    success: false,
+                    execution_time: Duration::from_millis(0),
+                    error_message: Some(e.to_string()),
+                    assertions_passed: 0,
+                    assertions_failed: 1,
+                    performance_metrics: TestPerformanceMetrics::default(),
+                });
             results.push(result);
         }
-        
+
         results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
-        
+
         let passed = results.iter().filter(|r| r.success).count();
         let total = results.len();
-        
-        info!("Concurrent test execution completed: {}/{} tests passed", passed, total);
-        
+
+        info!(
+            "Sequential test execution completed: {}/{} tests passed",
+            passed, total
+        );
+
         Ok(results)
     }
 
     /// Generate test report
     pub async fn generate_test_report(&self) -> Result<TestReport> {
         let results = self.test_results.read().await;
-        
+
         let total_tests = results.len();
         let passed_tests = results.iter().filter(|r| r.success).count();
         let failed_tests = total_tests - passed_tests;
-        
+
         let avg_execution_time = if !results.is_empty() {
-            results.iter().map(|r| r.execution_time.as_millis()).sum::<u128>() / results.len() as u128
+            results
+                .iter()
+                .map(|r| r.execution_time.as_millis())
+                .sum::<u128>()
+                / results.len() as u128
         } else {
             0
         };
-        
+
         let avg_memory_usage = if !results.is_empty() {
-            results.iter().map(|r| r.performance_metrics.memory_usage_mb).sum::<f64>() / results.len() as f64
+            results
+                .iter()
+                .map(|r| r.performance_metrics.memory_usage_mb)
+                .sum::<f64>()
+                / results.len() as f64
         } else {
             0.0
         };
@@ -741,7 +788,11 @@ input CreateCommentInput {
             total_tests,
             passed_tests,
             failed_tests,
-            success_rate: if total_tests > 0 { passed_tests as f64 / total_tests as f64 } else { 0.0 },
+            success_rate: if total_tests > 0 {
+                passed_tests as f64 / total_tests as f64
+            } else {
+                0.0
+            },
             avg_execution_time: Duration::from_millis(avg_execution_time as u64),
             avg_memory_usage,
             test_results: results.clone(),
@@ -751,12 +802,21 @@ input CreateCommentInput {
 
     /// Get mock service by ID
     pub async fn get_mock_sparql_service(&self, service_id: &str) -> Option<MockSparqlService> {
-        self.mock_sparql_services.read().await.get(service_id).cloned()
+        self.mock_sparql_services
+            .read()
+            .await
+            .get(service_id)
+            .cloned()
     }
 
     /// Get all mock services
     pub async fn get_all_mock_services(&self) -> Vec<MockSparqlService> {
-        self.mock_sparql_services.read().await.values().cloned().collect()
+        self.mock_sparql_services
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect()
     }
 }
 
@@ -807,7 +867,8 @@ impl TestUtils {
                     SERVICE <service1> { ?person foaf:name ?name }
                     SERVICE <service2> { ?person org:memberOf ?org }
                 }
-            "#.to_string(),
+            "#
+            .to_string(),
             patterns: vec![
                 TriplePattern {
                     subject: Some("?person".to_string()),
@@ -820,9 +881,12 @@ impl TestUtils {
                     predicate: Some("org:memberOf".to_string()),
                     object: Some("?org".to_string()),
                     pattern_string: "?person org:memberOf ?org".to_string(),
-                }
+                },
             ],
-            variables: ["person", "name", "org"].iter().map(|s| s.to_string()).collect(),
+            variables: ["person", "name", "org"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             filters: Vec::new(),
             complexity: 50,
             estimated_cost: 500,
@@ -831,9 +895,9 @@ impl TestUtils {
 
     /// Validate test result
     pub fn validate_test_result(result: &TestResult, expected_success: bool) -> bool {
-        result.success == expected_success &&
-        result.execution_time > Duration::from_millis(0) &&
-        (result.assertions_passed + result.assertions_failed) > 0
+        result.success == expected_success
+            && result.execution_time > Duration::from_millis(0)
+            && (result.assertions_passed + result.assertions_failed) > 0
     }
 }
 
@@ -845,10 +909,10 @@ mod tests {
     async fn test_infrastructure_initialization() {
         let config = TestConfig::default();
         let mut infrastructure = TestInfrastructure::new(config);
-        
+
         let result = infrastructure.initialize().await;
         assert!(result.is_ok());
-        
+
         let services = infrastructure.get_all_mock_services().await;
         assert_eq!(services.len(), 5); // Default mock service count
     }
@@ -862,7 +926,7 @@ mod tests {
         };
         let mut infrastructure = TestInfrastructure::new(config);
         infrastructure.initialize().await.unwrap();
-        
+
         let scenario = TestScenario {
             name: "test_query".to_string(),
             description: "Test query execution".to_string(),
@@ -872,10 +936,10 @@ mod tests {
             timeout: Duration::from_secs(10),
             performance_thresholds: PerformanceThresholds::default(),
         };
-        
+
         let result = infrastructure.execute_test_scenario(&scenario).await;
         assert!(result.is_ok());
-        
+
         let test_result = result.unwrap();
         assert_eq!(test_result.test_name, "test_query");
     }
@@ -885,7 +949,7 @@ mod tests {
         let simple_query = TestUtils::create_simple_query();
         assert_eq!(simple_query.query_type, QueryType::Select);
         assert_eq!(simple_query.patterns.len(), 1);
-        
+
         let federated_query = TestUtils::create_federated_query();
         assert_eq!(federated_query.patterns.len(), 2);
         assert!(federated_query.complexity > simple_query.complexity);

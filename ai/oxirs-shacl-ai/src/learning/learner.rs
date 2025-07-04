@@ -19,8 +19,13 @@ use crate::{
     Result, ShaclAiError,
 };
 
-use super::types::{LearningConfig, LearningStatistics, LearningQueryResult, ShapeTrainingData, TemporalPatterns};
-use super::performance::{LearningPerformanceMetrics, PatternStatistics, analyze_pattern_statistics, calculate_performance_metrics};
+use super::performance::{
+    analyze_pattern_statistics, calculate_performance_metrics, LearningPerformanceMetrics,
+    PatternStatistics,
+};
+use super::types::{
+    LearningConfig, LearningQueryResult, LearningStatistics, ShapeTrainingData, TemporalPatterns,
+};
 
 /// Shape learning engine for automatic constraint discovery
 #[derive(Debug)]
@@ -142,14 +147,20 @@ impl ShapeLearner {
     }
 
     /// Train machine learning model for shape learning
-    pub fn train_model(&mut self, training_data: &ShapeTrainingData) -> Result<crate::ModelTrainingResult> {
+    pub fn train_model(
+        &mut self,
+        training_data: &ShapeTrainingData,
+    ) -> Result<crate::ModelTrainingResult> {
         if !self.config.enable_training {
             return Err(ShaclAiError::ModelTraining(
                 "Training is disabled in configuration".to_string(),
             ));
         }
 
-        tracing::info!("Training shape learning model with {} samples", training_data.features.len());
+        tracing::info!(
+            "Training shape learning model with {} samples",
+            training_data.features.len()
+        );
         let start_time = std::time::Instant::now();
 
         // Simulate training process with placeholder metrics
@@ -204,8 +215,8 @@ impl ShapeLearner {
     /// Get performance metrics for learning efficiency analysis
     pub fn get_performance_metrics(&self) -> LearningPerformanceMetrics {
         let success_rate = if self.stats.total_shapes_learned + self.stats.failed_shapes > 0 {
-            self.stats.total_shapes_learned as f64 / 
-            (self.stats.total_shapes_learned + self.stats.failed_shapes) as f64
+            self.stats.total_shapes_learned as f64
+                / (self.stats.total_shapes_learned + self.stats.failed_shapes) as f64
         } else {
             0.0
         };
@@ -284,12 +295,12 @@ impl ShapeLearner {
     ) -> Result<Vec<NamedNode>> {
         // Placeholder implementation
         let mut classes = Vec::new();
-        
+
         // Add a default class for demonstration
         if let Ok(default_class) = NamedNode::new("http://example.org/DefaultClass") {
             classes.push(default_class);
         }
-        
+
         Ok(classes)
     }
 
@@ -303,11 +314,11 @@ impl ShapeLearner {
         if constraints.is_empty() {
             return 0.0;
         }
-        
+
         // Simple heuristic: more constraints and more instances suggest higher quality
         let constraint_factor = (constraints.len() as f64).min(10.0) / 10.0;
         let instance_factor = (instance_count as f64).min(100.0) / 100.0;
-        
+
         (constraint_factor + instance_factor) / 2.0
     }
 }

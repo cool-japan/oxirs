@@ -1146,11 +1146,144 @@ pub mod performance_benchmark {
     }
 }
 
+/// Convenience functions for quick operations
+pub mod convenience {
+    use super::*;
+    use crate::{TransE, ModelConfig, Triple, NamedNode, EmbeddingModel};
+    
+    /// Create a simple TransE model with sensible defaults for quick prototyping
+    pub fn create_simple_transe_model() -> TransE {
+        let config = ModelConfig::default()
+            .with_dimensions(128)
+            .with_learning_rate(0.01)
+            .with_max_epochs(100);
+        TransE::new(config)
+    }
+    
+    /// Parse a triple from a simple string format "subject predicate object"
+    pub fn parse_triple_from_string(triple_str: &str) -> Result<Triple> {
+        let parts: Vec<&str> = triple_str.trim().split_whitespace().collect();
+        if parts.len() != 3 {
+            return Err(anyhow!("Invalid triple format. Expected 'subject predicate object', got: '{}'", triple_str));
+        }
+        
+        let subject = if parts[0].starts_with("http") {
+            NamedNode::new(parts[0])?
+        } else {
+            NamedNode::new(&format!("http://example.org/{}", parts[0]))?
+        };
+        
+        let predicate = if parts[1].starts_with("http") {
+            NamedNode::new(parts[1])?
+        } else {
+            NamedNode::new(&format!("http://example.org/{}", parts[1]))?
+        };
+        
+        let object = if parts[2].starts_with("http") {
+            NamedNode::new(parts[2])?
+        } else {
+            NamedNode::new(&format!("http://example.org/{}", parts[2]))?
+        };
+        
+        Ok(Triple::new(subject, predicate, object))
+    }
+    
+    /// Add multiple triples from string array to a model
+    pub fn add_triples_from_strings(
+        model: &mut dyn EmbeddingModel, 
+        triple_strings: &[&str]
+    ) -> Result<usize> {
+        let mut added_count = 0;
+        for triple_str in triple_strings {
+            match parse_triple_from_string(triple_str) {
+                Ok(triple) => {
+                    model.add_triple(triple)?;
+                    added_count += 1;
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to parse triple '{}': {}", triple_str, e);
+                }
+            }
+        }
+        Ok(added_count)
+    }
+    
+    /// Create a quick biomedical model with default settings
+    #[cfg(feature = "biomedical")]
+    pub fn create_biomedical_model() -> crate::BiomedicalEmbedding {
+        let config = crate::BiomedicalEmbeddingConfig::default();
+        crate::BiomedicalEmbedding::new(config)
+    }
+    
+    /// Quick function to compute similarity between two embedding vectors
+    pub fn cosine_similarity(a: &[f64], b: &[f64]) -> Result<f64> {
+        if a.len() != b.len() {
+            return Err(anyhow!("Vector dimensions don't match: {} vs {}", a.len(), b.len()));
+        }
+        
+        let dot_product: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let norm_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+        
+        if norm_a == 0.0 || norm_b == 0.0 {
+            return Ok(0.0);
+        }
+        
+        Ok(dot_product / (norm_a * norm_b))
+    }
+    
+    /// Generate sample knowledge graph data for testing
+    pub fn generate_sample_kg_data(num_entities: usize, num_relations: usize) -> Vec<(String, String, String)> {
+        let mut rng = thread_rng();
+        let mut triples = Vec::new();
+        
+        let entities: Vec<String> = (0..num_entities)
+            .map(|i| format!("entity_{}", i))
+            .collect();
+            
+        let relations: Vec<String> = (0..num_relations)
+            .map(|i| format!("relation_{}", i))
+            .collect();
+            
+        // Generate random triples
+        for _ in 0..(num_entities * 2) {
+            let subject = entities.choose(&mut rng).unwrap().clone();
+            let relation = relations.choose(&mut rng).unwrap().clone();
+            let object = entities.choose(&mut rng).unwrap().clone();
+            
+            if subject != object {
+                triples.push((subject, relation, object));
+            }
+        }
+        
+        triples
+    }
+    
+    /// Quick performance test function
+    pub fn quick_performance_test<F>(name: &str, iterations: usize, operation: F) -> std::time::Duration
+    where
+        F: Fn() -> (),
+    {
+        let start = std::time::Instant::now();
+        for _ in 0..iterations {
+            operation();
+        }
+        let duration = start.elapsed();
+        
+        println!("Performance test '{}': {} iterations in {:?} ({:.2} ops/sec)", 
+                name, iterations, duration, iterations as f64 / duration.as_secs_f64());
+        
+        duration
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::NamedTempFile;
+    use crate::quick_start::{create_simple_transe_model, parse_triple_from_string, add_triples_from_strings, cosine_similarity, generate_sample_kg_data, quick_performance_test};
+    use crate::EmbeddingModel;
 
     #[test]
     fn test_load_triples_from_tsv() -> Result<()> {
@@ -1278,5 +1411,88 @@ mod tests {
         assert_eq!(stats.num_entities, 3); // alice, bob, charlie
         assert_eq!(stats.num_relations, 2); // knows, likes
         assert!(stats.avg_degree > 0.0);
+    }
+    
+    // Tests for convenience functions
+    #[test]
+    fn test_create_simple_transe_model() {
+        let model = create_simple_transe_model();
+        assert_eq!(model.config().dimensions, 128);
+        assert_eq!(model.config().learning_rate, 0.01);
+        assert_eq!(model.config().max_epochs, 100);
+    }
+    
+    #[test]
+    fn test_parse_triple_from_string() -> Result<()> {
+        let triple = parse_triple_from_string("alice knows bob")?;
+        assert_eq!(triple.subject.iri.as_str(), "http://example.org/alice");
+        assert_eq!(triple.predicate.iri.as_str(), "http://example.org/knows");
+        assert_eq!(triple.object.iri.as_str(), "http://example.org/bob");
+        
+        // Test with full URIs
+        let triple2 = parse_triple_from_string("http://example.org/alice http://example.org/knows http://example.org/bob")?;
+        assert_eq!(triple2.subject.iri.as_str(), "http://example.org/alice");
+        
+        // Test invalid format
+        assert!(parse_triple_from_string("alice knows").is_err());
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_add_triples_from_strings() -> Result<()> {
+        let mut model = create_simple_transe_model();
+        let triple_strings = &[
+            "alice knows bob",
+            "bob likes charlie",
+            "charlie follows alice"
+        ];
+        
+        let added_count = add_triples_from_strings(&mut model, triple_strings)?;
+        assert_eq!(added_count, 3);
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_cosine_similarity() -> Result<()> {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![1.0, 0.0, 0.0];
+        let similarity = cosine_similarity(&a, &b)?;
+        assert!((similarity - 1.0).abs() < 1e-10);
+        
+        let c = vec![0.0, 1.0, 0.0];
+        let similarity2 = cosine_similarity(&a, &c)?;
+        assert!((similarity2 - 0.0).abs() < 1e-10);
+        
+        // Test different dimensions
+        let d = vec![1.0, 0.0];
+        assert!(cosine_similarity(&a, &d).is_err());
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_generate_sample_kg_data() {
+        let triples = generate_sample_kg_data(5, 3);
+        assert!(!triples.is_empty());
+        
+        // Check that all subjects and objects are in the expected format
+        for (subject, relation, object) in &triples {
+            assert!(subject.starts_with("http://example.org/entity_"));
+            assert!(relation.starts_with("http://example.org/relation_"));
+            assert!(object.starts_with("http://example.org/entity_"));
+            assert_ne!(subject, object); // No self-loops
+        }
+    }
+    
+    #[test]
+    fn test_quick_performance_test() {
+        let duration = quick_performance_test("test_operation", 100, || {
+            // Simple operation for testing
+            let _sum: i32 = (1..10).sum();
+        });
+        
+        assert!(duration.as_nanos() > 0);
     }
 }

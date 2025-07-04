@@ -770,7 +770,7 @@ impl TokenRecognizer for N3Lexer {
 
                 // Variables (for SPARQL compatibility)
                 Some('?') | Some('$') if self.parse_variables => {
-                    let var_char = buffer.current().unwrap();
+                    let _var_char = buffer.current().unwrap();
                     buffer.advance();
                     let mut var_name = String::new();
                     while let Some(ch) = buffer.current() {

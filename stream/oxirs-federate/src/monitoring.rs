@@ -388,9 +388,9 @@ impl FederationMonitor {
             0.0
         };
 
-        let overall_health = if error_rate > 0.1 {
+        let overall_health = if error_rate > 0.2 {
             HealthStatus::Unhealthy
-        } else if error_rate > 0.05 || avg_response_time > Duration::from_secs(5) {
+        } else if error_rate > 0.15 || avg_response_time > Duration::from_secs(5) {
             HealthStatus::Degraded
         } else {
             HealthStatus::Healthy

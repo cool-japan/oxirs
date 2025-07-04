@@ -199,39 +199,189 @@ impl Pattern {
     /// Create a new pattern with a different id
     pub fn with_id(self, new_id: String) -> Self {
         match self {
-            Pattern::ClassUsage { class, instance_count, support, confidence, pattern_type, .. } => {
-                Pattern::ClassUsage { id: new_id, class, instance_count, support, confidence, pattern_type }
-            }
-            Pattern::PropertyUsage { property, usage_count, support, confidence, pattern_type, .. } => {
-                Pattern::PropertyUsage { id: new_id, property, usage_count, support, confidence, pattern_type }
-            }
-            Pattern::Datatype { property, datatype, usage_count, support, confidence, pattern_type, .. } => {
-                Pattern::Datatype { id: new_id, property, datatype, usage_count, support, confidence, pattern_type }
-            }
-            Pattern::Cardinality { property, cardinality_type, min_count, max_count, avg_count, support, confidence, pattern_type, .. } => {
-                Pattern::Cardinality { id: new_id, property, cardinality_type, min_count, max_count, avg_count, support, confidence, pattern_type }
-            }
-            Pattern::Hierarchy { subclass, superclass, relationship_type, depth, support, confidence, pattern_type, .. } => {
-                Pattern::Hierarchy { id: new_id, subclass, superclass, relationship_type, depth, support, confidence, pattern_type }
-            }
-            Pattern::ConstraintUsage { constraint_type, usage_count, support, confidence, pattern_type, .. } => {
-                Pattern::ConstraintUsage { id: new_id, constraint_type, usage_count, support, confidence, pattern_type }
-            }
-            Pattern::TargetUsage { target_type, usage_count, support, confidence, pattern_type, .. } => {
-                Pattern::TargetUsage { id: new_id, target_type, usage_count, support, confidence, pattern_type }
-            }
-            Pattern::PathComplexity { complexity, usage_count, support, confidence, pattern_type, .. } => {
-                Pattern::PathComplexity { id: new_id, complexity, usage_count, support, confidence, pattern_type }
-            }
-            Pattern::ShapeComplexity { constraint_count, shape_count, support, confidence, pattern_type, .. } => {
-                Pattern::ShapeComplexity { id: new_id, constraint_count, shape_count, support, confidence, pattern_type }
-            }
-            Pattern::AssociationRule { antecedent, consequent, support, confidence, lift, pattern_type, .. } => {
-                Pattern::AssociationRule { id: new_id, antecedent, consequent, support, confidence, lift, pattern_type }
-            }
-            Pattern::CardinalityRule { property, rule_type, min_count, max_count, support, confidence, pattern_type, .. } => {
-                Pattern::CardinalityRule { id: new_id, property, rule_type, min_count, max_count, support, confidence, pattern_type }
-            }
+            Pattern::ClassUsage {
+                class,
+                instance_count,
+                support,
+                confidence,
+                pattern_type,
+                ..
+            } => Pattern::ClassUsage {
+                id: new_id,
+                class,
+                instance_count,
+                support,
+                confidence,
+                pattern_type,
+            },
+            Pattern::PropertyUsage {
+                property,
+                usage_count,
+                support,
+                confidence,
+                pattern_type,
+                ..
+            } => Pattern::PropertyUsage {
+                id: new_id,
+                property,
+                usage_count,
+                support,
+                confidence,
+                pattern_type,
+            },
+            Pattern::Datatype {
+                property,
+                datatype,
+                usage_count,
+                support,
+                confidence,
+                pattern_type,
+                ..
+            } => Pattern::Datatype {
+                id: new_id,
+                property,
+                datatype,
+                usage_count,
+                support,
+                confidence,
+                pattern_type,
+            },
+            Pattern::Cardinality {
+                property,
+                cardinality_type,
+                min_count,
+                max_count,
+                avg_count,
+                support,
+                confidence,
+                pattern_type,
+                ..
+            } => Pattern::Cardinality {
+                id: new_id,
+                property,
+                cardinality_type,
+                min_count,
+                max_count,
+                avg_count,
+                support,
+                confidence,
+                pattern_type,
+            },
+            Pattern::Hierarchy {
+                subclass,
+                superclass,
+                relationship_type,
+                depth,
+                support,
+                confidence,
+                pattern_type,
+                ..
+            } => Pattern::Hierarchy {
+                id: new_id,
+                subclass,
+                superclass,
+                relationship_type,
+                depth,
+                support,
+                confidence,
+                pattern_type,
+            },
+            Pattern::ConstraintUsage {
+                constraint_type,
+                usage_count,
+                support,
+                confidence,
+                pattern_type,
+                ..
+            } => Pattern::ConstraintUsage {
+                id: new_id,
+                constraint_type,
+                usage_count,
+                support,
+                confidence,
+                pattern_type,
+            },
+            Pattern::TargetUsage {
+                target_type,
+                usage_count,
+                support,
+                confidence,
+                pattern_type,
+                ..
+            } => Pattern::TargetUsage {
+                id: new_id,
+                target_type,
+                usage_count,
+                support,
+                confidence,
+                pattern_type,
+            },
+            Pattern::PathComplexity {
+                complexity,
+                usage_count,
+                support,
+                confidence,
+                pattern_type,
+                ..
+            } => Pattern::PathComplexity {
+                id: new_id,
+                complexity,
+                usage_count,
+                support,
+                confidence,
+                pattern_type,
+            },
+            Pattern::ShapeComplexity {
+                constraint_count,
+                shape_count,
+                support,
+                confidence,
+                pattern_type,
+                ..
+            } => Pattern::ShapeComplexity {
+                id: new_id,
+                constraint_count,
+                shape_count,
+                support,
+                confidence,
+                pattern_type,
+            },
+            Pattern::AssociationRule {
+                antecedent,
+                consequent,
+                support,
+                confidence,
+                lift,
+                pattern_type,
+                ..
+            } => Pattern::AssociationRule {
+                id: new_id,
+                antecedent,
+                consequent,
+                support,
+                confidence,
+                lift,
+                pattern_type,
+            },
+            Pattern::CardinalityRule {
+                property,
+                rule_type,
+                min_count,
+                max_count,
+                support,
+                confidence,
+                pattern_type,
+                ..
+            } => Pattern::CardinalityRule {
+                id: new_id,
+                property,
+                rule_type,
+                min_count,
+                max_count,
+                support,
+                confidence,
+                pattern_type,
+            },
         }
     }
 }

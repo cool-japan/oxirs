@@ -280,7 +280,14 @@ impl PdfHandler {
             links.push(ExtractedLink {
                 url: url.to_string(),
                 text: url.to_string(),
-                link_type: crate::content_processing::LinkType::External,
+                title: None,
+                location: ContentLocation {
+                    page: None,
+                    section: None,
+                    char_offset: None,
+                    line: None,
+                    column: None,
+                },
             });
         }
 
@@ -290,7 +297,14 @@ impl PdfHandler {
             links.push(ExtractedLink {
                 url: format!("mailto:{}", email),
                 text: email.to_string(),
-                link_type: crate::content_processing::LinkType::External,
+                title: None,
+                location: ContentLocation {
+                    page: None,
+                    section: None,
+                    char_offset: None,
+                    line: None,
+                    column: None,
+                },
             });
         }
 

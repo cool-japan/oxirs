@@ -46,16 +46,16 @@ impl AdaptiveCompressor {
         let stats = self.analyze_data(sample_data);
 
         // Decision tree based on data characteristics
-        if stats.repetition_ratio > 0.5 {
-            // High repetition - use run-length encoding
-            AdvancedCompressionType::RunLength
-        } else if stats.sparsity > 0.9 {
+        if stats.sparsity > 0.9 {
             // Very sparse data (lots of zeros) - use bitmap compression
             if stats.bit_runs > stats.byte_runs {
                 AdvancedCompressionType::BitmapRoaring
             } else {
                 AdvancedCompressionType::BitmapWAH
             }
+        } else if stats.repetition_ratio > 0.5 {
+            // High repetition - use run-length encoding
+            AdvancedCompressionType::RunLength
         } else if stats.is_sorted && stats.delta_efficiency > 0.7 {
             // Sorted numeric data - use delta or FOR encoding
             if stats.range_ratio < 0.1 {

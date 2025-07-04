@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Semaphore, Mutex};
+use tokio::sync::{Mutex, RwLock, Semaphore};
 use tokio::task::yield_now;
 use tracing::{debug, info, warn};
 
@@ -96,10 +96,11 @@ impl AdaptiveBatcher {
         if buffer.len() >= optimal_size || time_since_last_flush >= self.target_latency {
             let batch = std::mem::take(&mut *buffer);
             self.last_flush = Instant::now();
-            
+
             // Update statistics and optimize batch size
-            self.update_stats_and_optimize(batch.len(), time_since_last_flush).await;
-            
+            self.update_stats_and_optimize(batch.len(), time_since_last_flush)
+                .await;
+
             Ok(Some(batch))
         } else {
             Ok(None)
@@ -116,9 +117,10 @@ impl AdaptiveBatcher {
         let batch = std::mem::take(&mut *buffer);
         let time_since_last_flush = self.last_flush.elapsed();
         self.last_flush = Instant::now();
-        
-        self.update_stats_and_optimize(batch.len(), time_since_last_flush).await;
-        
+
+        self.update_stats_and_optimize(batch.len(), time_since_last_flush)
+            .await;
+
         Ok(Some(batch))
     }
 
@@ -127,14 +129,14 @@ impl AdaptiveBatcher {
         let mut stats = self.batch_stats.write().await;
         stats.total_batches += 1;
         stats.total_events += batch_size as u64;
-        
+
         // Calculate moving averages
         let new_avg_batch_size = (stats.avg_batch_size + batch_size as f64) / 2.0;
         let new_avg_latency = (stats.avg_latency_ms + latency.as_millis() as f64) / 2.0;
-        
+
         stats.avg_batch_size = new_avg_batch_size;
         stats.avg_latency_ms = new_avg_latency;
-        
+
         if latency.as_secs_f64() > 0.0 {
             stats.throughput_events_per_sec = batch_size as f64 / latency.as_secs_f64();
         }
@@ -150,15 +152,23 @@ impl AdaptiveBatcher {
         // Adaptive optimization: adjust batch size based on performance
         if self.config.enable_batch_optimization {
             let mut optimal_size = self.optimal_batch_size.write().await;
-            
+
             if new_avg_latency > self.target_latency.as_millis() as f64 && *optimal_size > 100 {
                 // Latency too high, reduce batch size
                 *optimal_size = (*optimal_size * 9) / 10;
-                debug!("Reduced optimal batch size to {} due to high latency", *optimal_size);
-            } else if new_avg_latency < self.target_latency.as_millis() as f64 / 2.0 && *optimal_size < 10000 {
+                debug!(
+                    "Reduced optimal batch size to {} due to high latency",
+                    *optimal_size
+                );
+            } else if new_avg_latency < self.target_latency.as_millis() as f64 / 2.0
+                && *optimal_size < 10000
+            {
                 // Latency is good, try increasing batch size
                 *optimal_size = (*optimal_size * 11) / 10;
-                debug!("Increased optimal batch size to {} due to good latency", *optimal_size);
+                debug!(
+                    "Increased optimal batch size to {} due to good latency",
+                    *optimal_size
+                );
             }
         }
     }
@@ -223,15 +233,17 @@ impl<T> IntelligentMemoryPool<T> {
         // Pool miss - create new object
         stats.pool_misses += 1;
         stats.hit_rate = (stats.pool_hits as f64) / (stats.total_allocations as f64);
-        
+
         factory()
     }
 
     /// Return an object to the pool
     pub async fn return_to_pool(&self, pool_name: &str, obj: T) {
         let mut pools = self.pools.write().await;
-        let pool = pools.entry(pool_name.to_string()).or_insert_with(VecDeque::new);
-        
+        let pool = pools
+            .entry(pool_name.to_string())
+            .or_insert_with(VecDeque::new);
+
         if pool.len() < self.max_pool_size {
             pool.push_back(obj);
         }
@@ -247,7 +259,7 @@ impl<T> IntelligentMemoryPool<T> {
     pub async fn clear_all_pools(&self) {
         let mut pools = self.pools.write().await;
         pools.clear();
-        
+
         let mut stats = self.allocation_stats.write().await;
         *stats = PoolStats::default();
     }
@@ -296,7 +308,7 @@ impl AdaptiveRateLimiter {
     /// Create a new adaptive rate limiter
     pub fn new(config: RateLimitConfig) -> Self {
         let permits = Arc::new(Semaphore::new(config.burst_capacity));
-        
+
         Self {
             permits,
             config: Arc::new(RwLock::new(config)),
@@ -312,7 +324,10 @@ impl AdaptiveRateLimiter {
             Err(_) => {
                 // Apply backpressure by waiting
                 warn!("Rate limit reached, applying backpressure");
-                self.permits.acquire().await.map_err(|e| anyhow!("Failed to acquire permit: {}", e))
+                self.permits
+                    .acquire()
+                    .await
+                    .map_err(|e| anyhow!("Failed to acquire permit: {}", e))
             }
         }
     }
@@ -329,7 +344,7 @@ impl AdaptiveRateLimiter {
         {
             let mut history = self.performance_history.write().await;
             history.push_back(snapshot);
-            
+
             // Keep only last 100 snapshots
             if history.len() > 100 {
                 history.pop_front();
@@ -340,7 +355,7 @@ impl AdaptiveRateLimiter {
         {
             let last_adjustment = self.last_adjustment.read().await;
             let config = self.config.read().await;
-            
+
             if last_adjustment.elapsed() >= config.adjustment_interval {
                 drop(last_adjustment);
                 drop(config);
@@ -363,31 +378,34 @@ impl AdaptiveRateLimiter {
         }
 
         // Calculate average performance metrics
-        let avg_latency: f64 = history.iter().map(|s| s.latency_ms).sum::<f64>() / history.len() as f64;
-        let avg_success_rate: f64 = history.iter().map(|s| s.success_rate).sum::<f64>() / history.len() as f64;
+        let avg_latency: f64 =
+            history.iter().map(|s| s.latency_ms).sum::<f64>() / history.len() as f64;
+        let avg_success_rate: f64 =
+            history.iter().map(|s| s.success_rate).sum::<f64>() / history.len() as f64;
 
         let mut config = self.config.write().await;
         let current_rate = config.max_requests_per_second;
 
         // Adjust based on latency and success rate
-        let adjustment_factor = if avg_latency > config.target_latency_ms * 1.5 || avg_success_rate < 0.95 {
-            // Performance is poor, reduce rate
-            0.9
-        } else if avg_latency < config.target_latency_ms * 0.5 && avg_success_rate > 0.98 {
-            // Performance is good, increase rate
-            1.1
-        } else {
-            // Performance is acceptable, no change
-            1.0
-        };
+        let adjustment_factor =
+            if avg_latency > config.target_latency_ms * 1.5 || avg_success_rate < 0.95 {
+                // Performance is poor, reduce rate
+                0.9
+            } else if avg_latency < config.target_latency_ms * 0.5 && avg_success_rate > 0.98 {
+                // Performance is good, increase rate
+                1.1
+            } else {
+                // Performance is acceptable, no change
+                1.0
+            };
 
         if adjustment_factor != 1.0 {
             let new_rate = ((current_rate as f64) * adjustment_factor) as usize;
             let max_rate = ((current_rate as f64) * config.max_adjustment_factor) as usize;
             let min_rate = ((current_rate as f64) / config.max_adjustment_factor) as usize;
-            
+
             config.max_requests_per_second = new_rate.clamp(min_rate, max_rate);
-            
+
             info!(
                 "Adjusted rate limit from {} to {} req/s (factor: {:.2}, avg_latency: {:.2}ms, success_rate: {:.2}%)",
                 current_rate, config.max_requests_per_second, adjustment_factor, avg_latency, avg_success_rate * 100.0
@@ -429,7 +447,7 @@ impl ParallelStreamProcessor {
     /// Create a new parallel processor
     pub fn new(config: PerformanceUtilsConfig) -> Self {
         let worker_semaphore = Arc::new(Semaphore::new(config.cpu_cores * 2));
-        
+
         Self {
             config,
             worker_semaphore,
@@ -438,14 +456,18 @@ impl ParallelStreamProcessor {
     }
 
     /// Process events in parallel with optimal load balancing
-    pub async fn process_parallel<F, Fut>(&self, events: Vec<StreamEvent>, processor: F) -> Result<Vec<Result<()>>>
+    pub async fn process_parallel<F, Fut>(
+        &self,
+        events: Vec<StreamEvent>,
+        processor: F,
+    ) -> Result<Vec<Result<()>>>
     where
         F: Fn(StreamEvent) -> Fut + Send + Sync + Clone + 'static,
         Fut: std::future::Future<Output = Result<()>> + Send + 'static,
     {
         let start_time = Instant::now();
         let event_count = events.len();
-        
+
         // Update concurrency tracking
         {
             let mut stats = self.processing_stats.write().await;
@@ -455,18 +477,18 @@ impl ParallelStreamProcessor {
 
         // Process events in parallel with controlled concurrency
         let mut handles = Vec::new();
-        
+
         for event in events {
             let permit = self.worker_semaphore.clone().acquire_owned().await?;
             let processor_clone = processor.clone();
-            
+
             let handle = tokio::spawn(async move {
                 let _permit = permit; // Keep permit alive
                 let result = processor_clone(event).await;
                 yield_now().await; // Yield to prevent blocking
                 result
             });
-            
+
             handles.push(handle);
         }
 
@@ -484,13 +506,15 @@ impl ParallelStreamProcessor {
         {
             let mut stats = self.processing_stats.write().await;
             stats.events_processed += event_count as u64;
-            stats.avg_processing_time_ms = (stats.avg_processing_time_ms + processing_time.as_millis() as f64) / 2.0;
+            stats.avg_processing_time_ms =
+                (stats.avg_processing_time_ms + processing_time.as_millis() as f64) / 2.0;
             stats.current_concurrency = 0;
-            
+
             if processing_time.as_secs_f64() > 0.0 {
-                stats.throughput_events_per_sec = event_count as f64 / processing_time.as_secs_f64();
+                stats.throughput_events_per_sec =
+                    event_count as f64 / processing_time.as_secs_f64();
             }
-            
+
             // Calculate CPU efficiency (higher is better)
             let ideal_time = (event_count as f64) / (self.config.cpu_cores as f64);
             let actual_time = processing_time.as_secs_f64();
@@ -561,7 +585,7 @@ impl<T: Clone> IntelligentPrefetcher<T> {
 
         // Load data
         let data = loader(key.to_string()).await?;
-        
+
         // Store in cache
         {
             let mut cache = self.cache.write().await;
@@ -582,16 +606,18 @@ impl<T: Clone> IntelligentPrefetcher<T> {
     /// Update access pattern for a key
     async fn update_access_pattern(&self, key: &str) {
         let mut patterns = self.access_patterns.write().await;
-        let pattern = patterns.entry(key.to_string()).or_insert_with(|| AccessPattern {
-            access_count: 0,
-            last_access: Instant::now(),
-            prediction_score: 0.0,
-            related_keys: Vec::new(),
-        });
+        let pattern = patterns
+            .entry(key.to_string())
+            .or_insert_with(|| AccessPattern {
+                access_count: 0,
+                last_access: Instant::now(),
+                prediction_score: 0.0,
+                related_keys: Vec::new(),
+            });
 
         pattern.access_count += 1;
         pattern.last_access = Instant::now();
-        
+
         // Update prediction score based on access frequency and recency
         let recency_factor = 1.0; // More recent = higher score
         let frequency_factor = (pattern.access_count as f64).ln();
@@ -601,7 +627,7 @@ impl<T: Clone> IntelligentPrefetcher<T> {
     /// Trigger intelligent prefetching based on access patterns
     async fn trigger_intelligent_prefetch(&self, accessed_key: &str) {
         let patterns = self.access_patterns.read().await;
-        
+
         if let Some(pattern) = patterns.get(accessed_key) {
             // Prefetch related keys with high prediction scores
             for related_key in &pattern.related_keys {
@@ -618,15 +644,17 @@ impl<T: Clone> IntelligentPrefetcher<T> {
     /// Evict least recently used item from cache
     async fn evict_lru(&self) {
         let patterns = self.access_patterns.read().await;
-        
-        if let Some((lru_key, _)) = patterns.iter()
-            .min_by_key(|(_, pattern)| pattern.last_access) {
+
+        if let Some((lru_key, _)) = patterns
+            .iter()
+            .min_by_key(|(_, pattern)| pattern.last_access)
+        {
             let lru_key = lru_key.clone();
             drop(patterns);
-            
+
             let mut cache = self.cache.write().await;
             cache.remove(&lru_key);
-            
+
             let mut patterns = self.access_patterns.write().await;
             patterns.remove(&lru_key);
         }
@@ -649,7 +677,7 @@ mod tests {
     async fn test_adaptive_batcher() {
         let config = PerformanceUtilsConfig::default();
         let mut batcher = AdaptiveBatcher::new(config, Duration::from_millis(100));
-        
+
         let event = crate::event::StreamEvent::TripleAdded {
             subject: "http://example.org/subject".to_string(),
             predicate: "http://example.org/predicate".to_string(),
@@ -657,7 +685,7 @@ mod tests {
             graph: None,
             metadata: crate::event::EventMetadata::default(),
         };
-        
+
         // Add events and check batching behavior
         for i in 0..10 {
             let result = batcher.add_event(event.clone()).await.unwrap();
@@ -666,12 +694,12 @@ mod tests {
                 assert!(result.is_none());
             }
         }
-        
+
         // Force flush
         let batch = batcher.flush().await.unwrap();
         assert!(batch.is_some());
         assert_eq!(batch.unwrap().len(), 10);
-        
+
         let stats = batcher.get_stats().await;
         assert_eq!(stats.total_batches, 1);
         assert_eq!(stats.total_events, 10);
@@ -680,18 +708,22 @@ mod tests {
     #[tokio::test]
     async fn test_memory_pool() {
         let pool: IntelligentMemoryPool<String> = IntelligentMemoryPool::new(10);
-        
+
         // Get object from pool (will create new)
-        let obj1 = pool.get_or_create("test_pool", || "test_string".to_string()).await;
+        let obj1 = pool
+            .get_or_create("test_pool", || "test_string".to_string())
+            .await;
         assert_eq!(obj1, "test_string");
-        
+
         // Return object to pool
         pool.return_to_pool("test_pool", obj1).await;
-        
+
         // Get object again (should come from pool)
-        let obj2 = pool.get_or_create("test_pool", || "new_string".to_string()).await;
+        let obj2 = pool
+            .get_or_create("test_pool", || "new_string".to_string())
+            .await;
         assert_eq!(obj2, "test_string"); // Should be the pooled object
-        
+
         let stats = pool.get_stats().await;
         assert_eq!(stats.pool_hits, 1);
         assert_eq!(stats.total_allocations, 2);
@@ -706,17 +738,17 @@ mod tests {
             target_latency_ms: 10.0,
             max_adjustment_factor: 2.0,
         };
-        
+
         let limiter = AdaptiveRateLimiter::new(config);
-        
+
         // Acquire permits
         for _ in 0..5 {
             let _permit = limiter.acquire_permit().await.unwrap();
             limiter.record_performance(5.0, true).await.unwrap(); // Good performance
         }
-        
+
         sleep(Duration::from_millis(150)).await; // Wait for adjustment
-        
+
         let final_config = limiter.get_config().await;
         // Rate might be adjusted based on good performance
         assert!(final_config.max_requests_per_second >= 10);
@@ -726,7 +758,7 @@ mod tests {
     async fn test_parallel_processor() {
         let config = PerformanceUtilsConfig::default();
         let processor = ParallelStreamProcessor::new(config);
-        
+
         let events = vec![
             crate::event::StreamEvent::TripleAdded {
                 subject: "http://example.org/subject1".to_string(),
@@ -743,15 +775,18 @@ mod tests {
                 metadata: crate::event::EventMetadata::default(),
             },
         ];
-        
-        let results = processor.process_parallel(events, |_event| async {
-            sleep(Duration::from_millis(10)).await;
-            Ok(())
-        }).await.unwrap();
-        
+
+        let results = processor
+            .process_parallel(events, |_event| async {
+                sleep(Duration::from_millis(10)).await;
+                Ok(())
+            })
+            .await
+            .unwrap();
+
         assert_eq!(results.len(), 2);
         assert!(results.iter().all(|r| r.is_ok()));
-        
+
         let stats = processor.get_stats().await;
         assert_eq!(stats.events_processed, 2);
     }
@@ -759,21 +794,25 @@ mod tests {
     #[tokio::test]
     async fn test_intelligent_prefetcher() {
         let prefetcher: IntelligentPrefetcher<String> = IntelligentPrefetcher::new(10);
-        
+
         // Load data with prefetcher
-        let data1 = prefetcher.get_with_prefetch("key1", |key| async move {
-            Ok(format!("data_for_{}", key))
-        }).await.unwrap();
-        
+        let data1 = prefetcher
+            .get_with_prefetch("key1", |key| async move { Ok(format!("data_for_{}", key)) })
+            .await
+            .unwrap();
+
         assert_eq!(data1, "data_for_key1");
-        
+
         // Access same key (should come from cache)
-        let data2 = prefetcher.get_with_prefetch("key1", |_key| async move {
-            Ok("should_not_be_called".to_string())
-        }).await.unwrap();
-        
+        let data2 = prefetcher
+            .get_with_prefetch("key1", |_key| async move {
+                Ok("should_not_be_called".to_string())
+            })
+            .await
+            .unwrap();
+
         assert_eq!(data2, "data_for_key1");
-        
+
         let (cache_size, pattern_count) = prefetcher.get_cache_stats().await;
         assert_eq!(cache_size, 1);
         assert_eq!(pattern_count, 1);

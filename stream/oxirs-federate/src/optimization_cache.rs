@@ -78,7 +78,7 @@ impl QueryFingerprint {
     pub fn from_query_info(query_info: &QueryInfo) -> Self {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         query_info.original_query.hash(&mut hasher);
-        
+
         Self {
             query_type: query_info.query_type,
             pattern_count: query_info.patterns.len(),
@@ -114,14 +114,16 @@ impl QueryFingerprint {
         total_weight += 3.0;
 
         // Pattern count similarity
-        let pattern_similarity = 1.0 - ((self.pattern_count as f64 - other.pattern_count as f64).abs() 
-            / (self.pattern_count.max(other.pattern_count) as f64 + 1.0));
+        let pattern_similarity = 1.0
+            - ((self.pattern_count as f64 - other.pattern_count as f64).abs()
+                / (self.pattern_count.max(other.pattern_count) as f64 + 1.0));
         score += pattern_similarity * 2.0;
         total_weight += 2.0;
 
         // Variable count similarity
-        let variable_similarity = 1.0 - ((self.variable_count as f64 - other.variable_count as f64).abs() 
-            / (self.variable_count.max(other.variable_count) as f64 + 1.0));
+        let variable_similarity = 1.0
+            - ((self.variable_count as f64 - other.variable_count as f64).abs()
+                / (self.variable_count.max(other.variable_count) as f64 + 1.0));
         score += variable_similarity * 1.5;
         total_weight += 1.5;
 
@@ -132,8 +134,9 @@ impl QueryFingerprint {
         total_weight += 1.0;
 
         // Service count similarity
-        let service_similarity = 1.0 - ((self.service_count as f64 - other.service_count as f64).abs() 
-            / (self.service_count.max(other.service_count) as f64 + 1.0));
+        let service_similarity = 1.0
+            - ((self.service_count as f64 - other.service_count as f64).abs()
+                / (self.service_count.max(other.service_count) as f64 + 1.0));
         score += service_similarity * 1.0;
         total_weight += 1.0;
 
@@ -180,16 +183,21 @@ impl CachedPlan {
     /// Update performance metrics
     pub fn update_metrics(&mut self, execution_time: Duration, success: bool) {
         self.usage_count += 1;
-        
+
         // Update average execution time
         let current_avg_ms = self.avg_execution_time.as_millis() as f64;
         let new_time_ms = execution_time.as_millis() as f64;
-        let new_avg_ms = (current_avg_ms * (self.usage_count - 1) as f64 + new_time_ms) / self.usage_count as f64;
+        let new_avg_ms = (current_avg_ms * (self.usage_count - 1) as f64 + new_time_ms)
+            / self.usage_count as f64;
         self.avg_execution_time = Duration::from_millis(new_avg_ms as u64);
 
         // Update success rate
         let current_successes = (self.success_rate * (self.usage_count - 1) as f64).round() as u32;
-        let new_successes = if success { current_successes + 1 } else { current_successes };
+        let new_successes = if success {
+            current_successes + 1
+        } else {
+            current_successes
+        };
         self.success_rate = new_successes as f64 / self.usage_count as f64;
     }
 
@@ -284,7 +292,7 @@ impl OptimizationCache {
     /// Look up a cached plan for a query
     pub async fn get_plan(&self, fingerprint: &QueryFingerprint) -> Option<CachedPlan> {
         let cached_plans = self.cached_plans.read().await;
-        
+
         // Direct lookup first
         if let Some(plan) = cached_plans.get(fingerprint) {
             if plan.is_valid(self.config.plan_ttl) {
@@ -333,8 +341,11 @@ impl OptimizationCache {
 
         let cached_plan = CachedPlan::new(plan, fingerprint.clone());
         cached_plans.insert(fingerprint.clone(), cached_plan);
-        
-        info!("Cached new execution plan with fingerprint: {:?}", fingerprint);
+
+        info!(
+            "Cached new execution plan with fingerprint: {:?}",
+            fingerprint
+        );
     }
 
     /// Update performance metrics for a cached plan
@@ -345,7 +356,7 @@ impl OptimizationCache {
         success: bool,
     ) {
         let mut cached_plans = self.cached_plans.write().await;
-        
+
         if let Some(plan) = cached_plans.get_mut(fingerprint) {
             plan.update_metrics(execution_time, success);
             debug!("Updated performance metrics for plan: {:?}", fingerprint);
@@ -355,7 +366,7 @@ impl OptimizationCache {
         let performance_data = PerformanceData {
             execution_time,
             success,
-            memory_usage: 0, // Would be provided by caller
+            memory_usage: 0,                // Would be provided by caller
             services_contacted: Vec::new(), // Would be provided by caller
             timestamp: SystemTime::now(),
         };
@@ -426,7 +437,7 @@ impl OptimizationCache {
     pub async fn warm_cache(&self) -> Result<()> {
         let now = Instant::now();
         let last_warming = self.last_warming.read().await;
-        
+
         if now.duration_since(*last_warming) < self.config.cache_warming_interval {
             return Ok(());
         }
@@ -441,7 +452,10 @@ impl OptimizationCache {
             if data.success {
                 // Group by execution time buckets for pattern analysis
                 let bucket = Self::get_time_bucket(data.execution_time);
-                pattern_performance.entry(bucket).or_default().push(data.execution_time);
+                pattern_performance
+                    .entry(bucket)
+                    .or_default()
+                    .push(data.execution_time);
             }
         }
 
@@ -461,7 +475,10 @@ impl OptimizationCache {
                 filter_count: filters,
                 complexity_bucket: 2,
                 service_count: 1,
-                structure_hash: name.as_bytes().iter().fold(0u64, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u64)),
+                structure_hash: name
+                    .as_bytes()
+                    .iter()
+                    .fold(0u64, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u64)),
             };
 
             // Check if we should pre-warm this pattern
@@ -473,7 +490,7 @@ impl OptimizationCache {
 
         // Update last warming time
         *self.last_warming.write().await = now;
-        
+
         info!("Cache warming completed");
         Ok(())
     }
@@ -496,14 +513,24 @@ impl OptimizationCache {
         let performance_history = self.performance_history.read().await;
 
         let total_requests = stats.hits + stats.misses;
-        let hit_rate = if total_requests > 0 { stats.hits as f64 / total_requests as f64 } else { 0.0 };
+        let hit_rate = if total_requests > 0 {
+            stats.hits as f64 / total_requests as f64
+        } else {
+            0.0
+        };
 
         let mut avg_reuse = 0.0;
         if !cached_plans.is_empty() {
-            avg_reuse = cached_plans.values().map(|p| p.usage_count as f64).sum::<f64>() / cached_plans.len() as f64;
+            avg_reuse = cached_plans
+                .values()
+                .map(|p| p.usage_count as f64)
+                .sum::<f64>()
+                / cached_plans.len() as f64;
         }
 
-        let recommendations = self.generate_recommendations(hit_rate, avg_reuse, &cached_plans).await;
+        let recommendations = self
+            .generate_recommendations(hit_rate, avg_reuse, &cached_plans)
+            .await;
 
         Ok(CacheAnalysis {
             hit_rate,
@@ -525,21 +552,26 @@ impl OptimizationCache {
         let mut recommendations = Vec::new();
 
         if hit_rate < 0.3 {
-            recommendations.push("Consider increasing cache size or adjusting similarity threshold".to_string());
+            recommendations.push(
+                "Consider increasing cache size or adjusting similarity threshold".to_string(),
+            );
         }
 
         if avg_reuse < 2.0 {
-            recommendations.push("Query patterns show low reuse - consider query optimization".to_string());
+            recommendations
+                .push("Query patterns show low reuse - consider query optimization".to_string());
         }
 
         if cached_plans.len() < self.config.max_cached_plans / 10 {
-            recommendations.push("Cache utilization is low - consider more aggressive caching".to_string());
+            recommendations
+                .push("Cache utilization is low - consider more aggressive caching".to_string());
         }
 
-        let expired_count = cached_plans.values()
+        let expired_count = cached_plans
+            .values()
             .filter(|p| !p.is_valid(self.config.plan_ttl))
             .count();
-        
+
         if expired_count > cached_plans.len() / 4 {
             recommendations.push("Many cached plans are expired - consider longer TTL".to_string());
         }
@@ -615,13 +647,16 @@ mod tests {
         };
 
         let similarity = fp1.similarity(&fp2);
-        assert!(similarity > 0.8, "Similar queries should have high similarity score");
+        assert!(
+            similarity > 0.8,
+            "Similar queries should have high similarity score"
+        );
     }
 
     #[tokio::test]
     async fn test_cache_operations() {
         let cache = OptimizationCache::default();
-        
+
         let fingerprint = QueryFingerprint {
             query_type: QueryType::Select,
             pattern_count: 1,

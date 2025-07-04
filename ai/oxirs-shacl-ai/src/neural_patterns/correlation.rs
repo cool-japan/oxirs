@@ -16,7 +16,7 @@ use super::types::{
 };
 
 /// Advanced pattern correlation analyzer for discovering complex relationships
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AdvancedPatternCorrelationAnalyzer {
     /// Configuration for correlation analysis
     config: CorrelationAnalysisConfig,

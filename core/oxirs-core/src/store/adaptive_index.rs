@@ -295,7 +295,7 @@ impl AdaptiveIndexManager {
     }
 
     /// Estimate the benefit of creating an index for a pattern
-    fn estimate_index_benefit(&self, pattern: QueryPattern, stats: &PatternStats) -> Option<f64> {
+    fn estimate_index_benefit(&self, _pattern: QueryPattern, stats: &PatternStats) -> Option<f64> {
         // Simple cost model: benefit = (scan_cost - index_cost) / scan_cost
         let graph = self.base_graph.read();
         let total_triples = graph.len() as f64;

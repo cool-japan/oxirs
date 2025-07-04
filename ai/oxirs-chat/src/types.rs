@@ -858,3 +858,71 @@ pub enum MarkerShape {
     Diamond,
     Star,
 }
+
+/// Streaming response chunk for real-time communication
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StreamResponseChunk {
+    /// Status update with processing stage and progress
+    Status {
+        stage: String,
+        progress: f32, // 0.0 to 1.0
+    },
+    /// Context information available during processing
+    Context {
+        content: String,
+    },
+    /// Incremental content being generated
+    Content {
+        content: String,
+        is_final: bool,
+    },
+    /// Error occurred during processing
+    Error {
+        message: String,
+    },
+    /// Processing complete with final message
+    Complete {
+        message: crate::Message,
+        total_time: Duration,
+    },
+}
+
+/// Stream processing stage identifiers
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProcessingStage {
+    Initializing,
+    RagRetrieval,
+    RagComplete,
+    SparqlProcessing,
+    SparqlComplete,
+    ResponseGeneration,
+    Complete,
+}
+
+impl ProcessingStage {
+    /// Get the human-readable name for the stage
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ProcessingStage::Initializing => "Initializing",
+            ProcessingStage::RagRetrieval => "Retrieving Knowledge",
+            ProcessingStage::RagComplete => "Knowledge Retrieved",
+            ProcessingStage::SparqlProcessing => "Processing Query",
+            ProcessingStage::SparqlComplete => "Query Complete",
+            ProcessingStage::ResponseGeneration => "Generating Response",
+            ProcessingStage::Complete => "Complete",
+        }
+    }
+
+    /// Get expected progress for each stage
+    pub fn expected_progress(&self) -> f32 {
+        match self {
+            ProcessingStage::Initializing => 0.0,
+            ProcessingStage::RagRetrieval => 0.1,
+            ProcessingStage::RagComplete => 0.3,
+            ProcessingStage::SparqlProcessing => 0.5,
+            ProcessingStage::SparqlComplete => 0.6,
+            ProcessingStage::ResponseGeneration => 0.7,
+            ProcessingStage::Complete => 1.0,
+        }
+    }
+}

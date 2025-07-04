@@ -261,6 +261,13 @@ impl StatisticsCollector {
                             .entry(format!("predicate:{}", iri.as_str()))
                             .or_insert(0) += 1;
 
+                        // Update predicate frequency
+                        *self
+                            .stats
+                            .predicate_frequency
+                            .entry(iri.as_str().to_string())
+                            .or_insert(0) += 1;
+
                         // Create histogram for this predicate if needed
                         if !self.histograms.contains_key(iri.as_str()) {
                             self.histograms.insert(
@@ -300,6 +307,17 @@ impl StatisticsCollector {
                 self.stats
                     .filter_selectivities
                     .insert(format!("var:{}", var.as_str()), current * 0.9);
+
+                // Also track in variable_selectivity map
+                let var_selectivity = self
+                    .stats
+                    .variable_selectivity
+                    .get(var)
+                    .copied()
+                    .unwrap_or(0.1);
+                self.stats
+                    .variable_selectivity
+                    .insert(var.clone(), var_selectivity);
             }
             Term::QuotedTriple(triple) => {
                 // Recursively update statistics for the quoted triple's components

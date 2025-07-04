@@ -311,7 +311,7 @@ impl TurtleGrammarRecognizer {
 impl RuleRecognizer<TurtleNode> for TurtleGrammarRecognizer {
     fn recognize_next_node<Token>(
         &mut self,
-        parser: &mut Parser<Token>,
+        _parser: &mut Parser<Token>,
     ) -> ParseResult<Option<TurtleNode>> {
         // This is a simplified implementation - the full implementation would be much larger
         // and handle all Turtle grammar rules according to the W3C specification
@@ -337,8 +337,8 @@ impl TurtleParser {
     }
 
     /// Parse Turtle from a string into triples
-    pub fn parse_str(&mut self, input: &str) -> ParseResult<Vec<Triple>> {
-        let mut results = Vec::new();
+    pub fn parse_str(&mut self, _input: &str) -> ParseResult<Vec<Triple>> {
+        let results = Vec::new();
 
         // For now, return empty results - the full implementation would:
         // 1. Create a lexer with N3Lexer

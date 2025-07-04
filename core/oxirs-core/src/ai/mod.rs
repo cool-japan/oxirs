@@ -426,8 +426,8 @@ pub struct EvaluationMetrics {
 impl EvaluationMetrics {
     /// Evaluate model performance on test data
     pub async fn evaluate(
-        model: &dyn KnowledgeGraphEmbedding,
-        test_data: &[Triple],
+        _model: &dyn KnowledgeGraphEmbedding,
+        _test_data: &[Triple],
     ) -> Result<Self> {
         // TODO: Implement comprehensive evaluation
         Ok(Self {

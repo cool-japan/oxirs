@@ -265,7 +265,7 @@ pub mod serialization {
             }
 
             // Extract inner content
-            let inner = &trimmed[2..trimmed.len() - 2].trim();
+            let _inner = &trimmed[2..trimmed.len() - 2].trim();
 
             // Parse inner triple (simplified)
             // In production, would integrate with full Turtle parser

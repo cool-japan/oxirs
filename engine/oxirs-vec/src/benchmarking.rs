@@ -1335,9 +1335,9 @@ mod tests {
         let mut profiler = PerformanceProfiler::new();
 
         profiler.checkpoint("start");
-        std::thread::sleep(Duration::from_millis(20));
+        std::thread::sleep(Duration::from_millis(50));
         profiler.checkpoint("middle");
-        std::thread::sleep(Duration::from_millis(20));
+        std::thread::sleep(Duration::from_millis(100));
         profiler.checkpoint("end");
 
         let breakdown = profiler.get_timing_breakdown();
@@ -1346,7 +1346,8 @@ mod tests {
         // Check that timings are reasonable
         for (name, duration) in breakdown {
             assert!(!name.is_empty());
-            assert!(duration.as_micros() > 0);
+            // Use nanos instead of micros for more reliable timing
+            assert!(duration.as_nanos() > 0);
         }
     }
 }

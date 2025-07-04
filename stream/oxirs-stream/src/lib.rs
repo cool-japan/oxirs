@@ -94,6 +94,14 @@ pub use consciousness_streaming::{
     ConsciousnessLevel, ConsciousnessStats, ConsciousnessStreamProcessor, DreamSequence,
     EmotionalContext, IntuitiveEngine, MeditationState,
 };
+pub use observability::{
+    AlertConfig, AlertEvent, AlertSeverity, AlertType, BusinessMetrics, SpanLog, SpanStatus,
+    StreamObservability, StreamingMetrics, TelemetryConfig, TraceSpan,
+};
+pub use performance_utils::{
+    AdaptiveRateLimiter, IntelligentMemoryPool, IntelligentPrefetcher, ParallelStreamProcessor,
+    PerformanceUtilsConfig, PoolStats,
+};
 pub use quantum_communication::{
     BellState, EntanglementDistribution, QuantumCommConfig, QuantumCommSystem,
     QuantumOperation as QuantumCommOperation, QuantumSecurityProtocol,
@@ -101,6 +109,9 @@ pub use quantum_communication::{
 };
 pub use quantum_streaming::{
     QuantumEvent, QuantumOperation, QuantumProcessingStats, QuantumState, QuantumStreamProcessor,
+};
+pub use reliability::{
+    BulkReplayResult, DlqStats, ReplayStatus,
 };
 pub use security::{
     AuditConfig, AuditLogEntry, AuditLogger, AuthConfig, AuthMethod, AuthenticationProvider,
@@ -121,14 +132,6 @@ pub use wasm_edge_computing::{
 pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
     WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata,
-};
-pub use observability::{
-    AlertConfig, AlertEvent, AlertSeverity, AlertType, BusinessMetrics, SpanLog, SpanStatus,
-    StreamObservability, StreamingMetrics, TelemetryConfig, TraceSpan,
-};
-pub use performance_utils::{
-    AdaptiveRateLimiter, IntelligentMemoryPool,
-    IntelligentPrefetcher, ParallelStreamProcessor, PerformanceUtilsConfig, PoolStats,
 };
 
 #[cfg(test)]
@@ -154,8 +157,10 @@ pub mod health_monitor;
 pub mod join;
 pub mod monitoring;
 pub mod multi_region_replication;
+pub mod observability;
 pub mod patch;
 pub mod performance_optimizer;
+pub mod performance_utils;
 pub mod processing;
 pub mod producer;
 pub mod quantum_communication;
@@ -173,8 +178,6 @@ pub mod time_travel;
 pub mod types;
 pub mod wasm_edge_computing;
 pub mod webhook;
-pub mod observability;
-pub mod performance_utils;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]

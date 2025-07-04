@@ -669,7 +669,7 @@ impl IndexManager {
 
         let start_time = std::time::Instant::now();
         let result = self.execute_query_with_indexes(subject, predicate, object, graph_name);
-        let execution_time = start_time.elapsed().as_micros() as u64;
+        let _execution_time = start_time.elapsed().as_micros() as u64;
 
         // Update statistics
         if self.config.collect_stats {

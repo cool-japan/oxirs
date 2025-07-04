@@ -605,8 +605,9 @@ impl EnhancedBindProcessor {
             if let Some(expr_end) = self.find_expression_end(&query[bind_start + 5..]) {
                 let expr = &query[bind_start + 5..bind_start + 5 + expr_end];
 
-                // Extract the variable (AS ?var)
-                if let Some(as_pos) = expr.rfind(" as ") {
+                // Extract the variable (AS ?var) - case insensitive
+                let expr_lower = expr.to_lowercase();
+                if let Some(as_pos) = expr_lower.rfind(" as ") {
                     let var_part = expr[as_pos + 4..].trim();
                     if var_part.starts_with('?') {
                         let var = var_part.trim_end_matches(')').to_string();
@@ -1188,7 +1189,34 @@ impl ConstantFolder {
     }
 
     pub fn fold(&self, expr: &str) -> FusekiResult<String> {
-        // Constant folding logic
+        // Constant folding logic for CONCAT function
+        if expr.starts_with("CONCAT(") && expr.ends_with(")") {
+            let inner = &expr[7..expr.len()-1]; // Remove CONCAT( and )
+            
+            // Check if all arguments are string literals
+            let args: Vec<&str> = inner.split(", ").collect();
+            let mut all_literals = true;
+            let mut result_parts = Vec::new();
+            
+            for arg in &args {
+                let trimmed = arg.trim();
+                if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
+                    // Remove quotes and store the string content
+                    result_parts.push(&trimmed[1..trimmed.len()-1]);
+                } else {
+                    all_literals = false;
+                    break;
+                }
+            }
+            
+            if all_literals && !result_parts.is_empty() {
+                // Fold the constants into a single string literal
+                let folded_result = result_parts.join("");
+                return Ok(format!("\"{}\"", folded_result));
+            }
+        }
+        
+        // For other expressions or non-foldable CONCAT, return unchanged
         Ok(expr.to_string())
     }
 }

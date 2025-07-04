@@ -490,7 +490,7 @@ impl TurtleSerializer {
         match subject {
             crate::model::Subject::NamedNode(node) => self.serialize_iri(node.as_str()),
             crate::model::Subject::BlankNode(node) => Ok(node.as_str().to_string()),
-            crate::model::Subject::Variable(var) => Err(crate::OxirsError::Serialize(
+            crate::model::Subject::Variable(_var) => Err(crate::OxirsError::Serialize(
                 "Variables not supported in Turtle serialization".to_string(),
             )),
             crate::model::Subject::QuotedTriple(qt) => Ok(format!(
@@ -653,7 +653,7 @@ mod tests {
         // Check that all lines end with " ."
         for line in ntriples.lines() {
             if !line.trim().is_empty() {
-                assert!(line.ends_with(" ."), "Line should end with ' .': {}", line);
+                assert!(line.ends_with(" ."), "Line should end with ' .': {line}");
             }
         }
 

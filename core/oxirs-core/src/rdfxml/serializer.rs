@@ -3,7 +3,6 @@ use crate::model::{NamedOrBlankNode, NamedOrBlankNodeRef};
 use crate::model::iri::{Iri, IriParseError};
 use crate::model::*;
 use crate::vocab::{rdf, xsd};
-use crate::optimization::TermRef;
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use std::borrow::Cow;
@@ -251,9 +250,16 @@ pub struct WriterRdfXmlSerializer<W: Write> {
 impl<W: Write> WriterRdfXmlSerializer<W> {
     /// Serializes an extra triple.
     pub fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+        let triple_ref = t.into();
         let mut buffer = Vec::new();
-        self.inner.serialize_triple(t, &mut buffer)?;
-        self.flush_buffer(&mut buffer)
+        // Split the borrow to avoid conflict
+        let WriterRdfXmlSerializer { inner, writer } = self;
+        inner.serialize_triple(triple_ref, &mut buffer)?;
+        // Write buffer using appropriate writer method
+        for event in buffer {
+            writer.write_event(event).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        }
+        Ok(())
     }
 
     /// Ends the write process and returns the underlying [`Write`].
@@ -358,7 +364,7 @@ pub struct InnerRdfXmlWriter {
 
 impl InnerRdfXmlWriter {
     fn serialize_triple<'a>(
-        &mut self,
+        &'a mut self,
         t: impl Into<TripleRef<'a>>,
         output: &mut Vec<Event<'a>>,
     ) -> io::Result<()> {
@@ -391,11 +397,12 @@ impl InnerRdfXmlWriter {
                         (BytesStart::new("rdf:Description"), false)
                     } else {
                         let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(t);
-                        let mut description_open = BytesStart::new(prop_qname.clone());
+                        let prop_qname_owned = prop_qname.into_owned();
+                        let mut description_open = BytesStart::new(prop_qname_owned.clone());
                         if let Some((attr_name, attr_value)) = prop_xmlns {
                             description_open.push_attribute((attr_name.as_str(), attr_value.as_str()));
                         }
-                        self.current_resource_tag = Some(prop_qname.into_owned());
+                        self.current_resource_tag = Some(prop_qname_owned);
                         (description_open, true)
                     }
                 } else {
@@ -443,7 +450,8 @@ impl InnerRdfXmlWriter {
             ));
         }
         let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(pred_node);
-        let mut property_open = BytesStart::new(prop_qname.clone());
+        let prop_qname_owned = prop_qname.into_owned();
+        let mut property_open = BytesStart::new(prop_qname_owned.clone());
         if let Some((attr_name, attr_value)) = prop_xmlns {
             property_open.push_attribute((attr_name.as_str(), attr_value.as_str()));
         }
@@ -483,7 +491,7 @@ impl InnerRdfXmlWriter {
         if let Some(content) = content {
             output.push(Event::Start(property_open));
             output.push(Event::Text(BytesText::new(content)));
-            output.push(Event::End(BytesEnd::new(prop_qname)));
+            output.push(Event::End(BytesEnd::new(prop_qname_owned)));
         } else {
             output.push(Event::Empty(property_open));
         }
@@ -623,7 +631,7 @@ mod tests {
             .for_writer(Vec::new());
         serializer.serialize_triple(TripleRef::new(
             SubjectRef::NamedNode(&NamedNode::new("http://example.com/s")?),
-            PredicateRef::NamedNode(&*rdf::TYPE),
+            PredicateRef::NamedNode(&rdf::TYPE),
             ObjectRef::NamedNode(&NamedNode::new("http://example.org/o")?),
         ))?;
         serializer.serialize_triple(TripleRef::new(

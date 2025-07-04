@@ -1381,7 +1381,6 @@ impl ValidationOutcome {
             .filter(|result| {
                 !result.conforms()
                     // TODO: Check severity when API is available  
-                    && false
             })
             .count() as u32;
 

@@ -803,7 +803,7 @@ mod tests {
         )];
 
         let mut structure = optimizer.create_random_structure(&triples).unwrap();
-        let old_block_size = structure.storage_genes.block_size;
+        let _old_block_size = structure.storage_genes.block_size;
 
         optimizer.mutate(&mut structure).unwrap();
 

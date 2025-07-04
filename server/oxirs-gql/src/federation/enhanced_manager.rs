@@ -15,7 +15,7 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
 use super::config::{FederationConfig, RemoteEndpoint, RetryStrategy};
-use super::query_planner::{QueryPlan, QueryPlanner};
+use super::query_planner::{QueryPlan, QueryPlanner, QueryStep};
 use super::real_time_sync::{RealTimeSchemaSynchronizer, SyncConfig};
 use super::schema_stitcher::SchemaStitcher;
 use super::service_discovery::{
@@ -1012,7 +1012,7 @@ impl EnhancedFederationManager {
     /// Execute a single query step
     async fn execute_query_step(
         &self,
-        step: &crate::federation::query_planner::QueryStep,
+        step: &QueryStep,
         context: &FederationContext,
         _previous_results: &HashMap<String, serde_json::Value>,
     ) -> Result<FederationResult> {

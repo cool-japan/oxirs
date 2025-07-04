@@ -514,7 +514,7 @@ impl DistributedQueryEngine {
     fn apply_join(
         &self,
         results: Vec<QueryResult>,
-        join_op: &JoinOperation,
+        _join_op: &JoinOperation,
     ) -> Result<Vec<QueryResult>, OxirsError> {
         // Placeholder implementation
         Ok(results)
@@ -610,7 +610,7 @@ impl DistributedQueryEngine {
     }
 
     /// Optimize join order for distributed execution
-    fn optimize_join_order(&self, routes: &[QueryRoute]) -> Result<Vec<JoinOperation>, OxirsError> {
+    fn optimize_join_order(&self, _routes: &[QueryRoute]) -> Result<Vec<JoinOperation>, OxirsError> {
         // Placeholder - would use cost-based optimization
         Ok(Vec::new())
     }
@@ -875,7 +875,6 @@ impl QueryRouter {
             algebra::TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
             algebra::TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
             algebra::TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
-            _ => None,
         };
 
         Some(algebra::TriplePattern::new(subject, predicate, object))
@@ -1196,7 +1195,7 @@ impl CollaborativeFilter {
     }
 
     /// Extract pattern from query
-    fn extract_query_pattern(&self, query: &Query) -> Result<QueryPattern, OxirsError> {
+    fn extract_query_pattern(&self, _query: &Query) -> Result<QueryPattern, OxirsError> {
         // Extract patterns, joins, and filters
         Ok(QueryPattern {
             patterns: Vec::new(),

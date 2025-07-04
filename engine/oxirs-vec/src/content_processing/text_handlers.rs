@@ -194,7 +194,14 @@ impl HtmlHandler {
                             .replace_all(text.as_str(), "")
                             .trim()
                             .to_string(),
-                        link_type: crate::content_processing::LinkType::External,
+                        title: None,
+                        location: crate::content_processing::ContentLocation {
+                            page: None,
+                            section: None,
+                            char_offset: None,
+                            line: None,
+                            column: None,
+                        },
                     });
                 }
             }
@@ -435,7 +442,14 @@ impl MarkdownHandler {
                     links.push(crate::content_processing::ExtractedLink {
                         url: url.as_str().to_string(),
                         text: text.as_str().to_string(),
-                        link_type: crate::content_processing::LinkType::External,
+                        title: None,
+                        location: crate::content_processing::ContentLocation {
+                            page: None,
+                            section: None,
+                            char_offset: None,
+                            line: None,
+                            column: None,
+                        },
                     });
                 }
             }

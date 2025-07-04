@@ -96,6 +96,14 @@ pub struct DlqConfig {
     pub retention: Duration,
     /// Include error details in DLQ messages
     pub include_error_details: bool,
+    /// Enable message replay from DLQ
+    pub enable_replay: bool,
+    /// Maximum replay attempts per message
+    pub max_replay_attempts: u32,
+    /// Replay backoff duration
+    pub replay_backoff: Duration,
+    /// Replay batch size for bulk operations
+    pub replay_batch_size: usize,
 }
 
 impl Default for DlqConfig {
@@ -106,7 +114,32 @@ impl Default for DlqConfig {
             max_size: 10000,
             retention: Duration::from_secs(86400 * 7), // 7 days
             include_error_details: true,
+            enable_replay: true,
+            max_replay_attempts: 3,
+            replay_backoff: Duration::from_secs(60), // 1 minute
+            replay_batch_size: 100,
         }
+    }
+}
+
+/// Replay status for DLQ messages
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReplayStatus {
+    /// Message is available for replay
+    Available,
+    /// Message is currently being replayed
+    InProgress,
+    /// Message replay completed successfully
+    Succeeded,
+    /// Message replay failed and cannot be retried
+    Failed,
+    /// Message replay is temporarily paused
+    Paused,
+}
+
+impl Default for ReplayStatus {
+    fn default() -> Self {
+        ReplayStatus::Available
     }
 }
 
@@ -131,6 +164,12 @@ pub struct ReliableMessage {
     pub sequence_number: Option<u64>,
     /// Partition key for ordering within partition
     pub partition_key: Option<String>,
+    /// Number of replay attempts from DLQ
+    pub replay_count: u32,
+    /// Last replay attempt timestamp
+    pub last_replay_attempt: Option<DateTime<Utc>>,
+    /// Replay status
+    pub replay_status: ReplayStatus,
 }
 
 impl ReliableMessage {
@@ -147,6 +186,9 @@ impl ReliableMessage {
             checksum: None,
             sequence_number: None,
             partition_key: None,
+            replay_count: 0,
+            last_replay_attempt: None,
+            replay_status: ReplayStatus::default(),
         }
     }
 
@@ -574,6 +616,220 @@ impl ReliabilityManager {
         info!("Reliability manager shutdown");
         Ok(())
     }
+
+    /// Replay a single message from DLQ by message ID
+    pub async fn replay_message(&self, message_id: &str) -> Result<ReliableMessage> {
+        if !self.config.dlq_config.as_ref().map(|dlq| dlq.enable_replay).unwrap_or(false) {
+            return Err(anyhow!("Message replay is disabled"));
+        }
+
+        let mut dlq = self.dlq.lock().await;
+        let position = dlq.iter().position(|msg| msg.message_id == message_id);
+
+        if let Some(pos) = position {
+            let mut message = dlq[pos].clone();
+            
+            // Check if message can be replayed
+            if message.replay_status == ReplayStatus::Failed 
+                || message.replay_count >= self.config.dlq_config.as_ref().map(|dlq| dlq.max_replay_attempts).unwrap_or(0) {
+                return Err(anyhow!("Message has exceeded maximum replay attempts"));
+            }
+
+            // Update replay status and metadata
+            message.replay_status = ReplayStatus::InProgress;
+            message.replay_count += 1;
+            message.last_replay_attempt = Some(Utc::now());
+            dlq[pos] = message.clone();
+
+            info!("Replaying message {} (attempt {})", message_id, message.replay_count);
+            Ok(message)
+        } else {
+            Err(anyhow!("Message not found in DLQ: {}", message_id))
+        }
+    }
+
+    /// Replay multiple messages from DLQ with optional filter
+    pub async fn replay_messages_with_filter<F>(&self, filter: F, limit: usize) -> Result<Vec<ReliableMessage>>
+    where
+        F: Fn(&ReliableMessage) -> bool,
+    {
+        if !self.config.dlq_config.as_ref().map(|dlq| dlq.enable_replay).unwrap_or(false) {
+            return Err(anyhow!("Message replay is disabled"));
+        }
+
+        let mut dlq = self.dlq.lock().await;
+        let mut replayed_messages = Vec::new();
+        let mut updated_indices = Vec::new();
+
+        for (index, message) in dlq.iter().enumerate() {
+            if replayed_messages.len() >= limit {
+                break;
+            }
+
+            if filter(message) 
+                && message.replay_status != ReplayStatus::Failed
+                && message.replay_count < self.config.dlq_config.as_ref().map(|dlq| dlq.max_replay_attempts).unwrap_or(0) {
+                
+                let mut updated_message = message.clone();
+                updated_message.replay_status = ReplayStatus::InProgress;
+                updated_message.replay_count += 1;
+                updated_message.last_replay_attempt = Some(Utc::now());
+                
+                replayed_messages.push(updated_message.clone());
+                updated_indices.push((index, updated_message));
+            }
+        }
+
+        // Update the messages in the DLQ
+        for (index, updated_message) in updated_indices {
+            dlq[index] = updated_message;
+        }
+
+        info!("Replaying {} messages from DLQ", replayed_messages.len());
+        Ok(replayed_messages)
+    }
+
+    /// Remove successfully replayed message from DLQ
+    pub async fn remove_from_dlq(&self, message_id: &str) -> Result<()> {
+        let mut dlq = self.dlq.lock().await;
+        let initial_len = dlq.len();
+        dlq.retain(|msg| msg.message_id != message_id);
+        
+        if dlq.len() < initial_len {
+            info!("Removed successfully replayed message {} from DLQ", message_id);
+            Ok(())
+        } else {
+            Err(anyhow!("Message not found in DLQ: {}", message_id))
+        }
+    }
+
+    /// Update replay status for a message in DLQ
+    pub async fn update_replay_status(&self, message_id: &str, status: ReplayStatus) -> Result<()> {
+        let mut dlq = self.dlq.lock().await;
+        if let Some(message) = dlq.iter_mut().find(|msg| msg.message_id == message_id) {
+            message.replay_status = status;
+            debug!("Updated replay status for message {} to {:?}", message_id, status);
+            Ok(())
+        } else {
+            Err(anyhow!("Message not found in DLQ: {}", message_id))
+        }
+    }
+
+    /// Get DLQ statistics for monitoring
+    pub async fn get_dlq_stats(&self) -> DlqStats {
+        let dlq = self.dlq.lock().await;
+        
+        let mut error_categories = HashMap::new();
+        let mut status_counts = HashMap::new();
+        let mut oldest_message_age = 0u64;
+        let mut total_replay_attempts = 0u32;
+        let mut size_bytes = 0u64;
+
+        let now = Utc::now();
+        
+        for message in dlq.iter() {
+            // Count error categories
+            for error in &message.errors {
+                *error_categories.entry(error.clone()).or_insert(0) += 1;
+            }
+
+            // Count replay statuses
+            let status_key = format!("{:?}", message.replay_status);
+            *status_counts.entry(status_key).or_insert(0) += 1;
+
+            // Calculate oldest message age
+            let age_ms = (now - message.first_attempt).num_milliseconds().max(0) as u64;
+            oldest_message_age = oldest_message_age.max(age_ms);
+
+            // Sum replay attempts
+            total_replay_attempts += message.replay_count;
+
+            // Estimate size (rough calculation)
+            size_bytes += 1024; // Average estimate per message
+        }
+
+        let messages_count = dlq.len() as u64;
+        let replay_success_rate = if total_replay_attempts > 0 {
+            (status_counts.get("Succeeded").unwrap_or(&0) * 100) as f64 / total_replay_attempts as f64
+        } else {
+            100.0
+        };
+
+        DlqStats {
+            messages_count,
+            oldest_message_age_ms: oldest_message_age,
+            error_categories,
+            status_counts,
+            total_replay_attempts,
+            replay_success_rate,
+            size_bytes,
+            retention_period_ms: self.config.dlq_config.as_ref().map(|dlq| dlq.retention.as_millis() as u64).unwrap_or(0),
+        }
+    }
+
+    /// Bulk replay messages with batching
+    pub async fn bulk_replay_messages(&self, message_ids: Vec<String>) -> Result<BulkReplayResult> {
+        if !self.config.dlq_config.as_ref().map(|dlq| dlq.enable_replay).unwrap_or(false) {
+            return Err(anyhow!("Message replay is disabled"));
+        }
+
+        let batch_size = self.config.dlq_config.as_ref().map(|dlq| dlq.replay_batch_size).unwrap_or(100);
+        let mut successful = Vec::new();
+        let mut failed = Vec::new();
+
+        for chunk in message_ids.chunks(batch_size) {
+            for message_id in chunk {
+                match self.replay_message(message_id).await {
+                    Ok(message) => successful.push(message),
+                    Err(e) => failed.push((message_id.clone(), e.to_string())),
+                }
+
+                // Add backoff between replays
+                tokio::time::sleep(self.config.dlq_config.as_ref().map(|dlq| dlq.replay_backoff).unwrap_or(std::time::Duration::from_secs(1))).await;
+            }
+        }
+
+        Ok(BulkReplayResult {
+            successful_count: successful.len(),
+            failed_count: failed.len(),
+            successful_messages: successful,
+            failed_messages: failed,
+        })
+    }
+}
+
+/// Dead Letter Queue statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DlqStats {
+    /// Total number of messages in DLQ
+    pub messages_count: u64,
+    /// Age of oldest message in milliseconds
+    pub oldest_message_age_ms: u64,
+    /// Error categories and their counts
+    pub error_categories: HashMap<String, u64>,
+    /// Replay status counts
+    pub status_counts: HashMap<String, u64>,
+    /// Total replay attempts across all messages
+    pub total_replay_attempts: u32,
+    /// Success rate of replay operations (percentage)
+    pub replay_success_rate: f64,
+    /// Estimated DLQ size in bytes
+    pub size_bytes: u64,
+    /// DLQ retention period in milliseconds
+    pub retention_period_ms: u64,
+}
+
+/// Result of bulk replay operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkReplayResult {
+    /// Number of successfully replayed messages
+    pub successful_count: usize,
+    /// Number of failed replay attempts
+    pub failed_count: usize,
+    /// Successfully replayed messages
+    pub successful_messages: Vec<ReliableMessage>,
+    /// Failed messages with error details
+    pub failed_messages: Vec<(String, String)>, // (message_id, error)
 }
 
 /// Reliability statistics

@@ -208,7 +208,7 @@ impl IntuitionNetwork {
     pub fn learn_from_feedback(
         &mut self,
         characteristics: &[PatternCharacteristic],
-        expected_score: f64,
+        _expected_score: f64,
         actual_performance: f64,
     ) {
         let predicted_score = self.calculate_intuitive_score(characteristics);
@@ -355,7 +355,7 @@ impl CreativityEngine {
     /// Generate creative optimization suggestions
     pub fn generate_creative_optimizations(
         &mut self,
-        patterns: &[AlgebraTriplePattern],
+        _patterns: &[AlgebraTriplePattern],
     ) -> Vec<CreativeOptimization> {
         let mut optimizations = Vec::new();
 
@@ -467,7 +467,7 @@ impl IntuitiveQueryPlanner {
             patterns
                 .iter()
                 .enumerate()
-                .map(|(i, pattern)| {
+                .map(|(_i, pattern)| {
                     let signature = format!("{pattern:?}");
                     gut.calculate_gut_feeling(&signature, context)
                 })
