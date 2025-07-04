@@ -32,7 +32,7 @@ tempfile = "3.8"    # Temporary file handling
 
 # Enhanced CLI features
 indicatif = "0.17"  # Progress bars
-colored = "2.1"     # Colored output
+colored = "3.0"     # Colored output
 prettytable-rs = "0.10"  # Table formatting
 rustyline = "14.0"  # Interactive mode
 rustyline-derive = "0.10"  # Helper derive macros
