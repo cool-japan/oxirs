@@ -35,7 +35,7 @@ reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1.45", features = ["rt", "time"] }
 bincode = "1.3"
 regex = "1.11"
-pdf-extract = { version = "0.7", optional = true }
+pdf-extract = { version = "0.9", optional = true }
 zip = { version = "2.2", optional = true }
 quick-xml = { version = "0.37", optional = true }
 base64 = { version = "0.22", optional = true }
