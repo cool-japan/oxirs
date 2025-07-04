@@ -94,7 +94,7 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 chrono = { version = "0.4.38", features = ["serde"] }
 
 # Arrow crates (latest stable versions)
-arrow = "53.4.0"
+arrow = "55.2.0"
 arrow-array = "53.4.0"
 arrow-buffer = "53.4.0"
 arrow-data = "53.4.0"
