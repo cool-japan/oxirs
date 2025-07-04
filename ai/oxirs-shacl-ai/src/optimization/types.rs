@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
+use oxirs_shacl::{Shape, ShapeId, ValidationReport};
 use crate::shape::{AiShape, PropertyConstraint};
 use crate::shape_management::{OptimizationOpportunity, PerformanceProfile};
 
@@ -408,9 +409,9 @@ pub struct ConnectivityAnalysis {
     pub diameter: u32,
 }
 
-/// Optimization opportunity
+/// Optimization opportunity for validation engine
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OptimizationOpportunity {
+pub struct ValidationOptimizationOpportunity {
     /// Type of opportunity
     pub opportunity_type: OpportunityType,
 

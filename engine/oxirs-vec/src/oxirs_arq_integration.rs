@@ -462,7 +462,6 @@ pub enum ParallelStrategy {
 }
 
 /// Vector function registry for SPARQL integration
-#[derive(Debug)]
 pub struct VectorFunctionRegistry {
     /// Registered functions
     functions: Arc<RwLock<HashMap<String, Arc<dyn VectorFunction>>>>,
@@ -472,6 +471,17 @@ pub struct VectorFunctionRegistry {
     type_checker: Arc<VectorTypeChecker>,
     /// Performance monitor
     performance_monitor: Arc<RwLock<FunctionPerformanceMonitor>>,
+}
+
+impl std::fmt::Debug for VectorFunctionRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VectorFunctionRegistry")
+            .field("functions", &"<HashMap<String, Arc<dyn VectorFunction>>>")
+            .field("function_metadata", &self.function_metadata)
+            .field("type_checker", &"<Arc<VectorTypeChecker>>")
+            .field("performance_monitor", &self.performance_monitor)
+            .finish()
+    }
 }
 
 /// Vector function trait for SPARQL integration
@@ -569,7 +579,6 @@ pub enum ScalarValue {
 }
 
 /// Function execution context
-#[derive(Debug)]
 pub struct ExecutionContext {
     /// Available vector indices
     pub vector_indices: Arc<RwLock<HashMap<String, Arc<dyn VectorIndex>>>>,
@@ -579,6 +588,17 @@ pub struct ExecutionContext {
     pub performance_monitor: Arc<RwLock<VectorQueryPerformance>>,
     /// Configuration
     pub config: VectorQueryConfig,
+}
+
+impl std::fmt::Debug for ExecutionContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExecutionContext")
+            .field("vector_indices", &"<HashMap<String, Arc<dyn VectorIndex>>>")
+            .field("query_context", &self.query_context)
+            .field("performance_monitor", &self.performance_monitor)
+            .field("config", &self.config)
+            .finish()
+    }
 }
 
 /// Query execution context

@@ -15,14 +15,13 @@ pub struct EnhancedVectorIndex {
 impl EnhancedVectorIndex {
     /// Create a new enhanced vector index
     pub async fn new() -> Result<Self> {
-        let embedding_manager = EmbeddingManager::new();
+        let embedding_manager = super::embedding::EmbeddingManager::new();
         let index_config = IndexConfig {
-            index_type: IndexType::HNSW,
+            index_type: IndexType::Hnsw,
             distance_metric: DistanceMetric::Cosine,
-            dimensions: 384, // Default for sentence transformers
             ..Default::default()
         };
-        let index = AdvancedVectorIndex::new(index_config)?;
+        let index = AdvancedVectorIndex::new(index_config);
 
         Ok(Self {
             embedding_manager,
@@ -43,7 +42,7 @@ impl EnhancedVectorIndex {
         // Generate embedding for the content
         let vector = self
             .embedding_manager
-            .get_embedding(&EmbeddableContent::Text(content.clone()))?;
+            .get_embedding(&content, None).await?;
 
         // Add to vector index
         self.index.insert(id.clone(), vector.clone())?;
@@ -71,7 +70,7 @@ impl EnhancedVectorIndex {
         // Generate embedding for query
         let query_vector = self
             .embedding_manager
-            .get_embedding(&EmbeddableContent::Text(query.to_string()))?;
+            .get_embedding(query, None).await?;
 
         // Search the vector index
         let search_results: Vec<VecSearchResult> =

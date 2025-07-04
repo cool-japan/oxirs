@@ -186,7 +186,7 @@ impl ValidationPredictor {
     /// Predict validation outcome (simplified API for tests)
     pub fn predict_validation(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<ValidationPrediction> {
         // Convert our simplified shapes to SHACL validation config
@@ -254,7 +254,7 @@ impl ValidationPredictor {
     /// Predict validation outcome before execution
     pub fn predict_validation_outcome(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         config: &ValidationConfig,
     ) -> Result<ValidationPrediction> {
@@ -324,7 +324,7 @@ impl ValidationPredictor {
     /// Predict validation performance metrics
     pub fn predict_performance_metrics(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<PerformancePrediction> {
         tracing::debug!("Predicting validation performance metrics");
@@ -336,7 +336,7 @@ impl ValidationPredictor {
     /// Predict potential validation errors
     pub fn predict_potential_errors(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<Vec<PredictedError>> {
         tracing::debug!("Predicting potential validation errors");
@@ -387,7 +387,7 @@ impl ValidationPredictor {
     /// Extract features for prediction
     fn extract_prediction_features(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         config: &ValidationConfig,
     ) -> Result<HashMap<String, f64>> {
@@ -448,7 +448,7 @@ impl ValidationPredictor {
     /// Extract features specifically for performance prediction
     fn extract_performance_features(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<HashMap<String, f64>> {
         let mut features = HashMap::new();
@@ -559,7 +559,7 @@ impl ValidationPredictor {
     /// Predict potential errors
     fn predict_errors(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         features: &HashMap<String, f64>,
     ) -> Result<ErrorPrediction> {
@@ -595,7 +595,7 @@ impl ValidationPredictor {
     /// Predict errors for a specific shape
     fn predict_shape_errors(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         shape: &Shape,
         features: &HashMap<String, f64>,
     ) -> Result<Vec<PredictedError>> {
@@ -684,7 +684,7 @@ impl ValidationPredictor {
     }
 
     /// Calculate graph statistics for prediction
-    fn calculate_graph_stats(&self, store: &Store) -> Result<GraphStats> {
+    fn calculate_graph_stats(&self, store: &dyn Store) -> Result<GraphStats> {
         // Query for basic graph statistics
         let triple_count_query = r#"
             SELECT (COUNT(*) as ?count) WHERE {
@@ -730,7 +730,7 @@ impl ValidationPredictor {
     }
 
     /// Count unique predicates in the store
-    fn count_unique_predicates(&self, store: &Store) -> Result<u32> {
+    fn count_unique_predicates(&self, store: &dyn Store) -> Result<u32> {
         let query = r#"
             SELECT (COUNT(DISTINCT ?p) as ?count) WHERE {
                 ?s ?p ?o .
@@ -757,7 +757,7 @@ impl ValidationPredictor {
     }
 
     /// Count unique classes in the store
-    fn count_unique_classes(&self, store: &Store) -> Result<u32> {
+    fn count_unique_classes(&self, store: &dyn Store) -> Result<u32> {
         let query = r#"
             SELECT (COUNT(DISTINCT ?class) as ?count) WHERE {
                 ?instance a ?class .
@@ -1082,7 +1082,7 @@ impl ValidationPredictor {
     /// Create prediction cache key
     fn create_prediction_cache_key(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         config: &ValidationConfig,
     ) -> String {
@@ -1127,7 +1127,7 @@ impl ValidationPredictor {
     /// Execute prediction query
     fn execute_prediction_query(
         &self,
-        store: &Store,
+        store: &dyn Store,
         query: &str,
     ) -> Result<oxirs_core::query::QueryResult> {
         use oxirs_core::query::QueryEngine;

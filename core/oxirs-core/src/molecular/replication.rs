@@ -1,9 +1,8 @@
 //! DNA replication machinery for data copying and validation
 
 use super::dna_structures::{NucleotideData, SpecialMarker};
-use super::types::*;
 use crate::error::OxirsResult;
-use crate::model::{NamedNode, Term};
+// Removed unused imports: NamedNode, Term
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
@@ -489,6 +488,7 @@ impl Default for ProofreadingSystem {
 mod tests {
     use super::*;
     use crate::model::Term;
+    use crate::NamedNode;
 
     #[test]
     fn test_replication_machinery_creation() {

@@ -3,15 +3,12 @@
 //! This module handles scheduling, execution, and monitoring of maintenance operations
 //! for materialized views including refresh, cleanup, and optimization.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use crate::{planner::planning::types::QueryInfo, ServiceRegistry};
 
 use super::types::*;
 

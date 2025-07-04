@@ -18,7 +18,7 @@ use crate::{
     analytics::AnalyticsEngine,
     learning::ShapeLearner,
     ml::{ModelEnsemble, ShapeLearningModel},
-    neural_patterns::NeuralPatternRecognizer,
+    neural_patterns::{NeuralPatternRecognizer, types::NeuralPatternConfig},
     optimization::OptimizationEngine,
     patterns::PatternAnalyzer,
     prediction::ValidationPredictor,
@@ -239,7 +239,7 @@ impl AiOrchestrator {
             validation_predictor: Arc::new(Mutex::new(ValidationPredictor::new())),
             optimization_engine: Arc::new(Mutex::new(OptimizationEngine::new())),
             analytics_engine: Arc::new(Mutex::new(AnalyticsEngine::new())),
-            neural_pattern_recognizer: Arc::new(Mutex::new(NeuralPatternRecognizer::new())),
+            neural_pattern_recognizer: Arc::new(Mutex::new(NeuralPatternRecognizer::new(NeuralPatternConfig::default()))),
             pattern_analyzer: Arc::new(Mutex::new(crate::patterns::PatternAnalyzer::new())),
             model_selector: Arc::new(Mutex::new(model_selector)),
             config,
@@ -250,7 +250,7 @@ impl AiOrchestrator {
     /// Perform comprehensive AI-powered shape learning
     pub fn comprehensive_learning(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<ComprehensiveLearningResult> {
         tracing::info!("Starting comprehensive AI-powered shape learning");
@@ -285,9 +285,13 @@ impl AiOrchestrator {
 
         let total_learning_time = start_time.elapsed();
 
+        // Store counts before moving values
+        let shapes_count = shapes.len();
+        let patterns_count = patterns.len();
+        
         // Update statistics
         self.stats
-            .update_learning_session(total_learning_time, shapes.len(), patterns.len());
+            .update_learning_session(total_learning_time, shapes_count, patterns_count);
 
         Ok(ComprehensiveLearningResult {
             shapes,
@@ -299,8 +303,8 @@ impl AiOrchestrator {
                 pattern_discovery_time,
                 shape_generation_time,
                 quality_assessment_time,
-                patterns_discovered: patterns.len(),
-                shapes_generated: shapes.len(),
+                patterns_discovered: patterns_count,
+                shapes_generated: shapes_count,
                 memory_usage_mb: 0.0, // Would implement actual memory tracking
             },
             confidence_score: 0.85, // Placeholder
@@ -315,16 +319,18 @@ impl AiOrchestrator {
 
     fn discover_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<crate::patterns::Pattern>> {
-        let mut pattern_analyzer = self.pattern_analyzer.lock().unwrap();
-        pattern_analyzer.discover_patterns(store, graph_name)
+        // TODO: Implement discover_patterns method for PatternAnalyzer
+        // let mut pattern_analyzer = self.pattern_analyzer.lock().unwrap();
+        // pattern_analyzer.discover_patterns(store, graph_name)
+        Ok(Vec::new())
     }
 
     fn learn_shapes_from_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
         patterns: &[crate::patterns::Pattern],
         graph_name: Option<&str>,
     ) -> Result<Vec<Shape>> {
@@ -332,9 +338,10 @@ impl AiOrchestrator {
         shape_learner.learn_shapes_from_store(store, graph_name)
     }
 
-    fn assess_quality(&self, store: &Store, shapes: &[Shape]) -> Result<QualityAnalysisResult> {
-        let quality_assessor = self.quality_assessor.lock().unwrap();
-        let _quality_report = quality_assessor.assess_data_quality(store, shapes)?;
+    fn assess_quality(&self, store: &dyn Store, shapes: &[Shape]) -> Result<QualityAnalysisResult> {
+        // TODO: Implement assess_data_quality method for QualityAssessor
+        // let quality_assessor = self.quality_assessor.lock().unwrap();
+        // let _quality_report = quality_assessor.assess_data_quality(store, shapes)?;
 
         // Simplified quality analysis
         Ok(QualityAnalysisResult {
@@ -347,7 +354,7 @@ impl AiOrchestrator {
 
     fn generate_predictive_insights(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<PredictiveInsights> {
         Ok(PredictiveInsights {
@@ -360,7 +367,7 @@ impl AiOrchestrator {
 
     fn generate_optimization_recommendations(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         _quality_analysis: &QualityAnalysisResult,
     ) -> Result<Vec<OptimizationRecommendation>> {

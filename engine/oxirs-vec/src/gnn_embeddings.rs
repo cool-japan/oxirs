@@ -42,8 +42,7 @@ impl GCN {
     }
 
     /// Initialize GCN with specified number of layers
-    pub fn with_layers(mut config: KGEmbeddingConfig, num_layers: usize) -> Self {
-        config.dimensions = config.dimensions; // Ensure dimensions are set
+    pub fn with_layers(config: KGEmbeddingConfig, num_layers: usize) -> Self {
         Self {
             config,
             entity_embeddings: HashMap::new(),

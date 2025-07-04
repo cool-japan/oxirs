@@ -39,6 +39,11 @@ use crate::{Result, ShaclAiError};
 /// Unique identifier for consciousness agents in the collective
 pub type ConsciousnessId = Uuid;
 
+/// Helper function for serde default Instant
+fn default_instant() -> Instant {
+    Instant::now()
+}
+
 /// Collective consciousness validation system
 #[derive(Debug)]
 pub struct CollectiveConsciousnessNetwork {
@@ -100,13 +105,15 @@ impl Default for CollectiveConfig {
 }
 
 /// Individual consciousness agent in the collective
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ConsciousnessAgent {
     /// Unique agent identifier
     pub id: ConsciousnessId,
     /// Current consciousness level
     pub consciousness_level: ConsciousnessLevel,
     /// Individual consciousness validator
+    #[serde(skip)]
     pub validator: Arc<ConsciousnessValidator>,
     /// Agent's specialized domain
     pub specialization: ValidationSpecialization,
@@ -121,11 +128,29 @@ pub struct ConsciousnessAgent {
     /// Processing statistics
     pub stats: AgentStats,
     /// Last synchronization time
+    #[serde(skip)]
     pub last_sync: Instant,
 }
 
+impl Default for ConsciousnessAgent {
+    fn default() -> Self {
+        Self {
+            id: ConsciousnessId::new_v4(),
+            consciousness_level: ConsciousnessLevel::Unconscious,
+            validator: Arc::new(crate::consciousness_validation::ConsciousnessValidator::new()),
+            specialization: ValidationSpecialization::PatternRecognition,
+            emotional_state: EmotionalContext::default(),
+            capabilities: AgentCapabilities::default(),
+            entangled_agents: HashSet::new(),
+            status: AgentStatus::Active,
+            stats: AgentStats::default(),
+            last_sync: Instant::now(),
+        }
+    }
+}
+
 /// Agent specialization domains
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ValidationSpecialization {
     /// Pattern recognition and discovery
     PatternRecognition,
@@ -146,7 +171,7 @@ pub enum ValidationSpecialization {
 }
 
 /// Agent processing capabilities
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AgentCapabilities {
     /// Processing power relative to base consciousness level
     pub processing_power: f64,
@@ -163,7 +188,7 @@ pub struct AgentCapabilities {
 }
 
 /// Agent status
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AgentStatus {
     /// Agent is active and processing
     Active,
@@ -180,7 +205,7 @@ pub enum AgentStatus {
 }
 
 /// Agent processing statistics
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentStats {
     /// Total validations processed
     pub validations_processed: u64,
@@ -224,6 +249,7 @@ pub enum CollectiveMessage {
     /// Pattern discovery announcement
     PatternDiscovered {
         discoverer: ConsciousnessId,
+        #[serde(skip)]
         pattern: ValidationPattern,
         confidence: f64,
         affected_dimensions: Vec<Reality>,
@@ -233,7 +259,7 @@ pub enum CollectiveMessage {
         requester: ConsciousnessId,
         validation_context: ValidationContext,
         required_participants: HashSet<ConsciousnessId>,
-        deadline: Instant,
+        deadline: SystemTime,
     },
     /// Consensus response
     ConsensusResponse {
@@ -247,6 +273,7 @@ pub enum CollectiveMessage {
     QuantumEntanglement {
         initiator: ConsciousnessId,
         target: ConsciousnessId,
+        #[serde(skip)]
         entanglement_type: EntanglementType,
     },
     /// Reality synthesis proposal
@@ -263,6 +290,7 @@ pub enum CollectiveMessage {
     },
     /// Emergency collective response
     EmergencyCollective {
+        #[serde(skip)]
         emergency_type: EmergencyType,
         affected_areas: Vec<ValidationDomain>,
         response_required: bool,
@@ -270,17 +298,32 @@ pub enum CollectiveMessage {
 }
 
 /// Direct message between specific agents
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DirectMessage {
     pub sender: ConsciousnessId,
     pub recipient: ConsciousnessId,
     pub content: MessageContent,
+    #[serde(skip)]
     pub priority: MessagePriority,
+    #[serde(skip)]
     pub timestamp: Instant,
 }
 
+impl Default for DirectMessage {
+    fn default() -> Self {
+        Self {
+            sender: ConsciousnessId::new_v4(),
+            recipient: ConsciousnessId::new_v4(),
+            content: MessageContent::PrivateSync(EmotionalContext::default()),
+            priority: MessagePriority::Normal,
+            timestamp: Instant::now(),
+        }
+    }
+}
+
 /// Content of direct messages
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageContent {
     /// Private consciousness sync
     PrivateSync(EmotionalContext),
@@ -294,14 +337,16 @@ pub enum MessageContent {
     ProcessingAssistance {
         task: ValidationTask,
         complexity: f64,
+        #[serde(skip)]
         deadline: Option<Instant>,
     },
 }
 
 /// Message priority levels
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum MessagePriority {
     Low,
+    #[default]
     Normal,
     High,
     Critical,
@@ -309,16 +354,33 @@ pub enum MessagePriority {
 }
 
 /// Timestamped message for history tracking
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TimestampedMessage {
     pub message: CollectiveMessage,
+    #[serde(skip)]
     pub timestamp: Instant,
     pub sender: ConsciousnessId,
     pub coherence_impact: f64,
 }
 
+impl Default for TimestampedMessage {
+    fn default() -> Self {
+        Self {
+            message: CollectiveMessage::ConsensusRequest {
+                requester: ConsciousnessId::new_v4(),
+                validation_context: ValidationContext::default(),
+                required_participants: HashSet::new(),
+                deadline: SystemTime::now(),
+            },
+            timestamp: Instant::now(),
+            sender: ConsciousnessId::new_v4(),
+            coherence_impact: 0.0,
+        }
+    }
+}
+
 /// Consensus engine for collective decisions
-#[derive(Debug)]
 pub struct ConsensusEngine {
     /// Active consensus sessions
     active_sessions: Arc<DashMap<Uuid, ConsensusSession>>,
@@ -330,23 +392,54 @@ pub struct ConsensusEngine {
     reputation: Arc<DashMap<ConsciousnessId, ReputationScore>>,
 }
 
+impl std::fmt::Debug for ConsensusEngine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConsensusEngine")
+            .field("active_sessions", &self.active_sessions)
+            .field("algorithms", &"<trait objects>")
+            .field("voting_power", &self.voting_power)
+            .field("reputation", &self.reputation)
+            .finish()
+    }
+}
+
 /// Consensus session tracking
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ConsensusSession {
     pub id: Uuid,
     pub request: ValidationContext,
     pub participants: HashSet<ConsciousnessId>,
     pub responses: HashMap<ConsciousnessId, ConsensusDecision>,
+    #[serde(skip)]
     pub start_time: Instant,
+    #[serde(skip)]
     pub deadline: Instant,
+    #[serde(skip)]
     pub consensus_type: ConsensusType,
     pub status: ConsensusStatus,
 }
 
+impl Default for ConsensusSession {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            request: ValidationContext::default(),
+            participants: HashSet::new(),
+            responses: HashMap::new(),
+            start_time: Instant::now(),
+            deadline: Instant::now(),
+            consensus_type: ConsensusType::default(),
+            status: ConsensusStatus::Active,
+        }
+    }
+}
+
 /// Types of consensus mechanisms
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Default)]
 pub enum ConsensusType {
     /// Simple majority voting
+    #[default]
     SimpleMajority,
     /// Weighted voting by consciousness level
     WeightedConsciousness,
@@ -380,7 +473,7 @@ pub enum ConsensusDecision {
 }
 
 /// Consensus session status
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConsensusStatus {
     Active,
     ReachedConsensus(ConsensusResult),
@@ -388,8 +481,23 @@ pub enum ConsensusStatus {
     Timeout,
 }
 
+impl PartialEq for ConsensusStatus {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ConsensusStatus::Active, ConsensusStatus::Active) => true,
+            (ConsensusStatus::Failed(a), ConsensusStatus::Failed(b)) => a == b,
+            (ConsensusStatus::Timeout, ConsensusStatus::Timeout) => true,
+            // For ReachedConsensus, we'll just compare the non-ValidationConfig fields
+            (ConsensusStatus::ReachedConsensus(a), ConsensusStatus::ReachedConsensus(b)) => {
+                a.confidence == b.confidence && a.participant_count == b.participant_count
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Result of consensus process
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsensusResult {
     pub decision: FinalDecision,
     pub confidence: f64,
@@ -399,7 +507,7 @@ pub struct ConsensusResult {
 }
 
 /// Final collective decision
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FinalDecision {
     ValidateWithApproach(ValidationApproach),
     RejectValidation(String),
@@ -447,7 +555,7 @@ pub struct RealitySynthesizer {
 }
 
 /// Reality synthesis process
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RealitySynthesisProcess {
     pub id: Uuid,
     pub initiator: ConsciousnessId,
@@ -455,14 +563,34 @@ pub struct RealitySynthesisProcess {
     pub target_reality: RealityBlueprint,
     pub current_fragments: Vec<RealityFragment>,
     pub synthesis_progress: f64,
+    #[serde(skip, default = "default_instant")]
     pub start_time: Instant,
+    #[serde(skip, default)]
     pub estimated_completion: Option<Instant>,
     pub status: SynthesisStatus,
+}
+
+impl Default for RealitySynthesisProcess {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            initiator: ConsciousnessId::new_v4(),
+            contributors: HashSet::new(),
+            target_reality: RealityBlueprint::default(),
+            current_fragments: Vec::new(),
+            synthesis_progress: 0.0,
+            start_time: Instant::now(),
+            estimated_completion: None,
+            status: SynthesisStatus::Planning,
+        }
+    }
 }
 
 /// Different dimensions of reality for validation
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum Reality {
+    /// Base reality constraints
+    Base,
     /// Physical reality constraints
     Physical,
     /// Logical/mathematical reality
@@ -482,7 +610,7 @@ pub enum Reality {
 }
 
 /// Collective consciousness metrics
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectiveMetrics {
     /// Current number of active agents
     pub active_agents: usize,
@@ -505,11 +633,30 @@ pub struct CollectiveMetrics {
     /// Network latency statistics
     pub network_latency: Duration,
     /// Last metrics update
+    #[serde(skip, default = "default_instant")]
     pub last_update: Instant,
 }
 
+impl Default for CollectiveMetrics {
+    fn default() -> Self {
+        Self {
+            active_agents: 0,
+            collective_consciousness_level: 0.0,
+            coherence_score: 0.0,
+            total_collective_validations: 0,
+            consensus_success_rate: 0.0,
+            reality_synthesis_rate: 0.0,
+            entanglement_efficiency: 0.0,
+            interdimensional_capability: 0.0,
+            power_amplification: 1.0,
+            network_latency: Duration::default(),
+            last_update: Instant::now(),
+        }
+    }
+}
+
 /// Collective consciousness validation result
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectiveValidationResult {
     /// Individual agent results
     pub agent_results: HashMap<ConsciousnessId, ConsciousnessValidationResult>,
@@ -692,7 +839,7 @@ impl CollectiveConsciousnessNetwork {
             source_agent: agent_id,
             consciousness_level: agent.consciousness_level,
             emotional_state: agent.emotional_state.clone(),
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64,
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
         })
         .await?;
 
@@ -707,7 +854,7 @@ impl CollectiveConsciousnessNetwork {
     /// Perform collective consciousness validation
     pub async fn collective_validate(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         config: &ValidationConfig,
         validation_context: ValidationContext,
@@ -821,7 +968,7 @@ impl CollectiveConsciousnessNetwork {
                     ValidationTask {
                         specialization: specialization.clone(),
                         complexity: task_requirements.complexity,
-                        priority: task_requirements.priority,
+                        priority: task_requirements.priority.clone(),
                         constraints: task_requirements.constraints.clone(),
                         expected_processing_time: task_requirements.expected_processing_time,
                     },
@@ -836,7 +983,7 @@ impl CollectiveConsciousnessNetwork {
     async fn execute_agent_validation(
         &self,
         agent: &ConsciousnessAgent,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         config: &ValidationConfig,
         task: &ValidationTask,
@@ -851,8 +998,6 @@ impl CollectiveConsciousnessNetwork {
                 store,
                 shapes,
                 &enhanced_config,
-                agent.consciousness_level,
-                &agent.emotional_state,
             )
             .await?;
 
@@ -1071,7 +1216,7 @@ impl CollectiveConsciousnessNetwork {
 
         let total_confidence: f64 = agent_results
             .values()
-            .map(|result| result.confidence_score)
+            .map(|result| result.consciousness_enhancement_factor)
             .sum();
 
         let average_confidence = total_confidence / agent_results.len() as f64;
@@ -1121,7 +1266,7 @@ impl CollectiveConsciousnessNetwork {
         // Calculate coherence based on how aligned the agents' insights are
         let insights: Vec<_> = agent_results
             .values()
-            .flat_map(|result| &result.insights)
+            .flat_map(|result| &result.intuitive_insights)
             .collect();
 
         if insights.is_empty() {
@@ -1139,7 +1284,7 @@ impl CollectiveConsciousnessNetwork {
 
     /// Get current collective metrics
     pub async fn get_collective_metrics(&self) -> CollectiveMetrics {
-        self.collective_metrics.read().await.clone()
+        (*self.collective_metrics.read().await).clone()
     }
 
     /// Shutdown the collective consciousness network
@@ -1169,12 +1314,13 @@ impl CollectiveConsciousnessNetwork {
 // This is a comprehensive foundation for collective consciousness validation
 
 /// Validation context for collective decision-making
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationContext {
     pub validation_id: Uuid,
     pub target_shapes: Vec<ShapeId>,
     pub complexity_level: f64,
     pub required_specializations: HashMap<ValidationSpecialization, TaskRequirements>,
+    #[serde(skip)]
     pub deadline: Option<Instant>,
     pub priority: ValidationPriority,
     pub cross_dimensional: bool,
@@ -1182,8 +1328,24 @@ pub struct ValidationContext {
     pub reality_synthesis_allowed: bool,
 }
 
+impl Default for ValidationContext {
+    fn default() -> Self {
+        Self {
+            validation_id: Uuid::new_v4(),
+            target_shapes: Vec::new(),
+            complexity_level: 0.5,
+            required_specializations: HashMap::new(),
+            deadline: None,
+            priority: ValidationPriority::Medium,
+            cross_dimensional: false,
+            quantum_effects_expected: false,
+            reality_synthesis_allowed: false,
+        }
+    }
+}
+
 /// Task requirements for validation specializations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskRequirements {
     pub complexity: f64,
     pub priority: ValidationPriority,
@@ -1194,7 +1356,7 @@ pub struct TaskRequirements {
 }
 
 /// Validation task for individual agents
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationTask {
     pub specialization: ValidationSpecialization,
     pub complexity: f64,
@@ -1204,10 +1366,11 @@ pub struct ValidationTask {
 }
 
 /// Validation priority levels
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ValidationPriority {
     Low,
     Normal,
+    Medium,
     High,
     Critical,
     Emergency,
@@ -1324,7 +1487,18 @@ pub struct ValidationPattern {
     pub validation_rules: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+impl Default for ValidationPattern {
+    fn default() -> Self {
+        Self {
+            pattern_id: Uuid::new_v4(),
+            description: String::new(),
+            confidence: 0.0,
+            validation_rules: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationKnowledge {
     pub domain: ValidationDomain,
     pub insights: Vec<String>,
@@ -1338,14 +1512,14 @@ pub struct ValidationDomain {
     pub complexity: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantumState {
     pub state_vector: Vec<f64>,
     pub entanglement_partners: HashSet<ConsciousnessId>,
     pub coherence: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RealityFragment {
     pub fragment_id: Uuid,
     pub content: String,
@@ -1353,11 +1527,21 @@ pub struct RealityFragment {
     pub contributing_agents: HashSet<ConsciousnessId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RealityBlueprint {
     pub target_reality: Reality,
     pub required_fragments: Vec<String>,
     pub synthesis_complexity: f64,
+}
+
+impl Default for RealityBlueprint {
+    fn default() -> Self {
+        Self {
+            target_reality: Reality::Base,
+            required_fragments: Vec::new(),
+            synthesis_complexity: 0.5,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1367,15 +1551,16 @@ pub struct RealityTemplate {
     pub required_components: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SynthesisStatus {
+    Planning,
     Active,
     Completed(SynthesizedReality),
     Failed(String),
     Paused,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SynthesizedReality {
     pub reality_id: Uuid,
     pub description: String,
@@ -1384,7 +1569,7 @@ pub struct SynthesizedReality {
     pub stability: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InterdimensionalPattern {
     pub pattern_id: Uuid,
     pub dimensions: Vec<Reality>,
@@ -1393,7 +1578,7 @@ pub struct InterdimensionalPattern {
     pub confidence: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantumEffect {
     pub effect_type: String,
     pub participating_agents: HashSet<ConsciousnessId>,
@@ -1401,32 +1586,35 @@ pub struct QuantumEffect {
     pub duration: Duration,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsciousnessElevation {
     pub agent_id: ConsciousnessId,
     pub from_level: ConsciousnessLevel,
     pub to_level: ConsciousnessLevel,
     pub trigger_reason: String,
+    #[serde(skip, default = "default_instant")]
     pub elevation_timestamp: Instant,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantumValidationParams {
     pub entanglement_strength: f64,
     pub coherence_threshold: f64,
     pub quantum_constraints: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum EntanglementType {
+    #[default]
     Consciousness,
     Processing,
     ValidationState,
     Reality,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum EmergencyType {
+    #[default]
     ValidationFailure,
     ConsciousnessLoss,
     RealityInconsistency,

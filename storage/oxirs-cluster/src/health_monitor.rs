@@ -14,8 +14,32 @@ use tokio::time::{interval, timeout};
 use tracing::{debug, error, info, warn};
 
 /// Health status of a cluster node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeHealth {
+    /// Current health status
+    pub status: NodeHealthLevel,
+    /// System metrics
+    pub system_metrics: SystemMetrics,
+    /// Response time for health checks
+    pub response_time: Duration,
+    /// Last health check timestamp
+    pub last_checked: u64,
+}
+
+impl Default for NodeHealth {
+    fn default() -> Self {
+        Self {
+            status: NodeHealthLevel::Unknown,
+            system_metrics: SystemMetrics::default(),
+            response_time: Duration::from_millis(0),
+            last_checked: 0,
+        }
+    }
+}
+
+/// Health status enumeration
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum NodeHealth {
+pub enum NodeHealthLevel {
     /// Node is healthy and responsive
     Healthy,
     /// Node is experiencing degraded performance
@@ -28,12 +52,49 @@ pub enum NodeHealth {
     Unknown,
 }
 
+/// Complete health status tracking for a node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeHealthStatus {
+    /// Node identifier
+    pub node_id: OxirsNodeId,
+    /// Overall health status
+    pub health: NodeHealth,
+    /// Last heartbeat timestamp (milliseconds since epoch)
+    pub last_heartbeat: u64,
+    /// Number of consecutive failures
+    pub failure_count: u32,
+    /// System metrics
+    pub system_metrics: SystemMetrics,
+    /// Raft-specific metrics
+    pub raft_metrics: Option<RaftMetrics>,
+    /// Last failure timestamp
+    pub last_failure: Option<u64>,
+    /// Custom health check results
+    pub custom_checks: HashMap<String, bool>,
+}
+
+impl Default for NodeHealthStatus {
+    fn default() -> Self {
+        Self {
+            node_id: 0,
+            health: NodeHealth::default(),
+            last_heartbeat: 0,
+            failure_count: 0,
+            system_metrics: SystemMetrics::default(),
+            raft_metrics: None,
+            last_failure: None,
+            custom_checks: HashMap::new(),
+        }
+    }
+}
+
+
 /// System metrics for health assessment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemMetrics {
-    /// CPU utilization percentage (0-100)
-    pub cpu_utilization: f64,
-    /// Memory usage percentage (0-100)
+    /// CPU usage percentage (0.0-1.0)
+    pub cpu_usage: f64,
+    /// Memory usage percentage (0.0-1.0)
     pub memory_usage: f64,
     /// Disk I/O rate (MB/s)
     pub disk_io_rate: f64,
@@ -50,7 +111,7 @@ pub struct SystemMetrics {
 impl Default for SystemMetrics {
     fn default() -> Self {
         Self {
-            cpu_utilization: 0.0,
+            cpu_usage: 0.0,
             memory_usage: 0.0,
             disk_io_rate: 0.0,
             network_throughput: 0.0,
@@ -100,9 +161,9 @@ impl Default for RaftMetrics {
     }
 }
 
-/// Comprehensive node health status
+/// Comprehensive node health information
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeHealthStatus {
+pub struct NodeHealthInfo {
     /// Node identifier
     pub node_id: OxirsNodeId,
     /// Overall health status
@@ -130,10 +191,15 @@ impl NodeHealthStatus {
 
         Self {
             node_id,
-            health: NodeHealth::Unknown,
+            health: NodeHealth {
+                status: NodeHealthLevel::Unknown,
+                system_metrics: SystemMetrics::default(),
+                response_time: Duration::from_millis(0),
+                last_checked: now,
+            },
             last_heartbeat: now,
             system_metrics: SystemMetrics::default(),
-            raft_metrics: RaftMetrics::default(),
+            raft_metrics: Some(RaftMetrics::default()),
             failure_count: 0,
             last_failure: None,
             custom_checks: HashMap::new(),
@@ -150,32 +216,37 @@ impl NodeHealthStatus {
 
         // Check if node is unresponsive
         if heartbeat_age > Duration::from_secs(30) {
-            self.health = NodeHealth::Failed;
+            self.health.status = NodeHealthLevel::Failed;
+            self.health.last_checked = now;
             return self.health.clone();
         }
 
         // Check system metrics for degradation
-        if self.system_metrics.cpu_utilization > 90.0
-            || self.system_metrics.memory_usage > 95.0
+        if self.system_metrics.cpu_usage > 0.90
+            || self.system_metrics.memory_usage > 0.95
             || self.system_metrics.error_rate > 10.0
         {
-            self.health = NodeHealth::Degraded;
+            self.health.status = NodeHealthLevel::Degraded;
+            self.health.last_checked = now;
             return self.health.clone();
         }
 
         // Check if we suspect failures
         if heartbeat_age > Duration::from_secs(10) || self.failure_count > 3 {
-            self.health = NodeHealth::Suspected;
+            self.health.status = NodeHealthLevel::Suspected;
+            self.health.last_checked = now;
             return self.health.clone();
         }
 
         // Check custom health checks
         if self.custom_checks.values().any(|&check| !check) {
-            self.health = NodeHealth::Degraded;
+            self.health.status = NodeHealthLevel::Degraded;
+            self.health.last_checked = now;
             return self.health.clone();
         }
 
-        self.health = NodeHealth::Healthy;
+        self.health.status = NodeHealthLevel::Healthy;
+        self.health.last_checked = now;
         self.health.clone()
     }
 }
@@ -324,7 +395,7 @@ impl HealthMonitor {
             let new_health = status.update_health();
 
             // Send health event if status changed
-            if old_health != new_health && new_health == NodeHealth::Healthy {
+            if old_health.status != new_health.status && new_health.status == NodeHealthLevel::Healthy {
                 let _ = self.event_sender.send(HealthEvent::NodeRecovered(node_id));
             }
         }
@@ -353,7 +424,7 @@ impl HealthMonitor {
     ) -> Result<()> {
         let mut statuses = self.node_statuses.write().await;
         if let Some(status) = statuses.get_mut(&node_id) {
-            status.raft_metrics = metrics;
+            status.raft_metrics = Some(metrics);
         }
         Ok(())
     }
@@ -386,7 +457,7 @@ impl HealthMonitor {
 
         let healthy_nodes = statuses
             .values()
-            .filter(|status| matches!(status.health, NodeHealth::Healthy))
+            .filter(|status| matches!(status.health.status, NodeHealthLevel::Healthy))
             .count();
 
         // Require majority of nodes to be healthy
@@ -427,16 +498,16 @@ impl HealthMonitor {
                     let new_health = status.update_health();
 
                     // Send health events on status change
-                    if old_health != new_health {
-                        let event = match new_health {
-                            NodeHealth::Healthy => HealthEvent::NodeHealthy(*node_id),
-                            NodeHealth::Degraded => HealthEvent::NodeDegraded(
+                    if old_health.status != new_health.status {
+                        let event = match new_health.status {
+                            NodeHealthLevel::Healthy => HealthEvent::NodeHealthy(*node_id),
+                            NodeHealthLevel::Degraded => HealthEvent::NodeDegraded(
                                 *node_id,
                                 "System metrics degraded".to_string(),
                             ),
-                            NodeHealth::Suspected => HealthEvent::NodeSuspected(*node_id),
-                            NodeHealth::Failed => HealthEvent::NodeFailed(*node_id),
-                            NodeHealth::Unknown => continue,
+                            NodeHealthLevel::Suspected => HealthEvent::NodeSuspected(*node_id),
+                            NodeHealthLevel::Failed => HealthEvent::NodeFailed(*node_id),
+                            NodeHealthLevel::Unknown => continue,
                         };
                         let _ = event_sender.send(event);
                     }
@@ -490,6 +561,23 @@ impl HealthMonitor {
             }
         });
     }
+
+    /// Start monitoring a specific node
+    pub async fn start_monitoring(&self, node_id: OxirsNodeId, _address: String) {
+        let mut statuses = self.node_statuses.write().await;
+        if !statuses.contains_key(&node_id) {
+            let status = NodeHealthStatus::new(node_id);
+            statuses.insert(node_id, status);
+            info!("Started monitoring node {}", node_id);
+        }
+    }
+
+    /// Stop monitoring a specific node
+    pub async fn stop_monitoring(&self, node_id: OxirsNodeId) {
+        let mut statuses = self.node_statuses.write().await;
+        statuses.remove(&node_id);
+        info!("Stopped monitoring node {}", node_id);
+    }
 }
 
 #[cfg(test)]
@@ -535,11 +623,11 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
-        assert_eq!(status.update_health(), NodeHealth::Healthy);
+        assert_eq!(status.update_health().status, NodeHealthLevel::Healthy);
 
         // Test degraded status
-        status.system_metrics.cpu_utilization = 95.0;
-        assert_eq!(status.update_health(), NodeHealth::Degraded);
+        status.system_metrics.cpu_usage = 0.95;
+        assert_eq!(status.update_health().status, NodeHealthLevel::Degraded);
 
         // Test failed status
         status.last_heartbeat = SystemTime::now()
@@ -547,7 +635,7 @@ mod tests {
             .unwrap()
             .as_millis() as u64
             - Duration::from_secs(60).as_millis() as u64;
-        assert_eq!(status.update_health(), NodeHealth::Failed);
+        assert_eq!(status.update_health().status, NodeHealthLevel::Failed);
     }
 
     #[tokio::test]

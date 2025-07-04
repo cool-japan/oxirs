@@ -16,7 +16,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     llm::LLMResponse,
-    rag::{AssembledContext, RetrievedKnowledge},
+    rag::{AssembledContext, ExtractedKnowledge},
     Message,
 };
 
@@ -513,11 +513,11 @@ impl AdvancedCacheManager {
     /// Cache assembled context
     pub async fn cache_context(&self, key: String, context: &AssembledContext) -> Result<()> {
         let cached_context = CachedContext {
-            context_text: context.context_text.clone(),
-            quality_score: context.quality_score,
-            coverage_score: context.coverage_score,
-            entity_count: context.structured_context.entities.len(),
-            fact_count: context.structured_context.facts.len(),
+            context_text: format!("{} semantic results, {} graph results", context.semantic_results.len(), context.graph_results.len()),
+            quality_score: context.context_score,
+            coverage_score: context.context_score,
+            entity_count: context.extracted_entities.len(),
+            fact_count: context.retrieved_triples.as_ref().map(|t| t.len()).unwrap_or(0),
         };
 
         let size = bincode::serialize(&cached_context)?.len();

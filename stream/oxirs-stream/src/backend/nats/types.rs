@@ -281,14 +281,16 @@ impl NatsEventMessage {
                     .as_str()
                     .ok_or_else(|| anyhow!("Missing source"))?
                     .to_string();
-                let timestamp = self.data["timestamp"]
+                let timestamp_u64 = self.data["timestamp"]
                     .as_u64()
                     .ok_or_else(|| anyhow!("Missing timestamp"))?;
+                let timestamp = chrono::DateTime::from_timestamp(timestamp_u64 as i64, 0)
+                    .ok_or_else(|| anyhow!("Invalid timestamp"))?;
 
                 StreamEvent::Heartbeat {
                     timestamp,
                     source,
-                    metadata: Some(metadata),
+                    metadata,
                 }
             }
             _ => {

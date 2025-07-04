@@ -45,7 +45,7 @@ pub struct DetectionResult {
 }
 
 /// Detection method used to identify format
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DetectionMethod {
     FileExtension,
     MimeType,
@@ -194,7 +194,7 @@ impl FormatDetector {
         let start_time = std::time::Instant::now();
 
         // Detect input format if not specified
-        let input_format = if let Some(format) = options.input_format {
+        let input_format = if let Some(format) = options.input_format.clone() {
             format
         } else {
             let detection = self.detect_format(input_path)?;
@@ -210,7 +210,7 @@ impl FormatDetector {
 
         // Validate input if requested
         if options.validate_input {
-            self.validate_input_file(input_path, input_format)?;
+            self.validate_input_file(input_path, input_format.clone())?;
         }
 
         // Perform conversion
@@ -304,10 +304,11 @@ impl FormatDetector {
         );
 
         // JSON-LD format
+        let jsonld_format = RdfFormat::JsonLd { profile: oxirs_core::format::JsonLdProfileSet::empty() };
         self.format_registry.insert(
-            RdfFormat::JsonLd,
+            jsonld_format.clone(),
             FormatInfo {
-                format: RdfFormat::JsonLd,
+                format: jsonld_format,
                 mime_types: vec![
                     "application/ld+json".to_string(),
                     "application/json".to_string(),
@@ -412,7 +413,7 @@ impl FormatDetector {
 
         // JSON-LD patterns
         self.content_patterns.insert(
-            RdfFormat::JsonLd,
+            RdfFormat::JsonLd { profile: oxirs_core::format::JsonLdProfileSet::empty() },
             vec![
                 ContentPattern {
                     pattern: r#""@context"\s*:"#.to_string(),
@@ -437,13 +438,13 @@ impl FormatDetector {
         for info in self.format_registry.values() {
             // MIME type mappings
             for mime_type in &info.mime_types {
-                self.mime_mappings.insert(mime_type.clone(), info.format);
+                self.mime_mappings.insert(mime_type.clone(), info.format.clone());
             }
 
             // Extension mappings
             for extension in &info.file_extensions {
                 self.extension_mappings
-                    .insert(extension.clone(), info.format);
+                    .insert(extension.clone(), info.format.clone());
             }
         }
     }
@@ -451,9 +452,9 @@ impl FormatDetector {
     fn detect_by_extension(&self, path: &Path) -> Result<Option<DetectionResult>, CliError> {
         if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
             let extension = extension.to_lowercase();
-            if let Some(&format) = self.extension_mappings.get(&extension) {
+            if let Some(format) = self.extension_mappings.get(&extension) {
                 return Ok(Some(DetectionResult {
-                    format,
+                    format: format.clone(),
                     confidence: 0.6, // Medium confidence for extension-based detection
                     detection_method: DetectionMethod::FileExtension,
                     encoding: None,
@@ -474,10 +475,10 @@ impl FormatDetector {
         reader.by_ref().take(8192).read_to_end(&mut buffer)?;
 
         let content = std::str::from_utf8(&buffer)
-            .map_err(|_| CliError::InvalidFormat("File contains invalid UTF-8".to_string()))?;
+            .map_err(|_| CliError::invalid_format("File contains invalid UTF-8"))?;
 
         self.detect_by_content_patterns(content).ok_or_else(|| {
-            CliError::UnknownFormat("Could not detect format from content".to_string())
+            CliError::unknown_format("Could not detect format from content")
         })
     }
 
@@ -509,7 +510,7 @@ impl FormatDetector {
             if confidence > best_confidence {
                 best_confidence = confidence;
                 best_match = Some(DetectionResult {
-                    format: *format,
+                    format: format.clone(),
                     confidence,
                     detection_method: DetectionMethod::ContentAnalysis,
                     encoding: Some("UTF-8".to_string()),
@@ -529,7 +530,7 @@ impl FormatDetector {
         let bytes_read = reader.read(&mut buffer)?;
 
         self.detect_magic_bytes_from_buffer(&buffer[..bytes_read])
-            .ok_or_else(|| CliError::UnknownFormat("No magic bytes detected".to_string()))
+            .ok_or_else(|| CliError::unknown_format("No magic bytes detected"))
     }
 
     fn detect_magic_bytes_from_buffer(&self, buffer: &[u8]) -> Option<DetectionResult> {
@@ -537,7 +538,7 @@ impl FormatDetector {
             if let Some(magic_bytes) = &info.magic_bytes {
                 if buffer.starts_with(magic_bytes) {
                     return Some(DetectionResult {
-                        format: info.format,
+                        format: info.format.clone(),
                         confidence: 0.95, // High confidence for magic bytes
                         detection_method: DetectionMethod::MagicBytes,
                         encoding: None,
@@ -555,7 +556,7 @@ impl FormatDetector {
         results: Vec<DetectionResult>,
     ) -> Result<DetectionResult, CliError> {
         if results.is_empty() {
-            return Err(CliError::UnknownFormat("No format detected".to_string()));
+            return Err(CliError::unknown_format("No format detected"));
         }
 
         if results.len() == 1 {
@@ -576,7 +577,7 @@ impl FormatDetector {
             };
 
             let weighted_confidence = result.confidence * method_weight;
-            *weighted_scores.entry(result.format).or_insert(0.0) += weighted_confidence;
+            *weighted_scores.entry(result.format.clone()).or_insert(0.0) += weighted_confidence;
 
             if weighted_confidence > best_result.confidence * 0.85 {
                 best_result = result;
@@ -616,7 +617,7 @@ impl FormatDetector {
         let handler = FormatHandler::new(format);
         match handler.parse_triples(reader) {
             Ok(_) => Ok(()),
-            Err(e) => Err(CliError::InvalidFormat(format!("Validation failed: {}", e))),
+            Err(e) => Err(CliError::invalid_format(format!("Validation failed: {}", e))),
         }
     }
 
@@ -648,7 +649,7 @@ impl FormatDetector {
                 }
             }
             Err(e) => {
-                return Err(CliError::ConversionError(format!(
+                return Err(CliError::from(format!(
                     "Failed to parse input: {}",
                     e
                 )));
@@ -657,7 +658,7 @@ impl FormatDetector {
 
         // Write output
         let output_file = File::create(output_path)?;
-        let output_handler = FormatHandler::new(options.output_format);
+        let output_handler = FormatHandler::new(options.output_format.clone());
         let graph_triples: Vec<_> = graph.iter().cloned().collect();
 
         match output_handler.serialize_triples(output_file, &graph_triples) {
@@ -665,7 +666,7 @@ impl FormatDetector {
                 stats.conversion_time = start_time.elapsed();
                 Ok(stats)
             }
-            Err(e) => Err(CliError::ConversionError(format!(
+            Err(e) => Err(CliError::from(format!(
                 "Failed to write output: {}",
                 e
             ))),
@@ -695,9 +696,11 @@ fn format_name(format: &RdfFormat) -> &'static str {
         RdfFormat::Turtle => "Turtle",
         RdfFormat::NTriples => "N-Triples",
         RdfFormat::RdfXml => "RDF/XML",
-        RdfFormat::JsonLd => "JSON-LD",
+        RdfFormat::JsonLd { .. } => "JSON-LD",
         RdfFormat::TriG => "TriG",
         RdfFormat::NQuads => "N-Quads",
+        RdfFormat::N3 => "N3",
+        _ => "Unknown",
     }
 }
 
@@ -758,10 +761,10 @@ fn parse_format(format_str: &str) -> Result<RdfFormat, CliError> {
         "turtle" | "ttl" => Ok(RdfFormat::Turtle),
         "ntriples" | "nt" => Ok(RdfFormat::NTriples),
         "rdfxml" | "rdf" | "xml" => Ok(RdfFormat::RdfXml),
-        "jsonld" | "json" => Ok(RdfFormat::JsonLd),
+        "jsonld" | "json" => Ok(RdfFormat::JsonLd { profile: oxirs_core::format::JsonLdProfileSet::empty() }),
         "trig" => Ok(RdfFormat::TriG),
         "nquads" | "nq" => Ok(RdfFormat::NQuads),
-        _ => Err(CliError::InvalidFormat(format!(
+        _ => Err(CliError::invalid_format(format!(
             "Unknown format: {}",
             format_str
         ))),

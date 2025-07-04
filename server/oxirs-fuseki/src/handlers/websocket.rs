@@ -715,8 +715,8 @@ async fn execute_subscription_query(
     state: &AppState,
 ) -> FusekiResult<serde_json::Value> {
     // Execute query using existing SPARQL handler logic
-    let result =
-        crate::handlers::sparql::execute_sparql_query(&state.store, query, &[], &[]).await?;
+    let context = crate::handlers::sparql::QueryContext::default();
+    let result = crate::handlers::sparql::core::execute_sparql_query(query, context, &std::sync::Arc::new(state.clone())).await?;
 
     // Convert to JSON format suitable for WebSocket
     let json_result = match result.query_type.as_str() {

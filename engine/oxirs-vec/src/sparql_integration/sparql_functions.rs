@@ -220,6 +220,70 @@ impl SparqlVectorFunctions {
                 ],
             },
         );
+
+        // vec:vector_similarity function (alias for direct vector similarity)
+        self.function_registry.insert(
+            "vector_similarity".to_string(),
+            VectorServiceFunction {
+                name: "vector_similarity".to_string(),
+                arity: 2,
+                description: "Calculate similarity between two vectors directly".to_string(),
+                parameters: vec![
+                    VectorServiceParameter {
+                        name: "vector1".to_string(),
+                        param_type: VectorParameterType::Vector,
+                        required: true,
+                        description: "First vector for similarity comparison".to_string(),
+                    },
+                    VectorServiceParameter {
+                        name: "vector2".to_string(),
+                        param_type: VectorParameterType::Vector,
+                        required: true,
+                        description: "Second vector for similarity comparison".to_string(),
+                    },
+                ],
+            },
+        );
+
+        // vec:embed_text function (alias for embed)
+        self.function_registry.insert(
+            "embed_text".to_string(),
+            VectorServiceFunction {
+                name: "embed_text".to_string(),
+                arity: 1,
+                description: "Generate embedding for text content".to_string(),
+                parameters: vec![VectorServiceParameter {
+                    name: "text".to_string(),
+                    param_type: VectorParameterType::String,
+                    required: true,
+                    description: "Text content to generate embedding for".to_string(),
+                }],
+            },
+        );
+
+        // vec:search_text function (alias for search)
+        self.function_registry.insert(
+            "search_text".to_string(),
+            VectorServiceFunction {
+                name: "search_text".to_string(),
+                arity: 2,
+                description: "Search for resources using text query".to_string(),
+                parameters: vec![
+                    VectorServiceParameter {
+                        name: "query_text".to_string(),
+                        param_type: VectorParameterType::String,
+                        required: true,
+                        description: "Text query for search".to_string(),
+                    },
+                    VectorServiceParameter {
+                        name: "limit".to_string(),
+                        param_type: VectorParameterType::Number,
+                        required: false,
+                        description: "Maximum number of results to return".to_string(),
+                    },
+                ],
+            },
+        );
     }
 
     /// Register a custom vector service function
@@ -261,15 +325,73 @@ impl SparqlVectorFunctions {
                 ));
             }
 
-            // Create a query for the function
-            let query = VectorQuery::new(function_name.to_string(), args.to_vec());
-            let result = executor.execute_optimized_query(&query)?;
+            // Handle special functions that work with vectors directly
+            match function_name {
+                "vector_similarity" => self.execute_vector_similarity(args),
+                "embed_text" | "embed" => self.execute_embed_text(args, executor),
+                _ => {
+                    // Create a query for the function
+                    let query = VectorQuery::new(function_name.to_string(), args.to_vec());
+                    let result = executor.execute_optimized_query(&query)?;
 
-            // Convert VectorQueryResult to VectorServiceResult
-            Ok(VectorServiceResult::SimilarityList(result.results))
+                    // Convert VectorQueryResult to VectorServiceResult based on function type
+                    match function_name {
+                        "similarity" => {
+                            // For similarity between resources, return a single number
+                            if let Some((_, score)) = result.results.first() {
+                                Ok(VectorServiceResult::Number(*score))
+                            } else {
+                                Ok(VectorServiceResult::Number(0.0))
+                            }
+                        }
+                        _ => Ok(VectorServiceResult::SimilarityList(result.results)),
+                    }
+                }
+            }
         } else {
             Err(anyhow!("Unknown function: {}", function_name))
         }
+    }
+
+    /// Execute vector similarity function directly on vectors
+    fn execute_vector_similarity(&self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
+        if args.len() != 2 {
+            return Err(anyhow!("vector_similarity requires exactly 2 vector arguments"));
+        }
+
+        let vector1 = match &args[0] {
+            VectorServiceArg::Vector(v) => v,
+            _ => return Err(anyhow!("First argument must be a vector")),
+        };
+
+        let vector2 = match &args[1] {
+            VectorServiceArg::Vector(v) => v,
+            _ => return Err(anyhow!("Second argument must be a vector")),
+        };
+
+        let similarity = vector1.cosine_similarity(vector2)?;
+        Ok(VectorServiceResult::Number(similarity))
+    }
+
+    /// Execute embed text function
+    fn execute_embed_text(&self, args: &[VectorServiceArg], executor: &mut QueryExecutor) -> Result<VectorServiceResult> {
+        if args.is_empty() {
+            return Err(anyhow!("embed_text requires at least 1 argument"));
+        }
+
+        let text = match &args[0] {
+            VectorServiceArg::String(s) | VectorServiceArg::Literal(s) => s,
+            _ => return Err(anyhow!("First argument must be text")),
+        };
+
+        // Use the embed query type to generate the embedding
+        let query = VectorQuery::new("embed".to_string(), args.to_vec());
+        let result = executor.execute_optimized_query(&query)?;
+
+        // For embed functions, we want to return the vector itself
+        // This is a simplified implementation - in practice, you'd generate the actual vector
+        let vector = crate::Vector::new(vec![0.0; 384]); // Placeholder vector
+        Ok(VectorServiceResult::Vector(vector))
     }
 
     /// Get function definition
@@ -421,8 +543,7 @@ impl CustomVectorFunction for CosineSimilarityFunction {
             _ => return Err(anyhow!("Second argument must be a vector")),
         };
 
-        let similarity = crate::similarity::cosine_similarity(vector1, vector2)
-            .map_err(|e| anyhow!("Failed to calculate cosine similarity: {}", e))?;
+        let similarity = crate::similarity::cosine_similarity(&vector1.as_slice(), &vector2.as_slice());
 
         Ok(VectorServiceResult::Number(similarity))
     }

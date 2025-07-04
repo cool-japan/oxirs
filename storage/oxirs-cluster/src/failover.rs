@@ -3,7 +3,7 @@
 //! Automated failover and recovery system for OxiRS cluster nodes.
 //! Handles leader election, node replacement, and service recovery.
 
-use crate::health_monitor::{HealthEvent, HealthMonitor, NodeHealth, NodeHealthStatus};
+use crate::health_monitor::{HealthEvent, HealthMonitor, NodeHealth, NodeHealthStatus, NodeHealthLevel};
 use crate::raft::OxirsNodeId;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -109,7 +109,7 @@ pub enum FailoverEvent {
 #[derive(Debug, Clone)]
 struct NodeState {
     node_id: OxirsNodeId,
-    health: NodeHealth,
+    health: NodeHealthLevel,
     last_seen: Instant,
     failure_count: u32,
     recovery_attempts: u32,
@@ -121,7 +121,7 @@ impl NodeState {
     fn new(node_id: OxirsNodeId) -> Self {
         Self {
             node_id,
-            health: NodeHealth::Unknown,
+            health: NodeHealthLevel::Unknown,
             last_seen: Instant::now(),
             failure_count: 0,
             recovery_attempts: 0,
@@ -293,7 +293,7 @@ impl FailoverManager {
                             info!("Node {} recovered", node_id);
                             let mut states = node_states.write().await;
                             if let Some(state) = states.get_mut(&node_id) {
-                                state.health = NodeHealth::Healthy;
+                                state.health = NodeHealthLevel::Healthy;
                                 state.failure_count = 0;
                             }
                         }
@@ -328,7 +328,7 @@ impl FailoverManager {
                 let states = node_states.read().await;
                 let healthy_nodes = states
                     .values()
-                    .filter(|state| matches!(state.health, NodeHealth::Healthy))
+                    .filter(|state| matches!(state.health, NodeHealthLevel::Healthy))
                     .count();
 
                 // Check if cluster is below minimum size
@@ -344,7 +344,7 @@ impl FailoverManager {
                 let leader = current_leader.read().await;
                 if let Some(leader_id) = *leader {
                     if let Some(leader_state) = states.get(&leader_id) {
-                        if !matches!(leader_state.health, NodeHealth::Healthy) {
+                        if !matches!(leader_state.health, NodeHealthLevel::Healthy) {
                             drop(leader);
                             if config.enable_leader_failover {
                                 let _ = event_sender.send(FailoverEvent::LeaderElectionInitiated);
@@ -373,7 +373,7 @@ impl FailoverManager {
                 let recoveries = active_recoveries.read().await;
 
                 for (node_id, state) in states.iter() {
-                    if matches!(state.health, NodeHealth::Failed)
+                    if matches!(state.health, NodeHealthLevel::Failed)
                         && !recoveries.contains(node_id)
                         && state.can_attempt_recovery(config.recovery_cooldown)
                         && recoveries.len() < config.max_concurrent_recoveries
@@ -411,7 +411,7 @@ impl FailoverManager {
                 // Analyze cluster state and determine best action
                 let healthy_nodes = states
                     .values()
-                    .filter(|s| matches!(s.health, NodeHealth::Healthy))
+                    .filter(|s| matches!(s.health, NodeHealthLevel::Healthy))
                     .count();
 
                 if healthy_nodes < self.config.min_cluster_size {
@@ -505,10 +505,10 @@ impl FailoverManager {
                 // Verify the service is healthy again
                 let health_check = self.health_monitor.get_node_health(node_id).await;
                 match health_check {
-                    Some(status) if matches!(status.health, NodeHealth::Healthy) => {
+                    Some(status) if matches!(status.health.status, NodeHealthLevel::Healthy) => {
                         let mut states = self.node_states.write().await;
                         if let Some(state) = states.get_mut(&node_id) {
-                            state.health = NodeHealth::Healthy;
+                            state.health = NodeHealthLevel::Healthy;
                             state.failure_count = 0;
                             state.last_seen = Instant::now();
                         }
@@ -543,7 +543,7 @@ impl FailoverManager {
         {
             let mut states = self.node_states.write().await;
             if let Some(state) = states.get_mut(&failed_node) {
-                state.health = NodeHealth::Failed;
+                state.health = NodeHealthLevel::Failed;
                 state.recovery_attempts += 1;
                 state.last_recovery_attempt = Some(Instant::now());
             }
@@ -572,7 +572,7 @@ impl FailoverManager {
         let health_check = self.health_monitor.get_node_health(replacement_node).await;
 
         match health_check {
-            Some(status) if matches!(status.health, NodeHealth::Healthy) => {
+            Some(status) if matches!(status.health.status, NodeHealthLevel::Healthy) => {
                 info!(
                     "Node replacement completed successfully: {} -> {}",
                     failed_node, replacement_node
@@ -600,7 +600,7 @@ impl FailoverManager {
             states
                 .iter()
                 .filter(|(id, state)| {
-                    **id != node_id && matches!(state.health, NodeHealth::Healthy)
+                    **id != node_id && matches!(state.health, NodeHealthLevel::Healthy)
                 })
                 .map(|(id, _)| *id)
                 .collect::<Vec<_>>()
@@ -691,7 +691,7 @@ impl FailoverManager {
         for node_id in healthy_nodes {
             let health_check = self.health_monitor.get_node_health(*node_id).await;
             match health_check {
-                Some(status) if matches!(status.health, NodeHealth::Healthy) => {
+                Some(status) if matches!(status.health.status, NodeHealthLevel::Healthy) => {
                     debug!("Node {} is healthy after load redistribution", node_id);
                 }
                 _ => {
@@ -758,7 +758,7 @@ impl FailoverManager {
         for &node_id in &new_nodes {
             let health_check = self.health_monitor.get_node_health(node_id).await;
             match health_check {
-                Some(status) if matches!(status.health, NodeHealth::Healthy) => {
+                Some(status) if matches!(status.health.status, NodeHealthLevel::Healthy) => {
                     info!("New node {} is healthy and integrated", node_id);
                 }
                 _ => {
@@ -806,7 +806,7 @@ impl FailoverManager {
             let states = self.node_states.read().await;
             states
                 .iter()
-                .filter(|(_, state)| matches!(state.health, NodeHealth::Healthy))
+                .filter(|(_, state)| matches!(state.health, NodeHealthLevel::Healthy))
                 .map(|(id, state)| (*id, state.clone()))
                 .collect::<Vec<_>>()
         };
@@ -843,7 +843,7 @@ impl FailoverManager {
         // Step 6: Verify the selected leader is still healthy
         let health_check = self.health_monitor.get_node_health(new_leader).await;
         match health_check {
-            Some(status) if matches!(status.health, NodeHealth::Healthy) => {
+            Some(status) if matches!(status.health.status, NodeHealthLevel::Healthy) => {
                 // Step 7: Finalize leadership
                 {
                     let mut current_leader = self.current_leader.write().await;

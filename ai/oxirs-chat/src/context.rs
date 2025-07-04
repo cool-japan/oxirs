@@ -4,11 +4,11 @@
 //! context summarization, and adaptive memory optimization.
 
 use anyhow::{anyhow, Result};
-use rand::Rng;
+use fastrand;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -303,7 +303,7 @@ pub mod neuromorphic_context {
 
         pub fn process_input(&mut self, input: &f64) -> DendriticSignal {
             let signal_strength = self.activation_function.apply(*input);
-            let timing = rand::thread_rng().gen_range(0.0..1.0); // Simulated timing
+            let timing = fastrand::f64(); // Simulated timing
 
             // Update receptive field with plasticity
             self.update_receptive_field(*input);
@@ -397,7 +397,7 @@ pub mod neuromorphic_context {
     impl Synapse {
         pub fn new(neurotransmitter_type: NeurotransmitterType) -> Self {
             Self {
-                weight: rand::thread_rng().gen_range(-0.1..0.1),
+                weight: fastrand::f64() * 0.2 - 0.1,
                 neurotransmitter_type,
                 plasticity_factor: 0.1,
                 last_activation: None,
@@ -510,10 +510,14 @@ pub mod neuromorphic_context {
             // Extract features from messages
             let context_features = self.extract_context_features(messages);
 
+            // Prepare processor inputs before mutable iteration
+            let processor_inputs: Vec<_> = (0..self.processors.len())
+                .map(|i| self.prepare_processor_input(&context_features, i))
+                .collect();
+
             // Process through each specialized processor
             for (i, processor) in self.processors.iter_mut().enumerate() {
-                let processor_input = self.prepare_processor_input(&context_features, i);
-                let output = processor.process_context(&processor_input);
+                let output = processor.process_context(&processor_inputs[i]);
                 processor_outputs.push(output);
             }
 
@@ -965,8 +969,8 @@ pub mod neuromorphic_context {
         }
 
         fn calculate_attention_distribution(&self) -> AttentionDistribution {
-            let max_attention = self.attention_weights.iter().fold(0.0, |a, b| a.max(*b));
-            let min_attention = self.attention_weights.iter().fold(1.0, |a, b| a.min(*b));
+            let max_attention = self.attention_weights.iter().fold(0.0_f64, |a, b| a.max(*b));
+            let min_attention = self.attention_weights.iter().fold(1.0_f64, |a, b| a.min(*b));
             let mean_attention = if !self.attention_weights.is_empty() {
                 self.attention_weights.iter().sum::<f64>() / self.attention_weights.len() as f64
             } else {
@@ -1352,6 +1356,7 @@ impl AdvancedContextManager {
                 MessageRole::User => "User",
                 MessageRole::Assistant => "Assistant",
                 MessageRole::System => "System",
+                MessageRole::Function => "Function",
             };
             context_text.push_str(&format!("{}: {}\n", role_indicator, message.content));
         }
@@ -1468,7 +1473,7 @@ impl AdvancedContextManager {
         if !messages.is_empty() {
             let relevance_sum: f32 = messages
                 .iter()
-                .filter_map(|m| m.metadata.as_ref().and_then(|meta| meta.confidence_score))
+                .filter_map(|m| m.metadata.as_ref().and_then(|meta| meta.confidence.map(|c| c as f32)))
                 .sum();
             quality += relevance_sum / messages.len() as f32 * 0.4;
         }
@@ -1497,7 +1502,8 @@ impl AdvancedContextManager {
             .filter_map(|m| {
                 m.metadata
                     .as_ref()
-                    .and_then(|meta| meta.intent_classification.clone())
+                    .and_then(|meta| meta.custom_fields.get("intent_classification"))
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))
             })
             .collect();
 
@@ -1520,19 +1526,25 @@ impl AdvancedContextManager {
 
         for message in messages {
             if let Some(metadata) = &message.metadata {
-                // Extract entities
-                if let Some(extracted_entities) = &metadata.entities_extracted {
-                    entities.extend(extracted_entities.iter().cloned());
+                // Extract entities from custom fields
+                if let Some(extracted_entities) = metadata.custom_fields.get("entities_extracted") {
+                    if let Ok(entities_list) = serde_json::from_value::<Vec<String>>(extracted_entities.clone()) {
+                        entities.extend(entities_list);
+                    }
                 }
 
-                // Extract SPARQL queries
-                if let Some(sparql) = &metadata.sparql_query {
-                    queries.push(sparql.clone());
+                // Extract SPARQL queries from custom fields
+                if let Some(sparql) = metadata.custom_fields.get("sparql_query") {
+                    if let Some(query_str) = sparql.as_str() {
+                        queries.push(query_str.to_string());
+                    }
                 }
 
-                // Extract facts from retrieved triples
-                if let Some(triples) = &metadata.retrieved_triples {
-                    facts.extend(triples.iter().cloned());
+                // Extract facts from retrieved triples in custom fields
+                if let Some(triples) = metadata.custom_fields.get("retrieved_triples") {
+                    if let Ok(triples_list) = serde_json::from_value::<Vec<String>>(triples.clone()) {
+                        facts.extend(triples_list);
+                    }
                 }
             }
         }

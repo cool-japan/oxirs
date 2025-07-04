@@ -173,11 +173,14 @@ impl NeuralPatternLearner {
                 .accuracy_history
                 .last()
                 .copied()
-                .unwrap_or(0.0),
+                .unwrap_or(1.0 - best_validation_loss), // Use accuracy history if available, otherwise convert loss
             precision: 0.0, // TODO: Implement proper precision computation
             recall: 0.0,    // TODO: Implement proper recall computation
             f1_score: 0.0,  // TODO: Implement proper F1 computation
-            loss: best_validation_loss,
+            auc_roc: 0.0,   // TODO: Implement proper AUC computation
+            confusion_matrix: vec![vec![0; 2]; 2], // TODO: Implement proper confusion matrix
+            per_class_metrics: std::collections::HashMap::new(), // TODO: Implement per-class metrics
+            training_time: std::time::Duration::from_secs(0), // TODO: Track actual training time
         })
     }
 
@@ -730,8 +733,8 @@ impl NeuralPatternLearner {
         for (i, pattern) in patterns.iter().enumerate() {
             for (j, other_pattern) in patterns.iter().enumerate() {
                 if i != j {
-                    let pattern_pair = (pattern.id.clone(), other_pattern.id.clone());
-                    if let Some(&expected_correlation) = target_correlations.get(&pattern_pair) {
+                    let pattern_pair = (pattern.id().to_string(), other_pattern.id().to_string());
+                    if let Some(expected_correlation) = target_correlations.get(&pattern_pair) {
                         // Get predicted correlation type (argmax of prediction)
                         let pred_row = predictions.row(i);
                         let predicted_type_idx = pred_row
@@ -744,7 +747,7 @@ impl NeuralPatternLearner {
                         let predicted_correlation =
                             self.index_to_correlation_type(predicted_type_idx);
 
-                        if predicted_correlation == expected_correlation {
+                        if predicted_correlation == *expected_correlation {
                             correct_predictions += 1;
                         }
                         total_predictions += 1;

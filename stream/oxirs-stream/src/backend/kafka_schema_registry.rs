@@ -99,7 +99,7 @@ impl SchemaRegistryClient {
             if let (Some(username), Some(password)) = (&config.username, &config.password) {
                 let auth_header = format!(
                     "Basic {}",
-                    base64::encode(format!("{}:{}", username, password))
+                    aws_smithy_types::base64::encode(format!("{}:{}", username, password))
                 );
                 let mut headers = reqwest::header::HeaderMap::new();
                 headers.insert(

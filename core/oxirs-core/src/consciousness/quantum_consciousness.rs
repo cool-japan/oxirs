@@ -4,13 +4,12 @@
 //! graph processing, combining quantum computing principles with artificial
 //! consciousness for next-generation RDF optimization.
 
-use super::{EmotionalState, PatternCharacteristic, QueryContext};
+use super::EmotionalState;
 use crate::query::algebra::AlgebraTriplePattern;
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f64::consts::PI;
-use std::sync::{Arc, RwLock};
 
 /// Quantum consciousness state for enhanced processing
 #[derive(Debug, Clone)]
@@ -315,7 +314,7 @@ impl QuantumConsciousnessState {
         let correlation = strength * (2.0 * fastrand::f64() - 1.0);
         self.pattern_entanglement
             .correlation_coefficients
-            .insert(format!("{}_{}", pattern_a, pattern_b), correlation);
+            .insert(format!("{pattern_a}_{pattern_b}"), correlation);
 
         Ok(())
     }

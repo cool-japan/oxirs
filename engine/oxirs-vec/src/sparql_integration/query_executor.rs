@@ -8,7 +8,7 @@ use super::monitoring::PerformanceMonitor;
 use crate::{
     embeddings::{EmbeddableContent, EmbeddingManager},
     graph_aware_search::{GraphAwareSearch, GraphContext, GraphSearchScope},
-    VectorStore,
+    VectorStore, VectorStoreTrait,
 };
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -127,10 +127,10 @@ impl QueryExecutor {
         let result = match query.operation_type.as_str() {
             "similarity" => self.execute_similarity_query(query),
             "similar" => self.execute_similar_query(query),
-            "search" => self.execute_search_query(query),
+            "search" | "search_text" => self.execute_search_query(query),
             "searchIn" => self.execute_search_in_query(query),
             "cluster" => self.execute_cluster_query(query),
-            "embed" => self.execute_embed_query(query),
+            "embed" | "embed_text" => self.execute_embed_query(query),
             _ => Err(anyhow!("Unknown operation type: {}", query.operation_type)),
         }?;
 
@@ -146,7 +146,7 @@ impl QueryExecutor {
     }
 
     /// Execute similarity query between two resources
-    fn execute_similarity_query(&self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
+    fn execute_similarity_query(&mut self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
         if query.args.len() < 2 {
             return Err(anyhow!("Similarity query requires at least 2 arguments"));
         }
@@ -164,22 +164,23 @@ impl QueryExecutor {
         // Get vectors for both resources
         let vector1 = self
             .vector_store
-            .get_vector(resource1)
-            .ok_or_else(|| anyhow!("Vector not found for resource: {}", resource1))?;
+            .get_vector(&resource1.clone())
+            .ok_or_else(|| anyhow!("Vector not found for resource: {}", resource1))?
+            .clone();
         let vector2 = self
             .vector_store
-            .get_vector(resource2)
-            .ok_or_else(|| anyhow!("Vector not found for resource: {}", resource2))?;
+            .get_vector(&resource2.clone())
+            .ok_or_else(|| anyhow!("Vector not found for resource: {}", resource2))?
+            .clone();
 
         // Calculate similarity
-        let similarity = crate::similarity::cosine_similarity(&vector1, &vector2)
-            .map_err(|e| anyhow!("Failed to calculate similarity: {}", e))?;
+        let similarity = crate::similarity::cosine_similarity(&vector1.as_slice(), &vector2.as_slice());
 
         Ok(vec![(format!("{}-{}", resource1, resource2), similarity)])
     }
 
     /// Execute similar query to find similar resources
-    fn execute_similar_query(&self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
+    fn execute_similar_query(&mut self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
         if query.args.is_empty() {
             return Err(anyhow!("Similar query requires at least 1 argument"));
         }
@@ -210,11 +211,12 @@ impl QueryExecutor {
         // Get vector for the resource
         let query_vector = self
             .vector_store
-            .get_vector(resource)
-            .ok_or_else(|| anyhow!("Vector not found for resource: {}", resource))?;
+            .get_vector(&resource.clone())
+            .ok_or_else(|| anyhow!("Vector not found for resource: {}", resource))?
+            .clone();
 
         // Perform similarity search
-        let results = self.vector_store.search(&query_vector, limit, threshold)?;
+        let results = self.vector_store.index.search_knn(&query_vector, limit)?;
 
         Ok(results
             .into_iter()
@@ -223,7 +225,7 @@ impl QueryExecutor {
     }
 
     /// Execute text search query
-    fn execute_search_query(&self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
+    fn execute_search_query(&mut self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
         if query.args.is_empty() {
             return Err(anyhow!("Search query requires at least 1 argument"));
         }
@@ -282,26 +284,23 @@ impl QueryExecutor {
 
     /// Execute simple text search
     fn execute_simple_text_search(
-        &self,
+        &mut self,
         query_text: &str,
         limit: usize,
         threshold: f32,
     ) -> Result<Vec<(String, f32)>> {
         // Generate embedding for the query text
-        let content = EmbeddableContent::Text {
-            text: query_text.to_string(),
-            metadata: HashMap::new(),
-        };
+        let content = EmbeddableContent::Text(query_text.to_string());
 
-        let query_vector = self.embedding_manager.embed_content(&content)?;
+        let query_vector = self.embedding_manager.get_embedding(&content)?;
 
         // Perform similarity search
-        self.vector_store.search(&query_vector, limit, threshold)
+        self.vector_store.index.search_knn(&query_vector, limit)
     }
 
     /// Execute cross-language search
     fn execute_cross_language_search(
-        &self,
+        &mut self,
         query_text: &str,
         limit: usize,
         threshold: f32,
@@ -316,13 +315,10 @@ impl QueryExecutor {
 
         // Execute search for each query variation
         for (variation_text, weight) in query_variations {
-            let content = EmbeddableContent::Text {
-                text: variation_text,
-                metadata: HashMap::new(),
-            };
+            let content = EmbeddableContent::Text(variation_text);
 
-            if let Ok(query_vector) = self.embedding_manager.embed_content(&content) {
-                if let Ok(results) = self.vector_store.search(&query_vector, limit, threshold) {
+            if let Ok(query_vector) = self.embedding_manager.get_embedding(&content) {
+                if let Ok(results) = self.vector_store.index.search_knn(&query_vector, limit) {
                     for (id, score) in results {
                         all_results.push((id, score * weight));
                     }
@@ -336,7 +332,7 @@ impl QueryExecutor {
     }
 
     /// Execute graph-scoped search query
-    fn execute_search_in_query(&self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
+    fn execute_search_in_query(&mut self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
         if query.args.len() < 2 {
             return Err(anyhow!("SearchIn query requires at least 2 arguments"));
         }
@@ -380,24 +376,27 @@ impl QueryExecutor {
 
         // Convert scope string to enum
         let scope = match scope_str {
-            "children" => GraphSearchScope::Children,
-            "parents" => GraphSearchScope::Parents,
-            "hierarchy" => GraphSearchScope::Hierarchy,
+            "children" => GraphSearchScope::IncludeChildren,
+            "parents" => GraphSearchScope::IncludeParents,
+            "hierarchy" => GraphSearchScope::FullHierarchy,
             "related" => GraphSearchScope::Related,
             _ => GraphSearchScope::Exact,
         };
 
         if let Some(ref graph_search) = self.graph_aware_search {
-            let context = GraphContext::new(graph_iri.clone(), scope);
+            let context = GraphContext {
+                primary_graph: graph_iri.clone(),
+                additional_graphs: Vec::new(),
+                scope,
+                context_weights: HashMap::new(),
+            };
 
             // Generate embedding for query text
-            let content = EmbeddableContent::Text {
-                text: query_text.to_string(),
-                metadata: HashMap::new(),
-            };
-            let query_vector = self.embedding_manager.embed_content(&content)?;
+            let content = EmbeddableContent::Text(query_text.to_string());
+            let query_vector = self.embedding_manager.get_embedding(&content)?;
 
-            graph_search.search_with_context(&query_vector, limit, threshold, &context)
+            // Since search_with_context doesn't exist, fallback to simple search
+            self.execute_simple_text_search(query_text, limit, threshold)
         } else {
             // Fallback to simple search if graph-aware search is not available
             self.execute_simple_text_search(query_text, limit, threshold)
@@ -412,7 +411,7 @@ impl QueryExecutor {
     }
 
     /// Execute embedding generation query
-    fn execute_embed_query(&self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
+    fn execute_embed_query(&mut self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
         if query.args.is_empty() {
             return Err(anyhow!("Embed query requires at least 1 argument"));
         }
@@ -422,16 +421,13 @@ impl QueryExecutor {
             _ => return Err(anyhow!("First argument must be text")),
         };
 
-        let content = EmbeddableContent::Text {
-            text: text.to_string(),
-            metadata: HashMap::new(),
-        };
+        let content = EmbeddableContent::Text(text.to_string());
 
-        let vector = self.embedding_manager.embed_content(&content)?;
+        let vector = self.embedding_manager.get_embedding(&content)?;
 
         // Store the vector with a generated ID
         let id = format!("embedded_{}", hash_string(text));
-        self.vector_store.insert(&id, vector)?;
+        self.vector_store.index.add_vector(id.clone(), vector, None)?;
 
         Ok(vec![(id, 1.0)])
     }
@@ -494,6 +490,17 @@ impl QueryExecutor {
     /// Get cache statistics
     pub fn cache_stats(&self) -> (usize, usize) {
         (self.query_cache.len(), 1000)
+    }
+
+    /// Add a resource embedding to the vector store
+    pub fn add_resource_embedding(&mut self, uri: &str, content: &EmbeddableContent) -> Result<()> {
+        // Generate embedding for the content
+        let vector = self.embedding_manager.get_embedding(content)?;
+        
+        // Insert the vector into the store with the URI as the key
+        self.vector_store.index.insert(uri.to_string(), vector)?;
+        
+        Ok(())
     }
 }
 

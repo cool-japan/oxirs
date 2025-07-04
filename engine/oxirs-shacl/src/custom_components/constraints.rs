@@ -90,7 +90,7 @@ impl ConstraintEvaluator for CustomConstraint {
                 construct_query: None,
             };
 
-            return sparql_constraint.evaluate(store, context);
+            return sparql_constraint.evaluate(context, store);
         }
 
         // Otherwise, delegate to custom validation logic based on component type

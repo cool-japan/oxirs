@@ -491,7 +491,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess multi-dimensional quality
     pub fn assess_multi_dimensional_quality(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         validation_report: Option<&ValidationReport>,
     ) -> Result<MultiDimensionalQualityAssessment> {
@@ -556,7 +556,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess intrinsic quality dimensions
     fn assess_intrinsic_quality(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         validation_report: Option<&ValidationReport>,
     ) -> Result<IntrinsicQualityAssessment> {
@@ -582,7 +582,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess contextual quality dimensions
     fn assess_contextual_quality(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<ContextualQualityAssessment> {
         tracing::debug!("Assessing contextual quality dimensions");
@@ -607,7 +607,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Compute statistical quality measures
     fn compute_statistical_measures(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<StatisticalQualityMeasures> {
         tracing::debug!("Computing statistical quality measures");
 
@@ -631,7 +631,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Compute semantic quality measures
     fn compute_semantic_measures(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<SemanticQualityMeasures> {
         tracing::debug!("Computing semantic quality measures");
@@ -658,7 +658,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess accuracy dimension
     fn assess_accuracy_dimension(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         _validation_report: Option<&ValidationReport>,
     ) -> Result<QualityDimensionResult> {
@@ -680,7 +680,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess consistency dimension
     fn assess_consistency_dimension(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<QualityDimensionResult> {
         // Placeholder implementation
@@ -701,7 +701,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess completeness dimension
     fn assess_completeness_dimension(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<QualityDimensionResult> {
         // Placeholder implementation
@@ -722,7 +722,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess validity dimension
     fn assess_validity_dimension(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         _validation_report: Option<&ValidationReport>,
     ) -> Result<QualityDimensionResult> {
@@ -744,7 +744,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess precision dimension
     fn assess_precision_dimension(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<QualityDimensionResult> {
         // Placeholder implementation
@@ -763,7 +763,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess currency dimension (data freshness)
-    fn assess_currency_dimension(&mut self, _store: &Store) -> Result<QualityDimensionResult> {
+    fn assess_currency_dimension(&mut self, _store: &dyn Store) -> Result<QualityDimensionResult> {
         // Placeholder implementation
         Ok(QualityDimensionResult {
             score: 0.72,
@@ -784,7 +784,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess relevance dimension
     fn assess_relevance_dimension(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<QualityDimensionResult> {
         // Placeholder implementation
@@ -803,7 +803,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess timeliness dimension
-    fn assess_timeliness_dimension(&mut self, _store: &Store) -> Result<QualityDimensionResult> {
+    fn assess_timeliness_dimension(&mut self, _store: &dyn Store) -> Result<QualityDimensionResult> {
         // Placeholder implementation
         Ok(QualityDimensionResult {
             score: 0.68,
@@ -820,7 +820,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess accessibility dimension
-    fn assess_accessibility_dimension(&mut self, _store: &Store) -> Result<QualityDimensionResult> {
+    fn assess_accessibility_dimension(&mut self, _store: &dyn Store) -> Result<QualityDimensionResult> {
         // Placeholder implementation
         Ok(QualityDimensionResult {
             score: 0.81,
@@ -839,7 +839,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess compliance dimension
     fn assess_compliance_dimension(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<QualityDimensionResult> {
         // Placeholder implementation
@@ -858,7 +858,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess security dimension
-    fn assess_security_dimension(&mut self, _store: &Store) -> Result<QualityDimensionResult> {
+    fn assess_security_dimension(&mut self, _store: &dyn Store) -> Result<QualityDimensionResult> {
         // Placeholder implementation
         Ok(QualityDimensionResult {
             score: 0.75,
@@ -877,7 +877,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess usability dimension
     fn assess_usability_dimension(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<QualityDimensionResult> {
         // Placeholder implementation
@@ -898,7 +898,7 @@ impl ExtendedQualityDimensionsAssessor {
     // Statistical quality measures
 
     /// Analyze distributions
-    fn analyze_distributions(&mut self, _store: &Store) -> Result<DistributionAnalysis> {
+    fn analyze_distributions(&mut self, _store: &dyn Store) -> Result<DistributionAnalysis> {
         // Placeholder implementation
         Ok(DistributionAnalysis {
             distribution_type: DistributionType::Normal,
@@ -911,7 +911,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Detect outliers
-    fn detect_outliers(&mut self, _store: &Store) -> Result<OutlierDetectionResult> {
+    fn detect_outliers(&mut self, _store: &dyn Store) -> Result<OutlierDetectionResult> {
         // Placeholder implementation
         Ok(OutlierDetectionResult {
             outlier_count: 15,
@@ -923,7 +923,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Analyze correlations
-    fn analyze_correlations(&mut self, _store: &Store) -> Result<CorrelationAnalysis> {
+    fn analyze_correlations(&mut self, _store: &dyn Store) -> Result<CorrelationAnalysis> {
         // Placeholder implementation
         Ok(CorrelationAnalysis {
             property_correlations: HashMap::new(),
@@ -934,7 +934,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Calculate entropy
-    fn calculate_entropy(&mut self, _store: &Store) -> Result<EntropyCalculation> {
+    fn calculate_entropy(&mut self, _store: &dyn Store) -> Result<EntropyCalculation> {
         // Placeholder implementation
         Ok(EntropyCalculation {
             shannon_entropy: 4.25,
@@ -946,7 +946,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Measure information content
-    fn measure_information_content(&mut self, _store: &Store) -> Result<InformationContentMeasure> {
+    fn measure_information_content(&mut self, _store: &dyn Store) -> Result<InformationContentMeasure> {
         // Placeholder implementation
         Ok(InformationContentMeasure {
             total_information_content: 8.75,
@@ -958,7 +958,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess redundancy
-    fn assess_redundancy(&mut self, _store: &Store) -> Result<RedundancyAssessment> {
+    fn assess_redundancy(&mut self, _store: &dyn Store) -> Result<RedundancyAssessment> {
         // Placeholder implementation
         Ok(RedundancyAssessment {
             redundancy_ratio: 0.18,
@@ -971,7 +971,7 @@ impl ExtendedQualityDimensionsAssessor {
     // Semantic quality measures
 
     /// Assess concept coherence
-    fn assess_concept_coherence(&mut self, _store: &Store) -> Result<ConceptCoherence> {
+    fn assess_concept_coherence(&mut self, _store: &dyn Store) -> Result<ConceptCoherence> {
         // Placeholder implementation
         Ok(ConceptCoherence {
             coherence_score: 0.73,
@@ -982,7 +982,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess relationship validity
-    fn assess_relationship_validity(&mut self, _store: &Store) -> Result<RelationshipValidity> {
+    fn assess_relationship_validity(&mut self, _store: &dyn Store) -> Result<RelationshipValidity> {
         // Placeholder implementation
         Ok(RelationshipValidity {
             validity_score: 0.85,
@@ -993,7 +993,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess taxonomy consistency
-    fn assess_taxonomy_consistency(&mut self, _store: &Store) -> Result<TaxonomyConsistency> {
+    fn assess_taxonomy_consistency(&mut self, _store: &dyn Store) -> Result<TaxonomyConsistency> {
         // Placeholder implementation
         Ok(TaxonomyConsistency {
             consistency_score: 0.89,
@@ -1009,7 +1009,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess semantic density
-    fn assess_semantic_density(&mut self, _store: &Store) -> Result<SemanticDensity> {
+    fn assess_semantic_density(&mut self, _store: &dyn Store) -> Result<SemanticDensity> {
         // Placeholder implementation
         Ok(SemanticDensity {
             density_score: 0.67,
@@ -1024,7 +1024,7 @@ impl ExtendedQualityDimensionsAssessor {
     /// Assess knowledge completeness
     fn assess_knowledge_completeness(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<KnowledgeCompleteness> {
         // Placeholder implementation
@@ -1042,7 +1042,7 @@ impl ExtendedQualityDimensionsAssessor {
     }
 
     /// Assess logical consistency
-    fn assess_logical_consistency(&mut self, _store: &Store) -> Result<LogicalConsistency> {
+    fn assess_logical_consistency(&mut self, _store: &dyn Store) -> Result<LogicalConsistency> {
         // Placeholder implementation
         Ok(LogicalConsistency {
             consistency_score: 0.92,

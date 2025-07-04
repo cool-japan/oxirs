@@ -786,17 +786,17 @@ impl Default for CertificateConfig {
 /// Enterprise integration manager
 pub struct EnterpriseIntegrationManager {
     config: Arc<RwLock<EnterpriseConfig>>,
-    sso_provider: Option<Box<dyn SsoProvider + Send + Sync>>,
+    sso_provider: Option<Box<dyn SsoProviderTrait + Send + Sync>>,
     ldap_client: Option<Box<dyn LdapClient + Send + Sync>>,
     audit_logger: Option<Box<dyn AuditLogger + Send + Sync>>,
     compliance_monitor: Option<Box<dyn ComplianceMonitor + Send + Sync>>,
-    workflow_engine: Option<Box<dyn WorkflowEngine + Send + Sync>>,
-    bi_connectors: HashMap<String, Box<dyn BiConnector + Send + Sync>>,
+    workflow_engine: Option<Box<dyn WorkflowEngineTrait + Send + Sync>>,
+    bi_connectors: HashMap<String, Box<dyn BiConnectorTrait + Send + Sync>>,
 }
 
 /// Traits for enterprise integrations
 #[async_trait::async_trait]
-pub trait SsoProvider {
+pub trait SsoProviderTrait {
     async fn authenticate(&self, token: &str) -> Result<SsoUser>;
     async fn authorize(&self, user: &SsoUser, resource: &str, action: &str) -> Result<bool>;
     async fn refresh_token(&self, refresh_token: &str) -> Result<String>;
@@ -825,7 +825,7 @@ pub trait ComplianceMonitor {
 }
 
 #[async_trait::async_trait]
-pub trait WorkflowEngine {
+pub trait WorkflowEngineTrait {
     async fn start_workflow(
         &self,
         workflow_id: &str,
@@ -840,7 +840,7 @@ pub trait WorkflowEngine {
 }
 
 #[async_trait::async_trait]
-pub trait BiConnector {
+pub trait BiConnectorTrait {
     async fn sync_data(&self, data: Vec<HashMap<String, serde_json::Value>>) -> Result<()>;
     async fn create_dashboard(&self, dashboard: Dashboard) -> Result<String>;
     async fn update_metrics(&self, metrics: Vec<BusinessMetric>) -> Result<()>;

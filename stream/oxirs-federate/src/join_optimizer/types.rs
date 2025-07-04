@@ -2,16 +2,12 @@
 //!
 //! This module contains core data types used by the join optimizer.
 
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use crate::planner::planning::{FilterExpression as PlanningFilterExpression, TriplePattern};
+use crate::planner::planning::TriplePattern;
 use crate::service_optimizer::{
-    BushyNodeType, BushyTreeNode, ChainJoinPattern, ChainOptimizationType, CyclePattern,
-    JoinAlgorithm, JoinEdge, JoinExecutionResult, JoinExecutionStrategy, JoinOperation,
-    JoinOperationType, JoinPlan, ParallelizationOpportunity, QueryInfo, SpecialJoinPatterns,
-    StarJoinPattern, StarOptimizationType, StrategyPerformance,
+    JoinAlgorithm, JoinEdge, StrategyPerformance,
 };
 
 /// Join graph representation for optimization
@@ -210,7 +206,7 @@ impl JoinCostModel {
         network_latency: Duration,
     ) -> f64 {
         let base_cost = match join_algorithm {
-            JoinAlgorithm::NestedLoop => {
+            JoinAlgorithm::NestedLoopJoin => {
                 (left_cardinality as f64) * (right_cardinality as f64) * self.cpu_cost_factor
             }
             JoinAlgorithm::HashJoin => {
@@ -223,8 +219,11 @@ impl JoinCostModel {
                 sort_cost * self.cpu_cost_factor
                     + (left_cardinality + right_cardinality) as f64 * self.disk_io_cost_factor
             }
-            JoinAlgorithm::IndexJoin => {
+            JoinAlgorithm::Adaptive => {
                 (left_cardinality as f64) * (right_cardinality as f64).log2() * self.cpu_cost_factor
+            }
+            JoinAlgorithm::StreamingJoin => {
+                (left_cardinality as f64 + right_cardinality as f64) * self.cpu_cost_factor
             }
         };
 
@@ -242,7 +241,7 @@ impl JoinCostModel {
         join_algorithm: &JoinAlgorithm,
     ) -> u64 {
         match join_algorithm {
-            JoinAlgorithm::NestedLoop => 1024, // Minimal memory needed
+            JoinAlgorithm::NestedLoopJoin => 1024, // Minimal memory needed
             JoinAlgorithm::HashJoin => {
                 // Hash table for smaller relation + some overhead
                 let smaller_relation = left_cardinality.min(right_cardinality);
@@ -252,7 +251,8 @@ impl JoinCostModel {
                 // Need to sort both relations
                 (left_cardinality + right_cardinality) * 32
             }
-            JoinAlgorithm::IndexJoin => 2048, // Minimal memory for index lookups
+            JoinAlgorithm::Adaptive => 2048, // Minimal memory for adaptive lookups
+            JoinAlgorithm::StreamingJoin => 512, // Minimal memory for streaming
         }
     }
 }

@@ -11,6 +11,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use tokio::sync::Mutex as TokioMutex;
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -397,16 +398,16 @@ pub enum QueryComplexity {
 /// Main NL2SPARQL system
 pub struct NL2SPARQLSystem {
     config: NL2SPARQLConfig,
-    llm_manager: Option<Arc<LLMManager>>,
+    llm_manager: Option<Arc<TokioMutex<LLMManager>>>,
     template_engine: Handlebars<'static>,
     templates: HashMap<String, SPARQLTemplate>,
     validator: SPARQLValidator,
     optimizer: SPARQLOptimizer,
-    store: Option<Arc<Store>>,
+    store: Option<Arc<dyn Store>>,
 }
 
 impl NL2SPARQLSystem {
-    pub fn new(config: NL2SPARQLConfig, llm_manager: Option<Arc<LLMManager>>) -> Result<Self> {
+    pub fn new(config: NL2SPARQLConfig, llm_manager: Option<Arc<TokioMutex<LLMManager>>>) -> Result<Self> {
         let mut system = Self {
             config,
             llm_manager,
@@ -423,8 +424,8 @@ impl NL2SPARQLSystem {
 
     pub fn with_store(
         config: NL2SPARQLConfig,
-        llm_manager: Option<Arc<LLMManager>>,
-        store: Arc<Store>,
+        llm_manager: Option<Arc<TokioMutex<LLMManager>>>,
+        store: Arc<dyn Store>,
     ) -> Result<Self> {
         let mut system = Self {
             config,
@@ -447,7 +448,13 @@ impl NL2SPARQLSystem {
     ) -> Result<SPARQLGenerationResult> {
         let start_time = std::time::Instant::now();
 
-        info!("Starting SPARQL generation for: {}", query_context.query);
+        let query_text = query_context.conversation_history
+            .iter()
+            .rev()
+            .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
+            .map(|msg| msg.content.as_str())
+            .unwrap_or("Unknown query");
+        info!("Starting SPARQL generation for: {}", query_text);
 
         let mut result = match self.config.generation.strategy {
             GenerationStrategy::Template => self.generate_with_templates(query_context).await?,
@@ -742,9 +749,15 @@ LIMIT {{limit}}
         let system_prompt = self.create_sparql_generation_prompt();
 
         if let Some(ref llm_manager) = self.llm_manager {
+            let query_text = query_context.conversation_history
+                .iter()
+                .rev()
+                .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
+                .map(|msg| msg.content.as_str())
+                .unwrap_or("Unknown query");
             let user_message = format!(
                 "Convert this natural language query to SPARQL: {}",
-                query_context.query
+                query_text
             );
 
             let llm_request = LLMRequest {
@@ -761,7 +774,8 @@ LIMIT {{limit}}
                 timeout: None,
             };
 
-            match llm_manager.generate_response(llm_request).await {
+            let mut manager = llm_manager.lock().await;
+            match manager.generate_response(llm_request).await {
                 Ok(response) => {
                     let sparql_query = self.extract_sparql_from_response(&response.content)?;
 
@@ -836,7 +850,13 @@ LIMIT {{limit}}
     }
 
     fn select_template(&self, query_context: &QueryContext) -> Result<&SPARQLTemplate> {
-        let query_lower = query_context.query.to_lowercase();
+        let query_text = query_context.conversation_history
+            .iter()
+            .rev()
+            .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
+            .map(|msg| msg.content.as_str())
+            .unwrap_or("Unknown query");
+        let query_lower = query_text.to_lowercase();
 
         // Match based on intent and patterns
         for template in self.templates.values() {
@@ -859,11 +879,17 @@ LIMIT {{limit}}
         query_context: &QueryContext,
     ) -> Result<HashMap<String, String>> {
         let mut parameters = HashMap::new();
+        let query_text = query_context.conversation_history
+            .iter()
+            .rev()
+            .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
+            .map(|msg| msg.content.as_str())
+            .unwrap_or("Unknown query");
 
         for param in &template.parameters {
             if let Some(ref pattern) = param.extraction_pattern {
                 if let Ok(regex) = Regex::new(pattern) {
-                    if let Some(captures) = regex.captures(&query_context.query) {
+                    if let Some(captures) = regex.captures(query_text) {
                         if let Some(captured) = captures.get(1) {
                             parameters.insert(param.name.clone(), captured.as_str().to_string());
                         }
@@ -948,8 +974,14 @@ Always respond with just the SPARQL query, no additional explanation unless requ
         query_context: &QueryContext,
     ) -> Result<QueryExplanation> {
         // TODO: Implement explanation generation
+        let query_text = query_context.conversation_history
+            .iter()
+            .rev()
+            .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
+            .map(|msg| msg.content.as_str())
+            .unwrap_or("Unknown query");
         Ok(QueryExplanation {
-            natural_language: format!("Generated SPARQL query for: {}", query_context.query),
+            natural_language: format!("Generated SPARQL query for: {}", query_text),
             reasoning_steps: Vec::new(),
             parameter_mapping: result.parameters.clone(),
             alternatives: Vec::new(),

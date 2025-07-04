@@ -206,6 +206,29 @@ impl EpisodicMemory {
         Ok((coherence + (1.0 - usage).max(0.0)) / 2.0)
     }
 
+    pub fn store_simple_entry(&mut self, query: &str, context_summary: String) -> Result<()> {
+        let episode = EpisodicMemoryEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            timestamp: Utc::now(),
+            query_content: query.to_string(),
+            context_summary,
+            attention_focus: vec![], // Empty for simple entries
+            emotional_context: EmotionalContext {
+                valence: 0.0,
+                arousal: 0.5,
+                significance: 0.5,
+            },
+        };
+
+        self.episodes.push_back(episode);
+
+        if self.episodes.len() > self.max_episodes {
+            self.episodes.pop_front();
+        }
+
+        Ok(())
+    }
+
     fn calculate_episode_coherence(
         &self,
         ep1: &EpisodicMemoryEntry,
@@ -487,6 +510,17 @@ impl NeuralActivation {
     }
 }
 
+impl Default for NeuralActivation {
+    fn default() -> Self {
+        Self {
+            activation_map: HashMap::new(),
+            overall_activation: 0.5,
+            consciousness_relevance: 0.5,
+            confidence: 0.8,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ConsciousnessIndicators {
     indicators: HashMap<String, f64>,
@@ -506,7 +540,7 @@ impl ConsciousnessIndicators {
 
         // Simple relevance calculation based on activation diversity and strength
         let activation_values: Vec<f64> = activation_map.values().copied().collect();
-        let max_activation = activation_values.iter().fold(0.0, |a, b| a.max(*b));
+        let max_activation = activation_values.iter().fold(0.0f64, |a, b| a.max(*b));
         let avg_activation = activation_values.iter().sum::<f64>() / activation_values.len() as f64;
 
         Ok((max_activation + avg_activation) / 2.0)
@@ -652,4 +686,136 @@ pub struct MetacognitiveResult {
     pub strategy_recommendation: String,
     pub self_reflection_score: f64,
     pub monitoring_effectiveness: f64,
+}
+
+// Additional missing types for temporal processing
+#[derive(Debug, Clone)]
+pub struct ConsolidationMetrics {
+    pub consolidation_rate: f64,
+    pub memory_retention: f64,
+    pub insight_generation_rate: f64,
+}
+
+impl ConsolidationMetrics {
+    pub fn new() -> Self {
+        Self {
+            consolidation_rate: 0.7,
+            memory_retention: 0.8,
+            insight_generation_rate: 0.3,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CreativeInsight {
+    pub insight_content: String,
+    pub novelty_score: f64,
+    pub relevance_score: f64,
+    pub confidence: f64,
+}
+
+#[derive(Debug, Clone)]
+pub enum EmotionalTone {
+    Positive,
+    Negative,
+    Neutral,
+    Mixed { positive_weight: f64, negative_weight: f64 },
+}
+
+#[derive(Debug, Clone)]
+pub struct TemporalPatternRecognition {
+    pub pattern_library: HashMap<String, TemporalPattern>,
+    pub recognition_threshold: f64,
+}
+
+impl TemporalPatternRecognition {
+    pub fn new() -> Self {
+        Self {
+            pattern_library: HashMap::new(),
+            recognition_threshold: 0.6,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FutureProjectionEngine {
+    pub projection_horizon: chrono::Duration,
+    pub confidence_decay_rate: f64,
+}
+
+impl FutureProjectionEngine {
+    pub fn new() -> Self {
+        Self {
+            projection_horizon: chrono::Duration::hours(24),
+            confidence_decay_rate: 0.1,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TemporalMetrics {
+    pub coherence_score: f64,
+    pub continuity_index: f64,
+    pub prediction_accuracy: f64,
+}
+
+impl TemporalMetrics {
+    pub fn new() -> Self {
+        Self {
+            coherence_score: 0.7,
+            continuity_index: 0.8,
+            prediction_accuracy: 0.6,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TemporalPattern {
+    pub pattern_id: String,
+    pub description: String,
+    pub frequency: f64,
+    pub confidence: f64,
+    pub last_occurrence: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TemporalTrend {
+    pub trend_id: String,
+    pub direction: TrendDirection,
+    pub strength: f64,
+    pub duration: chrono::Duration,
+    pub confidence: f64,
+}
+
+#[derive(Debug, Clone)]
+pub enum TrendDirection {
+    Increasing,
+    Decreasing,
+    Stable,
+    Cyclical,
+}
+
+#[derive(Debug, Clone)]
+pub struct CyclicEvent {
+    pub event_id: String,
+    pub description: String,
+    pub cycle_duration: chrono::Duration,
+    pub next_predicted: DateTime<Utc>,
+    pub confidence: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct TemporalContext {
+    pub recent_events: Vec<crate::rag::consciousness::TemporalEvent>,
+    pub relevant_patterns: Vec<String>,
+    pub future_implications: Vec<String>,
+    pub temporal_coherence: f64,
+    pub time_awareness: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct TemporalFeature {
+    pub feature_type: String,
+    pub value: f64,
+    pub timestamp: DateTime<Utc>,
 }

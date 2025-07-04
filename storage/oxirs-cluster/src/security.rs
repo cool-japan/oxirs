@@ -52,6 +52,26 @@ pub struct User {
     pub is_active: bool,
 }
 
+impl User {
+    /// Check if the user has a specific permission
+    pub fn has_permission(&self, permission: &Permission) -> bool {
+        self.permissions.contains(permission)
+    }
+
+    /// Create a new user
+    pub fn new(username: String, password_hash: String) -> Self {
+        Self {
+            username,
+            password_hash,
+            roles: HashSet::new(),
+            permissions: HashSet::new(),
+            created_at: SystemTime::now(),
+            last_login: None,
+            is_active: true,
+        }
+    }
+}
+
 /// System permissions
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Permission {

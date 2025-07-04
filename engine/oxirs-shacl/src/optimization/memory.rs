@@ -211,7 +211,7 @@ impl StringInterner {
         let old_size = self.strings.len();
 
         // Remove unused strings
-        self.strings.retain(|_, &id| used_ids.contains(&id));
+        self.strings.retain(|_, id| used_ids.contains(id));
         self.reverse_map.retain(|&id, _| used_ids.contains(&id));
 
         let removed = old_size - self.strings.len();
@@ -453,9 +453,10 @@ pub struct MemoryMonitor {
 }
 
 /// Memory usage sample
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MemorySample {
     /// Timestamp
+    #[serde(skip)]
     pub timestamp: Instant,
 
     /// Memory usage in bytes
@@ -463,6 +464,16 @@ pub struct MemorySample {
 
     /// Memory pressure (0.0-1.0)
     pub pressure: f64,
+}
+
+impl Default for MemorySample {
+    fn default() -> Self {
+        Self {
+            timestamp: Instant::now(),
+            memory_usage: 0,
+            pressure: 0.0,
+        }
+    }
 }
 
 /// Memory pressure levels

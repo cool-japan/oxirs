@@ -4,14 +4,13 @@
 //! including missing link prediction, entity resolution enhancement, schema alignment
 //! automation, quality assessment automation, and recommendation systems.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
-use uuid::Uuid;
+use tracing::{debug, info};
 
 /// Semantic enhancement configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

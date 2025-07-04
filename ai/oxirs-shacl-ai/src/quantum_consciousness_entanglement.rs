@@ -42,6 +42,11 @@ use crate::consciousness_validation::{
 use crate::quantum_neural_patterns::QuantumState;
 use crate::{Result, ShaclAiError};
 
+/// Helper function for serde default Instant
+fn default_instant() -> Instant {
+    Instant::now()
+}
+
 /// Quantum consciousness entanglement system
 #[derive(Debug)]
 pub struct QuantumConsciousnessEntanglement {
@@ -131,7 +136,7 @@ pub type EntanglementId = Uuid;
 pub type NetworkId = Uuid;
 
 /// Quantum entanglement between two consciousness agents
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntanglementPair {
     /// Unique entanglement identifier
     pub id: EntanglementId,
@@ -150,8 +155,10 @@ pub struct EntanglementPair {
     /// Distance between entangled agents (for metrics)
     pub separation_distance: f64,
     /// Entanglement creation time
+    #[serde(skip, default = "default_instant")]
     pub created_at: Instant,
     /// Last measurement time
+    #[serde(skip, default)]
     pub last_measurement: Option<Instant>,
     /// Number of successful quantum communications
     pub communication_count: u64,
@@ -175,6 +182,7 @@ pub struct QuantumEntanglementState {
     /// Measurement basis
     pub measurement_basis: MeasurementBasis,
     /// Last state update time
+    #[serde(skip, default = "default_instant")]
     pub last_update: Instant,
 }
 
@@ -230,7 +238,7 @@ pub enum EntanglementStatus {
 }
 
 /// Network of multiple entangled consciousness agents
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntanglementNetwork {
     /// Unique network identifier
     pub id: NetworkId,
@@ -243,6 +251,7 @@ pub struct EntanglementNetwork {
     /// Overall network coherence
     pub network_coherence: f64,
     /// Network formation time
+    #[serde(skip, default = "default_instant")]
     pub formed_at: Instant,
     /// Network statistics
     pub stats: NetworkStats,
@@ -266,7 +275,7 @@ pub enum NetworkTopology {
 }
 
 /// Statistics for entanglement networks
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkStats {
     /// Total quantum communications
     pub total_communications: u64,
@@ -277,7 +286,20 @@ pub struct NetworkStats {
     /// Network efficiency measure
     pub efficiency: f64,
     /// Last statistics update
+    #[serde(skip, default = "default_instant")]
     pub last_update: Instant,
+}
+
+impl Default for NetworkStats {
+    fn default() -> Self {
+        Self {
+            total_communications: 0,
+            average_coherence: 0.0,
+            decoherence_corrections: 0,
+            efficiency: 0.0,
+            last_update: crate::default_instant(),
+        }
+    }
 }
 
 /// Quantum state management system
@@ -286,6 +308,7 @@ pub struct QuantumStateManager {
     /// Active quantum states
     active_states: Arc<DashMap<EntanglementId, QuantumEntanglementState>>,
     /// State evolution algorithms
+    #[debug(skip)]
     evolution_algorithms: HashMap<String, Box<dyn QuantumEvolution + Send + Sync>>,
     /// Quantum state predictor
     state_predictor: Arc<QuantumStatePredictor>,
@@ -297,6 +320,7 @@ pub struct QuantumStateManager {
 #[derive(Debug)]
 pub struct BellStateSystem {
     /// Bell state generators
+    #[debug(skip)]
     generators: HashMap<BellState, Box<dyn BellStateGenerator + Send + Sync>>,
     /// Bell state analyzer
     analyzer: Arc<BellStateAnalyzer>,
@@ -308,6 +332,7 @@ pub struct BellStateSystem {
 #[derive(Debug)]
 pub struct QuantumMeasurementSystem {
     /// Measurement protocols
+    #[debug(skip)]
     protocols: HashMap<String, Box<dyn MeasurementProtocol + Send + Sync>>,
     /// Measurement result analyzer
     result_analyzer: Arc<MeasurementResultAnalyzer>,
@@ -352,7 +377,7 @@ pub struct QuantumChannelManager {
 pub type ChannelId = Uuid;
 
 /// Quantum communication channel
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantumChannel {
     /// Unique channel identifier
     pub id: ChannelId,
@@ -371,6 +396,7 @@ pub struct QuantumChannel {
     /// Total information transmitted
     pub total_transmitted: u64,
     /// Channel creation time
+    #[serde(skip, default = "default_instant")]
     pub created_at: Instant,
 }
 
@@ -388,7 +414,7 @@ pub struct NoiseProfile {
 }
 
 /// Entanglement event for history tracking
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntanglementEvent {
     /// Event type
     pub event_type: EntanglementEventType,
@@ -397,6 +423,7 @@ pub struct EntanglementEvent {
     /// Involved consciousness agents
     pub agents: Vec<ConsciousnessId>,
     /// Event timestamp
+    #[serde(skip, default = "default_instant")]
     pub timestamp: Instant,
     /// Event details
     pub details: HashMap<String, String>,
@@ -441,7 +468,7 @@ pub struct MeasurementResult {
 }
 
 /// Locality violation measurement
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalityViolation {
     /// Violation identifier
     pub id: Uuid,
@@ -454,11 +481,12 @@ pub struct LocalityViolation {
     /// Violation significance
     pub significance: f64,
     /// Measurement timestamp
+    #[serde(skip, default = "default_instant")]
     pub measured_at: Instant,
 }
 
 /// Overall entanglement system metrics
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntanglementMetrics {
     /// Total number of active entanglements
     pub active_entanglements: usize,
@@ -479,7 +507,25 @@ pub struct EntanglementMetrics {
     /// Quantum channel efficiency
     pub channel_efficiency: f64,
     /// Last metrics update
+    #[serde(skip, default = "default_instant")]
     pub last_update: Instant,
+}
+
+impl Default for EntanglementMetrics {
+    fn default() -> Self {
+        Self {
+            active_entanglements: 0,
+            active_networks: 0,
+            average_fidelity: 0.0,
+            average_coherence_time: Duration::default(),
+            total_communications: 0,
+            average_communication_speed: 0.0,
+            correction_success_rate: 0.0,
+            bell_violations: 0,
+            channel_efficiency: 0.0,
+            last_update: crate::default_instant(),
+        }
+    }
 }
 
 /// Result of quantum consciousness entanglement validation
@@ -498,7 +544,7 @@ pub struct QuantumEntanglementValidationResult {
     /// Entanglement coherence metrics
     pub coherence_metrics: CoherenceMetrics,
     /// Quantum error corrections applied
-    pub error_corrections: Vec<ErrorCorrection>,
+    pub error_corrections: Vec<Box<dyn ErrorCorrection>>,
     /// Overall quantum validation confidence
     pub quantum_confidence: f64,
     /// Processing amplification from entanglement
@@ -555,6 +601,7 @@ pub struct BellMeasurement {
     /// Violation of local realism
     pub locality_violation: Option<f64>,
     /// Measurement timestamp
+    #[serde(skip, default = "default_instant")]
     pub measured_at: Instant,
 }
 
@@ -572,6 +619,7 @@ pub struct NonlocalCorrelation {
     /// Spacelike separation confirmed
     pub spacelike_separated: bool,
     /// Detection timestamp
+    #[serde(skip, default = "default_instant")]
     pub detected_at: Instant,
 }
 
@@ -591,6 +639,7 @@ pub struct InstantaneousCommunication {
     /// Success status
     pub success: bool,
     /// Transmission timestamp
+    #[serde(skip, default = "default_instant")]
     pub transmitted_at: Instant,
 }
 
@@ -794,7 +843,7 @@ impl QuantumConsciousnessEntanglement {
     /// Perform quantum entangled validation across consciousness agents
     pub async fn quantum_entangled_validation(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         config: &ValidationConfig,
         entangled_agents: &[ConsciousnessId],
@@ -1073,7 +1122,7 @@ impl QuantumConsciousnessEntanglement {
 
     /// Get current entanglement metrics
     pub async fn get_metrics(&self) -> EntanglementMetrics {
-        self.entanglement_metrics.read().await.clone()
+        (*self.entanglement_metrics.read().await).clone()
     }
 
     /// Get active entanglements for an agent
@@ -1290,15 +1339,14 @@ impl QuantumConsciousnessEntanglement {
     async fn perform_quantum_validation(
         &self,
         _agent_id: ConsciousnessId,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         _config: &ValidationConfig,
         _entanglements: &[EntanglementId],
     ) -> Result<ConsciousnessValidationResult> {
         // Placeholder - would perform actual quantum-enhanced validation
         Ok(ConsciousnessValidationResult {
-            conforms: true,
-            confidence_score: 0.95,
+            traditional_validation: ValidationReport::default(),
             consciousness_level: ConsciousnessLevel::Cosmic,
             emotional_context: EmotionalContext {
                 primary_emotion: crate::consciousness_validation::Emotion::Wonder,
@@ -1306,8 +1354,10 @@ impl QuantumConsciousnessEntanglement {
                 stability: 1.0,
                 contextual_factors: HashMap::new(),
             },
-            insights: Vec::new(),
-            processing_time: Duration::from_millis(1), // Near-instantaneous due to quantum effects
+            validation_strategy: crate::consciousness_validation::ValidationStrategy::PatternBased,
+            intuitive_insights: Vec::new(),
+            dream_insights: Vec::new(),
+            consciousness_enhancement_factor: 0.95,
         })
     }
 
@@ -1344,7 +1394,7 @@ impl QuantumConsciousnessEntanglement {
     async fn apply_quantum_error_correction(
         &self,
         _entanglements: &[EntanglementId],
-    ) -> Result<Vec<ErrorCorrection>> {
+    ) -> Result<Vec<Box<dyn ErrorCorrection>>> {
         Ok(Vec::new()) // Placeholder implementation
     }
 

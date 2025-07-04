@@ -227,7 +227,7 @@ impl ShapeLibrary {
 
     pub fn add_shape(&mut self, shape: &AiShape, entry: ShapeEntry) -> Result<()> {
         // Add shape to catalog
-        self.shape_catalog.insert(shape.id().clone(), entry.clone());
+        self.shape_catalog.insert(shape.id().clone().into(), entry.clone());
 
         // Update search indices
         self.update_search_indices(&entry)?;
@@ -329,7 +329,7 @@ impl PatternRepository {
 
         // Initialize metadata
         self.pattern_metadata.insert(
-            pattern_id,
+            pattern_id.clone(),
             PatternMetadata {
                 pattern_id: pattern_id.clone(),
                 quality_score: 0.0,
@@ -361,7 +361,7 @@ impl PatternRepository {
     pub fn get_patterns_by_type(&self, pattern_type: &str) -> Vec<&ShapePattern> {
         self.patterns
             .values()
-            .filter(|pattern| pattern.pattern_type.to_string() == pattern_type)
+            .filter(|pattern| format!("{:?}", pattern.pattern_type) == pattern_type)
             .collect()
     }
 }

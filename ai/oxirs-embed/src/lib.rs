@@ -115,6 +115,8 @@
 
 #[cfg(feature = "api-server")]
 pub mod api;
+pub mod adaptive_learning;
+pub mod advanced_profiler;
 pub mod application_tasks;
 pub mod batch_processing;
 pub mod biological_computing;
@@ -124,7 +126,7 @@ pub mod causal_representation_learning;
 pub mod cloud_integration;
 pub mod compression;
 pub mod consciousness_aware_embeddings;
-pub mod contextual_embeddings;
+// pub mod contextual;
 pub mod continual_learning;
 pub mod cross_domain_transfer;
 pub mod delta;
@@ -155,6 +157,12 @@ pub mod vision_language_graph;
 
 // Import Vector from oxirs-vec for type compatibility across the ecosystem
 pub use oxirs_vec::Vector as VecVector;
+
+// Adaptive Learning System exports
+pub use adaptive_learning::{
+    AdaptiveLearningConfig, AdaptiveLearningSystem, AdaptationStrategy,
+    AdaptationMetrics, QualityFeedback,
+};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -515,13 +523,9 @@ pub use consciousness_aware_embeddings::{
     AttentionMechanism, ConsciousnessAwareEmbedding, ConsciousnessInsights, ConsciousnessLevel,
     MetaCognition, WorkingMemory,
 };
-pub use contextual_embeddings::{
-    AdaptationEngine, AdaptationRecord, AdaptationState, AdaptationStrategy, AdaptationType,
-    ContextCache, ContextFusionMethod, ContextProcessor, ContextType, ContextualConfig,
-    ContextualEmbeddingModel, EmbeddingContext, ExpertiseLevel, FeedbackAggregation, FusionNetwork,
-    InteractiveConfig, PerformanceRequirements, QueryComplexity, QueryContext, QueryIntent,
-    TaskContext, TaskType, TemporalConfig, TemporalContext, UserContext, UserPreferences,
-};
+// pub use contextual::{
+//     ContextualConfig, ContextualEmbeddingModel, EmbeddingContext,
+// };
 pub use continual_learning::{
     ArchitectureConfig, BoundaryDetection, ConsolidationConfig, ContinualLearningConfig,
     ContinualLearningModel, MemoryConfig, MemoryType, MemoryUpdateStrategy, RegularizationConfig,
@@ -636,3 +640,95 @@ pub use models::QuatD;
 pub use crate::model_registry::{
     ModelRegistry, ModelVersion, ResourceAllocation as ModelResourceAllocation,
 };
+
+/// Convenience functions for quick setup and common operations
+pub mod quick_start {
+    use super::*;
+    use crate::models::TransE;
+    
+    /// Create a TransE model with sensible defaults for experimentation
+    pub fn create_simple_transe_model() -> TransE {
+        let config = ModelConfig::default()
+            .with_dimensions(128)
+            .with_learning_rate(0.01)
+            .with_max_epochs(100);
+        TransE::new(config)
+    }
+    
+    /// Create a biomedical embedding model for life sciences applications
+    pub fn create_biomedical_model() -> BiomedicalEmbedding {
+        let config = BiomedicalEmbeddingConfig::default();
+        BiomedicalEmbedding::new(config)
+    }
+    
+    /// Parse a triple from simple string format "subject predicate object"
+    pub fn parse_triple_from_string(triple_str: &str) -> Result<Triple> {
+        let parts: Vec<&str> = triple_str.split_whitespace().collect();
+        if parts.len() != 3 {
+            return Err(anyhow::anyhow!("Triple must have exactly 3 parts separated by spaces"));
+        }
+        
+        Ok(Triple::new(
+            NamedNode::new(parts[0])?,
+            NamedNode::new(parts[1])?,
+            NamedNode::new(parts[2])?,
+        ))
+    }
+    
+    /// Helper to add multiple triples from string format
+    pub fn add_triples_from_strings<T: EmbeddingModel>(
+        model: &mut T,
+        triple_strings: &[&str]
+    ) -> Result<usize> {
+        let mut count = 0;
+        for triple_str in triple_strings {
+            let triple = parse_triple_from_string(triple_str)?;
+            model.add_triple(triple)?;
+            count += 1;
+        }
+        Ok(count)
+    }
+}
+
+#[cfg(test)]
+mod quick_start_tests {
+    use super::*;
+    use crate::quick_start::*;
+    
+    #[test]
+    fn test_create_simple_transe_model() {
+        let model = create_simple_transe_model();
+        let config = model.config();
+        assert_eq!(config.dimensions, 128);
+        assert_eq!(config.learning_rate, 0.01);
+        assert_eq!(config.max_epochs, 100);
+    }
+    
+    #[test]
+    fn test_parse_triple_from_string() {
+        let triple_str = "http://example.org/alice http://example.org/knows http://example.org/bob";
+        let triple = parse_triple_from_string(triple_str).unwrap();
+        assert_eq!(triple.subject.iri, "http://example.org/alice");
+        assert_eq!(triple.predicate.iri, "http://example.org/knows");
+        assert_eq!(triple.object.iri, "http://example.org/bob");
+    }
+    
+    #[test]
+    fn test_parse_triple_from_string_invalid() {
+        let triple_str = "http://example.org/alice http://example.org/knows";
+        let result = parse_triple_from_string(triple_str);
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_add_triples_from_strings() {
+        let mut model = create_simple_transe_model();
+        let triple_strings = [
+            "http://example.org/alice http://example.org/knows http://example.org/bob",
+            "http://example.org/bob http://example.org/likes http://example.org/music",
+        ];
+        
+        let count = add_triples_from_strings(&mut model, &triple_strings).unwrap();
+        assert_eq!(count, 2);
+    }
+}

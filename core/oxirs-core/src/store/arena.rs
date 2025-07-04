@@ -363,7 +363,7 @@ mod tests {
                     let arena_clone = Arc::clone(&arena);
                     s.spawn(move || {
                         for j in 0..100 {
-                            let string = format!("thread_{}_item_{}", i, j);
+                            let string = format!("thread_{i}_item_{j}");
                             let allocated = arena_clone.alloc_str(&string);
                             assert_eq!(allocated, string);
                         }

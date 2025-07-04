@@ -458,7 +458,7 @@ impl<'a> ValidationEngine<'a> {
     }
 
     /// Resolve inherited constraints for a shape
-    fn resolve_inherited_constraints(
+    pub fn resolve_inherited_constraints(
         &mut self,
         shape_id: &ShapeId,
     ) -> Result<IndexMap<ConstraintComponentId, Constraint>> {
@@ -467,15 +467,12 @@ impl<'a> ValidationEngine<'a> {
             return Ok(cached);
         }
 
-        // For now, just return the shape's own constraints
-        // TODO: Implement proper inheritance resolution
+        // Implement proper inheritance resolution
         let mut constraints = IndexMap::new();
+        let mut visited = std::collections::HashSet::new();
 
-        if let Some(shape) = self.shapes.get(shape_id) {
-            for constraint in &shape.constraints {
-                constraints.insert(constraint.component_id(), constraint.clone());
-            }
-        }
+        // Recursively collect constraints from the inheritance chain
+        self.collect_inherited_constraints(shape_id, &mut constraints, &mut visited)?;
 
         // Cache the result
         self.inheritance_cache
@@ -484,7 +481,35 @@ impl<'a> ValidationEngine<'a> {
         Ok(constraints)
     }
 
-    /// Validate a single constraint (placeholder - will be moved to constraint_validators.rs)
+    /// Recursively collect constraints from a shape and its parents
+    fn collect_inherited_constraints(
+        &self,
+        shape_id: &ShapeId,
+        constraints: &mut IndexMap<ConstraintComponentId, Constraint>,
+        visited: &mut std::collections::HashSet<ShapeId>,
+    ) -> Result<()> {
+        // Prevent circular inheritance
+        if visited.contains(shape_id) {
+            return Ok(());
+        }
+        visited.insert(shape_id.clone());
+
+        if let Some(shape) = self.shapes.get(shape_id) {
+            // First collect constraints from parent shapes (lowest priority)
+            for parent_id in &shape.extends {
+                self.collect_inherited_constraints(parent_id, constraints, visited)?;
+            }
+
+            // Then add this shape's own constraints (higher priority - can override parent constraints)
+            for (constraint_id, constraint) in &shape.constraints {
+                constraints.insert(constraint_id.clone(), constraint.clone());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate a single constraint
     fn validate_constraint(
         &mut self,
         store: &dyn Store,
@@ -508,9 +533,27 @@ impl<'a> ValidationEngine<'a> {
         }
         self.stats.record_cache_miss();
 
-        // TODO: Delegate to constraint validators
-        // For now, return satisfied as placeholder
-        let result = ConstraintEvaluationResult::satisfied();
+        // Evaluate the constraint using its own evaluate method
+        let constraint_result = constraint.evaluate(store, context)?;
+
+        // Convert from constraints::ConstraintEvaluationResult to validation::ConstraintEvaluationResult
+        let result = match constraint_result {
+            crate::constraints::constraint_context::ConstraintEvaluationResult::Satisfied => {
+                ConstraintEvaluationResult::satisfied()
+            }
+            crate::constraints::constraint_context::ConstraintEvaluationResult::Violated {
+                violating_value,
+                message,
+                details: _,
+            } => ConstraintEvaluationResult::violated(violating_value, message),
+            crate::constraints::constraint_context::ConstraintEvaluationResult::Error {
+                message,
+                details: _,
+            } => ConstraintEvaluationResult::satisfied_with_note(format!(
+                "Constraint evaluation error: {}",
+                message
+            )),
+        };
 
         // Cache the result
         self.constraint_cache.insert(cache_key, result.clone());

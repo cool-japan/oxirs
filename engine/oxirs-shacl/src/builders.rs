@@ -977,7 +977,7 @@ impl EnhancedValidatorBuilder {
     /// Build the validator synchronously
     pub fn build(mut self) -> Result<Validator> {
         // Load shapes from loader if configured
-        if let Some(ref loader) = self.shape_loader {
+        if let Some(loader) = self.shape_loader.take() {
             let loaded_shapes = loader.build()?;
             self.shapes.extend(loaded_shapes);
         }

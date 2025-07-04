@@ -18,9 +18,8 @@ pub use types::*;
 
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::{planner::planning::types::QueryInfo, ServiceRegistry};

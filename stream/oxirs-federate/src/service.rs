@@ -5,6 +5,7 @@
 use crate::HealthStatus;
 use anyhow::{anyhow, Result};
 use base64::encode;
+use chrono::{DateTime, Utc};
 use governor::{
     clock::DefaultClock,
     state::{InMemoryState, NotKeyed},
@@ -19,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::metadata::{ExtendedServiceMetadata, HealthCheckResult};
 
@@ -113,6 +114,12 @@ pub enum ServiceCapability {
     NumericQuery,
     /// Service supports schema repository queries
     SchemaRepositoryQuery,
+    /// Service supports filter pushdown optimization
+    FilterPushdown,
+    /// Service supports projection pushdown optimization
+    ProjectionPushdown,
+    /// Service supports aggregation operations
+    Aggregation,
 }
 
 /// Authentication type enumeration
@@ -170,12 +177,12 @@ impl Default for AuthCredentials {
 
 /// Authentication configuration for services
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthConfig {
+pub struct ServiceAuthConfig {
     pub auth_type: AuthType,
     pub credentials: AuthCredentials,
 }
 
-impl Default for AuthConfig {
+impl Default for ServiceAuthConfig {
     fn default() -> Self {
         Self {
             auth_type: AuthType::None,
@@ -942,21 +949,21 @@ impl ServiceRegistry {
     }
 
     /// Add authentication header based on auth configuration
-    async fn add_auth_header(&self, headers: &mut HeaderMap, auth: &AuthConfig) -> Result<()> {
+    async fn add_auth_header(&self, headers: &mut HeaderMap, auth: &ServiceAuthConfig) -> Result<()> {
         match &auth.auth_type {
             AuthType::Basic => {
                 if let (Some(username), Some(password)) =
                     (&auth.credentials.username, &auth.credentials.password)
                 {
-                    let credentials = format!("{}:{}", username, password);
+                    let credentials = format!("{username}:{password}");
                     let encoded = encode(credentials.as_bytes());
-                    let auth_value = format!("Basic {}", encoded);
+                    let auth_value = format!("Basic {encoded}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
             }
             AuthType::Bearer => {
                 if let Some(token) = &auth.credentials.token {
-                    let auth_value = format!("Bearer {}", token);
+                    let auth_value = format!("Bearer {token}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
             }
@@ -976,7 +983,7 @@ impl ServiceRegistry {
             AuthType::OAuth2 => {
                 // Simplified OAuth2 - in production would implement full flow
                 if let Some(token) = &auth.credentials.token {
-                    let auth_value = format!("Bearer {}", token);
+                    let auth_value = format!("Bearer {token}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 } else {
                     warn!("OAuth2 token not available");
@@ -1239,7 +1246,7 @@ pub struct FederatedService {
     /// Data patterns this service can handle
     pub data_patterns: Vec<String>,
     /// Authentication configuration
-    pub auth: Option<AuthConfig>,
+    pub auth: Option<ServiceAuthConfig>,
     /// Service metadata
     pub metadata: ServiceMetadata,
     /// Extended metadata (optional, for enhanced tracking)
@@ -1383,6 +1390,7 @@ pub struct ServicePerformance {
     pub supported_result_formats: Vec<String>,
     pub success_rate: Option<f64>,
     pub error_rate: Option<f64>,
+    pub last_updated: Option<DateTime<Utc>>,
 }
 
 impl Default for ServicePerformance {
@@ -1400,6 +1408,7 @@ impl Default for ServicePerformance {
             ],
             success_rate: None,
             error_rate: None,
+            last_updated: None,
         }
     }
 }
@@ -1577,7 +1586,7 @@ mod tests {
         let registry = ServiceRegistry::new();
         let mut headers = HeaderMap::new();
 
-        let auth_config = AuthConfig {
+        let auth_config = ServiceAuthConfig {
             auth_type: AuthType::Basic,
             credentials: AuthCredentials {
                 username: Some("user".to_string()),

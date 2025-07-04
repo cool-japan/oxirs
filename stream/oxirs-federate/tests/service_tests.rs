@@ -1,6 +1,7 @@
 //! Unit tests for service registry and management
 
 use oxirs_federate::*;
+use oxirs_federate::service::{AuthType, RateLimit, ServiceMetadata, ServiceAuthConfig};
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -198,14 +199,12 @@ async fn test_service_authentication() {
     );
 
     // Test Basic auth
-    service.auth = Some(AuthConfig {
+    service.auth = Some(ServiceAuthConfig {
         auth_type: AuthType::Basic,
         credentials: AuthCredentials {
             username: Some("testuser".to_string()),
             password: Some("testpass".to_string()),
-            token: None,
-            api_key: None,
-            oauth_config: None,
+            ..Default::default()
         },
     });
 
@@ -213,28 +212,22 @@ async fn test_service_authentication() {
     assert_eq!(service.auth.as_ref().unwrap().auth_type, AuthType::Basic);
 
     // Test Bearer token auth
-    service.auth = Some(AuthConfig {
+    service.auth = Some(ServiceAuthConfig {
         auth_type: AuthType::Bearer,
         credentials: AuthCredentials {
-            username: None,
-            password: None,
             token: Some("test-token-123".to_string()),
-            api_key: None,
-            oauth_config: None,
+            ..Default::default()
         },
     });
 
     assert_eq!(service.auth.as_ref().unwrap().auth_type, AuthType::Bearer);
 
     // Test API key auth
-    service.auth = Some(AuthConfig {
+    service.auth = Some(ServiceAuthConfig {
         auth_type: AuthType::ApiKey,
         credentials: AuthCredentials {
-            username: None,
-            password: None,
-            token: None,
             api_key: Some("api-key-456".to_string()),
-            oauth_config: None,
+            ..Default::default()
         },
     });
 

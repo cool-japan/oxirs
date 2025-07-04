@@ -8,7 +8,7 @@ use anyhow::Result;
 use oxirs_core::model::{
     GraphName, Literal, NamedNode, Object, Predicate, Quad, RdfTerm, Subject, Triple, Variable,
 };
-use oxirs_core::{OxirsError, Store};
+use oxirs_core::{OxirsError, RdfStore};
 use std::collections::HashMap;
 use tracing::{debug, info, trace, warn};
 
@@ -17,7 +17,7 @@ pub struct RuleIntegration {
     /// Core rule engine
     pub rule_engine: RuleEngine,
     /// Core RDF store
-    pub store: Box<dyn Store>,
+    pub store: RdfStore,
 }
 
 impl Default for RuleIntegration {
@@ -31,15 +31,15 @@ impl RuleIntegration {
     pub fn new() -> Self {
         Self {
             rule_engine: RuleEngine::new(),
-            store: Box::new(oxirs_core::RdfStore::new().unwrap()),
+            store: oxirs_core::RdfStore::new().unwrap(),
         }
     }
 
     /// Create integration with an existing store
-    pub fn with_store(store: impl Store + 'static) -> Self {
+    pub fn with_store(store: RdfStore) -> Self {
         Self {
             rule_engine: RuleEngine::new(),
-            store: Box::new(store),
+            store,
         }
     }
 
@@ -55,7 +55,7 @@ impl RuleIntegration {
 
     /// Load facts from the core store into the rule engine
     pub fn load_facts_from_store(&mut self) -> Result<usize> {
-        let quads = self.store.find_quads(None, None, None, None)?;
+        let quads = self.store.query_quads(None, None, None, None)?;
         let rule_atoms: Vec<RuleAtom> = quads
             .into_iter()
             .map(|quad| self.quad_to_rule_atom(&quad))
@@ -116,7 +116,7 @@ impl RuleIntegration {
         object: Option<&Object>,
     ) -> Result<Vec<Triple>> {
         // First get direct matches from store
-        let quads = self.store.find_quads(subject, predicate, object, None)?;
+        let quads = self.store.query_quads(subject, predicate, object, None)?;
         let direct_matches: Vec<Triple> = quads
             .into_iter()
             .map(|quad| {
@@ -132,7 +132,7 @@ impl RuleIntegration {
         self.apply_rules()?;
 
         // Query again after applying rules
-        let enhanced_quads = self.store.find_quads(subject, predicate, object, None)?;
+        let enhanced_quads = self.store.query_quads(subject, predicate, object, None)?;
         let rule_enhanced_matches: Vec<Triple> = enhanced_quads
             .into_iter()
             .map(|quad| {
@@ -662,7 +662,7 @@ impl RuleIntegration {
     pub fn export_reasoning_results(&self, format: ExportFormat) -> Result<String> {
         match format {
             ExportFormat::NTriples => {
-                let quads = self.store.find_quads(None, None, None, None)?;
+                let quads = self.store.query_quads(None, None, None, None)?;
                 let mut output = String::new();
                 for quad in quads {
                     let triple = quad.to_triple();
@@ -1100,14 +1100,15 @@ mod tests {
 
         // Check that the mortal type was derived
         let mortal_type = NamedNode::new("http://example.org/Mortal").unwrap();
-        let results = integration
-            .store
-            .query_triples(
-                Some(&Subject::NamedNode(subject)),
-                Some(&Predicate::NamedNode(predicate)),
-                Some(&Object::NamedNode(mortal_type)),
-            )
-            .unwrap();
+        let all_triples = integration.store.triples().unwrap();
+        let results: Vec<_> = all_triples
+            .iter()
+            .filter(|triple| {
+                triple.subject() == &Subject::NamedNode(subject.clone()) &&
+                triple.predicate() == &Predicate::NamedNode(predicate.clone()) &&
+                triple.object() == &Object::NamedNode(mortal_type.clone())
+            })
+            .collect();
 
         assert!(!results.is_empty());
     }

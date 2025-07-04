@@ -23,11 +23,11 @@ pub struct ChatSession {
     pub context_window: ContextWindow,
     pub topic_tracker: TopicTracker,
     pub performance_metrics: SessionMetrics,
-    store: Arc<oxirs_core::Store>,
+    store: Arc<dyn oxirs_core::Store>,
 }
 
 impl ChatSession {
-    pub fn new(id: String, store: Arc<oxirs_core::Store>) -> Self {
+    pub fn new(id: String, store: Arc<dyn oxirs_core::Store>) -> Self {
         let now = chrono::Utc::now();
         let config = ChatConfig::default();
         Self {
@@ -45,7 +45,7 @@ impl ChatSession {
         }
     }
 
-    pub fn from_data(data: SessionData, store: Arc<oxirs_core::Store>) -> Self {
+    pub fn from_data(data: SessionData, store: Arc<dyn oxirs_core::Store>) -> Self {
         let mut context_window = ContextWindow::new(data.config.sliding_window_size);
         context_window.pinned_messages = data.pinned_messages;
         context_window.context_summary = data.context_summary;
@@ -134,7 +134,7 @@ impl ChatSession {
     }
 
     fn calculate_message_importance(&self, message: &Message) -> f32 {
-        let mut importance = 0.5; // Base importance
+        let mut importance: f32 = 0.5; // Base importance
 
         // Boost importance for questions
         if message.content.contains('?') {
@@ -156,7 +156,7 @@ impl ChatSession {
         }
 
         // Boost importance for code blocks
-        if message.content.contains("```") {
+        if message.content.to_text().contains("```") {
             importance += 0.2;
         }
 
@@ -181,7 +181,10 @@ impl ChatSession {
     }
 
     pub fn get_context_for_query(&self) -> Vec<&Message> {
-        self.context_window.get_context_messages()
+        let context_message_ids = self.context_window.get_context_messages();
+        self.messages.iter()
+            .filter(|msg| context_message_ids.contains(&msg.id))
+            .collect()
     }
 
     pub fn pin_message(&mut self, message_id: String) {

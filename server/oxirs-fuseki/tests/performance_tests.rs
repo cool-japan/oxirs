@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
 
-use oxirs_fuseki::federation::FederationPlanner;
+use oxirs_fuseki::federation::FederationManager;
 use oxirs_fuseki::handlers::{
     sparql::Sparql12Features,
     websocket::{SubscriptionFilters, SubscriptionManager},
@@ -458,7 +458,8 @@ mod performance_tests {
 
     // Helper function to create test endpoints
     fn create_test_endpoint(url: &str) -> oxirs_fuseki::federation::ServiceEndpoint {
-        use oxirs_fuseki::federation::{EndpointCapabilities, HealthStatus, ServiceEndpoint};
+        use oxirs_fuseki::federation::{EndpointCapabilities, ServiceEndpoint};
+        use oxirs_fuseki::clustering::HealthStatus;
         use std::collections::HashSet;
 
         ServiceEndpoint {

@@ -24,7 +24,7 @@ use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::f64::consts::{E, PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicF64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
@@ -38,16 +38,18 @@ use oxirs_core::{
 };
 use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
 
-use crate::collective_consciousness::CollectiveConsciousness;
+use crate::collective_consciousness::CollectiveConsciousnessNetwork;
 use crate::consciousness_guided_neuroplasticity::ConsciousnessGuidedNeuroplasticity;
 use crate::consciousness_validation::{
     ConsciousnessLevel, ConsciousnessValidator, EmotionalContext,
 };
-use crate::cosmic_scale_processing::CosmicScaleProcessing;
-use crate::interdimensional_patterns::InterdimensionalPatterns;
+use crate::cosmic_scale_processing::CosmicScaleProcessor;
+use crate::interdimensional_patterns::InterdimensionalPatternEngine;
 use crate::quantum_consciousness_entanglement::QuantumConsciousnessEntanglement;
-use crate::time_space_validation::TimeSpaceValidation;
-use crate::universal_knowledge_integration::UniversalKnowledgeIntegration;
+use crate::time_space_validation::TimeSpaceValidator;
+use crate::universal_knowledge_integration::{
+    UniversalKnowledgeIntegration, UniversalKnowledgeConfig,
+};
 use crate::{Result, ShaclAiError};
 
 /// Omniscient validation system for all-knowing SHACL validation
@@ -349,8 +351,8 @@ impl OmniscientValidation {
             semantic_interpretation_universality: semantic_interpretation.universality_score,
             constraint_validation_omniscience: constraint_validation.omniscience_score,
             perfect_synthesis_coherence: perfect_synthesis.coherence_level,
-            all_knowing_quality_assurance: quality_assurance.quality_certainty,
-            validation_omniscience_achieved: quality_assurance.omniscience_confirmed,
+            all_knowing_quality_assurance: quality_assurance.quality_certainty(),
+            validation_omniscience_achieved: quality_assurance.omniscience_confirmed(),
             complete_understanding_level: self
                 .calculate_complete_understanding(&perfect_synthesis)
                 .await?,
@@ -708,7 +710,9 @@ impl UniversalKnowledgeOmniscience {
         &mut self,
         analysis: &OmniscienceAnalysis,
     ) -> Result<UniversalKnowledgeIntegration> {
-        Ok(UniversalKnowledgeIntegration::default()) // Placeholder
+        Ok(UniversalKnowledgeIntegration::new(
+            UniversalKnowledgeConfig::default(),
+        )) // Placeholder
     }
 
     async fn generate_transcendent_understanding(
@@ -881,7 +885,7 @@ impl OmniscientValidationMetrics {
             self.transcendent_accuracy_achievements += 1;
         }
 
-        if quality_assurance.omniscience_confirmed {
+        if quality_assurance.omniscience_confirmed() {
             self.all_knowing_quality_confirmations += 1;
         }
 
@@ -1247,7 +1251,6 @@ macro_rules! impl_default_result_type {
     };
 }
 
-impl_default_result_type!(KnowledgeOmniscienceInitResult);
 impl_default_result_type!(ConsciousnessTranscendenceInitResult);
 impl_default_result_type!(PerfectReasoningInitResult);
 impl_default_result_type!(OmnipresentContextInitResult);
@@ -1258,6 +1261,27 @@ impl_default_result_type!(UniversalSemanticsInitResult);
 impl_default_result_type!(OmniscientConstraintsInitResult);
 impl_default_result_type!(PerfectSynthesisInitResult);
 impl_default_result_type!(AllKnowingQualityInitResult);
+
+// Proper definition for KnowledgeOmniscienceInitResult with actual fields
+#[derive(Debug, Default)]
+pub struct KnowledgeOmniscienceInitResult {
+    pub analyzers_active: usize,
+    pub integrators_active: usize,
+    pub understanding_engines_active: usize,
+    pub wisdom_synthesizers_active: usize,
+    pub awareness_monitors_active: usize,
+    pub pattern_recognizers_active: usize,
+    pub truth_validators_active: usize,
+    pub insight_generators_active: usize,
+}
+
+// Local knowledge integration structure
+#[derive(Debug, Default)]
+pub struct LocalKnowledgeIntegration {
+    pub integration_depth: f64,
+    pub knowledge_sources: usize,
+    pub synthesis_accuracy: f64,
+}
 
 // Complex result types
 #[derive(Debug, Default)]
@@ -1396,9 +1420,6 @@ pub struct CompleteCertainty {
 pub struct OmniscienceAnalysis;
 
 #[derive(Debug, Default)]
-pub struct UniversalKnowledgeIntegration;
-
-#[derive(Debug, Default)]
 pub struct TranscendentUnderstanding;
 
 #[derive(Debug, Default)]
@@ -1423,17 +1444,7 @@ impl KnowledgeOmniscienceInitResult {
     }
 }
 
-#[derive(Debug)]
-pub struct KnowledgeOmniscienceInitResult {
-    pub analyzers_active: usize,
-    pub integrators_active: usize,
-    pub understanding_engines_active: usize,
-    pub wisdom_synthesizers_active: usize,
-    pub awareness_monitors_active: usize,
-    pub pattern_recognizers_active: usize,
-    pub truth_validators_active: usize,
-    pub insight_generators_active: usize,
-}
+// KnowledgeOmniscienceInitResult is already defined by the macro above
 
 /// Module for omniscient validation protocols
 pub mod omniscient_validation_protocols {
@@ -1483,3 +1494,139 @@ pub mod omniscient_validation_protocols {
             .await
     }
 }
+
+/// Absolute truth validator for perfect validation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AbsoluteTruthValidator {
+    /// Validator identifier
+    pub id: String,
+    /// Truth validation algorithms
+    pub validation_algorithms: Vec<TruthValidationAlgorithm>,
+    /// Absolute certainty level
+    pub certainty_level: f64,
+    /// Truth validation confidence
+    pub validation_confidence: f64,
+    /// Perfect accuracy metrics
+    pub accuracy_metrics: AccuracyMetrics,
+}
+
+impl Default for AbsoluteTruthValidator {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            validation_algorithms: vec![],
+            certainty_level: 1.0,
+            validation_confidence: 1.0,
+            accuracy_metrics: AccuracyMetrics::default(),
+        }
+    }
+}
+
+/// Infinite knowledge processor for omniscient validation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InfiniteKnowledgeProcessor {
+    /// Processor identifier
+    pub id: String,
+    /// Knowledge processing capacity
+    pub processing_capacity: f64,
+    /// Infinite knowledge domains
+    pub knowledge_domains: Vec<KnowledgeDomain>,
+    /// Processing algorithms
+    pub processing_algorithms: Vec<KnowledgeProcessingAlgorithm>,
+    /// Omniscient processing metrics
+    pub processing_metrics: ProcessingMetrics,
+}
+
+impl Default for InfiniteKnowledgeProcessor {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            processing_capacity: f64::INFINITY,
+            knowledge_domains: vec![],
+            processing_algorithms: vec![],
+            processing_metrics: ProcessingMetrics::default(),
+        }
+    }
+}
+
+/// Truth validation algorithm types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TruthValidationAlgorithm {
+    AbsoluteTruth,
+    UniversalCorrectness,
+    TranscendentValidation,
+    OmniscientReasoning,
+    PerfectLogic,
+    InfiniteWisdom,
+}
+
+/// Knowledge domain for infinite processing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum KnowledgeDomain {
+    Scientific,
+    Philosophical,
+    Mathematical,
+    Cultural,
+    Historical,
+    Linguistic,
+    Artistic,
+    Technical,
+    Universal,
+}
+
+/// Knowledge processing algorithm types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum KnowledgeProcessingAlgorithm {
+    OmniscientAnalysis,
+    TranscendentSynthesis,
+    InfiniteIntegration,
+    UniversalCorrelation,
+    PerfectUnderstanding,
+    CompleteComprehension,
+}
+
+/// Accuracy metrics for truth validation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccuracyMetrics {
+    pub absolute_accuracy: f64,
+    pub validation_precision: f64,
+    pub truth_certainty: f64,
+    pub error_rate: f64,
+}
+
+impl Default for AccuracyMetrics {
+    fn default() -> Self {
+        Self {
+            absolute_accuracy: 1.0,
+            validation_precision: 1.0,
+            truth_certainty: 1.0,
+            error_rate: 0.0,
+        }
+    }
+}
+
+/// Processing metrics for knowledge processing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessingMetrics {
+    pub processing_speed: f64,
+    pub knowledge_throughput: f64,
+    pub integration_efficiency: f64,
+    pub omniscience_level: f64,
+}
+
+impl Default for ProcessingMetrics {
+    fn default() -> Self {
+        Self {
+            processing_speed: f64::INFINITY,
+            knowledge_throughput: f64::INFINITY,
+            integration_efficiency: 1.0,
+            omniscience_level: 1.0,
+        }
+    }
+}
+
+/// Type alias for OmniscientConfig (points to OmniscientValidationConfig)
+pub type OmniscientConfig = OmniscientValidationConfig;
+
+/// Type alias for OmniscientMetrics (points to OmniscientValidationMetrics)
+pub type OmniscientMetrics = OmniscientValidationMetrics;

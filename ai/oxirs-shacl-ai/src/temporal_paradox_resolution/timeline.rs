@@ -168,31 +168,7 @@ pub enum CausalRelationshipType {
     Independent,
 }
 
-/// Timeline context for validation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimelineContext {
-    /// Current timeline
-    pub current_timeline: Timeline,
-    /// Reference timelines
-    pub reference_timelines: Vec<Timeline>,
-    /// Temporal constraints
-    pub temporal_constraints: Vec<TemporalConstraint>,
-    /// Context metadata
-    pub metadata: HashMap<String, String>,
-}
-
-/// Temporal constraint for validation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TemporalConstraint {
-    /// Constraint identifier
-    pub id: String,
-    /// Constraint type
-    pub constraint_type: TemporalConstraintType,
-    /// Constraint parameters
-    pub parameters: HashMap<String, f64>,
-    /// Enforcement level
-    pub enforcement_level: f64,
-}
+// TimelineContext and TemporalConstraint are defined in types.rs
 
 /// Types of temporal constraints
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -250,20 +226,7 @@ pub enum CoherenceStrategyType {
     Quantum,
 }
 
-/// Timeline analysis result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimelineAnalysisResult {
-    /// Analyzed timeline
-    pub timeline_id: String,
-    /// Analysis outcome
-    pub outcome: TimelineAnalysisOutcome,
-    /// Detected issues
-    pub detected_issues: Vec<TimelineIssue>,
-    /// Recommendations
-    pub recommendations: Vec<String>,
-    /// Analysis confidence
-    pub confidence: f64,
-}
+// TimelineAnalysisResult is defined in types.rs
 
 /// Timeline analysis outcome
 #[derive(Debug, Clone, Serialize, Deserialize)]

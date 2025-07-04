@@ -21,10 +21,15 @@ impl From<StreamEvent> for NatsEventMessage {
             StreamEvent::TripleAdded { .. } => "triple_added",
             StreamEvent::TripleRemoved { .. } => "triple_removed",
             StreamEvent::GraphCleared { .. } => "graph_cleared",
-            StreamEvent::PatchApplied { .. } => "patch_applied",
-            StreamEvent::TransactionStarted { .. } => "transaction_started",
-            StreamEvent::TransactionCommitted { .. } => "transaction_committed",
-            StreamEvent::TransactionAborted { .. } => "transaction_aborted",
+            StreamEvent::GraphCreated { .. } => "graph_created",
+            StreamEvent::GraphDeleted { .. } => "graph_deleted",
+            StreamEvent::SparqlUpdate { .. } => "sparql_update",
+            StreamEvent::TransactionBegin { .. } => "transaction_begin",
+            StreamEvent::TransactionCommit { .. } => "transaction_commit",
+            StreamEvent::TransactionAbort { .. } => "transaction_abort",
+            StreamEvent::SchemaChanged { .. } => "schema_changed",
+            StreamEvent::Heartbeat { .. } => "heartbeat",
+            _ => "unknown",
         };
 
         let data = serde_json::to_value(&event).unwrap_or_default();
@@ -38,7 +43,7 @@ impl From<StreamEvent> for NatsEventMessage {
             event_type: event_type.to_string(),
             timestamp,
             data,
-            metadata: event.metadata().cloned(),
+            metadata: Some(event.metadata().clone()),
         }
     }
 }

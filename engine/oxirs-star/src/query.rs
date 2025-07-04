@@ -1153,7 +1153,7 @@ mod tests {
 
     #[test]
     fn test_bgp_execution() {
-        let store = StarStore::new();
+        let mut store = StarStore::new();
 
         // Add some test data
         let triple1 = StarTriple::new(

@@ -6,7 +6,7 @@ use crate::cli::error::helpers as error_helpers;
 use crate::cli::logging::QueryLogger;
 use crate::cli::validation::MultiValidator;
 use crate::cli::validation::{dataset_validation, query_validation};
-use crate::cli::{progress::helpers, ArgumentValidator, CliContext};
+use crate::cli::{progress::helpers, ArgumentValidator, CliContext, CliError};
 use serde_json;
 use std::fs;
 use std::path::PathBuf;
@@ -105,7 +105,7 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
         }
         Err(e) => {
             query_logger.error(&e.to_string());
-            return Err(e);
+            return Err(CliError::from(e));
         }
     };
 

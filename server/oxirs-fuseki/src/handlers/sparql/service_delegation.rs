@@ -4,6 +4,7 @@
 //! endpoint discovery, parallel execution, and result merging.
 
 use crate::error::FusekiResult;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -148,7 +149,7 @@ pub struct ServiceQueryResponse {
 }
 
 /// Response status for service queries
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ResponseStatus {
     Success,
     Timeout,
@@ -467,7 +468,7 @@ impl ServiceDelegationManager {
         };
 
         let endpoint = selected_endpoint
-            .ok_or_else(|| crate::error::FusekiError::service_error("No available endpoints"))?;
+            .ok_or_else(|| crate::error::FusekiError::bad_request("No available endpoints"))?;
 
         // Execute the query
         let request = ServiceQueryRequest {
@@ -652,9 +653,9 @@ impl ParallelServiceExecutor {
 
                     // Don't retry on last attempt
                     if attempt < retry_policy.max_retries {
-                        let delay = retry_policy.initial_delay
+                        let delay_ms = retry_policy.initial_delay.as_millis() as f64
                             * retry_policy.backoff_multiplier.powi(attempt as i32);
-                        let delay = delay.min(retry_policy.max_delay);
+                        let delay = Duration::from_millis(delay_ms as u64).min(retry_policy.max_delay);
                         tokio::time::sleep(delay).await;
                     }
                 }
@@ -681,8 +682,6 @@ impl ParallelServiceExecutor {
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         let client = reqwest::Client::builder()
             .timeout(timeout)
-            .gzip(true)
-            .deflate(true)
             .build()?;
 
         let mut http_request = client
@@ -711,7 +710,8 @@ impl ParallelServiceExecutor {
             .headers()
             .get("content-type")
             .and_then(|v| v.to_str().ok())
-            .unwrap_or("application/json");
+            .unwrap_or("application/json")
+            .to_string();
 
         if content_type.contains("application/sparql-results+json")
             || content_type.contains("application/json")
@@ -920,7 +920,7 @@ impl EndpointDiscovery {
             DiscoveryMethod::Static => self.discover_static(url).await,
             DiscoveryMethod::VoID => self.discover_void(url).await,
             DiscoveryMethod::SPARQL => self.discover_sparql(url).await,
-            _ => Err(crate::error::FusekiError::service_error(
+            _ => Err(crate::error::FusekiError::server_error(
                 "Discovery method not implemented",
             )),
         }
@@ -929,7 +929,7 @@ impl EndpointDiscovery {
     /// Static discovery (configuration-based)
     async fn discover_static(&self, url: &str) -> FusekiResult<ServiceEndpoint> {
         // Would read from static configuration
-        Err(crate::error::FusekiError::service_error(
+        Err(crate::error::FusekiError::server_error(
             "Static discovery not configured",
         ))
     }
@@ -1403,15 +1403,15 @@ mod tests {
 
 /// Advanced query cache for SERVICE results
 #[derive(Debug, Clone)]
-pub struct QueryCache {
-    cache: HashMap<String, CacheEntry>,
+pub struct QueryCacheV2 {
+    cache: HashMap<String, CacheEntryV2>,
     max_size: usize,
     default_ttl: Duration,
 }
 
 /// Cache entry with TTL and metadata
 #[derive(Debug, Clone)]
-pub struct CacheEntry {
+pub struct CacheEntryV2 {
     data: serde_json::Value,
     created_at: Instant,
     ttl: Duration,
@@ -1422,15 +1422,15 @@ pub struct CacheEntry {
 
 /// Load balancer for distributing queries across endpoints
 #[derive(Debug, Clone)]
-pub struct LoadBalancer {
-    strategy: LoadBalancingStrategy,
+pub struct LoadBalancerV2 {
+    strategy: LoadBalancingStrategyV2,
     endpoint_weights: HashMap<String, f64>,
     endpoint_health_scores: HashMap<String, f64>,
 }
 
 /// Load balancing strategies
 #[derive(Debug, Clone)]
-pub enum LoadBalancingStrategy {
+pub enum LoadBalancingStrategyV2 {
     RoundRobin,
     WeightedRoundRobin,
     LeastConnections,
@@ -1439,7 +1439,7 @@ pub enum LoadBalancingStrategy {
     Adaptive,
 }
 
-impl QueryCache {
+impl QueryCacheV2 {
     pub fn new(max_size: usize, default_ttl: Duration) -> Self {
         Self {
             cache: HashMap::new(),
@@ -1478,7 +1478,7 @@ impl QueryCache {
             self.evict_oldest();
         }
 
-        let entry = CacheEntry {
+        let entry = CacheEntryV2 {
             data,
             created_at: Instant::now(),
             ttl: ttl.unwrap_or(self.default_ttl),
@@ -1528,7 +1528,7 @@ impl QueryCache {
     }
 
     /// Get cache statistics
-    pub fn get_stats(&self) -> CacheStats {
+    pub fn get_stats(&self) -> ServiceCacheStats {
         let total_access_count = self.cache.values().map(|e| e.access_count).sum();
         let avg_age = if !self.cache.is_empty() {
             self.cache
@@ -1540,7 +1540,7 @@ impl QueryCache {
             0
         };
 
-        CacheStats {
+        ServiceCacheStats {
             entries: self.cache.len(),
             total_access_count,
             avg_age_seconds: avg_age,
@@ -1549,17 +1549,17 @@ impl QueryCache {
     }
 }
 
-/// Cache statistics
+/// Service cache statistics
 #[derive(Debug, Clone)]
-pub struct CacheStats {
+pub struct ServiceCacheStats {
     pub entries: usize,
     pub total_access_count: u64,
     pub avg_age_seconds: u64,
     pub hit_ratio: f64,
 }
 
-impl LoadBalancer {
-    pub fn new(strategy: LoadBalancingStrategy) -> Self {
+impl LoadBalancerV2 {
+    pub fn new(strategy: LoadBalancingStrategyV2) -> Self {
         Self {
             strategy,
             endpoint_weights: HashMap::new(),
@@ -1578,18 +1578,18 @@ impl LoadBalancer {
         }
 
         match &self.strategy {
-            LoadBalancingStrategy::RoundRobin => {
+            LoadBalancingStrategyV2::RoundRobin => {
                 // Simple round-robin (would need state tracking in real implementation)
                 available_endpoints.first().cloned()
             }
-            LoadBalancingStrategy::WeightedRoundRobin => {
+            LoadBalancingStrategyV2::WeightedRoundRobin => {
                 self.weighted_selection(available_endpoints)
             }
-            LoadBalancingStrategy::ResponseTime => available_endpoints
+            LoadBalancingStrategyV2::ResponseTime => available_endpoints
                 .iter()
                 .min_by_key(|ep| ep.response_time_avg.unwrap_or(Duration::from_secs(999)))
                 .cloned(),
-            LoadBalancingStrategy::HealthScore => available_endpoints
+            LoadBalancingStrategyV2::HealthScore => available_endpoints
                 .iter()
                 .filter(|ep| ep.health_status == ServiceHealth::Healthy)
                 .max_by(|a, b| {
@@ -1600,7 +1600,11 @@ impl LoadBalancer {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
                 .cloned(),
-            LoadBalancingStrategy::Adaptive => {
+            LoadBalancingStrategyV2::LeastConnections => {
+                // Select endpoint with least active connections (simplified)
+                available_endpoints.first().cloned()
+            }
+            LoadBalancingStrategyV2::Adaptive => {
                 self.adaptive_selection(available_endpoints, query_complexity)
             }
             _ => available_endpoints.first().cloned(),

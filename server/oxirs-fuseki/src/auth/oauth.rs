@@ -563,6 +563,18 @@ impl OAuth2Service {
             });
         }
     }
+
+    /// Get OAuth2 authorization URL with default parameters (simplified interface)
+    pub fn get_auth_url(&self, state: &str) -> FusekiResult<String> {
+        // Simple synchronous auth URL generation
+        let url = format!(
+            "{}?response_type=code&client_id={}&state={}",
+            self.config.auth_url,
+            urlencoding::encode(&self.config.client_id),
+            urlencoding::encode(state)
+        );
+        Ok(url)
+    }
 }
 
 /// Generate code verifier for PKCE

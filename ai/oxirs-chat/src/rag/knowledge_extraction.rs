@@ -114,7 +114,7 @@ pub struct TemporalFact {
 }
 
 /// Types of entities that can be extracted
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EntityType {
     Person,
     Organization,
@@ -130,7 +130,7 @@ pub enum EntityType {
 }
 
 /// Types of relationships
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RelationshipType {
     IsA,
     PartOf,
@@ -761,11 +761,11 @@ impl KnowledgeExtractionEngine {
             + 1
     }
 
-    fn find_matching_entity(
+    fn find_matching_entity<'a>(
         &self,
         text: &str,
-        entities: &[ExtractedEntity],
-    ) -> Option<&ExtractedEntity> {
+        entities: &'a [ExtractedEntity],
+    ) -> Option<&'a ExtractedEntity> {
         entities
             .iter()
             .find(|e| e.entity_text == text || e.canonical_form == self.canonicalize_entity(text))

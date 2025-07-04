@@ -5,7 +5,7 @@ use crate::OxirsError;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::str::FromStr;
 
 lazy_static! {

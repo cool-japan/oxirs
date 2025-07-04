@@ -32,8 +32,8 @@ pub mod advanced_optimizer;
 
 // Re-export commonly used types
 pub use algebra::{
-    Aggregate, Algebra, Binding, GroupCondition, Iri, Literal, OrderCondition, Solution, Term,
-    TriplePattern, Variable,
+    Aggregate, Algebra, BinaryOperator, Binding, Expression, GroupCondition, Iri, Literal, OrderCondition, Solution, Term,
+    TriplePattern, UnaryOperator, Variable,
 };
 pub use executor::{Dataset, ExecutionContext, InMemoryDataset, ParallelConfig, QueryExecutor};
 

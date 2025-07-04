@@ -141,11 +141,11 @@ pub struct ChatSession {
     pub context_window: ContextWindow,
     pub topic_tracker: TopicTracker,
     pub performance_metrics: SessionMetrics,
-    store: Arc<oxirs_core::Store>,
+    store: Arc<dyn oxirs_core::Store>,
 }
 
 impl ChatSession {
-    pub fn new(id: String, store: Arc<oxirs_core::Store>) -> Self {
+    pub fn new(id: String, store: Arc<dyn oxirs_core::Store>) -> Self {
         let now = chrono::Utc::now();
         let config = ChatConfig::default();
         Self {
@@ -163,7 +163,7 @@ impl ChatSession {
         }
     }
 
-    pub fn from_data(data: SessionData, store: Arc<oxirs_core::Store>) -> Self {
+    pub fn from_data(data: SessionData, store: Arc<dyn oxirs_core::Store>) -> Self {
         let mut context_window = ContextWindow::new(data.config.sliding_window_size);
         context_window.pinned_messages = data.pinned_messages;
         context_window.context_summary = data.context_summary;

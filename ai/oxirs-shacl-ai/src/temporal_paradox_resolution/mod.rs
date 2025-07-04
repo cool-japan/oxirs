@@ -4,11 +4,13 @@
 //! time-travel related validation scenarios, causality loops, and temporal
 //! consistency verification across multiple timelines.
 
+pub mod causality;
 pub mod core;
 pub mod timeline;
 pub mod types;
 
 // Re-export main types
+pub use causality::*;
 pub use core::*;
 pub use timeline::*;
 pub use types::*;

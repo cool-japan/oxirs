@@ -77,7 +77,7 @@ pub struct ProofOfWork {
 }
 
 /// Node's cryptographic identity
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct NodeIdentity {
     /// Node's unique identifier
     pub node_id: String,
@@ -356,26 +356,36 @@ impl BftNodeState {
 
     /// Check for double voting (Byzantine behavior)
     fn check_double_voting(&mut self, vote_req: &RequestVoteRequest) -> FusekiResult<()> {
-        let term_votes = self
-            .vote_tracking
-            .entry(vote_req.term)
-            .or_insert_with(HashMap::new);
+        // First, check if there's a previous vote to detect conflict
+        let previous_candidate_id = {
+            let term_votes = self
+                .vote_tracking
+                .entry(vote_req.term)
+                .or_insert_with(HashMap::new);
 
-        if let Some(previous_vote) = term_votes.get(&vote_req.candidate_id) {
-            if previous_vote.candidate_id != vote_req.candidate_id {
-                // Double voting detected!
-                self.record_byzantine_behavior(
-                    &vote_req.candidate_id,
-                    ByzantineBehavior::DoubleVoting,
-                    format!(
-                        "Double vote in term {}: {} vs {}",
-                        vote_req.term, previous_vote.candidate_id, vote_req.candidate_id
-                    )
-                    .into_bytes(),
-                );
+            if let Some(previous_vote) = term_votes.get(&vote_req.candidate_id) {
+                if previous_vote.candidate_id != vote_req.candidate_id {
+                    Some(previous_vote.candidate_id.clone())
+                } else {
+                    None
+                }
+            } else {
+                term_votes.insert(vote_req.candidate_id.clone(), vote_req.clone());
+                None
             }
-        } else {
-            term_votes.insert(vote_req.candidate_id.clone(), vote_req.clone());
+        };
+
+        // Now record byzantine behavior if detected (after borrow is dropped)
+        if let Some(prev_candidate) = previous_candidate_id {
+            self.record_byzantine_behavior(
+                &vote_req.candidate_id,
+                ByzantineBehavior::DoubleVoting,
+                format!(
+                    "Double vote in term {}: {} vs {}",
+                    vote_req.term, prev_candidate, vote_req.candidate_id
+                )
+                .into_bytes(),
+            );
         }
 
         Ok(())
@@ -386,36 +396,42 @@ impl BftNodeState {
         &mut self,
         append_req: &AppendEntriesRequest,
     ) -> FusekiResult<()> {
-        let entries = self
-            .append_entries_tracking
-            .entry(append_req.leader_id.clone())
-            .or_insert_with(VecDeque::new);
+        // First, check for conflicts and collect information
+        let conflict_detected = {
+            let entries = self
+                .append_entries_tracking
+                .entry(append_req.leader_id.clone())
+                .or_insert_with(VecDeque::new);
 
-        // Keep only recent entries
-        while entries.len() > 100 {
-            entries.pop_front();
-        }
-
-        // Check for conflicts
-        for previous_req in entries.iter() {
-            if previous_req.term == append_req.term
-                && previous_req.prev_log_index == append_req.prev_log_index
-                && previous_req.entries != append_req.entries
-            {
-                // Conflicting append entries detected!
-                self.record_byzantine_behavior(
-                    &append_req.leader_id,
-                    ByzantineBehavior::ConflictingAppendEntries,
-                    format!(
-                        "Conflicting append entries at term {} index {}",
-                        append_req.term, append_req.prev_log_index
-                    )
-                    .into_bytes(),
-                );
+            // Keep only recent entries
+            while entries.len() > 100 {
+                entries.pop_front();
             }
+
+            // Check for conflicts
+            let has_conflict = entries.iter().any(|previous_req| {
+                previous_req.term == append_req.term
+                    && previous_req.prev_log_index == append_req.prev_log_index
+                    && previous_req.entries.len() != append_req.entries.len()
+            });
+
+            entries.push_back(append_req.clone());
+            has_conflict
+        };
+
+        // Record byzantine behavior if conflict detected (after borrow is dropped)
+        if conflict_detected {
+            self.record_byzantine_behavior(
+                &append_req.leader_id,
+                ByzantineBehavior::ConflictingAppendEntries,
+                format!(
+                    "Conflicting append entries at term {} index {}",
+                    append_req.term, append_req.prev_log_index
+                )
+                .into_bytes(),
+            );
         }
 
-        entries.push_back(append_req.clone());
         Ok(())
     }
 

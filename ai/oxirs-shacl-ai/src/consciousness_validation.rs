@@ -20,6 +20,11 @@ use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator}
 
 use crate::{Result, ShaclAiError};
 
+/// Helper function for serde default Instant
+fn default_instant() -> Instant {
+    Instant::now()
+}
+
 /// Consciousness levels for validation processing
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ConsciousnessLevel {
@@ -86,7 +91,7 @@ impl ConsciousnessLevel {
 }
 
 /// Emotional context for validation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct EmotionalContext {
     /// Primary emotion driving validation
     pub primary_emotion: Emotion,
@@ -99,8 +104,11 @@ pub struct EmotionalContext {
 }
 
 /// Types of emotions that can influence validation
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum Emotion {
+    #[default]
+    /// Neutral - balanced, unbiased validation
+    Neutral,
     /// Curiosity - drives exploration and discovery
     Curiosity,
     /// Empathy - considers user needs and context
@@ -121,6 +129,7 @@ impl Emotion {
     /// Get the validation strategy bias for this emotion
     pub fn validation_bias(&self) -> ValidationBias {
         match self {
+            Emotion::Neutral => ValidationBias::Thorough,
             Emotion::Curiosity => ValidationBias::Exploratory,
             Emotion::Empathy => ValidationBias::UserCentric,
             Emotion::Determination => ValidationBias::Thorough,
@@ -170,11 +179,29 @@ pub struct ValidationDream {
     /// Validation scenario being dreamed
     pub scenario: ValidationScenario,
     /// Dream start time
+    #[serde(skip, default = "default_instant")]
     pub started_at: Instant,
     /// Expected dream duration
     pub duration: Duration,
     /// Current dream state
     pub state: DreamStateType,
+}
+
+impl Default for ValidationDream {
+    fn default() -> Self {
+        Self {
+            dream_id: format!("dream_{}", uuid::Uuid::new_v4()),
+            scenario: ValidationScenario {
+                name: "Basic Validation".to_string(),
+                data_patterns: vec!["basic_patterns".to_string()],
+                shape_constraints: vec!["basic_constraints".to_string()],
+                expected_outcomes: vec!["validation_result".to_string()],
+            },
+            started_at: Instant::now(),
+            duration: Duration::from_secs(60),
+            state: DreamStateType::Light,
+        }
+    }
 }
 
 /// Types of dream states
@@ -251,6 +278,41 @@ pub struct IntuitivePattern {
     pub logical_support: f64,
     /// Pattern emergence indicators
     pub emergence_indicators: Vec<String>,
+}
+
+/// Basic consciousness validator with simplified functionality
+#[derive(Debug)]
+pub struct BasicConsciousnessValidator {
+    /// Current consciousness level
+    level: ConsciousnessLevel,
+    /// Emotional context
+    emotion: Emotion,
+}
+
+impl BasicConsciousnessValidator {
+    /// Create a new basic consciousness validator
+    pub fn new() -> Self {
+        Self {
+            level: ConsciousnessLevel::Conscious,
+            emotion: Emotion::Neutral,
+        }
+    }
+
+    /// Set consciousness level
+    pub fn set_level(&mut self, level: ConsciousnessLevel) {
+        self.level = level;
+    }
+
+    /// Get consciousness level
+    pub fn level(&self) -> ConsciousnessLevel {
+        self.level
+    }
+}
+
+impl Default for BasicConsciousnessValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Consciousness-aware SHACL validator
@@ -349,7 +411,7 @@ impl ConsciousnessValidator {
     /// Perform consciousness-aware validation
     pub async fn validate_with_consciousness(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         config: &ValidationConfig,
     ) -> Result<ConsciousnessValidationResult> {
@@ -448,7 +510,7 @@ impl ConsciousnessValidator {
     /// Enhanced validation with consciousness processing
     async fn enhance_validation_with_consciousness(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         config: &ValidationConfig,
         strategy: &ValidationStrategy,
@@ -490,9 +552,8 @@ impl ConsciousnessValidator {
         // Enhanced processing allows for more thorough validation
         if multiplier > 1.0 {
             // More comprehensive validation at higher consciousness levels
-            enhanced_config.max_validation_errors = Some(
-                (enhanced_config.max_validation_errors.unwrap_or(100) as f64 * multiplier) as usize,
-            );
+            enhanced_config.max_violations = 
+                (enhanced_config.max_violations as f64 * multiplier) as usize;
         }
 
         enhanced_config
@@ -529,7 +590,7 @@ impl ConsciousnessValidator {
     }
 
     /// Start background dream processing
-    async fn start_dream_processing(&self, store: &Store, shapes: &[Shape]) -> Result<()> {
+    async fn start_dream_processing(&self, store: &dyn Store, shapes: &[Shape]) -> Result<()> {
         let mut dream_state = self.dream_state.write().await;
 
         // Create validation scenarios for dream processing
@@ -561,7 +622,7 @@ impl ConsciousnessValidator {
     /// Create dream scenarios for validation exploration
     async fn create_dream_scenarios(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<Vec<ValidationScenario>> {
         let mut scenarios = Vec::new();
@@ -689,7 +750,7 @@ impl Default for ConsciousnessValidator {
 }
 
 /// Validation strategies adapted by consciousness
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ValidationStrategy {
     /// Basic reactive validation
     Reactive,

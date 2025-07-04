@@ -2,16 +2,12 @@
 //!
 //! This module contains all the core data structures used in the materialized views system.
 
-use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::{
-    planner::planning::{FilterExpression, QueryComplexity, TriplePattern},
-    FederatedService, ServiceCapability,
-};
+use crate::planner::planning::{FilterExpression, TriplePattern};
 
 /// Configuration for materialized view management
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -836,21 +836,14 @@ pub mod fusion_utils {
                 .into_iter()
                 .enumerate()
                 .map(|(rank, detailed)| VectorSearchResult {
-                    resource: detailed.resource,
-                    score: detailed.score,
+                    resource: detailed.0,
+                    score: detailed.1,
                     normalized_score: None,
                     source: source_id.clone(),
                     original_rank: rank,
                     final_rank: None,
                     vector: None,
-                    metadata: {
-                        let mut meta = HashMap::new();
-                        meta.insert("metric".to_string(), format!("{:?}", detailed.metric));
-                        if let Some(explanation) = detailed.explanation {
-                            meta.insert("explanation".to_string(), explanation);
-                        }
-                        meta
-                    },
+                    metadata: detailed.2,
                     explanation: None,
                 })
                 .collect(),

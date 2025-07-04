@@ -151,6 +151,7 @@ pub mod performance_optimizer;
 pub mod processing;
 pub mod producer;
 pub mod quantum_communication;
+pub mod quantum_processing;
 pub mod quantum_streaming;
 pub mod reconnect;
 pub mod reliability;

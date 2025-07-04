@@ -265,6 +265,11 @@ pub struct JoinEdge {
     pub shared_variables: Vec<String>,
     pub join_selectivity: f64,
     pub estimated_cost: f64,
+    // Legacy field aliases for compatibility
+    pub from: String,
+    pub to: String,
+    pub join_variables: Vec<String>,
+    pub selectivity: f64,
 }
 
 /// Join plan result
@@ -275,6 +280,7 @@ pub struct JoinPlan {
     pub parallelization_opportunities: Vec<ParallelizationOpportunity>,
     pub execution_strategy: JoinExecutionStrategy,
     pub memory_requirements: u64,
+    pub estimated_total_cost: f64,
 }
 
 /// Individual join operation
@@ -289,6 +295,7 @@ pub struct JoinOperation {
     pub estimated_cost: f64,
     pub estimated_cardinality: u64,
     pub parallelizable: bool,
+    pub join_condition: String,
 }
 
 /// Join operation types
@@ -298,6 +305,7 @@ pub enum JoinOperationType {
     Join,
     Union,
     Filter,
+    HashJoin,
 }
 
 /// Join algorithms
@@ -444,7 +452,6 @@ pub enum RangeOverlapType {
 }
 
 /// Bloom filter for service data
-#[derive(Debug, Clone)]
 pub struct ServiceBloomFilter {
     pub service_id: String,
     pub predicate: String,
@@ -456,6 +463,42 @@ pub struct ServiceBloomFilter {
     pub resource_filter: ExternalBloomFilter,
     pub last_updated: DateTime<Utc>,
     pub estimated_elements: u64,
+}
+
+impl std::fmt::Debug for ServiceBloomFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ServiceBloomFilter")
+            .field("service_id", &self.service_id)
+            .field("predicate", &self.predicate)
+            .field("filter_data", &format!("{} bytes", self.filter_data.len()))
+            .field("hash_functions", &self.hash_functions)
+            .field("false_positive_rate", &self.false_positive_rate)
+            .field("estimated_cardinality", &self.estimated_cardinality)
+            .field("predicate_filter", &"<BloomFilter>")
+            .field("resource_filter", &"<BloomFilter>")
+            .field("last_updated", &self.last_updated)
+            .field("estimated_elements", &self.estimated_elements)
+            .finish()
+    }
+}
+
+impl Clone for ServiceBloomFilter {
+    fn clone(&self) -> Self {
+        // Note: bloom::BloomFilter doesn't implement Clone, so we create new ones
+        // This is a limitation - in practice you might want to use a different bloom filter crate
+        Self {
+            service_id: self.service_id.clone(),
+            predicate: self.predicate.clone(),
+            filter_data: self.filter_data.clone(),
+            hash_functions: self.hash_functions,
+            false_positive_rate: self.false_positive_rate,
+            estimated_cardinality: self.estimated_cardinality,
+            predicate_filter: ExternalBloomFilter::with_rate(0.01, 1000), // Create new filter with default params
+            resource_filter: ExternalBloomFilter::with_rate(0.01, 1000),  // Create new filter with default params
+            last_updated: self.last_updated,
+            estimated_elements: self.estimated_elements,
+        }
+    }
 }
 
 /// Bloom filter query result
@@ -515,10 +558,13 @@ pub struct QueryFeatures {
     pub has_union: bool,
     pub complexity_score: f64,
     pub estimated_selectivity: f64,
+    pub selectivity_estimate: f64,
     pub predicate_distribution: HashMap<String, usize>,
     pub namespace_distribution: HashMap<String, usize>,
     pub pattern_type_distribution: HashMap<String, usize>,
     pub has_joins: bool,
+    pub query_type: String,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Similar query for recommendation

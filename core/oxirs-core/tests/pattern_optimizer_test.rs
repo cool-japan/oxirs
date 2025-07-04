@@ -1,7 +1,7 @@
 //! Tests for pattern matching optimization
 
 use oxirs_core::model::*;
-use oxirs_core::query::algebra::{TermPattern, TriplePattern as AlgebraTriplePattern};
+use oxirs_core::query::algebra::{TermPattern as AlgebraTermPattern, AlgebraTriplePattern};
 use oxirs_core::query::pattern_optimizer::IndexStats;
 use oxirs_core::query::{IndexType, OptimizedPatternPlan, PatternExecutor, PatternOptimizer};
 use oxirs_core::store::IndexedGraph;
@@ -16,9 +16,9 @@ fn test_pattern_optimizer_basic() {
 
     // Create a simple pattern: ?s <http://example.org/type> <http://example.org/Person>
     let pattern = AlgebraTriplePattern {
-        subject: TermPattern::Variable(Variable::new("s").unwrap()),
-        predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
-        object: TermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
+        subject: AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
+        predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+        object: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
     };
 
     let plan = optimizer.optimize_patterns(&[pattern]).unwrap();
@@ -36,21 +36,21 @@ fn test_pattern_optimizer_with_multiple_patterns() {
     let patterns = vec![
         // ?person <http://example.org/type> <http://example.org/Person>
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
-            object: TermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
+            subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+            object: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
         },
         // ?person <http://example.org/name> ?name
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
-            object: TermPattern::Variable(Variable::new("name").unwrap()),
+            subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
+            object: AlgebraTermPattern::Variable(Variable::new("name").unwrap()),
         },
         // ?person <http://example.org/age> ?age
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/age").unwrap()),
-            object: TermPattern::Variable(Variable::new("age").unwrap()),
+            subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/age").unwrap()),
+            object: AlgebraTermPattern::Variable(Variable::new("age").unwrap()),
         },
     ];
 
@@ -66,7 +66,7 @@ fn test_pattern_optimizer_with_multiple_patterns() {
     assert_eq!(plan.patterns.len(), 3);
 
     // First pattern should be the most selective (type)
-    if let TermPattern::NamedNode(pred) = &plan.patterns[0].0.predicate {
+    if let AlgebraTermPattern::NamedNode(pred) = &plan.patterns[0].0.predicate {
         assert_eq!(pred.as_str(), "http://example.org/type");
     }
 
@@ -181,14 +181,14 @@ fn test_pattern_executor_integration() {
     // Create query patterns
     let patterns = vec![
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: TermPattern::NamedNode(type_pred),
-            object: TermPattern::NamedNode(person_type),
+            subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(type_pred),
+            object: AlgebraTermPattern::NamedNode(person_type),
         },
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: TermPattern::NamedNode(name_pred),
-            object: TermPattern::Variable(Variable::new("name").unwrap()),
+            subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(name_pred),
+            object: AlgebraTermPattern::Variable(Variable::new("name").unwrap()),
         },
     ];
 
@@ -245,21 +245,21 @@ fn test_pattern_optimization_performance() {
     let patterns = vec![
         // Find people of specific age
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/age").unwrap()),
-            object: TermPattern::Literal(Literal::new("25")),
+            subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/age").unwrap()),
+            object: AlgebraTermPattern::Literal(Literal::new("25")),
         },
         // Get their type
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
-            object: TermPattern::Variable(Variable::new("type").unwrap()),
+            subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+            object: AlgebraTermPattern::Variable(Variable::new("type").unwrap()),
         },
         // Get their name
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("person").unwrap()),
-            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
-            object: TermPattern::Variable(Variable::new("name").unwrap()),
+            subject: AlgebraTermPattern::Variable(Variable::new("person").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
+            object: AlgebraTermPattern::Variable(Variable::new("name").unwrap()),
         },
     ];
 
@@ -301,26 +301,26 @@ fn test_selective_pattern_ordering() {
     let patterns = vec![
         // Common property pattern
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("x").unwrap()),
-            predicate: TermPattern::NamedNode(
+            subject: AlgebraTermPattern::Variable(Variable::new("x").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(
                 NamedNode::new("http://example.org/commonProperty").unwrap(),
             ),
-            object: TermPattern::Variable(Variable::new("y").unwrap()),
+            object: AlgebraTermPattern::Variable(Variable::new("y").unwrap()),
         },
         // Rare property pattern
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("x").unwrap()),
-            predicate: TermPattern::NamedNode(
+            subject: AlgebraTermPattern::Variable(Variable::new("x").unwrap()),
+            predicate: AlgebraTermPattern::NamedNode(
                 NamedNode::new("http://example.org/rareProperty").unwrap(),
             ),
-            object: TermPattern::Variable(Variable::new("z").unwrap()),
+            object: AlgebraTermPattern::Variable(Variable::new("z").unwrap()),
         },
     ];
 
     let plan = optimizer.optimize_patterns(&patterns).unwrap();
 
     // The rare property pattern should be executed first
-    if let TermPattern::NamedNode(pred) = &plan.patterns[0].0.predicate {
+    if let AlgebraTermPattern::NamedNode(pred) = &plan.patterns[0].0.predicate {
         assert_eq!(pred.as_str(), "http://example.org/rareProperty");
     }
 }

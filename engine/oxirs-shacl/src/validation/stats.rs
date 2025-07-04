@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use crate::{ConstraintComponentId, Severity, ShapeId};
 
 /// Comprehensive statistics for validation operations
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ValidationStats {
     pub total_validations: usize,
     pub total_node_validations: usize,
@@ -223,6 +223,9 @@ impl ShapeConformanceStats {
 
         violation_metrics.count += 1;
         *violation_metrics.by_severity.entry(severity).or_insert(0) += 1;
+        
+        // Also update the total violations count
+        shape_metrics.total_violations += 1;
     }
 
     /// Get conformance rate for a specific shape (0.0 to 1.0)
@@ -317,16 +320,29 @@ pub struct DataQualityMetrics {
     /// Violation density (violations per node)
     total_violations: usize,
     /// Quality trends over time
+    #[serde(skip)]
     quality_measurements: Vec<QualityMeasurement>,
 }
 
 /// Point-in-time quality measurement
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct QualityMeasurement {
+    #[serde(skip)]
     timestamp: Instant,
     quality_score: f64,
     violation_count: usize,
     nodes_evaluated: usize,
+}
+
+impl Default for QualityMeasurement {
+    fn default() -> Self {
+        Self {
+            timestamp: Instant::now(),
+            quality_score: 0.0,
+            violation_count: 0,
+            nodes_evaluated: 0,
+        }
+    }
 }
 
 impl DataQualityMetrics {
@@ -491,17 +507,39 @@ pub struct PerformanceAnalytics {
 /// Throughput measurement
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThroughputMeasurement {
+    #[serde(skip, default = "Instant::now")]
     timestamp: Instant,
     nodes_per_second: f64,
     constraints_per_second: f64,
 }
 
+impl Default for ThroughputMeasurement {
+    fn default() -> Self {
+        Self {
+            timestamp: Instant::now(),
+            nodes_per_second: 0.0,
+            constraints_per_second: 0.0,
+        }
+    }
+}
+
 /// Memory usage measurement
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryMeasurement {
+    #[serde(skip, default = "Instant::now")]
     timestamp: Instant,
     memory_usage_bytes: usize,
     cache_size_bytes: usize,
+}
+
+impl Default for MemoryMeasurement {
+    fn default() -> Self {
+        Self {
+            timestamp: Instant::now(),
+            memory_usage_bytes: 0,
+            cache_size_bytes: 0,
+        }
+    }
 }
 
 /// Slow operation tracking
@@ -509,8 +547,20 @@ pub struct MemoryMeasurement {
 pub struct SlowOperation {
     operation_type: String,
     duration: Duration,
+    #[serde(skip, default = "Instant::now")]
     timestamp: Instant,
     context: String,
+}
+
+impl Default for SlowOperation {
+    fn default() -> Self {
+        Self {
+            operation_type: String::new(),
+            duration: Duration::ZERO,
+            timestamp: Instant::now(),
+            context: String::new(),
+        }
+    }
 }
 
 impl PerformanceAnalytics {
@@ -910,15 +960,16 @@ mod tests {
         let constraint2 = ConstraintComponentId::new("sh:datatype");
 
         // Record violations for different constraints
-        stats.record_violation(shape_id.clone(), constraint1, Severity::Violation);
+        stats.record_violation(shape_id.clone(), constraint1.clone(), Severity::Violation);
         stats.record_violation(shape_id.clone(), constraint1, Severity::Warning);
         stats.record_violation(shape_id.clone(), constraint2, Severity::Violation);
 
         // Test shape with most violations
         let most_violations = stats.shape_with_most_violations();
         assert!(most_violations.is_some());
-        assert_eq!(most_violations.unwrap().0, shape_id);
-        assert_eq!(most_violations.unwrap().1, 3); // Total violations recorded
+        let (shape_id_result, violation_count) = most_violations.unwrap();
+        assert_eq!(shape_id_result, shape_id);
+        assert_eq!(violation_count, 3); // Total violations recorded
     }
 }
 

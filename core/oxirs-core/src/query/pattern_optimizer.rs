@@ -89,6 +89,7 @@ impl IndexStats {
 }
 
 /// Pattern matching optimizer that selects optimal indexes
+#[derive(Debug)]
 pub struct PatternOptimizer {
     /// Index statistics for cost estimation
     index_stats: Arc<IndexStats>,
@@ -158,7 +159,7 @@ pub struct PatternStrategy {
 }
 
 /// Optimized pattern execution order
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OptimizedPatternPlan {
     /// Ordered list of patterns with their strategies
     pub patterns: Vec<(AlgebraTriplePattern, PatternStrategy)>,

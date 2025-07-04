@@ -5,13 +5,12 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::{FederatedService, ServiceRegistry};
 
 /// Performance analysis engine for the federation system
 pub struct PerformanceAnalyzer {
@@ -348,6 +347,7 @@ impl PerformanceAnalyzer {
     pub async fn record_service_metrics(&self, metrics: ServicePerformanceMetrics) -> Result<()> {
         let mut history = self.metrics_history.write().await;
 
+        let max_entries = history.max_entries; // Cache the value before mutable borrow
         let service_history = history
             .service_metrics
             .entry(metrics.service_id.clone())
@@ -356,7 +356,7 @@ impl PerformanceAnalyzer {
         service_history.push_back(metrics.clone());
 
         // Maintain size limit
-        while service_history.len() > history.max_entries {
+        while service_history.len() > max_entries {
             service_history.pop_front();
         }
 

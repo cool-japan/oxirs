@@ -79,7 +79,7 @@ impl SelfAdaptiveAI {
     /// Perform adaptive learning on new data
     pub async fn adaptive_learn(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
         validation_reports: &[ValidationReport],
     ) -> Result<AdaptationResult> {
@@ -123,7 +123,7 @@ impl SelfAdaptiveAI {
     /// Execute the selected adaptation strategy
     async fn execute_adaptation(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
         strategy: &AdaptationStrategy,
     ) -> Result<AdaptationResult> {
@@ -294,7 +294,7 @@ impl AdaptationEngine {
     /// Execute an adaptation strategy
     pub async fn execute_strategy(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
         strategy: &AdaptationStrategy,
     ) -> Result<AdaptationResult> {
@@ -718,7 +718,7 @@ impl EvolutionTracker {
 pub trait AdaptationStrategyTrait: Send + Sync + std::fmt::Debug {
     async fn execute(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
         parameters: &HashMap<String, f64>,
     ) -> Result<AdaptationResult>;
@@ -738,7 +738,7 @@ impl IncrementalStrategy {
 impl AdaptationStrategyTrait for IncrementalStrategy {
     async fn execute(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _graph_name: Option<&str>,
         _parameters: &HashMap<String, f64>,
     ) -> Result<AdaptationResult> {
@@ -767,7 +767,7 @@ impl ReinforcementStrategy {
 impl AdaptationStrategyTrait for ReinforcementStrategy {
     async fn execute(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _graph_name: Option<&str>,
         _parameters: &HashMap<String, f64>,
     ) -> Result<AdaptationResult> {
@@ -796,7 +796,7 @@ impl TransferLearningStrategy {
 impl AdaptationStrategyTrait for TransferLearningStrategy {
     async fn execute(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _graph_name: Option<&str>,
         _parameters: &HashMap<String, f64>,
     ) -> Result<AdaptationResult> {
@@ -825,7 +825,7 @@ impl EnsembleStrategy {
 impl AdaptationStrategyTrait for EnsembleStrategy {
     async fn execute(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _graph_name: Option<&str>,
         _parameters: &HashMap<String, f64>,
     ) -> Result<AdaptationResult> {

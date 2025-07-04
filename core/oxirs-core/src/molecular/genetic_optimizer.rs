@@ -4,13 +4,9 @@
 //! execution using genetic algorithms inspired by biological evolution.
 
 use super::dna_structures::DnaDataStructure;
-use super::types::*;
-use crate::model::{Term, Triple};
-use crate::query::algebra::AlgebraTriplePattern;
+use crate::model::Triple;
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Genetic algorithm for optimizing graph structures
@@ -35,6 +31,8 @@ pub struct GeneticGraphOptimizer {
     best_fitness: f64,
     /// Evolution history
     evolution_history: Vec<GenerationStats>,
+    /// Best individual found so far
+    best_individual: Option<GraphStructure>,
 }
 
 /// Graph structure chromosome representation
@@ -265,6 +263,23 @@ pub struct GenerationStats {
 }
 
 impl GeneticGraphOptimizer {
+    /// Get the best fitness achieved so far
+    pub fn best_fitness(&self) -> f64 {
+        self.best_fitness
+    }
+
+    /// Get the best individual found so far
+    pub fn best_individual(&self) -> Option<&GraphStructure> {
+        self.best_individual.as_ref()
+    }
+
+    /// Update best individual if fitness improved
+    fn update_best_individual(&mut self, individual: &GraphStructure) {
+        if individual.fitness > self.best_fitness {
+            self.best_fitness = individual.fitness;
+            self.best_individual = Some(individual.clone());
+        }
+    }
     /// Create a new genetic optimizer
     pub fn new(
         population_size: usize,
@@ -281,6 +296,7 @@ impl GeneticGraphOptimizer {
             current_generation: 0,
             best_fitness: 0.0,
             evolution_history: Vec::new(),
+            best_individual: None,
         }
     }
 
@@ -567,7 +583,7 @@ impl GeneticGraphOptimizer {
 
     /// Mutate a structure
     fn mutate(&self, structure: &mut GraphStructure) -> Result<(), OxirsError> {
-        let mutation_types = vec![
+        let mutation_types = [
             "index_parameter",
             "storage_parameter",
             "access_pattern",

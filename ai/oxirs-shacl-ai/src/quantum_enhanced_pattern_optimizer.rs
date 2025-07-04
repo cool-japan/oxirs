@@ -8,10 +8,11 @@ use crate::{
     ml::{GraphData, ModelError, ModelMetrics},
     neural_patterns::{NeuralPattern, NeuralPatternRecognizer},
     optimization::OptimizationEngine,
+    quantum_neural_patterns::QuantumState,
     quantum_consciousness_entanglement::{
         QuantumConsciousnessEntanglement, QuantumEntanglementConfig,
     },
-    quantum_neural_patterns::{QuantumNeuralConfig, QuantumNeuralNetwork},
+    quantum_neural_patterns::{QuantumNeuralPatternRecognizer, QuantumPattern},
     Result, ShaclAiError,
 };
 
@@ -45,7 +46,7 @@ pub struct QuantumEnhancedPatternOptimizer {
     entanglement_engine: Arc<Mutex<QuantumConsciousnessEntanglement>>,
 
     /// Quantum neural network for cost estimation
-    quantum_neural_net: Arc<Mutex<QuantumNeuralNetwork>>,
+    quantum_neural_net: Arc<Mutex<QuantumNeuralPatternRecognizer>>,
 
     /// Quantum annealing optimizer
     quantum_annealer: Arc<Mutex<QuantumAnnealer>>,
@@ -679,7 +680,7 @@ impl QuantumEnhancedPatternOptimizer {
             QuantumEntanglementConfig::default(),
         )));
 
-        let quantum_neural_net = Arc::new(Mutex::new(QuantumNeuralNetwork::new(
+        let quantum_neural_net = Arc::new(Mutex::new(QuantumNeuralPatternRecognizer::new(
             QuantumNeuralConfig::default(),
         )));
 

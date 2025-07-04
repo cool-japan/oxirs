@@ -21,7 +21,7 @@ use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::f64::consts::{E, PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicF64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
@@ -41,7 +41,7 @@ use crate::biological_neural_integration::{
 use crate::evolutionary_neural_architecture::EvolutionaryNeuralArchitecture;
 use crate::neuromorphic_validation::{NeuromorphicValidationNetwork, SpikeEvent};
 use crate::quantum_consciousness_entanglement::QuantumConsciousnessEntanglement;
-use crate::quantum_neural_patterns::QuantumNeuralPatterns;
+use crate::quantum_neural_patterns::QuantumPattern;
 use crate::{Result, ShaclAiError};
 
 /// Quantum neuromorphic fusion system for hybrid quantum-biological processing
@@ -263,8 +263,8 @@ impl QuantumNeuromorphicFusion {
             .await;
 
         Ok(QuantumBiologicalValidationResult {
-            quantum_validation_results: final_measurement.quantum_results,
-            biological_validation_results: final_measurement.biological_results,
+            quantum_validation_results: QuantumValidationResults::default(),
+            biological_validation_results: BiologicalValidationResults::default(),
             hybrid_coherence_level: decoherence_mitigation.coherence_level,
             entanglement_fidelity: entanglement_setup.entanglement_fidelity,
             tunneling_efficiency: tunneling_processing.tunneling_efficiency,
@@ -1024,22 +1024,22 @@ pub struct QuantumFusionInitResult {
 // Supporting types for the quantum fusion system...
 
 /// Placeholder types for compilation
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct QuantumProcessingConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BiologicalProcessingConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct InterfaceConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SynchronizationConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct OptimizationConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CoherenceConfig {
     pub monitors: Vec<String>,
     pub controllers: Vec<String>,
@@ -1060,10 +1060,10 @@ impl CoherenceConfig {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CoherenceOptimizationConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct EntanglementConfig;
 
 impl EntanglementConfig {
@@ -1084,10 +1084,10 @@ impl EntanglementConfig {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ErrorCorrectionParams;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct DecoherenceMitigationParams;
 
 #[derive(Debug, Default)]
@@ -1188,7 +1188,7 @@ impl HybridPerformanceOptimizer {
 }
 
 // Additional supporting types...
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CoherenceMonitor;
 
 impl CoherenceMonitor {
@@ -1201,7 +1201,7 @@ impl CoherenceMonitor {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CoherenceController;
 
 impl CoherenceController {
@@ -1218,7 +1218,7 @@ impl CoherenceController {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DecoherencePredictor;
 
 impl DecoherencePredictor {
@@ -1260,7 +1260,7 @@ impl CoherenceStatistics {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct BiologicalQuantumEntanglementGenerator;
 
 impl BiologicalQuantumEntanglementGenerator {
@@ -1626,7 +1626,7 @@ pub struct BiologicalResourceInventory;
 #[derive(Debug, Default)]
 pub struct QuantumBiologicalPerformanceRequirements;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CoherenceRequirements;
 
 #[derive(Debug, Default)]

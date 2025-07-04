@@ -20,7 +20,7 @@ use nalgebra::{DMatrix, DVector, Vector3};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::f64::consts::{E, PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicF64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
@@ -269,7 +269,7 @@ impl ConsciousnessGuidedNeuroplasticity {
             consciousness_level_achieved: awareness_assessment.consciousness_level,
             plasticity_control_effectiveness: plasticity_control.effectiveness_score,
             meta_learning_improvements: meta_learning_results.improvement_metrics,
-            self_evolution_progress: self_evolution_results.evolution_progress,
+            self_evolution_progress: SelfEvolutionProgress::default(),
             memory_consolidation_efficiency: memory_consolidation.consolidation_efficiency,
             attention_optimization_gains: attention_adjustment.optimization_gains,
             overall_adaptation_success: feedback_integration.adaptation_success_score,
@@ -685,10 +685,11 @@ impl IntentionalPlasticityController {
         let strategy = self
             .plasticity_strategies
             .get(&strategy_selection.selected_strategy)
-            .ok_or_else(|| ShaclAiError::PatternRecognition("Strategy not found".to_string()))?;
+            .ok_or_else(|| ShaclAiError::PatternRecognition("Strategy not found".to_string()))?
+            .clone();
 
         // Apply plasticity modulation
-        let modulation_results = self.apply_plasticity_modulation(strategy, context).await?;
+        let modulation_results = self.apply_plasticity_modulation(&strategy, context).await?;
 
         // Control synaptic modifications
         let synaptic_control = self
@@ -996,7 +997,7 @@ pub struct ConsciousnessPlasticityInitResult {
 // Supporting types and implementations...
 
 /// Placeholder types for compilation
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct LearningObjective {
     pub objective_id: String,
     pub description: String,
@@ -1004,7 +1005,7 @@ pub struct LearningObjective {
     pub success_criteria: Vec<String>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ConsciousnessGoal {
     pub goal_id: String,
     pub description: String,
@@ -1012,7 +1013,7 @@ pub struct ConsciousnessGoal {
     pub timeline: Duration,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AwarenessConfig {
     pub assessors: Vec<String>,
     pub monitors: Vec<String>,
@@ -1033,10 +1034,10 @@ impl AwarenessConfig {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MetaAwarenessConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PlasticityConfig;
 
 impl PlasticityConfig {
@@ -1061,31 +1062,31 @@ impl PlasticityConfig {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MetaLearningConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MemoryConsolidationConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AttentionControlConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct StrategySelectionConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AdaptationMonitoringConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FeedbackIntegrationConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CoherenceRequirements {
     pub min_coherence: f64,
     pub stability_threshold: f64,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct EffectivenessThresholds {
     pub min_plasticity_effectiveness: f64,
     pub min_adaptation_success: f64,
@@ -1106,7 +1107,7 @@ pub struct EnvironmentalContext {
 }
 
 // Manager and component implementations...
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct NeuralAwarenessAssessor;
 
 impl NeuralAwarenessAssessor {
@@ -1126,7 +1127,7 @@ impl NeuralAwarenessAssessor {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ConsciousnessMonitor;
 
 impl ConsciousnessMonitor {
@@ -1139,7 +1140,7 @@ impl ConsciousnessMonitor {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct AwarenessIntegrator;
 
 impl AwarenessIntegrator {
@@ -1196,7 +1197,7 @@ pub struct MetaAwareness {
     pub meta_level: f64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AwarenessAssessment {
     pub consciousness_level: ConsciousnessLevel,
     pub awareness_measurements: Vec<AwarenessMeasurement>,
@@ -1218,7 +1219,7 @@ pub struct QuickAwarenessCheck {
     pub level: f64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PlasticityModulator;
 
 impl PlasticityModulator {
@@ -1242,7 +1243,7 @@ impl PlasticityModulator {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SynapticController;
 
 impl SynapticController {
@@ -1258,7 +1259,7 @@ impl SynapticController {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct AdaptationCoordinator;
 
 impl AdaptationCoordinator {
@@ -1352,7 +1353,7 @@ pub struct FeedbackIntegration {
     pub total_adaptation_time: Duration,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 pub struct EvolutionMilestone {
     pub milestone_id: String,
     pub achievement_date: SystemTime,
@@ -1549,7 +1550,9 @@ pub struct AttentionControlInitResult;
 pub struct AdaptationMonitoringInitResult;
 
 #[derive(Debug, Default)]
-pub struct SelfEvolutionResults;
+pub struct SelfEvolutionResults {
+    pub evolution_progress: f64,
+}
 
 #[derive(Debug, Default)]
 pub struct MemoryConsolidation {

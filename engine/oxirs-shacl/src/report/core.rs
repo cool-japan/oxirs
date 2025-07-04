@@ -137,6 +137,11 @@ impl ValidationReport {
         self.conforms
     }
 
+    /// Set the conformance status
+    pub fn set_conforms(&mut self, conforms: bool) {
+        self.conforms = conforms;
+    }
+
     /// Get the violations
     pub fn violations(&self) -> &[ValidationViolation] {
         &self.violations
@@ -419,6 +424,51 @@ impl ValidationReport {
 
         ValidationReport::from_violations(filtered_violations)
     }
+
+
+    /// Serialize validation report to RDF format (Turtle, N-Triples, etc.)
+    pub fn to_rdf(&self, format: &str) -> Result<String> {
+        // Basic implementation - in a full implementation this would convert to RDF using SHACL vocabulary
+        let report_iri = "http://example.org/validation-report";
+        let mut rdf_output = String::new();
+        
+        match format.to_lowercase().as_str() {
+            "turtle" | "ttl" => {
+                rdf_output.push_str("@prefix sh: <http://www.w3.org/ns/shacl#> .\n");
+                rdf_output.push_str("@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n");
+                rdf_output.push_str(&format!("<{}> a sh:ValidationReport ;\n", report_iri));
+                rdf_output.push_str(&format!("    sh:conforms {} ;\n", self.conforms));
+                
+                if !self.violations.is_empty() {
+                    rdf_output.push_str("    sh:result ");
+                    for (i, violation) in self.violations.iter().enumerate() {
+                        if i > 0 { rdf_output.push_str(", "); }
+                        rdf_output.push_str(&format!("[\n        a sh:ValidationResult ;\n"));
+                        rdf_output.push_str(&format!("        sh:focusNode <{}> ;\n", violation.focus_node));
+                        rdf_output.push_str(&format!("        sh:sourceShape <{}> ;\n", violation.source_shape));
+                        rdf_output.push_str(&format!("        sh:resultSeverity sh:{}\n", violation.result_severity));
+                        if let Some(message) = &violation.result_message {
+                            rdf_output.push_str(&format!("        sh:resultMessage \"{}\" ;\n", message.replace("\"", "\\\"")));
+                        }
+                        rdf_output.push_str("    ]");
+                    }
+                    rdf_output.push_str(" .\n");
+                } else {
+                    rdf_output.push_str(" .\n");
+                }
+            }
+            "nt" | "ntriples" => {
+                rdf_output.push_str(&format!("<{}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationReport> .\n", report_iri));
+                rdf_output.push_str(&format!("<{}> <http://www.w3.org/ns/shacl#conforms> \"{}\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n", report_iri, self.conforms));
+            }
+            _ => {
+                return Err(crate::ShaclError::ValidationEngine(format!("Unsupported RDF format: {}", format)));
+            }
+        }
+        
+        Ok(rdf_output)
+    }
+
 }
 
 impl Default for ValidationReport {
@@ -443,8 +493,8 @@ impl fmt::Display for ValidationReport {
                     "  {}. {} - {} ({})",
                     i + 1,
                     violation.result_severity,
-                    violation.focus_node.as_str(),
-                    violation.source_shape.as_str()
+                    violation.focus_node,
+                    violation.source_shape
                 )?;
                 if let Some(message) = &violation.result_message {
                     writeln!(f, "     {}", message)?;

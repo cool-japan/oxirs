@@ -270,7 +270,7 @@ impl AdvancedSPARQLOptimizer {
     ) -> Result<Vec<OptimizationHint>> {
         let analysis = self
             .query_analyzer
-            .analyze(&generation_result.query, &QueryIntent::Exploration)
+            .analyze(&generation_result.query, &QueryIntent::Explanation)
             .await?;
         let mut hints = Vec::new();
 
@@ -615,7 +615,7 @@ impl QueryAnalyzer {
         }
 
         // LIMIT pushdown for list queries
-        if matches!(intent, QueryIntent::ListQuery) && !query.to_uppercase().contains("LIMIT") {
+        if matches!(intent, QueryIntent::Listing) && !query.to_uppercase().contains("LIMIT") {
             opportunities.push(OptimizationOpportunity {
                 strategy: OptimizationStrategy::LimitPushdown,
                 description: "Add LIMIT clause for list queries to improve performance".to_string(),
@@ -786,7 +786,7 @@ impl QueryRewriter {
     }
 
     fn pushdown_limit(&self, query: &str, intent: &QueryIntent) -> Result<String> {
-        if matches!(intent, QueryIntent::ListQuery) && !query.to_uppercase().contains("LIMIT") {
+        if matches!(intent, QueryIntent::Listing) && !query.to_uppercase().contains("LIMIT") {
             if query.to_uppercase().contains("ORDER BY") {
                 // Add LIMIT after ORDER BY
                 let with_limit =

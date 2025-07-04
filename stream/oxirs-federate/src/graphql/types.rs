@@ -3,15 +3,12 @@
 //! This module contains all the type definitions, enums, and data structures
 //! used throughout the GraphQL federation system.
 
-use anyhow::Result;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use uuid::Uuid;
 
-use crate::{executor::GraphQLResponse, QueryResultData, StepResult};
+use crate::executor::GraphQLResponse;
 
 /// Entity data returned from federated services
 #[derive(Debug, Clone, Serialize, Deserialize)]

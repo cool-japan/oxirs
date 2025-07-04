@@ -11,6 +11,7 @@ use crate::rag::{AssembledContext, RagSearchResult};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use oxirs_core::model::triple::Triple;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, info, warn};

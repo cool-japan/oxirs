@@ -5,8 +5,6 @@
 //! https://www.w3.org/TR/sparql11-query/#sparqlQuery
 
 use crate::model::*;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr).

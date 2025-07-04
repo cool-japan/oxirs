@@ -821,7 +821,7 @@ impl QualityIssueDetector {
     /// Detect quality issues comprehensively
     pub fn detect_quality_issues(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         quality_report: &QualityReport,
         validation_report: Option<&ValidationReport>,
@@ -983,7 +983,7 @@ impl QualityIssueDetector {
 
     fn create_quality_snapshot(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         quality_report: &QualityReport,
         _validation_report: Option<&ValidationReport>,
@@ -1248,7 +1248,7 @@ impl QualityIssueDetector {
         0.82 // Placeholder confidence score
     }
 
-    fn calculate_coverage_percentage(&self, _store: &Store) -> f64 {
+    fn calculate_coverage_percentage(&self, _store: &dyn Store) -> f64 {
         85.0 // Placeholder coverage percentage
     }
 

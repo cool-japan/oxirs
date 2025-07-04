@@ -323,7 +323,7 @@ impl VectorQueryOptimizer {
                 opportunities.extend(self.analyze_vector_opportunities(left)?);
                 opportunities.extend(self.analyze_vector_opportunities(right)?);
             }
-            Algebra::Optional { left, right } => {
+            Algebra::LeftJoin { left, right, filter: _ } => {
                 opportunities.extend(self.analyze_vector_opportunities(left)?);
                 opportunities.extend(self.analyze_vector_opportunities(right)?);
             }

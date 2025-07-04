@@ -835,9 +835,9 @@ mod tests {
 
             for i in 0..100 {
                 let quad = Quad::new(
-                    Subject::NamedNode(NamedNode::new(format!("http://example.org/s{}", i))?),
+                    Subject::NamedNode(NamedNode::new(format!("http://example.org/s{i}"))?),
                     Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
-                    Object::Literal(Literal::new_simple_literal(format!("value{}", i))),
+                    Object::Literal(Literal::new_simple_literal(format!("value{i}"))),
                     GraphName::DefaultGraph,
                 );
                 store.add(&quad)?;
@@ -870,9 +870,9 @@ mod tests {
             for p in &predicates {
                 for o in &objects {
                     let quad = Quad::new(
-                        Subject::NamedNode(NamedNode::new(format!("http://example.org/{}", s))?),
-                        Predicate::NamedNode(NamedNode::new(format!("http://example.org/{}", p))?),
-                        Object::NamedNode(NamedNode::new(format!("http://example.org/{}", o))?),
+                        Subject::NamedNode(NamedNode::new(format!("http://example.org/{s}"))?),
+                        Predicate::NamedNode(NamedNode::new(format!("http://example.org/{p}"))?),
+                        Object::NamedNode(NamedNode::new(format!("http://example.org/{o}"))?),
                         GraphName::DefaultGraph,
                     );
                     store.add(&quad)?;

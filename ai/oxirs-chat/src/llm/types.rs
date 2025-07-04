@@ -98,7 +98,7 @@ pub struct Usage {
 
 /// Routing candidate for model selection
 #[derive(Debug, Clone)]
-pub(crate) struct RoutingCandidate {
+pub struct RoutingCandidate {
     pub provider: String,
     pub model: String,
     pub score: f32,

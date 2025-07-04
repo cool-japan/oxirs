@@ -31,6 +31,7 @@ use tokio_stream;
 use oxirs_core::{
     model::{NamedNode, Term, Triple, Quad, Subject, Predicate, Object, GraphName},
     Store, Result as OxirsResult,
+    rdf_store::{OxirsQueryResults, PreparedQuery},
 };
 
 #[cfg(feature = "async")]
@@ -250,7 +251,7 @@ impl StreamingValidationEngine {
         let shapes = Arc::new(RwLock::new(shapes));
         // Create a simple in-memory store for buffering
         // For now, we'll use a placeholder - this would need a proper implementation
-        let buffer_store: Arc<Mutex<dyn Store>> = Arc::new(Mutex::new(Box::new(PlaceholderStore::new())));
+        let buffer_store: Arc<Mutex<dyn Store>> = Arc::new(Mutex::new(PlaceholderStore::new()));
 
         let initial_state = ValidationState {
             current_report: ValidationReport::new(),
@@ -548,8 +549,8 @@ impl StreamingValidationEngine {
         };
 
         // Perform validation
-        let engine = ValidationEngine::new(&shapes_guard, validation_config);
-        let current_report = engine.validate_store(&**store)?;
+        let mut engine = ValidationEngine::new(&shapes_guard, validation_config);
+        let current_report = engine.validate_store(&*store)?;
 
         // Calculate differences if incremental validation is enabled
         let (new_violations, resolved_violations) = if config.incremental {
@@ -721,6 +722,21 @@ impl Store for PlaceholderStore {
         let quads = self.quads.read().unwrap();
         Ok(quads.len())
     }
+
+    fn is_empty(&self) -> OxirsResult<bool> {
+        let quads = self.quads.read().unwrap();
+        Ok(quads.is_empty())
+    }
+
+    fn query(&self, _sparql: &str) -> OxirsResult<OxirsQueryResults> {
+        // Placeholder implementation - in a real implementation this would parse and execute SPARQL
+        Ok(OxirsQueryResults::default())
+    }
+
+    fn prepare_query(&self, sparql: &str) -> OxirsResult<PreparedQuery> {
+        // Placeholder implementation - in a real implementation this would parse the SPARQL
+        Ok(PreparedQuery::new(sparql.to_string()))
+    }
 }
 
 #[cfg(test)]
@@ -739,13 +755,11 @@ mod tests {
 
         // Create test stream
         let events = vec![
-            StreamEvent::Addition(Triple {
-                subject: Term::NamedNode(NamedNode::new("http://example.org/person1").unwrap()),
-                predicate: Term::NamedNode(
-                    NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap(),
-                ),
-                object: Term::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
-            }),
+            StreamEvent::Addition(Triple::new(
+                NamedNode::new("http://example.org/person1").unwrap(),
+                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap(),
+                NamedNode::new("http://example.org/Person").unwrap(),
+            )),
             StreamEvent::BatchEnd,
             StreamEvent::StreamEnd,
         ];

@@ -1269,7 +1269,7 @@ impl Default for WorkspaceSettings {
             enable_decision_voting: true,
             auto_save_interval: std::time::Duration::from_secs(10),
             max_concurrent_editors: 50,
-            session_timeout: std::time::Duration::from_hours(8),
+            session_timeout: std::time::Duration::from_secs(8 * 3600),
         }
     }
 }

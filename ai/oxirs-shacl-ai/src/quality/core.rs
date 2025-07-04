@@ -288,7 +288,7 @@ impl QualityAssessor {
     /// Assess comprehensive data quality
     pub fn assess_comprehensive_quality(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<QualityReport> {
         tracing::info!("Starting comprehensive quality assessment");
@@ -367,7 +367,7 @@ impl QualityAssessor {
     }
 
     /// Assess data completeness
-    fn assess_completeness(&self, store: &Store, shapes: &[Shape]) -> Result<f64> {
+    fn assess_completeness(&self, store: &dyn Store, shapes: &[Shape]) -> Result<f64> {
         tracing::debug!("Assessing data completeness");
 
         let mut total_expected_properties = 0;
@@ -404,7 +404,7 @@ impl QualityAssessor {
     }
 
     /// Assess data consistency
-    fn assess_consistency(&self, store: &Store, shapes: &[Shape]) -> Result<f64> {
+    fn assess_consistency(&self, store: &dyn Store, shapes: &[Shape]) -> Result<f64> {
         tracing::debug!("Assessing data consistency");
 
         let mut total_checks = 0;
@@ -432,7 +432,7 @@ impl QualityAssessor {
     }
 
     /// Assess data accuracy using validation and heuristics
-    fn assess_accuracy(&self, store: &Store, shapes: &[Shape]) -> Result<f64> {
+    fn assess_accuracy(&self, store: &dyn Store, shapes: &[Shape]) -> Result<f64> {
         tracing::debug!("Assessing data accuracy");
 
         let mut total_values = 0;
@@ -465,7 +465,7 @@ impl QualityAssessor {
     /// Assess conformance to SHACL shapes
     fn assess_shape_conformance(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<ConformanceResult> {
         tracing::debug!("Assessing SHACL shape conformance");
@@ -501,7 +501,7 @@ impl QualityAssessor {
     }
 
     /// Detect duplicate data
-    fn detect_duplicates(&self, store: &Store) -> Result<DuplicateResult> {
+    fn detect_duplicates(&self, store: &dyn Store) -> Result<DuplicateResult> {
         tracing::debug!("Detecting duplicate data");
 
         let mut entity_signatures: HashMap<String, Vec<Term>> = HashMap::new();
@@ -603,7 +603,7 @@ impl QualityAssessor {
     }
 
     /// Assess schema adherence
-    fn assess_schema_adherence(&self, store: &Store, shapes: &[Shape]) -> Result<f64> {
+    fn assess_schema_adherence(&self, store: &dyn Store, shapes: &[Shape]) -> Result<f64> {
         tracing::debug!("Assessing schema adherence");
 
         let mut total_checks = 0;
@@ -629,7 +629,7 @@ impl QualityAssessor {
     }
 
     /// Detect anomalies in the data
-    fn detect_anomalies(&self, store: &Store, shapes: &[Shape]) -> Result<Vec<QualityIssue>> {
+    fn detect_anomalies(&self, store: &dyn Store, shapes: &[Shape]) -> Result<Vec<QualityIssue>> {
         tracing::debug!("Detecting data anomalies");
 
         let mut anomalies = Vec::new();
@@ -732,7 +732,7 @@ impl QualityAssessor {
 
     // Helper methods
 
-    fn get_shape_instances(&self, store: &Store, shape: &Shape) -> Result<Vec<Term>> {
+    fn get_shape_instances(&self, store: &dyn Store, shape: &Shape) -> Result<Vec<Term>> {
         let mut instances = Vec::new();
 
         // Get target nodes based on shape targets
@@ -829,7 +829,7 @@ impl QualityAssessor {
 
     fn count_instances_with_property(
         &self,
-        store: &Store,
+        store: &dyn Store,
         instances: &[Term],
         constraint: &(oxirs_shacl::ConstraintComponentId, Constraint),
     ) -> Result<usize> {
@@ -919,7 +919,7 @@ impl QualityAssessor {
         */
     }
 
-    fn check_type_consistency(&self, store: &Store) -> Result<ConsistencyCheck> {
+    fn check_type_consistency(&self, store: &dyn Store) -> Result<ConsistencyCheck> {
         // Check for type consistency issues in the data
         let mut total_checks = 0;
         let mut consistent_checks = 0;
@@ -1052,14 +1052,14 @@ impl QualityAssessor {
         })
     }
 
-    fn check_shape_consistency(&self, _store: &Store, _shape: &Shape) -> Result<ConsistencyCheck> {
+    fn check_shape_consistency(&self, _store: &dyn Store, _shape: &Shape) -> Result<ConsistencyCheck> {
         Ok(ConsistencyCheck {
             total: 50,
             consistent: 48,
         })
     }
 
-    fn check_datatype_accuracy(&self, store: &Store, shapes: &[Shape]) -> Result<AccuracyCheck> {
+    fn check_datatype_accuracy(&self, store: &dyn Store, shapes: &[Shape]) -> Result<AccuracyCheck> {
         let mut total_checks = 0;
         let mut accurate_checks = 0;
 
@@ -1156,14 +1156,14 @@ impl QualityAssessor {
         })
     }
 
-    fn check_range_accuracy(&self, _store: &Store, _shapes: &[Shape]) -> Result<AccuracyCheck> {
+    fn check_range_accuracy(&self, _store: &dyn Store, _shapes: &[Shape]) -> Result<AccuracyCheck> {
         Ok(AccuracyCheck {
             total: 50,
             accurate: 45,
         })
     }
 
-    fn check_pattern_accuracy(&self, _store: &Store, _shapes: &[Shape]) -> Result<AccuracyCheck> {
+    fn check_pattern_accuracy(&self, _store: &dyn Store, _shapes: &[Shape]) -> Result<AccuracyCheck> {
         Ok(AccuracyCheck {
             total: 75,
             accurate: 70,
@@ -1189,7 +1189,7 @@ impl QualityAssessor {
         0.8 // Placeholder
     }
 
-    fn check_class_adherence(&self, _store: &Store, _shapes: &[Shape]) -> Result<AdherenceCheck> {
+    fn check_class_adherence(&self, _store: &dyn Store, _shapes: &[Shape]) -> Result<AdherenceCheck> {
         Ok(AdherenceCheck {
             total: 100,
             adherent: 95,
@@ -1198,7 +1198,7 @@ impl QualityAssessor {
 
     fn check_property_adherence(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<AdherenceCheck> {
         Ok(AdherenceCheck {
@@ -1209,7 +1209,7 @@ impl QualityAssessor {
 
     fn detect_numeric_anomalies(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<Vec<QualityIssue>> {
         Ok(Vec::new()) // Placeholder
@@ -1217,13 +1217,13 @@ impl QualityAssessor {
 
     fn detect_pattern_anomalies(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<Vec<QualityIssue>> {
         Ok(Vec::new()) // Placeholder
     }
 
-    fn detect_structural_anomalies(&self, _store: &Store) -> Result<Vec<QualityIssue>> {
+    fn detect_structural_anomalies(&self, _store: &dyn Store) -> Result<Vec<QualityIssue>> {
         Ok(Vec::new()) // Placeholder
     }
 
@@ -1301,7 +1301,7 @@ impl QualityAssessor {
 
     fn execute_quality_query(
         &self,
-        store: &Store,
+        store: &dyn Store,
         query: &str,
     ) -> Result<oxirs_core::query::QueryResult> {
         use oxirs_core::query::QueryEngine;

@@ -269,14 +269,6 @@ impl GraphQLFederation {
         Ok(service_queries)
     }
 
-    /// Extract base type name, removing List/NonNull wrappers
-    fn extract_base_type(&self, type_str: &str) -> String {
-        type_str
-            .trim_start_matches('[')
-            .trim_end_matches(']')
-            .trim_end_matches('!')
-            .to_string()
-    }
 
     /// Parse a GraphQL query string into a structured representation
     pub fn parse_graphql_query(&self, query: &str) -> Result<ParsedQuery> {
@@ -433,7 +425,7 @@ impl GraphQLFederation {
     }
 
     /// Analyze which services own which fields
-    fn analyze_field_ownership(
+    pub fn analyze_field_ownership(
         &self,
         query: &ParsedQuery,
         schema: &UnifiedSchema,

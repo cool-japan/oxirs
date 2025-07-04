@@ -3,9 +3,8 @@
 //! This module implements artificial intuition for query optimization using
 //! pattern memory, gut feeling calculations, and creative optimization techniques.
 
-use crate::model::*;
 use crate::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
-use crate::query::pattern_optimizer::{IndexStats, IndexType, PatternStrategy};
+use crate::query::pattern_optimizer::IndexStats;
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -163,7 +162,7 @@ impl IntuitionNetwork {
     /// Calculate intuitive score for a pattern
     pub fn calculate_intuitive_score(&self, characteristics: &[PatternCharacteristic]) -> f64 {
         // Convert characteristics to input vector
-        let mut input_vector = vec![0.0; 8];
+        let mut input_vector = [0.0; 8];
         let characteristic_types = [
             PatternCharacteristic::HighSelectivity,
             PatternCharacteristic::JoinIntensive,
@@ -469,7 +468,7 @@ impl IntuitiveQueryPlanner {
                 .iter()
                 .enumerate()
                 .map(|(i, pattern)| {
-                    let signature = format!("{:?}", pattern);
+                    let signature = format!("{pattern:?}");
                     gut.calculate_gut_feeling(&signature, context)
                 })
                 .collect::<Vec<_>>()
@@ -566,7 +565,7 @@ impl IntuitiveQueryPlanner {
         // Update pattern memory
         if let Ok(mut memory) = self.pattern_memory.write() {
             for (i, (_, pattern, predicted_score)) in plan.ordered_patterns.iter().enumerate() {
-                let signature = format!("{:?}", pattern);
+                let signature = format!("{pattern:?}");
                 let actual_score = actual_performance
                     .pattern_scores
                     .get(&i)
@@ -611,7 +610,7 @@ impl IntuitiveQueryPlanner {
         // Update gut feeling
         if let Ok(mut gut) = self.gut_feeling.write() {
             for (i, (_, pattern, _)) in plan.ordered_patterns.iter().enumerate() {
-                let signature = format!("{:?}", pattern);
+                let signature = format!("{pattern:?}");
                 let success_rate = actual_performance
                     .pattern_scores
                     .get(&i)
@@ -655,6 +654,7 @@ pub struct ExecutionResults {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Variable, NamedNode, Literal};
 
     #[test]
     fn test_intuition_network_creation() {

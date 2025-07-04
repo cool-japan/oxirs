@@ -645,7 +645,7 @@ mod tests {
 
         // Insert entries
         for i in 0..100 {
-            let key = format!("key{:04}", i);
+            let key = format!("key{i:04}");
             let entry = IndexEntry {
                 offset: i * 100,
                 quad_id: i,
@@ -667,7 +667,7 @@ mod tests {
 
         // Insert many entries to trigger splits
         for i in 0..1000 {
-            let key = format!("{:064x}", i); // 64-character hex key
+            let key = format!("{i:064x}"); // 64-character hex key
             let entry = IndexEntry {
                 offset: i * 32,
                 quad_id: i,
@@ -679,7 +679,7 @@ mod tests {
 
         // Verify all entries
         for i in 0..1000 {
-            let key = format!("{:064x}", i);
+            let key = format!("{i:064x}");
             let results = index.search_prefix(&key)?;
             assert!(!results.is_empty());
             assert_eq!(results[0].1.quad_id, i);

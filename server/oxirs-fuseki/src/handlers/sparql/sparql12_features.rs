@@ -225,10 +225,11 @@ impl Sparql12Features {
         // Apply subquery optimization
         if contains_subqueries(&optimized) {
             optimized = self.subquery_optimizer.optimize_query(&optimized).await?;
-            optimized = self
+            let optimized_result = self
                 .advanced_subquery_optimizer
-                .optimize_query(&optimized)
+                .optimize(&optimized)
                 .await?;
+            optimized = optimized_result.optimized_query;
         }
 
         // Apply BIND/VALUES optimization
@@ -254,7 +255,8 @@ impl PropertyPathOptimizer {
     pub async fn optimize_query(&self, query: &str) -> FusekiResult<String> {
         // Use the advanced property path optimizer for better optimization
         let advanced_optimizer = AdvancedPropertyPathOptimizer::new();
-        advanced_optimizer.optimize_query(query).await
+        let optimized_path = advanced_optimizer.optimize_path(query).await?;
+        Ok(optimized_path.optimized_pattern)
     }
 }
 
@@ -837,4 +839,149 @@ fn contains_subqueries(query: &str) -> bool {
 fn contains_bind_values(query: &str) -> bool {
     let upper = query.to_uppercase();
     upper.contains("BIND(") || upper.contains("VALUES")
+}
+
+// SPARQL-star support functions
+
+/// Parsed quoted triple representation
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParsedQuotedTriple {
+    pub subject: String,
+    pub predicate: String,
+    pub object: String,
+}
+
+/// Parse a quoted triple value from SPARQL-star syntax
+/// 
+/// Example: `<< <http://example.org/alice> <http://example.org/knows> <http://example.org/bob> >>`
+pub fn parse_quoted_triple_value(quoted_triple: &str) -> FusekiResult<ParsedQuotedTriple> {
+    let trimmed = quoted_triple.trim();
+    
+    // Check if it starts and ends with << >>
+    if !trimmed.starts_with("<<") || !trimmed.ends_with(">>") {
+        return Err(crate::error::FusekiError::parse(
+            "Quoted triple must start with << and end with >>"
+        ));
+    }
+    
+    // Remove outer << >>
+    let inner = &trimmed[2..trimmed.len()-2].trim();
+    
+    // Simple parsing - split by whitespace while preserving quoted strings
+    let parts = parse_triple_parts(inner)?;
+    
+    if parts.len() != 3 {
+        return Err(crate::error::FusekiError::parse(
+            "Quoted triple must have exactly three parts: subject predicate object"
+        ));
+    }
+    
+    Ok(ParsedQuotedTriple {
+        subject: parts[0].clone(),
+        predicate: parts[1].clone(),
+        object: parts[2].clone(),
+    })
+}
+
+/// Extract all quoted triple patterns from a SPARQL query
+pub fn extract_quoted_triple_patterns(query: &str) -> FusekiResult<Vec<String>> {
+    let mut patterns = Vec::new();
+    let mut pos = 0;
+    
+    while let Some(start) = query[pos..].find("<<") {
+        let abs_start = pos + start;
+        let remaining = &query[abs_start..];
+        
+        if let Some(pattern) = extract_single_quoted_pattern(remaining)? {
+            patterns.push(pattern);
+            pos = abs_start + 2; // Move past the << we just found
+        } else {
+            pos = abs_start + 2; // Skip this << if we couldn't parse it
+        }
+    }
+    
+    Ok(patterns)
+}
+
+/// Parse triple parts while handling quoted strings and nested structures
+fn parse_triple_parts(text: &str) -> FusekiResult<Vec<String>> {
+    let mut parts = Vec::new();
+    let mut current_part = String::new();
+    let mut in_quotes = false;
+    let mut in_angle_brackets = false;
+    let mut nested_depth = 0;
+    let mut chars = text.chars().peekable();
+    
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' => {
+                in_quotes = !in_quotes;
+                current_part.push(ch);
+            }
+            '<' if !in_quotes => {
+                if chars.peek() == Some(&'<') {
+                    // Start of nested quoted triple
+                    nested_depth += 1;
+                    current_part.push(ch);
+                } else {
+                    in_angle_brackets = true;
+                    current_part.push(ch);
+                }
+            }
+            '>' if !in_quotes => {
+                if in_angle_brackets {
+                    in_angle_brackets = false;
+                    current_part.push(ch);
+                } else if chars.peek() == Some(&'>') && nested_depth > 0 {
+                    // End of nested quoted triple
+                    nested_depth -= 1;
+                    current_part.push(ch);
+                }
+            }
+            ' ' | '\t' | '\n' | '\r' if !in_quotes && !in_angle_brackets && nested_depth == 0 => {
+                if !current_part.is_empty() {
+                    parts.push(current_part.trim().to_string());
+                    current_part.clear();
+                }
+            }
+            _ => {
+                current_part.push(ch);
+            }
+        }
+    }
+    
+    if !current_part.is_empty() {
+        parts.push(current_part.trim().to_string());
+    }
+    
+    Ok(parts)
+}
+
+/// Extract a single quoted triple pattern starting from position
+fn extract_single_quoted_pattern(text: &str) -> FusekiResult<Option<String>> {
+    if !text.starts_with("<<") {
+        return Ok(None);
+    }
+    
+    let mut depth = 0;
+    let mut pos = 0;
+    let chars: Vec<char> = text.chars().collect();
+    
+    for i in 0..chars.len() {
+        if i + 1 < chars.len() && chars[i] == '<' && chars[i + 1] == '<' {
+            depth += 1;
+        } else if i + 1 < chars.len() && chars[i] == '>' && chars[i + 1] == '>' {
+            depth -= 1;
+            if depth == 0 {
+                pos = i + 2;
+                break;
+            }
+        }
+    }
+    
+    if pos > 0 {
+        Ok(Some(text[..pos].to_string()))
+    } else {
+        Ok(None)
+    }
 }

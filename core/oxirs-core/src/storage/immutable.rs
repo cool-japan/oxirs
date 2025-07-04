@@ -685,7 +685,7 @@ mod tests {
             Triple::new(
                 NamedNode::new("http://example.org/s2").unwrap(),
                 NamedNode::new("http://example.org/p2").unwrap(),
-                crate::model::Object::Literal(crate::model::Literal::new("test")),
+                crate::model::Object::Literal(Literal::new("test")),
             ),
         ];
 
@@ -728,7 +728,7 @@ mod tests {
         let triple = Triple::new(
             NamedNode::new("http://example.org/s").unwrap(),
             NamedNode::new("http://example.org/p").unwrap(),
-            crate::model::Object::Literal(crate::model::Literal::new("value")),
+            crate::model::Object::Literal(Literal::new("value")),
         );
 
         let triples = vec![triple.clone(), triple.clone(), triple.clone()];

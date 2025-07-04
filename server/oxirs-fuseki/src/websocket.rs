@@ -620,7 +620,7 @@ impl SubscriptionManager {
     }
 
     /// Validate subscription query
-    fn validate_subscription_query(query: &str) -> FusekiResult<()> {
+    pub fn validate_subscription_query(query: &str) -> FusekiResult<()> {
         // Basic validation
         if query.trim().is_empty() {
             return Err(FusekiError::bad_request("Empty query"));
@@ -658,21 +658,10 @@ impl SubscriptionManager {
                 .map(|entry| entry.key().clone())
                 .collect();
 
-            // Evaluate subscriptions in parallel
-            let futures: Vec<_> = subscription_ids
-                .into_iter()
-                .map(|id: String| {
-                    let id_clone = id.clone();
-                    self.evaluate_subscription(&id_clone)
-                })
-                .collect();
-
-            let results = futures::future::join_all(futures).await;
-
-            // Log errors
-            for result in results {
-                if let Err(e) = result {
-                    error!("Subscription evaluation error: {}", e);
+            // Evaluate subscriptions sequentially due to borrowing constraints
+            for id in subscription_ids {
+                if let Err(e) = self.evaluate_subscription(&id).await {
+                    error!("Subscription evaluation error for {}: {}", id, e);
                 }
             }
         }

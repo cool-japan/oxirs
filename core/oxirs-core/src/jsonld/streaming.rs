@@ -4,31 +4,27 @@
 //! with zero-copy operations, SIMD acceleration, and adaptive buffering.
 
 use crate::{
-    interning::STRING_INTERNER,
-    jsonld::{JsonLdParseError, JsonLdParser, JsonLdSerializer},
-    model::{BlankNode, Literal, NamedNode, Object, Predicate, Quad, Subject, Term, Triple},
+    jsonld::JsonLdParseError,
+    model::{NamedNode, Object, Predicate, Quad, Subject, Triple},
     optimization::{SimdJsonProcessor, TermInterner, TermInternerExt, ZeroCopyBuffer},
 };
-use async_trait::async_trait;
+// Removed unused async_trait::async_trait import
 use dashmap::DashMap;
-use futures::{Sink, SinkExt, Stream, StreamExt};
+// Removed unused futures::{SinkExt, StreamExt} imports
 use parking_lot::Mutex;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
-use serde_json::{Deserializer, Map, Value};
+use serde_json::{Map, Value};
 use std::{
     collections::VecDeque,
     error::Error as StdError,
-    future::Future,
-    pin::Pin,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    task::{Context, Poll},
 };
 use tokio::{
-    io::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, BufReader},
+    io::{AsyncRead, AsyncReadExt, BufReader},
     sync::{mpsc, RwLock, Semaphore},
     time::{Duration, Instant},
 };

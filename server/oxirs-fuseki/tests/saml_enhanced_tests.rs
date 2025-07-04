@@ -1,5 +1,7 @@
 //! Enhanced SAML 2.0 authentication tests
 
+#![cfg(feature = "saml")]
+
 use chrono::Utc;
 use std::collections::HashMap;
 

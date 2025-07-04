@@ -307,6 +307,12 @@ struct ActiveStream {
     page_strategy: AdaptivePagingStrategy,
 }
 
+impl Default for StreamingOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StreamingOptimizer {
     /// Create a new streaming optimizer
     pub fn new() -> Self {

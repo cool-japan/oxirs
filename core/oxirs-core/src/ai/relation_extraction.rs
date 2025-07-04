@@ -263,14 +263,14 @@ impl RelationExtractor {
                 NamedNode::new(kb_id)?
             } else {
                 // Use text as identifier (simplified)
-                NamedNode::new(&format!(
+                NamedNode::new(format!(
                     "http://example.org/entity/{}",
                     relation.subject.text.replace(' ', "_")
                 ))?
             };
 
             // Create predicate
-            let predicate = NamedNode::new(&format!(
+            let predicate = NamedNode::new(format!(
                 "http://example.org/relation/{}",
                 relation.predicate.replace(' ', "_")
             ))?;
@@ -287,7 +287,7 @@ impl RelationExtractor {
                     | EntityType::Percent => {
                         crate::model::Object::Literal(Literal::new(&relation.object.text))
                     }
-                    _ => crate::model::Object::NamedNode(NamedNode::new(&format!(
+                    _ => crate::model::Object::NamedNode(NamedNode::new(format!(
                         "http://example.org/entity/{}",
                         relation.object.text.replace(' ', "_")
                     ))?),

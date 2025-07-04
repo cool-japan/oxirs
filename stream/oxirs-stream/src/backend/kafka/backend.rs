@@ -24,6 +24,8 @@ use crate::types::{Offset, PartitionId, StreamPosition, TopicName};
 use crate::{StreamBackend, StreamConfig, StreamEvent};
 use anyhow::Result;
 use async_trait::async_trait;
+use crate::consumer::ConsumerGroup;
+use rdkafka::producer::Producer;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -57,7 +59,7 @@ pub struct KafkaBackend {
 impl KafkaBackend {
     /// Create a new Kafka backend with the given configuration
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let kafka_config = if let StreamBackend::Kafka { brokers, .. } = &config.backend {
+        let kafka_config = if let crate::StreamBackendType::Kafka { brokers, .. } = &config.backend {
             KafkaProducerConfig {
                 brokers: brokers.clone(),
                 ..Default::default()
@@ -196,7 +198,7 @@ impl KafkaBackend {
             let new_topic = NewTopic::new(
                 topic_name,
                 partitions,
-                TopicReplication::Fixed(replication_factor),
+                TopicReplication::Fixed(replication_factor.into()),
             );
             let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(30)));
 
@@ -645,13 +647,14 @@ impl StreamBackendTrait for KafkaBackend {
                             // Deserialize the KafkaEvent
                             match serde_json::from_slice::<KafkaEvent>(payload) {
                                 Ok(kafka_event) => {
+                                    let event_id = kafka_event.event_id.clone();
                                     let stream_event = kafka_event.to_stream_event();
                                     let offset = Offset::new(message.offset() as u64);
                                     events.push((stream_event, offset));
 
                                     debug!(
                                         "Received event from Kafka: {} at offset {}",
-                                        kafka_event.event_id,
+                                        event_id,
                                         message.offset()
                                     );
                                 }
@@ -1040,7 +1043,7 @@ mod tests {
     #[tokio::test]
     async fn test_kafka_backend_creation() {
         let config = StreamConfig {
-            backend: StreamBackend::Kafka {
+            backend: crate::StreamBackendType::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
                 topic: "test_topic".to_string(),
             },
@@ -1087,7 +1090,7 @@ mod tests {
     #[tokio::test]
     async fn test_stats_update() {
         let config = StreamConfig {
-            backend: StreamBackend::Kafka {
+            backend: crate::StreamBackendType::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
                 topic: "test_topic".to_string(),
             },

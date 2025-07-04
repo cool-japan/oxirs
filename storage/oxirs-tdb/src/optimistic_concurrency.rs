@@ -40,7 +40,7 @@ pub enum ConflictType {
 }
 
 /// Validation result with detailed conflict information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ValidationResult {
     /// Transaction is valid and can commit
     Valid,
@@ -462,7 +462,7 @@ impl OptimisticConcurrencyController {
 
                 // Update conflict statistics
                 if let ValidationResult::Conflict { conflict_type, .. } = &result {
-                    *stats.conflicts_by_type.entry(*conflict_type).or_insert(0) += 1;
+                    *stats.conflicts_by_type.entry(conflict_type.clone()).or_insert(0) += 1;
                     stats.validation_failures += 1;
                 }
             }

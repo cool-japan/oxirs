@@ -70,13 +70,11 @@ pub fn generate_turtle_report(report: &ValidationReport) -> Result<String> {
             writeln!(output, "        [ a sh:ValidationResult ;")?;
 
             // Focus node
-            if let Some(focus_node) = &violation.focus_node {
-                writeln!(
-                    output,
-                    "            sh:focusNode {} ;",
-                    format_term_turtle(focus_node)
-                )?;
-            }
+            writeln!(
+                output,
+                "            sh:focusNode {} ;",
+                format_term_turtle(&violation.focus_node)
+            )?;
 
             // Result path
             if let Some(path) = &violation.result_path {
@@ -97,22 +95,18 @@ pub fn generate_turtle_report(report: &ValidationReport) -> Result<String> {
             }
 
             // Source constraint component
-            if let Some(component) = &violation.source_constraint_component {
-                writeln!(
-                    output,
-                    "            sh:sourceConstraintComponent {} ;",
-                    format_iri_turtle(component.as_str())
-                )?;
-            }
+            writeln!(
+                output,
+                "            sh:sourceConstraintComponent {} ;",
+                format_iri_turtle(violation.source_constraint_component.as_str())
+            )?;
 
             // Source shape
-            if let Some(shape) = &violation.source_shape {
-                writeln!(
-                    output,
-                    "            sh:sourceShape {} ;",
-                    format_iri_turtle(shape.as_str())
-                )?;
-            }
+            writeln!(
+                output,
+                "            sh:sourceShape {} ;",
+                format_iri_turtle(violation.source_shape.as_str())
+            )?;
 
             // Result severity
             let severity_iri = match violation.result_severity {
@@ -183,9 +177,7 @@ pub fn generate_jsonld_report(report: &ValidationReport) -> Result<String> {
                     Value::String("sh:ValidationResult".to_string()),
                 );
 
-                if let Some(focus_node) = &violation.focus_node {
-                    result.insert("sh:focusNode".to_string(), format_term_jsonld(focus_node));
-                }
+                result.insert("sh:focusNode".to_string(), format_term_jsonld(&violation.focus_node));
 
                 if let Some(path) = &violation.result_path {
                     result.insert("sh:resultPath".to_string(), format_path_jsonld(path));
@@ -195,19 +187,15 @@ pub fn generate_jsonld_report(report: &ValidationReport) -> Result<String> {
                     result.insert("sh:value".to_string(), format_term_jsonld(value));
                 }
 
-                if let Some(component) = &violation.source_constraint_component {
-                    result.insert(
-                        "sh:sourceConstraintComponent".to_string(),
-                        Value::String(format!("sh:{}", component.as_str())),
-                    );
-                }
+                result.insert(
+                    "sh:sourceConstraintComponent".to_string(),
+                    Value::String(format!("sh:{}", violation.source_constraint_component.as_str())),
+                );
 
-                if let Some(shape) = &violation.source_shape {
-                    result.insert(
-                        "sh:sourceShape".to_string(),
-                        Value::String(shape.as_str().to_string()),
-                    );
-                }
+                result.insert(
+                    "sh:sourceShape".to_string(),
+                    Value::String(violation.source_shape.as_str().to_string()),
+                );
 
                 let severity = match violation.result_severity {
                     Severity::Violation => "sh:Violation",
@@ -274,13 +262,11 @@ pub fn generate_rdfxml_report(report: &ValidationReport) -> Result<String> {
             result_id
         )?;
 
-        if let Some(focus_node) = &violation.focus_node {
-            writeln!(
-                output,
-                "        <sh:focusNode rdf:resource=\"{}\"/>",
-                format_term_rdfxml(focus_node)
-            )?;
-        }
+        writeln!(
+            output,
+            "        <sh:focusNode rdf:resource=\"{}\"/>",
+            format_term_rdfxml(&violation.focus_node)
+        )?;
 
         if let Some(path) = &violation.result_path {
             writeln!(
@@ -298,18 +284,14 @@ pub fn generate_rdfxml_report(report: &ValidationReport) -> Result<String> {
             )?;
         }
 
-        if let Some(component) = &violation.source_constraint_component {
-            writeln!(output, "        <sh:sourceConstraintComponent rdf:resource=\"http://www.w3.org/ns/shacl#{}\"/>", 
-                component.as_str())?;
-        }
+        writeln!(output, "        <sh:sourceConstraintComponent rdf:resource=\"http://www.w3.org/ns/shacl#{}\"/>", 
+            violation.source_constraint_component.as_str())?;
 
-        if let Some(shape) = &violation.source_shape {
-            writeln!(
-                output,
-                "        <sh:sourceShape rdf:resource=\"{}\"/>",
-                shape.as_str()
-            )?;
-        }
+        writeln!(
+            output,
+            "        <sh:sourceShape rdf:resource=\"{}\"/>",
+            violation.source_shape.as_str()
+        )?;
 
         let severity_iri = match violation.result_severity {
             Severity::Violation => "http://www.w3.org/ns/shacl#Violation",
@@ -368,14 +350,12 @@ pub fn generate_ntriples_report(report: &ValidationReport) -> Result<String> {
         writeln!(output, "{} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationResult> .", result_iri)?;
 
         // Focus node
-        if let Some(focus_node) = &violation.focus_node {
-            writeln!(
-                output,
-                "{} <http://www.w3.org/ns/shacl#focusNode> {} .",
-                result_iri,
-                format_term_ntriples(focus_node)
-            )?;
-        }
+        writeln!(
+            output,
+            "{} <http://www.w3.org/ns/shacl#focusNode> {} .",
+            result_iri,
+            format_term_ntriples(&violation.focus_node)
+        )?;
 
         // Result path
         if let Some(path) = &violation.result_path {
@@ -398,20 +378,16 @@ pub fn generate_ntriples_report(report: &ValidationReport) -> Result<String> {
         }
 
         // Source constraint component
-        if let Some(component) = &violation.source_constraint_component {
-            writeln!(output, "{} <http://www.w3.org/ns/shacl#sourceConstraintComponent> <http://www.w3.org/ns/shacl#{}> .", 
-                result_iri, component.as_str())?;
-        }
+        writeln!(output, "{} <http://www.w3.org/ns/shacl#sourceConstraintComponent> <http://www.w3.org/ns/shacl#{}> .", 
+            result_iri, violation.source_constraint_component.as_str())?;
 
         // Source shape
-        if let Some(shape) = &violation.source_shape {
-            writeln!(
-                output,
-                "{} <http://www.w3.org/ns/shacl#sourceShape> <{}> .",
-                result_iri,
-                shape.as_str()
-            )?;
-        }
+        writeln!(
+            output,
+            "{} <http://www.w3.org/ns/shacl#sourceShape> <{}> .",
+            result_iri,
+            violation.source_shape.as_str()
+        )?;
 
         // Result severity
         let severity_iri = match violation.result_severity {
@@ -461,12 +437,10 @@ pub fn generate_json_report(report: &ValidationReport) -> Result<String> {
         .map(|violation| {
             let mut v = serde_json::Map::new();
 
-            if let Some(focus_node) = &violation.focus_node {
-                v.insert(
-                    "focusNode".to_string(),
-                    Value::String(format!("{:?}", focus_node)),
-                );
-            }
+            v.insert(
+                "focusNode".to_string(),
+                Value::String(format!("{:?}", violation.focus_node)),
+            );
 
             if let Some(path) = &violation.result_path {
                 v.insert(
@@ -479,19 +453,15 @@ pub fn generate_json_report(report: &ValidationReport) -> Result<String> {
                 v.insert("value".to_string(), Value::String(format!("{:?}", value)));
             }
 
-            if let Some(component) = &violation.source_constraint_component {
-                v.insert(
-                    "sourceConstraintComponent".to_string(),
-                    Value::String(component.as_str().to_string()),
-                );
-            }
+            v.insert(
+                "sourceConstraintComponent".to_string(),
+                Value::String(violation.source_constraint_component.as_str().to_string()),
+            );
 
-            if let Some(shape) = &violation.source_shape {
-                v.insert(
-                    "sourceShape".to_string(),
-                    Value::String(shape.as_str().to_string()),
-                );
-            }
+            v.insert(
+                "sourceShape".to_string(),
+                Value::String(violation.source_shape.as_str().to_string()),
+            );
 
             v.insert(
                 "severity".to_string(),
@@ -685,11 +655,7 @@ pub fn generate_html_report(report: &ValidationReport) -> Result<String> {
             writeln!(
                 output,
                 "                        <td class=\"focus-node\">{}</td>",
-                violation
-                    .focus_node
-                    .as_ref()
-                    .map(|n| format!("{:?}", n))
-                    .unwrap_or_else(|| "-".to_string())
+format!("{:?}", violation.focus_node)
             )?;
             writeln!(
                 output,
@@ -720,20 +686,12 @@ pub fn generate_html_report(report: &ValidationReport) -> Result<String> {
             writeln!(
                 output,
                 "                        <td class=\"shape\">{}</td>",
-                violation
-                    .source_shape
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or("-")
+violation.source_shape.as_str()
             )?;
             writeln!(
                 output,
                 "                        <td class=\"constraint\">{}</td>",
-                violation
-                    .source_constraint_component
-                    .as_ref()
-                    .map(|c| c.as_str())
-                    .unwrap_or("-")
+violation.source_constraint_component.as_str()
             )?;
             writeln!(output, "                    </tr>")?;
         }
@@ -768,11 +726,7 @@ pub fn generate_csv_report(report: &ValidationReport) -> Result<String> {
     // CSV rows
     for violation in report.violations() {
         let severity = format!("{:?}", violation.result_severity);
-        let focus_node = violation
-            .focus_node
-            .as_ref()
-            .map(|n| format!("{:?}", n))
-            .unwrap_or_else(|| "".to_string());
+        let focus_node = format!("{:?}", violation.focus_node);
         let result_path = violation
             .result_path
             .as_ref()
@@ -788,16 +742,8 @@ pub fn generate_csv_report(report: &ValidationReport) -> Result<String> {
             .as_ref()
             .unwrap_or(&"".to_string())
             .clone();
-        let source_shape = violation
-            .source_shape
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or("");
-        let source_constraint = violation
-            .source_constraint_component
-            .as_ref()
-            .map(|c| c.as_str())
-            .unwrap_or("");
+        let source_shape = violation.source_shape.as_str();
+        let source_constraint = violation.source_constraint_component.as_str();
 
         writeln!(
             output,
@@ -878,9 +824,7 @@ pub fn generate_text_report(report: &ValidationReport) -> Result<String> {
                     .unwrap_or(&"No message".to_string())
             )?;
 
-            if let Some(focus_node) = &violation.focus_node {
-                writeln!(output, "   Focus Node: {:?}", focus_node)?;
-            }
+            writeln!(output, "   Focus Node: {:?}", violation.focus_node)?;
 
             if let Some(path) = &violation.result_path {
                 writeln!(output, "   Result Path: {:?}", path)?;
@@ -890,13 +834,9 @@ pub fn generate_text_report(report: &ValidationReport) -> Result<String> {
                 writeln!(output, "   Value: {:?}", value)?;
             }
 
-            if let Some(shape) = &violation.source_shape {
-                writeln!(output, "   Source Shape: {}", shape.as_str())?;
-            }
+            writeln!(output, "   Source Shape: {}", violation.source_shape.as_str())?;
 
-            if let Some(component) = &violation.source_constraint_component {
-                writeln!(output, "   Constraint Component: {}", component.as_str())?;
-            }
+            writeln!(output, "   Constraint Component: {}", violation.source_constraint_component.as_str())?;
 
             writeln!(output)?;
         }
@@ -954,13 +894,11 @@ pub fn generate_yaml_report(report: &ValidationReport) -> Result<String> {
         for violation in report.violations() {
             writeln!(output, "    - severity: {:?}", violation.result_severity)?;
 
-            if let Some(focus_node) = &violation.focus_node {
-                writeln!(
-                    output,
-                    "      focusNode: \"{}\"",
-                    format!("{:?}", focus_node).replace("\"", "\\\"")
-                )?;
-            }
+            writeln!(
+                output,
+                "      focusNode: \"{}\"",
+                format!("{:?}", violation.focus_node).replace("\"", "\\\"")
+            )?;
 
             if let Some(path) = &violation.result_path {
                 writeln!(
@@ -986,17 +924,13 @@ pub fn generate_yaml_report(report: &ValidationReport) -> Result<String> {
                 )?;
             }
 
-            if let Some(shape) = &violation.source_shape {
-                writeln!(output, "      sourceShape: \"{}\"", shape.as_str())?;
-            }
+            writeln!(output, "      sourceShape: \"{}\"", violation.source_shape.as_str())?;
 
-            if let Some(component) = &violation.source_constraint_component {
-                writeln!(
-                    output,
-                    "      sourceConstraintComponent: \"{}\"",
-                    component.as_str()
-                )?;
-            }
+            writeln!(
+                output,
+                "      sourceConstraintComponent: \"{}\"",
+                violation.source_constraint_component.as_str()
+            )?;
         }
     } else {
         writeln!(output, "  violations: []")?;

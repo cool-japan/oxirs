@@ -14,13 +14,13 @@ pub struct Message {
     pub thread_id: Option<String>,
     pub parent_message_id: Option<String>,
     pub token_count: Option<usize>,
-    pub reactions: Vec<MessageReaction>,
+    pub reactions: Vec<crate::types::MessageReaction>,
     pub attachments: Vec<MessageAttachment>,
     pub rich_elements: Vec<RichContentElement>,
 }
 
 /// Message role enumeration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum MessageRole {
     User,
     Assistant,
@@ -261,13 +261,7 @@ pub struct MessageMetadata {
     pub custom_fields: HashMap<String, serde_json::Value>,
 }
 
-/// Message reaction for user feedback
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MessageReaction {
-    pub user_id: String,
-    pub reaction_type: ReactionType,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-}
+// MessageReaction is now defined in types.rs and re-exported from crate root
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ReactionType {

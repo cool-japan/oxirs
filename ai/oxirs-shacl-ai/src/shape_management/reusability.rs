@@ -207,6 +207,18 @@ pub enum PatternType {
     Composite,
 }
 
+impl std::fmt::Display for PatternType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PatternType::Structural => write!(f, "Structural"),
+            PatternType::Behavioral => write!(f, "Behavioral"),
+            PatternType::Constraint => write!(f, "Constraint"),
+            PatternType::Semantic => write!(f, "Semantic"),
+            PatternType::Composite => write!(f, "Composite"),
+        }
+    }
+}
+
 /// Pattern component
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PatternComponent {

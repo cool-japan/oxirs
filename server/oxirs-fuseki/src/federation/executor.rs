@@ -16,7 +16,7 @@ use tokio::{
 };
 use url::Url;
 
-use oxirs_arq::{Query, QueryType};
+use oxirs_arq::query::{Query, QueryType};
 use oxirs_core::query::QueryResults;
 
 use crate::{

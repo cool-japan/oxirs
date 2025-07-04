@@ -580,6 +580,8 @@ pub struct UserConfig {
 
     pub roles: Vec<String>,
 
+    pub permissions: Vec<crate::auth::types::Permission>,
+
     pub enabled: bool,
 
     pub email: Option<String>,
@@ -1481,6 +1483,7 @@ mod tests {
         let user = UserConfig {
             password_hash: "$argon2id$v=19$m=65536,t=3,p=4$...".to_string(),
             roles: vec!["admin".to_string(), "user".to_string()],
+            permissions: vec![],
             enabled: true,
             email: Some("admin@example.com".to_string()),
             full_name: Some("Administrator".to_string()),

@@ -12,43 +12,43 @@ pub mod rdf {
 
     /// rdf:type predicate
     pub static TYPE: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}type", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}type")));
 
     /// rdf:Property class
     pub static PROPERTY: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}Property", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}Property")));
 
     /// rdf:Resource class
     pub static RESOURCE: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}Resource", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}Resource")));
 
     /// rdf:Statement class
     pub static STATEMENT: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}Statement", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}Statement")));
 
     /// rdf:subject predicate
     pub static SUBJECT: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}subject", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}subject")));
 
     /// rdf:predicate predicate
     pub static PREDICATE: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}predicate", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}predicate")));
 
     /// rdf:object predicate
     pub static OBJECT: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}object", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}object")));
 
     /// rdf:List class
     pub static LIST: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}List", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}List")));
 
     /// rdf:first predicate
     pub static FIRST: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}first", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}first")));
 
     /// rdf:rest predicate
     pub static REST: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}rest", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}rest")));
 
     /// rdf:nil resource
     pub static NIL: LazyLock<NamedNode> =
@@ -73,7 +73,7 @@ pub mod xsd {
 
     /// xsd:string datatype
     pub static STRING: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}string", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}string")));
 
     /// xsd:boolean datatype
     pub static BOOLEAN: LazyLock<NamedNode> =
@@ -85,15 +85,15 @@ pub mod xsd {
 
     /// xsd:decimal datatype
     pub static DECIMAL: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}decimal", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}decimal")));
 
     /// xsd:double datatype
     pub static DOUBLE: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}double", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}double")));
 
     /// xsd:float datatype
     pub static FLOAT: LazyLock<NamedNode> =
-        LazyLock::new(|| NamedNode::new_unchecked(format!("{}float", NAMESPACE)));
+        LazyLock::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}float")));
 
     /// xsd:date datatype
     pub static DATE: LazyLock<NamedNode> =

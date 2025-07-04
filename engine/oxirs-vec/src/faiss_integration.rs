@@ -835,6 +835,16 @@ impl FaissIndex {
 
         Ok(vector_memory + metadata_memory)
     }
+
+    /// Get the dimension of vectors in the index
+    pub fn dimension(&self) -> usize {
+        self.config.dimension
+    }
+
+    /// Get the number of vectors in the index
+    pub fn size(&self) -> usize {
+        self.vectors.read().map(|v| v.len()).unwrap_or(0)
+    }
 }
 
 impl VectorIndex for FaissIndex {

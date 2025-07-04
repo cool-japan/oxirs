@@ -7,6 +7,7 @@ use super::types::RagDocument;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 use std::time::Duration;
+use fastrand;
 
 /// Quantum-inspired state for retrieval optimization
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,7 +69,7 @@ impl QuantumRetrievalState {
             let tunneling_prob = (-2.0 * barrier_height.sqrt()).exp();
 
             // If tunneling occurs, boost probability of low-scoring but potentially relevant results
-            if result.quantum_probability < 0.3 && rand::random::<f64>() < tunneling_prob {
+            if result.quantum_probability < 0.3 && fastrand::f64() < tunneling_prob {
                 result.quantum_probability *= 1.5;
                 result.entanglement_score *= 1.2;
             }

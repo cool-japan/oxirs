@@ -11,7 +11,7 @@ use anyhow::{Context, Error as AnyhowError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 #[cfg(feature = "async")]
 use tokio::time::timeout;
 use url::Url;
@@ -116,7 +116,7 @@ pub struct EndpointHealth {
     /// Is endpoint currently healthy
     pub is_healthy: bool,
     /// Last health check time
-    pub last_check: Option<Instant>,
+    pub last_check: Option<SystemTime>,
     /// Response time in milliseconds
     pub response_time: Option<u64>,
     /// Error count in last window
@@ -151,6 +151,7 @@ pub struct EndpointMetrics {
     /// Request rate per second
     pub request_rate: f64,
     /// Last metric update time
+    #[serde(skip)]
     pub last_update: Option<Instant>,
 }
 
@@ -231,6 +232,7 @@ pub struct RequestMetadata {
     /// Priority level
     pub priority: u8,
     /// Request timestamp
+    #[serde(skip, default = "std::time::Instant::now")]
     pub timestamp: Instant,
     /// Coordination data
     pub coordination: Option<CoordinationData>,

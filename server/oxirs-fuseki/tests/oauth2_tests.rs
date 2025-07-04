@@ -1,5 +1,6 @@
 //! Tests for OAuth2/OIDC authentication
 
+use axum::body::to_bytes;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use oxirs_fuseki::{
     auth::{oauth::OAuth2Service, AuthResult, AuthService, User},
@@ -50,7 +51,7 @@ async fn test_auth_service_oauth2_integration() {
         scopes: vec!["openid".to_string(), "profile".to_string()],
     });
 
-    let auth_service = AuthService::new(security_config);
+    let auth_service = AuthService::new(security_config).await.unwrap();
 
     // Verify OAuth2 is enabled
     assert!(auth_service.is_oauth2_enabled());
@@ -92,7 +93,7 @@ async fn test_oauth2_handler_authorization_flow() {
         scopes: vec!["openid".to_string()],
     });
 
-    let auth_service = AuthService::new(security_config.clone());
+    let auth_service = AuthService::new(security_config.clone()).await.unwrap();
     let state = AppState {
         store: oxirs_fuseki::store::Store::new().unwrap(),
         config: oxirs_fuseki::config::ServerConfig {
@@ -129,7 +130,7 @@ async fn test_oauth2_handler_authorization_flow() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["success"], true);

@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
 /// Snapshot format version
@@ -179,7 +179,7 @@ pub struct EnhancedSnapshotManager {
     /// Data directory
     data_dir: PathBuf,
     /// Binary serializer
-    serializer: BinarySerializer,
+    serializer: Arc<Mutex<BinarySerializer>>,
     /// Corruption detector
     corruption_detector: CorruptionDetector,
     /// Active transfers
@@ -198,7 +198,7 @@ impl EnhancedSnapshotManager {
         Self {
             node_id,
             data_dir,
-            serializer,
+            serializer: Arc::new(Mutex::new(serializer)),
             corruption_detector,
             active_transfers: Arc::new(RwLock::new(HashMap::new())),
             snapshot_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -232,7 +232,9 @@ impl EnhancedSnapshotManager {
         };
 
         // Serialize the snapshot data
-        let serialized_data = self.serializer.serialize(&snapshot_data)?;
+        let mut serializer = self.serializer.lock().await;
+        let serialized_data = serializer.serialize(&snapshot_data)?;
+        drop(serializer);
 
         // Create chunks
         let chunks = self.create_chunks(&serialized_data, options.chunk_size);
@@ -282,7 +284,9 @@ impl EnhancedSnapshotManager {
 
         // Save metadata
         let metadata_path = snapshot_dir.join("metadata.json");
-        let metadata_data = self.serializer.serialize(&enhanced_metadata)?;
+        let mut serializer = self.serializer.lock().await;
+        let metadata_data = serializer.serialize(&enhanced_metadata)?;
+        drop(serializer);
         let mut writer = AtomicFileWriter::new(&metadata_path).await?;
         writer.write_all(&metadata_data).await?;
         writer.commit().await?;
@@ -334,7 +338,7 @@ impl EnhancedSnapshotManager {
         }
 
         let metadata_data = tokio::fs::read(&metadata_path).await?;
-        let metadata: EnhancedSnapshotMetadata = self.serializer.deserialize(&metadata_data)?;
+        let metadata: EnhancedSnapshotMetadata = self.serializer.lock().await.deserialize(&metadata_data)?;
 
         // Cache metadata
         {
@@ -379,9 +383,9 @@ impl EnhancedSnapshotManager {
         let app_state: RdfApp = if metadata.is_incremental {
             // For incremental snapshots, we'd need to apply the diff to a base snapshot
             // This is a simplified implementation
-            self.serializer.deserialize(&all_data)?
+            self.serializer.lock().await.deserialize(&all_data)?
         } else {
-            self.serializer.deserialize(&all_data)?
+            self.serializer.lock().await.deserialize(&all_data)?
         };
 
         info!(
@@ -601,7 +605,7 @@ impl Clone for EnhancedSnapshotManager {
         Self {
             node_id: self.node_id,
             data_dir: self.data_dir.clone(),
-            serializer: BinarySerializer::new(SerializationConfig::default()),
+            serializer: Arc::new(Mutex::new(BinarySerializer::new(SerializationConfig::default()))),
             corruption_detector: CorruptionDetector::new(true),
             active_transfers: Arc::clone(&self.active_transfers),
             snapshot_cache: Arc::clone(&self.snapshot_cache),

@@ -52,7 +52,7 @@ impl OptimizationEngine {
     }
 
     /// Optimize SHACL shapes for better performance
-    pub fn optimize_shapes(&mut self, shapes: &[Shape], store: &Store) -> Result<Vec<Shape>> {
+    pub fn optimize_shapes(&mut self, shapes: &[Shape], store: &dyn Store) -> Result<Vec<Shape>> {
         tracing::info!("Optimizing {} SHACL shapes for performance", shapes.len());
         let start_time = Instant::now();
 
@@ -113,7 +113,7 @@ impl OptimizationEngine {
     /// Optimize validation strategy for better performance
     pub fn optimize_validation_strategy(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<OptimizedValidationStrategy> {
         tracing::info!("Optimizing validation strategy for {} shapes", shapes.len());
@@ -181,7 +181,7 @@ impl OptimizationEngine {
     /// Generate optimization recommendations
     pub fn generate_optimization_recommendations(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         validation_history: &[ValidationReport],
     ) -> Result<Vec<OptimizationRecommendation>> {
@@ -281,7 +281,7 @@ impl OptimizationEngine {
     fn optimize_constraint_ordering(
         &self,
         shapes: Vec<Shape>,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<Vec<Shape>> {
         tracing::debug!("Optimizing constraint ordering for {} shapes", shapes.len());
 
@@ -334,7 +334,7 @@ impl OptimizationEngine {
     fn estimate_constraint_selectivity(
         &self,
         constraint: &Constraint,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<f64> {
         match constraint {
             // High selectivity constraints (filter lots of data)
@@ -734,12 +734,12 @@ impl OptimizationEngine {
         self.merge_shapes_union(shape1, shape2)
     }
 
-    fn apply_genetic_optimization(&self, shapes: Vec<Shape>, _store: &Store) -> Result<Vec<Shape>> {
+    fn apply_genetic_optimization(&self, shapes: Vec<Shape>, _store: &dyn Store) -> Result<Vec<Shape>> {
         // TODO: Implement genetic algorithm optimization
         Ok(shapes)
     }
 
-    fn analyze_graph_for_optimization(&self, _store: &Store) -> Result<GraphAnalysis> {
+    fn analyze_graph_for_optimization(&self, _store: &dyn Store) -> Result<GraphAnalysis> {
         // TODO: Implement graph analysis
         Ok(GraphAnalysis {
             statistics: GraphStatistics {
@@ -764,7 +764,7 @@ impl OptimizationEngine {
     fn optimize_execution_order(
         &self,
         shapes: &[Shape],
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<Vec<ShapeExecutionPlan>> {
         // TODO: Implement execution order optimization
         let mut plans = Vec::new();
@@ -784,7 +784,7 @@ impl OptimizationEngine {
     fn optimize_parallel_execution(
         &self,
         _shapes: &[Shape],
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<ParallelExecutionStrategy> {
         // TODO: Implement parallel execution optimization
         Ok(ParallelExecutionStrategy {
@@ -798,7 +798,7 @@ impl OptimizationEngine {
     fn optimize_memory_usage(
         &self,
         _shapes: &[Shape],
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<MemoryOptimization> {
         // TODO: Implement memory optimization
         Ok(MemoryOptimization {
@@ -1116,7 +1116,7 @@ impl OptimizationEngine {
     fn generate_recommendation_for_bottleneck(
         &self,
         bottleneck: &PerformanceBottleneck,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<OptimizationRecommendation> {
         // TODO: Implement recommendation generation
@@ -1356,7 +1356,7 @@ impl OptimizationEngine {
 
     fn analyze_graph_structure_for_recommendations(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
     ) -> Result<Vec<OptimizationRecommendation>> {
         // TODO: Implement graph structure analysis
         Ok(Vec::new())
@@ -1374,7 +1374,7 @@ impl OptimizationEngine {
         format!("shapes_opt_{}", hasher.finish())
     }
 
-    fn create_strategy_cache_key(&self, _store: &Store, shapes: &[Shape]) -> String {
+    fn create_strategy_cache_key(&self, _store: &dyn Store, shapes: &[Shape]) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 

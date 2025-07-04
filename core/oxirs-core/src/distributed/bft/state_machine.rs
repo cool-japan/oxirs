@@ -102,7 +102,7 @@ impl RdfStateMachine {
             hasher.update(triple.object().to_string().as_bytes());
         }
 
-        hasher.update(&self.operation_count.to_le_bytes());
+        hasher.update(self.operation_count.to_le_bytes());
         hasher.finalize().to_vec()
     }
 
@@ -238,7 +238,6 @@ impl Default for RdfStateMachine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::SystemTime;
 
     #[test]
     fn test_state_machine_basic_operations() {

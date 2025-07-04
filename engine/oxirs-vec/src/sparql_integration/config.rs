@@ -125,6 +125,7 @@ pub enum VectorServiceResult {
     Vector(crate::Vector),
     Boolean(bool),
     SimilarityList(Vec<(String, f32)>),
+    DetailedSimilarityList(Vec<(String, f32, std::collections::HashMap<String, String>)>),
     Clusters(Vec<Vec<String>>),
 }
 
@@ -187,6 +188,152 @@ impl VectorQuery {
         }
 
         format!("query_{:x}", hasher.finish())
+    }
+}
+
+/// Vector operation enum for SPARQL queries
+#[derive(Debug, Clone)]
+pub enum VectorOperation {
+    /// Find similar resources to a given resource
+    FindSimilar {
+        resource: String,
+        limit: Option<usize>,
+        threshold: Option<f32>,
+    },
+    /// Calculate similarity between two resources
+    CalculateSimilarity {
+        resource1: String,
+        resource2: String,
+    },
+    /// Search for resources similar to given text
+    SearchText {
+        query: String,
+        limit: Option<usize>,
+        threshold: Option<f32>,
+    },
+    /// Embed text into a vector
+    EmbedText {
+        text: String,
+    },
+    /// Calculate similarity between two vectors
+    VectorSimilarity {
+        vector1: crate::Vector,
+        vector2: crate::Vector,
+    },
+    /// Find nearest neighbors for a given vector
+    VectorKNN {
+        query_vector: crate::Vector,
+        k: usize,
+        threshold: Option<f32>,
+    },
+}
+
+impl VectorOperation {
+    /// Generate a SPARQL SERVICE query for this operation
+    pub fn to_sparql_service_query(&self, service_uri: &str) -> String {
+        match self {
+            VectorOperation::FindSimilar { resource, limit, threshold } => {
+                let limit_clause = limit.map(|l| format!("LIMIT {}", l)).unwrap_or_default();
+                let threshold_param = threshold.unwrap_or(0.0);
+                format!(
+                    r#"
+                    SELECT ?resource ?similarity WHERE {{
+                        SERVICE <{}> {{
+                            SELECT ?resource ?similarity WHERE {{
+                                ?resource vec:similar <{}> .
+                                ?resource vec:similarity ?similarity .
+                                FILTER(?similarity >= {})
+                            }}
+                            ORDER BY DESC(?similarity)
+                            {}
+                        }}
+                    }}
+                    "#,
+                    service_uri, resource, threshold_param, limit_clause
+                )
+            }
+            VectorOperation::CalculateSimilarity { resource1, resource2 } => {
+                format!(
+                    r#"
+                    SELECT ?similarity WHERE {{
+                        SERVICE <{}> {{
+                            SELECT ?similarity WHERE {{
+                                BIND(vec:similarity(<{}>, <{}>) AS ?similarity)
+                            }}
+                        }}
+                    }}
+                    "#,
+                    service_uri, resource1, resource2
+                )
+            }
+            VectorOperation::SearchText { query, limit, threshold } => {
+                let limit_clause = limit.map(|l| format!("LIMIT {}", l)).unwrap_or_default();
+                let threshold_param = threshold.unwrap_or(0.0);
+                format!(
+                    r#"
+                    SELECT ?resource ?similarity WHERE {{
+                        SERVICE <{}> {{
+                            SELECT ?resource ?similarity WHERE {{
+                                ?resource vec:searchText "{}" .
+                                ?resource vec:similarity ?similarity .
+                                FILTER(?similarity >= {})
+                            }}
+                            ORDER BY DESC(?similarity)
+                            {}
+                        }}
+                    }}
+                    "#,
+                    service_uri, query, threshold_param, limit_clause
+                )
+            }
+            VectorOperation::EmbedText { text } => {
+                format!(
+                    r#"
+                    SELECT ?vector WHERE {{
+                        SERVICE <{}> {{
+                            SELECT ?vector WHERE {{
+                                BIND(vec:embedText("{}") AS ?vector)
+                            }}
+                        }}
+                    }}
+                    "#,
+                    service_uri, text
+                )
+            }
+            VectorOperation::VectorSimilarity { .. } => {
+                format!(
+                    r#"
+                    SELECT ?similarity WHERE {{
+                        SERVICE <{}> {{
+                            SELECT ?similarity WHERE {{
+                                BIND(vec:vectorSimilarity(?vector1, ?vector2) AS ?similarity)
+                            }}
+                        }}
+                    }}
+                    "#,
+                    service_uri
+                )
+            }
+            VectorOperation::VectorKNN { k, threshold, .. } => {
+                let threshold_param = threshold.unwrap_or(0.0);
+                format!(
+                    r#"
+                    SELECT ?resource ?similarity WHERE {{
+                        SERVICE <{}> {{
+                            SELECT ?resource ?similarity WHERE {{
+                                ?resource vec:knn ?queryVector .
+                                ?resource vec:similarity ?similarity .
+                                FILTER(?similarity >= {})
+                            }}
+                            ORDER BY DESC(?similarity)
+                            LIMIT {}
+                        }}
+                    }}
+                    "#,
+                    service_uri, threshold_param, k
+                )
+            }
+        }
     }
 }
 

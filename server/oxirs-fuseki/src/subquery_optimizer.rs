@@ -893,8 +893,8 @@ impl MaterializationManager {
 
         if current_size + new_size > max_size {
             // Evict least recently used
-            let mut entries: Vec<_> = views.iter().collect();
-            entries.sort_by_key(|(_, v)| v.last_accessed);
+            let mut entries: Vec<_> = views.iter().map(|(k, v)| (k.clone(), v.last_accessed)).collect();
+            entries.sort_by_key(|(_, last_accessed)| *last_accessed);
 
             let mut freed = 0;
             for (key, _) in entries {
@@ -902,7 +902,7 @@ impl MaterializationManager {
                     break;
                 }
 
-                if let Some(view) = views.remove(key) {
+                if let Some(view) = views.remove(&key) {
                     freed += view.size_bytes;
                 }
             }
@@ -912,12 +912,11 @@ impl MaterializationManager {
     }
 
     async fn update_cache_stats(&self, hit: bool) {
-        if let Ok(mut stats) = self.cache_stats.write().await {
-            if hit {
-                stats.hit_count += 1;
-            } else {
-                stats.miss_count += 1;
-            }
+        let mut stats = self.cache_stats.write().await;
+        if hit {
+            stats.hit_count += 1;
+        } else {
+            stats.miss_count += 1;
         }
     }
 }

@@ -4,7 +4,7 @@
 //! machine learning-based failure prediction, and intelligent recovery.
 
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -349,7 +349,7 @@ impl CircuitBreaker {
         };
 
         // Time of day factor (simplified)
-        let hour = now.hour() as f64;
+        let hour = now.time().hour() as f64;
         let time_of_day_factor = if hour >= 9.0 && hour <= 17.0 {
             1.0
         } else {

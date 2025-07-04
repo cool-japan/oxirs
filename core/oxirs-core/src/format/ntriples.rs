@@ -317,7 +317,7 @@ impl NTriplesParser {
             NTriplesTerm::Iri(iri) => {
                 let named_node = NamedNode::new(iri).map_err(|e| {
                     RdfParseError::syntax_at(
-                        &format!("Invalid subject IRI: {}", e),
+                        format!("Invalid subject IRI: {e}"),
                         TextPosition::new(line_number, 0, 0),
                     )
                 })?;
@@ -326,7 +326,7 @@ impl NTriplesParser {
             NTriplesTerm::BlankNode(id) => {
                 let blank_node = BlankNode::new(id).map_err(|e| {
                     RdfParseError::syntax_at(
-                        &format!("Invalid blank node: {}", e),
+                        format!("Invalid blank node: {e}"),
                         TextPosition::new(line_number, 0, 0),
                     )
                 })?;
@@ -349,7 +349,7 @@ impl NTriplesParser {
             NTriplesTerm::Iri(iri) => {
                 let named_node = NamedNode::new(iri).map_err(|e| {
                     RdfParseError::syntax_at(
-                        &format!("Invalid predicate IRI: {}", e),
+                        format!("Invalid predicate IRI: {e}"),
                         TextPosition::new(line_number, 0, 0),
                     )
                 })?;
@@ -381,7 +381,7 @@ impl NTriplesParser {
             NTriplesTerm::BlankNode(id) => {
                 let blank_node = BlankNode::new(id).map_err(|e| {
                     RdfParseError::syntax_at(
-                        &format!("Invalid blank node: {}", e),
+                        format!("Invalid blank node: {e}"),
                         TextPosition::new(line_number, 0, 0),
                     )
                 })?;

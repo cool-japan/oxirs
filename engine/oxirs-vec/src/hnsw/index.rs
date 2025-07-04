@@ -193,18 +193,57 @@ impl HnswIndex {
 
 impl VectorIndex for HnswIndex {
     fn insert(&mut self, uri: String, vector: Vector) -> Result<()> {
-        // Placeholder implementation - will be moved to construction module
-        todo!("Implementation moved to construction module")
+        // Use the add_vector implementation from construction module
+        self.add_vector(uri, vector)
     }
 
     fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
-        // Placeholder implementation - will be moved to search module
-        todo!("Implementation moved to search module")
+        if self.nodes.is_empty() || self.entry_point.is_none() {
+            return Ok(Vec::new());
+        }
+
+        // Simple brute force search for now (placeholder)
+        // TODO: Implement proper HNSW search algorithm
+        let mut results = Vec::new();
+        
+        for (uri, &node_id) in &self.uri_to_id {
+            if let Some(node) = self.nodes.get(node_id) {
+                // Calculate distance using configured metric
+                let distance = self.config.metric.distance(query, &node.vector)?;
+                results.push((uri.clone(), distance));
+            }
+        }
+        
+        // Sort by distance and take k closest
+        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(k);
+        
+        Ok(results)
     }
 
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
-        // Placeholder implementation - will be moved to search module
-        todo!("Implementation moved to search module")
+        if self.nodes.is_empty() || self.entry_point.is_none() {
+            return Ok(Vec::new());
+        }
+
+        // Simple brute force threshold search for now
+        // TODO: Implement proper HNSW range search algorithm
+        let mut results = Vec::new();
+        
+        for (uri, &node_id) in &self.uri_to_id {
+            if let Some(node) = self.nodes.get(node_id) {
+                // Calculate distance using configured metric
+                let distance = self.config.metric.distance(query, &node.vector)?;
+                if distance <= threshold {
+                    results.push((uri.clone(), distance));
+                }
+            }
+        }
+        
+        // Sort by distance
+        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        
+        Ok(results)
     }
 
     fn get_vector(&self, uri: &str) -> Option<&Vector> {

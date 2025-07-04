@@ -137,7 +137,7 @@ fn test_logical_expressions() {
     // Test NOT
     let not_expr = Expression::Unary {
         op: UnaryOperator::Not,
-        expr: Box::new(Expression::Variable(Variable::new("q").unwrap())),
+        operand: Box::new(Expression::Variable(Variable::new("q").unwrap())),
     };
 
     let result = evaluator.evaluate(&not_expr).unwrap();
@@ -226,7 +226,7 @@ fn test_type_checking_functions() {
     // Test isIRI
     let is_iri_expr = Expression::Unary {
         op: UnaryOperator::IsIri,
-        expr: Box::new(Expression::Variable(Variable::new("iri").unwrap())),
+        operand: Box::new(Expression::Variable(Variable::new("iri").unwrap())),
     };
 
     let result = evaluator.evaluate(&is_iri_expr).unwrap();
@@ -235,7 +235,7 @@ fn test_type_checking_functions() {
     // Test isLiteral
     let is_literal_expr = Expression::Unary {
         op: UnaryOperator::IsLiteral,
-        expr: Box::new(Expression::Variable(Variable::new("lit").unwrap())),
+        operand: Box::new(Expression::Variable(Variable::new("lit").unwrap())),
     };
 
     let result = evaluator.evaluate(&is_literal_expr).unwrap();
@@ -244,7 +244,7 @@ fn test_type_checking_functions() {
     // Test isBlank
     let is_blank_expr = Expression::Unary {
         op: UnaryOperator::IsBlank,
-        expr: Box::new(Expression::Variable(Variable::new("blank").unwrap())),
+        operand: Box::new(Expression::Variable(Variable::new("blank").unwrap())),
     };
 
     let result = evaluator.evaluate(&is_blank_expr).unwrap();
@@ -253,7 +253,7 @@ fn test_type_checking_functions() {
     // Test isNumeric
     let is_numeric_expr = Expression::Unary {
         op: UnaryOperator::IsNumeric,
-        expr: Box::new(Expression::Variable(Variable::new("num").unwrap())),
+        operand: Box::new(Expression::Variable(Variable::new("num").unwrap())),
     };
 
     let result = evaluator.evaluate(&is_numeric_expr).unwrap();

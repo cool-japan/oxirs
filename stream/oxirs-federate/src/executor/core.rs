@@ -3,7 +3,7 @@
 //! This module contains the main FederatedExecutor implementation with basic
 //! execution methods and constructor functions.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use reqwest::Client;
 use std::collections::HashMap;
 use std::sync::Arc;

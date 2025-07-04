@@ -379,7 +379,7 @@ pub struct ConsciousnessProcessor {
 }
 
 /// Processing statistics for consciousness system
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProcessingStats {
     /// Total queries processed
     pub total_queries: u64,

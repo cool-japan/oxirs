@@ -3,13 +3,12 @@
 //! This module provides comprehensive monitoring and metrics collection for federated
 //! query processing, including performance tracking, error monitoring, and observability.
 
-use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Federation performance monitor
 #[derive(Debug)]
@@ -542,7 +541,7 @@ impl FederationMonitor {
             if cache_metrics.hit_rate < 0.5 && cache_metrics.total_requests > 100 {
                 bottlenecks.push(BottleneckReport {
                     bottleneck_type: BottleneckType::PoorCachePerformance,
-                    component: format!("Cache: {}", cache_name),
+                    component: format!("Cache: {cache_name}"),
                     severity: if cache_metrics.hit_rate < 0.2 {
                         BottleneckSeverity::High
                     } else {
@@ -608,7 +607,7 @@ impl FederationMonitor {
                         recent_avg_duration.as_millis() as f64 / historical_avg.as_millis() as f64;
 
                     regressions.push(RegressionReport {
-                        component: format!("Query Type: {}", query_type),
+                        component: format!("Query Type: {query_type}"),
                         regression_type: RegressionType::ResponseTimeIncrease,
                         severity: if degradation_factor > 3.0 {
                             RegressionSeverity::Critical
@@ -642,7 +641,7 @@ impl FederationMonitor {
                     && recent_error_rate > historical_error_rate * 2.0
                 {
                     regressions.push(RegressionReport {
-                        component: format!("Query Type: {}", query_type),
+                        component: format!("Query Type: {query_type}"),
                         regression_type: RegressionType::ErrorRateIncrease,
                         severity: if recent_error_rate > 0.2 {
                             RegressionSeverity::Critical
@@ -687,7 +686,7 @@ impl FederationMonitor {
                     } else {
                         OptimizationPriority::Medium
                     },
-                    title: format!("Improve {} Cache Hit Rate", cache_name),
+                    title: format!("Improve {cache_name} Cache Hit Rate"),
                     description: format!(
                         "Cache {} has a {:.1}% hit rate. Consider increasing cache size, \
                         improving cache key strategies, or extending TTL values.",
@@ -715,7 +714,7 @@ impl FederationMonitor {
                     } else {
                         OptimizationPriority::Medium
                     },
-                    title: format!("Optimize {} Service Performance", service_id),
+                    title: format!("Optimize {service_id} Service Performance"),
                     description: format!(
                         "Service {} has an average response time of {:?}. Consider \
                         implementing connection pooling, query optimization, or scaling the service.",
@@ -1061,7 +1060,7 @@ impl FederationMonitor {
 
                         predictions.push(PerformancePrediction {
                             prediction_type: PredictionType::PerformanceDegradation,
-                            component: format!("Query Type: {}", query_type),
+                            component: format!("Query Type: {query_type}"),
                             predicted_at: SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
                                 .unwrap()

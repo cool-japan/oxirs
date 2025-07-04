@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
+use validator::Validate;
 
 /// Test server builder for creating servers with different configurations
 struct TestServerBuilder {
@@ -62,6 +63,10 @@ impl TestServerBuilder {
             auth_service: None, // Would be Some(auth_service) in real implementation
             metrics_service: None, // Would be Some(Arc::new(metrics_service)) in real implementation
             performance_service: None, // Would be Some(Arc::new(performance_service)) in real implementation
+            query_optimizer: None, // Would be Some(Arc::new(query_optimizer)) in real implementation
+            subscription_manager: None, // Would be Some(Arc::new(subscription_manager)) in real implementation
+            federation_manager: None, // Would be Some(Arc::new(federation_manager)) in real implementation
+            streaming_manager: None, // Would be Some(Arc::new(streaming_manager)) in real implementation
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
         };
@@ -419,7 +424,8 @@ mod graph_store_tests {
                 .await;
 
             response.assert_status_ok();
-            let content_type = response.header("content-type").to_str().unwrap();
+            let content_type_header = response.header("content-type");
+            let content_type = content_type_header.to_str().unwrap();
             assert!(content_type.contains(expected_content_type));
         }
     }
@@ -795,7 +801,8 @@ mod sparql_protocol_tests {
             response.assert_status_ok();
 
             // Verify appropriate response format for query type
-            let content_type = response.header("content-type").to_str().unwrap();
+            let content_type_header = response.header("content-type");
+            let content_type = content_type_header.to_str().unwrap();
             match query_type {
                 "SELECT" | "ASK" => assert!(
                     content_type.contains("sparql-results") || content_type.contains("json")

@@ -11,7 +11,7 @@ use crate::{
     Result, ShaclAiError,
 };
 
-use ndarray::{Array1, Array2, Array3, Array4, Axis};
+use ndarray::{Array1, Array2, Array3, Array4, Axis, s};
 use oxirs_core::{
     model::{Term, Variable},
     query::{
@@ -531,7 +531,7 @@ impl PatternEmbedder {
         let pattern_tokens = self.tokenize_pattern(pattern)?;
         let mut embedding = Array1::zeros(self.config.model_dim);
 
-        for token in pattern_tokens {
+        for token in &pattern_tokens {
             let token_id = self.get_or_create_token_id(&token);
             let token_embedding = self.embedding_table.slice(s![token_id, ..]);
             embedding = embedding + token_embedding;

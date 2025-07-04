@@ -417,9 +417,9 @@ pub enum DamageSensorType {
 #[derive(Debug, Clone)]
 pub enum MetabolicSensorType {
     AMPK,
-    mTOR,
+    MTor,
     SIRT1,
-    HIF1α,
+    HIF1a,
 }
 
 #[derive(Debug, Clone)]
@@ -711,7 +711,7 @@ impl MetabolicCheckpoint {
                     target_metabolite: "AMP".to_string(),
                 },
                 MetabolicSensor {
-                    sensor_type: MetabolicSensorType::mTOR,
+                    sensor_type: MetabolicSensorType::MTor,
                     sensitivity: 0.90,
                     target_metabolite: "Amino acids".to_string(),
                 },

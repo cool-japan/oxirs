@@ -39,6 +39,19 @@ impl Default for KafkaConfig {
     }
 }
 
+impl From<crate::streaming::KafkaConfig> for KafkaConfig {
+    fn from(config: crate::streaming::KafkaConfig) -> Self {
+        Self {
+            brokers: config.brokers,
+            security_protocol: None,
+            sasl_mechanism: None,
+            sasl_username: None,
+            sasl_password: None,
+            properties: HashMap::new(),
+        }
+    }
+}
+
 /// Kafka producer implementation
 pub struct KafkaProducer {
     config: KafkaConfig,

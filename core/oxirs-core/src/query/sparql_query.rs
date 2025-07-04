@@ -4,10 +4,8 @@
 //! Based on W3C SPARQL 1.1 Query specification:
 //! https://www.w3.org/TR/sparql11-query/
 
-use super::sparql_algebra::{GraphPattern, TermPattern, TriplePattern};
+use super::sparql_algebra::{GraphPattern, TriplePattern};
 use crate::model::{NamedNode, Variable};
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/).
@@ -756,6 +754,7 @@ impl fmt::Display for SparqlInnerGraphPattern<'_> {
 mod tests {
     use super::*;
     use crate::model::{NamedNode, Variable};
+    use crate::query::sparql_algebra::TermPattern;
 
     #[test]
     fn test_query_creation() {

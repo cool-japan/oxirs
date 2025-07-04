@@ -16,8 +16,6 @@
 //! the original 2544-line file into focused, logical components while preserving
 //! all original functionality.
 
-use crate::error::OxirsResult;
-use crate::model::{Term, Triple};
 
 // Sub-modules
 mod cellular_division;
@@ -33,8 +31,9 @@ pub use cellular_division::{
 };
 pub use dna_structures::{DnaDataStructure, NucleotideData, SpecialMarker};
 pub use genetic_optimizer::{
-    default_fitness_function, AccessGenes, GenerationStats, GeneticGraphOptimizer, GraphStructure,
-    IndexingGenes, MutationType, StorageGenes,
+    default_fitness_function, AccessGenes, AccessPattern, CachingGene, ClusteringGene, CompressionGene, 
+    ConcurrencyGene, GenerationStats, GeneticGraphOptimizer, GraphStructure, IndexGene,
+    IndexingGenes, MutationType, PartitioningGene, QueryPreferences, StorageGenes,
 };
 pub use regulatory::{CheckpointResult, CheckpointSystem, RegulatoryProtein};
 pub use replication::{

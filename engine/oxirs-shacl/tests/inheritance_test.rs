@@ -1,6 +1,6 @@
 //! Tests for SHACL shape inheritance functionality
 
-use oxirs_core::{model::*, Store};
+use oxirs_core::{model::*, ConcreteStore};
 use oxirs_shacl::*;
 
 #[test]
@@ -34,7 +34,7 @@ fn test_basic_shape_inheritance() {
     validator.add_shape(child_shape).unwrap();
 
     // Verify inheritance resolution works
-    let engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
+    let mut engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
     let resolved_constraints = engine
         .resolve_inherited_constraints(&ShapeId::new("http://example.org/ChildShape"))
         .unwrap();
@@ -69,7 +69,7 @@ fn test_constraint_override_in_inheritance() {
     validator.add_shape(parent_shape).unwrap();
     validator.add_shape(child_shape).unwrap();
 
-    let engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
+    let mut engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
     let resolved_constraints = engine
         .resolve_inherited_constraints(&ShapeId::new("http://example.org/ChildShape"))
         .unwrap();
@@ -121,7 +121,7 @@ fn test_priority_based_inheritance() {
     validator.add_shape(low_priority_parent).unwrap();
     validator.add_shape(child_shape).unwrap();
 
-    let engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
+    let mut engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
     let resolved_constraints = engine
         .resolve_inherited_constraints(&ShapeId::new("http://example.org/ChildShape"))
         .unwrap();
@@ -160,7 +160,7 @@ fn test_circular_inheritance_prevention() {
     match result {
         Ok(_) => {
             // If it succeeds, inheritance resolution should handle circular references
-            let engine =
+            let mut engine =
                 validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
             let resolved =
                 engine.resolve_inherited_constraints(&ShapeId::new("http://example.org/ShapeA"));
@@ -209,7 +209,7 @@ fn test_deep_inheritance_chain() {
     validator.add_shape(parent).unwrap();
     validator.add_shape(child).unwrap();
 
-    let engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
+    let mut engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
     let resolved_constraints = engine
         .resolve_inherited_constraints(&ShapeId::new("http://example.org/Child"))
         .unwrap();
@@ -225,7 +225,7 @@ fn test_deep_inheritance_chain() {
 fn test_inheritance_with_validation() {
     // Test that inheritance works during actual validation
     let mut validator = Validator::new();
-    let mut store = Store::new().unwrap();
+    let mut store = ConcreteStore::new().unwrap();
 
     // Add test data
     let subject = NamedNode::new("http://example.org/testNode").unwrap();

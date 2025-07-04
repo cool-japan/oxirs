@@ -6,8 +6,6 @@ use crate::error::OxirsResult;
 use crate::model::{Object, Predicate, Subject, Term, Triple};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 /// DNA-inspired data structure for RDF storage
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -248,7 +246,7 @@ impl Default for DnaDataStructure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, Term};
+    use crate::model::NamedNode;
 
     #[test]
     fn test_dna_structure_creation() {

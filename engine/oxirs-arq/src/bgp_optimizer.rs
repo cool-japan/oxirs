@@ -2392,15 +2392,14 @@ mod tests {
             .subject_cardinality
             .insert("http://example.org/person/2".to_string(), 15);
 
-        // Add available indexes
-        stats
-            .index_stats
-            .available_indexes
-            .insert(IndexType::SubjectPredicate);
-        stats
-            .index_stats
-            .available_indexes
-            .insert(IndexType::PredicateObject);
+        // Add available indexes - create a default IndexStatistics with available indexes
+        let mut subject_predicate_stats = IndexStatistics::default();
+        subject_predicate_stats.available_indexes.insert(IndexType::SubjectPredicate);
+        stats.index_stats.insert(IndexType::SubjectPredicate, subject_predicate_stats);
+        
+        let mut predicate_object_stats = IndexStatistics::default();
+        predicate_object_stats.available_indexes.insert(IndexType::PredicateObject);
+        stats.index_stats.insert(IndexType::PredicateObject, predicate_object_stats);
 
         stats
     }
@@ -2408,7 +2407,8 @@ mod tests {
     #[test]
     fn test_pattern_selectivity_calculation() {
         let stats = create_test_statistics();
-        let optimizer = BGPOptimizer::new(&stats, &stats.index_stats);
+        let default_index_stats = IndexStatistics::default();
+        let optimizer = BGPOptimizer::new(&stats, &default_index_stats);
 
         // Test pattern with bound predicate
         let pattern = TriplePattern {
@@ -2431,7 +2431,8 @@ mod tests {
     #[test]
     fn test_join_variable_detection() {
         let stats = create_test_statistics();
-        let optimizer = BGPOptimizer::new(&stats, &stats.index_stats);
+        let default_index_stats = IndexStatistics::default();
+        let optimizer = BGPOptimizer::new(&stats, &default_index_stats);
 
         let p1 = TriplePattern {
             subject: Term::Variable(Variable::new("x").unwrap()),
@@ -2453,7 +2454,8 @@ mod tests {
     #[test]
     fn test_bgp_optimization() {
         let stats = create_test_statistics();
-        let optimizer = BGPOptimizer::new(&stats, &stats.index_stats);
+        let default_index_stats = IndexStatistics::default();
+        let optimizer = BGPOptimizer::new(&stats, &default_index_stats);
 
         let patterns = vec![
             // Less selective pattern

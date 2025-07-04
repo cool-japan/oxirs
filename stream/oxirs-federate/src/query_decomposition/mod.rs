@@ -36,39 +36,57 @@ mod tests {
     use std::collections::HashSet;
 
     fn create_test_service() -> FederatedService {
+        use crate::service::{ServiceType, ServiceMetadata, ServicePerformance};
+        use std::time::Duration;
+        
         FederatedService {
             id: "test-service".to_string(),
             name: "Test Service".to_string(),
             endpoint: "http://localhost:8080/sparql".to_string(),
-            capabilities: vec![ServiceCapability::SparqlQuery],
+            service_type: ServiceType::Sparql,
+            capabilities: [ServiceCapability::SparqlQuery].iter().cloned().collect(),
             data_patterns: vec!["*".to_string()],
-            priority: 1,
-            health_status: crate::HealthStatus::Healthy,
-            last_check: std::time::SystemTime::now(),
-            response_time: std::time::Duration::from_millis(100),
-            error_rate: 0.0,
+            auth: None,
+            metadata: ServiceMetadata::default(),
+            extended_metadata: None,
+            performance: ServicePerformance {
+                average_response_time: Some(Duration::from_millis(100)),
+                avg_response_time_ms: 100.0,
+                reliability_score: 0.95,
+                max_concurrent_requests: Some(10),
+                rate_limit: None,
+                estimated_dataset_size: Some(1000),
+                supported_result_formats: vec!["application/json".to_string()],
+                success_rate: Some(0.98),
+                error_rate: Some(0.02),
+                last_updated: None,
+            },
+            status: None,
         }
     }
 
     fn create_test_query() -> QueryInfo {
         QueryInfo {
             query_type: QueryType::Select,
-            variables: vec!["?s".to_string(), "?p".to_string(), "?o".to_string()],
+            original_query: "SELECT ?s ?p ?o WHERE { ?s rdf:type foaf:Person . ?s foaf:name ?name }".to_string(),
+            variables: ["?s".to_string(), "?p".to_string(), "?o".to_string()].iter().cloned().collect(),
             patterns: vec![
                 TriplePattern {
-                    subject: "?s".to_string(),
-                    predicate: "rdf:type".to_string(),
+                    subject: Some("?s".to_string()),
+                    predicate: Some("rdf:type".to_string()),
                     object: Some("foaf:Person".to_string()),
+                    pattern_string: "?s rdf:type foaf:Person".to_string(),
                 },
                 TriplePattern {
-                    subject: "?s".to_string(),
-                    predicate: "foaf:name".to_string(),
+                    subject: Some("?s".to_string()),
+                    predicate: Some("foaf:name".to_string()),
                     object: Some("?name".to_string()),
+                    pattern_string: "?s foaf:name ?name".to_string(),
                 },
             ],
             filters: vec![],
-            limit: None,
-            offset: None,
+            complexity: 2,
+            estimated_cost: 1000,
         }
     }
 
@@ -125,9 +143,10 @@ mod tests {
         let cost_estimator = CostEstimator::new();
         let service = create_test_service();
         let pattern = TriplePattern {
-            subject: "?s".to_string(),
-            predicate: "rdf:type".to_string(),
+            subject: Some("?s".to_string()),
+            predicate: Some("rdf:type".to_string()),
             object: Some("foaf:Person".to_string()),
+            pattern_string: "?s rdf:type foaf:Person".to_string(),
         };
 
         let cost = cost_estimator.estimate_single_pattern_cost(&service, &pattern);
@@ -138,9 +157,10 @@ mod tests {
     async fn test_pattern_analysis() {
         let decomposer = QueryDecomposer::new();
         let pattern = TriplePattern {
-            subject: "?s".to_string(),
-            predicate: "rdf:type".to_string(),
+            subject: Some("?s".to_string()),
+            predicate: Some("rdf:type".to_string()),
             object: Some("foaf:Person".to_string()),
+            pattern_string: "?s rdf:type foaf:Person".to_string(),
         };
 
         let variables = decomposer.extract_pattern_variables(&pattern);
@@ -154,9 +174,10 @@ mod tests {
         let patterns = vec![(
             0,
             TriplePattern {
-                subject: "?s".to_string(),
-                predicate: "rdf:type".to_string(),
+                subject: Some("?s".to_string()),
+                predicate: Some("rdf:type".to_string()),
                 object: Some("foaf:Person".to_string()),
+                pattern_string: "?s rdf:type foaf:Person".to_string(),
             },
         )];
 
@@ -174,25 +195,28 @@ mod tests {
             (
                 0,
                 TriplePattern {
-                    subject: "?s".to_string(),
-                    predicate: "rdf:type".to_string(),
+                    subject: Some("?s".to_string()),
+                    predicate: Some("rdf:type".to_string()),
                     object: Some("foaf:Person".to_string()),
+                    pattern_string: "?s rdf:type foaf:Person".to_string(),
                 },
             ),
             (
                 1,
                 TriplePattern {
-                    subject: "?s".to_string(),
-                    predicate: "foaf:name".to_string(),
+                    subject: Some("?s".to_string()),
+                    predicate: Some("foaf:name".to_string()),
                     object: Some("?name".to_string()),
+                    pattern_string: "?s foaf:name ?name".to_string(),
                 },
             ),
             (
                 2,
                 TriplePattern {
-                    subject: "?s".to_string(),
-                    predicate: "foaf:age".to_string(),
+                    subject: Some("?s".to_string()),
+                    predicate: Some("foaf:age".to_string()),
                     object: Some("?age".to_string()),
+                    pattern_string: "?s foaf:age ?age".to_string(),
                 },
             ),
         ];

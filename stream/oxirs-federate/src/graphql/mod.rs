@@ -19,8 +19,7 @@ pub mod translation;
 pub mod types;
 
 // Re-export main types and structs for public API
-pub use core::*;
-pub use entity_resolution::*;
+pub use types::{GraphQLFederation, GraphQLFederationConfig};
 pub use types::*;
 
 #[cfg(test)]
@@ -141,7 +140,7 @@ mod tests {
 
         let complexity = complexity_result.unwrap();
         assert_eq!(complexity.max_depth, 3);
-        assert_eq!(complexity.field_count, 3);
+        assert_eq!(complexity.field_count, 4); // user, id, profile, bio = 4 fields
         assert!(complexity.total_complexity > 0);
     }
 

@@ -93,6 +93,12 @@ pub struct QueryContext {
     pub user_id: Option<String>,
     /// Session ID
     pub session_id: String,
+    /// Query text
+    pub query: Option<String>,
+    /// Query intent classification
+    pub intent: Option<QueryIntent>,
+    /// Extracted entities
+    pub entities: Option<Vec<String>>,
     /// Previous messages in conversation
     pub conversation_history: Vec<ConversationMessage>,
     /// Domain or topic constraints
@@ -111,6 +117,9 @@ impl QueryContext {
         Self {
             user_id: None,
             session_id,
+            query: None,
+            intent: None,
+            entities: None,
             conversation_history: Vec::new(),
             domain_constraints: Vec::new(),
             response_format: ResponseFormat::Text,
@@ -168,7 +177,7 @@ pub enum ResponseFormat {
 }
 
 /// Query intent classification
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum QueryIntent {
     Information,
     Navigation,
@@ -176,6 +185,7 @@ pub enum QueryIntent {
     Comparison,
     Explanation,
     Discovery,
+    Relationship,
 }
 
 /// Assembled context from RAG retrieval

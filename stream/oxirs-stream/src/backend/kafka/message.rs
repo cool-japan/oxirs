@@ -42,12 +42,16 @@ impl KafkaEvent {
 
     /// Convert to StreamEvent for consumption
     pub fn to_stream_event(self) -> StreamEvent {
+        let timestamp = self.timestamp;
+        let source = self.source.clone();
+        let metadata = self.metadata.clone();
+        
         self.try_into().unwrap_or_else(|_| {
             // Fallback to a default event if conversion fails
             StreamEvent::Heartbeat {
-                timestamp: self.timestamp,
-                source: self.source,
-                metadata: self.metadata,
+                timestamp,
+                source,
+                metadata,
             }
         })
     }

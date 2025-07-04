@@ -5,11 +5,12 @@
 //! conflict resolution strategies, and eventual consistency handling.
 
 use anyhow::{anyhow, Result};
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::{broadcast, RwLock, Semaphore};
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -47,7 +48,7 @@ impl Default for CdcConfig {
             change_batch_size: 1000,
             conflict_resolution: ConflictResolutionStrategy::LastWriterWins,
             consistency_level: ConsistencyLevel::Eventual,
-            change_retention_period: Duration::from_hours(24),
+            change_retention_period: Duration::from_secs(86400), // 24 hours
             sync_interval: Duration::from_secs(30),
             enable_incremental_updates: true,
             max_retry_attempts: 3,

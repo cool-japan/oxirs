@@ -348,7 +348,7 @@ impl GraphAnalyticsEngine {
 
         // Iterative computation
         for iteration in 0..self.config.max_iterations {
-            let mut max_change = 0.0;
+            let mut max_change: f64 = 0.0;
 
             for node_id in &nodes {
                 let mut rank = (1.0 - damping_factor) / node_count as f64;

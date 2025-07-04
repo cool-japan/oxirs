@@ -334,7 +334,7 @@ mod tests {
 
     #[test]
     fn test_parse_ntriples() {
-        let store = Arc::new(Store::new().unwrap());
+        let store = Arc::new(oxirs_core::RdfStore::new().unwrap());
         let mut processor = SimpleRdfProcessor::new(store);
 
         let ntriples = r#"
@@ -381,7 +381,7 @@ _:blank1 <http://example.org/p5> _:blank2 .
 
     #[test]
     fn test_parse_prefixes() {
-        let store = Arc::new(Store::new().unwrap());
+        let store = Arc::new(oxirs_core::RdfStore::new().unwrap());
         let mut processor = SimpleRdfProcessor::new(store);
 
         let turtle = r#"

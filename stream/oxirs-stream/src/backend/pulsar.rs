@@ -24,7 +24,7 @@ use pulsar::{
     authentication::Authentication,
     compression::Compression,
     consumer::{
-        Consumer, ConsumerBuilder, ConsumerOptions, DeadLetterPolicy, InitialPosition, SubType,
+        Consumer, ConsumerBuilder, ConsumerOptions, DeadLetterPolicy, InitialPosition,
     },
     error::Error as PulsarError,
     message::{Message as PulsarMessageTrait, Payload},
@@ -284,7 +284,7 @@ impl MessageRouter {
 
 impl PulsarProducer {
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let pulsar_config = if let StreamBackend::Pulsar { service_url, .. } = &config.backend {
+        let pulsar_config = if let crate::StreamBackendType::Pulsar { service_url, .. } = &config.backend {
             PulsarProducerConfig {
                 service_url: service_url.clone(),
                 topic: config.topic.clone(),
@@ -301,7 +301,7 @@ impl PulsarProducer {
 
         Ok(Self {
             config,
-            pulsar_config,
+            pulsar_config: pulsar_config.clone(),
             #[cfg(feature = "pulsar")]
             client: None,
             #[cfg(feature = "pulsar")]
@@ -650,7 +650,7 @@ pub struct PulsarConsumer {
     #[cfg(feature = "pulsar")]
     client: Option<Arc<Pulsar<TokioExecutor>>>,
     #[cfg(feature = "pulsar")]
-    consumer: Option<Consumer<PulsarMessage, TokioExecutor>>,
+    consumer: Option<Consumer<Vec<u8>, TokioExecutor>>,
     stats: Arc<RwLock<ConsumerStats>>,
     subscription_name: String,
     consumer_name: String,
@@ -731,7 +731,7 @@ struct ConsumerStats {
 
 impl PulsarConsumer {
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let pulsar_config = if let StreamBackend::Pulsar { service_url, .. } = &config.backend {
+        let pulsar_config = if let crate::StreamBackendType::Pulsar { service_url, .. } = &config.backend {
             PulsarConsumerConfig {
                 service_url: service_url.clone(),
                 topic: config.topic.clone(),
@@ -746,7 +746,7 @@ impl PulsarConsumer {
 
         Ok(Self {
             config,
-            pulsar_config,
+            pulsar_config: pulsar_config.clone(),
             #[cfg(feature = "pulsar")]
             client: None,
             #[cfg(feature = "pulsar")]
@@ -796,10 +796,10 @@ impl PulsarConsumer {
 
             // Set subscription type
             let sub_type = match self.pulsar_config.subscription_type {
-                PulsarSubscriptionType::Exclusive => SubType::Exclusive,
-                PulsarSubscriptionType::Shared => SubType::Shared,
-                PulsarSubscriptionType::Failover => SubType::Failover,
-                PulsarSubscriptionType::KeyShared => SubType::KeyShared,
+                PulsarSubscriptionType::Exclusive => pulsar::message::proto::command_subscribe::SubType::Exclusive,
+                PulsarSubscriptionType::Shared => pulsar::message::proto::command_subscribe::SubType::Shared,
+                PulsarSubscriptionType::Failover => pulsar::message::proto::command_subscribe::SubType::Failover,
+                PulsarSubscriptionType::KeyShared => pulsar::message::proto::command_subscribe::SubType::KeyShared,
             };
 
             // Set initial position
@@ -1139,7 +1139,7 @@ mod tests {
 
     fn test_pulsar_config() -> StreamConfig {
         StreamConfig {
-            backend: StreamBackend::Pulsar {
+            backend: crate::StreamBackendType::Pulsar {
                 service_url: "pulsar://localhost:6650".to_string(),
                 auth_config: None,
             },

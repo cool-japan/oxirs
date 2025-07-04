@@ -111,7 +111,7 @@ pub async fn login_handler(
             let (token, expires_at) = if state.config.security.jwt.is_some() {
                 #[cfg(feature = "auth")]
                 {
-                    let token = auth_service.generate_jwt_token(&user)?;
+                    let token = auth_service.create_jwt_token(&user)?;
                     let expires_at = chrono::Utc::now()
                         + chrono::Duration::seconds(
                             state.config.security.jwt.as_ref().unwrap().expiration_secs as i64,
@@ -131,9 +131,9 @@ pub async fn login_handler(
             };
 
             let response = LoginResponse {
-                success: true,
-                token: token.clone(),
-                user: Some(user.clone()),
+                token: token.clone().unwrap_or_default(),
+                user: user.clone(),
+                mfa_required: false,
                 expires_at,
                 message: "Login successful".to_string(),
             };
@@ -163,41 +163,36 @@ pub async fn login_handler(
         AuthResult::Unauthenticated => {
             warn!("Failed login attempt for user '{}'", request.username);
 
-            let response = LoginResponse {
-                success: false,
-                token: None,
-                user: None,
-                expires_at: None,
-                message: "Invalid username or password".to_string(),
-            };
-
-            Ok((StatusCode::UNAUTHORIZED, Json(response)).into_response())
+            // For unauthorized, we return error without LoginResponse
+            Ok((
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "Invalid username or password",
+                    "message": "Authentication failed"
+                }))
+            ).into_response())
         }
         AuthResult::Locked => {
             warn!("Login attempt for locked user '{}'", request.username);
 
-            let response = LoginResponse {
-                success: false,
-                token: None,
-                user: None,
-                expires_at: None,
-                message: "Account is temporarily locked due to failed login attempts".to_string(),
-            };
-
-            Ok((StatusCode::FORBIDDEN, Json(response)).into_response())
+            Ok((
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": "Account locked",
+                    "message": "Account is temporarily locked due to failed login attempts"
+                }))
+            ).into_response())
         }
         AuthResult::Forbidden => {
             warn!("Login attempt for disabled user '{}'", request.username);
 
-            let response = LoginResponse {
-                success: false,
-                token: None,
-                user: None,
-                expires_at: None,
-                message: "Account is disabled".to_string(),
-            };
-
-            Ok((StatusCode::FORBIDDEN, Json(response)).into_response())
+            Ok((
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": "Account disabled",
+                    "message": "Account is disabled"
+                }))
+            ).into_response())
         }
         _ => {
             error!(
@@ -205,15 +200,13 @@ pub async fn login_handler(
                 request.username
             );
 
-            let response = LoginResponse {
-                success: false,
-                token: None,
-                user: None,
-                expires_at: None,
-                message: "Authentication error".to_string(),
-            };
-
-            Ok((StatusCode::INTERNAL_SERVER_ERROR, Json(response)).into_response())
+            Ok((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Authentication error",
+                    "message": "An unexpected error occurred during authentication"
+                }))
+            ).into_response())
         }
     }
 }
@@ -339,6 +332,7 @@ pub async fn register_user_handler(
     let user_config = UserConfig {
         password_hash,
         roles: request.roles.clone(),
+        permissions: Vec::new(), // Default to no explicit permissions
         enabled: true,
         email: request.email.clone(),
         full_name: request.full_name.clone(),

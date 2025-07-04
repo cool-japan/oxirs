@@ -4,7 +4,6 @@ use super::detection::ByzantineDetector;
 use super::messages::BftMessage;
 use super::state_machine::RdfStateMachine;
 use super::types::*;
-use crate::model::Triple;
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use parking_lot::{Mutex, RwLock};
@@ -434,7 +433,7 @@ impl BftNode {
                     state.commits.insert(node_id);
 
                     // Check if we have 2f+1 commits (including our own)
-                    state.commits.len() >= 2 * self.config.fault_tolerance + 1
+                    state.commits.len() > 2 * self.config.fault_tolerance
                 } else {
                     false
                 }

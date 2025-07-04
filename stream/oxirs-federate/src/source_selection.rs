@@ -13,7 +13,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::{FederatedService, ServiceCapability, ServiceRegistry};
+use crate::{FederatedService, ServiceCapability, ServiceRegistry, service::ServiceMetadata};
 
 /// Triple pattern for SPARQL queries
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -1048,6 +1048,12 @@ impl PredicateBasedFilter {
     }
 }
 
+impl Default for RangeBasedSelector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RangeBasedSelector {
     pub fn new() -> Self {
         Self {
@@ -1139,7 +1145,7 @@ impl RangeBasedSelector {
         for (_, p, o) in triples {
             predicate_values
                 .entry(p.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(o.clone());
         }
 
@@ -1385,8 +1391,8 @@ impl RangeBasedSelector {
         }
 
         if !datetime_values.is_empty() {
-            let earliest = datetime_values.iter().min().unwrap().clone();
-            let latest = datetime_values.iter().max().unwrap().clone();
+            let earliest = *datetime_values.iter().min().unwrap();
+            let latest = *datetime_values.iter().max().unwrap();
 
             // Determine granularity based on the range
             let range_duration = latest.signed_duration_since(earliest);
@@ -1459,7 +1465,7 @@ impl RangeBasedSelector {
 
         // Try just year as number
         if let Ok(year) = value.parse::<i32>() {
-            if year >= 1900 && year <= 2100 {
+            if (1900..=2100).contains(&year) {
                 return Some(year);
             }
         }
@@ -1474,6 +1480,12 @@ impl RangeBasedSelector {
         }
 
         None
+    }
+}
+
+impl Default for MLSourcePredictor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1615,7 +1627,7 @@ mod tests {
             },
             data_patterns: vec!["http://example.org/".to_string()],
             auth: None,
-            metadata: crate::ServiceMetadata {
+            metadata: crate::service::ServiceMetadata {
                 description: Some("Test SPARQL endpoint".to_string()),
                 version: Some("1.0".to_string()),
                 maintainer: None,

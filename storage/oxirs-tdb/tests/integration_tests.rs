@@ -175,18 +175,19 @@ fn test_compression_features() -> Result<()> {
 fn test_performance_benchmarks() -> Result<()> {
     let (store, _temp_dir) = create_test_store()?;
 
-    // Performance test: Insert 10,000 triples and measure time
-    let start = std::time::Instant::now();
-
+    // Performance test: Insert 10,000 triples and measure time using bulk insertion
+    let mut triples = Vec::new();
     for i in 0..10_000 {
         let subject = Term::iri(&format!("http://example.org/item{}", i));
         let predicate = Term::iri("http://example.org/hasValue");
         let object = Term::literal(&format!("value{}", i));
-
-        store.insert_triple(&subject, &predicate, &object)?;
+        triples.push((subject, predicate, object));
     }
 
+    let start = std::time::Instant::now();
+    store.insert_triples_bulk(&triples)?;
     let insert_time = start.elapsed();
+    
     println!("Inserted 10,000 triples in {} ms", insert_time.as_millis());
 
     // Performance requirement: Should handle bulk inserts efficiently

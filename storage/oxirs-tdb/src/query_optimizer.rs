@@ -7,7 +7,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use chrono::{DateTime, Utc};
 
 use crate::nodes::NodeId;
 use crate::triple_store::TripleStoreStats;
@@ -137,7 +138,7 @@ pub struct QueryStats {
     pub result_count: u64,
     pub index_used: IndexType,
     pub cost: f64,
-    pub timestamp: Instant,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Query cost model for optimization
@@ -510,9 +511,15 @@ mod tests {
         let pattern = QueryPattern::new(Some(1), Some(2), None);
         let stats = TripleStoreStats {
             total_triples: 10000,
-            spo_index_size: 1000,
-            pos_index_size: 1000,
-            osp_index_size: 1000,
+            total_quads: 10000,
+            named_graphs: 5,
+            active_transactions: 0,
+            completed_transactions: 100,
+            query_count: 50,
+            insert_count: 5000,
+            delete_count: 500,
+            index_hits: HashMap::new(),
+            avg_query_time_ms: 10.0,
         };
 
         let cost = cost_model.estimate_cost(&pattern, IndexType::SPO, &stats);
@@ -526,9 +533,15 @@ mod tests {
         let pattern = QueryPattern::new(Some(1), Some(2), None);
         let stats = TripleStoreStats {
             total_triples: 10000,
-            spo_index_size: 1000,
-            pos_index_size: 1000,
-            osp_index_size: 1000,
+            total_quads: 10000,
+            named_graphs: 5,
+            active_transactions: 0,
+            completed_transactions: 100,
+            query_count: 50,
+            insert_count: 5000,
+            delete_count: 500,
+            index_hits: HashMap::new(),
+            avg_query_time_ms: 10.0,
         };
 
         let recommendation = optimizer.recommend_optimization(&pattern, &stats).unwrap();
@@ -548,7 +561,7 @@ mod tests {
             result_count: 100,
             index_used: IndexType::SPO,
             cost: 25.0,
-            timestamp: Instant::now(),
+            timestamp: Utc::now(),
         };
 
         optimizer.record_execution(stats).unwrap();

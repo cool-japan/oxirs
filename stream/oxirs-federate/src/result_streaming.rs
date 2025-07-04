@@ -4,7 +4,7 @@
 //! streaming, and adaptive data transfer optimization for federated query results.
 
 use anyhow::{anyhow, Result};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use flate2::{write::GzEncoder, Compression as GzCompression};
 use futures::stream::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -13,13 +13,12 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
-use crate::executor::{GraphQLResponse, SparqlResults};
+use crate::executor::SparqlResults;
 use crate::QueryResult;
 
 /// Result compression and streaming manager
@@ -1070,26 +1069,18 @@ impl PaginationManager {
     ) -> Result<(QueryResult, Option<usize>)> {
         match result {
             QueryResult::Sparql(sparql_results) => {
-                let total_count = sparql_results.results.bindings.len();
+                let total_count = sparql_results.len();
                 let end_idx = (offset + page_size).min(total_count);
 
                 if offset >= total_count {
                     // Return empty result
-                    let empty_result = QueryResult::Sparql(SparqlResults {
-                        head: sparql_results.head.clone(),
-                        results: crate::executor::SparqlResultsData { bindings: vec![] },
-                    });
+                    let empty_result = QueryResult::Sparql(vec![]);
                     return Ok((empty_result, Some(total_count)));
                 }
 
-                let page_bindings = sparql_results.results.bindings[offset..end_idx].to_vec();
+                let page_bindings = sparql_results[offset..end_idx].to_vec();
 
-                let paginated_result = QueryResult::Sparql(SparqlResults {
-                    head: sparql_results.head.clone(),
-                    results: crate::executor::SparqlResultsData {
-                        bindings: page_bindings,
-                    },
-                });
+                let paginated_result = QueryResult::Sparql(page_bindings);
 
                 Ok((paginated_result, Some(total_count)))
             }
@@ -1243,10 +1234,7 @@ mod tests {
 
         use crate::executor::{SparqlHead, SparqlResultsData};
 
-        let test_result = QueryResult::Sparql(SparqlResults {
-            head: SparqlHead { vars: vec![] },
-            results: SparqlResultsData { bindings: vec![] },
-        });
+        let test_result = QueryResult::Sparql(vec![]);
 
         let mut stream = manager
             .create_stream(test_result, ResultFormat::Json)
@@ -1312,10 +1300,7 @@ mod tests {
 
         use crate::executor::{SparqlHead, SparqlResultsData};
 
-        let test_result = QueryResult::Sparql(SparqlResults {
-            head: SparqlHead { vars: vec![] },
-            results: SparqlResultsData { bindings: vec![] },
-        });
+        let test_result = QueryResult::Sparql(vec![]);
 
         let network_conditions = NetworkConditions {
             bandwidth_mbps: 50.0,

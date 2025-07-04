@@ -13,7 +13,7 @@ use crate::{
     embeddings::{EmbeddableContent, EmbeddingManager, EmbeddingStrategy},
     rdf_integration::{RdfVectorConfig, RdfVectorIntegration},
     sparql_integration::SparqlVectorService,
-    Vector, VectorIndex, VectorStore, VectorStoreTrait,
+    Vector, VectorId, VectorIndex, VectorStore, VectorStoreTrait,
 };
 use anyhow::{anyhow, Result};
 use parking_lot::{Mutex, RwLock};
@@ -24,6 +24,7 @@ use std::sync::{
     Arc,
 };
 use std::time::{Duration, Instant, SystemTime};
+
 
 /// Configuration for store integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -593,13 +594,57 @@ impl Default for StoreIntegrationConfig {
     }
 }
 
+/// Wrapper to bridge VectorStore and VectorStoreTrait
+pub struct VectorStoreWrapper {
+    store: Arc<parking_lot::RwLock<VectorStore>>,
+}
+
+impl VectorStoreTrait for VectorStoreWrapper {
+    fn insert_vector(&mut self, id: VectorId, vector: Vector) -> Result<()> {
+        let mut store = self.store.write();
+        store.insert_vector(id, vector)
+    }
+
+    fn add_vector(&mut self, vector: Vector) -> Result<VectorId> {
+        let mut store = self.store.write();
+        store.add_vector(vector)
+    }
+
+    fn get_vector(&self, id: &VectorId) -> Result<Option<Vector>> {
+        let store = self.store.read();
+        let result = store.get_vector(id);
+        Ok(result.map(|v| v.clone()))
+    }
+
+    fn get_all_vector_ids(&self) -> Result<Vec<VectorId>> {
+        let store = self.store.read();
+        store.get_all_vector_ids()
+    }
+
+    fn search_similar(&self, query: &Vector, k: usize) -> Result<Vec<(VectorId, f32)>> {
+        let store = self.store.read();
+        store.search_similar(query, k)
+    }
+
+    fn remove_vector(&mut self, id: &VectorId) -> Result<bool> {
+        let mut store = self.store.write();
+        store.remove_vector(id)
+    }
+
+    fn len(&self) -> usize {
+        let store = self.store.read();
+        // VectorStore doesn't have a direct len method, so we'll use a fallback
+        0 // This would need to be implemented properly
+    }
+}
+
 impl IntegratedVectorStore {
     pub fn new(
         config: StoreIntegrationConfig,
         embedding_strategy: EmbeddingStrategy,
     ) -> Result<Self> {
         let vector_store = Arc::new(RwLock::new(
-            VectorStore::with_embedding_strategy(embedding_strategy)?.with_config(
+            VectorStore::with_embedding_strategy(embedding_strategy.clone())?.with_config(
                 crate::VectorStoreConfig {
                     auto_embed: true,
                     cache_embeddings: config.cache_config.enable_vector_cache,
@@ -610,7 +655,13 @@ impl IntegratedVectorStore {
         ));
 
         let rdf_config = RdfVectorConfig::default();
-        let rdf_integration = Arc::new(RwLock::new(RdfVectorIntegration::new(rdf_config)));
+        // Create a wrapper that implements VectorStoreTrait without cloning
+        let vector_store_wrapper = VectorStoreWrapper {
+            store: vector_store.clone(),
+        };
+        let vector_store_trait: Arc<std::sync::RwLock<dyn VectorStoreTrait>> = 
+            Arc::new(std::sync::RwLock::new(vector_store_wrapper));
+        let rdf_integration = Arc::new(RwLock::new(RdfVectorIntegration::new(rdf_config, vector_store_trait)));
 
         let sparql_config = crate::sparql_integration::VectorServiceConfig::default();
         let sparql_service = Arc::new(RwLock::new(SparqlVectorService::new(
@@ -815,7 +866,30 @@ impl IntegratedVectorStore {
         graph_context: Option<&str>,
     ) -> Result<Vec<(String, f32)>> {
         let rdf_integration = self.rdf_integration.read();
-        rdf_integration.search_similar_terms(rdf_term, k, graph_context)
+        
+        // Convert string to Term - assuming it's a NamedNode for now
+        let term = oxirs_core::model::Term::NamedNode(
+            oxirs_core::model::NamedNode::new(rdf_term)
+                .map_err(|e| anyhow!("Invalid IRI: {}", e))?
+        );
+        
+        // Convert graph context if provided
+        let graph_name = graph_context.map(|ctx| -> Result<oxirs_core::model::GraphName> {
+            Ok(oxirs_core::model::GraphName::NamedNode(
+                oxirs_core::model::NamedNode::new(ctx)
+                    .map_err(|e| anyhow!("Invalid graph IRI: {}", e))?
+            ))
+        }).transpose()?;
+        
+        // Call find_similar_terms and convert result
+        let results = rdf_integration.find_similar_terms(&term, k, None, graph_name.as_ref())?;
+        
+        // Convert RdfVectorSearchResult to (String, f32)
+        let converted_results = results.into_iter()
+            .map(|result| (result.term.to_string(), result.score))
+            .collect();
+            
+        Ok(converted_results)
     }
 
     /// SPARQL-integrated vector search
@@ -921,7 +995,10 @@ impl IntegratedVectorStore {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        query.as_f32().hash(&mut hasher);
+        // Hash the vector data by converting floats to bytes
+        for value in query.as_f32() {
+            value.to_bits().hash(&mut hasher);
+        }
         k.hash(&mut hasher);
         hasher.finish()
     }
@@ -966,7 +1043,7 @@ impl TransactionManager {
     pub fn new(config: StoreIntegrationConfig) -> Self {
         Self {
             active_transactions: Arc::new(RwLock::new(HashMap::new())),
-            transaction_counter: AtomicU64::new(0),
+            transaction_counter: AtomicU64::new(1),
             config,
             write_ahead_log: Arc::new(WriteAheadLog::new()),
             lock_manager: Arc::new(LockManager::new()),
@@ -1376,7 +1453,7 @@ impl CacheManager {
 
     pub fn get_cached_query(&self, query_hash: &u64) -> Option<CachedQueryResult> {
         let cache = self.query_cache.read();
-        if let Some(cached) = cache.get(query_hash) {
+        if let Some(cached) = cache.get(&query_hash.to_string()) {
             self.cache_stats
                 .query_cache_hits
                 .fetch_add(1, Ordering::Relaxed);
@@ -1399,7 +1476,7 @@ impl CacheManager {
         };
 
         let mut cache = self.query_cache.write();
-        cache.insert(query_hash, cached_result);
+        cache.insert(query_hash.to_string(), cached_result);
     }
 
     pub fn get_stats(&self) -> &CacheStats {

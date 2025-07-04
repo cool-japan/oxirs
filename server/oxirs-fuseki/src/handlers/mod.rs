@@ -10,6 +10,7 @@ pub mod oauth2;
 #[cfg(feature = "saml")]
 pub mod saml;
 pub mod sparql;
+pub mod sparql_refactored;
 pub mod websocket;
 
 // Re-export commonly used handlers
@@ -31,5 +32,5 @@ pub use oauth2::{
 pub use saml::{
     get_saml_metadata, handle_saml_acs, handle_saml_slo, initiate_saml_logout, initiate_saml_sso,
 };
-pub use sparql::{query_handler, update_handler};
+pub use sparql_refactored::{query_handler, update_handler};
 pub use websocket::{websocket_handler, SubscriptionManager};

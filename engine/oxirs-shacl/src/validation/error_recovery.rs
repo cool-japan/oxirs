@@ -359,7 +359,7 @@ impl ErrorRecoveryManager {
     fn classify_error(&self, error: &ShaclError) -> ErrorType {
         match error {
             ShaclError::ConstraintValidation(_) => ErrorType::ConstraintEvaluation,
-            ShaclError::ShapeParser(_) => ErrorType::ShapeParsing,
+            ShaclError::ShapeParsing(_) => ErrorType::ShapeParsing,
             ShaclError::PropertyPath(_) => ErrorType::PropertyPath,
             ShaclError::SparqlExecution(_) => ErrorType::SparqlQuery,
             ShaclError::Timeout(_) => ErrorType::Timeout,
@@ -533,7 +533,18 @@ impl ErrorRecoveryManager {
             )));
         }
 
-        result
+        // Convert from constraints::ConstraintEvaluationResult to validation::ConstraintEvaluationResult
+        match result? {
+            crate::constraints::ConstraintEvaluationResult::Satisfied => {
+                Ok(crate::validation::ConstraintEvaluationResult::Satisfied)
+            }
+            crate::constraints::ConstraintEvaluationResult::Violated { violating_value, message, details: _ } => {
+                Ok(crate::validation::ConstraintEvaluationResult::Violated { violating_value, message })
+            }
+            crate::constraints::ConstraintEvaluationResult::Error { message, .. } => {
+                Err(crate::ShaclError::ValidationEngine(message))
+            }
+        }
     }
 
     /// Handle constraint evaluation error

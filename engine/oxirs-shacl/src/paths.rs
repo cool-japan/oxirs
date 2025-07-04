@@ -832,7 +832,7 @@ impl PropertyPathEvaluator {
         };
 
         let quads = store
-            .query_quads(
+            .find_quads(
                 Some(&subject),
                 Some(&predicate_term),
                 None, // Any object
@@ -885,7 +885,7 @@ impl PropertyPathEvaluator {
         };
 
         let quads = store
-            .query_quads(
+            .find_quads(
                 None, // Any subject
                 Some(&predicate_term),
                 Some(&object),
@@ -926,7 +926,7 @@ impl PropertyPathEvaluator {
 
         // Get all subjects from the store (limited to prevent memory issues)
         let quads = store
-            .query_quads(
+            .find_quads(
                 None, // Any subject
                 None, // Any predicate
                 None, // Any object

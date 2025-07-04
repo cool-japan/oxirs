@@ -7,6 +7,7 @@ use crate::error::FusekiResult;
 use std::collections::HashMap;
 
 /// Injection detection and prevention
+#[derive(Debug, Clone)]
 pub struct InjectionDetector {
     patterns: Vec<String>,
     whitelist: Vec<String>,
@@ -66,6 +67,7 @@ impl InjectionDetector {
 }
 
 /// Query complexity analyzer
+#[derive(Debug, Clone)]
 pub struct ComplexityAnalyzer {
     max_depth: usize,
     max_joins: usize,
@@ -98,8 +100,8 @@ impl ComplexityAnalyzer {
     }
 
     fn calculate_nesting_depth(&self, query: &str) -> usize {
-        let mut max_depth = 0;
-        let mut current_depth = 0;
+        let mut max_depth: usize = 0;
+        let mut current_depth: usize = 0;
 
         for ch in query.chars() {
             match ch {
@@ -126,7 +128,7 @@ impl ComplexityAnalyzer {
         // Count implicit joins (multiple triple patterns)
         let triple_patterns = upper.matches(" . ").count() + 1;
 
-        explicit_joins + triple_patterns.saturating_sub(1)
+        explicit_joins + triple_patterns.saturating_sub(1_usize)
     }
 
     fn count_unions(&self, query: &str) -> usize {
@@ -144,6 +146,7 @@ pub struct QueryComplexity {
 }
 
 /// Performance optimizer for query execution
+#[derive(Debug, Clone)]
 pub struct PerformanceOptimizer {
     cache: HashMap<String, OptimizedQuery>,
 }

@@ -15,7 +15,7 @@ members = [
     "stream/oxirs-stream",
     "stream/oxirs-federate",
     "ai/oxirs-embed",
-    "ai/oxirs-shacl-ai",
+    "ai/oxirs-shacl-ai",  # Re-enabled after major refactoring fixes
     "ai/oxirs-chat",
     "tools/oxide",
 ]
@@ -127,10 +127,11 @@ futures = "0.3"
 rand = "0.8.5"
 rand_core = "0.6"
 rand_distr = "0.4"
+fastrand = "2.2"
 
 # System utilities
 num_cpus = "1.16"
-url = "2.5"
+url = { version = "2.5", features = ["serde"] }
 rayon = "1.10"
 
 [workspace.metadata.docs.rs]

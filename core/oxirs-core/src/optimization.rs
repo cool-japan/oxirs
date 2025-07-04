@@ -503,10 +503,10 @@ impl OptimizedGraph {
         let object = self.intern_object(triple.object());
 
         // Insert into SPO index
-        let spo_entry = self.spo.entry(subject.clone()).or_insert_with(DashMap::new);
+        let spo_entry = self.spo.entry(subject.clone()).or_default();
         let mut po_entry = spo_entry
             .entry(predicate.clone())
-            .or_insert_with(BTreeSet::new);
+            .or_default();
         let was_new = po_entry.insert(object.clone());
 
         if was_new {
@@ -514,17 +514,17 @@ impl OptimizedGraph {
             let pos_entry = self
                 .pos
                 .entry(predicate.clone())
-                .or_insert_with(DashMap::new);
+                .or_default();
             let mut os_entry = pos_entry
                 .entry(object.clone())
-                .or_insert_with(BTreeSet::new);
+                .or_default();
             os_entry.insert(subject.clone());
 
             // Insert into OSP index
-            let osp_entry = self.osp.entry(object.clone()).or_insert_with(DashMap::new);
+            let osp_entry = self.osp.entry(object.clone()).or_default();
             let mut sp_entry = osp_entry
                 .entry(subject.clone())
-                .or_insert_with(BTreeSet::new);
+                .or_default();
             sp_entry.insert(predicate);
 
             // Update statistics

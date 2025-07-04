@@ -1,6 +1,6 @@
 //! Core types and structures for quantum consciousness synthesis
 
-use crate::ai_orchestrator::AIModel;
+use crate::ai_orchestrator::AiOrchestrator;
 use crate::ShaclAiError;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -271,3 +271,24 @@ pub struct EmotionalIntelligence;
 pub struct QuantumIntuitionSystem;
 #[derive(Debug, Clone)]
 pub struct MetacognitiveAbilities;
+
+/// Validation outcome from quantum consciousness synthesis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationOutcome {
+    /// Outcome identifier
+    pub id: String,
+    /// Validation result
+    pub is_valid: bool,
+    /// Confidence level (0.0 to 1.0)
+    pub confidence: f64,
+    /// Quantum enhancement score
+    pub quantum_enhancement: f64,
+    /// Consciousness reasoning score
+    pub consciousness_reasoning: f64,
+    /// Detected issues
+    pub issues: Vec<String>,
+    /// Synthesis insights
+    pub synthesis_insights: Vec<String>,
+    /// Processing time
+    pub processing_time_ms: f64,
+}

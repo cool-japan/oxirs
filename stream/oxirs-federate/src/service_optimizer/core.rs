@@ -41,7 +41,7 @@ impl ServiceOptimizer {
     /// Optimize a query containing SERVICE clauses
     pub async fn optimize_query(
         &self,
-        query_info: &PlannerQueryInfo,
+        query_info: &QueryInfo,
         registry: &ServiceRegistry,
     ) -> Result<OptimizedQuery> {
         // Extract SERVICE clauses from the original query (simplified approach)
@@ -580,20 +580,6 @@ impl ServiceOptimizer {
         joins
     }
 
-    /// Extract all variables from a service clause
-    fn extract_service_variables(&self, service: &OptimizedServiceClause) -> HashSet<String> {
-        let mut vars = HashSet::new();
-
-        for pattern in &service.patterns {
-            vars.extend(self.extract_pattern_variables(pattern));
-        }
-
-        for filter in &service.filters {
-            vars.extend(filter.variables.iter().cloned());
-        }
-
-        vars
-    }
 
     /// Determine overall execution strategy
     pub fn determine_execution_strategy(
@@ -767,8 +753,8 @@ impl ServiceOptimizer {
         );
     }
 
-    /// Estimate service cost for a pattern
-    pub fn estimate_service_cost(
+    /// Estimate service cost for a single pattern
+    pub fn estimate_single_pattern_service_cost(
         &self,
         pattern: &TriplePattern,
         service: &FederatedService,
@@ -783,43 +769,6 @@ impl ServiceOptimizer {
         base_cost * complexity_factor
     }
 
-    /// Calculate pattern selectivity for result size estimation
-    pub fn calculate_pattern_selectivity(
-        &self,
-        pattern: &TriplePattern,
-        service: &FederatedService,
-        registry: &ServiceRegistry,
-    ) -> f64 {
-        // Simple selectivity calculation - more specific patterns have lower selectivity
-        let mut selectivity = 1.0;
-
-        // More bound terms = lower selectivity (fewer results)
-        if pattern.subject.is_some() {
-            selectivity *= 0.1;
-        }
-        if pattern.predicate.is_some() {
-            selectivity *= 0.3;
-        }
-        if pattern.object.is_some() {
-            selectivity *= 0.1;
-        }
-
-        selectivity
-    }
-
-    /// Get service-specific result size factor
-    pub fn get_service_result_size_factor(
-        &self,
-        service: &FederatedService,
-        registry: &ServiceRegistry,
-    ) -> f64 {
-        // Factor based on service characteristics - large endpoints return more results
-        match service.endpoint.as_str() {
-            url if url.contains("wikidata") => 2.0, // Wikidata typically returns many results
-            url if url.contains("dbpedia") => 1.5,  // DBpedia has substantial data
-            _ => 1.0,                               // Default factor
-        }
-    }
 
     /// Calculate pattern complexity for cost estimation
     pub fn calculate_pattern_complexity(&self, pattern: &TriplePattern) -> PatternComplexity {

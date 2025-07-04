@@ -314,7 +314,7 @@ impl ExternalServicesManager {
             self.rate_limiter.check_limit().await?;
 
             match self
-                .translate_text_advanced(trans_config, text, source_language, target_language)
+                .translate_text(trans_config, text, target_language)
                 .await
             {
                 Ok(result) => return Ok(result),
@@ -340,7 +340,8 @@ impl ExternalServicesManager {
 
             self.rate_limiter.check_limit().await?;
 
-            match self.detect_text_language(trans_config, text).await {
+            // Use specific language detection for this service
+            match self.detect_language_for_service(trans_config, text).await {
                 Ok(result) => return Ok(result),
                 Err(e) => {
                     warn!(
@@ -455,7 +456,7 @@ impl ExternalServicesManager {
             self.rate_limiter.check_limit().await?;
 
             match self
-                .convert_speech_to_text_advanced(speech_config, audio_data, language, options)
+                .convert_speech_to_text(speech_config, audio_data, language)
                 .await
             {
                 Ok(result) => return Ok(result),
@@ -493,9 +494,8 @@ impl ExternalServicesManager {
                 continue;
             }
 
-            return self
-                .create_streaming_speech_connection(speech_config, audio_stream, language, options)
-                .await;
+            // Streaming speech connection not yet implemented
+            return Err(anyhow!("Streaming speech-to-text not yet implemented"));
         }
 
         Err(anyhow!(
@@ -544,7 +544,7 @@ impl ExternalServicesManager {
             self.rate_limiter.check_limit().await?;
 
             match self
-                .convert_text_to_speech_with_voice(speech_config, text, voice_model)
+                .convert_text_to_speech(speech_config, text, &voice_model.language)
                 .await
             {
                 Ok(audio_data) => return Ok(audio_data),
@@ -634,7 +634,7 @@ impl ExternalServicesManager {
             self.rate_limiter.check_limit().await?;
 
             match self
-                .convert_text_to_speech_basic(speech_config, text, language)
+                .convert_text_to_speech(speech_config, text, language)
                 .await
             {
                 Ok(audio_data) => return Ok(audio_data),
@@ -768,9 +768,12 @@ impl ExternalServicesManager {
             service: config.name.clone(),
             original_text: text.to_string(),
             translated_text: trans_response.translated_text,
-            source_language: trans_response.detected_language,
+            source_language: trans_response.detected_language.clone(),
             target_language: target_language.to_string(),
             confidence: trans_response.confidence,
+            detected_language: Some(trans_response.detected_language),
+            alternative_translations: Vec::new(),
+            processing_time_ms: 0,
         })
     }
 
@@ -803,6 +806,37 @@ impl ExternalServicesManager {
             text: speech_response.text,
             confidence: speech_response.confidence,
             language: language.to_string(),
+            word_timestamps: None,
+            speaker_info: None,
+            emotion_analysis: None,
+            processing_time_ms: 0,
+        })
+    }
+
+    async fn detect_language_for_service(
+        &self,
+        config: &TranslationConfig,
+        text: &str,
+    ) -> Result<LanguageDetectionResult> {
+        let mut request = self
+            .client
+            .post(&format!("{}/detect", config.api_url))
+            .json(&serde_json::json!({"text": text}));
+
+        if let Some(api_key) = &config.api_key {
+            request = request.header("Authorization", format!("Bearer {}", api_key));
+        }
+
+        let response = request.send().await?;
+        let detection_response: serde_json::Value = response.json().await?;
+
+        Ok(LanguageDetectionResult {
+            service: config.name.clone(),
+            language_code: detection_response["language_code"].as_str().unwrap_or("unknown").to_string(),
+            language_name: detection_response["language_name"].as_str().unwrap_or("Unknown").to_string(),
+            confidence: detection_response["confidence"].as_f64().unwrap_or(0.0) as f32,
+            alternative_languages: Vec::new(),
+            text_sample: text.chars().take(50).collect(),
         })
     }
 

@@ -174,7 +174,7 @@ impl PatternAnalyzer {
     /// Analyze patterns in an RDF graph
     pub fn analyze_graph_patterns(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         tracing::info!("Starting pattern analysis for graph");
@@ -316,8 +316,8 @@ impl PatternAnalyzer {
     /// Discover similar patterns between graphs
     pub fn discover_similar_patterns(
         &mut self,
-        store1: &Store,
-        store2: &Store,
+        store1: &dyn Store,
+        store2: &dyn Store,
     ) -> Result<Vec<PatternSimilarity>> {
         tracing::info!("Discovering similar patterns between graphs");
 
@@ -383,7 +383,7 @@ impl PatternAnalyzer {
     /// Analyze structural patterns in the graph
     fn analyze_structural_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
@@ -406,7 +406,7 @@ impl PatternAnalyzer {
     /// Analyze usage patterns in the graph
     fn analyze_usage_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
@@ -429,7 +429,7 @@ impl PatternAnalyzer {
     /// Analyze class usage patterns
     fn analyze_class_usage_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
@@ -497,6 +497,7 @@ impl PatternAnalyzer {
 
                             if support >= self.config.min_support_threshold {
                                 patterns.push(Pattern::ClassUsage {
+                                    id: format!("class_usage_{}", uuid::Uuid::new_v4()),
                                     class: class_node.clone(),
                                     instance_count: count,
                                     support,
@@ -516,7 +517,7 @@ impl PatternAnalyzer {
     /// Analyze property usage patterns
     fn analyze_property_usage_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
@@ -586,6 +587,7 @@ impl PatternAnalyzer {
 
                             if support >= self.config.min_support_threshold {
                                 patterns.push(Pattern::PropertyUsage {
+                                    id: format!("property_usage_{}", uuid::Uuid::new_v4()),
                                     property: property_node.clone(),
                                     usage_count: count,
                                     support,
@@ -605,7 +607,7 @@ impl PatternAnalyzer {
     /// Analyze hierarchy patterns (rdfs:subClassOf, etc.)
     fn analyze_hierarchy_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
@@ -648,6 +650,7 @@ impl PatternAnalyzer {
                         (subclass_term, superclass_term)
                     {
                         patterns.push(Pattern::Hierarchy {
+                            id: format!("hierarchy_{}", uuid::Uuid::new_v4()),
                             subclass: subclass.clone(),
                             superclass: superclass.clone(),
                             relationship_type: HierarchyType::SubClassOf,
@@ -667,7 +670,7 @@ impl PatternAnalyzer {
     /// Analyze cardinality patterns
     fn analyze_cardinality_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
@@ -734,6 +737,7 @@ impl PatternAnalyzer {
                 // Check for functional properties (max cardinality 1)
                 if max_cardinality == 1 {
                     patterns.push(Pattern::Cardinality {
+                        id: format!("cardinality_{}", uuid::Uuid::new_v4()),
                         property: property.clone(),
                         cardinality_type: CardinalityType::Functional,
                         min_count: Some(min_cardinality),
@@ -748,6 +752,7 @@ impl PatternAnalyzer {
                 // Check for required properties (min cardinality > 0)
                 if min_cardinality > 0 {
                     patterns.push(Pattern::Cardinality {
+                        id: format!("cardinality_{}", uuid::Uuid::new_v4()),
                         property: property.clone(),
                         cardinality_type: CardinalityType::Required,
                         min_count: Some(min_cardinality),
@@ -767,7 +772,7 @@ impl PatternAnalyzer {
     /// Analyze datatype patterns
     fn analyze_datatype_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
@@ -840,6 +845,7 @@ impl PatternAnalyzer {
 
                     if support >= self.config.min_support_threshold {
                         patterns.push(Pattern::Datatype {
+                            id: format!("datatype_{}", uuid::Uuid::new_v4()),
                             property: property.clone(),
                             datatype: datatype.clone(),
                             usage_count: count,
@@ -858,7 +864,7 @@ impl PatternAnalyzer {
     /// Analyze naming patterns
     fn analyze_naming_patterns(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
@@ -873,7 +879,7 @@ impl PatternAnalyzer {
     /// Analyze frequent itemsets
     fn analyze_frequent_itemsets(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
@@ -938,6 +944,7 @@ impl PatternAnalyzer {
             if support >= self.config.min_support_threshold {
                 if let Ok(property_node) = NamedNode::new(&predicate) {
                     patterns.push(Pattern::PropertyUsage {
+                        id: format!("property_usage_{}", uuid::Uuid::new_v4()),
                         property: property_node,
                         usage_count: count,
                         support,
@@ -955,7 +962,7 @@ impl PatternAnalyzer {
     /// Analyze association rules
     fn analyze_association_rules(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
         existing_patterns: &[Pattern],
     ) -> Result<Vec<Pattern>> {
@@ -1033,7 +1040,7 @@ impl PatternAnalyzer {
     /// Analyze graph structure patterns
     fn analyze_graph_structure_patterns(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         // Analyze graph topology patterns (star, chain, tree, etc.)
@@ -1044,7 +1051,7 @@ impl PatternAnalyzer {
     /// Detect anomalous patterns
     fn detect_anomalous_patterns(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _graph_name: Option<&str>,
         _existing_patterns: &[Pattern],
     ) -> Result<Vec<Pattern>> {
@@ -1076,6 +1083,7 @@ impl PatternAnalyzer {
 
             if support >= self.config.min_support_threshold {
                 patterns.push(Pattern::ConstraintUsage {
+                    id: format!("constraint_usage_{}", uuid::Uuid::new_v4()),
                     constraint_type,
                     usage_count: count,
                     support,
@@ -1116,6 +1124,7 @@ impl PatternAnalyzer {
 
             if support >= self.config.min_support_threshold {
                 patterns.push(Pattern::TargetUsage {
+                    id: format!("target_usage_{}", uuid::Uuid::new_v4()),
                     target_type,
                     usage_count: count,
                     support,
@@ -1149,6 +1158,7 @@ impl PatternAnalyzer {
 
             if support >= self.config.min_support_threshold {
                 patterns.push(Pattern::PathComplexity {
+                    id: format!("path_complexity_{}_{}", complexity, uuid::Uuid::new_v4()),
                     complexity,
                     usage_count: count,
                     support,
@@ -1183,6 +1193,7 @@ impl PatternAnalyzer {
 
             if support >= self.config.min_support_threshold {
                 patterns.push(Pattern::ShapeComplexity {
+                    id: format!("shape_complexity_{}_{}", constraint_count, uuid::Uuid::new_v4()),
                     constraint_count,
                     shape_count,
                     support,
@@ -1308,7 +1319,7 @@ impl PatternAnalyzer {
     }
 
     /// Create cache key
-    fn create_cache_key(&self, _store: &Store, graph_name: Option<&str>) -> String {
+    fn create_cache_key(&self, _store: &dyn Store, graph_name: Option<&str>) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -1320,7 +1331,7 @@ impl PatternAnalyzer {
     /// Execute pattern query
     fn execute_pattern_query(
         &self,
-        store: &Store,
+        store: &dyn Store,
         query: &str,
     ) -> Result<oxirs_core::query::QueryResult> {
         use oxirs_core::query::QueryEngine;
@@ -1336,7 +1347,7 @@ impl PatternAnalyzer {
     /// Mine Class -> Property association rules
     fn mine_class_property_rule(
         &self,
-        store: &Store,
+        store: &dyn Store,
         class_iri: &str,
         property_iri: &str,
         graph_name: Option<&str>,
@@ -1402,6 +1413,7 @@ impl PatternAnalyzer {
 
             if confidence >= self.config.min_confidence_threshold {
                 return Ok(Some(Pattern::AssociationRule {
+                    id: format!("association_{}_to_{}_{}", class_iri, property_iri, uuid::Uuid::new_v4()),
                     antecedent: class_iri.to_string(),
                     consequent: property_iri.to_string(),
                     support: with_property_count as f64 / total_count as f64,
@@ -1418,7 +1430,7 @@ impl PatternAnalyzer {
     /// Mine Property -> Property association rules
     fn mine_property_property_rule(
         &self,
-        store: &Store,
+        store: &dyn Store,
         antecedent_property: &str,
         consequent_property: &str,
         graph_name: Option<&str>,
@@ -1484,6 +1496,7 @@ impl PatternAnalyzer {
 
             if confidence >= self.config.min_confidence_threshold {
                 return Ok(Some(Pattern::AssociationRule {
+                    id: format!("association_{}_to_{}_{}", antecedent_property, consequent_property, uuid::Uuid::new_v4()),
                     antecedent: antecedent_property.to_string(),
                     consequent: consequent_property.to_string(),
                     support: both_count as f64 / antecedent_count as f64,
@@ -1500,7 +1513,7 @@ impl PatternAnalyzer {
     /// Mine cardinality constraint rules
     fn mine_cardinality_rules(
         &self,
-        store: &Store,
+        store: &dyn Store,
         class_iri: &str,
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
@@ -1572,6 +1585,7 @@ impl PatternAnalyzer {
                 // Create min cardinality pattern
                 if min_card > 0 {
                     patterns.push(Pattern::CardinalityRule {
+                        id: format!("min_cardinality_{}_{}_{}", property, min_card, uuid::Uuid::new_v4()),
                         property: NamedNode::new(property.as_str()).unwrap(),
                         rule_type: format!("min_cardinality_{}", min_card),
                         min_count: Some(min_card),
@@ -1586,6 +1600,7 @@ impl PatternAnalyzer {
                 if max_card > 0 && max_card == min_card {
                     // Exact cardinality
                     patterns.push(Pattern::CardinalityRule {
+                        id: format!("exact_cardinality_{}_{}_{}", property, min_card, uuid::Uuid::new_v4()),
                         property: NamedNode::new(property.as_str()).unwrap(),
                         rule_type: format!("exact_cardinality_{}", min_card),
                         min_count: Some(min_card),
@@ -1597,6 +1612,7 @@ impl PatternAnalyzer {
                 } else if max_card <= 5 {
                     // Reasonable upper bound
                     patterns.push(Pattern::CardinalityRule {
+                        id: format!("max_cardinality_{}_{}_{}", property, max_card, uuid::Uuid::new_v4()),
                         property: NamedNode::new(property.as_str()).unwrap(),
                         rule_type: format!("max_cardinality_{}", max_card),
                         min_count: None,
@@ -1644,6 +1660,7 @@ impl Default for PatternAnalyzer {
 pub enum Pattern {
     /// Class usage pattern
     ClassUsage {
+        id: String,
         class: NamedNode,
         instance_count: u32,
         support: f64,
@@ -1653,6 +1670,7 @@ pub enum Pattern {
 
     /// Property usage pattern
     PropertyUsage {
+        id: String,
         property: NamedNode,
         usage_count: u32,
         support: f64,
@@ -1662,6 +1680,7 @@ pub enum Pattern {
 
     /// Datatype usage pattern
     Datatype {
+        id: String,
         property: NamedNode,
         datatype: NamedNode,
         usage_count: u32,
@@ -1672,6 +1691,7 @@ pub enum Pattern {
 
     /// Cardinality pattern
     Cardinality {
+        id: String,
         property: NamedNode,
         cardinality_type: CardinalityType,
         min_count: Option<u32>,
@@ -1684,6 +1704,7 @@ pub enum Pattern {
 
     /// Hierarchy pattern
     Hierarchy {
+        id: String,
         subclass: NamedNode,
         superclass: NamedNode,
         relationship_type: HierarchyType,
@@ -1695,6 +1716,7 @@ pub enum Pattern {
 
     /// Constraint usage pattern in shapes
     ConstraintUsage {
+        id: String,
         constraint_type: String,
         usage_count: u32,
         support: f64,
@@ -1704,6 +1726,7 @@ pub enum Pattern {
 
     /// Target usage pattern in shapes
     TargetUsage {
+        id: String,
         target_type: String,
         usage_count: u32,
         support: f64,
@@ -1713,6 +1736,7 @@ pub enum Pattern {
 
     /// Path complexity pattern
     PathComplexity {
+        id: String,
         complexity: usize,
         usage_count: u32,
         support: f64,
@@ -1722,6 +1746,7 @@ pub enum Pattern {
 
     /// Shape complexity pattern
     ShapeComplexity {
+        id: String,
         constraint_count: usize,
         shape_count: u32,
         support: f64,
@@ -1731,6 +1756,7 @@ pub enum Pattern {
 
     /// Association rule pattern
     AssociationRule {
+        id: String,
         antecedent: String,
         consequent: String,
         support: f64,
@@ -1741,6 +1767,7 @@ pub enum Pattern {
 
     /// Cardinality rule pattern
     CardinalityRule {
+        id: String,
         property: NamedNode,
         rule_type: String,
         min_count: Option<u32>,
@@ -1800,6 +1827,23 @@ impl Pattern {
             Pattern::ShapeComplexity { pattern_type, .. } => pattern_type,
             Pattern::AssociationRule { pattern_type, .. } => pattern_type,
             Pattern::CardinalityRule { pattern_type, .. } => pattern_type,
+        }
+    }
+
+    /// Get the ID for this pattern
+    pub fn id(&self) -> &str {
+        match self {
+            Pattern::ClassUsage { id, .. } => id,
+            Pattern::PropertyUsage { id, .. } => id,
+            Pattern::Datatype { id, .. } => id,
+            Pattern::Cardinality { id, .. } => id,
+            Pattern::Hierarchy { id, .. } => id,
+            Pattern::ConstraintUsage { id, .. } => id,
+            Pattern::TargetUsage { id, .. } => id,
+            Pattern::PathComplexity { id, .. } => id,
+            Pattern::ShapeComplexity { id, .. } => id,
+            Pattern::AssociationRule { id, .. } => id,
+            Pattern::CardinalityRule { id, .. } => id,
         }
     }
 }
@@ -1938,6 +1982,7 @@ mod tests {
     #[test]
     fn test_pattern_support_confidence() {
         let pattern = Pattern::ClassUsage {
+            id: "test_class_usage_person".to_string(),
             class: NamedNode::new("http://example.org/Person").unwrap(),
             instance_count: 100,
             support: 0.8,
@@ -1953,6 +1998,7 @@ mod tests {
     #[test]
     fn test_cardinality_pattern() {
         let pattern = Pattern::Cardinality {
+            id: "test_cardinality_name_functional".to_string(),
             property: NamedNode::new("http://example.org/name").unwrap(),
             cardinality_type: CardinalityType::Functional,
             min_count: Some(1),
@@ -1970,6 +2016,7 @@ mod tests {
     #[test]
     fn test_hierarchy_pattern() {
         let pattern = Pattern::Hierarchy {
+            id: "test_hierarchy_student_person".to_string(),
             subclass: NamedNode::new("http://example.org/Student").unwrap(),
             superclass: NamedNode::new("http://example.org/Person").unwrap(),
             relationship_type: HierarchyType::SubClassOf,
@@ -1986,6 +2033,7 @@ mod tests {
     #[test]
     fn test_cached_pattern_result_expiry() {
         let patterns = vec![Pattern::ClassUsage {
+            id: "test_cached_pattern_test_class".to_string(),
             class: NamedNode::new("http://example.org/Test").unwrap(),
             instance_count: 10,
             support: 0.5,

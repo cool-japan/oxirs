@@ -666,7 +666,7 @@ impl ValidationReportAnalytics {
     }
 
     /// Export analytics to various formats
-    pub fn export_analytics(&self, format: ReportFormat) -> Result<String> {
+    pub fn export_analytics(&mut self, format: ReportFormat) -> Result<String> {
         let analytics = self.generate_analytics()?;
 
         match format {
@@ -675,7 +675,7 @@ impl ValidationReportAnalytics {
             ReportFormat::Csv => self.export_to_csv(&analytics),
             ReportFormat::Html => self.export_to_html(&analytics),
             ReportFormat::Text => self.export_to_text(&analytics),
-            _ => Err(ShaclError::UnsupportedOperation(format!(
+            _ => Err(ShaclError::ReportGeneration(format!(
                 "Export format {:?} not supported for analytics",
                 format
             ))),

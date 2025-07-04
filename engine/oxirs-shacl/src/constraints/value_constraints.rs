@@ -46,7 +46,7 @@
 use serde::{Deserialize, Serialize};
 
 use oxirs_core::{
-    model::{BlankNode, Literal, NamedNode, Term, Triple},
+    model::{BlankNode, Literal, NamedNode, Quad, Term, Triple},
     Store,
 };
 
@@ -151,7 +151,12 @@ impl ClassConstraint {
                 // Check direct type assertion
                 let triple =
                     Triple::new(node.clone(), type_predicate.clone(), self.class_iri.clone());
-                if store.contains_quad(&triple.into()).unwrap_or(false) {
+                let quad: Quad = triple.into();
+                let subject = quad.subject();
+                let predicate = quad.predicate();
+                let object = quad.object();
+                let graph_name = quad.graph_name();
+                if !store.find_quads(Some(subject), Some(predicate), Some(object), Some(graph_name)).unwrap_or_default().is_empty() {
                     return Ok(true);
                 }
 

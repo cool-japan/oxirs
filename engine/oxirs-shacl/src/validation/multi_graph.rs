@@ -24,7 +24,7 @@ use tokio::sync::{mpsc, Semaphore};
 #[cfg(feature = "async")]
 use oxirs_core::{
     model::{GraphName, NamedNode, Quad, Term, Triple},
-    Store,
+    Store, ConcreteStore,
 };
 
 #[cfg(feature = "async")]
@@ -726,7 +726,8 @@ impl MultiGraphValidationEngine {
             aggregated_violations.extend(result.report.violations().iter().cloned());
         }
 
-        let mut aggregated_report = ValidationReport::new(overall_conforms);
+        let mut aggregated_report = ValidationReport::new();
+        aggregated_report.set_conforms(overall_conforms);
         for violation in aggregated_violations {
             aggregated_report.add_violation(violation);
         }
@@ -755,11 +756,11 @@ impl MultiGraphValidationEngine {
 
         let average_validation_time = if total_graphs > 0 {
             Duration::from_nanos(
-                graph_results
+                (graph_results
                     .values()
                     .map(|r| r.stats.validation_duration.as_nanos())
                     .sum::<u128>()
-                    / total_graphs as u128,
+                    / total_graphs as u128).min(u64::MAX as u128) as u64,
             )
         } else {
             Duration::from_millis(0)
@@ -1113,8 +1114,9 @@ impl MultiGraphValidationEngine {
                     .violations()
                     .iter()
                     .map(|v| {
-                        v.message
-                            .clone()
+                        v.message()
+                            .as_ref()
+                            .cloned()
                             .unwrap_or_else(|| "Unknown validation error".to_string())
                     })
                     .collect();
@@ -1327,8 +1329,8 @@ mod tests {
         let engine = MultiGraphValidationEngine::new(shapes, config).unwrap();
 
         // Create test stores
-        let mut stores = HashMap::new();
-        let store1 = Arc::new(Store::new().unwrap());
+        let mut stores: HashMap<GraphName, Arc<dyn Store>> = HashMap::new();
+        let store1 = Arc::new(ConcreteStore::new().unwrap()) as Arc<dyn Store>;
         let graph1 = GraphName::NamedNode(NamedNode::new("http://example.org/graph1").unwrap());
         stores.insert(graph1, store1);
 

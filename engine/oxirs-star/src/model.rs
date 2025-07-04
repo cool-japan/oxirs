@@ -291,6 +291,24 @@ impl StarTriple {
             || self.object.is_quoted_triple()
     }
 
+    /// Count the number of quoted triples in this triple (recursively)
+    pub fn count_quoted_triples(&self) -> usize {
+        let mut count = 0;
+        
+        // Count quoted triples in each position
+        if let StarTerm::QuotedTriple(inner) = &self.subject {
+            count += 1 + inner.count_quoted_triples();
+        }
+        if let StarTerm::QuotedTriple(inner) = &self.predicate {
+            count += 1 + inner.count_quoted_triples();
+        }
+        if let StarTerm::QuotedTriple(inner) = &self.object {
+            count += 1 + inner.count_quoted_triples();
+        }
+        
+        count
+    }
+
     /// Convert to a quad with optional graph
     pub fn to_quad(self, graph: Option<StarTerm>) -> StarQuad {
         StarQuad {
@@ -706,6 +724,49 @@ impl StarGraph {
             .unwrap_or(0);
 
         default_max.max(named_max)
+    }
+
+    /// Check if the graph is valid (all triples validate)
+    pub fn is_valid(&self) -> bool {
+        // Check default graph triples
+        for triple in &self.triples {
+            if triple.validate().is_err() {
+                return false;
+            }
+        }
+
+        // Check named graph triples
+        for triples in self.named_graphs.values() {
+            for triple in triples {
+                if triple.validate().is_err() {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+
+    /// Get an iterator over all triples in all graphs
+    pub fn iter(&self) -> impl Iterator<Item = &StarTriple> {
+        self.triples
+            .iter()
+            .chain(self.named_graphs.values().flatten())
+    }
+
+    /// Get an iterator over all subjects in the graph
+    pub fn subjects(&self) -> impl Iterator<Item = &StarTerm> {
+        self.iter().map(|triple| &triple.subject)
+    }
+
+    /// Get an iterator over all predicates in the graph
+    pub fn predicates(&self) -> impl Iterator<Item = &StarTerm> {
+        self.iter().map(|triple| &triple.predicate)
+    }
+
+    /// Get an iterator over all objects in the graph
+    pub fn objects(&self) -> impl Iterator<Item = &StarTerm> {
+        self.iter().map(|triple| &triple.object)
     }
 }
 

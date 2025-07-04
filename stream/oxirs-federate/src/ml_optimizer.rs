@@ -4,14 +4,13 @@
 //! including performance prediction, source selection learning, join order optimization,
 //! caching strategy learning, and anomaly detection.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
-use uuid::Uuid;
 
 /// ML model configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +45,7 @@ impl Default for MLConfig {
             enable_join_order_optimization: true,
             enable_caching_strategy_learning: true,
             enable_anomaly_detection: true,
-            training_interval: Duration::from_hours(1),
+            training_interval: Duration::from_secs(3600), // 1 hour
             feature_history_size: 10000,
             learning_rate: 0.01,
             regularization: 0.001,

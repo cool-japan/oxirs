@@ -255,6 +255,24 @@ pub enum ArrowType {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum NodeSize {
+    Small,
+    Medium,
+    Large,
+    ExtraLarge,
+    Custom(f64),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum EdgeThickness {
+    Thin,
+    Medium,
+    Thick,
+    ExtraThick,
+    Custom(f64),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum GraphLayout {
     ForceDirected,
     Circular,
@@ -275,6 +293,12 @@ pub struct GraphStyling {
     pub physics_enabled: bool,
     pub clustering_enabled: bool,
     pub smooth_curves: bool,
+    pub node_color: String,
+    pub edge_color: String,
+    pub node_size: NodeSize,
+    pub edge_thickness: EdgeThickness,
+    pub layout_algorithm: String,
+    pub show_labels: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -322,6 +346,9 @@ impl RichMessage {
             code: code.into(),
             language: language.into(),
             filename: None,
+            line_numbers: true,
+            highlight_lines: Vec::new(),
+            theme: CodeTheme::default(),
         });
     }
 
@@ -335,6 +362,7 @@ impl RichMessage {
             valid,
             error_message,
             execution_plan: None,
+            performance_stats: None,
         });
 
         Ok(())
@@ -350,7 +378,9 @@ impl RichMessage {
         self.add_content(RichContent::GraphVisualization {
             nodes,
             edges,
-            layout: layout.into(),
+            layout: GraphLayout::ForceDirected,
+            styling: GraphStyling::default(),
+            interactive_features: InteractiveFeatures::default(),
             metadata: HashMap::new(),
         });
     }
@@ -358,8 +388,12 @@ impl RichMessage {
     /// Add a table
     pub fn add_table(&mut self, headers: Vec<String>, rows: Vec<Vec<String>>) {
         self.add_content(RichContent::Table {
-            headers,
-            rows,
+            headers: headers.into_iter().map(|h| TableHeader { name: h, data_type: TableDataType::Text, sortable: true, filterable: true, width: None, alignment: TextAlignment::Left }).collect(),
+            rows: rows.into_iter().map(|r| TableRow { cells: r.into_iter().map(|c| TableCell { value: c, data_type: TableDataType::Text, formatting: None, link: None }).collect(), metadata: HashMap::new(), styling: None }).collect(),
+            pagination: None,
+            sorting: None,
+            filtering: None,
+            styling: TableStyling::default(),
             metadata: HashMap::new(),
         });
     }
@@ -406,12 +440,12 @@ impl RichMessage {
                 RichContent::Table { headers, rows, .. } => {
                     // Convert to markdown table
                     if !headers.is_empty() {
-                        markdown.push_str(&format!("| {} |\n", headers.join(" | ")));
+                        markdown.push_str(&format!("| {} |\n", headers.iter().map(|h| h.name.as_str()).collect::<Vec<_>>().join(" | ")));
                         markdown
                             .push_str(&format!("| {} |\n", vec!["---"; headers.len()].join(" | ")));
 
                         for row in rows {
-                            markdown.push_str(&format!("| {} |\n", row.join(" | ")));
+                            markdown.push_str(&format!("| {} |\n", row.cells.iter().map(|c| c.value.as_str()).collect::<Vec<_>>().join(" | ")));
                         }
                         markdown.push_str("\n");
                     }
@@ -422,6 +456,30 @@ impl RichMessage {
                 }
                 RichContent::File { filename, .. } => {
                     markdown.push_str(&format!("📎 **File**: {}\n\n", filename));
+                }
+                RichContent::Chart { chart_type, .. } => {
+                    markdown.push_str(&format!("📈 **Chart**: {:?}\n\n", chart_type));
+                }
+                RichContent::Timeline { events, .. } => {
+                    markdown.push_str(&format!("📅 **Timeline**: {} events\n\n", events.len()));
+                }
+                RichContent::Map { map_type, markers, .. } => {
+                    markdown.push_str(&format!("🗺️ **Map**: {:?} with {} markers\n\n", map_type, markers.len()));
+                }
+                RichContent::ThreeDVisualization { objects, .. } => {
+                    markdown.push_str(&format!("🎯 **3D Visualization**: {} objects\n\n", objects.len()));
+                }
+                RichContent::Dashboard { widgets, .. } => {
+                    markdown.push_str(&format!("📊 **Dashboard**: {} widgets\n\n", widgets.len()));
+                }
+                RichContent::Audio { .. } => {
+                    markdown.push_str("🔊 **Audio Content**\n\n");
+                }
+                RichContent::Video { .. } => {
+                    markdown.push_str("🎥 **Video Content**\n\n");
+                }
+                RichContent::Widget { .. } => {
+                    markdown.push_str("🔧 **Interactive Widget**\n\n");
                 }
             }
         }
@@ -483,15 +541,15 @@ impl RichMessage {
                     if !headers.is_empty() {
                         html.push_str("<thead><tr>");
                         for header in headers {
-                            html.push_str(&format!("<th>{}</th>", html_escape(header)));
+                            html.push_str(&format!("<th>{}</th>", html_escape(&header.name)));
                         }
                         html.push_str("</tr></thead>");
 
                         html.push_str("<tbody>");
                         for row in rows {
                             html.push_str("<tr>");
-                            for cell in row {
-                                html.push_str(&format!("<td>{}</td>", html_escape(cell)));
+                            for cell in &row.cells {
+                                html.push_str(&format!("<td>{}</td>", html_escape(&cell.value)));
                             }
                             html.push_str("</tr>");
                         }
@@ -504,6 +562,8 @@ impl RichMessage {
                     alt_text,
                     width,
                     height,
+                    annotations: _,
+                    filters: _,
                 } => {
                     let alt = alt_text.as_deref().unwrap_or("Image");
                     let mut img_tag = format!("<img src=\"{}\" alt=\"{}\"", url, html_escape(alt));
@@ -522,6 +582,45 @@ impl RichMessage {
                         "<div class=\"file-attachment\">📎 <strong>File</strong>: {}</div>",
                         html_escape(filename)
                     ));
+                }
+                RichContent::Chart { chart_type, .. } => {
+                    html.push_str(&format!(
+                        "<div class=\"chart\">📈 <strong>Chart</strong>: {:?}</div>",
+                        chart_type
+                    ));
+                }
+                RichContent::Timeline { events, .. } => {
+                    html.push_str(&format!(
+                        "<div class=\"timeline\">📅 <strong>Timeline</strong>: {} events</div>",
+                        events.len()
+                    ));
+                }
+                RichContent::Map { map_type, markers, .. } => {
+                    html.push_str(&format!(
+                        "<div class=\"map\">🗺️ <strong>Map</strong>: {:?} with {} markers</div>",
+                        map_type, markers.len()
+                    ));
+                }
+                RichContent::ThreeDVisualization { objects, .. } => {
+                    html.push_str(&format!(
+                        "<div class=\"3d-viz\">🎯 <strong>3D Visualization</strong>: {} objects</div>",
+                        objects.len()
+                    ));
+                }
+                RichContent::Dashboard { widgets, .. } => {
+                    html.push_str(&format!(
+                        "<div class=\"dashboard\">📊 <strong>Dashboard</strong>: {} widgets</div>",
+                        widgets.len()
+                    ));
+                }
+                RichContent::Audio { .. } => {
+                    html.push_str("<div class=\"audio\">🔊 <strong>Audio Content</strong></div>");
+                }
+                RichContent::Video { .. } => {
+                    html.push_str("<div class=\"video\">🎥 <strong>Video Content</strong></div>");
+                }
+                RichContent::Widget { .. } => {
+                    html.push_str("<div class=\"widget\">🔧 <strong>Interactive Widget</strong></div>");
                 }
             }
         }
@@ -603,6 +702,7 @@ impl RichContentProcessor {
                     valid,
                     error_message,
                     execution_plan,
+                    performance_stats: _,
                 } => {
                     let (is_valid, error) = validate_sparql_query(query);
                     *valid = is_valid;
@@ -618,10 +718,16 @@ impl RichContentProcessor {
                     layout,
                     ..
                 } => {
-                    if layout.is_empty() {
-                        *layout = self.graph_layout_engine.clone();
-                    }
-                    self.apply_graph_layout(nodes, edges, layout)?;
+                    let layout_str = match layout {
+                        GraphLayout::ForceDirected => "force-directed",
+                        GraphLayout::Circular => "circular",
+                        GraphLayout::Hierarchical => "hierarchical",
+                        GraphLayout::Grid => "grid",
+                        GraphLayout::Tree => "tree",
+                        GraphLayout::Cluster => "cluster",
+                        GraphLayout::Custom { algorithm, .. } => algorithm,
+                    };
+                    self.apply_graph_layout(nodes, edges, layout_str)?;
                 }
                 _ => {}
             }
@@ -667,15 +773,21 @@ impl RichContentProcessor {
                 let n = nodes.len() as f64;
                 for (i, node) in nodes.iter_mut().enumerate() {
                     let angle = 2.0 * std::f64::consts::PI * i as f64 / n;
-                    node.x = Some(50.0 + 40.0 * angle.cos());
-                    node.y = Some(50.0 + 40.0 * angle.sin());
+                    node.position = Some(NodePosition {
+                        x: 50.0 + 40.0 * angle.cos(),
+                        y: 50.0 + 40.0 * angle.sin(),
+                        z: None,
+                    });
                 }
             }
             "hierarchical" => {
                 // Simple vertical layout
                 for (i, node) in nodes.iter_mut().enumerate() {
-                    node.x = Some(50.0);
-                    node.y = Some(i as f64 * 20.0);
+                    node.position = Some(NodePosition {
+                        x: 50.0,
+                        y: i as f64 * 20.0,
+                        z: None,
+                    });
                 }
             }
             _ => {
@@ -761,6 +873,12 @@ mod tests {
             physics_enabled: true,
             clustering_enabled: false,
             smooth_curves: true,
+            node_color: "#3498db".to_string(),
+            edge_color: "#95a5a6".to_string(),
+            node_size: NodeSize::Medium,
+            edge_thickness: EdgeThickness::Medium,
+            layout_algorithm: "force-directed".to_string(),
+            show_labels: true,
         };
         let interactive_features = InteractiveFeatures {
             pan_enabled: true,
@@ -1495,4 +1613,86 @@ pub enum ValidationType {
     Email,
     Url,
     Custom(String),
+}
+
+// Default implementations for existing types
+
+impl Default for CodeTheme {
+    fn default() -> Self {
+        Self::Light
+    }
+}
+
+impl Default for GraphLayout {
+    fn default() -> Self {
+        Self::ForceDirected
+    }
+}
+
+impl Default for QueryPerformanceStats {
+    fn default() -> Self {
+        Self {
+            execution_time_ms: 0,
+            result_count: 0,
+            memory_used_mb: 0.0,
+            query_plan_complexity: 0,
+        }
+    }
+}
+
+// Default implementations for existing types
+
+impl Default for GraphStyling {
+    fn default() -> Self {
+        Self {
+            background_color: "#ffffff".to_string(),
+            grid_enabled: false,
+            physics_enabled: true,
+            clustering_enabled: false,
+            smooth_curves: true,
+            node_color: "#3498db".to_string(),
+            edge_color: "#7f8c8d".to_string(),
+            node_size: NodeSize::Medium,
+            edge_thickness: EdgeThickness::Medium,
+            layout_algorithm: "force".to_string(),
+            show_labels: true,
+        }
+    }
+}
+
+impl Default for InteractiveFeatures {
+    fn default() -> Self {
+        Self {
+            pan_enabled: true,
+            zoom_enabled: true,
+            node_selection: true,
+            edge_selection: true,
+            hover_effects: true,
+            click_to_expand: true,
+            context_menu: true,
+        }
+    }
+}
+
+impl Default for TableStyling {
+    fn default() -> Self {
+        Self {
+            theme: TableTheme::Default,
+            striped_rows: true,
+            border_style: BorderStyle::Solid,
+            header_styling: HeaderStyling::default(),
+            cell_padding: 8,
+        }
+    }
+}
+
+impl Default for HeaderStyling {
+    fn default() -> Self {
+        Self {
+            background_color: "#f8f9fa".to_string(),
+            text_color: "#212529".to_string(),
+            font_weight: FontWeight::Bold,
+            fixed_header: false,
+        }
+    }
 }

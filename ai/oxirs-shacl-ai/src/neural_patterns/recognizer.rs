@@ -13,6 +13,8 @@ use crate::{
     Result, ShaclAiError,
 };
 
+use super::types::{GraphStatistics, PatternRelationshipGraph};
+
 use super::{
     attention::CrossPatternAttention,
     correlation::AdvancedPatternCorrelationAnalyzer,
@@ -133,7 +135,11 @@ impl NeuralPatternRecognizer {
             .discover_hierarchies(
                 &patterns,
                 &correlation_analysis.discovered_correlations,
-                &correlation_analysis.pattern_hierarchies[0], // TODO: Fix this
+                &PatternRelationshipGraph {
+                    pattern_nodes: HashMap::new(),
+                    relationship_edges: Vec::new(),
+                    graph_stats: GraphStatistics::default(),
+                }, // Create default relationship graph
             )
             .await?;
 
@@ -213,8 +219,8 @@ impl NeuralPatternRecognizer {
         tracing::info!("Starting pattern discovery from RDF store");
 
         // Use pattern analyzer to discover initial patterns
-        let mut analyzer = PatternAnalyzer::new(config.clone());
-        let discovered_patterns = analyzer.discover_patterns(store).await?;
+        let mut analyzer = PatternAnalyzer::with_config(config.clone());
+        let discovered_patterns = analyzer.analyze_graph_patterns(store, None)?;
 
         // Apply neural enhancement to refine patterns
         let enhanced_patterns = self
@@ -327,7 +333,7 @@ impl NeuralPatternRecognizer {
                 .map(|_| rand::random::<f64>())
                 .collect();
 
-            embeddings.insert(pattern.id.clone(), embedding);
+            embeddings.insert(pattern.id().to_string(), embedding);
         }
 
         Ok(embeddings)
@@ -349,7 +355,7 @@ impl NeuralPatternRecognizer {
             let correlation_count = correlation_analysis
                 .discovered_correlations
                 .iter()
-                .filter(|c| c.pattern1_id == pattern.id || c.pattern2_id == pattern.id)
+                .filter(|c| c.pattern1_id == pattern.id() || c.pattern2_id == pattern.id())
                 .count();
 
             score += (correlation_count as f64 * 0.1).min(0.3);
@@ -358,14 +364,14 @@ impl NeuralPatternRecognizer {
             let in_hierarchy = correlation_analysis.pattern_hierarchies.iter().any(|h| {
                 h.hierarchy_levels
                     .iter()
-                    .any(|l| l.patterns.contains(&pattern.id))
+                    .any(|l| l.patterns.contains(&pattern.id().to_string()))
             });
 
             if in_hierarchy {
                 score += 0.2;
             }
 
-            quality_scores.insert(pattern.id.clone(), score.min(1.0));
+            quality_scores.insert(pattern.id().to_string(), score.min(1.0));
         }
 
         Ok(quality_scores)

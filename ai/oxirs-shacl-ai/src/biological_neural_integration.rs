@@ -20,7 +20,7 @@ use nalgebra::{DVector, Matrix3, Vector3};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::f64::consts::{E, PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicF64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
@@ -37,7 +37,7 @@ use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator}
 use crate::consciousness_validation::{
     ConsciousnessLevel, ConsciousnessValidationResult, EmotionalContext,
 };
-use crate::neuromorphic_validation::NeuromorphicNetwork;
+use crate::neuromorphic_validation::NeuromorphicValidationNetwork;
 use crate::{Result, ShaclAiError};
 
 /// Biological neural integration system for bio-hybrid validation
@@ -132,7 +132,7 @@ impl BiologicalNeuralIntegrator {
     /// Perform biological neural validation
     pub async fn validate_with_biological_neurons(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         bio_context: BiologicalValidationContext,
     ) -> Result<BiologicalValidationResult> {
@@ -249,7 +249,7 @@ impl BiologicalNeuralIntegrator {
         let mut total_neurons = 0;
 
         for culture_index in 0..self.config.target_culture_count {
-            let culture_id = CultureId::new();
+            let culture_id = Uuid::new_v4();
             let culture_cluster = CellCultureCluster::new(
                 culture_id,
                 self.config.neurons_per_culture,
@@ -280,7 +280,7 @@ impl BiologicalNeuralIntegrator {
         let mut total_processing_capacity = 0.0;
 
         for organoid_index in 0..self.config.target_organoid_count {
-            let organoid_id = OrganoidId::new();
+            let organoid_id = Uuid::new_v4();
             let organoid_processor = NeuralOrganoidProcessor::new(
                 organoid_id,
                 self.config.organoid_configuration.clone(),
@@ -402,7 +402,7 @@ impl BiologicalNeuralIntegrator {
     /// Process data with biological neurons
     async fn process_with_biological_neurons(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         bio_context: &BiologicalValidationContext,
     ) -> Result<BiologicalProcessingResults> {
@@ -713,12 +713,7 @@ impl BiologicalNeuralIntegrator {
         organoid_results: &NeuralOrganoidResults,
     ) -> Result<ValidationReport> {
         // Simplified implementation - would create comprehensive bio-validation report
-        Ok(ValidationReport::new(
-            None,
-            culture_results.overall_culture_accuracy > 0.8
-                && organoid_results.overall_reasoning_depth > 0.8,
-            Vec::new(),
-        ))
+        Ok(ValidationReport::new())
     }
 
     /// Calculate biological energy consumption
@@ -1063,7 +1058,7 @@ impl BiologicalNeuronInterface {
 
     async fn stimulate_neurons_with_validation_data(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _bio_patterns: &BiologicalPatterns,
     ) -> Result<NeuralStimulationResults> {
         Ok(NeuralStimulationResults { efficiency: 0.92 })

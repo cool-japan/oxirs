@@ -30,7 +30,7 @@ pub mod session;
 pub mod types;
 
 // Re-export key types for easy access
-pub use certificate::CertificateAuth as CertificateAuthenticator;
+pub use certificate::CertificateAuthService as CertificateAuthenticator;
 pub use session::SessionManager;
 pub use types::*;
 
@@ -54,7 +54,7 @@ impl AuthService {
         let config_arc = Arc::new(config);
 
         // Initialize session manager
-        let session_manager = Arc::new(SessionManager::new(config_arc.clone()));
+        let session_manager = Arc::new(SessionManager::new(config_arc.session.timeout_secs as i64));
 
         // Initialize certificate authenticator
         let certificate_auth = Arc::new(CertificateAuthenticator::new(config_arc.clone()));
@@ -101,11 +101,11 @@ impl AuthService {
             }
 
             // Verify password using password module
-            if password::verify_password(password, &user_config.password_hash)? {
+            if password::PasswordUtils::verify_password(password, &user_config.password_hash)? {
                 debug!("Successful local authentication for user: {}", username);
 
                 // Create user object with permissions
-                let permissions = permissions::compute_user_permissions(user_config).await;
+                let permissions = permissions::PermissionChecker::compute_user_permissions(user_config);
                 let user = User {
                     username: username.to_string(),
                     roles: user_config.roles.clone(),
@@ -122,7 +122,7 @@ impl AuthService {
         // If local authentication failed, try LDAP if enabled
         if let Some(ldap_service) = &self.ldap_service {
             debug!("Trying LDAP authentication for user: {}", username);
-            return ldap_service.authenticate(username, password).await;
+            return ldap_service.authenticate_ldap_user(username, password).await;
         }
 
         Ok(AuthResult::Unauthenticated)
@@ -142,12 +142,15 @@ impl AuthService {
 
     /// Validate an existing session
     pub async fn validate_session(&self, session_id: &str) -> FusekiResult<Option<User>> {
-        self.session_manager.validate_session(session_id).await
+        match self.session_manager.validate_session(session_id).await? {
+            AuthResult::Authenticated(user) => Ok(Some(user)),
+            _ => Ok(None),
+        }
     }
 
     /// Logout a session
     pub async fn logout(&self, session_id: &str) -> FusekiResult<bool> {
-        self.session_manager.logout(session_id).await
+        self.session_manager.invalidate_session(session_id).await.map(|_| true)
     }
 
     /// Create JWT token for user
@@ -169,12 +172,16 @@ impl AuthService {
     }
 
     /// Complete OAuth2 authentication
-    pub async fn complete_oauth2_authentication(&self, code: &str) -> FusekiResult<AuthResult> {
-        self.oauth2_service
+    pub async fn complete_oauth2_authentication(&self, code: &str, state: &str, redirect_uri: &str) -> FusekiResult<AuthResult> {
+        let token = self.oauth2_service
             .as_ref()
             .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?
-            .exchange_code(code)
-            .await
+            .exchange_code_for_token(code, state, redirect_uri)
+            .await?;
+        
+        // Convert OAuth2Token to AuthResult - this would need to be implemented
+        // For now, return a placeholder
+        Ok(AuthResult::Unauthenticated)
     }
 
     /// SAML authentication methods
@@ -202,6 +209,151 @@ impl AuthService {
     /// Get session manager reference
     pub fn session_manager(&self) -> &SessionManager {
         &self.session_manager
+    }
+
+    /// Get user configuration by username
+    pub async fn get_user(&self, username: &str) -> Option<UserConfig> {
+        let users = self.users.read().await;
+        users.get(username).cloned()
+    }
+
+    /// Hash a password (placeholder implementation)
+    pub fn hash_password(&self, password: &str) -> FusekiResult<String> {
+        // TODO: Replace with proper bcrypt hashing
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        password.hash(&mut hasher);
+        Ok(format!("hash_{:x}", hasher.finish()))
+    }
+
+    /// Verify password against hash (placeholder implementation)
+    pub fn verify_password(&self, password: &str, hash: &str) -> FusekiResult<bool> {
+        // TODO: Replace with proper bcrypt verification
+        let computed_hash = self.hash_password(password)?;
+        Ok(computed_hash == hash)
+    }
+
+    /// Add or update user
+    pub async fn upsert_user(&self, username: String, config: UserConfig) -> FusekiResult<()> {
+        let mut users = self.users.write().await;
+        users.insert(username, config);
+        Ok(())
+    }
+
+    /// Remove user by username
+    pub async fn remove_user(&self, username: &str) -> FusekiResult<bool> {
+        let mut users = self.users.write().await;
+        Ok(users.remove(username).is_some())
+    }
+
+    /// Check if LDAP authentication is enabled
+    pub fn is_ldap_enabled(&self) -> bool {
+        self.ldap_service.is_some()
+    }
+
+    /// Authenticate user against LDAP
+    pub async fn authenticate_ldap(&self, username: &str, password: &str) -> FusekiResult<AuthResult> {
+        if let Some(ref ldap_service) = self.ldap_service {
+            ldap_service.authenticate_ldap_user(username, password).await
+        } else {
+            Err(FusekiError::configuration("LDAP not configured"))
+        }
+    }
+
+    /// Get JWT configuration
+    pub fn jwt_config(&self) -> Option<&JwtConfig> {
+        self.config.jwt.as_ref()
+    }
+
+    /// Generate JWT token for user
+    pub async fn generate_jwt_token(&self, user: &User) -> FusekiResult<String> {
+        self.create_jwt_token(user)
+    }
+
+    /// Test LDAP connection
+    pub async fn test_ldap_connection(&self) -> FusekiResult<bool> {
+        if let Some(ref ldap_service) = self.ldap_service {
+            ldap_service.test_connection().await
+        } else {
+            Err(FusekiError::configuration("LDAP not configured"))
+        }
+    }
+
+    /// Get LDAP configuration
+    pub fn ldap_config(&self) -> Option<&LdapConfig> {
+        self.config.ldap.as_ref()
+    }
+
+    /// Get user LDAP groups
+    pub async fn get_ldap_user_groups(&self, username: &str) -> FusekiResult<Vec<String>> {
+        if let Some(ref ldap_service) = self.ldap_service {
+            let groups = ldap_service.get_user_groups(username).await?;
+            Ok(groups.into_iter().map(|group| group.cn).collect())
+        } else {
+            Err(FusekiError::configuration("LDAP not configured"))
+        }
+    }
+
+    /// Store MFA challenge (placeholder)
+    pub async fn store_mfa_challenge(&self, _challenge_id: &str, _challenge: MfaChallenge) -> FusekiResult<()> {
+        // TODO: Implement MFA challenge storage
+        Ok(())
+    }
+
+    /// Get MFA challenge (placeholder)
+    pub async fn get_mfa_challenge(&self, _challenge_id: &str) -> FusekiResult<Option<MfaChallenge>> {
+        // TODO: Implement MFA challenge retrieval
+        Ok(None)
+    }
+
+    /// Remove MFA challenge (placeholder)
+    pub async fn remove_mfa_challenge(&self, _challenge_id: &str) -> FusekiResult<bool> {
+        // TODO: Implement MFA challenge removal
+        Ok(true)
+    }
+
+    /// Update MFA challenge (placeholder)
+    pub async fn update_mfa_challenge(&self, _challenge_id: &str, _challenge: MfaChallenge) -> FusekiResult<()> {
+        // TODO: Implement MFA challenge update
+        Ok(())
+    }
+
+    /// Get user MFA status (placeholder)
+    pub async fn get_user_mfa_status(&self, _username: &str) -> FusekiResult<MfaStatus> {
+        // TODO: Implement MFA status retrieval
+        Ok(MfaStatus {
+            enabled: false,
+            backup_codes_remaining: 0,
+            last_used: None,
+            expires_at: None,
+            message: "MFA disabled".to_string(),
+        })
+    }
+
+    /// Disable MFA method (placeholder)
+    pub async fn disable_mfa_method(&self, _username: &str, _method: MfaMethod) -> FusekiResult<()> {
+        // TODO: Implement MFA method disabling
+        Ok(())
+    }
+
+    /// Store backup codes (placeholder)
+    pub async fn store_backup_codes(&self, _username: &str, _codes: Vec<String>) -> FusekiResult<()> {
+        // TODO: Implement backup code storage
+        Ok(())
+    }
+
+    /// Store TOTP secret (placeholder)
+    pub async fn store_totp_secret(&self, _username: &str, _secret: &str) -> FusekiResult<()> {
+        // TODO: Implement TOTP secret storage
+        Ok(())
+    }
+
+    /// Store SMS phone number (placeholder)
+    pub async fn store_sms_phone(&self, _username: &str, _phone: &str) -> FusekiResult<()> {
+        // TODO: Implement SMS phone storage
+        Ok(())
     }
 }
 
@@ -301,13 +453,13 @@ impl axum::response::IntoResponse for AuthError {
 fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::error::Error + Send>> {
     use base64::{engine::general_purpose::STANDARD, Engine};
 
-    let decoded = STANDARD.decode(encoded)?;
-    let credential = String::from_utf8(decoded)?;
+    let decoded = STANDARD.decode(encoded).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+    let credential = String::from_utf8(decoded).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
 
     if let Some((username, password)) = credential.split_once(':') {
         Ok((username.to_string(), password.to_string()))
     } else {
-        Err("Invalid basic auth format".into())
+        Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid basic auth format")))
     }
 }
 

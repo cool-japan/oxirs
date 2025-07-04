@@ -467,7 +467,7 @@ impl IntelligentConstraintValidator {
     /// Validate constraints with intelligent optimization
     pub async fn validate_constraints_intelligent(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         config: &ValidationConfig,
     ) -> Result<ValidationReport> {
@@ -505,7 +505,7 @@ impl IntelligentConstraintValidator {
     /// Predict validation outcomes for constraints
     async fn predict_validation_outcomes(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<HashMap<String, ValidationPredictionResult>> {
         let mut predictions = HashMap::new();
@@ -574,7 +574,7 @@ impl IntelligentConstraintValidator {
     /// Execute constraints with optimization
     async fn execute_constraints_optimized(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         contexts: Vec<ConstraintExecutionContext>,
         config: &ValidationConfig,
     ) -> Result<ValidationReport> {
@@ -628,7 +628,7 @@ impl IntelligentConstraintValidator {
     /// Execute single constraint
     async fn execute_single_constraint(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         context: &ConstraintExecutionContext,
     ) -> Result<bool> {
         // Simplified constraint execution
@@ -669,7 +669,7 @@ impl IntelligentConstraintValidator {
     /// Extract features for constraint prediction
     async fn extract_constraint_features(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         shape: &Shape,
         constraint: &Constraint,
     ) -> Result<Vec<f64>> {

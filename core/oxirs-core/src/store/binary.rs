@@ -157,7 +157,7 @@ pub fn decode_term(buffer: &mut Cursor<&[u8]>) -> Result<EncodedTerm, OxirsError
     let mut type_byte = [0u8; 1];
     buffer
         .read_exact(&mut type_byte)
-        .map_err(|e| OxirsError::Store(format!("Failed to read type byte: {}", e)))?;
+        .map_err(|e| OxirsError::Store(format!("Failed to read type byte: {e}")))?;
 
     match type_byte[0] {
         TYPE_DEFAULT_GRAPH => Ok(EncodedTerm::DefaultGraph),
@@ -169,7 +169,7 @@ pub fn decode_term(buffer: &mut Cursor<&[u8]>) -> Result<EncodedTerm, OxirsError
             let mut id = [0u8; 16];
             buffer
                 .read_exact(&mut id)
-                .map_err(|e| OxirsError::Store(format!("Failed to read blank node ID: {}", e)))?;
+                .map_err(|e| OxirsError::Store(format!("Failed to read blank node ID: {e}")))?;
             Ok(EncodedTerm::NumericalBlankNode { id })
         }
         TYPE_SMALL_BLANK_NODE_ID => {
@@ -252,7 +252,7 @@ fn decode_small_string(buffer: &mut Cursor<&[u8]>) -> Result<SmallString, OxirsE
     let mut len_byte = [0u8; 1];
     buffer
         .read_exact(&mut len_byte)
-        .map_err(|e| OxirsError::Store(format!("Failed to read string length: {}", e)))?;
+        .map_err(|e| OxirsError::Store(format!("Failed to read string length: {e}")))?;
 
     let len = len_byte[0] as usize;
     if len > 15 {
@@ -266,11 +266,11 @@ fn decode_small_string(buffer: &mut Cursor<&[u8]>) -> Result<SmallString, OxirsE
     if len > 0 {
         buffer
             .read_exact(&mut data[..len])
-            .map_err(|e| OxirsError::Store(format!("Failed to read string data: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to read string data: {e}")))?;
     }
 
     let s = std::str::from_utf8(&data[..len])
-        .map_err(|e| OxirsError::Store(format!("Invalid UTF-8 in small string: {}", e)))?;
+        .map_err(|e| OxirsError::Store(format!("Invalid UTF-8 in small string: {e}")))?;
 
     SmallString::new(s)
         .ok_or_else(|| OxirsError::Store("String too long for SmallString".to_string()))
@@ -281,7 +281,7 @@ fn read_str_hash(buffer: &mut Cursor<&[u8]>) -> Result<StrHash, OxirsError> {
     let mut hash_bytes = [0u8; 16];
     buffer
         .read_exact(&mut hash_bytes)
-        .map_err(|e| OxirsError::Store(format!("Failed to read StrHash: {}", e)))?;
+        .map_err(|e| OxirsError::Store(format!("Failed to read StrHash: {e}")))?;
     Ok(StrHash::from_be_bytes(hash_bytes))
 }
 

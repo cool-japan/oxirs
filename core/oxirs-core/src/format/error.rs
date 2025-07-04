@@ -211,26 +211,26 @@ impl From<crate::OxirsError> for RdfParseError {
     fn from(err: crate::OxirsError) -> Self {
         match err {
             crate::OxirsError::Parse(msg) => Self::syntax(msg),
-            crate::OxirsError::Io(msg) => Self::syntax(format!("IO error: {}", msg)),
-            crate::OxirsError::Store(msg) => Self::internal(format!("Store error: {}", msg)),
-            crate::OxirsError::Query(msg) => Self::internal(format!("Query error: {}", msg)),
+            crate::OxirsError::Io(msg) => Self::syntax(format!("IO error: {msg}")),
+            crate::OxirsError::Store(msg) => Self::internal(format!("Store error: {msg}")),
+            crate::OxirsError::Query(msg) => Self::internal(format!("Query error: {msg}")),
             crate::OxirsError::Serialize(msg) => {
-                Self::internal(format!("Serialization error: {}", msg))
+                Self::internal(format!("Serialization error: {msg}"))
             }
             crate::OxirsError::QuantumError(msg) => {
-                Self::internal(format!("Quantum error: {}", msg))
+                Self::internal(format!("Quantum error: {msg}"))
             }
             crate::OxirsError::MolecularError(msg) => {
-                Self::internal(format!("Molecular error: {}", msg))
+                Self::internal(format!("Molecular error: {msg}"))
             }
             crate::OxirsError::NeuralSymbolicError(msg) => {
-                Self::internal(format!("Neural-symbolic error: {}", msg))
+                Self::internal(format!("Neural-symbolic error: {msg}"))
             }
             crate::OxirsError::ConcurrencyError(msg) => {
-                Self::internal(format!("Concurrency error: {}", msg))
+                Self::internal(format!("Concurrency error: {msg}"))
             }
             crate::OxirsError::NotSupported(msg) => {
-                Self::unsupported(format!("Not supported: {}", msg))
+                Self::unsupported(format!("Not supported: {msg}"))
             }
         }
     }

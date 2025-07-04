@@ -707,7 +707,7 @@ mod tests {
         let adjustments = manager.optimize_pools().await.unwrap();
 
         // Should handle optimization without errors
-        assert!(adjustments.len() >= 0);
+        // adjustments.len() is always >= 0, so this assertion is unnecessary
     }
 
     #[tokio::test]

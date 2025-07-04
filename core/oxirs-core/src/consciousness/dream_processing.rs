@@ -3,14 +3,13 @@
 //! This module implements sophisticated dream-like processing for memory consolidation,
 //! pattern discovery, and creative insight generation during system idle periods.
 
-use super::{EmotionalState, PatternCharacteristic, QueryContext};
-use crate::model::Triple;
+use super::EmotionalState;
 use crate::query::algebra::AlgebraTriplePattern;
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 /// Dream state processor for memory consolidation and creative insights
 #[derive(Debug)]
@@ -720,6 +719,11 @@ impl DreamProcessor {
         ))
     }
 
+    /// Organize memories temporally (alias for organize_temporal_memories)
+    pub fn organize_memories_temporally(&mut self) -> Result<StepResult, OxirsError> {
+        self.organize_temporal_memories()
+    }
+
     /// Weight memories by importance
     fn weight_memory_importance(&mut self) -> Result<StepResult, OxirsError> {
         if let Ok(mut working_memory) = self.memory_consolidator.working_memory.write() {
@@ -749,8 +753,7 @@ impl DreamProcessor {
             .len();
 
         Ok(StepResult::ProcessingComplete(format!(
-            "integrated_{}_schemas",
-            integration_count
+            "integrated_{integration_count}_schemas"
         )))
     }
 
@@ -765,8 +768,7 @@ impl DreamProcessor {
             .len();
 
         Ok(StepResult::ProcessingComplete(format!(
-            "strengthened_{}_connections",
-            connection_count
+            "strengthened_{connection_count}_connections"
         )))
     }
 
@@ -776,8 +778,7 @@ impl DreamProcessor {
         let combinations_generated = fastrand::usize(5..15);
 
         Ok(StepResult::ProcessingComplete(format!(
-            "generated_{}_combinations",
-            combinations_generated
+            "generated_{combinations_generated}_combinations"
         )))
     }
 
@@ -787,8 +788,7 @@ impl DreamProcessor {
         let insights_generated = fastrand::usize(1..5);
 
         Ok(StepResult::ProcessingComplete(format!(
-            "generated_{}_insights",
-            insights_generated
+            "generated_{insights_generated}_insights"
         )))
     }
 
@@ -861,6 +861,50 @@ impl DreamProcessor {
             "Test creative optimization strategies in controlled environment".to_string(),
             "Strengthen highly-activated memory connections".to_string(),
         ]
+    }
+
+    /// Process a dream sequence with given input and dream state
+    pub fn process_dream_sequence(
+        &mut self, 
+        dream_input: &[String], 
+        dream_state: DreamState
+    ) -> Result<StepResult, OxirsError> {
+        // Set the dream state
+        self.dream_state = dream_state.clone();
+        
+        // Process each input in the dream sequence
+        for (index, input) in dream_input.iter().enumerate() {
+            match dream_state {
+                DreamState::REM => {
+                    // REM sleep processing focuses on creative synthesis
+                    self.synthesize_creative_combinations()?;
+                    if index % 2 == 0 {
+                        self.synthesize_insights()?;
+                    }
+                },
+                DreamState::DeepSleep => {
+                    // Deep sleep focuses on memory consolidation
+                    self.organize_memories_temporally()?;
+                    self.weight_memory_importance()?;
+                },
+                DreamState::CreativeDreaming => {
+                    // Creative dreaming focuses on novel pattern discovery
+                    self.synthesize_creative_combinations()?;
+                    self.synthesize_insights()?;
+                },
+                DreamState::Lucid => {
+                    // Lucid dreaming allows controlled exploration
+                    self.integrate_memory_schemas()?;
+                    self.strengthen_memory_connections()?;
+                },
+                _ => {
+                    // Default processing for other states
+                    self.process_dream_step()?;
+                }
+            }
+        }
+        
+        Ok(StepResult::SequenceComplete(format!("processed_{}_inputs_in_{:?}", dream_input.len(), dream_state)))
     }
 }
 

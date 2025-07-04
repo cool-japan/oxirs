@@ -230,32 +230,41 @@ impl ConstraintSelectivityAnalyzer {
     ) {
         let constraint_key = self.get_constraint_type_key(constraint);
 
-        // Update selectivity stats
-        let selectivity_stats = self
-            .constraint_selectivity
-            .entry(constraint_key.clone())
-            .or_insert_with(|| SelectivityStats {
-                total_evaluations: 0,
-                total_violations: 0,
-                selectivity: 0.5, // Start with neutral selectivity
-                confidence: 0.0,
-                last_updated: Instant::now(),
-            });
+        // Update selectivity stats with careful borrowing
+        let (total_evaluations, confidence) = {
+            let selectivity_stats = self
+                .constraint_selectivity
+                .entry(constraint_key.clone())
+                .or_insert_with(|| SelectivityStats {
+                    total_evaluations: 0,
+                    total_violations: 0,
+                    selectivity: 0.5, // Start with neutral selectivity
+                    confidence: 0.0,
+                    last_updated: Instant::now(),
+                });
 
-        selectivity_stats.total_evaluations += 1;
-        if matches!(result, ConstraintEvaluationResult::Violated { .. }) {
-            selectivity_stats.total_violations += 1;
+            selectivity_stats.total_evaluations += 1;
+            if matches!(result, ConstraintEvaluationResult::Violated { .. }) {
+                selectivity_stats.total_violations += 1;
+            }
+
+            // Recalculate selectivity
+            selectivity_stats.selectivity =
+                selectivity_stats.total_violations as f64 / selectivity_stats.total_evaluations as f64;
+
+            let total_evaluations = selectivity_stats.total_evaluations;
+            selectivity_stats.last_updated = Instant::now();
+            
+            (total_evaluations, total_evaluations)
+        };
+        
+        // Calculate confidence after releasing the mutable borrow
+        let confidence = self.calculate_confidence(confidence);
+        
+        // Update confidence
+        if let Some(stats) = self.constraint_selectivity.get_mut(&constraint_key) {
+            stats.confidence = confidence;
         }
-
-        // Recalculate selectivity
-        selectivity_stats.selectivity =
-            selectivity_stats.total_violations as f64 / selectivity_stats.total_evaluations as f64;
-
-        // Update confidence based on sample size
-        let total_evaluations = selectivity_stats.total_evaluations;
-        let confidence = self.calculate_confidence(total_evaluations);
-        selectivity_stats.confidence = confidence;
-        selectivity_stats.last_updated = Instant::now();
 
         // Update performance stats
         let performance_stats = self
@@ -405,9 +414,14 @@ impl ConstraintSelectivityAnalyzer {
 
         // Reorder: independent constraints first (for early termination potential),
         // then dependent constraints
-        ordered_constraints.clear();
-        ordered_constraints.extend(independent_constraints);
-        ordered_constraints.extend(dependent_constraints);
+        let mut reordered = Vec::new();
+        reordered.extend(independent_constraints);
+        reordered.extend(dependent_constraints);
+        
+        // Copy back to the slice (up to its capacity)
+        for (i, constraint) in reordered.into_iter().take(ordered_constraints.len()).enumerate() {
+            ordered_constraints[i] = constraint;
+        }
 
         Ok(())
     }
@@ -480,7 +494,7 @@ impl ConstraintSelectivityAnalyzer {
             .take(3)
             .map(|c| c.selectivity)
             .sum::<f64>()
-            / 3.0.min(ordered_constraints.len() as f64);
+            / 3.0_f64.min(ordered_constraints.len() as f64);
 
         // Expected improvement is the probability of early termination * time saved
         if total_expected_time.as_millis() > 0 {
@@ -625,6 +639,7 @@ mod tests {
                 ConstraintEvaluationResult::Violated {
                     violating_value: None,
                     message: Some("Test violation".to_string()),
+                    details: std::collections::HashMap::new(),
                 }
             } else {
                 ConstraintEvaluationResult::Satisfied

@@ -8,12 +8,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock, Semaphore};
-use tokio::time::{interval, sleep, timeout};
+use tokio::sync::{RwLock, Semaphore};
+use tokio::time::{interval, sleep};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::{executor::GraphQLResponse, FederatedService, ServiceRegistry};
+use crate::{executor::GraphQLResponse, ServiceRegistry};
 
 /// Request batching configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

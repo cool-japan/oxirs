@@ -1,7 +1,6 @@
 //! RDF parsing utilities for various formats with ultra-performance streaming
 
 use std::collections::HashMap;
-use std::io::BufRead;
 // Native implementation - no external dependencies needed
 use crate::model::{
     BlankNode, GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject, Triple,

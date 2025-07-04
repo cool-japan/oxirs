@@ -62,7 +62,7 @@ impl AnalyticsEngine {
     /// Generate comprehensive insights from validation data
     pub fn generate_comprehensive_insights(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         validation_history: &[ValidationReport],
     ) -> Result<ValidationInsights> {
@@ -154,7 +154,7 @@ impl AnalyticsEngine {
     /// Generate quality insights from assessment data
     pub fn generate_quality_insights(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         quality_report: &QualityReport,
     ) -> Result<Vec<QualityInsight>> {
@@ -340,7 +340,7 @@ impl AnalyticsEngine {
 
     fn analyze_quality_trends(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         _validation_history: &[ValidationReport],
     ) -> Result<Vec<QualityInsight>> {
@@ -376,7 +376,7 @@ impl AnalyticsEngine {
 
     fn create_insights_cache_key(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         validation_history: &[ValidationReport],
     ) -> String {
@@ -411,7 +411,7 @@ impl AnalyticsEngine {
     // Placeholder implementations for analysis methods
     fn analyze_completeness_insights(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         _quality_report: &QualityReport,
     ) -> Result<Vec<QualityInsight>> {
@@ -420,7 +420,7 @@ impl AnalyticsEngine {
 
     fn analyze_consistency_insights(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         _quality_report: &QualityReport,
     ) -> Result<Vec<QualityInsight>> {
@@ -429,7 +429,7 @@ impl AnalyticsEngine {
 
     fn analyze_accuracy_insights(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         _quality_report: &QualityReport,
     ) -> Result<Vec<QualityInsight>> {

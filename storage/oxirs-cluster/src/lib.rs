@@ -735,9 +735,8 @@ impl ClusterNode {
         let running_clone = Arc::clone(&self.running);
 
         tokio::spawn(async move {
-            while *running_clone.read().await {
-                replication_clone.run_maintenance().await;
-                break; // run_maintenance() is infinite loop
+            if *running_clone.read().await {
+                replication_clone.run_maintenance().await; // run_maintenance() is infinite loop
             }
         });
     }

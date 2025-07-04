@@ -47,7 +47,7 @@ impl Default for DecomposerConfig {
 }
 
 /// Optimization strategies for query decomposition
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum OptimizationStrategy {
     MinimizeCost,
     MinimizeTime,
@@ -130,7 +130,8 @@ impl QueryGraph {
     }
 
     pub fn neighbors(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + '_ {
-        self.graph.neighbors(node)
+        // For undirected connectivity analysis, we need both incoming and outgoing neighbors
+        self.graph.neighbors_undirected(node)
     }
 
     pub fn node_type(&self, node: NodeIndex) -> Option<&QueryNode> {

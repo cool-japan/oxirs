@@ -295,18 +295,18 @@ impl ConcurrentGraph {
         graph_node
             .spo_index
             .entry(triple.subject().clone())
-            .or_insert_with(DashMap::new)
+            .or_default()
             .entry(triple.predicate().clone())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(triple.object().clone());
 
         // Update OSP index
         graph_node
             .osp_index
             .entry(triple.object().clone())
-            .or_insert_with(DashMap::new)
+            .or_default()
             .entry(triple.subject().clone())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(triple.predicate().clone());
     }
 

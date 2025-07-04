@@ -1,5 +1,5 @@
 use oxirs_chat::rag::{QueryContext, QueryIntent, RAGConfig, RAGSystem, SimpleEmbeddingModel};
-use oxirs_core::{Literal, NamedNode, Store, Triple};
+use oxirs_core::{Literal, NamedNode, Store, ConcreteStore, Triple};
 use oxirs_embed::EmbeddingModel;
 use oxirs_vec::{
     index::AdvancedVectorIndex,
@@ -155,7 +155,7 @@ async fn test_vector_search_similarity() {
 #[tokio::test]
 async fn test_rag_system_with_vector_index() {
     // Create a store and add some test data
-    let mut store = Store::new().expect("Failed to create store");
+    let mut store = ConcreteStore::new().expect("Failed to create store");
 
     // Add test triples
     let test_triples = vec![
@@ -183,24 +183,21 @@ async fn test_rag_system_with_vector_index() {
     let rag_system = RAGSystem::with_vector_index(config, store_arc, 64).await;
 
     match rag_system {
-        Ok(system) => {
+        Ok(mut system) => {
             println!("✅ RAG system with vector index created successfully!");
 
             // Test knowledge retrieval
-            let query_context = QueryContext {
-                query: "Who works for companies?".to_string(),
-                intent: QueryIntent::Relationship,
-                entities: Vec::new(),
-                relationships: Vec::new(),
-                constraints: Vec::new(),
-                conversation_history: Vec::new(),
-            };
+            let query = "Who works for companies?";
 
-            match system.retrieve_knowledge(&query_context).await {
+            match system.retrieve(query).await {
                 Ok(knowledge) => {
+                    let triple_count = knowledge.retrieved_triples
+                        .as_ref()
+                        .map(|t| t.len())
+                        .unwrap_or(0);
                     println!(
                         "✅ Knowledge retrieval succeeded, found {} triples",
-                        knowledge.triples.len()
+                        triple_count
                     );
                     // Don't require non-empty results - the simple embedding model may not find good matches
                 }

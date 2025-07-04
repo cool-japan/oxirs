@@ -23,6 +23,12 @@ pub enum IriResolutionError {
     UrlParsing(String),
 }
 
+impl From<url::ParseError> for IriResolutionError {
+    fn from(error: url::ParseError) -> Self {
+        IriResolutionError::UrlParsing(error.to_string())
+    }
+}
+
 /// IRI resolver with namespace and base IRI support
 #[derive(Debug, Clone)]
 pub struct IriResolver {

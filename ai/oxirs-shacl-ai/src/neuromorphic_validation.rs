@@ -20,6 +20,11 @@ use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator}
 
 use crate::{Result, ShaclAiError};
 
+/// Helper function for serde default Instant
+fn default_instant() -> Instant {
+    Instant::now()
+}
+
 /// Neuromorphic neuron for validation processing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationNeuron {
@@ -32,6 +37,7 @@ pub struct ValidationNeuron {
     /// Refractory period (ms)
     pub refractory_period: Duration,
     /// Last spike time
+    #[serde(skip, default)]
     pub last_spike: Option<Instant>,
     /// Leak rate (membrane potential decay)
     pub leak_rate: f64,
@@ -234,6 +240,7 @@ pub struct SpikeEvent {
     /// Neuron that fired
     pub neuron_id: String,
     /// Spike timestamp
+    #[serde(skip, default = "default_instant")]
     pub timestamp: Instant,
     /// Spike amplitude
     pub amplitude: f64,
@@ -493,7 +500,7 @@ impl NeuromorphicValidationNetwork {
     /// Perform neuromorphic validation
     pub async fn validate_neuromorphically(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         config: &ValidationConfig,
     ) -> Result<NeuromorphicValidationResult> {
@@ -529,7 +536,7 @@ impl NeuromorphicValidationNetwork {
     /// Encode validation input as spike patterns
     async fn encode_validation_input(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<Vec<SpikeEvent>> {
         let mut spikes = Vec::new();

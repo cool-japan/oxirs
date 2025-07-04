@@ -1,5 +1,5 @@
 use oxirs_chat::*;
-use oxirs_core::Store;
+use oxirs_core::{Store, ConcreteStore};
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio;
@@ -11,7 +11,7 @@ async fn test_session_creation_and_persistence() {
     let persistence_path = temp_dir.path().join("test_sessions");
 
     // Create a store for testing
-    let store = Arc::new(Store::new().expect("Failed to create store"));
+    let store = Arc::new(ConcreteStore::new().expect("Failed to create store"));
 
     // Create chat manager with persistence
     let manager = ChatManager::with_persistence(store.clone(), &persistence_path)
@@ -62,7 +62,7 @@ async fn test_session_backup_and_restore() {
     let backup_path = temp_dir.path().join("test_backup");
 
     // Create store and manager
-    let store = Arc::new(Store::new().expect("Failed to create store"));
+    let store = Arc::new(ConcreteStore::new().expect("Failed to create store"));
     let mut manager = ChatManager::with_persistence(store.clone(), &persistence_path)
         .await
         .expect("Failed to create chat manager");
@@ -109,8 +109,8 @@ async fn test_session_backup_and_restore() {
         .await
         .expect("Failed to restore sessions");
 
-    assert_eq!(restore_report.restored_sessions, 1);
-    assert_eq!(restore_report.failed_restorations, 0);
+    assert_eq!(restore_report.sessions_restored, 1);
+    // Note: failed_restorations field not available in RestoreReport
 
     // Verify the restored session
     let restored_session = manager
@@ -118,7 +118,7 @@ async fn test_session_backup_and_restore() {
         .await
         .expect("Restored session not found");
 
-    let restored_session_guard = restored_session.lock().await;
+    let restored_session_guard = restored_session.expect("Restored session should exist").lock().await;
     assert_eq!(restored_session_guard.id, session_id);
     assert!(restored_session_guard.messages.len() >= 2); // Should have the messages we added
 
@@ -132,7 +132,7 @@ async fn test_session_expiration_and_cleanup() {
     let persistence_path = temp_dir.path().join("test_sessions");
 
     // Create store and manager
-    let store = Arc::new(Store::new().expect("Failed to create store"));
+    let store = Arc::new(ConcreteStore::new().expect("Failed to create store"));
     let manager = ChatManager::with_persistence(store.clone(), &persistence_path)
         .await
         .expect("Failed to create chat manager");

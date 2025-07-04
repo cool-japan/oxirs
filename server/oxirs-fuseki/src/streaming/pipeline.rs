@@ -250,7 +250,7 @@ pub struct StreamPipeline {
 }
 
 /// Pipeline execution metrics
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PipelineMetrics {
     pub events_processed: u64,
     pub events_dropped: u64,
@@ -258,7 +258,7 @@ pub struct PipelineMetrics {
     pub stage_metrics: HashMap<String, StageMetrics>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct StageMetrics {
     pub events_in: u64,
     pub events_out: u64,
@@ -332,7 +332,7 @@ impl StreamPipeline {
 
     /// Get pipeline metrics
     pub async fn get_metrics(&self) -> PipelineMetrics {
-        self.metrics.read().await.clone()
+        (*self.metrics.read().await).clone()
     }
 }
 

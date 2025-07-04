@@ -48,7 +48,7 @@ impl CliContext {
             no_color,
             interactive: false,
             profile: None,
-            output_formatter: OutputFormatter::new(no_color),
+            output_formatter: OutputFormatter::new_with_color(no_color),
             progress_tracker: None,
         }
     }
@@ -59,7 +59,7 @@ impl CliContext {
         ctx.verbose = verbose;
         ctx.quiet = quiet;
         ctx.no_color = no_color || ctx.no_color;
-        ctx.output_formatter = OutputFormatter::new(ctx.no_color);
+        ctx.output_formatter = OutputFormatter::new_with_color(ctx.no_color);
         ctx
     }
 

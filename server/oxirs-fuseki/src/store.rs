@@ -58,9 +58,9 @@ pub struct UpdateStats {
 #[derive(Clone)]
 pub struct Store {
     /// Default dataset store
-    default_store: Arc<RwLock<CoreStore>>,
+    default_store: Arc<RwLock<dyn CoreStore>>,
     /// Named datasets
-    datasets: Arc<RwLock<HashMap<String, Arc<RwLock<CoreStore>>>>>,
+    datasets: Arc<RwLock<HashMap<String, Arc<RwLock<dyn CoreStore>>>>>,
     /// Query engine for SPARQL execution
     query_engine: Arc<QueryEngine>,
     /// Store metadata
@@ -71,7 +71,7 @@ impl std::fmt::Debug for Store {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Store")
             .field("default_store", &"CoreStore")
-            .field("datasets", &self.datasets)
+            .field("datasets", &"<datasets>")
             .field("query_engine", &"QueryEngine")
             .field("metadata", &self.metadata)
             .finish()
@@ -114,7 +114,7 @@ pub struct ChangeDetectionParams {
 impl Store {
     /// Create a new in-memory store
     pub fn new() -> FusekiResult<Self> {
-        let default_store = CoreStore::new()
+        let default_store = RdfStore::new()
             .map_err(|e| FusekiError::store(format!("Failed to create core store: {}", e)))?;
 
         Ok(Store {
@@ -196,7 +196,7 @@ impl Store {
     }
 
     /// Get a reference to a dataset store (default if name is None)
-    pub fn get_dataset(&self, name: Option<&str>) -> FusekiResult<Arc<RwLock<CoreStore>>> {
+    pub fn get_dataset(&self, name: Option<&str>) -> FusekiResult<Arc<RwLock<dyn CoreStore>>> {
         match name {
             None => Ok(Arc::clone(&self.default_store)),
             Some(dataset_name) => {
@@ -308,7 +308,7 @@ impl Store {
 
         // Parse and execute the update operation
         let (operation_type, inserted, deleted) =
-            self.execute_sparql_update(&mut store_guard, sparql)?;
+            self.execute_sparql_update(&mut *store_guard, sparql)?;
         quads_inserted = inserted;
         quads_deleted = deleted;
 
@@ -363,7 +363,7 @@ impl Store {
     /// Execute a SPARQL update operation using basic parsing and low-level Store API
     fn execute_sparql_update(
         &self,
-        store: &mut CoreStore,
+        store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize)> {
         let sparql_upper = sparql.to_uppercase();
@@ -394,7 +394,7 @@ impl Store {
     /// Execute CLEAR operation
     fn execute_clear_operation(
         &self,
-        store: &mut CoreStore,
+        store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize)> {
         let quad_count = store.len().map_err(|e| {
@@ -405,13 +405,13 @@ impl Store {
         if sparql.to_uppercase().contains("CLEAR ALL")
             || sparql.to_uppercase().contains("CLEAR DEFAULT")
         {
-            store.clear().map_err(|e| {
+            store.clear_all().map_err(|e| {
                 FusekiError::update_execution(format!("Failed to clear store: {}", e))
             })?;
             Ok(("CLEAR", 0, quad_count))
         } else {
             // For now, clear everything (TODO: implement named graph clearing)
-            store.clear().map_err(|e| {
+            store.clear_all().map_err(|e| {
                 FusekiError::update_execution(format!("Failed to clear store: {}", e))
             })?;
             Ok(("CLEAR", 0, quad_count))
@@ -421,7 +421,7 @@ impl Store {
     /// Execute INSERT DATA operation
     fn execute_insert_data_operation(
         &self,
-        store: &mut CoreStore,
+        store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize)> {
         // Extract the data block between { and }
@@ -443,7 +443,7 @@ impl Store {
     /// Execute DELETE DATA operation  
     fn execute_delete_data_operation(
         &self,
-        store: &mut CoreStore,
+        store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize)> {
         // Extract the data block between { and }
@@ -465,7 +465,7 @@ impl Store {
     /// Execute DELETE/INSERT operation (simplified implementation)
     fn execute_delete_insert_operation(
         &self,
-        store: &mut CoreStore,
+        store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize)> {
         // This is a simplified implementation - just parse both blocks and execute them
@@ -504,7 +504,7 @@ impl Store {
     /// Execute DELETE WHERE operation (simplified implementation)
     fn execute_delete_where_operation(
         &self,
-        store: &mut CoreStore,
+        store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize)> {
         warn!("DELETE WHERE operation using simplified implementation - deleting all matching patterns");
@@ -517,7 +517,7 @@ impl Store {
             for pattern_quad in pattern_quads {
                 // Find all matching quads and delete them
                 let matching_quads = store
-                    .query_quads(
+                    .find_quads(
                         Some(pattern_quad.subject()),
                         Some(pattern_quad.predicate()),
                         Some(pattern_quad.object()),
@@ -550,7 +550,7 @@ impl Store {
     /// Execute simple INSERT operation
     fn execute_insert_operation(
         &self,
-        store: &mut CoreStore,
+        store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize)> {
         // Extract the data block and insert
@@ -572,7 +572,7 @@ impl Store {
     /// Execute LOAD operation (simplified implementation)
     fn execute_load_operation(
         &self,
-        _store: &mut CoreStore,
+        _store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize)> {
         warn!("LOAD operation not fully implemented: {}", sparql.trim());
@@ -734,7 +734,7 @@ impl Store {
 
         let serializer = Serializer::new(core_format);
         let triples = store_guard
-            .query_triples(None, None, None)
+            .triples()
             .map_err(|e| FusekiError::store(format!("Failed to query triples: {}", e)))?;
 
         let graph = Graph::from_triples(triples);

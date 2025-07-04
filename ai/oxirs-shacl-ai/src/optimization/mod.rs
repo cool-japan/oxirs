@@ -17,7 +17,7 @@ pub use types::{
     BottleneckSeverity, BottleneckType, CachePartitioningStrategy, CacheReplacementPolicy,
     CacheStrategy, ComplexityLevel, ConnectivityAnalysis, GcStrategy, GraphAnalysis,
     GraphStatistics, ImplementationEffort, LoadBalancingStrategy, MemoryOptimization, MemoryPool,
-    OpportunityType, OptimizationOpportunity, OptimizationRecommendation,
+    OpportunityType, ValidationOptimizationOpportunity, OptimizationRecommendation,
     OptimizationRecommendationType, OptimizationStatistics, OptimizationTrainingData,
     OptimizedValidationStrategy, ParallelExecutionStrategy, PerformanceBottleneck,
     PerformanceImprovements, PoolType, RecommendationPriority, ShapeExecutionPlan,

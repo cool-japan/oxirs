@@ -11,7 +11,7 @@
 
 use super::*;
 use anyhow::{Context, Result};
-use rand::Rng;
+use fastrand;
 use std::f64::consts::PI;
 use tracing::{debug, warn};
 
@@ -45,7 +45,7 @@ impl QuantumRetrievalState {
             return Ok(Vec::new());
         }
 
-        let results = candidates
+        let results: Vec<QuantumSearchResult> = candidates
             .iter()
             .filter_map(|doc| {
                 // Enhanced probability calculation with content analysis
@@ -84,9 +84,10 @@ impl QuantumRetrievalState {
         }
 
         // Apply quantum interference patterns
+        let results_len = results.len();
         for (i, result) in results.iter_mut().enumerate() {
             // Multi-path interference calculation
-            let path_interference = self.calculate_path_interference(i, results.len());
+            let path_interference = self.calculate_path_interference(i, results_len);
             let phase_interference = (self.phase - result.quantum_probability * PI).sin();
 
             // Combined interference effect
@@ -210,7 +211,7 @@ impl QuantumRetrievalState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantumSearchResult {
     pub document: RagDocument,
     pub quantum_probability: f64,
@@ -266,7 +267,7 @@ impl QuantumStateMetrics {
 }
 
 /// RAG document structure for quantum processing
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RagDocument {
     pub id: String,
     pub content: String,
@@ -381,17 +382,22 @@ impl QuantumEntanglementManager {
 
     /// Apply quantum correlation to search results
     pub fn apply_quantum_correlations(&self, results: &mut Vec<QuantumSearchResult>) -> Result<()> {
+        // Collect document data first to avoid borrowing conflicts
+        let document_data: Vec<_> = results.iter()
+            .map(|r| (r.document.id.clone(), r.quantum_probability))
+            .collect();
+
         for result in results.iter_mut() {
             let mut correlation_boost = 0.0;
             let mut correlation_count = 0;
 
             // Check for entangled documents in the result set
-            for other_result in results.iter() {
-                if result.document.id != other_result.document.id {
+            for (other_id, other_probability) in &document_data {
+                if result.document.id != *other_id {
                     let strength = self
-                        .get_entanglement_strength(&result.document.id, &other_result.document.id);
+                        .get_entanglement_strength(&result.document.id, other_id);
                     if strength > 0.0 {
-                        correlation_boost += strength * other_result.quantum_probability;
+                        correlation_boost += strength * other_probability;
                         correlation_count += 1;
                     }
                 }
@@ -449,8 +455,8 @@ impl QuantumDecoherenceSimulator {
         state.amplitude *= decoherence_factor;
 
         // Add environmental noise to phase
-        let mut rng = rand::thread_rng();
-        let phase_noise = rng.gen_range(-self.noise_level..self.noise_level) * time_factor;
+        // Using fastrand for random number generation
+        let phase_noise = (fastrand::f64() * 2.0 - 1.0) * self.noise_level * time_factor;
         state.phase += phase_noise;
 
         // Reduce entanglement factor due to environmental interaction
@@ -539,8 +545,8 @@ impl QuantumAnnealingOptimizer {
                 (-energy_diff / temperature).exp()
             };
 
-            let mut rng = rand::thread_rng();
-            if rng.gen::<f64>() < acceptance_probability {
+            // Using fastrand for random number generation
+            if fastrand::f64() < acceptance_probability {
                 current_params = neighbor_params;
                 if neighbor_energy < best_energy {
                     best_params = current_params.clone();
@@ -585,20 +591,20 @@ impl QuantumAnnealingOptimizer {
         &self,
         current: &QuantumRetrievalParams,
     ) -> Result<QuantumRetrievalParams> {
-        let mut rng = rand::thread_rng();
+        // Using fastrand for random number generation
         let perturbation = 0.1;
 
         Ok(QuantumRetrievalParams {
             amplitude_factor: (current.amplitude_factor
-                + rng.gen_range(-perturbation..perturbation))
+                + (fastrand::f64() * 2.0 - 1.0) * perturbation)
             .clamp(0.1, 2.0),
-            phase_factor: (current.phase_factor + rng.gen_range(-perturbation..perturbation))
+            phase_factor: (current.phase_factor + (fastrand::f64() * 2.0 - 1.0) * perturbation)
                 .clamp(0.1, 2.0),
             entanglement_strength: (current.entanglement_strength
-                + rng.gen_range(-perturbation..perturbation))
+                + (fastrand::f64() * 2.0 - 1.0) * perturbation)
             .clamp(0.0, 1.0),
             coherence_factor: (current.coherence_factor
-                + rng.gen_range(-perturbation..perturbation))
+                + (fastrand::f64() * 2.0 - 1.0) * perturbation)
             .clamp(0.1, 2.0),
         })
     }
@@ -695,7 +701,7 @@ impl MultiDimensionalQuantumState {
                 let max_element = dim
                     .state_vector
                     .iter()
-                    .fold(0.0, |acc, &x| acc.max(x.abs()));
+                    .fold(0.0f64, |acc, &x| acc.max(x.abs()));
                 (norm_squared - max_element * max_element)
                     / (1.0 - 1.0 / dim.state_vector.len() as f64)
             })

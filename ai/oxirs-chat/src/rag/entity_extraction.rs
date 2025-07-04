@@ -72,7 +72,7 @@ JSON Response:"#,
 
         // Initialize LLM manager
         let llm_config = LLMConfig::default();
-        let llm_manager = LLMManager::new(llm_config)?;
+        let mut llm_manager = LLMManager::new(llm_config)?;
 
         let chat_messages = vec![
             ChatMessage {

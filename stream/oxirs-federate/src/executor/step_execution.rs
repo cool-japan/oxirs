@@ -10,15 +10,15 @@ use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
     Client,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 use crate::{
     planner::{ExecutionPlan, ExecutionStep, StepType},
     service_client::GraphQLRequest,
-    FederatedService, QueryResultData, StepResult,
+    QueryResultData, StepResult,
 };
 
 use super::types::*;

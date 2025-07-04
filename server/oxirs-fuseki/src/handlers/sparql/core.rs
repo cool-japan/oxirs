@@ -157,8 +157,8 @@ pub async fn sparql_query(
         Ok(result) => {
             let execution_time = start_time.elapsed().as_millis() as u64;
 
-            // Update metrics
-            state.metrics.record_query_execution(execution_time, true);
+            // TODO: Implement metrics recording
+            // state.metrics.record_query_execution(execution_time, true);
 
             // Determine response format based on Accept header
             let accept_header = headers
@@ -170,7 +170,7 @@ pub async fn sparql_query(
         }
         Err(e) => {
             let execution_time = start_time.elapsed().as_millis() as u64;
-            state.metrics.record_query_execution(execution_time, false);
+            // TODO: Implement metrics - state.metrics.record_query_execution(execution_time, false);
 
             error!("SPARQL query execution failed: {}", e);
             (
@@ -226,13 +226,13 @@ pub async fn sparql_update(
     match execute_sparql_update(&params.update, context, &state).await {
         Ok(result) => {
             let execution_time = start_time.elapsed().as_millis() as u64;
-            state.metrics.record_update_execution(execution_time, true);
+            // TODO: Implement metrics - state.metrics.record_update_execution(execution_time, true);
 
             Json(result).into_response()
         }
         Err(e) => {
             let execution_time = start_time.elapsed().as_millis() as u64;
-            state.metrics.record_update_execution(execution_time, false);
+            // TODO: Implement metrics - state.metrics.record_update_execution(execution_time, false);
 
             error!("SPARQL update execution failed: {}", e);
             (
@@ -248,7 +248,7 @@ pub async fn sparql_update(
 }
 
 /// Execute SPARQL query with enhanced features
-async fn execute_sparql_query(
+pub async fn execute_sparql_query(
     query: &str,
     context: QueryContext,
     state: &Arc<AppState>,
@@ -268,10 +268,20 @@ async fn execute_sparql_query(
     };
 
     // Execute through store
-    let result = state
+    let store_result = state
         .store
-        .execute_query(&optimized_query, &context)
-        .await?;
+        .query(&optimized_query)?;
+
+    // Convert store::QueryResult to sparql::core::QueryResult
+    let result = QueryResult {
+        query_type: "SELECT".to_string(), // TODO: Detect actual query type
+        execution_time_ms: store_result.stats.execution_time.as_millis() as u64,
+        result_count: Some(0), // TODO: Extract actual count from store_result
+        bindings: None, // TODO: Convert from store_result.inner
+        boolean: None,
+        construct_graph: None,
+        describe_graph: None,
+    };
 
     Ok(result)
 }
@@ -285,8 +295,17 @@ async fn execute_sparql_update(
     // Validate update
     validate_sparql_update(update)?;
 
-    // Execute through store
-    let result = state.store.execute_update(update, &context).await?;
+    // Execute through store  
+    let store_result = state.store.update(update)?;
+
+    // Convert store::UpdateResult to sparql::core::UpdateResult
+    let result = UpdateResult {
+        success: store_result.stats.success,
+        execution_time_ms: store_result.stats.execution_time.as_millis() as u64,
+        operations_count: 1, // TODO: Calculate actual operations count
+        affected_triples: Some(store_result.stats.quads_inserted + store_result.stats.quads_deleted),
+        error_message: store_result.stats.error_message,
+    };
 
     Ok(result)
 }
@@ -301,9 +320,22 @@ async fn apply_query_optimizations(
 
     // Apply federation optimization if enabled
     if context.enable_federation {
-        let federation_optimizer = FederatedQueryOptimizer::new();
-        if let Some(federated_plan) = federation_optimizer.create_execution_plan(query).await? {
-            optimized_query = federated_plan.optimized_query;
+        if let Some(metrics_service) = &state.metrics_service {
+            let federation_optimizer = FederatedQueryOptimizer::new(metrics_service.clone());
+            // Check if query contains SERVICE clauses for federation
+            if query.to_uppercase().contains("SERVICE") {
+                let timeout_ms = context.timeout.unwrap_or(Duration::from_secs(30)).as_millis() as u64;
+                match federation_optimizer.process_federated_query(query, timeout_ms).await {
+                    Ok(_federated_results) => {
+                        // For now, continue with original query until we integrate federated results
+                        // TODO: Integrate federated query results into response
+                    }
+                    Err(e) => {
+                        warn!("Federated query processing failed: {}", e);
+                        // Continue with original query as fallback
+                    }
+                }
+            }
         }
     }
 

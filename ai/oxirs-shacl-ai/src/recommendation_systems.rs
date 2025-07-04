@@ -351,7 +351,7 @@ impl RecommendationEngine {
     /// Generate comprehensive recommendations
     pub fn generate_recommendations(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         quality_report: &QualityReport,
         validation_reports: &[ValidationReport],
@@ -917,7 +917,7 @@ impl RecommendationEngine {
     /// Generate tool recommendations
     fn generate_tool_recommendations(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<Vec<Recommendation>> {
         let mut recommendations = Vec::new();

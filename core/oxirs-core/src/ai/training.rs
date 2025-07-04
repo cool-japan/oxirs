@@ -434,7 +434,7 @@ impl TrainingMetrics {
     pub fn add_metric(&mut self, name: String, value: f32) {
         self.additional_metrics
             .entry(name)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(value);
     }
 }

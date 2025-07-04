@@ -690,8 +690,8 @@ mod tests {
         // Generate some activity
         cache.insert("key1", "value1");
         cache.insert("key2", "value2");
-        cache.get(&"key1".to_string());
-        cache.get(&"key3".to_string()); // Miss
+        cache.get(&"key1");
+        cache.get(&"key3"); // Miss
 
         let stats = cache.stats();
         assert_eq!(stats.hits, 1);

@@ -927,7 +927,8 @@ impl FaissPerformanceComparison {
 
         self.results.clear();
 
-        for dataset in &self.benchmark_datasets {
+        let datasets = self.benchmark_datasets.clone();
+        for dataset in &datasets {
             info!("Running benchmark on dataset: {}", dataset.name);
             let result = self.benchmark_single_dataset(dataset)?;
             self.results.push(result);
@@ -1213,23 +1214,20 @@ mod tests {
     }
 
     impl VectorIndex for MockVectorIndex {
-        type Config = ();
-        type SearchParams = ();
-
-        fn add(&mut self, _vector: Vec<f32>, _id: String) -> Result<()> {
+        fn insert(&mut self, _uri: String, _vector: Vector) -> Result<()> {
             Ok(())
         }
 
-        fn search(&self, _query: &[f32], _k: usize) -> Result<Vec<(String, f32)>> {
+        fn search_knn(&self, _query: &Vector, _k: usize) -> Result<Vec<(String, f32)>> {
             Ok(vec![("mock".to_string(), 0.9)])
         }
 
-        fn size(&self) -> usize {
-            0
+        fn search_threshold(&self, _query: &Vector, _threshold: f32) -> Result<Vec<(String, f32)>> {
+            Ok(vec![("mock".to_string(), 0.9)])
         }
 
-        fn dimension(&self) -> usize {
-            128
+        fn get_vector(&self, _uri: &str) -> Option<&Vector> {
+            None
         }
     }
 }

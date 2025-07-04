@@ -15,7 +15,7 @@ pub mod step_execution;
 pub mod types;
 
 // Re-export main types and structs for public API
-pub use core::*;
+pub use types::{FederatedExecutor, FederatedExecutorConfig};
 pub use step_execution::{execute_parallel_group, execute_step};
 pub use types::*;
 

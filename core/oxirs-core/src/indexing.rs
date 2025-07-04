@@ -8,8 +8,7 @@ use ahash::RandomState;
 use bumpalo::Bump;
 use dashmap::DashMap;
 use parking_lot::RwLock;
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
+// Removed unused rayon::prelude import
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

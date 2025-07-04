@@ -51,13 +51,12 @@ impl EmbeddingManager {
 
         // Check cache first
         if self.config.enable_caching {
-            if let Ok(cache) = self.embedding_cache.read().await {
-                if let Some(cached) = cache.get(&cache_key) {
-                    if !cached.is_expired() {
-                        self.update_stats(|stats| stats.cache_hits += 1).await;
-                        debug!("Cache hit for embedding: {}", text);
-                        return Ok(cached.vector.clone());
-                    }
+            let cache = self.embedding_cache.read().await;
+            if let Some(cached) = cache.get(&cache_key) {
+                if !cached.is_expired() {
+                    self.update_stats(|stats| stats.cache_hits += 1).await;
+                    debug!("Cache hit for embedding: {}", text);
+                    return Ok(cached.vector.clone());
                 }
             }
         }
@@ -74,13 +73,12 @@ impl EmbeddingManager {
         // Cache the result
         if self.config.enable_caching {
             let cached_embedding = CachedEmbedding::new(vector.clone());
-            if let Ok(mut cache) = self.embedding_cache.write().await {
-                cache.insert(cache_key, cached_embedding);
+            let mut cache = self.embedding_cache.write().await;
+            cache.insert(cache_key, cached_embedding);
 
-                // Cleanup old entries if cache is too large
-                if cache.len() > self.config.max_cache_size {
-                    self.cleanup_cache(&mut cache).await;
-                }
+            // Cleanup old entries if cache is too large
+            if cache.len() > self.config.max_cache_size {
+                self.cleanup_cache(&mut cache).await;
             }
         }
 
@@ -130,7 +128,8 @@ impl EmbeddingManager {
 
     /// Clear the embedding cache
     pub async fn clear_cache(&self) -> Result<()> {
-        if let Ok(mut cache) = self.embedding_cache.write().await {
+        let mut cache = self.embedding_cache.write().await;
+        {
             cache.clear();
             self.update_stats(|stats| stats.cache_cleared += 1).await;
             info!("Embedding cache cleared");
@@ -140,11 +139,8 @@ impl EmbeddingManager {
 
     /// Get embedding statistics
     pub async fn get_stats(&self) -> EmbeddingStats {
-        if let Ok(stats) = self.stats.read().await {
-            stats.clone()
-        } else {
-            EmbeddingStats::default()
-        }
+        let stats = self.stats.read().await;
+        stats.clone()
     }
 
     /// Update configuration
@@ -175,12 +171,13 @@ impl EmbeddingManager {
 
         // If still too large, remove oldest entries
         if cache.len() > self.config.max_cache_size {
-            let mut entries: Vec<_> = cache.iter().collect();
-            entries.sort_by_key(|(_, cached)| cached.created_at);
+            let entries: Vec<_> = cache.iter().map(|(k, v)| (k.clone(), v.created_at)).collect();
+            let mut sorted_entries = entries;
+            sorted_entries.sort_by_key(|(_, created_at)| *created_at);
 
             let to_remove = cache.len() - self.config.max_cache_size;
-            for (key, _) in entries.iter().take(to_remove) {
-                cache.remove(*key);
+            for (key, _) in sorted_entries.iter().take(to_remove) {
+                cache.remove(key);
             }
         }
     }
@@ -190,7 +187,8 @@ impl EmbeddingManager {
     where
         F: FnOnce(&mut EmbeddingStats),
     {
-        if let Ok(mut stats) = self.stats.write().await {
+        let mut stats = self.stats.write().await;
+        {
             updater(&mut stats);
         }
     }
@@ -318,13 +316,15 @@ impl SimpleEmbeddingModel {
         Self {
             dimensions,
             config: oxirs_embed::ModelConfig {
-                model_type: "simple".to_string(),
                 dimensions,
                 learning_rate: 0.01,
+                l2_reg: 0.001,
+                max_epochs: 100,
                 batch_size: 128,
                 negative_samples: 5,
-                epochs: 100,
-                regularization: 0.001,
+                seed: Some(42),
+                use_gpu: false,
+                model_params: std::collections::HashMap::new(),
             },
             model_id: uuid::Uuid::new_v4(),
         }
@@ -332,7 +332,9 @@ impl SimpleEmbeddingModel {
 
     /// Convenience method for single string embedding
     pub fn embed(&self, text: &str) -> Result<Vector> {
-        self.get_entity_embedding(text)
+        let embed_vector = self.get_entity_embedding(text)?;
+        // Convert oxirs_embed::Vector to oxirs_vec::Vector
+        Ok(Vector::new(embed_vector.values))
     }
 }
 
@@ -355,14 +357,20 @@ impl EmbeddingModel for SimpleEmbeddingModel {
     }
 
     async fn train(&mut self, epochs: Option<usize>) -> Result<oxirs_embed::TrainingStats> {
-        let epochs = epochs.unwrap_or(self.config.epochs);
+        let epochs = epochs.unwrap_or(self.config.max_epochs);
 
         // Simple mock training for testing purposes
+        let mut loss_history = Vec::new();
+        for i in 0..epochs {
+            loss_history.push(0.1 * (epochs - i) as f64 / epochs as f64);
+        }
+        
         let stats = oxirs_embed::TrainingStats {
-            total_epochs: epochs,
+            epochs_completed: epochs,
+            convergence_achieved: true,
+            loss_history,
             final_loss: 0.1,
-            training_time_seconds: 1,
-            convergence_epoch: Some(epochs / 2),
+            training_time_seconds: 1.0,
         };
 
         Ok(stats)
@@ -529,7 +537,7 @@ mod tests {
 
         assert_eq!(embeddings.len(), 3);
         for embedding in embeddings {
-            assert_eq!(embedding.values.len(), 128);
+            assert_eq!(embedding.len(), 128);
         }
     }
 

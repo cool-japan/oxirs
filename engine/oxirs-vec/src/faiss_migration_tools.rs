@@ -269,7 +269,7 @@ pub struct MigrationState {
 }
 
 /// Migration phases
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum MigrationPhase {
     Initialization,
     FormatDetection,
@@ -581,24 +581,7 @@ impl FaissMigrationTool {
             )));
         }
 
-        // Check for FAISS magic number
-        let header_path = source_path.join("header");
-        let read_path = if header_path.exists() {
-            header_path
-        } else {
-            source_path.to_path_buf()
-        };
-        let file_content = std::fs::read(read_path)?;
-
-        if file_content.len() >= 5 && &file_content[0..5] == b"FAISS" {
-            debug!("Detected FAISS native format");
-            return Ok(MigrationFormat::FaissNative {
-                index_type: FaissIndexType::IndexHNSWFlat, // Default, will be refined
-                gpu_enabled: false,
-            });
-        }
-
-        // Check for oxirs-vec format indicators
+        // Check for oxirs-vec format indicators first if it's a directory
         if source_path.is_dir() {
             let entries: Vec<_> = std::fs::read_dir(source_path)?.collect();
             let has_vectors = entries.iter().any(|e| {
@@ -618,6 +601,24 @@ impl FaissMigrationTool {
                     index_type: OxirsIndexType::Hnsw, // Default, will be refined
                     config_path: None,
                 });
+            }
+        } else {
+            // Check for FAISS magic number in files
+            let header_path = source_path.join("header");
+            let read_path = if header_path.exists() {
+                header_path
+            } else {
+                source_path.to_path_buf()
+            };
+            
+            if let Ok(file_content) = std::fs::read(read_path) {
+                if file_content.len() >= 5 && &file_content[0..5] == b"FAISS" {
+                    debug!("Detected FAISS native format");
+                    return Ok(MigrationFormat::FaissNative {
+                        index_type: FaissIndexType::IndexHNSWFlat, // Default, will be refined
+                        gpu_enabled: false,
+                    });
+                }
             }
         }
 

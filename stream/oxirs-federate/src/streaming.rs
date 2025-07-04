@@ -433,7 +433,7 @@ impl StreamingProcessor {
         }
 
         // Start query processing task
-        self.start_query_processing_task(query_id).await?;
+        self.start_query_processing_task(query_id.clone()).await?;
 
         // Update statistics
         {
@@ -485,7 +485,7 @@ impl StreamingProcessor {
         {
             let publishers = self.event_publishers.read().await;
             if let Some(publisher) = publishers.get(stream_id) {
-                if let Err(_) = publisher.send(event.clone()) {
+                if publisher.send(event.clone()).is_err() {
                     warn!("No subscribers for stream: {}", stream_id);
                 }
             }
@@ -508,13 +508,13 @@ impl StreamingProcessor {
     pub async fn subscribe_to_stream(
         &self,
         stream_id: &str,
-    ) -> Result<impl Stream<Item = StreamEvent>> {
+    ) -> Result<impl Stream<Item = StreamEvent> + Unpin> {
         self.ensure_stream_exists(stream_id).await?;
 
         let publishers = self.event_publishers.read().await;
         if let Some(publisher) = publishers.get(stream_id) {
             let receiver = publisher.subscribe();
-            Ok(
+            Ok(Box::pin(
                 BroadcastStream::new(receiver).filter_map(|result| async move {
                     match result {
                         Ok(event) => Some(event),
@@ -524,7 +524,7 @@ impl StreamingProcessor {
                         }
                     }
                 }),
-            )
+            ))
         } else {
             Err(anyhow!("Stream not found: {}", stream_id))
         }
@@ -548,7 +548,7 @@ impl StreamingProcessor {
         }
 
         // Start join processing task
-        self.start_join_processing_task(join_id).await?;
+        self.start_join_processing_task(join_id.clone()).await?;
 
         info!("Registered stream join: {}", join_id);
         Ok(())

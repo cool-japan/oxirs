@@ -90,7 +90,6 @@ impl Default for BatchValidationConfig {
 }
 
 /// Progress tracking for batch operations
-#[derive(Debug)]
 pub struct BatchProgressTracker {
     /// Total number of items to process
     total_items: AtomicUsize,
@@ -106,6 +105,20 @@ pub struct BatchProgressTracker {
     cancelled: AtomicBool,
     /// Progress callback functions
     progress_callbacks: Arc<Mutex<Vec<Box<dyn Fn(BatchProgress) + Send + Sync>>>>,
+}
+
+impl std::fmt::Debug for BatchProgressTracker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BatchProgressTracker")
+            .field("total_items", &self.total_items)
+            .field("processed_items", &self.processed_items)
+            .field("violations_found", &self.violations_found)
+            .field("errors_encountered", &self.errors_encountered)
+            .field("start_time", &self.start_time)
+            .field("cancelled", &self.cancelled)
+            .field("progress_callbacks", &"<function closures>")
+            .finish()
+    }
 }
 
 impl BatchProgressTracker {
@@ -297,7 +310,7 @@ impl BatchErrorHandler {
 
     /// Get error log
     pub fn get_error_log(&self) -> Vec<BatchValidationError> {
-        self.error_log.lock().unwrap_or_default().clone()
+        self.error_log.lock().map(|guard| guard.clone()).unwrap_or_default()
     }
 }
 

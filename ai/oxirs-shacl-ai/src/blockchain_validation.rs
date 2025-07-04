@@ -131,7 +131,7 @@ impl BlockchainValidator {
     /// Perform decentralized SHACL validation
     pub async fn validate_decentralized(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         target_network: &str,
         validation_mode: ValidationMode,
@@ -169,7 +169,7 @@ impl BlockchainValidator {
     /// Validate using smart contract constraints
     pub async fn validate_with_smart_contract(
         &self,
-        store: &Store,
+        store: &dyn Store,
         contract_address: &str,
         network: &str,
         validation_params: &ValidationParameters,
@@ -214,7 +214,7 @@ impl BlockchainValidator {
     /// Perform cross-chain validation
     pub async fn validate_cross_chain(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         target_networks: &[String],
         aggregation_strategy: CrossChainAggregation,
@@ -258,7 +258,7 @@ impl BlockchainValidator {
     /// Validate with privacy preservation using zero-knowledge proofs
     pub async fn validate_with_privacy(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         network: &str,
         privacy_level: PrivacyLevel,
@@ -416,7 +416,7 @@ impl BlockchainValidator {
 
     async fn prepare_validation_request(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<ValidationRequest> {
         let validation_data = self.extract_validation_data(store).await?;
@@ -568,7 +568,7 @@ impl BlockchainValidator {
             .map(|p| p.clone_box())
     }
 
-    async fn convert_rdf_to_blockchain_format(&self, _store: &Store) -> Result<BlockchainData> {
+    async fn convert_rdf_to_blockchain_format(&self, _store: &dyn Store) -> Result<BlockchainData> {
         // Convert RDF triples to blockchain-compatible format
         Ok(BlockchainData {
             format: "json-ld".to_string(),
@@ -647,7 +647,7 @@ impl BlockchainValidator {
         Ok(result)
     }
 
-    async fn extract_validation_data(&self, _store: &Store) -> Result<ValidationData> {
+    async fn extract_validation_data(&self, _store: &dyn Store) -> Result<ValidationData> {
         Ok(ValidationData {
             triples_count: 1000,
             data_hash: "sha256:data123...".to_string(),
@@ -733,7 +733,7 @@ pub trait ConsensusEngine: Send + Sync + std::fmt::Debug {
 #[async_trait::async_trait]
 pub trait PrivacyProtocol: Send + Sync + std::fmt::Debug {
     async fn setup(&self) -> Result<()>;
-    async fn generate_validation_proof(&self, store: &Store, shapes: &[Shape]) -> Result<ZkProof>;
+    async fn generate_validation_proof(&self, store: &dyn Store, shapes: &[Shape]) -> Result<ZkProof>;
     async fn verify_proof(&self, proof: &ZkProof) -> Result<ProofVerificationResult>;
     fn clone_box(&self) -> Box<dyn PrivacyProtocol>;
 }
@@ -1776,7 +1776,7 @@ impl PrivacyProtocol for ZkSnarksProtocol {
 
     async fn generate_validation_proof(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<ZkProof> {
         Ok(ZkProof {
@@ -1815,7 +1815,7 @@ impl PrivacyProtocol for ZkStarksProtocol {
     }
     async fn generate_validation_proof(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<ZkProof> {
         Ok(ZkProof {
@@ -1851,7 +1851,7 @@ impl PrivacyProtocol for HomomorphicProtocol {
     }
     async fn generate_validation_proof(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<ZkProof> {
         Ok(ZkProof {

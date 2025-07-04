@@ -3,7 +3,6 @@
 //! This module contains all the type definitions, configuration structs, and data structures
 //! used throughout the federated execution system.
 
-use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

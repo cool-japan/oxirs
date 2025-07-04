@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::{PropertyPath, Shape, ShapeType};
-use oxirs_core::model::{Literal, NamedNode, Term};
+use oxirs_core::{model::{Literal, NamedNode, Term}, ConcreteStore};
 
 #[test]
 fn test_validation_engine_creation() {
@@ -10,8 +10,10 @@ fn test_validation_engine_creation() {
     let config = ValidationConfig::default();
     let engine = ValidationEngine::new(&shapes, config.clone());
 
-    assert_eq!(engine.shapes.len(), 0);
-    assert_eq!(engine.config.max_violations, config.max_violations);
+    // Test that engine was created successfully - since fields are private,
+    // we just verify creation works and basic functionality
+    assert!(!engine.is_optimization_enabled());
+    assert_eq!(engine.get_cache_hit_rate(), 0.0);
 }
 
 #[test]
@@ -161,7 +163,7 @@ fn test_validation_engine_with_empty_shapes() {
     let config = ValidationConfig::default();
     let mut engine = ValidationEngine::new(&shapes, config);
 
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
     let result = engine.validate_store(&store).unwrap();
 
     assert!(result.conforms());

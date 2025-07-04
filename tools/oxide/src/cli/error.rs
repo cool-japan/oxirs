@@ -245,6 +245,30 @@ impl From<Box<dyn std::error::Error>> for CliError {
     }
 }
 
+impl From<String> for CliError {
+    fn from(err: String) -> Self {
+        Self::new(CliErrorKind::Other(err))
+    }
+}
+
+impl From<&str> for CliError {
+    fn from(err: &str) -> Self {
+        Self::new(CliErrorKind::Other(err.to_string()))
+    }
+}
+
+impl From<dialoguer::Error> for CliError {
+    fn from(err: dialoguer::Error) -> Self {
+        Self::new(CliErrorKind::Other(err.to_string()))
+    }
+}
+
+impl From<toml::de::Error> for CliError {
+    fn from(err: toml::de::Error) -> Self {
+        Self::new(CliErrorKind::ConfigError(err.to_string()))
+    }
+}
+
 /// Helper functions for common error scenarios
 pub mod helpers {
     use super::*;

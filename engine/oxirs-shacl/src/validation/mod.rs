@@ -249,6 +249,11 @@ impl ValidationViolation {
         violations
     }
 
+    /// Get the message (convenience method for result_message)
+    pub fn message(&self) -> &Option<String> {
+        &self.result_message
+    }
+
     /// Get the violation as an RDF graph representation
     pub fn to_rdf(&self) -> Vec<Triple> {
         // TODO: Implement RDF serialization

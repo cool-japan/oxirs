@@ -3,19 +3,19 @@
 //! This module implements automatic discovery protocols including mDNS/DNS-SD
 //! for finding federated SPARQL and GraphQL services on the network.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
-use tokio::time::{interval, timeout};
-use tracing::{debug, error, info, warn};
+use tokio::time::interval;
+use tracing::{error, info, warn};
 
 #[cfg(feature = "service-discovery")]
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 
-use crate::{FederatedService, ServiceDiscovery, service_registry::ServiceRegistry, service::ServiceType};
+use crate::{ServiceDiscovery, service_registry::ServiceRegistry, service::ServiceType};
 
 /// Service discovery daemon for automatic discovery
 #[derive(Debug)]

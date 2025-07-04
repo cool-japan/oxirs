@@ -4,6 +4,7 @@ use axum::{
     extract::ws::{Message, WebSocket},
     Router,
 };
+use std::time::SystemTime;
 use futures::{SinkExt, StreamExt};
 use oxirs_fuseki::{
     config::ServerConfig,
@@ -239,7 +240,7 @@ async fn test_change_detection() {
     let notification = ChangeNotification {
         graphs: vec!["http://example.org/graph1".to_string()],
         change_type: ChangeType::Insert,
-        timestamp: Instant::now(),
+        timestamp: SystemTime::now(),
         details: Some(json!({
             "triples_added": 42,
             "subjects": ["http://example.org/s1", "http://example.org/s2"]

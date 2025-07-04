@@ -8,11 +8,10 @@ use bloom::{BloomFilter, ASMS};
 use lru::LruCache;
 use moka::future::Cache as AsyncCache;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
@@ -105,7 +104,7 @@ impl FederationCache {
 
     /// Get a cached query result
     pub async fn get_query_result(&self, query_hash: &str) -> Option<QueryResultCache> {
-        let cache_key = format!("query:{}", query_hash);
+        let cache_key = format!("query:{query_hash}");
 
         // Check bloom filter first
         {
@@ -168,7 +167,7 @@ impl FederationCache {
         result: QueryResultCache,
         ttl: Option<Duration>,
     ) {
-        let cache_key = format!("query:{}", query_hash);
+        let cache_key = format!("query:{query_hash}");
         let expiry = SystemTime::now() + ttl.unwrap_or(self.config.default_ttl);
 
         let entry = CacheEntry {
@@ -199,14 +198,14 @@ impl FederationCache {
 
     /// Get cached service metadata
     pub async fn get_service_metadata(&self, service_id: &str) -> Option<ServiceMetadata> {
-        let cache_key = format!("service_meta:{}", service_id);
+        let cache_key = format!("service_meta:{service_id}");
         self.get_typed_value(&cache_key, CacheType::ServiceMetadata)
             .await
     }
 
     /// Cache service metadata
     pub async fn put_service_metadata(&self, service_id: &str, metadata: ServiceMetadata) {
-        let cache_key = format!("service_meta:{}", service_id);
+        let cache_key = format!("service_meta:{service_id}");
         let entry = CacheEntry {
             value: CacheValue::ServiceMetadata(metadata),
             created_at: SystemTime::now(),
@@ -220,13 +219,13 @@ impl FederationCache {
 
     /// Get cached schema
     pub async fn get_schema(&self, service_id: &str) -> Option<FederatedSchema> {
-        let cache_key = format!("schema:{}", service_id);
+        let cache_key = format!("schema:{service_id}");
         self.get_typed_value(&cache_key, CacheType::Schema).await
     }
 
     /// Cache schema
     pub async fn put_schema(&self, service_id: &str, schema: FederatedSchema) {
-        let cache_key = format!("schema:{}", service_id);
+        let cache_key = format!("schema:{service_id}");
         let entry = CacheEntry {
             value: CacheValue::Schema(schema),
             created_at: SystemTime::now(),
@@ -396,7 +395,7 @@ impl FederationCache {
         debug!("Warming up service metadata");
 
         // Pre-cache default service capabilities
-        let default_capabilities = vec![
+        let default_capabilities = [
             ServiceCapability::SparqlQuery,
             ServiceCapability::GraphQLQuery,
             ServiceCapability::FilterPushdown,
@@ -404,14 +403,12 @@ impl FederationCache {
         ];
 
         let metadata = ServiceMetadata {
-            capabilities: default_capabilities,
-            endpoint_url: "placeholder".to_string(),
             description: Some("Warmed metadata".to_string()),
             version: Some("1.0".to_string()),
-            health_check_url: None,
-            auth_required: false,
-            rate_limit: None,
-            timeout: Duration::from_secs(30),
+            maintainer: Some("OxiRS Federation".to_string()),
+            tags: vec!["cache".to_string(), "warmup".to_string()],
+            documentation_url: None,
+            schema_url: None,
         };
 
         // Cache for common service types
@@ -431,8 +428,10 @@ impl FederationCache {
         let schema = FederatedSchema {
             service_id: "warmup".to_string(),
             types: std::collections::HashMap::new(),
-            directives: vec![],
-            federation_metadata: None,
+            queries: std::collections::HashMap::new(),
+            mutations: std::collections::HashMap::new(),
+            subscriptions: std::collections::HashMap::new(),
+            directives: std::collections::HashMap::new(),
         };
 
         self.put_schema("warmup-schema", schema).await;

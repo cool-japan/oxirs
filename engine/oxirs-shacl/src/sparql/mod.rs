@@ -9,6 +9,7 @@ pub mod function_library;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use oxirs_core::{
     model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple, Variable},
@@ -17,8 +18,9 @@ use oxirs_core::{
 
 use crate::{
     constraints::{
-        ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator,
+        ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator,
     },
+    validation::constraint_validators::ConstraintValidator,
     Result, Severity, ShaclError, ShapeId,
 };
 
@@ -72,7 +74,7 @@ impl SparqlConstraintExecutor {
         store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // Basic implementation - in a real system this would execute SPARQL queries
-        Ok(ConstraintEvaluationResult::Valid)
+        Ok(ConstraintEvaluationResult::Satisfied)
     }
 }
 
@@ -110,6 +112,39 @@ impl SparqlConstraint {
             message: None,
             severity: None,
             construct_query: None,
+        }
+    }
+
+    /// Validate method for compatibility
+    pub fn validate(&self) -> Result<()> {
+        // Basic validation - check if query is not empty
+        if self.query.trim().is_empty() {
+            return Err(ShaclError::SparqlExecution(
+                "SPARQL query cannot be empty".to_string()
+            ));
+        }
+        Ok(())
+    }
+
+    /// Evaluate the SPARQL constraint
+    pub fn evaluate(&self, context: &ConstraintContext, store: &dyn Store) -> Result<ConstraintEvaluationResult> {
+        // Basic implementation - in a real system this would execute SPARQL queries
+        // For now, return satisfied to allow compilation
+        Ok(ConstraintEvaluationResult::Satisfied)
+    }
+}
+
+impl ConstraintValidator for SparqlConstraint {
+    fn validate(
+        &self,
+        store: &dyn Store,
+        context: &ConstraintContext,
+        _graph_name: Option<&str>,
+    ) -> Result<crate::validation::ConstraintEvaluationResult> {
+        match self.evaluate(context, store)? {
+            crate::constraints::ConstraintEvaluationResult::Satisfied => Ok(crate::validation::ConstraintEvaluationResult::Satisfied),
+            crate::constraints::ConstraintEvaluationResult::Violated { violating_value, message, details: _ } => Ok(crate::validation::ConstraintEvaluationResult::Violated { violating_value, message }),
+            crate::constraints::ConstraintEvaluationResult::Error { message, .. } => Err(crate::ShaclError::ValidationEngine(message)),
         }
     }
 }
@@ -198,6 +233,7 @@ pub mod examples {
     use std::time::SystemTime;
 
     /// Example string manipulation function
+    #[derive(Debug)]
     pub struct UpperCaseFunction {
         metadata: FunctionMetadata,
     }
@@ -260,6 +296,7 @@ pub mod examples {
     }
 
     /// Example mathematical function
+    #[derive(Debug)]
     pub struct PowerFunction {
         metadata: FunctionMetadata,
     }

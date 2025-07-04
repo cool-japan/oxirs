@@ -7,7 +7,7 @@ use crate::{
     constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator},
     PropertyPath, Result, ShaclError, ShapeId,
 };
-use oxirs_core::{model::Term, Store};
+use oxirs_core::{model::Term, Store, RdfTerm};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -1243,30 +1243,23 @@ impl IncrementalValidationEngine {
         let mut triples = Vec::new();
 
         // Create a pattern to match triples with this node as subject
-        for quad in store.iter() {
-            match quad {
-                Ok(Quad::Triple(triple)) => {
-                    if &triple.subject() == node {
-                        triples.push(triple);
-                    }
-                }
-                Ok(Quad::Quad(quad)) => {
-                    let triple = oxirs_core::model::Triple::new(
-                        quad.subject().clone(),
-                        quad.predicate().clone(),
-                        quad.object().clone(),
-                    );
-                    if &quad.subject() == node {
-                        triples.push(triple);
-                    }
-                }
-                Err(e) => {
-                    return Err(ShaclError::ValidationEngine(format!(
-                        "Store iteration error: {}",
-                        e
-                    )));
-                }
-            }
+        let subject = match node {
+            Term::NamedNode(nn) => Some(oxirs_core::model::Subject::NamedNode(nn.clone())),
+            Term::BlankNode(bn) => Some(oxirs_core::model::Subject::BlankNode(bn.clone())),
+            Term::Variable(v) => Some(oxirs_core::model::Subject::Variable(v.clone())),
+            _ => None,
+        };
+        let quads = match subject {
+            Some(s) => store.find_quads(Some(&s), None, None, None)?,
+            None => Vec::new(),
+        };
+        for quad in quads {
+            let triple = oxirs_core::model::Triple::new(
+                quad.subject().clone(),
+                quad.predicate().clone(),
+                quad.object().clone(),
+            );
+            triples.push(triple);
         }
 
         Ok(triples)
@@ -1283,30 +1276,24 @@ impl IncrementalValidationEngine {
         let mut triples = Vec::new();
 
         // Create a pattern to match triples with this node as object
-        for quad in store.iter() {
-            match quad {
-                Ok(Quad::Triple(triple)) => {
-                    if &triple.object() == node {
-                        triples.push(triple);
-                    }
-                }
-                Ok(Quad::Quad(quad)) => {
-                    let triple = oxirs_core::model::Triple::new(
-                        quad.subject().clone(),
-                        quad.predicate().clone(),
-                        quad.object().clone(),
-                    );
-                    if &quad.object() == node {
-                        triples.push(triple);
-                    }
-                }
-                Err(e) => {
-                    return Err(ShaclError::ValidationEngine(format!(
-                        "Store iteration error: {}",
-                        e
-                    )));
-                }
-            }
+        let object = match node {
+            Term::NamedNode(nn) => Some(oxirs_core::model::Object::NamedNode(nn.clone())),
+            Term::BlankNode(bn) => Some(oxirs_core::model::Object::BlankNode(bn.clone())),
+            Term::Literal(lit) => Some(oxirs_core::model::Object::Literal(lit.clone())),
+            Term::Variable(v) => Some(oxirs_core::model::Object::Variable(v.clone())),
+            _ => None,
+        };
+        let quads = match object {
+            Some(o) => store.find_quads(None, None, Some(&o), None)?,
+            None => Vec::new(),
+        };
+        for quad in quads {
+            let triple = oxirs_core::model::Triple::new(
+                quad.subject().clone(),
+                quad.predicate().clone(),
+                quad.object().clone(),
+            );
+            triples.push(triple);
         }
 
         Ok(triples)
@@ -1338,10 +1325,8 @@ impl IncrementalValidationEngine {
         let snapshots = self.previous_results.read().unwrap();
 
         for node in nodes {
-            let node_key = format!("{:?}", node);
-
             // Check if we have a previous snapshot for this node
-            if let Some(previous_snapshot) = snapshots.get(&node_key) {
+            if let Some(previous_snapshot) = snapshots.get(node) {
                 // Compute current hashes
                 let current_property_hash = self.hash_node_properties(store, node)?;
                 let current_constraint_hash = self.hash_constraints(current_constraints);
@@ -1376,15 +1361,11 @@ impl IncrementalValidationEngine {
         }
 
         // Detect deleted nodes (in snapshots but not in current nodes)
-        let current_node_keys: std::collections::HashSet<String> =
-            nodes.iter().map(|n| format!("{:?}", n)).collect();
+        let current_nodes: std::collections::HashSet<&Term> = nodes.iter().collect();
 
-        for snapshot_key in snapshots.keys() {
-            if !current_node_keys.contains(snapshot_key) {
-                // Try to reconstruct the term (simplified approach)
-                if let Ok(term) = self.reconstruct_term_from_key(snapshot_key) {
-                    delta.deleted_nodes.push(term);
-                }
+        for snapshot_node in snapshots.keys() {
+            if !current_nodes.contains(snapshot_node) {
+                delta.deleted_nodes.push(snapshot_node.clone());
             }
         }
 
@@ -1539,14 +1520,23 @@ impl IncrementalValidationEngine {
         if !current_triples.is_empty() {
             for triple in current_triples.iter().take(5) {
                 // Limit for performance
-                changes.push(PropertyChange {
-                    subject: node.clone(),
-                    property: triple.predicate().clone(),
-                    change_type: PropertyChangeType::Modified, // Simplified assumption
-                    old_value: None, // Would need previous state comparison
-                    new_value: Some(triple.object().clone()),
-                    timestamp: std::time::SystemTime::now(),
-                });
+                // Convert predicate to NamedNode and object to Term
+                if let oxirs_core::model::Predicate::NamedNode(predicate_nn) = triple.predicate() {
+                    changes.push(PropertyChange {
+                        subject: node.clone(),
+                        property: predicate_nn.clone(),
+                        change_type: PropertyChangeType::Modified, // Simplified assumption
+                        old_value: None, // Would need previous state comparison
+                        new_value: Some(match triple.object() {
+                            oxirs_core::model::Object::NamedNode(nn) => Term::NamedNode(nn.clone()),
+                            oxirs_core::model::Object::BlankNode(bn) => Term::BlankNode(bn.clone()),
+                            oxirs_core::model::Object::Literal(lit) => Term::Literal(lit.clone()),
+                            oxirs_core::model::Object::Variable(v) => Term::Variable(v.clone()),
+                            _ => continue, // Skip unsupported object types
+                        }),
+                        timestamp: std::time::SystemTime::now(),
+                    });
+                }
             }
         }
 

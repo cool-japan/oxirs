@@ -87,7 +87,7 @@ impl EmbeddableContent {
 }
 
 /// Embedding generation strategy
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EmbeddingStrategy {
     /// Simple TF-IDF based embeddings (for testing/fallback)
     TfIdf,
@@ -2044,5 +2044,83 @@ mod tests {
 
         // RoBERTa should be slightly larger than BERT due to larger vocabulary
         assert!(roberta_size > bert_size);
+    }
+}
+
+/// Mock embedding generator for testing
+#[cfg(test)]
+pub struct MockEmbeddingGenerator {
+    config: EmbeddingConfig,
+}
+
+#[cfg(test)]
+impl MockEmbeddingGenerator {
+    pub fn new() -> Self {
+        Self {
+            config: EmbeddingConfig {
+                dimensions: 128,
+                ..Default::default()
+            },
+        }
+    }
+    
+    pub fn with_dimensions(dimensions: usize) -> Self {
+        Self {
+            config: EmbeddingConfig {
+                dimensions,
+                ..Default::default()
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+impl AsAny for MockEmbeddingGenerator {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+#[cfg(test)]
+impl EmbeddingGenerator for MockEmbeddingGenerator {
+    fn generate(&self, content: &EmbeddableContent) -> Result<crate::Vector> {
+        let text = content.to_text();
+        
+        // Generate deterministic mock embedding based on content hash
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut hasher);
+        let hash = hasher.finish();
+        
+        let mut embedding = Vec::with_capacity(self.config.dimensions);
+        let mut seed = hash;
+        
+        for _ in 0..self.config.dimensions {
+            // Simple LCG for deterministic values
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            let value = (seed as f64 / u64::MAX as f64) as f32;
+            embedding.push(value * 2.0 - 1.0); // Range [-1, 1]
+        }
+        
+        // Normalize to unit vector
+        let magnitude: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if magnitude > 0.0 {
+            for value in &mut embedding {
+                *value /= magnitude;
+            }
+        }
+        
+        Ok(crate::Vector::new(embedding))
+    }
+    
+    fn dimensions(&self) -> usize {
+        self.config.dimensions
+    }
+    
+    fn config(&self) -> &EmbeddingConfig {
+        &self.config
     }
 }

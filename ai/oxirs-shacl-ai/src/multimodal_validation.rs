@@ -164,7 +164,7 @@ impl MultiModalValidator {
     /// Validate multi-modal content against SHACL shapes
     pub async fn validate_multimodal_content(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         content_refs: &[MultiModalContentRef],
     ) -> Result<MultiModalValidationReport> {

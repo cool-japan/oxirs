@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use super::execution_tracking::{ExecutionRecord, OptimizationDecision, OptimizationType};
 use super::index_types::{IndexStatistics, IndexType};
+use crate::algebra::Variable;
 
 /// Query optimization statistics
 #[derive(Debug, Clone, Default)]
@@ -23,6 +24,14 @@ pub struct Statistics {
     pub cardinalities: HashMap<String, usize>,
     /// Pattern cardinality estimates
     pub pattern_cardinality: HashMap<String, usize>,
+    /// Predicate frequency statistics
+    pub predicate_frequency: HashMap<String, usize>,
+    /// Subject cardinality statistics
+    pub subject_cardinality: HashMap<String, usize>,
+    /// Object cardinality statistics
+    pub object_cardinality: HashMap<String, usize>,
+    /// Variable selectivity statistics
+    pub variable_selectivity: HashMap<Variable, f64>,
     /// Optimization success rates
     pub optimization_success_rates: HashMap<OptimizationType, f64>,
     /// Total queries processed

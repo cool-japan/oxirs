@@ -134,7 +134,7 @@ impl From<parquet::errors::ParquetError> for OxirsError {
 
 impl From<std::time::SystemTimeError> for OxirsError {
     fn from(err: std::time::SystemTimeError) -> Self {
-        OxirsError::Io(format!("System time error: {}", err))
+        OxirsError::Io(format!("System time error: {err}"))
     }
 }
 

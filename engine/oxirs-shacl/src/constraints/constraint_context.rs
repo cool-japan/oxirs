@@ -170,6 +170,7 @@ impl ConstraintEvaluationResult {
                 result_severity: Severity::Violation,
                 result_message: message,
                 details: details,
+                nested_results: Vec::new(),
             }),
             _ => None,
         }

@@ -5,8 +5,6 @@ use crate::model::*;
 use crate::optimization::RdfArena;
 use crate::{OxirsError, Result};
 use async_trait::async_trait;
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -314,6 +312,105 @@ pub trait Store: Send + Sync {
 
     /// Prepare a SPARQL query for execution
     fn prepare_query(&self, sparql: &str) -> Result<PreparedQuery>;
+
+    /// Insert a triple into the default graph
+    fn insert_triple(&self, triple: Triple) -> Result<bool> {
+        let quad = Quad::from_triple(triple);
+        self.insert_quad(quad)
+    }
+
+    /// Insert a quad (compatibility method)
+    fn insert(&self, quad: &Quad) -> Result<()> {
+        self.insert_quad(quad.clone())?;
+        Ok(())
+    }
+
+    /// Remove a quad (compatibility method)
+    fn remove(&self, quad: &Quad) -> Result<bool> {
+        self.remove_quad(quad)
+    }
+
+    /// Get all quads in the store
+    fn quads(&self) -> Result<Vec<Quad>> {
+        self.find_quads(None, None, None, None)
+    }
+
+    /// Get all named graphs
+    fn named_graphs(&self) -> Result<Vec<NamedNode>> {
+        // Default implementation - subclasses should override
+        Ok(Vec::new())
+    }
+
+    /// Get all graphs
+    fn graphs(&self) -> Result<Vec<NamedNode>> {
+        self.named_graphs()
+    }
+
+    /// Get quads from named graphs only
+    fn named_graph_quads(&self) -> Result<Vec<Quad>> {
+        // Default implementation - get all quads except default graph
+        let all_quads = self.quads()?;
+        Ok(all_quads
+            .into_iter()
+            .filter(|quad| matches!(quad.graph_name(), GraphName::NamedNode(_)))
+            .collect())
+    }
+
+    /// Get quads from the default graph only
+    fn default_graph_quads(&self) -> Result<Vec<Quad>> {
+        let default_graph = GraphName::DefaultGraph;
+        self.find_quads(None, None, None, Some(&default_graph))
+    }
+
+    /// Get quads from a specific graph
+    fn graph_quads(&self, graph: Option<&NamedNode>) -> Result<Vec<Quad>> {
+        let graph_name = graph
+            .map(|g| GraphName::NamedNode(g.clone()))
+            .unwrap_or(GraphName::DefaultGraph);
+        self.find_quads(None, None, None, Some(&graph_name))
+    }
+
+    /// Clear all data from all graphs
+    fn clear_all(&self) -> Result<usize> {
+        // Default implementation - not supported in trait
+        Err(OxirsError::NotSupported("clear_all requires mutable access".to_string()))
+    }
+
+    /// Clear all named graphs (but not the default graph)
+    fn clear_named_graphs(&self) -> Result<usize> {
+        // Default implementation - not supported in trait
+        Err(OxirsError::NotSupported("clear_named_graphs requires mutable access".to_string()))
+    }
+
+    /// Clear the default graph only
+    fn clear_default_graph(&self) -> Result<usize> {
+        // Default implementation - not supported in trait
+        Err(OxirsError::NotSupported("clear_default_graph requires mutable access".to_string()))
+    }
+
+    /// Clear a specific graph
+    fn clear_graph(&self, _graph: Option<&GraphName>) -> Result<usize> {
+        // Default implementation - not supported in trait
+        Err(OxirsError::NotSupported("clear_graph requires mutable access".to_string()))
+    }
+
+    /// Create a new graph (if it doesn't exist)
+    fn create_graph(&self, _graph: Option<&NamedNode>) -> Result<()> {
+        // Default implementation - not supported in trait
+        Err(OxirsError::NotSupported("create_graph requires mutable access".to_string()))
+    }
+
+    /// Drop a graph (remove the graph and all its quads)
+    fn drop_graph(&self, _graph: Option<&GraphName>) -> Result<()> {
+        // Default implementation - not supported in trait
+        Err(OxirsError::NotSupported("drop_graph requires mutable access".to_string()))
+    }
+
+    /// Load data from a URL into a graph
+    fn load_from_url(&self, _url: &str, _graph: Option<&NamedNode>) -> Result<usize> {
+        // Default implementation - not supported in trait
+        Err(OxirsError::NotSupported("load_from_url requires mutable access".to_string()))
+    }
 
     /// Get all triples in the store (converts quads to triples)
     fn triples(&self) -> Result<Vec<Triple>> {
@@ -921,6 +1018,21 @@ impl ConcreteStore {
             inner: RdfStore::open(path)?,
         })
     }
+
+    /// Insert a quad into the store (requires mutable access)
+    pub fn insert_quad(&mut self, quad: Quad) -> Result<bool> {
+        RdfStore::insert_quad(&mut self.inner, quad)
+    }
+
+    /// Remove a quad from the store (requires mutable access)
+    pub fn remove_quad(&mut self, quad: &Quad) -> Result<bool> {
+        RdfStore::remove_quad(&mut self.inner, quad)
+    }
+
+    /// Insert a triple into the default graph (requires mutable access)
+    pub fn insert_triple(&mut self, triple: crate::model::Triple) -> Result<bool> {
+        RdfStore::insert_triple(&mut self.inner, triple)
+    }
 }
 
 impl Default for ConcreteStore {
@@ -1042,7 +1154,7 @@ impl Default for OxirsQueryResults {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::*;
+    // Removed unused crate::model::* import
 
     fn create_test_quad() -> Quad {
         let subject = NamedNode::new("http://example.org/subject").unwrap();

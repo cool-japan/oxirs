@@ -7,7 +7,7 @@ use std::time::{Duration, Instant, SystemTime};
 use uuid::Uuid;
 
 /// Statistics for the entire pipeline
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PipelineStatistics {
     /// Total items processed
     pub total_processed: AtomicU64,
@@ -353,8 +353,8 @@ impl Default for CircuitBreakerConfig {
     fn default() -> Self {
         Self {
             failure_threshold: 5,
-            failure_window: Duration::from_minutes(1),
-            recovery_timeout: Duration::from_minutes(5),
+            failure_window: Duration::from_secs(60),
+            recovery_timeout: Duration::from_secs(300),
             success_threshold: 3,
         }
     }

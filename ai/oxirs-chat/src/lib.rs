@@ -49,6 +49,9 @@ pub use types::*;
 // Re-export key RAG types
 pub use rag::{AssembledContext, QueryContext, RAGConfig, RAGSystem};
 
+// LLM manager type alias for chat functionality
+pub type ChatManager = llm::manager::EnhancedLLMManager;
+
 // Re-export LLM types including circuit breaker
 pub use llm::{
     CircuitBreakerConfig, CircuitBreakerState, CircuitBreakerStats, LLMConfig, LLMResponse,
@@ -59,7 +62,7 @@ pub struct OxiRSChat {
     /// Configuration for the chat system
     pub config: ChatConfig,
     /// RDF store for knowledge graph access
-    pub store: Arc<oxirs_core::ConcreteStore>,
+    pub store: Arc<dyn oxirs_core::Store>,
     /// Session storage
     sessions: Arc<RwLock<HashMap<String, Arc<Mutex<ChatSession>>>>>,
     /// Session timeout duration
@@ -69,12 +72,12 @@ pub struct OxiRSChat {
     /// LLM integration for natural language processing
     llm_manager: Arc<Mutex<llm::LLMManager>>,
     /// NL2SPARQL translation engine
-    nl2sparql_engine: Arc<Mutex<nl2sparql::NL2SPARQLEngine>>,
+    nl2sparql_engine: Arc<Mutex<nl2sparql::NL2SPARQLSystem>>,
 }
 
 impl OxiRSChat {
     /// Create a new OxiRS Chat instance with advanced AI capabilities
-    pub async fn new(config: ChatConfig, store: Arc<oxirs_core::Store>) -> Result<Self> {
+    pub async fn new(config: ChatConfig, store: Arc<dyn oxirs_core::Store>) -> Result<Self> {
         // Initialize RAG engine with advanced features
         let rag_config = rag::RagConfig {
             retrieval: rag::RetrievalConfig {
@@ -106,7 +109,7 @@ impl OxiRSChat {
 
         // Initialize NL2SPARQL engine
         let nl2sparql_config = nl2sparql::NL2SPARQLConfig::default();
-        let nl2sparql_engine = nl2sparql::NL2SPARQLEngine::new(nl2sparql_config, store.clone())?;
+        let nl2sparql_engine = nl2sparql::NL2SPARQLSystem::new(nl2sparql_config, None)?;
 
         Ok(Self {
             config,
@@ -157,7 +160,7 @@ impl OxiRSChat {
 
         for (session_id, session) in sessions.iter() {
             if let Ok(session_guard) = session.try_lock() {
-                if session_guard.should_expire(self.session_timeout) {
+                if session_guard.should_expire(chrono::Duration::from_std(self.session_timeout).unwrap_or(chrono::Duration::seconds(3600))) {
                     expired_sessions.push(session_id.clone());
                 }
             }
@@ -207,6 +210,9 @@ impl OxiRSChat {
             rich_elements: Vec::new(),
         };
 
+        // Store user message ID before moving
+        let user_msg_id = user_msg.id.clone();
+        
         // Add user message to session
         session.add_message(user_msg)?;
 
@@ -226,14 +232,20 @@ impl OxiRSChat {
         let (sparql_query, sparql_results) = if self.is_sparql_query(&user_message) {
             debug!("Detected SPARQL query, performing NL2SPARQL translation");
             let mut nl2sparql = self.nl2sparql_engine.lock().await;
+            let query_context = rag::QueryContext::new(session_id.to_string())
+                .add_message(rag::ConversationMessage {
+                    role: rag::MessageRole::User,
+                    content: user_message.clone(),
+                    timestamp: chrono::Utc::now(),
+                });
             match nl2sparql
-                .translate_to_sparql(&user_message, &assembled_context)
+                .generate_sparql(&query_context)
                 .await
             {
                 Ok(sparql) => {
-                    debug!("Generated SPARQL: {}", sparql);
+                    debug!("Generated SPARQL: {}", sparql.query);
                     // Execute SPARQL query
-                    match self.execute_sparql(&sparql).await {
+                    match self.execute_sparql(&sparql.query).await {
                         Ok(results) => (Some(sparql), Some(results)),
                         Err(e) => {
                             warn!("SPARQL execution failed: {}", e);
@@ -291,7 +303,7 @@ impl OxiRSChat {
         // Add reasoning chains if available
         if let Some(ref reasoning_results) = assembled_context.reasoning_results {
             rich_elements.push(RichContentElement::ReasoningChain {
-                reasoning_steps: reasoning_results.reasoning_chain.clone(),
+                reasoning_steps: reasoning_results.primary_chain.steps.clone(),
                 confidence_score: reasoning_results.reasoning_quality.overall_quality,
             });
         }
@@ -299,24 +311,34 @@ impl OxiRSChat {
         // Add SPARQL results if available
         if let Some(ref results) = sparql_results {
             rich_elements.push(RichContentElement::SPARQLResults {
-                query: sparql_query.unwrap_or_default(),
+                query: sparql_query.map(|s| s.query).unwrap_or_default(),
                 results: results.clone(),
                 execution_time: processing_start.elapsed(),
             });
         }
 
         // 5. Create comprehensive response message
+        let response_text_len = response_text.len();
         let response = Message {
             id: uuid::Uuid::new_v4().to_string(),
             role: MessageRole::Assistant,
             content: MessageContent::from_text(response_text),
             timestamp: chrono::Utc::now(),
-            metadata: Some(
-                self.create_response_metadata(&assembled_context, processing_start.elapsed()),
-            ),
+            metadata: Some(messages::MessageMetadata {
+                source: Some("oxirs-chat".to_string()),
+                confidence: Some(assembled_context.context_score as f64),
+                processing_time_ms: Some(processing_start.elapsed().as_millis() as u64),
+                model_used: Some("oxirs-chat-ai".to_string()),
+                temperature: None,
+                max_tokens: None,
+                custom_fields: self.create_response_metadata(&assembled_context, processing_start.elapsed())
+                    .into_iter()
+                    .map(|(k, v)| (k, serde_json::Value::String(v)))
+                    .collect(),
+            }),
             thread_id: None,
-            parent_message_id: Some(user_msg.id.clone()),
-            token_count: Some(response_text.len() / 4), // Rough estimate
+            parent_message_id: Some(user_msg_id),
+            token_count: Some(response_text_len / 4), // Rough estimate
             reactions: Vec::new(),
             attachments: Vec::new(),
             rich_elements,
@@ -410,7 +432,7 @@ impl OxiRSChat {
         llm_manager: &mut llm::LLMManager,
         user_message: &str,
         assembled_context: &rag::AssembledContext,
-        sparql_query: Option<&String>,
+        sparql_query: Option<&nl2sparql::SPARQLGenerationResult>,
         sparql_results: Option<&Vec<HashMap<String, String>>>,
     ) -> Result<String> {
         // Build comprehensive prompt with all context
@@ -459,10 +481,10 @@ impl OxiRSChat {
         // Add reasoning results if available
         if let Some(ref reasoning_results) = assembled_context.reasoning_results {
             prompt.push_str("Advanced Reasoning Analysis:\n");
-            for step in reasoning_results.reasoning_chain.iter().take(3) {
+            for step in reasoning_results.primary_chain.steps.iter().take(3) {
                 prompt.push_str(&format!(
-                    "- {}: {} (confidence: {:.2})\n",
-                    step.reasoning_type, step.conclusion, step.confidence
+                    "- {:?}: {:?} (confidence: {:.2})\n",
+                    step.reasoning_type, step.conclusion_triple, step.confidence
                 ));
             }
             prompt.push('\n');
@@ -475,7 +497,7 @@ impl OxiRSChat {
                 for insight in consciousness_insights.iter().take(3) {
                     prompt.push_str(&format!(
                         "- {} (confidence: {:.2})\n",
-                        insight.description, insight.confidence
+                        insight.content, insight.confidence
                     ));
                 }
                 prompt.push('\n');
@@ -484,7 +506,7 @@ impl OxiRSChat {
 
         // Add SPARQL information if available
         if let Some(sparql) = sparql_query {
-            prompt.push_str(&format!("Generated SPARQL Query:\n{}\n\n", sparql));
+            prompt.push_str(&format!("Generated SPARQL Query:\n{}\n\n", sparql.query));
 
             if let Some(results) = sparql_results {
                 prompt.push_str("SPARQL Query Results:\n");
@@ -523,10 +545,26 @@ impl OxiRSChat {
             "Generating LLM response with context length: {} chars",
             prompt.len()
         );
-        llm_manager
-            .generate_response(&prompt)
+        let llm_request = llm::LLMRequest {
+            messages: vec![llm::ChatMessage {
+                role: llm::ChatRole::User,
+                content: prompt.clone(),
+                metadata: None,
+            }],
+            system_prompt: Some("You are an advanced AI assistant with access to a knowledge graph.".to_string()),
+            temperature: 0.7,
+            max_tokens: Some(1000),
+            use_case: llm::UseCase::Conversation,
+            priority: llm::Priority::Normal,
+            timeout: None,
+        };
+        
+        let response = llm_manager
+            .generate_response(llm_request)
             .await
-            .context("Failed to generate LLM response")
+            .context("Failed to generate LLM response")?;
+        
+        Ok(response.content)
     }
 
     /// Helper: Create metadata for response message

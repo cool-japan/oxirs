@@ -208,3 +208,87 @@ impl Default for IntelligentShapeManager {
         Self::new()
     }
 }
+
+/// Optimization opportunity for shape improvement
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OptimizationOpportunity {
+    /// Unique identifier for the opportunity
+    pub id: String,
+    /// Type of optimization
+    pub optimization_type: OptimizationType,
+    /// Expected improvement score (0.0 to 1.0)
+    pub expected_improvement: f64,
+    /// Confidence level in the recommendation
+    pub confidence: f64,
+    /// Description of the optimization
+    pub description: String,
+    /// Effort required to implement
+    pub effort_level: EffortLevel,
+    /// Priority of the optimization
+    pub priority: OptimizationPriority,
+}
+
+/// Types of shape optimization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum OptimizationType {
+    /// Constraint simplification
+    ConstraintSimplification,
+    /// Path optimization
+    PathOptimization,
+    /// Target refinement
+    TargetRefinement,
+    /// Property grouping
+    PropertyGrouping,
+    /// Redundancy removal
+    RedundancyRemoval,
+    /// Performance optimization
+    PerformanceOptimization,
+    /// Custom optimization
+    Custom(String),
+}
+
+impl std::fmt::Display for OptimizationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OptimizationType::ConstraintSimplification => write!(f, "constraint_simplification"),
+            OptimizationType::PathOptimization => write!(f, "path_optimization"),
+            OptimizationType::TargetRefinement => write!(f, "target_refinement"),
+            OptimizationType::PropertyGrouping => write!(f, "property_grouping"),
+            OptimizationType::RedundancyRemoval => write!(f, "redundancy_removal"),
+            OptimizationType::PerformanceOptimization => write!(f, "performance_optimization"),
+            OptimizationType::Custom(name) => write!(f, "custom_{}", name),
+        }
+    }
+}
+
+impl OptimizationType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            OptimizationType::ConstraintSimplification => "constraint_simplification",
+            OptimizationType::PathOptimization => "path_optimization",
+            OptimizationType::TargetRefinement => "target_refinement",
+            OptimizationType::PropertyGrouping => "property_grouping",
+            OptimizationType::RedundancyRemoval => "redundancy_removal",
+            OptimizationType::PerformanceOptimization => "performance_optimization",
+            OptimizationType::Custom(_) => "custom",
+        }
+    }
+}
+
+/// Effort level for implementing optimization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EffortLevel {
+    Low,
+    Medium,
+    High,
+    VeryHigh,
+}
+
+/// Priority of optimization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum OptimizationPriority {
+    Critical,
+    High,
+    Medium,
+    Low,
+}

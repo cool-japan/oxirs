@@ -25,6 +25,7 @@ async fn test_federation_manager_creation() {
             tags: vec!["test".to_string()],
             location: Some("US-East".to_string()),
             version: Some("1.0.0".to_string()),
+            contact: Some("test@example.com".to_string()),
         },
         health: ServiceHealth::Healthy,
         capabilities: ServiceCapabilities {

@@ -350,9 +350,13 @@ impl CDCStore {
         // self.inner.add_triple(triple.clone(), graph.clone()).await?;
 
         // Notify CDC listeners
+        let triple_clone = triple.clone();
         let graph_ref = graph.as_deref();
-        self.notify_listeners(|listener| async move {
-            listener.on_triple_added(&triple, graph_ref).await;
+        self.notify_listeners(|listener| {
+            let triple_ref = &triple_clone;
+            async move {
+                listener.on_triple_added(triple_ref, graph_ref).await;
+            }
         })
         .await;
 

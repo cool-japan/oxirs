@@ -14,8 +14,9 @@ pub enum ErrorSeverity {
 }
 
 /// Error types in taxonomy
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum ErrorType {
+    #[default]
     ConstraintViolation,
     DataTypeError,
     CardinalityError,
@@ -83,4 +84,38 @@ pub struct ErrorClassificationResult {
 
     /// Recommended actions
     pub recommended_actions: Vec<String>,
+}
+
+/// Smart error analysis with AI insights
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SmartErrorAnalysis {
+    pub error_classification: ErrorType,
+    pub root_cause_analysis: Vec<String>,
+    pub fix_suggestions: Vec<RepairSuggestion>,
+    pub confidence_score: f64,
+    pub similar_cases: Vec<String>,
+}
+
+/// Repair suggestion from intelligent analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepairSuggestion {
+    pub repair_type: RepairType,
+    pub description: String,
+    pub confidence: f64,
+    pub effort_estimate: f64,
+    pub success_probability: f64,
+    pub automated: bool,
+}
+
+/// Types of repairs that can be suggested
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RepairType {
+    DataCorrection,
+    SchemaModification,
+    ConstraintRelaxation,
+    ValidationRuleUpdate,
+    DataTypeConversion,
+    CardinalityAdjustment,
+    PatternFix,
+    Custom(String),
 }

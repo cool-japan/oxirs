@@ -6,12 +6,11 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::RwLock as AsyncRwLock;
-use uuid::Uuid;
 
 /// Privacy-related errors
 #[derive(Error, Debug)]
@@ -47,6 +46,12 @@ pub enum PrivacyLevel {
     DifferentialPrivacy,
     /// Maximum privacy protection
     Maximum,
+}
+
+impl Default for PrivacyLevel {
+    fn default() -> Self {
+        PrivacyLevel::Basic
+    }
 }
 
 impl PrivacyLevel {
@@ -86,7 +91,7 @@ impl Default for DifferentialPrivacyConfig {
             delta: 1e-5,
             sensitivity: 1.0,
             mechanism: NoiseMechanism::Laplace,
-            budget_window: Duration::from_hours(24),
+            budget_window: Duration::from_secs(24 * 60 * 60),
         }
     }
 }
@@ -492,8 +497,8 @@ impl PrivacyManager {
 
         self.apply_noise_recursive(data, &mut |value| {
             if let Some(num) = value.as_f64() {
-                let u1 = uniform.sample(&mut rng);
-                let u2 = uniform.sample(&mut rng);
+                let u1: f64 = uniform.sample(&mut rng);
+                let u2: f64 = uniform.sample(&mut rng);
                 let noise = scale * (u1 - 0.5).signum() * (1.0 - 2.0 * u2.min(1.0 - u2)).ln();
                 *value = serde_json::Value::Number(
                     serde_json::Number::from_f64(num + noise)
@@ -1082,13 +1087,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_privacy_manager_creation() {
-        let manager = PrivacyManager::new(10.0, Duration::from_hours(24));
+        let manager = PrivacyManager::new(10.0, Duration::from_secs(24 * 3600)); // 24 hours
         assert!(manager.budget_tracker.remaining_budget("test_user") == 10.0);
     }
 
     #[tokio::test]
     async fn test_budget_tracking() {
-        let tracker = PrivacyBudgetTracker::new(5.0, Duration::from_hours(1));
+        let tracker = PrivacyBudgetTracker::new(5.0, Duration::from_secs(3600)); // 1 hour
 
         // Test budget consumption
         assert!(tracker.consume_budget("user1", 2.0).is_ok());

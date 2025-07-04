@@ -7,7 +7,6 @@ use crate::{
     model::*,
     parser::RdfFormat,
     rdf_store::{OxirsQueryResults, RdfStore},
-    serializer::Serializer,
     OxirsError, Result, Store as OxirsStoreTrait,
 };
 use std::io::{BufRead, Write};
@@ -57,7 +56,7 @@ impl Store {
         let mut store = self
             .inner
             .write()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
         store.insert_quad(quad)
     }
 
@@ -69,7 +68,7 @@ impl Store {
         let mut store = self
             .inner
             .write()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
 
         for quad in quads {
             let quad_ref = quad.into();
@@ -100,7 +99,7 @@ impl Store {
         let mut store = self
             .inner
             .write()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
         store.remove_quad(&quad)
     }
 
@@ -117,10 +116,10 @@ impl Store {
         // Read all data into a string
         let mut data = String::new();
         let mut reader = reader;
-        use std::io::Read;
+        // BufRead already extends Read, so this import is not needed
         reader
             .read_to_string(&mut data)
-            .map_err(|e| OxirsError::Parse(format!("Failed to read input: {}", e)))?;
+            .map_err(|e| OxirsError::Parse(format!("Failed to read input: {e}")))?;
 
         // Create parser with base IRI if provided
         let mut parser = Parser::new(format);
@@ -135,7 +134,7 @@ impl Store {
         let mut store = self
             .inner
             .write()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
 
         // Insert quads, potentially modifying graph name
         let target_graph = graph.map(|g| g.into());
@@ -170,7 +169,7 @@ impl Store {
         let store = self
             .inner
             .read()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
 
         let serializer = Serializer::new(format);
 
@@ -204,7 +203,7 @@ impl Store {
 
         writer
             .write_all(output.as_bytes())
-            .map_err(|e| OxirsError::Serialize(format!("Failed to write output: {}", e)))?;
+            .map_err(|e| OxirsError::Serialize(format!("Failed to write output: {e}")))?;
 
         Ok(())
     }
@@ -222,7 +221,7 @@ impl Store {
         let store = self
             .inner
             .read()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
         store.contains_quad(&quad)
     }
 
@@ -231,7 +230,7 @@ impl Store {
         let store = self
             .inner
             .read()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
         store.len()
     }
 
@@ -240,7 +239,7 @@ impl Store {
         let store = self
             .inner
             .read()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
         store.is_empty()
     }
 
@@ -346,7 +345,7 @@ impl Store {
         let store = self
             .inner
             .read()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
         let quads = store.query_quads(None, None, None, Some(&graph))?;
         Ok(!quads.is_empty())
     }
@@ -356,7 +355,7 @@ impl Store {
         let mut store = self
             .inner
             .write()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
         store.clear()
     }
 
@@ -368,7 +367,7 @@ impl Store {
         let mut store = self
             .inner
             .write()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
 
         // Get all quads in the specified graph
         let quads_to_remove = store.query_quads(None, None, None, Some(&graph))?;
@@ -386,7 +385,7 @@ impl Store {
         let store = self
             .inner
             .read()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
         let results = store.query(query)?;
         Ok(QueryResults { inner: results })
     }
@@ -419,7 +418,7 @@ impl Store {
         let store = self
             .inner
             .read()
-            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
         store.clear_arena();
         Ok(())
     }
@@ -581,7 +580,7 @@ impl From<OxirsError> for OxigraphCompatError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{BlankNode, Literal, LiteralRef, NamedNode, NamedNodeRef, Triple};
+    use crate::model::{Literal, NamedNode};
     use crate::parser::RdfFormat;
     use std::io::Cursor;
 

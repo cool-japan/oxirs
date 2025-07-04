@@ -152,14 +152,22 @@ impl CompressionManager {
         let _decompressed = self.decompress_with_algorithm(&compressed_data, &algorithm)?;
         let decompression_time = start_decomp_time.elapsed();
 
+        let compression_ratio = data.len() as f64 / compressed_data.len() as f64;
+        let compression_time_ms = compression_time.as_millis() as u64;
+        let decompression_time_ms = decompression_time.as_millis() as u64;
+        
         let stats = CompressionStats {
             algorithm: algorithm.clone(),
             original_size: data.len(),
             compressed_size: compressed_data.len(),
-            compression_ratio: data.len() as f64 / compressed_data.len() as f64,
-            compression_time_ms: compression_time.as_millis() as u64,
-            decompression_time_ms: decompression_time.as_millis() as u64,
-            cpu_efficiency: self.calculate_cpu_efficiency(&stats),
+            compression_ratio,
+            compression_time_ms,
+            decompression_time_ms,
+            cpu_efficiency: self.calculate_cpu_efficiency_direct(
+                compression_ratio,
+                compression_time_ms,
+                decompression_time_ms
+            ),
         };
 
         // Update metrics
@@ -394,6 +402,20 @@ impl CompressionManager {
     }
 
     /// Calculate CPU efficiency score
+    fn calculate_cpu_efficiency_direct(&self, compression_ratio: f64, compression_time_ms: u64, decompression_time_ms: u64) -> f64 {
+        let total_time = compression_time_ms + decompression_time_ms;
+        if total_time == 0 {
+            return 1.0;
+        }
+
+        // Calculate bytes per ms using original size from algorithm metrics
+        let bytes_per_ms = 1000.0 / total_time as f64; // Simplified calculation
+        let compression_benefit = compression_ratio;
+
+        // Combine throughput and compression benefit
+        (bytes_per_ms * compression_benefit).min(1.0)
+    }
+
     fn calculate_cpu_efficiency(&self, stats: &CompressionStats) -> f64 {
         let total_time = stats.compression_time_ms + stats.decompression_time_ms;
         if total_time == 0 {

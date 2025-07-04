@@ -3,14 +3,14 @@
 //! This module contains the main engine for temporal paradox resolution
 //! and core validation result types.
 
-use crate::ai_orchestrator::AIModel;
+use crate::ai_orchestrator::AiOrchestrator;
 use crate::ShaclAiError;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
-use super::{timeline::*, types::*};
+use super::{causality::CausalityLoopDetector, timeline::*, types::*};
 
 /// Temporal paradox resolution engine for handling time-travel validation scenarios
 #[derive(Debug, Clone)]

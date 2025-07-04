@@ -85,6 +85,9 @@ pub enum FusekiError {
     #[error("Internal server error: {message}")]
     Internal { message: String },
 
+    #[error("Response formatting error: {message}")]
+    ResponseFormatting { message: String },
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -181,6 +184,7 @@ impl FusekiError {
             | FusekiError::Store { .. }
             | FusekiError::Configuration { .. }
             | FusekiError::Internal { .. }
+            | FusekiError::ResponseFormatting { .. }
             | FusekiError::Io(..)
             | FusekiError::Json(..)
             | FusekiError::Yaml(..)
@@ -216,6 +220,7 @@ impl FusekiError {
             FusekiError::ServiceError { .. } => "service_error",
             FusekiError::ServiceUnavailable { .. } => "service_unavailable",
             FusekiError::Internal { .. } => "internal_error",
+            FusekiError::ResponseFormatting { .. } => "response_formatting_error",
             FusekiError::Io(..) => "io_error",
             FusekiError::Json(..) => "json_error",
             FusekiError::Yaml(..) => "yaml_error",
@@ -391,6 +396,12 @@ impl FusekiError {
 
     pub fn internal(message: impl Into<String>) -> Self {
         Self::Internal {
+            message: message.into(),
+        }
+    }
+
+    pub fn response_formatting(message: impl Into<String>) -> Self {
+        Self::ResponseFormatting {
             message: message.into(),
         }
     }

@@ -72,7 +72,7 @@ impl NatsProducer {
         let nats_config = {
             #[cfg(feature = "nats")]
             {
-                if let StreamBackend::Nats { url, .. } = &config.backend {
+                if let crate::StreamBackendType::Nats { url, .. } = &config.backend {
                     NatsConfig {
                         url: url.clone(),
                         ..Default::default()

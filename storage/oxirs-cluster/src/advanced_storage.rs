@@ -148,7 +148,7 @@ impl AtomicFile {
         if matches!(self.sync_mode, WalSyncMode::Sync | WalSyncMode::FullSync) {
             self.file.sync_all()?;
         }
-        drop(self.file);
+        // File will be automatically dropped when self goes out of scope
         std::fs::rename(&self.temp_path, &self.final_path)?;
         Ok(())
     }
@@ -162,7 +162,7 @@ impl Drop for AtomicFile {
 }
 
 /// Write-Ahead Log with atomic operations and crash recovery
-#[derive(Debug)]
+// TODO: Implement Debug for MessageSerializer to re-enable derive(Debug)
 struct WriteAheadLog {
     config: StorageConfig,
     current_sequence: AtomicU64,
@@ -194,7 +194,11 @@ impl WriteAheadLog {
         }
 
         let serializer_config = SerializationConfig {
-            enable_compression: config.enable_compression,
+            compression: if config.enable_compression {
+                crate::serialization::CompressionAlgorithm::Lz4
+            } else {
+                crate::serialization::CompressionAlgorithm::None
+            },
             ..Default::default()
         };
         let serializer = Arc::new(Mutex::new(MessageSerializer::with_config(
@@ -265,7 +269,7 @@ impl WriteAheadLog {
         let mut recovered_entries = Vec::new();
         let mut buffer = Vec::new();
 
-        let serializer = self.serializer.lock().await;
+        let mut serializer = self.serializer.lock().await;
 
         loop {
             // Read entry size
@@ -299,9 +303,10 @@ impl WriteAheadLog {
                     // Verify checksum
                     let computed_checksum = format!("{:x}", Sha256::digest(&buffer));
                     if entry.checksum == computed_checksum {
+                        let sequence = entry.sequence;
                         recovered_entries.push(entry);
                         self.current_sequence
-                            .store(entry.sequence + 1, Ordering::SeqCst);
+                            .store(sequence + 1, Ordering::SeqCst);
                     } else {
                         tracing::warn!(
                             "WAL entry {} has invalid checksum, stopping recovery",
@@ -435,7 +440,7 @@ pub struct AdvancedStorageBackend {
     snapshot_cache: Arc<RwLock<LruCache<String, SnapshotMetadata>>>,
     mmap_storage: Arc<RwLock<Option<MmapStorage>>>,
     stats: Arc<RwLock<StorageStats>>,
-    serializer: MessageSerializer,
+    serializer: Arc<Mutex<MessageSerializer>>,
     environment: Arc<Mutex<Environment>>,
     state_db: Database,
     snapshot_db: Database,
@@ -470,12 +475,16 @@ impl AdvancedStorageBackend {
 
         // Initialize serializer with compression if enabled
         let serializer_config = SerializationConfig {
-            enable_compression: config.enable_compression,
+            compression: if config.enable_compression {
+                crate::serialization::CompressionAlgorithm::Lz4
+            } else {
+                crate::serialization::CompressionAlgorithm::None
+            },
             ..Default::default()
         };
-        let serializer = MessageSerializer::with_config(serializer_config);
+        let serializer = Arc::new(Mutex::new(MessageSerializer::with_config(serializer_config)));
 
-        let backend = Self {
+        let mut backend = Self {
             config,
             wal,
             state_cache,
@@ -495,7 +504,7 @@ impl AdvancedStorageBackend {
     }
 
     /// Perform crash recovery from WAL
-    async fn recover(&self) -> Result<()> {
+    async fn recover(&mut self) -> Result<()> {
         let start_time = Instant::now();
         let entries = self.wal.recover().await?;
 
@@ -559,18 +568,26 @@ impl AdvancedStorageBackend {
 
     /// Internal method to store Raft state in database
     async fn store_raft_state_internal(&self, state: RaftState) -> Result<()> {
-        let serialized = self.serializer.serialize(&state)?;
+        // Serialize the state first
+        let serialized = {
+            let mut serializer = self.serializer.lock().await;
+            serializer.serialize(&state)?
+        };
 
-        let env = self.environment.lock().await;
-        let mut txn = env.begin_rw_txn()?;
-        txn.put(
-            self.state_db,
-            &b"current",
-            &serialized.payload,
-            WriteFlags::empty(),
-        )?;
-        txn.commit()?;
+        // Store in database (all DB operations before any async operations)
+        {
+            let env = self.environment.lock().await;
+            let mut txn = env.begin_rw_txn()?;
+            txn.put(
+                self.state_db,
+                &b"current",
+                &serialized.payload,
+                WriteFlags::empty(),
+            )?;
+            txn.commit()?;
+        } // Transaction is dropped here, before any async operations
 
+        // Update stats after DB operations are complete
         let mut stats = self.stats.write().await;
         stats.bytes_written += serialized.payload.len() as u64;
 
@@ -591,34 +608,45 @@ impl AdvancedStorageBackend {
             }
         }
 
-        // Load from database
-        let env = self.environment.lock().await;
-        let txn = env.begin_ro_txn()?;
+        // Load from database (complete all DB operations first)
+        let data_result = {
+            let env = self.environment.lock().await;
+            let txn = env.begin_ro_txn()?;
+            match txn.get(self.state_db, &b"current") {
+                Ok(data) => Ok(Some(data.to_vec())),
+                Err(lmdb::Error::NotFound) => Ok(None),
+                Err(e) => Err(e),
+            }
+        }; // Transaction is dropped here, before any async operations
 
-        let result = match txn.get(self.state_db, &b"current") {
-            Ok(data) => {
+        let result = match data_result? {
+            Some(data) => {
+                let data_len = data.len();
                 let serialized_message = crate::serialization::SerializedMessage {
                     schema_version: Default::default(),
                     compression: crate::serialization::CompressionAlgorithm::None,
                     format: crate::serialization::SerializationFormat::MessagePack,
-                    payload: data.to_vec(),
+                    payload: data,
                     checksum: None,
-                    original_size: data.len(),
+                    original_size: data_len,
                     compression_ratio: 1.0,
                 };
 
-                let state = self
-                    .serializer
-                    .deserialize::<RaftState>(&serialized_message)?;
+                // Deserialize the state
+                let state = {
+                    let mut serializer = self.serializer.lock().await;
+                    serializer.deserialize::<RaftState>(&serialized_message)?
+                };
 
                 // Update cache
-                let mut cache = self.state_cache.write().await;
-                cache.put("current".to_string(), state.clone());
+                {
+                    let mut cache = self.state_cache.write().await;
+                    cache.put("current".to_string(), state.clone());
+                }
 
                 Some(state)
             }
-            Err(lmdb::Error::NotFound) => None,
-            Err(e) => return Err(e.into()),
+            None => None,
         };
 
         // Update statistics
@@ -679,22 +707,30 @@ impl AdvancedStorageBackend {
         atomic_file.write_all(&final_data)?;
         atomic_file.commit()?;
 
-        // Store metadata in database
-        let serialized_metadata = self.serializer.serialize(&metadata)?;
-        let env = self.environment.lock().await;
-        let mut txn = env.begin_rw_txn()?;
+        // Store metadata in database (complete all DB operations first)
         let key = format!("snapshot-{}-{}", last_included_index, last_included_term);
-        txn.put(
-            self.snapshot_db,
-            &key.as_bytes(),
-            &serialized_metadata.payload,
-            WriteFlags::empty(),
-        )?;
-        txn.commit()?;
+        {
+            let serialized_metadata = {
+                let mut serializer = self.serializer.lock().await;
+                serializer.serialize(&metadata)?
+            };
+            
+            let env = self.environment.lock().await;
+            let mut txn = env.begin_rw_txn()?;
+            txn.put(
+                self.snapshot_db,
+                &key.as_bytes(),
+                &serialized_metadata.payload,
+                WriteFlags::empty(),
+            )?;
+            txn.commit()?;
+        } // Transaction is dropped here, before any async operations
 
         // Update cache
-        let mut cache = self.snapshot_cache.write().await;
-        cache.put(key, metadata.clone());
+        {
+            let mut cache = self.snapshot_cache.write().await;
+            cache.put(key.clone(), metadata.clone());
+        }
 
         // Log WAL operation
         self.wal
@@ -733,34 +769,45 @@ impl AdvancedStorageBackend {
         let metadata = if let Some(meta) = metadata {
             meta
         } else {
-            // Load metadata from database
-            let env = self.environment.lock().await;
-            let txn = env.begin_ro_txn()?;
+            // Load metadata from database (complete all DB operations first)
+            let data_result = {
+                let env = self.environment.lock().await;
+                let txn = env.begin_ro_txn()?;
+                match txn.get(self.snapshot_db, &key.as_bytes()) {
+                    Ok(data) => Ok(Some(data.to_vec())),
+                    Err(lmdb::Error::NotFound) => Ok(None),
+                    Err(e) => Err(e),
+                }
+            }; // Transaction is dropped here, before any async operations
 
-            match txn.get(self.snapshot_db, &key.as_bytes()) {
-                Ok(data) => {
+            match data_result? {
+                Some(data) => {
+                    let data_len = data.len();
                     let serialized_message = crate::serialization::SerializedMessage {
                         schema_version: Default::default(),
                         compression: crate::serialization::CompressionAlgorithm::None,
                         format: crate::serialization::SerializationFormat::MessagePack,
-                        payload: data.to_vec(),
+                        payload: data,
                         checksum: None,
-                        original_size: data.len(),
+                        original_size: data_len,
                         compression_ratio: 1.0,
                     };
 
-                    let metadata = self
-                        .serializer
-                        .deserialize::<SnapshotMetadata>(&serialized_message)?;
+                    // Deserialize metadata
+                    let metadata = {
+                        let mut serializer = self.serializer.lock().await;
+                        serializer.deserialize::<SnapshotMetadata>(&serialized_message)?
+                    };
 
                     // Update cache
-                    let mut cache = self.snapshot_cache.write().await;
-                    cache.put(key.clone(), metadata.clone());
+                    {
+                        let mut cache = self.snapshot_cache.write().await;
+                        cache.put(key.clone(), metadata.clone());
+                    }
 
                     metadata
                 }
-                Err(lmdb::Error::NotFound) => return Ok(None),
-                Err(e) => return Err(e.into()),
+                None => return Ok(None),
             }
         };
 

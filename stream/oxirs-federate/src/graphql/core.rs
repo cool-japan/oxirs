@@ -187,7 +187,7 @@ impl GraphQLFederation {
             error: error.clone(),
             execution_time,
             service_id: step.service_id.clone(),
-            memory_used: memory_used,
+            memory_used,
             result_size: result_size as usize,
             success: matches!(status, crate::executor::ExecutionStatus::Success),
             error_message: error,
@@ -461,10 +461,18 @@ impl GraphQLFederation {
             if !fields.is_empty() {
                 let subscription_query = self.build_service_subscription_query(fields, query)?;
 
+                // Convert VariableDefinition to actual values (using default values where available)
+                let variable_values: HashMap<String, serde_json::Value> = query.variables
+                    .iter()
+                    .filter_map(|(name, def)| {
+                        def.default_value.as_ref().map(|val| (name.clone(), val.clone()))
+                    })
+                    .collect();
+
                 service_subscriptions.push(ServiceSubscription {
                     service_id: service_id.clone(),
                     query: subscription_query,
-                    variables: query.variables.clone(),
+                    variables: variable_values,
                     stream_active: false,
                 });
             }
@@ -518,7 +526,21 @@ impl GraphQLFederation {
                 }
             }
 
-            all_errors.extend(event.errors);
+            // Convert graphql::types::GraphQLError to executor::types::GraphQLError
+            let converted_errors: Vec<crate::executor::types::GraphQLError> = event.errors
+                .into_iter()
+                .map(|err| crate::executor::types::GraphQLError {
+                    message: err.message,
+                    locations: err.locations.map(|locs| 
+                        locs.into_iter().map(|loc| crate::executor::types::GraphQLLocation {
+                            line: loc.line,
+                            column: loc.column,
+                        }).collect()
+                    ),
+                    path: err.path,
+                })
+                .collect();
+            all_errors.extend(converted_errors);
         }
 
         Ok(GraphQLResponse {
@@ -905,7 +927,7 @@ impl GraphQLFederation {
                     }
 
                     // Check if this is an entity type (simplified detection)
-                    if self.is_entity_type(type_def) {
+                    if self.is_entity_type_from_def(type_def) {
                         entity_types.push(type_name.to_string());
                     }
                 }
@@ -915,8 +937,8 @@ impl GraphQLFederation {
         Ok(entity_types)
     }
 
-    /// Check if a type is an entity type (has key fields)
-    fn is_entity_type(&self, type_def: &serde_json::Value) -> bool {
+    /// Check if a type is an entity type (has key fields) from type definition
+    fn is_entity_type_from_def(&self, type_def: &serde_json::Value) -> bool {
         // Simplified check - look for @key directive in description or check for id field
         if let Some(description) = type_def["description"].as_str() {
             if description.contains("@key") {

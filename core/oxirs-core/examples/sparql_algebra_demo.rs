@@ -22,17 +22,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test basic triple pattern creation
     println!("✅ Triple Pattern Creation:");
-    let subject = TermPattern::Variable(Variable::new("person")?);
-    let predicate = TermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/name")?);
-    let object = TermPattern::Variable(Variable::new("name")?);
+    let subject = AlgebraTermPattern::Variable(Variable::new("person")?);
+    let predicate = AlgebraTermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/name")?);
+    let object = AlgebraTermPattern::Variable(Variable::new("name")?);
 
     let triple = TriplePattern::new(subject, predicate, object);
     println!("   Created triple pattern: {}", triple);
 
-    // Test basic graph pattern (BGP)
+    // Test basic graph pattern (BGP) - using SPARQL algebra patterns
     println!("\n✅ Basic Graph Pattern:");
+    // Convert to SPARQL algebra triple pattern for BGP
+    let sparql_triple = oxirs_core::query::sparql_algebra::TriplePattern {
+        subject: TermPattern::Variable(Variable::new("person")?),
+        predicate: TermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/name")?),
+        object: TermPattern::Variable(Variable::new("name")?),
+    };
     let bgp = GraphPattern::Bgp {
-        patterns: vec![triple],
+        patterns: vec![sparql_triple],
     };
     println!("   BGP: {}", bgp);
 
@@ -68,11 +74,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let condition = Expression::Greater(Box::new(age_var), Box::new(eighteen));
 
     let simple_bgp = GraphPattern::Bgp {
-        patterns: vec![TriplePattern::new(
-            TermPattern::Variable(Variable::new("person")?),
-            TermPattern::NamedNode(NamedNode::new("http://example.org/age")?),
-            TermPattern::Variable(Variable::new("age")?),
-        )],
+        patterns: vec![oxirs_core::query::sparql_algebra::TriplePattern {
+            subject: TermPattern::Variable(Variable::new("person")?),
+            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/age")?),
+            object: TermPattern::Variable(Variable::new("age")?),
+        }],
     };
 
     let filter_pattern = GraphPattern::Filter {
@@ -84,19 +90,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test UNION pattern
     println!("\n✅ Union Pattern:");
     let left_pattern = GraphPattern::Bgp {
-        patterns: vec![TriplePattern::new(
-            TermPattern::Variable(Variable::new("x")?),
-            TermPattern::NamedNode(NamedNode::new("http://example.org/type")?),
-            TermPattern::NamedNode(NamedNode::new("http://example.org/Person")?),
-        )],
+        patterns: vec![oxirs_core::query::sparql_algebra::TriplePattern {
+            subject: TermPattern::Variable(Variable::new("x")?),
+            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type")?),
+            object: TermPattern::NamedNode(NamedNode::new("http://example.org/Person")?),
+        }],
     };
 
     let right_pattern = GraphPattern::Bgp {
-        patterns: vec![TriplePattern::new(
-            TermPattern::Variable(Variable::new("x")?),
-            TermPattern::NamedNode(NamedNode::new("http://example.org/type")?),
-            TermPattern::NamedNode(NamedNode::new("http://example.org/Organization")?),
-        )],
+        patterns: vec![oxirs_core::query::sparql_algebra::TriplePattern {
+            subject: TermPattern::Variable(Variable::new("x")?),
+            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type")?),
+            object: TermPattern::NamedNode(NamedNode::new("http://example.org/Organization")?),
+        }],
     };
 
     let union_pattern = GraphPattern::Union {

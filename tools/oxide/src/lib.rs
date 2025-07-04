@@ -707,49 +707,49 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             name,
             format,
             location,
-        } => commands::init::run(name, format, location).await,
+        } => commands::init::run(name, format, location).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Serve {
             config,
             port,
             host,
             graphql,
-        } => commands::serve::run(config, port, host, graphql).await,
+        } => commands::serve::run(config, port, host, graphql).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Import {
             dataset,
             file,
             format,
             graph,
-        } => commands::import::run(dataset, file, format, graph).await,
+        } => commands::import::run(dataset, file, format, graph).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Export {
             dataset,
             file,
             format,
             graph,
-        } => commands::export::run(dataset, file, format, graph).await,
+        } => commands::export::run(dataset, file, format, graph).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Query {
             dataset,
             query,
             file,
             output,
-        } => commands::query::run(dataset, query, file, output).await,
+        } => commands::query::run(dataset, query, file, output).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Update {
             dataset,
             update,
             file,
-        } => commands::update::run(dataset, update, file).await,
+        } => commands::update::run(dataset, update, file).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Benchmark {
             dataset,
             suite,
             iterations,
             output,
-        } => commands::benchmark::run(dataset, suite, iterations, output).await,
+        } => commands::benchmark::run(dataset, suite, iterations, output).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Migrate {
             source,
             target,
             from,
             to,
-        } => commands::migrate::run(source, target, from, to).await,
-        Commands::Config { action } => commands::config::run(action).await,
+        } => commands::migrate::run(source, target, from, to).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+        Commands::Config { action } => commands::config::run(action).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
 
         // Data Processing Tools
         Commands::Riot {
@@ -938,7 +938,7 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Performance { action } => {
             let config = config::Config::default();
-            action.execute(&config).await
+            action.execute(&config).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
         }
     }
 }

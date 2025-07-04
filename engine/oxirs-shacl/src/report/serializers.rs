@@ -143,12 +143,10 @@ impl HtmlSerializer {
                 violation.source_shape
             ));
 
-            if let Some(component) = &violation.source_constraint_component {
-                html.push_str(&format!(
-                    "<p><strong>Constraint:</strong> <code>{}</code></p>",
-                    component
-                ));
-            }
+            html.push_str(&format!(
+                "<p><strong>Constraint:</strong> <code>{}</code></p>",
+                violation.source_constraint_component
+            ));
 
             if let Some(path) = &violation.result_path {
                 html.push_str(&format!(
@@ -254,13 +252,7 @@ impl CsvSerializer {
                 self.escape_csv_field(&violation.result_severity.to_string()),
                 self.escape_csv_field(&violation.focus_node.to_string()),
                 self.escape_csv_field(&violation.source_shape.to_string()),
-                self.escape_csv_field(
-                    &violation
-                        .source_constraint_component
-                        .as_ref()
-                        .map(|c| c.to_string())
-                        .unwrap_or_else(|| "".to_string())
-                ),
+                self.escape_csv_field(&violation.source_constraint_component.to_string()),
                 self.escape_csv_field(
                     &violation
                         .result_path
@@ -349,12 +341,10 @@ impl TurtleSerializer {
                     violation.source_shape
                 ));
 
-                if let Some(component) = &violation.source_constraint_component {
-                    turtle.push_str(&format!(
-                        "        sh:sourceConstraintComponent sh:{} ;\n",
-                        component
-                    ));
-                }
+                turtle.push_str(&format!(
+                    "        sh:sourceConstraintComponent sh:{} ;\n",
+                    violation.source_constraint_component
+                ));
 
                 if let Some(message) = &violation.result_message {
                     turtle.push_str(&format!(

@@ -50,6 +50,18 @@ pub enum MfaType {
     Backup,   // Backup codes
 }
 
+/// MFA method configuration
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum MfaMethod {
+    Totp,
+    Sms,
+    Email,
+    Hardware,
+    Backup,
+}
+
+
 /// SAML authentication response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SamlResponse {
@@ -73,19 +85,29 @@ pub struct User {
 }
 
 /// Permission types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum Permission {
     Read,
     Write,
     Admin,
+    GlobalAdmin,
+    GlobalRead,
+    GlobalWrite,
     DatasetCreate,
     DatasetDelete,
     DatasetManage,
+    DatasetRead(String),
+    DatasetWrite(String),
+    DatasetAdmin(String),
     UserManage,
+    UserManagement,
     SystemConfig,
+    SystemMetrics,
     QueryExecute,
     UpdateExecute,
+    SparqlQuery,
+    SparqlUpdate,
     GraphStore,
     Upload,
     Download,
@@ -150,7 +172,6 @@ pub struct LoginRequest {
 #[derive(Debug, Serialize)]
 pub struct LoginResponse {
     pub token: String,
-    pub expires_at: DateTime<Utc>,
     pub user: User,
     pub mfa_required: bool,
     pub expires_at: Option<DateTime<Utc>>,

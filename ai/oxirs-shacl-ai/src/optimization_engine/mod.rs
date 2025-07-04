@@ -11,7 +11,7 @@ use tokio::sync::{RwLock, Semaphore};
 
 use crate::{
     shape::{AiShape, PropertyConstraint},
-    shape_management::{OptimizationOpportunity, PerformanceProfile},
+    shape_management::{EffortLevel, OptimizationOpportunity, OptimizationPriority, OptimizationType, PerformanceProfile},
     Result, ShaclAiError,
 };
 
@@ -91,12 +91,12 @@ impl AdvancedOptimizationEngine {
             {
                 Ok(optimization_result) => {
                     applied_optimizations.push(optimization_result);
-                    tracing::info!("Applied optimization: {}", opportunity.opportunity_type);
+                    tracing::info!("Applied optimization: {}", opportunity.optimization_type);
                 }
                 Err(e) => {
                     tracing::warn!(
                         "Failed to apply optimization {}: {}",
-                        opportunity.opportunity_type,
+                        opportunity.optimization_type,
                         e
                     );
                 }
@@ -166,13 +166,14 @@ impl AdvancedOptimizationEngine {
         let mut opportunities = Vec::new();
 
         // Check for constraint ordering opportunities
-        if shape.constraints().len() > 1 {
+        if shape.property_constraints().len() > 1 {
             opportunities.push(OptimizationOpportunity {
-                opportunity_type: "constraint_ordering".to_string(),
-                estimated_impact: 0.15, // 15% improvement
+                id: uuid::Uuid::new_v4().to_string(),
+                optimization_type: OptimizationType::ConstraintSimplification,
+                expected_improvement: 0.15, // 15% improvement
                 confidence: 0.8,
-                prerequisites: Vec::new(),
-                estimated_effort: "low".to_string(),
+                effort_level: EffortLevel::Low,
+                priority: OptimizationPriority::Medium,
                 description: "Reorder constraints for optimal execution".to_string(),
             });
         }
@@ -180,23 +181,25 @@ impl AdvancedOptimizationEngine {
         // Check for caching opportunities
         if self.config.enable_constraint_caching {
             opportunities.push(OptimizationOpportunity {
-                opportunity_type: "constraint_caching".to_string(),
-                estimated_impact: 0.25, // 25% improvement
+                id: uuid::Uuid::new_v4().to_string(),
+                optimization_type: OptimizationType::PerformanceOptimization,
+                expected_improvement: 0.25, // 25% improvement
                 confidence: 0.9,
-                prerequisites: Vec::new(),
-                estimated_effort: "medium".to_string(),
+                effort_level: EffortLevel::Medium,
+                priority: OptimizationPriority::High,
                 description: "Enable result caching for expensive constraints".to_string(),
             });
         }
 
         // Check for parallelization opportunities
-        if self.config.enable_parallel_validation && shape.constraints().len() > 2 {
+        if self.config.enable_parallel_validation && shape.property_constraints().len() > 2 {
             opportunities.push(OptimizationOpportunity {
-                opportunity_type: "parallel_validation".to_string(),
-                estimated_impact: 0.40, // 40% improvement
+                id: uuid::Uuid::new_v4().to_string(),
+                optimization_type: OptimizationType::PerformanceOptimization,
+                expected_improvement: 0.40, // 40% improvement
                 confidence: 0.7,
-                prerequisites: vec!["thread_safe_constraints".to_string()],
-                estimated_effort: "high".to_string(),
+                effort_level: EffortLevel::High,
+                priority: OptimizationPriority::High,
                 description: "Execute independent constraints in parallel".to_string(),
             });
         }
@@ -213,20 +216,20 @@ impl AdvancedOptimizationEngine {
         let start_time = Instant::now();
         let before_metrics = self.measure_performance(shape).await?;
 
-        match opportunity.opportunity_type.as_str() {
-            "constraint_ordering" => {
+        match &opportunity.optimization_type {
+            OptimizationType::ConstraintSimplification => {
                 self.apply_constraint_ordering_optimization(shape).await?;
             }
-            "constraint_caching" => {
+            OptimizationType::PerformanceOptimization => {
                 self.apply_caching_optimization(shape).await?;
             }
-            "parallel_validation" => {
+            OptimizationType::PathOptimization => {
                 self.apply_parallelization_optimization(shape).await?;
             }
             _ => {
                 return Err(ShaclAiError::ShapeManagement(format!(
                     "Unknown optimization type: {}",
-                    opportunity.opportunity_type
+                    opportunity.optimization_type
                 )));
             }
         }
@@ -240,7 +243,7 @@ impl AdvancedOptimizationEngine {
         };
 
         Ok(OptimizationResult {
-            optimization_type: opportunity.opportunity_type.clone(),
+            optimization_type: opportunity.optimization_type.to_string(),
             before_performance: before_metrics,
             after_performance: after_metrics,
             improvement_percentage: improvement * 100.0,
@@ -251,7 +254,7 @@ impl AdvancedOptimizationEngine {
 
     /// Apply constraint ordering optimization
     async fn apply_constraint_ordering_optimization(&self, shape: &mut AiShape) -> Result<()> {
-        let constraints = shape.constraints();
+        let constraints = shape.property_constraints();
         let optimized_order = self
             .constraint_optimizer
             .optimize_constraint_order(&constraints)?;
@@ -296,8 +299,8 @@ impl AdvancedOptimizationEngine {
         // This is a simplified performance measurement
         // In a real implementation, you would run actual validation and measure timing
 
-        let validation_time_ms = shape.constraints().len() as f64 * 10.0; // Simulate timing
-        let memory_usage_mb = shape.constraints().len() as f64 * 0.5; // Simulate memory usage
+        let validation_time_ms = shape.property_constraints().len() as f64 * 10.0; // Simulate timing
+        let memory_usage_mb = shape.property_constraints().len() as f64 * 0.5; // Simulate memory usage
 
         Ok(PerformanceMetrics {
             validation_time_ms,

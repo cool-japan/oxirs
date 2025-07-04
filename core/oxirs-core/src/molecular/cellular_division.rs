@@ -1,11 +1,7 @@
 //! Cellular division processes for data partitioning and distribution
 
 use super::dna_structures::DnaDataStructure;
-use super::types::*;
 use crate::error::OxirsResult;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 /// Cellular division system for data partitioning
 #[derive(Debug, Clone)]

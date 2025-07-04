@@ -20,7 +20,7 @@ pub mod query_executor;
 pub mod sparql_functions;
 
 pub use config::{
-    VectorQuery, VectorQueryOptimizer, VectorQueryResult, VectorServiceArg, VectorServiceConfig,
+    VectorOperation, VectorQuery, VectorQueryOptimizer, VectorQueryResult, VectorServiceArg, VectorServiceConfig,
     VectorServiceFunction, VectorServiceParameter, VectorServiceResult,
 };
 pub use cross_language::CrossLanguageProcessor;
@@ -182,6 +182,16 @@ impl SparqlVectorService {
     pub fn get_config(&self) -> &VectorServiceConfig {
         &self.config
     }
+
+    /// Generate a SPARQL SERVICE query for a vector operation
+    pub fn generate_service_query(&self, operation: &VectorOperation) -> String {
+        operation.to_sparql_service_query(&self.config.service_uri)
+    }
+
+    /// Add a resource embedding to the service's vector store
+    pub fn add_resource_embedding(&mut self, uri: &str, content: &crate::embeddings::EmbeddableContent) -> Result<()> {
+        self.query_executor.add_resource_embedding(uri, content)
+    }
 }
 
 /// Builder for creating SPARQL vector service with custom configuration
@@ -229,7 +239,7 @@ impl SparqlVectorServiceBuilder {
     pub fn build(self) -> Result<SparqlVectorService> {
         let embedding_strategy = self
             .embedding_strategy
-            .unwrap_or(EmbeddingStrategy::SentenceTransformers);
+            .unwrap_or(EmbeddingStrategy::SentenceTransformer);
 
         let mut service = SparqlVectorService::new(self.config, embedding_strategy)?;
 
@@ -261,7 +271,7 @@ pub mod convenience {
     pub fn create_basic_service() -> Result<SparqlVectorService> {
         SparqlVectorService::new(
             VectorServiceConfig::default(),
-            EmbeddingStrategy::SentenceTransformers,
+            EmbeddingStrategy::SentenceTransformer,
         )
     }
 
@@ -275,7 +285,7 @@ pub mod convenience {
             ..Default::default()
         };
 
-        SparqlVectorService::new(config, EmbeddingStrategy::SentenceTransformers)
+        SparqlVectorService::new(config, EmbeddingStrategy::SentenceTransformer)
     }
 
     /// Create a federated SPARQL vector service
@@ -342,7 +352,7 @@ mod tests {
     #[test]
     fn test_builder_pattern() {
         let service = SparqlVectorServiceBuilder::new()
-            .with_embedding_strategy(EmbeddingStrategy::SentenceTransformers)
+            .with_embedding_strategy(EmbeddingStrategy::SentenceTransformer)
             .with_federation_endpoints(vec!["http://endpoint1.com".to_string()])
             .build();
 

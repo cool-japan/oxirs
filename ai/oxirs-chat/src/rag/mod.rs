@@ -56,7 +56,8 @@ pub use embedding_providers::{
 pub use entity_extraction::{EntityExtractor, LLMEntityExtraction};
 pub use graph_traversal::{EntityType, ExtractedEntity, ExtractedRelationship, GraphTraversal};
 pub use knowledge_extraction::{
-    EntityType, ExtractedEntity, ExtractedKnowledge, ExtractedRelationship,
+    EntityType as KnowledgeEntityType, ExtractedEntity as KnowledgeExtractedEntity, 
+    ExtractedKnowledge, ExtractedRelationship as KnowledgeExtractedRelationship,
     KnowledgeExtractionConfig, KnowledgeExtractionEngine, RelationshipType,
 };
 pub use quantum_rag::{QuantumRetrievalState, QuantumSearchResult, RagDocument};
@@ -82,7 +83,7 @@ use oxirs_embed::{
     Vector as EmbedVector,
 };
 use oxirs_vec::{
-    embeddings::{EmbeddableContent, EmbeddingManager, EmbeddingStrategy},
+    embeddings::{EmbeddableContent, EmbeddingManager as VecEmbeddingManager, EmbeddingStrategy},
     index::{
         AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType,
         SearchResult as VecSearchResult,
@@ -126,6 +127,8 @@ pub struct RagConfig {
     pub consciousness: ConsciousnessConfig,
     pub embedding: EmbeddingConfig,
     pub graph: GraphConfig,
+    pub max_context_length: usize,
+    pub context_overlap: usize,
 }
 
 impl Default for RagConfig {
@@ -136,6 +139,8 @@ impl Default for RagConfig {
             consciousness: ConsciousnessConfig::default(),
             embedding: EmbeddingConfig::default(),
             graph: GraphConfig::default(),
+            max_context_length: 4096,
+            context_overlap: 200,
         }
     }
 }
@@ -277,6 +282,13 @@ impl RagEngine {
         }
     }
 
+    /// Create a new RAG engine with vector index configuration
+    pub async fn with_vector_index(config: RagConfig, store: Arc<dyn Store>, vector_dimensions: usize) -> Result<Self> {
+        let mut engine = Self::new(config, store);
+        engine.initialize().await?;
+        Ok(engine)
+    }
+
     /// Initialize the RAG engine with all components
     pub async fn initialize(&mut self) -> Result<()> {
         // Initialize embedding model
@@ -372,7 +384,7 @@ impl RagEngine {
                     })
                     .collect();
 
-                context.quantum_results = Some(quantum_state.superposition_search(&quantum_docs));
+                context.quantum_results = Some(quantum_state.superposition_search(&quantum_docs)?);
             }
         }
 
@@ -503,9 +515,9 @@ impl RagEngine {
                 let avg_consciousness_score = consciousness_insights
                     .iter()
                     .map(|insight| insight.confidence)
-                    .sum::<f32>()
-                    / consciousness_insights.len() as f32;
-                score += avg_consciousness_score;
+                    .sum::<f64>()
+                    / consciousness_insights.len() as f64;
+                score += avg_consciousness_score as f32;
                 components += 1;
             }
         }

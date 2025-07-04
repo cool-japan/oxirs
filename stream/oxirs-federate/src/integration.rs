@@ -8,10 +8,10 @@ use oxirs_core::{BlankNode, Literal, NamedNode, Term};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::{
-    ExecutionMetadata, ExecutionStatus, FederatedResult, FederationError, GraphQLResponse,
+    ExecutionMetadata, ExecutionStatus, FederatedResult, FederationError,
     QueryResult, QueryResultData, SparqlBinding, SparqlResults, SparqlValue, StepResult,
 };
 

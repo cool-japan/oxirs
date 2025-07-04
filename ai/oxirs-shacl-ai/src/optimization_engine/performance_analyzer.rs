@@ -113,20 +113,18 @@ impl PerformanceAnalyzer {
         tracing::debug!("Analyzing performance for shape {}", shape.id());
 
         // Simulate performance analysis
-        let constraint_count = shape.constraints().len();
+        let constraint_count = shape.property_constraints().len();
         let estimated_execution_time = constraint_count as f64 * 5.0; // 5ms per constraint
         let estimated_memory_usage = constraint_count as f64 * 1.0; // 1MB per constraint
 
         // Create a simplified performance profile
         // In a real implementation, this would involve actual profiling
         Ok(PerformanceProfile {
-            shape_id: shape.id(),
-            total_constraints: constraint_count,
-            estimated_execution_time_ms: estimated_execution_time,
-            estimated_memory_usage_mb: estimated_memory_usage,
-            bottlenecks: self.detect_bottlenecks(shape).await?,
-            optimization_score: self.calculate_optimization_score(shape),
-            last_analyzed: chrono::Utc::now(),
+            validation_time_ms: estimated_execution_time,
+            memory_usage_kb: estimated_memory_usage * 1024.0, // Convert MB to KB
+            complexity_score: self.calculate_optimization_score(shape),
+            bottlenecks: Vec::new(), // TODO: Convert DetectedBottleneck to PerformanceBottleneck
+            optimization_suggestions: Vec::new(),
         })
     }
 
@@ -138,7 +136,7 @@ impl PerformanceAnalyzer {
     /// Calculate optimization score for a shape
     fn calculate_optimization_score(&self, shape: &AiShape) -> f64 {
         // Simple scoring based on constraint count and complexity
-        let constraint_count = shape.constraints().len() as f64;
+        let constraint_count = shape.property_constraints().len() as f64;
         let complexity_factor = 0.8; // Assume medium complexity
 
         // Score from 0.0 to 1.0, where 1.0 means high optimization potential
@@ -194,7 +192,7 @@ impl BottleneckDetector {
         let mut bottlenecks = Vec::new();
 
         // Simple bottleneck detection based on constraint count
-        if shape.constraints().len() > 10 {
+        if shape.property_constraints().len() > 10 {
             bottlenecks.push(DetectedBottleneck {
                 bottleneck_type: BottleneckType::ConstraintExecution,
                 location: format!("Shape {}", shape.id()),
@@ -204,7 +202,7 @@ impl BottleneckDetector {
             });
         }
 
-        if shape.constraints().len() > 20 {
+        if shape.property_constraints().len() > 20 {
             bottlenecks.push(DetectedBottleneck {
                 bottleneck_type: BottleneckType::ParallelizationInefficiency,
                 location: format!("Shape {}", shape.id()),

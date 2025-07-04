@@ -2,7 +2,7 @@
 
 use oxirs_core::{
     model::{NamedNode, Term},
-    Store,
+    Store, ConcreteStore,
 };
 use oxirs_shacl::{
     constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
@@ -40,7 +40,7 @@ fn test_closed_shape_validation() {
     validator.add_shape(person_shape).unwrap();
 
     // Create a store with test data
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
 
     // Note: Since the Store API is not fully implemented, we can't add actual data
     // This test will verify that the shape parses and validates correctly
@@ -109,7 +109,7 @@ fn test_closed_shape_with_property_shapes() {
     validator.add_shape(age_shape).unwrap();
 
     // Test validation
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
     let result = validator.validate_store(&store, None);
 
     match result {
@@ -152,7 +152,7 @@ fn test_open_shape() {
     validator.add_shape(open_shape).unwrap();
 
     // Open shapes should always conform regardless of properties
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
     let result = validator.validate_store(&store, None);
 
     match result {

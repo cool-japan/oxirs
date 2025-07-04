@@ -4,7 +4,7 @@ use crate::model::RdfTerm;
 use crate::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject, Variable};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 /// An RDF Triple
 ///

@@ -440,6 +440,18 @@ impl RealTimeVectorUpdater {
     }
 
     /// Apply single operation to index
+    /// Count the actual number of individual operations (handle batch operations)
+    fn count_operations(operation: &UpdateOperation) -> u64 {
+        match operation {
+            UpdateOperation::Insert { .. }
+            | UpdateOperation::Update { .. }
+            | UpdateOperation::Delete { .. } => 1,
+            UpdateOperation::Batch { operations } => {
+                operations.iter().map(|op| Self::count_operations(op)).sum()
+            }
+        }
+    }
+
     fn apply_operation(index: &mut dyn VectorIndex, operation: &UpdateOperation) -> Result<()> {
         match operation {
             UpdateOperation::Insert {
@@ -447,7 +459,8 @@ impl RealTimeVectorUpdater {
                 vector,
                 metadata,
             } => {
-                index.add_vector(*id, vector.clone(), metadata.clone())?;
+                let vector_obj = crate::Vector::new(vector.clone());
+                index.add_vector(id.clone(), vector_obj, Some(metadata.clone()))?;
             }
             UpdateOperation::Update {
                 id,
@@ -455,15 +468,16 @@ impl RealTimeVectorUpdater {
                 metadata,
             } => {
                 // Update vector
-                index.update_vector(*id, vector.clone())?;
+                let vector_obj = crate::Vector::new(vector.clone());
+                index.update_vector(id.clone(), vector_obj)?;
 
                 // Update metadata if provided
                 if let Some(meta) = metadata {
-                    index.update_metadata(*id, meta.clone())?;
+                    index.update_metadata(id.clone(), meta.clone())?;
                 }
             }
             UpdateOperation::Delete { id } => {
-                index.remove_vector(*id)?;
+                index.remove_vector(id.clone())?;
             }
             UpdateOperation::Batch { operations } => {
                 for op in operations {
@@ -505,8 +519,13 @@ impl RealTimeVectorUpdater {
 
         for operation in &operations {
             match Self::apply_operation(&mut *index, operation) {
-                Ok(_) => successful_ops += 1,
-                Err(_) => failed_ops += 1,
+                Ok(_) => {
+                    // Count actual number of operations (handle batch operations properly)
+                    successful_ops += Self::count_operations(operation);
+                }
+                Err(_) => {
+                    failed_ops += Self::count_operations(operation);
+                }
             }
         }
 
@@ -632,7 +651,7 @@ impl RealTimeVectorSearch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::MemoryVectorIndex;
+    use crate::MemoryVectorIndex;
 
     #[tokio::test]
     async fn test_real_time_updater() {
@@ -642,7 +661,7 @@ mod tests {
 
         // Test basic operations
         let operation = UpdateOperation::Insert {
-            id: 1,
+            id: "1".to_string(),
             vector: vec![1.0, 2.0, 3.0],
             metadata: HashMap::new(),
         };
@@ -662,12 +681,12 @@ mod tests {
 
         let operations = vec![
             UpdateOperation::Insert {
-                id: 1,
+                id: "1".to_string(),
                 vector: vec![1.0, 0.0],
                 metadata: HashMap::new(),
             },
             UpdateOperation::Insert {
-                id: 2,
+                id: "2".to_string(),
                 vector: vec![0.0, 1.0],
                 metadata: HashMap::new(),
             },

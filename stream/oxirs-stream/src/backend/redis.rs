@@ -24,7 +24,7 @@ use redis::{
     cluster::ClusterClient,
     cluster_async::ClusterConnection,
     streams::{StreamReadOptions, StreamReadReply},
-    AsyncCommands, Client, RedisResult, Value,
+    AsyncCommands, Client, FromRedisValue, RedisResult, Value as RedisValue,
 };
 
 /// Redis Streams configuration with clustering and performance tuning
@@ -310,7 +310,7 @@ impl From<StreamEvent> for RedisStreamEvent {
 
 impl RedisProducer {
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let redis_config = if let StreamBackend::Redis { url, .. } = &config.backend {
+        let redis_config = if let crate::StreamBackendType::Redis { url, .. } = &config.backend {
             RedisStreamConfig {
                 urls: vec![url.clone()],
                 ..Default::default()
@@ -656,6 +656,11 @@ impl RedisProducer {
                     transaction_id: "unknown".to_string(),
                     metadata,
                 },
+                PatchOperation::Header { key, value } => {
+                    // Headers don't directly map to stream events, log for now
+                    tracing::debug!("Processing patch header: {} = {}", key, value);
+                    continue; // Skip to next operation
+                },
             };
 
             self.publish(event).await?;
@@ -779,7 +784,7 @@ struct DeadLetterHandler {
 
 impl RedisConsumer {
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let redis_config = if let StreamBackend::Redis { url, .. } = &config.backend {
+        let redis_config = if let crate::StreamBackendType::Redis { url, .. } = &config.backend {
             RedisStreamConfig {
                 urls: vec![url.clone()],
                 ..Default::default()
@@ -881,7 +886,12 @@ impl RedisConsumer {
 
                 if let Ok(messages) = result {
                     for (id, fields) in messages {
-                        if let Ok(Some(event)) = self.parse_redis_message(&fields).await {
+                        // Convert HashMap<String, String> to HashMap<String, redis::Value>
+                        let fields_values: HashMap<String, RedisValue> = fields
+                            .into_iter()
+                            .map(|(k, v)| (k, RedisValue::BulkString(v.into_bytes())))
+                            .collect();
+                        if let Ok(Some(event)) = self.parse_redis_message(&fields_values).await {
                             let mut stats = self.stats.write().await;
                             stats.claimed_messages += 1;
                             claimed_events.push(event);
@@ -1043,11 +1053,11 @@ impl RedisConsumer {
 
     async fn parse_redis_message(
         &mut self,
-        fields: &HashMap<String, redis::Value>,
+        fields: &HashMap<String, RedisValue>,
     ) -> Result<Option<StreamEvent>> {
         let start_time = Instant::now();
 
-        if let Some(redis::Value::Data(data_bytes)) = fields.get("data") {
+        if let Some(RedisValue::BulkString(data_bytes)) = fields.get("data") {
             let data = String::from_utf8(data_bytes.clone())
                 .map_err(|e| anyhow!("Failed to convert data to string: {}", e))?;
 
@@ -1224,7 +1234,7 @@ impl RedisConsumer {
                     .await;
 
                 if let Ok(stream_data) = stream_info {
-                    if let Some(redis::Value::Data(length_bytes)) = stream_data.get("length") {
+                    if let Some(RedisValue::BulkString(length_bytes)) = stream_data.get("length") {
                         if let Ok(length_str) = String::from_utf8(length_bytes.clone()) {
                             if let Ok(length) = length_str.parse::<u64>() {
                                 let pending = info
@@ -1270,11 +1280,13 @@ impl RedisConsumer {
 
         match &mut self.connection {
             Some(RedisConnectionManager::Standalone(manager)) => {
+                let failed_at_time = Utc::now().to_rfc3339();
+                let event_data = serde_json::to_string(event)?;
                 let fields = vec![
                     ("original_message_id", message_id),
                     ("failure_reason", reason),
-                    ("failed_at", &Utc::now().to_rfc3339()),
-                    ("data", &serde_json::to_string(event)?),
+                    ("failed_at", &failed_at_time),
+                    ("data", &event_data),
                 ];
 
                 let _: RedisResult<String> = redis::cmd("XADD")

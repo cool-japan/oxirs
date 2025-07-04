@@ -8,7 +8,7 @@ use super::types::*;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use oxirs_core::Store;
-use oxirs_vec::{SearchResult as VectorSearchResult, VectorIndex};
+use oxirs_vec::{SearchResult as VectorSearchResult, VectorIndex, Vector};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -28,12 +28,12 @@ impl MultiStageRetrieval {
     /// Create a new multi-stage retrieval engine
     pub fn new(rag_config: &super::RAGConfig) -> Self {
         let config = RetrievalConfig {
-            max_documents: rag_config.max_documents,
-            similarity_threshold: rag_config.similarity_threshold,
+            max_documents: rag_config.retrieval.max_results,
+            similarity_threshold: rag_config.retrieval.similarity_threshold as f64,
             enable_reranking: true,
             reranking_model: None,
             enable_temporal_filtering: true,
-            temporal_window: Some(std::time::Duration::from_days(365)),
+            temporal_window: Some(std::time::Duration::from_secs(365 * 24 * 3600)),
         };
 
         Self {
@@ -57,11 +57,10 @@ impl MultiStageRetrieval {
 
         // Check cache first
         let cache_key = format!("{}:{}", query, context.session_id);
-        if let Ok(cache) = self.result_cache.read().await {
-            if let Some(cached_results) = cache.get(&cache_key) {
-                debug!("Cache hit for query: {}", query);
-                return Ok(cached_results.clone());
-            }
+        let cache = self.result_cache.read().await;
+        if let Some(cached_results) = cache.get(&cache_key) {
+            debug!("Cache hit for query: {}", query);
+            return Ok(cached_results.clone());
         }
 
         let mut all_results = Vec::new();
@@ -96,12 +95,11 @@ impl MultiStageRetrieval {
         let filtered_results = self.apply_filters(final_results, context).await?;
 
         // Cache results
-        if let Ok(mut cache) = self.result_cache.write().await {
-            cache.insert(cache_key, filtered_results.clone());
-            // Keep cache size reasonable
-            if cache.len() > 1000 {
-                cache.clear();
-            }
+        let mut cache = self.result_cache.write().await;
+        cache.insert(cache_key, filtered_results.clone());
+        // Keep cache size reasonable
+        if cache.len() > 1000 {
+            cache.clear();
         }
 
         let retrieval_time = start_time.elapsed();
@@ -116,8 +114,8 @@ impl MultiStageRetrieval {
 
     /// Update configuration
     pub fn update_config(&mut self, rag_config: &super::RAGConfig) {
-        self.config.max_documents = rag_config.max_documents;
-        self.config.similarity_threshold = rag_config.similarity_threshold;
+        self.config.max_documents = rag_config.retrieval.max_results;
+        self.config.similarity_threshold = rag_config.retrieval.similarity_threshold as f64;
     }
 
     /// Deduplicate and rank results
@@ -212,22 +210,23 @@ impl SemanticRetriever {
         vector_index: &Arc<dyn VectorIndex>,
     ) -> Result<Vec<SearchResult>> {
         // Get query embedding (simplified - would use actual embedding model)
-        let query_embedding = self.get_query_embedding(query).await?;
+        let query_embedding_vec = self.get_query_embedding(query).await?;
+        let query_embedding = Vector::new(query_embedding_vec);
 
         // Perform vector search
-        let vector_results = vector_index.search(&query_embedding, 20)?;
+        let vector_results = vector_index.search_knn(&query_embedding, 20)?;
 
         // Convert to search results
         let search_results = vector_results
             .into_iter()
-            .map(|vr| {
+            .map(|(id, score)| {
                 SearchResult::new(
                     RagDocument::new(
-                        vr.id.clone(),
-                        format!("Content for document {}", vr.id),
+                        id.clone(),
+                        format!("Content for document {}", id),
                         "vector_index".to_string(),
                     ),
-                    vr.score,
+                    score.into(),
                 )
                 .add_relevance_factor("semantic_similarity".to_string())
             })
@@ -238,7 +237,8 @@ impl SemanticRetriever {
 
     async fn get_query_embedding(&self, query: &str) -> Result<Vec<f32>> {
         // Check cache first
-        if let Ok(cache) = self.embedding_cache.read().await {
+        let cache = self.embedding_cache.read().await;
+        {
             if let Some(embedding) = cache.get(query) {
                 return Ok(embedding.clone());
             }
@@ -256,7 +256,8 @@ impl SemanticRetriever {
         padded.resize(128, 0.0);
 
         // Cache the result
-        if let Ok(mut cache) = self.embedding_cache.write().await {
+        let mut cache = self.embedding_cache.write().await;
+        {
             cache.insert(query.to_string(), padded.clone());
         }
 
@@ -284,7 +285,8 @@ impl GraphRetriever {
     ) -> Result<Vec<SearchResult>> {
         // Check cache
         let cache_key = format!("graph:{}:{}", query, context.session_id);
-        if let Ok(cache) = self.query_cache.read().await {
+        let cache = self.query_cache.read().await;
+        {
             if let Some(cached) = cache.get(&cache_key) {
                 return Ok(cached.clone());
             }
@@ -297,7 +299,8 @@ impl GraphRetriever {
         let results = self.execute_sparql_query(&sparql_query).await?;
 
         // Cache results
-        if let Ok(mut cache) = self.query_cache.write().await {
+        {
+            let mut cache = self.query_cache.write().await;
             cache.insert(cache_key, results.clone());
         }
 

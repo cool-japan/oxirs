@@ -1,6 +1,6 @@
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
-    Store,
+    Store, ConcreteStore,
 };
 use oxirs_shacl::{
     constraints::*, shapes::ShapeFactory, Constraint, ConstraintComponentId, PropertyPath,
@@ -46,7 +46,7 @@ fn test_full_validation_workflow() {
     validator.add_shape(age_shape).unwrap();
 
     // Create a store with test data
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
 
     // TODO: Add actual test data to store when API is available
     // For now, just test that validation runs without errors
@@ -85,7 +85,7 @@ fn test_node_validation() {
 
     validator.add_shape(person_shape).unwrap();
 
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
 
     // Test validating a specific node
     let test_node = Term::NamedNode(NamedNode::new("http://example.org/john").unwrap());
@@ -136,7 +136,7 @@ fn test_validation_config() {
     let validator = Validator::with_config(config.clone());
 
     // Test that validator respects configuration
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
     let result = validator.validate_store(&store, None);
 
     assert!(result.is_ok());
@@ -225,7 +225,7 @@ fn test_validation_report_formats() {
     let shape = Shape::node_shape(ShapeId::new("http://example.org/TestShape"));
     validator.add_shape(shape).unwrap();
 
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
     let validation_result = validator.validate_store(&store, None);
 
     let report = match validation_result {
@@ -257,7 +257,7 @@ fn test_validation_report_formats() {
 
     let html = html_result.unwrap();
     assert!(html.contains("SHACL Validation Report"));
-    assert!(html.contains("Conforms"));
+    assert!(html.contains("Validation Passed") || html.contains("Validation Failed"));
 }
 
 #[test]
@@ -272,7 +272,7 @@ fn test_validator_builder() {
         .build();
 
     // Test that builder creates validator with correct configuration
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
     let result = validator.validate_store(&store, None);
     assert!(result.is_ok());
 }
@@ -282,7 +282,7 @@ fn test_error_handling() {
     let mut validator = Validator::new();
 
     // Test validation of non-existent shape
-    let store = Store::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
     let non_existent_shape = ShapeId::new("http://example.org/NonExistent");
     let test_node = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
 

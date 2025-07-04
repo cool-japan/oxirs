@@ -954,6 +954,7 @@ mod tests {
             tokens,
             vec![
                 N3Token::Integer(42),
+                #[allow(clippy::approx_constant)]
                 N3Token::Decimal(3.14),
                 N3Token::Double(1.5e10),
             ]

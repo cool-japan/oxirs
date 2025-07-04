@@ -77,6 +77,10 @@ pub struct SparqlEndpoint {
     /// Human-readable name
     pub name: String,
     /// Endpoint URL
+    #[serde(
+        serialize_with = "serialize_url", 
+        deserialize_with = "deserialize_url"
+    )]
     pub url: Url,
     /// Authentication configuration
     pub auth: Option<AuthConfig>,
@@ -102,6 +106,10 @@ pub struct GraphQLService {
     /// Human-readable name
     pub name: String,
     /// Service URL
+    #[serde(
+        serialize_with = "serialize_url", 
+        deserialize_with = "deserialize_url"
+    )]
     pub url: Url,
     /// Authentication configuration
     pub auth: Option<AuthConfig>,
@@ -180,6 +188,41 @@ pub struct GraphQLCapabilities {
     pub introspection_enabled: bool,
     /// Federation specification version
     pub federation_version: Option<String>,
+}
+
+impl Default for SparqlCapabilities {
+    fn default() -> Self {
+        Self {
+            sparql_version: SparqlVersion::V11,
+            result_formats: vec![
+                "application/sparql-results+json".to_string(),
+                "application/sparql-results+xml".to_string(),
+            ].into_iter().collect(),
+            graph_formats: vec![
+                "text/turtle".to_string(),
+                "application/rdf+xml".to_string(),
+            ].into_iter().collect(),
+            custom_functions: HashSet::new(),
+            max_query_complexity: Some(1000),
+            supports_federation: true,
+            supports_update: false,
+            supports_named_graphs: true,
+            service_description: None,
+        }
+    }
+}
+
+impl Default for GraphQLCapabilities {
+    fn default() -> Self {
+        Self {
+            graphql_version: "June 2018".to_string(),
+            supports_subscriptions: false,
+            max_query_depth: Some(10),
+            max_query_complexity: Some(1000),
+            introspection_enabled: true,
+            federation_version: Some("v1.0".to_string()),
+        }
+    }
 }
 
 /// SPARQL version enumeration
@@ -335,6 +378,17 @@ pub enum ServiceType {
 pub enum CapabilityData {
     Sparql(SparqlCapabilities),
     GraphQL(GraphQLCapabilities),
+}
+
+/// Registry statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistryStats {
+    pub total_sparql_endpoints: usize,
+    pub total_graphql_services: usize,
+    pub healthy_services: usize,
+    pub degraded_services: usize,
+    pub unhealthy_services: usize,
+    pub last_health_check: Option<DateTime<Utc>>,
 }
 
 impl ServiceRegistry {
@@ -778,6 +832,128 @@ impl ServiceRegistry {
             },
         }
     }
+
+    /// Register a federated service (generic method)
+    pub async fn register(&self, service: crate::FederatedService) -> Result<()> {
+        match service.service_type {
+            crate::ServiceType::Sparql => {
+                let sparql_endpoint = SparqlEndpoint {
+                    id: service.id,
+                    name: service.name,
+                    url: Url::parse(&service.endpoint)?,
+                    auth: None, // Convert from service.auth if needed
+                    capabilities: SparqlCapabilities::default(),
+                    statistics: PerformanceStats::default(),
+                    registered_at: Utc::now(),
+                    last_access: None,
+                    metadata: HashMap::new(),
+                    connection_config: ConnectionConfig::default(),
+                };
+                self.register_sparql_endpoint(sparql_endpoint).await
+            }
+            crate::ServiceType::GraphQL => {
+                let graphql_service = GraphQLService {
+                    id: service.id,
+                    name: service.name,
+                    url: Url::parse(&service.endpoint)?,
+                    auth: None, // Convert from service.auth if needed
+                    schema: None,
+                    federation_directives: FederationDirectives {
+                        key_fields: HashMap::new(),
+                        external_fields: HashSet::new(),
+                        requires_fields: HashMap::new(),
+                        provides_fields: HashMap::new(),
+                    },
+                    capabilities: GraphQLCapabilities::default(),
+                    statistics: PerformanceStats::default(),
+                    registered_at: Utc::now(),
+                    schema_updated_at: None,
+                    metadata: HashMap::new(),
+                };
+                self.register_graphql_service(graphql_service).await
+            }
+            _ => {
+                // For other service types, try registering as SPARQL by default
+                let sparql_endpoint = SparqlEndpoint {
+                    id: service.id,
+                    name: service.name,
+                    url: Url::parse(&service.endpoint)?,
+                    auth: None,
+                    capabilities: SparqlCapabilities::default(),
+                    statistics: PerformanceStats::default(),
+                    registered_at: Utc::now(),
+                    last_access: None,
+                    metadata: HashMap::new(),
+                    connection_config: ConnectionConfig::default(),
+                };
+                self.register_sparql_endpoint(sparql_endpoint).await
+            }
+        }
+    }
+
+    /// Unregister a service (generic method)
+    pub async fn unregister(&self, service_id: &str) -> Result<()> {
+        self.remove_service(service_id).await
+    }
+
+    /// Get registry statistics
+    pub async fn get_stats(&self) -> Result<RegistryStats> {
+        Ok(RegistryStats {
+            total_sparql_endpoints: self.sparql_endpoints.len(),
+            total_graphql_services: self.graphql_services.len(),
+            healthy_services: self.health_status.iter()
+                .filter(|entry| entry.status == HealthState::Healthy)
+                .count(),
+            degraded_services: self.health_status.iter()
+                .filter(|entry| entry.status == HealthState::Degraded)
+                .count(),
+            unhealthy_services: self.health_status.iter()
+                .filter(|entry| entry.status == HealthState::Unhealthy)
+                .count(),
+            last_health_check: self.health_status.iter()
+                .map(|entry| entry.last_check)
+                .max(),
+        })
+    }
+
+    /// Perform health check on all services
+    pub async fn health_check(&self) -> Result<Vec<HealthStatus>> {
+        let mut results = Vec::new();
+        
+        // Check SPARQL endpoints
+        for entry in self.sparql_endpoints.iter() {
+            let endpoint = entry.value();
+            let health = Self::check_sparql_health(&self.http_client, endpoint).await;
+            self.health_status.insert(endpoint.id.clone(), health.clone());
+            results.push(health);
+        }
+
+        // Check GraphQL services
+        for entry in self.graphql_services.iter() {
+            let service = entry.value();
+            let health = Self::check_graphql_health(&self.http_client, service).await;
+            self.health_status.insert(service.id.clone(), health.clone());
+            results.push(health);
+        }
+
+        Ok(results)
+    }
+}
+
+// Helper functions for URL serialization
+fn serialize_url<S>(url: &Url, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(url.as_str())
+}
+
+fn deserialize_url<'de, D>(deserializer: D) -> Result<Url, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Url::parse(&s).map_err(serde::de::Error::custom)
 }
 
 #[cfg(test)]

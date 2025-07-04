@@ -126,7 +126,7 @@ pub async fn ldap_login(
 
             // Generate JWT token if enabled
             let (access_token, token_type, expires_in) = if auth_service.jwt_config().is_some() {
-                match auth_service.generate_jwt_token(&user) {
+                match auth_service.generate_jwt_token(&user).await {
                     Ok(token) => {
                         let expires_in = auth_service
                             .jwt_config()
@@ -308,9 +308,9 @@ pub async fn get_ldap_groups(
             let group_info: Vec<LdapGroupInfo> = groups
                 .into_iter()
                 .map(|g| LdapGroupInfo {
-                    dn: g.dn,
-                    name: g.cn,
-                    description: g.description,
+                    dn: format!("cn={},ou=groups,dc=example,dc=com", g),
+                    name: g,
+                    description: None,
                 })
                 .collect();
 

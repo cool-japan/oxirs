@@ -126,7 +126,7 @@ async fn test_openai_api_integration() {
     }
 
     let config = LLMConfig::default();
-    let manager = LLMManager::new(config).expect("Failed to create LLM manager");
+    let mut manager = LLMManager::new(config).expect("Failed to create LLM manager");
 
     let request = LLMRequest {
         messages: vec![ChatMessage {
@@ -168,7 +168,7 @@ async fn test_anthropic_api_integration() {
     }
 
     let config = LLMConfig::default();
-    let manager = LLMManager::new(config).expect("Failed to create LLM manager");
+    let mut manager = LLMManager::new(config).expect("Failed to create LLM manager");
 
     let request = LLMRequest {
         messages: vec![ChatMessage {

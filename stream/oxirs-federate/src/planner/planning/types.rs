@@ -3,21 +3,11 @@
 //! This module contains all the data structures, enums, and type definitions
 //! used throughout the federated query planning system.
 
-use anyhow::Result;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
-use url::Url;
 use uuid::Uuid;
 
-use crate::{
-    metadata::ExtendedServiceMetadata,
-    query_decomposition::{DecomposerConfig, DecompositionResult, QueryDecomposer},
-    service::ServiceMetadata,
-    service_optimizer::{ServiceOptimizer, ServiceOptimizerConfig},
-    FederatedService, ServiceCapability, ServiceRegistry,
-};
 
 /// Execution context for query processing
 #[derive(Debug, Clone)]
@@ -557,6 +547,7 @@ pub enum QueryType {
     Ask,
     Describe,
     Update,
+    Sparql,
     GraphQL,
 }
 
@@ -582,7 +573,7 @@ pub struct TriplePattern {
 }
 
 /// Filter expression for query optimization
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 pub struct FilterExpression {
     pub expression: String,
     pub variables: Vec<String>,

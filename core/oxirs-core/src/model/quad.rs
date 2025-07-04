@@ -5,7 +5,7 @@ use crate::model::{
     TripleRef, Variable,
 };
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 /// Union type for terms that can be graph names
 #[derive(

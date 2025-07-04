@@ -4,6 +4,11 @@
 //! in the Oxide CLI toolkit, providing comprehensive functionality for
 //! RDF data management, SPARQL operations, and performance monitoring.
 
+use crate::cli::{CliError, CliResult};
+
+/// Result type for command execution
+pub type CommandResult = CliResult<()>;
+
 /// Dataset initialization commands
 pub mod init;
 

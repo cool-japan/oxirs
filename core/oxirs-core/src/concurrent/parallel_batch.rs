@@ -41,7 +41,7 @@ impl std::fmt::Debug for BatchOperation {
                 predicate,
                 object,
             } => {
-                write!(f, "Query({:?}, {:?}, {:?})", subject, predicate, object)
+                write!(f, "Query({subject:?}, {predicate:?}, {object:?})")
             }
             BatchOperation::Transform(_) => write!(f, "Transform(function)"),
         }

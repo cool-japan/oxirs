@@ -365,14 +365,15 @@ impl AdvancedPropertyPathOptimizer {
         let cardinality_estimate = self.estimate_result_cardinality(&rewritten_path).await?;
 
         let optimized = OptimizedPath {
-            original_path: path.to_string(),
-            optimized_form: self.path_to_string(&rewritten_path),
-            estimated_cardinality: cardinality_estimate,
+            original_pattern: path.to_string(),
+            optimized_pattern: self.path_to_string(&rewritten_path),
             execution_plan: PathExecutionPlan {
                 strategy: self.strategy_to_legacy(&execution_plan.strategy),
                 estimated_cost: cost_estimate,
-                intermediate_steps: self.convert_to_legacy_steps(&execution_plan.steps),
+                steps: self.convert_to_legacy_steps(&execution_plan.steps),
             },
+            estimated_cost: cost_estimate,
+            optimization_applied: vec!["path_rewrite".to_string()],
         };
 
         // Cache the result
@@ -1213,16 +1214,12 @@ impl AdvancedPropertyPathOptimizer {
         }
     }
 
-    /// Convert local TraversalDirection to sparql::TraversalDirection
+    /// Convert local TraversalDirection (no conversion needed since using same type)
     fn convert_direction(
         &self,
         direction: TraversalDirection,
-    ) -> crate::handlers::sparql::TraversalDirection {
-        match direction {
-            TraversalDirection::Forward => crate::handlers::sparql::TraversalDirection::Forward,
-            TraversalDirection::Backward => crate::handlers::sparql::TraversalDirection::Backward,
-            TraversalDirection::Both => crate::handlers::sparql::TraversalDirection::Both,
-        }
+    ) -> TraversalDirection {
+        direction // No conversion needed since we're using the same type
     }
 
     fn convert_to_legacy_steps(&self, steps: &[EnhancedPathStep]) -> Vec<PathStep> {
@@ -1241,17 +1238,17 @@ impl AdvancedPropertyPathOptimizer {
                     PathOperation::TransitiveClosure { predicate, .. } => (
                         "transitive_closure".to_string(),
                         Some(predicate.clone()),
-                        crate::handlers::sparql::TraversalDirection::Forward,
+                        TraversalDirection::Forward,
                     ),
                     PathOperation::Union(_) => (
                         "union".to_string(),
                         None,
-                        crate::handlers::sparql::TraversalDirection::Forward,
+                        TraversalDirection::Forward,
                     ),
                     _ => (
                         "unknown".to_string(),
                         None,
-                        crate::handlers::sparql::TraversalDirection::Forward,
+                        TraversalDirection::Forward,
                     ),
                 };
 
@@ -1335,8 +1332,39 @@ struct PathCharacteristics {
     can_use_index: bool,
 }
 
-// Import legacy types for compatibility
-use crate::handlers::sparql::{OptimizedPath, PathExecutionPlan, PathStep, PathStrategy};
+// Define compatibility types locally since they may not exist in sparql_refactored
+#[derive(Debug, Clone)]
+pub struct PathExecutionPlan {
+    pub strategy: PathStrategy,
+    pub steps: Vec<PathStep>,
+    pub estimated_cost: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PathStep {
+    pub operation: String,
+    pub predicate: Option<String>,
+    pub direction: TraversalDirection,
+    pub estimated_selectivity: f64,
+}
+
+#[derive(Debug, Clone)]
+pub enum PathStrategy {
+    ForwardTraversal,
+    BackwardTraversal,
+    BidirectionalMeet,
+    IndexLookup,
+    MaterializedView,
+}
+
+#[derive(Debug, Clone)]
+pub struct OptimizedPath {
+    pub original_pattern: String,
+    pub optimized_pattern: String,
+    pub execution_plan: PathExecutionPlan,
+    pub estimated_cost: f64,
+    pub optimization_applied: Vec<String>,
+}
 
 #[cfg(test)]
 mod tests {
@@ -1398,7 +1426,7 @@ mod tests {
 
         // Test transitive path optimization
         let result = optimizer.optimize_path("rdfs:subClassOf+").await.unwrap();
-        assert!(result.optimized_form.contains("subClassOf")); // Should maintain the property
+        assert!(result.optimized_pattern.contains("subClassOf")); // Should maintain the property
     }
 
     #[tokio::test]

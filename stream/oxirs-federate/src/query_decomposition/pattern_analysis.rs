@@ -118,6 +118,22 @@ impl QueryDecomposer {
         selectivity
     }
 
+    /// Estimate selectivity of a single pattern
+    pub fn estimate_single_pattern_selectivity(&self, pattern: &TriplePattern) -> f64 {
+        let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
+            .iter()
+            .filter(|p| p.as_ref().map_or(false, |s| s.starts_with('?')))
+            .count();
+
+        match var_count {
+            0 => 0.001, // All constants - very selective
+            1 => 0.01,  // One variable
+            2 => 0.1,   // Two variables
+            3 => 1.0,   // All variables - least selective
+            _ => 1.0,
+        }
+    }
+
     /// Check if component represents a star join pattern
     pub fn is_star_join_pattern(&self, component: &QueryComponent) -> bool {
         if component.patterns.len() < 3 {
@@ -528,7 +544,7 @@ impl QueryDecomposer {
         pattern: &TriplePattern,
         service: &FederatedService,
     ) -> f64 {
-        let mut confidence = 0.5; // Base confidence
+        let mut confidence: f64 = 0.5; // Base confidence
 
         // Higher confidence for specific services
         if let Some(ref predicate) = pattern.predicate {

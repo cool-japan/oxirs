@@ -10,7 +10,7 @@ use regex::Regex;
 // use serde::{Deserialize, Serialize}; // Available for serialization features
 use std::collections::HashSet;
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Parses a string as a hexadecimal u128 ID (similar to OxiGraph's optimization)

@@ -496,3 +496,56 @@ pub struct InterpretabilityRecommendation {
 
 // Import necessary types for references
 use crate::neural_patterns::NeuralPattern;
+
+/// Audit trail for compliance and debugging
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditTrail {
+    /// Unique audit trail identifier
+    pub trail_id: String,
+    /// Chain of decision events
+    pub events: Vec<AuditEvent>,
+    /// Total processing time
+    pub total_duration: Duration,
+    /// Compliance status
+    pub compliance_status: ComplianceStatus,
+    /// Audit metadata
+    pub metadata: HashMap<String, String>,
+}
+
+/// Individual audit event
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditEvent {
+    /// Event identifier
+    pub event_id: String,
+    /// Event type
+    pub event_type: AuditEventType,
+    /// Timestamp of the event
+    pub timestamp: SystemTime,
+    /// Event description
+    pub description: String,
+    /// Associated data
+    pub data: serde_json::Value,
+    /// User/system responsible
+    pub actor: String,
+}
+
+/// Types of audit events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AuditEventType {
+    DecisionMade,
+    DataAccessed,
+    ModelInvoked,
+    ValidationPerformed,
+    ErrorOccurred,
+    ConfigurationChanged,
+    ResultGenerated,
+}
+
+/// Compliance status for audit
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ComplianceStatus {
+    Compliant,
+    NonCompliant(Vec<String>),
+    Pending,
+    NotApplicable,
+}

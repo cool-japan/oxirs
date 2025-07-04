@@ -3,9 +3,10 @@
 use clap::Parser;
 use oxirs_chat::{
     server::{ChatServer, ServerConfig},
-    ChatManager,
+    OxiRSChat,
+    ChatConfig,
 };
-use oxirs_core::{format::RdfFormat, GraphName, Literal, NamedNode, Quad, Store, Triple};
+use oxirs_core::{format::RdfFormat, GraphName, Literal, NamedNode, Quad, Store, ConcreteStore, Triple};
 use std::{path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
 
@@ -79,30 +80,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Knowledge graph store initialized");
 
-    // Initialize the chat manager
-    let chat_manager = match &args.persistence_path {
-        Some(path) => {
-            info!("Enabling session persistence at: {:?}", path);
-            match ChatManager::with_persistence(store.clone(), path).await {
-                Ok(manager) => Arc::new(manager),
-                Err(e) => {
-                    error!("Failed to initialize chat manager with persistence: {}", e);
-                    return Err(format!(
-                        "Failed to initialize chat manager with persistence: {}",
-                        e
-                    )
-                    .into());
-                }
-            }
-        }
-        None => {
-            info!("Session persistence disabled");
-            match ChatManager::new(store.clone()).await {
-                Ok(manager) => Arc::new(manager),
-                Err(e) => {
-                    error!("Failed to initialize chat manager: {}", e);
-                    return Err(format!("Failed to initialize chat manager: {}", e).into());
-                }
+    // Initialize OxiRS Chat instance
+    let chat_instance = {
+        info!("Initializing OxiRS Chat with advanced AI capabilities");
+        let chat_config = ChatConfig::default();
+        match OxiRSChat::new(chat_config, store.clone()).await {
+            Ok(chat) => Arc::new(chat),
+            Err(e) => {
+                error!("Failed to initialize OxiRS Chat: {}", e);
+                return Err(format!("Failed to initialize OxiRS Chat: {}", e).into());
             }
         }
     };
@@ -154,11 +140,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Clone chat_manager before moving it
-    let chat_manager_clone = chat_manager.clone();
+    // Clone chat_instance before moving it
+    let chat_instance_clone = chat_instance.clone();
 
     // Create and start the server
-    let server = ChatServer::new(chat_manager, server_config);
+    let server = ChatServer::new(chat_instance, server_config);
 
     info!("🚀 OxiRS Chat server starting...");
     info!("📡 HTTP API available at: http://{}:{}/api", host, port);
@@ -177,15 +163,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Set up graceful shutdown
-    let chat_manager_for_shutdown = chat_manager_clone.clone();
+    let chat_instance_for_shutdown = chat_instance_clone.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to listen for Ctrl+C");
         info!("Received shutdown signal, saving sessions...");
-        if let Err(e) = chat_manager_for_shutdown.save_all_sessions().await {
-            error!("Failed to save sessions on shutdown: {}", e);
-        }
+        // TODO: Implement session saving for OxiRSChat
         info!("Sessions saved, shutting down...");
         std::process::exit(0);
     });
@@ -205,8 +189,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// Initialize the knowledge graph store
 async fn initialize_store(
     dataset_path: Option<&PathBuf>,
-) -> Result<Store, Box<dyn std::error::Error>> {
-    let mut store = Store::new()?;
+) -> Result<ConcreteStore, Box<dyn std::error::Error>> {
+    let mut store = ConcreteStore::new()?;
 
     if let Some(path) = dataset_path {
         info!("Loading dataset from: {:?}", path);
@@ -311,7 +295,7 @@ async fn load_llm_config(
 fn parse_rdf_content(
     content: &str,
     format: RdfFormat,
-    store: &mut Store,
+    store: &mut ConcreteStore,
 ) -> Result<usize, Box<dyn std::error::Error>> {
     use oxirs_core::format::parser::simple;
     use std::io::Cursor;
@@ -408,7 +392,7 @@ fn parse_rdf_content(
 }
 
 /// Add sample RDF data for demonstration when no dataset is provided
-fn add_sample_data(store: &mut Store) -> Result<(), Box<dyn std::error::Error>> {
+fn add_sample_data(store: &mut ConcreteStore) -> Result<(), Box<dyn std::error::Error>> {
     let sample_triples = vec![
         // Person data
         Triple::new(

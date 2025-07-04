@@ -33,6 +33,8 @@
 //! ```
 
 use anyhow::Result;
+use std::collections::HashMap;
+use uuid;
 
 pub mod adaptive_compression;
 pub mod advanced_analytics;
@@ -40,12 +42,14 @@ pub mod advanced_benchmarking;
 pub mod advanced_caching;
 pub mod advanced_metrics;
 pub mod advanced_result_merging;
+pub mod automl_optimization;
 pub mod benchmarking;
 pub mod cache_friendly_index;
 pub mod clustering;
 pub mod compression;
 #[cfg(feature = "content-processing")]
 pub mod content_processing;
+pub mod cross_language_alignment;
 pub mod cross_modal_embeddings;
 pub mod distributed_vector_search;
 pub mod embedding_pipeline;
@@ -56,6 +60,7 @@ pub mod faiss_gpu_integration;
 pub mod faiss_integration;
 pub mod faiss_migration_tools;
 pub mod faiss_native_integration;
+pub mod federated_search;
 pub mod gnn_embeddings;
 pub mod gpu;
 pub mod graph_aware_search;
@@ -72,6 +77,7 @@ pub mod mmap_index;
 pub mod opq;
 pub mod oxirs_arq_integration;
 pub mod pq;
+pub mod quantum_search;
 pub mod rdf_content_enhancement;
 pub mod rdf_integration;
 pub mod real_time_analytics;
@@ -123,6 +129,11 @@ pub use advanced_result_merging::{
     ResultMetadata, ScoreCombinationStrategy, ScoreNormalizationMethod, ScoredResult,
     SourceContribution, SourceResult, SourceType,
 };
+pub use automl_optimization::{
+    AutoMLConfig, AutoMLOptimizer, AutoMLResults, AutoMLStatistics, IndexConfiguration,
+    IndexParameterSpace, OptimizationMetric, OptimizationTrial, ResourceConstraints,
+    SearchSpace, TrialResult,
+};
 pub use benchmarking::{
     BenchmarkConfig, BenchmarkDataset, BenchmarkOutputFormat, BenchmarkResult, BenchmarkRunner,
     BenchmarkSuite, BenchmarkTestCase, MemoryMetrics as BenchmarkMemoryMetrics,
@@ -169,6 +180,10 @@ pub use faiss_compatibility::{
     FaissImportConfig, FaissIndexMetadata, FaissIndexType, FaissMetricType, FaissParameter,
     SimpleVectorIndex,
 };
+pub use federated_search::{
+    AuthenticationConfig, FederatedSearchConfig, FederatedVectorSearch, FederationEndpoint,
+    PrivacyMode, SchemaCompatibility, TrustManager, PrivacyEngine,
+};
 pub use gnn_embeddings::{AggregatorType, GraphSAGE, GCN};
 pub use gpu::{
     create_default_accelerator, create_memory_optimized_accelerator,
@@ -200,6 +215,10 @@ pub use kg_embeddings::{
 pub use lsh::{LshConfig, LshFamily, LshIndex, LshStats};
 pub use mmap_index::{MemoryMappedIndexStats, MemoryMappedVectorIndex};
 pub use pq::{PQConfig, PQIndex, PQStats};
+pub use quantum_search::{
+    QuantumSearchConfig, QuantumSearchResult, QuantumSearchStatistics, QuantumState,
+    QuantumVectorSearch,
+};
 pub use rdf_content_enhancement::{
     ComponentWeights, MultiLanguageProcessor, PathConstraint, PathDirection, PropertyAggregator,
     PropertyPath, RdfContentConfig, RdfContentProcessor, RdfContext, RdfEntity, RdfValue,
@@ -233,7 +252,7 @@ pub use result_fusion::{
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
     CrossLanguageProcessor, FederatedQueryResult, QueryExecutor, SparqlVectorFunctions,
-    SparqlVectorService, VectorQuery, VectorQueryResult, VectorServiceArg, VectorServiceConfig,
+    SparqlVectorService, VectorOperation, VectorQuery, VectorQueryResult, VectorServiceArg, VectorServiceConfig,
     VectorServiceResult,
 };
 pub use sparql_service_endpoint::{
@@ -266,8 +285,14 @@ pub trait VectorStoreTrait: Send + Sync {
     /// Insert a vector with metadata
     fn insert_vector(&mut self, id: VectorId, vector: Vector) -> Result<()>;
 
+    /// Add a vector and return its ID
+    fn add_vector(&mut self, vector: Vector) -> Result<VectorId>;
+
     /// Get a vector by its ID
     fn get_vector(&self, id: &VectorId) -> Result<Option<Vector>>;
+
+    /// Get all vector IDs
+    fn get_all_vector_ids(&self) -> Result<Vec<VectorId>>;
 
     /// Search for similar vectors
     fn search_similar(&self, query: &Vector, k: usize) -> Result<Vec<(VectorId, f32)>>;
@@ -679,6 +704,21 @@ impl Vector {
 
         Vector::new(scaled_values)
     }
+
+    /// Get the number of dimensions in the vector
+    pub fn len(&self) -> usize {
+        self.dimensions
+    }
+
+    /// Check if vector is empty (zero dimensions)
+    pub fn is_empty(&self) -> bool {
+        self.dimensions == 0
+    }
+
+    /// Get vector as slice of f32 values
+    pub fn as_slice(&self) -> Vec<f32> {
+        self.as_f32()
+    }
 }
 
 /// Vector index trait for efficient similarity search
@@ -694,6 +734,30 @@ pub trait VectorIndex: Send + Sync {
 
     /// Get a vector by its URI
     fn get_vector(&self, uri: &str) -> Option<&Vector>;
+
+    /// Add a vector with associated ID and metadata
+    fn add_vector(&mut self, id: VectorId, vector: Vector, metadata: Option<HashMap<String, String>>) -> Result<()> {
+        // Default implementation that delegates to insert
+        self.insert(id, vector)
+    }
+
+    /// Update an existing vector
+    fn update_vector(&mut self, id: VectorId, vector: Vector) -> Result<()> {
+        // Default implementation that delegates to insert
+        self.insert(id, vector)
+    }
+
+    /// Update metadata for a vector
+    fn update_metadata(&mut self, _id: VectorId, _metadata: HashMap<String, String>) -> Result<()> {
+        // Default implementation (no-op)
+        Ok(())
+    }
+
+    /// Remove a vector by its ID
+    fn remove_vector(&mut self, _id: VectorId) -> Result<()> {
+        // Default implementation (no-op)
+        Ok(())
+    }
 }
 
 /// In-memory vector index implementation
@@ -995,6 +1059,11 @@ impl VectorStore {
         // Calculate cosine similarity between the vectors
         vector1.cosine_similarity(vector2)
     }
+
+    /// Get a vector by its ID (delegates to VectorIndex)
+    pub fn get_vector(&self, id: &str) -> Option<&Vector> {
+        self.index.get_vector(id)
+    }
 }
 
 impl Default for VectorStore {
@@ -1008,8 +1077,21 @@ impl VectorStoreTrait for VectorStore {
         self.index.insert(id, vector)
     }
 
+    fn add_vector(&mut self, vector: Vector) -> Result<VectorId> {
+        // Generate a unique ID for the vector
+        let id = format!("vec_{}", uuid::Uuid::new_v4());
+        self.index.insert(id.clone(), vector)?;
+        Ok(id)
+    }
+
     fn get_vector(&self, id: &VectorId) -> Result<Option<Vector>> {
         Ok(self.index.get_vector(id).cloned())
+    }
+
+    fn get_all_vector_ids(&self) -> Result<Vec<VectorId>> {
+        // For now, return empty vec as VectorIndex doesn't provide this method
+        // This could be enhanced if the underlying index supports it
+        Ok(Vec::new())
     }
 
     fn search_similar(&self, query: &Vector, k: usize) -> Result<Vec<(VectorId, f32)>> {
@@ -1343,7 +1425,7 @@ mod tests {
         use crate::hnsw::{HnswConfig, HnswIndex};
 
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config);
+        let mut index = HnswIndex::new(config).unwrap();
 
         let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
         let v2 = Vector::new(vec![0.0, 1.0, 0.0]);

@@ -36,6 +36,11 @@ use crate::consciousness_validation::{ConsciousnessLevel, EmotionalContext};
 use crate::quantum_neural_patterns::QuantumState;
 use crate::{Result, ShaclAiError};
 
+/// Helper function for serde default Instant
+fn default_instant() -> Instant {
+    Instant::now()
+}
+
 /// Interdimensional pattern recognition engine
 #[derive(Debug)]
 pub struct InterdimensionalPatternEngine {
@@ -115,7 +120,7 @@ pub type BridgeId = Uuid;
 pub type SessionId = Uuid;
 
 /// Representation of a reality dimension
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RealityDimension {
     /// Unique dimension identifier
     pub id: DimensionId,
@@ -134,7 +139,24 @@ pub struct RealityDimension {
     /// Accessibility from other dimensions
     pub accessibility: DimensionAccessibility,
     /// Last synchronization time
+    #[serde(skip, default = "default_instant")]
     pub last_sync: Instant,
+}
+
+impl Default for RealityDimension {
+    fn default() -> Self {
+        Self {
+            id: DimensionId::new_v4(),
+            dimension_type: DimensionType::BaseReality,
+            state: DimensionState::default(),
+            coordinates: SpatialTemporalCoordinates::default(),
+            physical_constants: PhysicalConstants::default(),
+            active_patterns: HashSet::new(),
+            coherence_with_base: 1.0,
+            accessibility: DimensionAccessibility::default(),
+            last_sync: Instant::now(),
+        }
+    }
 }
 
 /// Types of reality dimensions
@@ -227,6 +249,20 @@ pub struct DimensionState {
     pub validation_load: f64,
 }
 
+impl Default for DimensionState {
+    fn default() -> Self {
+        Self {
+            energy_level: 1.0,
+            entropy: 0.0,
+            information_content: 0.0,
+            stability: 1.0,
+            active_entities: 0,
+            age: Duration::from_secs(0),
+            validation_load: 0.0,
+        }
+    }
+}
+
 /// Spatial-temporal coordinates for dimensions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpatialTemporalCoordinates {
@@ -240,6 +276,18 @@ pub struct SpatialTemporalCoordinates {
     pub consciousness_coord: f64,
     /// Reality coherence coordinate
     pub coherence_coord: f64,
+}
+
+impl Default for SpatialTemporalCoordinates {
+    fn default() -> Self {
+        Self {
+            spatial: vec![0.0, 0.0, 0.0],
+            temporal: 0.0,
+            quantum_phase: vec![0.0],
+            consciousness_coord: 0.0,
+            coherence_coord: 1.0,
+        }
+    }
 }
 
 /// Physical constants in a dimension
@@ -287,8 +335,20 @@ pub struct DimensionAccessibility {
     pub active_access_count: usize,
 }
 
+impl Default for DimensionAccessibility {
+    fn default() -> Self {
+        Self {
+            accessible_from_base: true,
+            min_consciousness_level: ConsciousnessLevel::Unconscious,
+            access_cost: 1.0,
+            max_concurrent_access: 100,
+            active_access_count: 0,
+        }
+    }
+}
+
 /// Cross-dimensional bridge between realities
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DimensionalBridge {
     /// Unique bridge identifier
     pub id: BridgeId,
@@ -309,8 +369,10 @@ pub struct DimensionalBridge {
     /// Total information transferred
     pub total_transferred: u64,
     /// Bridge creation time
+    #[serde(skip, default = "default_instant")]
     pub created_at: Instant,
     /// Last activity time
+    #[serde(skip, default = "default_instant")]
     pub last_activity: Instant,
 }
 
@@ -359,7 +421,7 @@ pub enum CausalDirection {
 }
 
 /// State of a dimensional bridge
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum BridgeState {
     /// Bridge is active and operational
     Active,
@@ -402,7 +464,7 @@ pub enum PatternType {
 }
 
 /// Interdimensional pattern recognition session
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PatternSession {
     /// Unique session identifier
     pub id: SessionId,
@@ -421,13 +483,32 @@ pub struct PatternSession {
     /// Session metrics
     pub metrics: SessionMetrics,
     /// Session start time
+    #[serde(skip, default = "default_instant")]
     pub start_time: Instant,
     /// Expected completion time
+    #[serde(skip, default)]
     pub expected_completion: Option<Instant>,
 }
 
+impl Default for PatternSession {
+    fn default() -> Self {
+        Self {
+            id: SessionId::new_v4(),
+            dimensions: HashSet::new(),
+            target_patterns: HashSet::new(),
+            state: SessionState::Initializing,
+            config: PatternSessionConfig::default(),
+            discovered_patterns: Vec::new(),
+            correlations: Vec::new(),
+            metrics: SessionMetrics::default(),
+            start_time: Instant::now(),
+            expected_completion: None,
+        }
+    }
+}
+
 /// State of a pattern recognition session
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SessionState {
     /// Session is being initialized
     Initializing,
@@ -462,6 +543,19 @@ pub struct PatternSessionConfig {
     pub priority: PatternPriority,
 }
 
+impl Default for PatternSessionConfig {
+    fn default() -> Self {
+        Self {
+            sensitivity: 0.7,
+            max_processing_time: Duration::from_secs(300), // 5 minutes
+            min_correlation_strength: 0.5,
+            enable_temporal_analysis: true,
+            enable_causal_detection: true,
+            priority: PatternPriority::Normal,
+        }
+    }
+}
+
 /// Priority levels for pattern recognition
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum PatternPriority {
@@ -492,6 +586,7 @@ pub struct DiscoveredPattern {
     /// Supporting evidence
     pub evidence: Vec<PatternEvidence>,
     /// Discovery timestamp
+    #[serde(skip, default = "default_instant")]
     pub discovered_at: Instant,
 }
 
@@ -636,7 +731,7 @@ pub enum ImpactLevel {
 }
 
 /// Metrics for pattern recognition sessions
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionMetrics {
     /// Number of patterns discovered
     pub patterns_discovered: usize,
@@ -653,7 +748,7 @@ pub struct SessionMetrics {
 }
 
 /// Overall interdimensional pattern recognition metrics
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InterdimensionalMetrics {
     /// Total patterns discovered across all sessions
     pub total_patterns: u64,
@@ -672,7 +767,24 @@ pub struct InterdimensionalMetrics {
     /// Average processing time per session
     pub avg_processing_time: Duration,
     /// Last metrics update
+    #[serde(skip, default = "default_instant")]
     pub last_update: Instant,
+}
+
+impl Default for InterdimensionalMetrics {
+    fn default() -> Self {
+        Self {
+            total_patterns: 0,
+            total_correlations: 0,
+            active_dimensions: 0,
+            active_bridges: 0,
+            avg_coherence: 0.0,
+            total_implications: 0,
+            success_rate: 0.0,
+            avg_processing_time: Duration::default(),
+            last_update: crate::default_instant(),
+        }
+    }
 }
 
 /// Reality synchronization system
@@ -687,7 +799,6 @@ pub struct RealitySynchronizer {
 }
 
 /// Universe tracking system for parallel realities
-#[derive(Debug)]
 pub struct UniverseTracker {
     /// Known parallel universes
     known_universes: Arc<DashMap<UniverseId, UniverseInfo>>,
@@ -697,8 +808,17 @@ pub struct UniverseTracker {
     classifier: Arc<UniverseClassifier>,
 }
 
+impl std::fmt::Debug for UniverseTracker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UniverseTracker")
+            .field("known_universes", &self.known_universes.len())
+            .field("discovery_algorithms", &self.discovery_algorithms.len())
+            .field("classifier", &"<UniverseClassifier>")
+            .finish()
+    }
+}
+
 /// Temporal-spatial analysis system
-#[derive(Debug)]
 pub struct TemporalSpatialAnalyzer {
     /// Temporal analysis algorithms
     temporal_algorithms: HashMap<String, Box<dyn TemporalAnalyzer + Send + Sync>>,
@@ -708,8 +828,17 @@ pub struct TemporalSpatialAnalyzer {
     spacetime_detector: Arc<SpacetimeCorrelationDetector>,
 }
 
+impl std::fmt::Debug for TemporalSpatialAnalyzer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TemporalSpatialAnalyzer")
+            .field("temporal_algorithms", &self.temporal_algorithms.len())
+            .field("spatial_algorithms", &self.spatial_algorithms.len())
+            .field("spacetime_detector", &"<SpacetimeCorrelationDetector>")
+            .finish()
+    }
+}
+
 /// Pattern coherence validation system
-#[derive(Debug)]
 pub struct PatternCoherenceValidator {
     /// Coherence validation algorithms
     validation_algorithms: HashMap<PatternType, Box<dyn CoherenceValidator + Send + Sync>>,
@@ -717,8 +846,17 @@ pub struct PatternCoherenceValidator {
     consistency_checker: Arc<ConsistencyChecker>,
 }
 
+impl std::fmt::Debug for PatternCoherenceValidator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PatternCoherenceValidator")
+            .field("validation_algorithms", &self.validation_algorithms.len())
+            .field("consistency_checker", &"<ConsistencyChecker>")
+            .finish()
+    }
+}
+
 /// Trait for pattern recognition algorithms
-trait PatternRecognizer {
+trait PatternRecognizer: std::fmt::Debug {
     fn recognize_patterns(
         &self,
         dimensions: &[RealityDimension],
@@ -805,7 +943,7 @@ impl InterdimensionalPatternEngine {
     /// Discover patterns across multiple dimensions
     pub async fn discover_interdimensional_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         validation_context: &ValidationContext,
         target_patterns: HashSet<PatternType>,
@@ -1280,6 +1418,7 @@ trait CoherenceValidator {
 }
 
 // Implementations for pattern recognizers
+#[derive(Debug)]
 struct CausalPatternRecognizer;
 impl PatternRecognizer for CausalPatternRecognizer {
     fn recognize_patterns(
@@ -1292,6 +1431,7 @@ impl PatternRecognizer for CausalPatternRecognizer {
     }
 }
 
+#[derive(Debug)]
 struct StructuralPatternRecognizer;
 impl PatternRecognizer for StructuralPatternRecognizer {
     fn recognize_patterns(
@@ -1304,6 +1444,7 @@ impl PatternRecognizer for StructuralPatternRecognizer {
     }
 }
 
+#[derive(Debug)]
 struct TemporalPatternRecognizer;
 impl PatternRecognizer for TemporalPatternRecognizer {
     fn recognize_patterns(
@@ -1316,6 +1457,7 @@ impl PatternRecognizer for TemporalPatternRecognizer {
     }
 }
 
+#[derive(Debug)]
 struct QuantumCoherencePatternRecognizer;
 impl PatternRecognizer for QuantumCoherencePatternRecognizer {
     fn recognize_patterns(
@@ -1328,6 +1470,7 @@ impl PatternRecognizer for QuantumCoherencePatternRecognizer {
     }
 }
 
+#[derive(Debug)]
 struct InformationFlowPatternRecognizer;
 impl PatternRecognizer for InformationFlowPatternRecognizer {
     fn recognize_patterns(
@@ -1340,6 +1483,7 @@ impl PatternRecognizer for InformationFlowPatternRecognizer {
     }
 }
 
+#[derive(Debug)]
 struct ConsciousnessResonancePatternRecognizer;
 impl PatternRecognizer for ConsciousnessResonancePatternRecognizer {
     fn recognize_patterns(
@@ -1352,6 +1496,7 @@ impl PatternRecognizer for ConsciousnessResonancePatternRecognizer {
     }
 }
 
+#[derive(Debug)]
 struct LogicConsistencyPatternRecognizer;
 impl PatternRecognizer for LogicConsistencyPatternRecognizer {
     fn recognize_patterns(
@@ -1364,6 +1509,7 @@ impl PatternRecognizer for LogicConsistencyPatternRecognizer {
     }
 }
 
+#[derive(Debug)]
 struct ValidationOutcomePatternRecognizer;
 impl PatternRecognizer for ValidationOutcomePatternRecognizer {
     fn recognize_patterns(
@@ -1376,6 +1522,7 @@ impl PatternRecognizer for ValidationOutcomePatternRecognizer {
     }
 }
 
+#[derive(Debug)]
 struct MetaPatternRecognizer;
 impl PatternRecognizer for MetaPatternRecognizer {
     fn recognize_patterns(

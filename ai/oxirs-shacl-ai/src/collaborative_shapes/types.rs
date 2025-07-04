@@ -292,7 +292,7 @@ pub struct UserSession {
 }
 
 /// Session state
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SessionState {
     Active,
     Idle,

@@ -115,7 +115,7 @@ pub enum Resource {
 pub struct LockInfo {
     pub resource: Resource,
     pub mode: LockMode,
-    pub acquired_at: Instant,
+    pub acquired_at: SystemTime,
     pub owner_tx_id: String,
 }
 
@@ -359,7 +359,7 @@ impl DeadlockDetector {
         path.push(tx_id.to_string());
 
         if let Some(waiting_for) = self.wait_for_graph.get(tx_id) {
-            let next_txs: Vec<_> = waiting_for.clone();
+            let next_txs: Vec<String> = waiting_for.iter().cloned().collect();
             for next_tx in next_txs {
                 self.dfs_detect_cycle(&next_tx, visited, path);
             }
@@ -716,7 +716,7 @@ impl TransactionManager {
             let lock_info = LockInfo {
                 resource: resource.clone(),
                 mode,
-                acquired_at: Instant::now(),
+                acquired_at: SystemTime::now(),
                 owner_tx_id: tx_id.to_string(),
             };
 
@@ -808,6 +808,10 @@ impl TransactionManager {
                 // No validation needed
                 Ok(())
             }
+            IsolationLevel::SnapshotIsolation => {
+                // Validate snapshot isolation constraints
+                self.validate_snapshot_isolation_constraints(tx_info)
+            }
         }
     }
 
@@ -827,6 +831,14 @@ impl TransactionManager {
     /// Validate read committed constraints
     fn validate_read_committed_constraints(&self, _tx_info: &TransactionInfo) -> Result<()> {
         // Implementation would check for dirty reads
+        Ok(())
+    }
+
+    /// Validate snapshot isolation constraints
+    fn validate_snapshot_isolation_constraints(&self, _tx_info: &TransactionInfo) -> Result<()> {
+        // Implementation would check for snapshot isolation violations
+        // In snapshot isolation, transactions see a consistent snapshot of the database
+        // and write conflicts are prevented through first-committer-wins rule
         Ok(())
     }
 

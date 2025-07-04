@@ -69,7 +69,7 @@ impl JsonLdParser {
     /// Parse JSON-LD from a byte slice
     pub fn parse_slice(&self, slice: &[u8]) -> ParseResult<Vec<Quad>> {
         let content = std::str::from_utf8(slice)
-            .map_err(|e| RdfParseError::syntax(format!("Invalid UTF-8: {}", e)))?;
+            .map_err(|e| RdfParseError::syntax(format!("Invalid UTF-8: {e}")))?;
         self.parse_str(content)
     }
 
@@ -79,7 +79,7 @@ impl JsonLdParser {
 
         // Basic JSON validation
         let _json_value: serde_json::Value = serde_json::from_str(input)
-            .map_err(|e| RdfParseError::syntax(format!("Invalid JSON: {}", e)))?;
+            .map_err(|e| RdfParseError::syntax(format!("Invalid JSON: {e}")))?;
 
         // TODO: Process JSON-LD algorithm:
         // 1. Context processing
@@ -270,12 +270,12 @@ impl<W: Write> WriterJsonLdSerializer<W> {
         let json_output = if self.config.pretty {
             serde_json::to_string_pretty(&serde_json::json!({
                 "@context": self.config.context.clone().unwrap_or_else(|| serde_json::json!({})),
-                "@graph": self.quads.iter().map(|q| format!("TODO: quad {}", q)).collect::<Vec<_>>()
+                "@graph": self.quads.iter().map(|q| format!("TODO: quad {q}")).collect::<Vec<_>>()
             }))?
         } else {
             serde_json::to_string(&serde_json::json!({
                 "@context": self.config.context.clone().unwrap_or_else(|| serde_json::json!({})),
-                "@graph": self.quads.iter().map(|q| format!("TODO: quad {}", q)).collect::<Vec<_>>()
+                "@graph": self.quads.iter().map(|q| format!("TODO: quad {q}")).collect::<Vec<_>>()
             }))?
         };
 

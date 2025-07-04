@@ -5,10 +5,10 @@
 
 use anyhow::{anyhow, Result};
 use brotli::{enc::BrotliEncoderParams, CompressorWriter, Decompressor};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
-use rmp_serde::{from_slice, to_vec};
+use rmp_serde::to_vec;
 use serde::{Deserialize, Serialize};
 use serde_cbor;
 use std::collections::HashMap;
@@ -16,10 +16,10 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::debug;
 use zstd::{decode_all, encode_all};
 
-use crate::{FederatedService, ServiceRegistry};
+use crate::FederatedService;
 
 /// Network optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

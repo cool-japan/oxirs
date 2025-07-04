@@ -3,7 +3,7 @@
 //! This module provides the base error types that all OxiRS modules should use.
 //! Module-specific errors should include this as a variant.
 
-use std::fmt;
+// Removed unused std::fmt import
 
 /// Core error type for OxiRS operations
 #[derive(Debug, Clone, thiserror::Error)]
@@ -84,7 +84,7 @@ pub mod validation {
         if value <= T::default() {
             Err(CoreError::InvalidParameter {
                 name: name.to_string(),
-                message: format!("Value must be positive, got {}", value),
+                message: format!("Value must be positive, got {value}"),
             })
         } else {
             Ok(value)
@@ -96,7 +96,7 @@ pub mod validation {
         if !value.is_finite() {
             Err(CoreError::InvalidParameter {
                 name: name.to_string(),
-                message: format!("Value must be finite, got {}", value),
+                message: format!("Value must be finite, got {value}"),
             })
         } else {
             Ok(value)
@@ -108,7 +108,7 @@ pub mod validation {
         if !value.is_finite() {
             Err(CoreError::InvalidParameter {
                 name: name.to_string(),
-                message: format!("Value must be finite, got {}", value),
+                message: format!("Value must be finite, got {value}"),
             })
         } else {
             Ok(value)
@@ -120,8 +120,8 @@ pub mod validation {
         for (i, &value) in values.iter().enumerate() {
             if !value.is_finite() {
                 return Err(CoreError::InvalidParameter {
-                    name: format!("array[{}]", i),
-                    message: format!("Value must be finite, got {}", value),
+                    name: format!("array[{i}]"),
+                    message: format!("Value must be finite, got {value}"),
                 });
             }
         }
@@ -169,7 +169,7 @@ pub mod validation {
         if value < min || value > max {
             Err(CoreError::InvalidParameter {
                 name: name.to_string(),
-                message: format!("Value must be between {} and {}, got {}", min, max, value),
+                message: format!("Value must be between {min} and {max}, got {value}"),
             })
         } else {
             Ok(value)

@@ -176,6 +176,11 @@ impl Constraint {
         None
     }
 
+    /// Get the constraint type discriminant for grouping
+    pub fn constraint_type(&self) -> std::mem::Discriminant<Constraint> {
+        std::mem::discriminant(self)
+    }
+
     /// Get custom message for this constraint (if specified)
     pub fn message(&self) -> Option<&str> {
         match self {
@@ -219,7 +224,7 @@ impl Constraint {
             Constraint::Node(c) => c.evaluate(context, store),
             Constraint::QualifiedValueShape(c) => c.evaluate(context, store),
             Constraint::Closed(c) => c.evaluate(context, store),
-            Constraint::Sparql(c) => c.evaluate(store, context),
+            Constraint::Sparql(c) => c.evaluate(context, store),
         }
     }
 }

@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
-    Store,
+    Store, ConcreteStore,
 };
 
 use crate::{constraints::*, PropertyPath, Result, ShaclError};
@@ -107,7 +107,7 @@ impl ConstraintValidator for DatatypeConstraintValidator {
             if let Term::Literal(literal) = value {
                 // Check if literal has the expected datatype
                 // This is a placeholder - in practice you'd get the expected datatype from the constraint
-                if literal.datatype().is_none() {
+                if literal.datatype().as_str() == "http://www.w3.org/2001/XMLSchema#string" {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
                         Some(format!(
@@ -341,7 +341,7 @@ mod tests {
             NamedNode::new("http://example.org/value").unwrap(),
         )]);
 
-        let store = Store::new().unwrap();
+        let store = ConcreteStore::new().unwrap();
         let result = validator.validate(&store, &context, None).unwrap();
         assert!(result.is_satisfied());
     }
@@ -357,7 +357,7 @@ mod tests {
         )
         .with_values(vec![Term::Literal(Literal::new("value"))]);
 
-        let store = Store::new().unwrap();
+        let store = ConcreteStore::new().unwrap();
         let result = validator
             .validate(&store, &context_with_values, None)
             .unwrap();

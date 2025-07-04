@@ -582,7 +582,7 @@ pub static SHACL_VOCAB: Lazy<vocabulary::ShaclVocabulary> =
 pub use iri_resolver::IriResolver;
 
 /// Core error type for SHACL operations
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum ShaclError {
     #[error("Shape parsing error: {0}")]
     ShapeParsing(String),
@@ -649,6 +649,12 @@ pub enum ShaclError {
 
     #[error("Async operation error: {0}")]
     AsyncOperation(String),
+
+    #[error("Unsupported operation: {0}")]
+    UnsupportedOperation(String),
+
+    #[error("Report error: {0}")]
+    ReportError(String),
 }
 
 impl From<serde_json::Error> for ShaclError {
@@ -663,11 +669,23 @@ impl From<std::io::Error> for ShaclError {
     }
 }
 
+impl From<serde_yaml::Error> for ShaclError {
+    fn from(err: serde_yaml::Error) -> Self {
+        ShaclError::Json(err.to_string())
+    }
+}
+
+impl From<std::fmt::Error> for ShaclError {
+    fn from(err: std::fmt::Error) -> Self {
+        ShaclError::ReportGeneration(err.to_string())
+    }
+}
+
 /// Result type alias for SHACL operations
 pub type Result<T> = std::result::Result<T, ShaclError>;
 
 /// SHACL shape identifier
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ShapeId(pub String);
 
 impl ShapeId {

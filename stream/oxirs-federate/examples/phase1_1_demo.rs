@@ -8,17 +8,19 @@
 
 use anyhow::Result;
 use oxirs_federate::{
-    AuthConfig, AuthCredentials, AuthType, AutoDiscovery, AutoDiscoveryConfig, FederatedService,
+    AuthConfig, AuthCredentials, AutoDiscovery, AutoDiscoveryConfig, FederatedService, ServiceAuthConfig,
     ServiceDiscovery, ServiceRegistry, ServiceType,
+    service::AuthType,
 };
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{info, warn};
+use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
-    tracing_subscriber::init();
+    tracing_subscriber::fmt::init();
 
     info!("🚀 OxiRS Federation Engine - Phase 1.1 Demo");
     info!("===============================================");
@@ -61,7 +63,7 @@ async fn demo_service_registry() -> Result<()> {
     );
 
     // Add authentication configuration
-    graphql_service.auth = Some(AuthConfig {
+    graphql_service.auth = Some(ServiceAuthConfig {
         auth_type: AuthType::ApiKey,
         credentials: AuthCredentials {
             api_key: Some("example-api-key".to_string()),

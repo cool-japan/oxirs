@@ -1,9 +1,7 @@
 //! Common types and definitions for molecular memory management
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Helper function for serde default deserialization of Instant
 fn default_instant() -> Instant {
@@ -215,7 +213,7 @@ pub enum ModificationType {
     Phosphorylation,
     Ubiquitination,
     Sumoylation,
-    ADP_Ribosylation,
+    AdpRibosylation,
 }
 
 impl Default for ModificationType {

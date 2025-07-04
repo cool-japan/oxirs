@@ -318,7 +318,7 @@ impl EntityResolver {
                     *counter
                 };
                 EntityRecord {
-                    id: format!("entity_{}", id),
+                    id: format!("entity_{id}"),
                     uri: subject_uri.clone(),
                     attributes: HashMap::new(),
                     triples: Vec::new(),
@@ -342,7 +342,7 @@ impl EntityResolver {
                         *counter
                     };
                     EntityRecord {
-                        id: format!("entity_{}", id),
+                        id: format!("entity_{id}"),
                         uri: object_uri.clone(),
                         attributes: HashMap::new(),
                         triples: Vec::new(),
@@ -354,7 +354,7 @@ impl EntityResolver {
                 // Add reverse relation
                 object_entry
                     .attributes
-                    .insert(format!("{}^-1", predicate_uri), subject_uri.clone());
+                    .insert(format!("{predicate_uri}^-1"), subject_uri.clone());
             }
         }
 
@@ -551,7 +551,7 @@ impl FeatureExtractor for DefaultFeatureExtractor {
 
         // Attribute-based features
         for (key, value) in &entity.attributes {
-            features.insert(format!("attr_{}_length", key), value.len() as f32);
+            features.insert(format!("attr_{key}_length"), value.len() as f32);
         }
 
         Ok(features)

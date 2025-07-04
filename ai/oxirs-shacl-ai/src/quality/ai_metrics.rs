@@ -541,7 +541,7 @@ impl AiQualityMetricsEngine {
     /// Compute comprehensive AI quality metrics
     pub fn compute_ai_quality_metrics(
         &mut self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         validation_report: Option<&ValidationReport>,
     ) -> Result<AiQualityMetricsResult> {
@@ -706,7 +706,7 @@ impl AiQualityMetricsEngine {
 
     fn compute_advanced_statistical_metrics(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<AdvancedStatisticalMetrics> {
         // Placeholder implementation
@@ -809,7 +809,7 @@ impl AiQualityMetricsEngine {
 
     fn compute_advanced_semantic_metrics(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<AdvancedSemanticMetrics> {
         // Placeholder implementation
@@ -860,7 +860,7 @@ impl AiQualityMetricsEngine {
 
     fn generate_ml_predictions(
         &mut self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         _validation_report: Option<&ValidationReport>,
     ) -> Result<MachineLearningPredictions> {
@@ -943,7 +943,7 @@ impl AiQualityMetricsEngine {
         }
     }
 
-    fn generate_cache_key(&self, _store: &Store, shapes: &[Shape]) -> String {
+    fn generate_cache_key(&self, _store: &dyn Store, shapes: &[Shape]) -> String {
         // Simple cache key based on shape count and configuration
         format!(
             "shapes_{}_config_{}",
@@ -985,7 +985,7 @@ impl AiQualityMetricsEngine {
         models
     }
 
-    fn calculate_sample_sizes(&self, _store: &Store) -> HashMap<String, usize> {
+    fn calculate_sample_sizes(&self, _store: &dyn Store) -> HashMap<String, usize> {
         let mut sizes = HashMap::new();
         sizes.insert("statistical_analysis".to_string(), 1000);
         sizes.insert("semantic_analysis".to_string(), 500);
@@ -1027,7 +1027,7 @@ impl AiQualityMetricsEngine {
         ])
     }
 
-    fn detect_data_quality_flags(&self, _store: &Store) -> Result<Vec<DataQualityFlag>> {
+    fn detect_data_quality_flags(&self, _store: &dyn Store) -> Result<Vec<DataQualityFlag>> {
         Ok(vec![DataQualityFlag {
             flag_type: "MissingValues".to_string(),
             severity: "Medium".to_string(),

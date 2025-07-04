@@ -42,6 +42,10 @@ pub struct PerformanceConfig {
     pub enable_compression: bool,
     /// Compression threshold (bytes)
     pub compression_threshold: usize,
+    /// Enable adaptive compression based on network conditions
+    pub enable_adaptive_compression: bool,
+    /// Network bandwidth estimation (bytes/sec)
+    pub estimated_bandwidth: u64,
 }
 
 impl Default for PerformanceConfig {
@@ -58,6 +62,8 @@ impl Default for PerformanceConfig {
             enable_event_filtering: true,
             enable_compression: true,
             compression_threshold: 1024,
+            enable_adaptive_compression: true,
+            estimated_bandwidth: 1_000_000_000, // 1 Gbps default
         }
     }
 }
@@ -161,6 +167,361 @@ pub struct BatchingStats {
     pub average_latency_ms: AtomicU64,
     pub throughput_eps: AtomicU64,
     pub adaptations: AtomicU64,
+}
+
+/// ML-based batch size predictor for intelligent batching optimization
+#[derive(Debug)]
+pub struct BatchSizePredictor {
+    /// Historical batch performance data
+    training_data: VecDeque<BatchPerformancePoint>,
+    /// Linear regression coefficients
+    coefficients: Option<(f64, f64)>, // (slope, intercept)
+    /// Prediction accuracy tracker
+    accuracy_tracker: VecDeque<f64>,
+    /// Maximum training data size
+    max_training_size: usize,
+}
+
+/// Single training data point for batch performance
+#[derive(Debug, Clone)]
+pub struct BatchPerformancePoint {
+    /// Batch size used
+    pub batch_size: usize,
+    /// Observed latency
+    pub latency_ms: f64,
+    /// System load factor (0.0 to 1.0)
+    pub system_load: f64,
+    /// Event complexity factor
+    pub event_complexity: f64,
+    /// Timestamp of measurement
+    pub timestamp: DateTime<Utc>,
+}
+
+impl BatchSizePredictor {
+    /// Create a new batch size predictor
+    pub fn new() -> Self {
+        Self {
+            training_data: VecDeque::with_capacity(1000),
+            coefficients: None,
+            accuracy_tracker: VecDeque::with_capacity(100),
+            max_training_size: 1000,
+        }
+    }
+
+    /// Add a new training data point
+    pub fn add_training_point(&mut self, point: BatchPerformancePoint) {
+        self.training_data.push_back(point);
+        
+        // Keep training data size under limit
+        if self.training_data.len() > self.max_training_size {
+            self.training_data.pop_front();
+        }
+
+        // Retrain model if we have enough data
+        if self.training_data.len() >= 10 {
+            self.retrain_model();
+        }
+    }
+
+    /// Predict optimal batch size for given conditions
+    pub fn predict_optimal_batch_size(
+        &self, 
+        target_latency_ms: f64, 
+        system_load: f64,
+        event_complexity: f64
+    ) -> Option<usize> {
+        let (slope, intercept) = self.coefficients?;
+        
+        // Simple linear regression: latency = slope * batch_size + intercept
+        // Adjust for system conditions
+        let adjusted_target = target_latency_ms * (1.0 + system_load * 0.5) * (1.0 + event_complexity * 0.3);
+        
+        // Solve for batch_size: batch_size = (latency - intercept) / slope
+        if slope.abs() < f64::EPSILON {
+            return None;
+        }
+        
+        let predicted_batch_size = ((adjusted_target - intercept) / slope).max(1.0);
+        Some(predicted_batch_size as usize)
+    }
+
+    /// Retrain the linear regression model
+    fn retrain_model(&mut self) {
+        if self.training_data.len() < 2 {
+            return;
+        }
+
+        let n = self.training_data.len() as f64;
+        let mut sum_x = 0.0;  // batch size
+        let mut sum_y = 0.0;  // latency
+        let mut sum_xy = 0.0;
+        let mut sum_x2 = 0.0;
+
+        for point in &self.training_data {
+            let x = point.batch_size as f64;
+            let y = point.latency_ms;
+            
+            sum_x += x;
+            sum_y += y;
+            sum_xy += x * y;
+            sum_x2 += x * x;
+        }
+
+        // Calculate linear regression coefficients
+        let denominator = n * sum_x2 - sum_x * sum_x;
+        if denominator.abs() < f64::EPSILON {
+            return;
+        }
+
+        let slope = (n * sum_xy - sum_x * sum_y) / denominator;
+        let intercept = (sum_y - slope * sum_x) / n;
+
+        self.coefficients = Some((slope, intercept));
+
+        debug!(
+            "Retrained batch predictor: slope={:.4}, intercept={:.4}, samples={}",
+            slope, intercept, self.training_data.len()
+        );
+    }
+
+    /// Calculate current prediction accuracy
+    pub fn get_accuracy(&self) -> f64 {
+        if self.accuracy_tracker.is_empty() {
+            return 0.0;
+        }
+        
+        let sum: f64 = self.accuracy_tracker.iter().sum();
+        sum / self.accuracy_tracker.len() as f64
+    }
+
+    /// Validate prediction against actual performance
+    pub fn validate_prediction(&mut self, predicted: usize, actual_latency: f64, actual_batch_size: usize) {
+        if actual_batch_size == 0 {
+            return;
+        }
+
+        let error_ratio = (predicted as f64 - actual_batch_size as f64).abs() / actual_batch_size as f64;
+        let accuracy = (1.0 - error_ratio.min(1.0)) * 100.0;
+        
+        self.accuracy_tracker.push_back(accuracy);
+        if self.accuracy_tracker.len() > 100 {
+            self.accuracy_tracker.pop_front();
+        }
+    }
+}
+
+/// Network-aware compression system that adapts compression levels based on network conditions
+#[derive(Debug)]
+pub struct NetworkAwareCompressor {
+    /// Current compression level (1-9)
+    current_level: AtomicUsize,
+    /// Network bandwidth tracker
+    bandwidth_tracker: Arc<Mutex<BandwidthTracker>>,
+    /// Compression statistics
+    stats: Arc<CompressionStats>,
+    /// Configuration
+    config: PerformanceConfig,
+}
+
+/// Bandwidth tracking and estimation
+#[derive(Debug)]
+pub struct BandwidthTracker {
+    /// Recent bandwidth measurements
+    measurements: VecDeque<BandwidthMeasurement>,
+    /// Current estimated bandwidth (bytes/sec)
+    estimated_bandwidth: f64,
+    /// Last measurement time
+    last_measurement: Option<Instant>,
+}
+
+/// Single bandwidth measurement
+#[derive(Debug, Clone)]
+pub struct BandwidthMeasurement {
+    /// Bytes transferred
+    pub bytes: u64,
+    /// Time taken
+    pub duration: Duration,
+    /// Timestamp
+    pub timestamp: Instant,
+}
+
+/// Compression performance statistics
+#[derive(Debug, Default)]
+pub struct CompressionStats {
+    pub total_compressed: AtomicU64,
+    pub total_uncompressed: AtomicU64,
+    pub compression_ratio: AtomicU64, // Stored as ratio * 1000
+    pub compression_time_ms: AtomicU64,
+    pub decompression_time_ms: AtomicU64,
+    pub level_adjustments: AtomicU64,
+}
+
+impl NetworkAwareCompressor {
+    /// Create a new network-aware compressor
+    pub fn new(config: PerformanceConfig) -> Self {
+        Self {
+            current_level: AtomicUsize::new(6), // Default compression level
+            bandwidth_tracker: Arc::new(Mutex::new(BandwidthTracker::new())),
+            stats: Arc::new(CompressionStats::default()),
+            config,
+        }
+    }
+
+    /// Compress data with adaptive compression level
+    pub async fn compress_adaptive(&self, data: &[u8]) -> Result<Vec<u8>> {
+        let start_time = Instant::now();
+        
+        // Determine optimal compression level based on network conditions
+        let compression_level = self.calculate_optimal_compression_level().await;
+        
+        // Update current level
+        self.current_level.store(compression_level, Ordering::Relaxed);
+        
+        // Perform compression
+        let compressed = self.compress_with_level(data, compression_level)?;
+        
+        // Update statistics
+        let compression_time = start_time.elapsed();
+        self.update_compression_stats(data.len(), compressed.len(), compression_time);
+        
+        debug!(
+            "Compressed {} bytes to {} bytes (ratio: {:.2}x) with level {} in {:?}",
+            data.len(),
+            compressed.len(),
+            data.len() as f64 / compressed.len() as f64,
+            compression_level,
+            compression_time
+        );
+        
+        Ok(compressed)
+    }
+
+    /// Calculate optimal compression level based on network conditions
+    async fn calculate_optimal_compression_level(&self) -> usize {
+        if !self.config.enable_adaptive_compression {
+            return 6; // Default level
+        }
+
+        let bandwidth_tracker = self.bandwidth_tracker.lock().await;
+        let estimated_bw = bandwidth_tracker.estimated_bandwidth;
+        drop(bandwidth_tracker);
+
+        // Adaptive logic:
+        // - High bandwidth (>100 Mbps): Lower compression for speed
+        // - Medium bandwidth (10-100 Mbps): Balanced compression
+        // - Low bandwidth (<10 Mbps): Higher compression for efficiency
+        
+        if estimated_bw > 100_000_000.0 { // >100 Mbps
+            3 // Low compression, prioritize speed
+        } else if estimated_bw > 10_000_000.0 { // 10-100 Mbps
+            6 // Balanced compression
+        } else {
+            9 // High compression, prioritize size
+        }
+    }
+
+    /// Compress data with specific compression level
+    fn compress_with_level(&self, data: &[u8], level: usize) -> Result<Vec<u8>> {
+        use flate2::{Compression, write::GzEncoder};
+        use std::io::Write;
+
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::new(level as u32));
+        encoder.write_all(data)?;
+        encoder.finish().map_err(|e| anyhow!("Compression failed: {}", e))
+    }
+
+    /// Update bandwidth measurement
+    pub async fn update_bandwidth(&self, bytes_transferred: u64, duration: Duration) {
+        let mut tracker = self.bandwidth_tracker.lock().await;
+        tracker.add_measurement(BandwidthMeasurement {
+            bytes: bytes_transferred,
+            duration,
+            timestamp: Instant::now(),
+        });
+    }
+
+    /// Update compression statistics
+    fn update_compression_stats(&self, original_size: usize, compressed_size: usize, compression_time: Duration) {
+        self.stats.total_uncompressed.fetch_add(original_size as u64, Ordering::Relaxed);
+        self.stats.total_compressed.fetch_add(compressed_size as u64, Ordering::Relaxed);
+        self.stats.compression_time_ms.fetch_add(compression_time.as_millis() as u64, Ordering::Relaxed);
+        
+        // Calculate and store compression ratio
+        if compressed_size > 0 {
+            let ratio = (original_size as f64 / compressed_size as f64 * 1000.0) as u64;
+            self.stats.compression_ratio.store(ratio, Ordering::Relaxed);
+        }
+    }
+
+    /// Get current compression statistics
+    pub fn get_stats(&self) -> CompressionStats {
+        CompressionStats {
+            total_compressed: AtomicU64::new(self.stats.total_compressed.load(Ordering::Relaxed)),
+            total_uncompressed: AtomicU64::new(self.stats.total_uncompressed.load(Ordering::Relaxed)),
+            compression_ratio: AtomicU64::new(self.stats.compression_ratio.load(Ordering::Relaxed)),
+            compression_time_ms: AtomicU64::new(self.stats.compression_time_ms.load(Ordering::Relaxed)),
+            decompression_time_ms: AtomicU64::new(self.stats.decompression_time_ms.load(Ordering::Relaxed)),
+            level_adjustments: AtomicU64::new(self.stats.level_adjustments.load(Ordering::Relaxed)),
+        }
+    }
+}
+
+impl BandwidthTracker {
+    /// Create a new bandwidth tracker
+    pub fn new() -> Self {
+        Self {
+            measurements: VecDeque::with_capacity(100),
+            estimated_bandwidth: 1_000_000_000.0, // 1 Gbps default
+            last_measurement: None,
+        }
+    }
+
+    /// Add a new bandwidth measurement
+    pub fn add_measurement(&mut self, measurement: BandwidthMeasurement) {
+        let timestamp = measurement.timestamp;
+        self.measurements.push_back(measurement);
+        
+        // Keep only recent measurements
+        if self.measurements.len() > 100 {
+            self.measurements.pop_front();
+        }
+        
+        // Update estimated bandwidth
+        self.update_estimated_bandwidth();
+        self.last_measurement = Some(timestamp);
+    }
+
+    /// Update estimated bandwidth based on recent measurements
+    fn update_estimated_bandwidth(&mut self) {
+        if self.measurements.is_empty() {
+            return;
+        }
+
+        // Calculate weighted average bandwidth over recent measurements
+        let mut total_weighted_bw = 0.0;
+        let mut total_weight = 0.0;
+        let now = Instant::now();
+
+        for measurement in &self.measurements {
+            let age_seconds = now.duration_since(measurement.timestamp).as_secs_f64();
+            
+            // Exponential decay weight (newer measurements have higher weight)
+            let weight = (-age_seconds / 60.0).exp(); // 1-minute half-life
+            
+            let bandwidth = measurement.bytes as f64 / measurement.duration.as_secs_f64();
+            total_weighted_bw += bandwidth * weight;
+            total_weight += weight;
+        }
+
+        if total_weight > 0.0 {
+            self.estimated_bandwidth = total_weighted_bw / total_weight;
+        }
+    }
+
+    /// Get current estimated bandwidth
+    pub fn get_estimated_bandwidth(&self) -> f64 {
+        self.estimated_bandwidth
+    }
 }
 
 impl AdaptiveBatcher {

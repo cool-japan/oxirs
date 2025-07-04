@@ -41,7 +41,7 @@ impl Default for SimilarityConfig {
 }
 
 /// Available similarity metrics
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum SimilarityMetric {
     /// Cosine similarity
     Cosine,
@@ -135,6 +135,13 @@ impl SimilarityMetric {
         };
 
         Ok(distance.max(0.0))
+    }
+
+    /// Compute similarity between two vectors (alias for similarity method)
+    pub fn compute(&self, a: &Vector, b: &Vector) -> Result<f32> {
+        let a_f32 = a.as_f32();
+        let b_f32 = b.as_f32();
+        self.similarity(&a_f32, &b_f32)
     }
 }
 
@@ -624,13 +631,13 @@ fn angular_similarity(a: &[f32], b: &[f32]) -> f32 {
 }
 
 fn dot_product_similarity(a: &[f32], b: &[f32]) -> f32 {
-    // Use oxirs-core SIMD operations
-    f32::dot_product(a, b)
+    // Simple dot product implementation
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
 fn vector_magnitude(vector: &[f32]) -> f32 {
-    // Use oxirs-core SIMD operations
-    f32::norm(vector)
+    // Calculate vector magnitude (L2 norm)
+    vector.iter().map(|x| x * x).sum::<f32>().sqrt()
 }
 
 // Distance function implementations (lower values mean more similar)
@@ -691,7 +698,7 @@ fn canberra_distance(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Similarity search result with metadata
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimilarityResult {
     pub uri: String,
     pub similarity: f32,

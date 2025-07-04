@@ -622,9 +622,9 @@ mod tests {
         // Insert test data
         for i in 0..10 {
             let triple = Triple::new(
-                NamedNode::new(format!("http://s{}", i)).unwrap(),
+                NamedNode::new(format!("http://s{i}")).unwrap(),
                 NamedNode::new("http://p").unwrap(),
-                NamedNode::new(format!("http://o{}", i)).unwrap(),
+                NamedNode::new(format!("http://o{i}")).unwrap(),
             );
             manager.insert(triple).unwrap();
         }
@@ -651,18 +651,18 @@ mod tests {
         // Insert test data
         for i in 0..5 {
             let triple = Triple::new(
-                NamedNode::new(format!("http://s{}", i)).unwrap(),
+                NamedNode::new(format!("http://s{i}")).unwrap(),
                 NamedNode::new("http://p1").unwrap(),
-                NamedNode::new(format!("http://o{}", i)).unwrap(),
+                NamedNode::new(format!("http://o{i}")).unwrap(),
             );
             graph.write().insert(&triple);
         }
 
         for i in 0..3 {
             let triple = Triple::new(
-                NamedNode::new(format!("http://s{}", i)).unwrap(),
+                NamedNode::new(format!("http://s{i}")).unwrap(),
                 NamedNode::new("http://p2").unwrap(),
-                NamedNode::new(format!("http://o{}", i)).unwrap(),
+                NamedNode::new(format!("http://o{i}")).unwrap(),
             );
             graph.write().insert(&triple);
         }
@@ -691,7 +691,7 @@ mod tests {
             let triple = Triple::new(
                 s1.clone(),
                 p1.clone(),
-                Object::NamedNode(NamedNode::new(format!("http://o{}", i)).unwrap()),
+                Object::NamedNode(NamedNode::new(format!("http://o{i}")).unwrap()),
             );
             graph.write().insert(&triple);
         }

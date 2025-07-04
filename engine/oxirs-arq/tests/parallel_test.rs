@@ -199,7 +199,8 @@ fn test_parallel_aggregation() {
         },
     ]);
 
-    use oxirs_arq::{Aggregate, Expression, GroupCondition};
+    use oxirs_arq::{Aggregate, GroupCondition};
+    use oxirs_arq::algebra::Expression;
 
     let group_algebra = Algebra::Group {
         pattern: Box::new(pattern),

@@ -160,7 +160,7 @@ pub enum TrendDirection {
 }
 
 /// Graph statistics for pattern relationships
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GraphStatistics {
     pub node_count: usize,
     pub edge_count: usize,
@@ -308,6 +308,18 @@ pub struct CorrelationAnalysisMetadata {
     pub confidence_threshold: f64,
 }
 
+impl Default for CorrelationAnalysisMetadata {
+    fn default() -> Self {
+        Self {
+            analysis_timestamp: chrono::Utc::now(),
+            analysis_duration: Duration::default(),
+            patterns_analyzed: 0,
+            correlation_methods_used: Vec::new(),
+            confidence_threshold: 0.8,
+        }
+    }
+}
+
 /// Configuration for neural pattern recognition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NeuralPatternConfig {
@@ -361,4 +373,207 @@ pub enum ScheduleType {
     Exponential,
     StepLR,
     ReduceOnPlateau,
+}
+
+/// Core neural pattern representation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NeuralPattern {
+    /// Unique identifier for the pattern
+    pub id: String,
+    /// Pattern features as a vector
+    pub features: Vec<f64>,
+    /// Pattern type classification
+    pub pattern_type: PatternType,
+    /// Confidence score for the pattern
+    pub confidence: f64,
+    /// Semantic embedding of the pattern
+    pub embedding: Vec<f64>,
+    /// Associated SHACL constraints
+    pub constraints: Vec<String>,
+    /// Pattern metadata
+    pub metadata: HashMap<String, String>,
+}
+
+/// Types of neural patterns
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum PatternType {
+    /// Structural patterns in RDF graphs
+    Structural,
+    /// Semantic patterns based on meaning
+    Semantic,
+    /// Temporal patterns over time
+    Temporal,
+    /// Spatial patterns in data
+    Spatial,
+    /// Hierarchical patterns
+    Hierarchical,
+    /// Causal patterns
+    Causal,
+    /// Constraint patterns for SHACL
+    Constraint,
+    /// Custom pattern type
+    Custom(String),
+}
+
+/// Attention configuration for neural patterns
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttentionConfig {
+    /// Number of attention heads
+    pub num_heads: usize,
+    /// Attention dimension
+    pub attention_dim: usize,
+    /// Dropout rate for attention
+    pub dropout_rate: f64,
+    /// Enable scaled dot-product attention
+    pub scaled_attention: bool,
+}
+
+/// Analysis quality metrics for pattern evaluation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnalysisQualityMetrics {
+    pub accuracy: f64,
+    pub precision: f64,
+    pub recall: f64,
+    pub f1_score: f64,
+    pub confidence: f64,
+}
+
+/// Attention flow dynamics between pattern layers
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttentionFlowDynamics {
+    pub flow_vectors: Vec<Array1<f64>>,
+    pub temporal_evolution: Vec<f64>,
+    pub intensity_patterns: HashMap<String, f64>,
+}
+
+/// Attention hotspot in pattern recognition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttentionHotspot {
+    pub hotspot_type: HotspotType,
+    pub position: (f64, f64),
+    pub intensity: f64,
+    pub influence_radius: f64,
+}
+
+/// Types of attention hotspots
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HotspotType {
+    HighActivity,
+    PatternBoundary,
+    FeatureInteraction,
+    AnomalyDetection,
+}
+
+/// Attention insights from analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttentionInsights {
+    pub key_patterns: Vec<String>,
+    pub attention_distribution: HashMap<String, f64>,
+    pub temporal_trends: Vec<f64>,
+    pub recommendations: Vec<String>,
+}
+
+/// Attention pathway in neural processing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttentionPathway {
+    pub source_layer: String,
+    pub target_layer: String,
+    pub pathway_strength: f64,
+    pub information_flow: Vec<f64>,
+}
+
+/// Causal mechanism discovery
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CausalMechanism {
+    pub mechanism_type: MechanismType,
+    pub cause_variables: Vec<String>,
+    pub effect_variables: Vec<String>,
+    pub strength: f64,
+    pub confidence: f64,
+}
+
+/// Types of causal mechanisms
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MechanismType {
+    DirectCausation,
+    IndirectCausation,
+    ConditionalCausation,
+    BidirectionalCausation,
+}
+
+/// Cluster characteristics in pattern analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClusterCharacteristics {
+    pub cluster_id: String,
+    pub size: usize,
+    pub density: f64,
+    pub cohesion: f64,
+    pub separation: f64,
+    pub representative_patterns: Vec<String>,
+}
+
+/// Evidence for correlation analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorrelationEvidence {
+    pub evidence_type: String,
+    pub strength: f64,
+    pub confidence: f64,
+    pub supporting_data: Vec<String>,
+}
+
+/// Cross-scale interaction patterns
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrossScaleInteraction {
+    pub interaction_type: InteractionType,
+    pub scales: Vec<String>,
+    pub interaction_strength: f64,
+    pub bidirectional: bool,
+}
+
+/// Types of interactions between scales
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InteractionType {
+    Hierarchical,
+    Emergent,
+    Regulatory,
+    Competitive,
+}
+
+/// Emergence pattern detection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmergencePattern {
+    pub emergence_level: usize,
+    pub source_patterns: Vec<String>,
+    pub emergent_properties: Vec<String>,
+    pub emergence_strength: f64,
+}
+
+/// Learned constraint pattern from analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearnedConstraintPattern {
+    pub constraint_type: String,
+    pub pattern_expression: String,
+    pub confidence: f64,
+    pub support_count: usize,
+    pub applicability_score: f64,
+}
+
+/// Multi-scale finding from hierarchical analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultiScaleFinding {
+    pub finding_id: String,
+    pub scales_involved: Vec<String>,
+    pub finding_description: String,
+    pub significance: f64,
+    pub cross_scale_validity: f64,
+}
+
+/// Temporal behavior patterns
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemporalBehavior {
+    pub behavior_type: String,
+    pub time_series: Vec<f64>,
+    pub periodicity: Option<Duration>,
+    pub trend_direction: String,
+    pub volatility: f64,
 }

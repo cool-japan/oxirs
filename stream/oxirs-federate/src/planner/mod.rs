@@ -6,14 +6,8 @@
 pub mod planning;
 
 use anyhow::Result;
-use std::sync::Arc;
-use tracing::{debug, info};
-
-use crate::{
-    query_decomposition::{DecomposerConfig, DecompositionResult, QueryDecomposer},
-    service_optimizer::{ServiceOptimizer, ServiceOptimizerConfig},
-    ServiceRegistry, StepResult,
-};
+use crate::query_decomposition::QueryDecomposer;
+use crate::service_optimizer::ServiceOptimizer;
 
 // Import specific items from the planning module
 
@@ -40,8 +34,8 @@ impl QueryPlanner {
     pub fn new() -> Self {
         Self {
             inner: FederatedQueryPlanner::new(),
-            decomposer: QueryDecomposer::new(DecomposerConfig::default()),
-            optimizer: ServiceOptimizer::new(ServiceOptimizerConfig::default()),
+            decomposer: QueryDecomposer::new(),
+            optimizer: ServiceOptimizer::new(),
         }
     }
 
@@ -49,8 +43,8 @@ impl QueryPlanner {
     pub fn with_config(config: PlannerConfig) -> Self {
         Self {
             inner: FederatedQueryPlanner::with_config(config.clone()),
-            decomposer: QueryDecomposer::new(DecomposerConfig::default()),
-            optimizer: ServiceOptimizer::new(ServiceOptimizerConfig::default()),
+            decomposer: QueryDecomposer::new(),
+            optimizer: ServiceOptimizer::new(),
         }
     }
 

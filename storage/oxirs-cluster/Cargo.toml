@@ -24,16 +24,17 @@ tracing.workspace = true
 uuid.workspace = true
 async-trait.workspace = true
 reqwest = { version = "0.12", features = ["json"] }
-futures = "0.3"
+futures.workspace = true
+num_cpus.workspace = true
 
 # Byzantine fault tolerance dependencies
 sha2 = "0.10"
 ed25519-dalek = "1.0"
-rand = "0.9"
+rand.workspace = true
 
 # MVCC dependencies
 dashmap = "6.1"
-chrono = { version = "0.4", features = ["serde"] }
+chrono.workspace = true
 parking_lot = "0.12"
 
 # TLS and encryption dependencies

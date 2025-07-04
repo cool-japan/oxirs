@@ -238,8 +238,7 @@ impl EcosystemBenchmarkSuite {
                     benchmark_id,
                     &(backend, batch_size),
                     |b, &(backend, batch_size)| {
-                        b.to_async(&*self.runtime)
-                            .iter(|| self.run_throughput_benchmark(*backend, batch_size));
+                        b.iter(|| self.runtime.block_on(self.run_throughput_benchmark(*backend, batch_size)));
                     },
                 );
             }
@@ -260,8 +259,8 @@ impl EcosystemBenchmarkSuite {
                     benchmark_id,
                     &(backend, event_size),
                     |b, &(backend, event_size)| {
-                        b.to_async(&*self.runtime)
-                            .iter(|| self.run_latency_benchmark(*backend, event_size));
+                        b
+                            .iter(|| self.runtime.block_on(self.run_latency_benchmark(*backend, event_size)));
                     },
                 );
             }
@@ -278,8 +277,8 @@ impl EcosystemBenchmarkSuite {
             let benchmark_id = BenchmarkId::new("memory_usage", concurrency);
 
             group.bench_with_input(benchmark_id, &concurrency, |b, &concurrency| {
-                b.to_async(&*self.runtime)
-                    .iter(|| self.run_memory_benchmark(concurrency));
+                b
+                    .iter(|| self.runtime.block_on(self.run_memory_benchmark(concurrency)));
             });
         }
 
@@ -295,8 +294,8 @@ impl EcosystemBenchmarkSuite {
 
             group.throughput(Throughput::Elements(concurrency as u64 * 1000));
             group.bench_with_input(benchmark_id, &concurrency, |b, &concurrency| {
-                b.to_async(&*self.runtime)
-                    .iter(|| self.run_scalability_benchmark(concurrency));
+                b
+                    .iter(|| self.runtime.block_on(self.run_scalability_benchmark(concurrency)));
             });
         }
 
@@ -315,8 +314,8 @@ impl EcosystemBenchmarkSuite {
 
         for (query_name, query) in query_types {
             group.bench_function(query_name, |b| {
-                b.to_async(&*self.runtime)
-                    .iter(|| self.run_federation_query_benchmark(query))
+                b
+                    .iter(|| self.runtime.block_on(self.run_federation_query_benchmark(query)))
             });
         }
 
@@ -328,12 +327,12 @@ impl EcosystemBenchmarkSuite {
         let mut group = c.benchmark_group("federation_cache");
 
         group.bench_function("cache_miss", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_cache_miss_benchmark());
         });
 
         group.bench_function("cache_hit", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_cache_hit_benchmark());
         });
 
@@ -351,7 +350,7 @@ impl EcosystemBenchmarkSuite {
                 BenchmarkId::new("discovery_time", count),
                 &count,
                 |b, &count| {
-                    b.to_async(&*self.runtime)
+                    b
                         .iter(|| self.run_service_discovery_benchmark(count));
                 },
             );
@@ -365,7 +364,7 @@ impl EcosystemBenchmarkSuite {
         let mut group = c.benchmark_group("fault_tolerance");
 
         group.bench_function("service_failure_recovery", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_fault_tolerance_benchmark());
         });
 
@@ -377,7 +376,7 @@ impl EcosystemBenchmarkSuite {
         let mut group = c.benchmark_group("stream_federation_integration");
 
         group.bench_function("stream_to_federation", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_integration_benchmark());
         });
 
@@ -393,7 +392,7 @@ impl EcosystemBenchmarkSuite {
                 BenchmarkId::new("updates_per_sec", update_rate),
                 &update_rate,
                 |b, &update_rate| {
-                    b.to_async(&*self.runtime)
+                    b
                         .iter(|| self.run_real_time_updates_benchmark(update_rate));
                 },
             );
@@ -407,7 +406,7 @@ impl EcosystemBenchmarkSuite {
         let mut group = c.benchmark_group("multi_backend");
 
         group.bench_function("backend_switching", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_multi_backend_benchmark());
         });
 
@@ -423,7 +422,7 @@ impl EcosystemBenchmarkSuite {
                 BenchmarkId::new("event_replay", event_count),
                 &event_count,
                 |b, &event_count| {
-                    b.to_async(&*self.runtime)
+                    b
                         .iter(|| self.run_event_sourcing_benchmark(event_count));
                 },
             );
@@ -437,12 +436,12 @@ impl EcosystemBenchmarkSuite {
         let mut group = c.benchmark_group("cqrs");
 
         group.bench_function("command_processing", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_cqrs_command_benchmark());
         });
 
         group.bench_function("query_processing", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_cqrs_query_benchmark());
         });
 
@@ -454,7 +453,7 @@ impl EcosystemBenchmarkSuite {
         let mut group = c.benchmark_group("time_travel");
 
         group.bench_function("historical_query", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_time_travel_benchmark());
         });
 
@@ -466,12 +465,12 @@ impl EcosystemBenchmarkSuite {
         let mut group = c.benchmark_group("security");
 
         group.bench_function("authentication", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_security_auth_benchmark());
         });
 
         group.bench_function("encryption", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_security_encryption_benchmark());
         });
 
@@ -483,7 +482,7 @@ impl EcosystemBenchmarkSuite {
         let mut group = c.benchmark_group("multi_region");
 
         group.bench_function("cross_region_sync", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_multi_region_benchmark());
         });
 
@@ -495,7 +494,7 @@ impl EcosystemBenchmarkSuite {
         let mut group = c.benchmark_group("stress_test");
 
         group.bench_function("high_load", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_high_load_stress_test());
         });
 
@@ -511,7 +510,7 @@ impl EcosystemBenchmarkSuite {
                 BenchmarkId::new("concurrent_queries", concurrency),
                 &concurrency,
                 |b, &concurrency| {
-                    b.to_async(&*self.runtime)
+                    b
                         .iter(|| self.run_concurrent_operations_benchmark(concurrency));
                 },
             );
@@ -525,7 +524,7 @@ impl EcosystemBenchmarkSuite {
         let mut group = c.benchmark_group("resource_exhaustion");
 
         group.bench_function("memory_pressure", |b| {
-            b.to_async(&*self.runtime)
+            b
                 .iter(|| self.run_memory_pressure_benchmark());
         });
 

@@ -1,6 +1,7 @@
 //! Unit tests for service clients
 
 use oxirs_federate::*;
+use oxirs_federate::service::{AuthType, RateLimit, ServiceMetadata, ServiceAuthConfig};
 use std::time::Duration;
 
 #[tokio::test]
@@ -50,14 +51,12 @@ async fn test_client_with_basic_auth() {
         "http://example.com/sparql".to_string(),
     );
 
-    service.auth = Some(AuthConfig {
+    service.auth = Some(ServiceAuthConfig {
         auth_type: AuthType::Basic,
         credentials: AuthCredentials {
             username: Some("user".to_string()),
             password: Some("pass".to_string()),
-            token: None,
-            api_key: None,
-            oauth_config: None,
+            ..Default::default()
         },
     });
 
@@ -75,14 +74,11 @@ async fn test_client_with_bearer_auth() {
         "http://example.com/graphql".to_string(),
     );
 
-    service.auth = Some(AuthConfig {
+    service.auth = Some(ServiceAuthConfig {
         auth_type: AuthType::Bearer,
         credentials: AuthCredentials {
-            username: None,
-            password: None,
             token: Some("test-token-123".to_string()),
-            api_key: None,
-            oauth_config: None,
+            ..Default::default()
         },
     });
 
@@ -100,14 +96,11 @@ async fn test_client_with_api_key_auth() {
         "http://example.com/sparql".to_string(),
     );
 
-    service.auth = Some(AuthConfig {
+    service.auth = Some(ServiceAuthConfig {
         auth_type: AuthType::ApiKey,
         credentials: AuthCredentials {
-            username: None,
-            password: None,
-            token: None,
             api_key: Some("api-key-456".to_string()),
-            oauth_config: None,
+            ..Default::default()
         },
     });
 

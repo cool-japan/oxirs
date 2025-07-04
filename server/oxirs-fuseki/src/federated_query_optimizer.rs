@@ -396,7 +396,7 @@ pub trait MergeStrategy: Send + Sync {
 /// Result merger for combining distributed results
 pub struct ResultMerger {
     /// Merge strategies
-    strategies: HashMap<String, Arc<dyn MergeStrategy>>,
+    pub strategies: HashMap<String, Arc<dyn MergeStrategy>>,
     /// Deduplication cache
     dedup_cache: Arc<RwLock<HashSet<u64>>>,
 }
@@ -1035,7 +1035,7 @@ impl FederatedExecutor {
     }
 
     /// Calculate backoff duration
-    fn calculate_backoff(&self, attempt: u32) -> Duration {
+    pub fn calculate_backoff(&self, attempt: u32) -> Duration {
         let backoff_ms = (self.retry_policy.initial_backoff_ms as f64
             * self.retry_policy.exponential_base.powi(attempt as i32))
             as u64;

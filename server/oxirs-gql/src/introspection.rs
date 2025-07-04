@@ -183,7 +183,7 @@ impl TypeIntrospection {
                 let mut fields: Vec<FieldIntrospection> = obj
                     .fields
                     .values()
-                    .filter(|field| include_deprecated || true) // No deprecation support yet
+                    .filter(|_field| true) // No deprecation support yet
                     .map(|field| FieldIntrospection::new(field.clone(), Arc::clone(&self.schema)))
                     .collect();
 
@@ -199,7 +199,7 @@ impl TypeIntrospection {
                     iface
                         .fields
                         .values()
-                        .filter(|field| include_deprecated || true) // No deprecation support yet
+                        .filter(|_field| true) // No deprecation support yet
                         .map(|field| {
                             FieldIntrospection::new(field.clone(), Arc::clone(&self.schema))
                         })

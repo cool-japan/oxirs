@@ -257,7 +257,7 @@ impl FederatedLearningCoordinator {
             global_model: Arc::new(RwLock::new(GlobalModel::default())),
             config,
             shape_learner: Arc::new(Mutex::new(ShapeLearner::new())),
-            pattern_recognizer: Arc::new(Mutex::new(NeuralPatternRecognizer::new())),
+            pattern_recognizer: Arc::new(Mutex::new(NeuralPatternRecognizer::new(crate::neural_patterns::types::NeuralPatternConfig::default()))),
             quantum_recognizer: Arc::new(Mutex::new(QuantumNeuralPatternRecognizer::new(8, 4))),
             consensus: Arc::new(Mutex::new(ConsensusManager::new())),
         }
@@ -312,7 +312,7 @@ impl FederatedLearningCoordinator {
     /// Perform federated learning on local data
     pub async fn learn_federated_shapes(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Shape>> {
         tracing::info!("Starting federated shape learning");
@@ -336,7 +336,7 @@ impl FederatedLearningCoordinator {
     /// Learn shapes on local data
     async fn learn_local_shapes(
         &self,
-        store: &Store,
+        store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<Shape>> {
         let mut learner = self.shape_learner.lock().await;

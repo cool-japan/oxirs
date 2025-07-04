@@ -208,7 +208,7 @@ impl NotConstraint {
                 let predicate: Predicate = type_predicate.into();
                 let object: Object = friend_type.clone().into();
                 let quads =
-                    store.query_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
+                    store.find_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
                 if !quads.is_empty() {
                     return Ok(true);
                 }
@@ -462,7 +462,7 @@ impl AndConstraint {
                 let predicate: Predicate = type_predicate.into();
                 let object: Object = friend_type.clone().into();
                 let quads =
-                    store.query_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
+                    store.find_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
                 if !quads.is_empty() {
                     return Ok(true);
                 }
@@ -757,7 +757,7 @@ impl OrConstraint {
                 let predicate: Predicate = type_predicate.into();
                 let object: Object = friend_type.clone().into();
                 let quads =
-                    store.query_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
+                    store.find_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
                 if !quads.is_empty() {
                     return Ok(true);
                 }
@@ -1102,7 +1102,7 @@ impl XoneConstraint {
                 let predicate: Predicate = type_predicate.into();
                 let object: Object = friend_type.clone().into();
                 let quads =
-                    store.query_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
+                    store.find_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
                 if !quads.is_empty() {
                     return Ok(true);
                 }

@@ -23,7 +23,7 @@ use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::f64::consts::{E, PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicF64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
@@ -37,7 +37,7 @@ use oxirs_core::{
 };
 use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
 
-use crate::collective_consciousness::CollectiveConsciousness;
+use crate::collective_consciousness::CollectiveConsciousnessNetwork;
 use crate::consciousness_guided_neuroplasticity::ConsciousnessGuidedNeuroplasticity;
 use crate::consciousness_validation::{
     ConsciousnessLevel, ConsciousnessValidator, EmotionalContext,
@@ -46,7 +46,7 @@ use crate::quantum_consciousness_entanglement::QuantumConsciousnessEntanglement;
 use crate::{Result, ShaclAiError};
 
 /// Universal knowledge integration system for omniscient SHACL validation
-#[derive(Debug)]
+#[derive(Debug, Default, Clone)]
 pub struct UniversalKnowledgeIntegration {
     /// System configuration
     config: UniversalKnowledgeConfig,
@@ -364,7 +364,7 @@ impl UniversalKnowledgeIntegration {
 
         Ok(UniversalKnowledgeValidationResult {
             knowledge_breadth_accessed: knowledge_synthesis.knowledge_domains_count,
-            scientific_insights_applied: scientific_knowledge.insights_count,
+            scientific_insights_applied: scientific_knowledge.insights_count as u32,
             cultural_context_integration: cultural_knowledge.context_depth,
             technical_accuracy_enhancement: technical_knowledge.accuracy_improvement,
             historical_temporal_understanding: historical_knowledge.temporal_span,
@@ -508,61 +508,43 @@ impl UniversalKnowledgeIntegration {
 
     async fn refresh_technical_knowledge(&self) -> Result<()> {
         debug!("Refreshing technical knowledge with new developments");
-        self.technical_integrator
-            .write()
-            .await
-            .refresh_knowledge()
-            .await?;
+        // TODO: Implement refresh_knowledge for TechnicalKnowledgeIntegrator
+        // self.technical_integrator.write().await.refresh_knowledge().await?;
         Ok(())
     }
 
     async fn update_historical_knowledge(&self) -> Result<()> {
         debug!("Updating historical knowledge with new discoveries");
-        self.historical_integrator
-            .write()
-            .await
-            .update_knowledge()
-            .await?;
+        // TODO: Implement update_knowledge for HistoricalKnowledgeIntegrator
+        // self.historical_integrator.write().await.update_knowledge().await?;
         Ok(())
     }
 
     async fn enhance_linguistic_knowledge(&self) -> Result<()> {
         debug!("Enhancing linguistic knowledge with language evolution");
-        self.linguistic_integrator
-            .write()
-            .await
-            .enhance_knowledge()
-            .await?;
+        // TODO: Implement enhance_knowledge for LinguisticKnowledgeIntegrator
+        // self.linguistic_integrator.write().await.enhance_knowledge().await?;
         Ok(())
     }
 
     async fn deepen_philosophical_knowledge(&self) -> Result<()> {
         debug!("Deepening philosophical knowledge with new thinking");
-        self.philosophical_integrator
-            .write()
-            .await
-            .deepen_knowledge()
-            .await?;
+        // TODO: Implement deepen_knowledge for PhilosophicalKnowledgeIntegrator
+        // self.philosophical_integrator.write().await.deepen_knowledge().await?;
         Ok(())
     }
 
     async fn expand_mathematical_knowledge(&self) -> Result<()> {
         debug!("Expanding mathematical knowledge with new proofs");
-        self.mathematical_integrator
-            .write()
-            .await
-            .expand_knowledge()
-            .await?;
+        // TODO: Implement expand_knowledge for MathematicalKnowledgeIntegrator
+        // self.mathematical_integrator.write().await.expand_knowledge().await?;
         Ok(())
     }
 
     async fn enrich_artistic_knowledge(&self) -> Result<()> {
         debug!("Enriching artistic knowledge with new expressions");
-        self.artistic_integrator
-            .write()
-            .await
-            .enrich_knowledge()
-            .await?;
+        // TODO: Implement enrich_knowledge for ArtisticKnowledgeIntegrator
+        // self.artistic_integrator.write().await.enrich_knowledge().await?;
         Ok(())
     }
 
@@ -777,13 +759,15 @@ impl ScientificKnowledgeIntegrator {
             .track_scientific_consensus(&validated_knowledge)
             .await?;
 
+        let insights_count = literature_insights.len();
+        
         Ok(ScientificKnowledge {
             research_results,
             literature_insights,
             validated_knowledge,
             citation_context,
             consensus_status,
-            insights_count: literature_insights.len(),
+            insights_count,
         })
     }
 
@@ -1079,10 +1063,16 @@ impl UniversalKnowledgeMetrics {
     }
 }
 
+impl Default for UniversalKnowledgeMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Supporting types and placeholder implementations
 
 // Core result types
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 pub struct UniversalKnowledgeInitResult {
     pub scientific_knowledge: ScientificIntegrationInitResult,
     pub cultural_knowledge: CulturalIntegrationInitResult,
@@ -1099,8 +1089,28 @@ pub struct UniversalKnowledgeInitResult {
     pub timestamp: SystemTime,
 }
 
+impl Default for UniversalKnowledgeInitResult {
+    fn default() -> Self {
+        Self {
+            scientific_knowledge: ScientificIntegrationInitResult::default(),
+            cultural_knowledge: CulturalIntegrationInitResult::default(),
+            technical_knowledge: TechnicalIntegrationInitResult::default(),
+            historical_knowledge: HistoricalIntegrationInitResult::default(),
+            linguistic_knowledge: LinguisticIntegrationInitResult::default(),
+            philosophical_knowledge: PhilosophicalIntegrationInitResult::default(),
+            mathematical_knowledge: MathematicalIntegrationInitResult::default(),
+            artistic_knowledge: ArtisticIntegrationInitResult::default(),
+            synthesis_engine: SynthesisEngineInitResult::default(),
+            ontology_mapping: OntologyMappingInitResult::default(),
+            realtime_updates: RealTimeUpdateInitResult::default(),
+            quality_assurance: QualityAssuranceInitResult::default(),
+            timestamp: SystemTime::now(),
+        }
+    }
+}
+
 // Configuration types
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ScientificKnowledgeConfig;
 
 impl ScientificKnowledgeConfig {
@@ -1137,7 +1147,7 @@ impl ScientificKnowledgeConfig {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CulturalKnowledgeConfig;
 
 impl CulturalKnowledgeConfig {
@@ -1175,38 +1185,38 @@ impl CulturalKnowledgeConfig {
 }
 
 // Placeholder configuration types
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TechnicalKnowledgeConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct HistoricalKnowledgeConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct LinguisticKnowledgeConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PhilosophicalKnowledgeConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MathematicalKnowledgeConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ArtisticKnowledgeConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct KnowledgeSynthesisConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct OntologyMappingConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RealTimeUpdateConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct QualityAssuranceConfig;
 
 // Component types with placeholder implementations
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ResearchDatabase;
 
 impl ResearchDatabase {
@@ -1223,7 +1233,7 @@ impl ResearchDatabase {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LiteratureAnalyzer;
 
 impl LiteratureAnalyzer {
@@ -1232,7 +1242,7 @@ impl LiteratureAnalyzer {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PeerReviewValidator;
 
 impl PeerReviewValidator {
@@ -1241,7 +1251,7 @@ impl PeerReviewValidator {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CitationNetwork;
 
 impl CitationNetwork {
@@ -1250,19 +1260,19 @@ impl CitationNetwork {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ResearchTrendAnalyzer;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ScientificConsensusTracker;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct InterdisciplinaryConnector;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct KnowledgeGapIdentifier;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CulturalDatabase;
 
 impl CulturalDatabase {
@@ -1271,7 +1281,7 @@ impl CulturalDatabase {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct AnthropologyAnalyzer;
 
 impl AnthropologyAnalyzer {
@@ -1282,8 +1292,8 @@ impl AnthropologyAnalyzer {
 
 // Additional placeholder types for all the remaining knowledge integrators
 macro_rules! impl_knowledge_integrator {
-    ($name:ident, $init_result:ident) => {
-        #[derive(Debug)]
+    ($name:ident, $init_method:ident, $init_result:ident, $knowledge_type:ident, $retrieve_method:ident) => {
+        #[derive(Debug, Default)]
         pub struct $name;
 
         impl $name {
@@ -1291,15 +1301,15 @@ macro_rules! impl_knowledge_integrator {
                 Self
             }
 
-            async fn $init_result(&mut self) -> Result<$init_result> {
+            async fn $init_method(&mut self) -> Result<$init_result> {
                 Ok($init_result::default())
             }
 
-            async fn retrieve_relevant_knowledge(
+            async fn $retrieve_method(
                 &mut self,
                 _queries: &KnowledgeQueries,
-            ) -> Result<String> {
-                Ok("Knowledge retrieved".to_string())
+            ) -> Result<$knowledge_type> {
+                Ok($knowledge_type::default())
             }
         }
     };
@@ -1308,28 +1318,49 @@ macro_rules! impl_knowledge_integrator {
 // Implement remaining knowledge integrators
 impl_knowledge_integrator!(
     TechnicalKnowledgeIntegrator,
-    initialize_technical_integration
+    initialize_technical_integration,
+    TechnicalIntegrationInitResult,
+    TechnicalKnowledge,
+    retrieve_relevant_technical_knowledge
 );
 impl_knowledge_integrator!(
     HistoricalKnowledgeIntegrator,
-    initialize_historical_integration
+    initialize_historical_integration,
+    HistoricalIntegrationInitResult,
+    HistoricalKnowledge,
+    retrieve_relevant_historical_knowledge
 );
 impl_knowledge_integrator!(
     LinguisticKnowledgeIntegrator,
-    initialize_linguistic_integration
+    initialize_linguistic_integration,
+    LinguisticIntegrationInitResult,
+    LinguisticKnowledge,
+    retrieve_relevant_linguistic_knowledge
 );
 impl_knowledge_integrator!(
     PhilosophicalKnowledgeIntegrator,
-    initialize_philosophical_integration
+    initialize_philosophical_integration,
+    PhilosophicalIntegrationInitResult,
+    PhilosophicalKnowledge,
+    retrieve_relevant_philosophical_knowledge
 );
 impl_knowledge_integrator!(
     MathematicalKnowledgeIntegrator,
-    initialize_mathematical_integration
+    initialize_mathematical_integration,
+    MathematicalIntegrationInitResult,
+    MathematicalKnowledge,
+    retrieve_relevant_mathematical_knowledge
 );
-impl_knowledge_integrator!(ArtisticKnowledgeIntegrator, initialize_artistic_integration);
+impl_knowledge_integrator!(
+    ArtisticKnowledgeIntegrator,
+    initialize_artistic_integration,
+    ArtisticIntegrationInitResult,
+    ArtisticKnowledge,
+    retrieve_relevant_artistic_knowledge
+);
 
 // Main system components
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct KnowledgeSynthesisEngine;
 
 impl KnowledgeSynthesisEngine {
@@ -1345,12 +1376,12 @@ impl KnowledgeSynthesisEngine {
         &mut self,
         _scientific: &ScientificKnowledge,
         _cultural: &CulturalKnowledge,
-        _technical: &str,
-        _historical: &str,
-        _linguistic: &str,
-        _philosophical: &str,
-        _mathematical: &str,
-        _artistic: &str,
+        _technical: &TechnicalKnowledge,
+        _historical: &HistoricalKnowledge,
+        _linguistic: &LinguisticKnowledge,
+        _philosophical: &PhilosophicalKnowledge,
+        _mathematical: &MathematicalKnowledge,
+        _artistic: &ArtisticKnowledge,
     ) -> Result<KnowledgeSynthesis> {
         Ok(KnowledgeSynthesis::default())
     }
@@ -1360,7 +1391,7 @@ impl KnowledgeSynthesisEngine {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct UniversalOntologyMapper;
 
 impl UniversalOntologyMapper {
@@ -1385,7 +1416,7 @@ impl UniversalOntologyMapper {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct RealTimeKnowledgeUpdater;
 
 impl RealTimeKnowledgeUpdater {
@@ -1398,7 +1429,7 @@ impl RealTimeKnowledgeUpdater {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct KnowledgeQualityAssurance;
 
 impl KnowledgeQualityAssurance {
@@ -1423,7 +1454,7 @@ impl KnowledgeQualityAssurance {
 }
 
 // Many supporting types with default implementations
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct KnowledgeQueries {
     pub scientific_queries: Vec<ScientificQuery>,
     pub cultural_queries: Vec<CulturalQuery>,
@@ -1436,32 +1467,32 @@ pub struct KnowledgeQueries {
 }
 
 // Query types
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ScientificQuery;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CulturalQuery;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TechnicalQuery;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct HistoricalQuery;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LinguisticQuery;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PhilosophicalQuery;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MathematicalQuery;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ArtisticQuery;
 
 // Knowledge types
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ScientificKnowledge {
     pub research_results: Vec<ResearchResult>,
     pub literature_insights: Vec<LiteratureInsight>,
@@ -1471,7 +1502,7 @@ pub struct ScientificKnowledge {
     pub insights_count: usize,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CulturalKnowledge {
     pub cultural_insights: Vec<CulturalInsight>,
     pub wisdom_collection: Vec<CulturalWisdom>,
@@ -1479,7 +1510,7 @@ pub struct CulturalKnowledge {
 }
 
 // Result and status types
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ScientificIntegrationInitResult {
     pub research_databases_active: usize,
     pub literature_analyzers_active: usize,
@@ -1489,7 +1520,7 @@ pub struct ScientificIntegrationInitResult {
     pub consensus_trackers_active: usize,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CulturalIntegrationInitResult {
     pub cultural_databases_active: usize,
     pub anthropology_analyzers_active: usize,
@@ -1498,69 +1529,111 @@ pub struct CulturalIntegrationInitResult {
 }
 
 // Many more placeholder types...
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TechnicalIntegrationInitResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct HistoricalIntegrationInitResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LinguisticIntegrationInitResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PhilosophicalIntegrationInitResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MathematicalIntegrationInitResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ArtisticIntegrationInitResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SynthesisEngineInitResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct OntologyMappingInitResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RealTimeUpdateInitResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct QualityAssuranceInitResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ResearchResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LiteratureInsight;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ValidatedKnowledge;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CitationContext;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ConsensusStatus;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CulturalInsight;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CulturalWisdom;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
+pub struct TechnicalKnowledge {
+    pub accuracy_improvement: f64,
+    pub implementation_details: Vec<String>,
+    pub technical_context: String,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct HistoricalKnowledge {
+    pub temporal_span: Duration,
+    pub historical_context: Vec<String>,
+    pub timeline_events: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct LinguisticKnowledge {
+    pub semantic_precision: f64,
+    pub language_analysis: Vec<String>,
+    pub semantic_context: String,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct PhilosophicalKnowledge {
+    pub reasoning_depth: f64,
+    pub philosophical_insights: Vec<String>,
+    pub reasoning_context: String,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct MathematicalKnowledge {
+    pub formal_accuracy: f64,
+    pub mathematical_proofs: Vec<String>,
+    pub formal_context: String,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ArtisticKnowledge {
+    pub creative_understanding: f64,
+    pub artistic_insights: Vec<String>,
+    pub creative_context: String,
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct KnowledgeSynthesis {
     pub knowledge_domains_count: u32,
     pub coherence_score: f64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct UniversalOntologyMapping {
     pub completeness_score: f64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct KnowledgeEnhancedValidation {
     pub validation_result: OmniscientValidationResult,
     pub omniscience_level: f64,
@@ -1568,56 +1641,56 @@ pub struct KnowledgeEnhancedValidation {
     pub processing_time: Duration,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct KnowledgeQualityValidation {
     pub quality_score: f64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct OmniscientValidationResult;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DomainAnalysis;
 
 // Context types
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ValidationDomain;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct KnowledgeRequirements;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TemporalContext;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CulturalContext;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TechnicalContext;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct AccuracyRequirements;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PerformanceConstraints;
 
 // Additional placeholder component types
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TraditionPreserver;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CulturalEvolutionTracker;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CrossCulturalComparator;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct WisdomExtractor;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SocialDynamicsAnalyzer;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CulturalContextInterpreter;
 
 /// Module for universal knowledge protocols
@@ -1666,5 +1739,17 @@ pub mod universal_knowledge_protocols {
         knowledge_system
             .universal_knowledge_validation(validation_context)
             .await
+    }
+}
+
+impl Default for ScientificKnowledgeIntegrator {
+    fn default() -> Self {
+        Self::new(&UniversalKnowledgeConfig::default())
+    }
+}
+
+impl Default for CulturalKnowledgeIntegrator {
+    fn default() -> Self {
+        Self::new(&UniversalKnowledgeConfig::default())
     }
 }

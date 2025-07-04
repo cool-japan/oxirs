@@ -11,13 +11,13 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::{
     metadata::{CapabilityDetail, QueryPattern},
     FederatedService, ServiceCapability,
 };
-use crate::auth::AuthConfig as AuthenticationConfig;
+use crate::service::ServiceAuthConfig;
 use crate::service::ServiceType;
 
 /// Capability assessor for detailed service analysis
@@ -493,7 +493,7 @@ impl CapabilityAssessor {
     }
 
     /// Add authentication headers
-    fn add_auth_headers(&self, headers: &mut HeaderMap, auth: &AuthenticationConfig) -> Result<()> {
+    fn add_auth_headers(&self, headers: &mut HeaderMap, auth: &ServiceAuthConfig) -> Result<()> {
         use crate::service::AuthType;
         use base64::encode;
 

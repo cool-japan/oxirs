@@ -60,7 +60,7 @@ impl HnswIndex {
     fn calculate_distance(&self, query: &Vector, node_id: usize) -> Result<f32> {
         if let Some(node) = self.nodes().get(node_id) {
             // Use the configured similarity metric
-            Ok(self.config().metric.distance(query, &node.vector))
+            self.config().metric.distance(query, &node.vector)
         } else {
             Err(anyhow::anyhow!("Node {} not found", node_id))
         }

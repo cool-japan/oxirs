@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use oxirs_core::{
     model::{BlankNode, NamedNode, RdfTerm, Term, Triple},
-    OxirsError, Store,
+    OxirsError, Store, ConcreteStore,
 };
 
 use crate::{Result, ShaclError, SHACL_VOCAB};
@@ -890,7 +890,7 @@ impl TargetSelector {
                 let mut target_nodes = Vec::new();
 
                 // Iterate through all quads in the store
-                for quad in store.iter_quads()? {
+                for quad in store.find_quads(None, None, None, None)? {
                     // Check if this is a type triple and matches our target class
                     if quad.predicate() == &rdf_type
                         && matches!(quad.object(), Object::NamedNode(obj) if obj.as_str() == class_iri.as_str())
@@ -942,7 +942,7 @@ impl TargetSelector {
                 let mut target_nodes = Vec::new();
 
                 // Find all objects of the specified property
-                for quad in store.iter_quads()? {
+                for quad in store.find_quads(None, None, None, None)? {
                     if matches!(quad.predicate(), Predicate::NamedNode(pred) if pred.as_str() == property.as_str())
                     {
                         // Check graph name if specified
@@ -973,7 +973,7 @@ impl TargetSelector {
                 let mut target_nodes = Vec::new();
 
                 // Find all subjects of the specified property
-                for quad in store.iter_quads()? {
+                for quad in store.find_quads(None, None, None, None)? {
                     if matches!(quad.predicate(), Predicate::NamedNode(pred) if pred.as_str() == property.as_str())
                     {
                         // Check graph name if specified
@@ -1633,7 +1633,7 @@ mod tests {
         use oxirs_core::model::{GraphName, Quad};
         use oxirs_core::{query::QueryEngine, Store};
 
-        let mut store = Store::new().unwrap();
+        let mut store = ConcreteStore::new().unwrap();
 
         // Test simple query first
         let simple_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";

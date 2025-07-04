@@ -797,13 +797,19 @@ impl ServiceOptimizer {
 
         QueryFeatures {
             pattern_count: patterns.len(),
+            variable_count: self.count_variables(patterns),
+            join_count: self.count_joins(patterns),
+            filter_count: 0, // TODO: implement filter counting
+            has_optional: false, // TODO: implement optional detection
+            has_union: false, // TODO: implement union detection
+            complexity_score: self.calculate_patterns_complexity(patterns),
+            estimated_selectivity: self.estimate_query_selectivity(patterns),
+            selectivity_estimate: self.estimate_query_selectivity(patterns),
             predicate_distribution: predicate_counts,
             namespace_distribution: namespace_counts,
             pattern_type_distribution: pattern_types,
-            complexity_score: self.calculate_patterns_complexity(patterns),
-            selectivity_estimate: self.estimate_query_selectivity(patterns),
             has_joins: self.has_join_patterns(patterns),
-            query_type: context.query_type.clone(),
+            query_type: format!("{:?}", context.query_type),
             timestamp: chrono::Utc::now(),
         }
     }
@@ -1060,5 +1066,65 @@ impl ServiceOptimizer {
             .sum();
 
         total_variable_occurrences > variables.len()
+    }
+
+    /// Count the number of unique variables in patterns
+    fn count_variables(&self, patterns: &[TriplePattern]) -> usize {
+        let mut variables = HashSet::new();
+        for pattern in patterns {
+            if let Some(ref subject) = pattern.subject {
+                if subject.starts_with('?') {
+                    variables.insert(subject.clone());
+                }
+            }
+            if let Some(ref predicate) = pattern.predicate {
+                if predicate.starts_with('?') {
+                    variables.insert(predicate.clone());
+                }
+            }
+            if let Some(ref object) = pattern.object {
+                if object.starts_with('?') {
+                    variables.insert(object.clone());
+                }
+            }
+        }
+        variables.len()
+    }
+
+    /// Count the number of joins based on shared variables
+    fn count_joins(&self, patterns: &[TriplePattern]) -> usize {
+        if patterns.len() <= 1 {
+            return 0;
+        }
+
+        let mut variable_patterns: HashMap<String, Vec<usize>> = HashMap::new();
+        
+        // Track which patterns each variable appears in
+        for (pattern_idx, pattern) in patterns.iter().enumerate() {
+            if let Some(ref subject) = pattern.subject {
+                if subject.starts_with('?') {
+                    variable_patterns.entry(subject.clone()).or_insert_with(Vec::new).push(pattern_idx);
+                }
+            }
+            if let Some(ref predicate) = pattern.predicate {
+                if predicate.starts_with('?') {
+                    variable_patterns.entry(predicate.clone()).or_insert_with(Vec::new).push(pattern_idx);
+                }
+            }
+            if let Some(ref object) = pattern.object {
+                if object.starts_with('?') {
+                    variable_patterns.entry(object.clone()).or_insert_with(Vec::new).push(pattern_idx);
+                }
+            }
+        }
+
+        // Count joins (shared variables create joins)
+        let mut join_count = 0;
+        for (_variable, pattern_indices) in variable_patterns {
+            if pattern_indices.len() > 1 {
+                join_count += pattern_indices.len() - 1; // n patterns sharing a variable = n-1 joins
+            }
+        }
+        join_count
     }
 }

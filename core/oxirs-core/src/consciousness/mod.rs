@@ -18,6 +18,7 @@ pub mod dream_processing;
 pub mod emotional_learning;
 pub mod intuitive_planner;
 pub mod quantum_consciousness;
+pub mod quantum_genetic_optimizer;
 
 pub use intuitive_planner::{
     ComplexityLevel, CreativeTechnique, CreativityEngine, DatasetSize, ExecutionResults,
@@ -44,6 +45,12 @@ pub use dream_processing::{
     DreamProcessor, DreamQuality, DreamSequence, DreamState, MemoryConsolidator, MemoryContent,
     MemoryTrace, MemoryType, ProcessingSummary, SequenceType, StepResult, WakeupReport,
     WorkingMemory,
+};
+
+pub use quantum_genetic_optimizer::{
+    BellStateType, ConsciousnessEvolutionInsight, InsightType, OptimizationStrategy,
+    QuantumEntanglementLevel, QuantumEvolutionResult, QuantumGeneticOptimizer,
+    QuantumOptimizationSuperposition,
 };
 
 // Integrated consciousness types are defined below as structs
@@ -1461,7 +1468,6 @@ mod tests {
         assert!(recommendations.recommended_consciousness_level >= 0.0);
         assert!(recommendations.recommended_consciousness_level <= 1.0);
         assert!(recommendations.confidence > 0.0);
-        assert!(recommendations.suggested_optimizations.len() >= 0);
     }
 
     #[test]

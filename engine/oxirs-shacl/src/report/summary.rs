@@ -78,12 +78,10 @@ impl ValidationSummary {
                 .or_insert(0) += 1;
 
             // By constraint component
-            if let Some(component) = &violation.source_constraint_component {
-                *self
-                    .violations_by_component
-                    .entry(component.clone())
-                    .or_insert(0) += 1;
-            }
+            *self
+                .violations_by_component
+                .entry(violation.source_constraint_component.clone())
+                .or_insert(0) += 1;
         }
 
         // Calculate top violation types

@@ -128,7 +128,7 @@ pub struct RdfVectorIntegration {
     /// Namespace registry
     namespace_registry: Arc<RwLock<HashMap<String, String>>>,
     /// Vector store reference
-    vector_store: Arc<dyn VectorStoreTrait>,
+    vector_store: Arc<RwLock<dyn VectorStoreTrait>>,
 }
 
 /// Hash wrapper for RDF terms to enable HashMap keys
@@ -174,7 +174,7 @@ impl TermHash {
 
 impl RdfVectorIntegration {
     /// Create a new RDF-vector integration instance
-    pub fn new(config: RdfVectorConfig, vector_store: Arc<dyn VectorStoreTrait>) -> Self {
+    pub fn new(config: RdfVectorConfig, vector_store: Arc<RwLock<dyn VectorStoreTrait>>) -> Self {
         Self {
             config,
             term_mappings: Arc::new(RwLock::new(HashMap::new())),
@@ -192,12 +192,12 @@ impl RdfVectorIntegration {
         vector: Vector,
         graph_context: Option<GraphName>,
     ) -> Result<VectorId> {
-        let vector_id = self.vector_store.add_vector(vector)?;
+        let vector_id = self.vector_store.write().unwrap().add_vector(vector)?;
         let metadata = self.extract_term_metadata(&term)?;
 
         let mapping = RdfTermMapping {
             term: term.clone(),
-            vector_id,
+            vector_id: vector_id.clone(),
             graph_context: graph_context.clone(),
             metadata,
         };
@@ -212,7 +212,7 @@ impl RdfVectorIntegration {
 
         {
             let mut vector_mappings = self.vector_mappings.write().unwrap();
-            vector_mappings.insert(vector_id, mapping);
+            vector_mappings.insert(vector_id.clone(), mapping);
         }
 
         // Update graph cache if applicable
@@ -221,7 +221,7 @@ impl RdfVectorIntegration {
             graph_cache
                 .entry(graph)
                 .or_insert_with(HashSet::new)
-                .insert(vector_id);
+                .insert(vector_id.clone());
         }
 
         Ok(vector_id)
@@ -244,7 +244,9 @@ impl RdfVectorIntegration {
 
         let query_vector = self
             .vector_store
-            .get_vector(query_vector_id)?
+            .read()
+            .unwrap()
+            .get_vector(&query_vector_id)?
             .ok_or_else(|| anyhow!("Query vector not found"))?;
 
         // Filter by graph context if specified
@@ -252,21 +254,21 @@ impl RdfVectorIntegration {
             let graph_cache = self.graph_cache.read().unwrap();
             graph_cache
                 .get(graph)
-                .map(|set| set.iter().copied().collect::<Vec<_>>())
+                .map(|set| set.iter().cloned().collect::<Vec<_>>())
                 .unwrap_or_default()
         } else {
             // Use all vectors if no graph context specified
-            self.vector_store.get_all_vector_ids()?
+            self.vector_store.read().unwrap().get_all_vector_ids()?
         };
 
         // Perform similarity search
         let mut results = Vec::new();
         for vector_id in candidate_vectors {
-            if vector_id == query_vector_id {
+            if *vector_id == query_vector_id {
                 continue; // Skip self
             }
 
-            if let Ok(Some(vector)) = self.vector_store.get_vector(vector_id) {
+            if let Ok(Some(vector)) = self.vector_store.read().unwrap().get_vector(&vector_id) {
                 let similarity = self.config.default_metric.compute(&query_vector, &vector)?;
 
                 // Apply threshold filtering
@@ -284,7 +286,7 @@ impl RdfVectorIntegration {
                     results.push(RdfVectorSearchResult {
                         term: mapping.term.clone(),
                         score: similarity,
-                        vector_id,
+                        vector_id: vector_id.clone(),
                         graph_context: mapping.graph_context.clone(),
                         metadata: SearchMetadata {
                             algorithm: "vector_similarity".to_string(),
@@ -327,24 +329,24 @@ impl RdfVectorIntegration {
         let query_vector = self.generate_text_embedding(query_text)?;
 
         // Register temporary term (optional - for caching)
-        let temp_vector_id = self.vector_store.add_vector(query_vector.clone())?;
+        let temp_vector_id = self.vector_store.write().unwrap().add_vector(query_vector.clone())?;
 
         // Perform similarity search against all terms
         let candidate_vectors = if let Some(graph) = graph_context {
             let graph_cache = self.graph_cache.read().unwrap();
             graph_cache
                 .get(graph)
-                .map(|set| set.iter().copied().collect::<Vec<_>>())
+                .map(|set| set.iter().cloned().collect::<Vec<_>>())
                 .unwrap_or_default()
         } else {
-            self.vector_store.get_all_vector_ids()?
+            self.vector_store.read().unwrap().get_all_vector_ids()?
         };
 
         let mut results = Vec::new();
         let start_time = std::time::Instant::now();
 
         for vector_id in candidate_vectors {
-            if let Ok(Some(vector)) = self.vector_store.get_vector(vector_id) {
+            if let Ok(Some(vector)) = self.vector_store.read().unwrap().get_vector(&vector_id) {
                 let similarity = self.config.default_metric.compute(&query_vector, &vector)?;
 
                 if let Some(thresh) = threshold {
@@ -360,7 +362,7 @@ impl RdfVectorIntegration {
                     results.push(RdfVectorSearchResult {
                         term: mapping.term.clone(),
                         score: similarity,
-                        vector_id,
+                        vector_id: vector_id.clone(),
                         graph_context: mapping.graph_context.clone(),
                         metadata: SearchMetadata {
                             algorithm: "text_similarity".to_string(),
@@ -374,7 +376,7 @@ impl RdfVectorIntegration {
         }
 
         // Clean up temporary vector
-        let _ = self.vector_store.remove_vector(temp_vector_id);
+        let _ = self.vector_store.write().unwrap().remove_vector(&temp_vector_id);
 
         // Sort and limit results
         results.sort_by(|a, b| {
@@ -441,7 +443,7 @@ impl RdfVectorIntegration {
                 term_type: RdfTermType::Literal,
                 namespace: None,
                 local_name: None,
-                datatype: Some(literal.datatype()),
+                datatype: Some(literal.datatype().into()),
                 language: literal.language().map(|s| s.to_string()),
                 complexity_score: self.calculate_literal_complexity(literal),
             }),
@@ -619,13 +621,13 @@ pub struct RdfIntegrationStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::MemoryVectorStore;
+    use crate::MemoryVectorIndex;
     use oxirs_core::model::*;
 
     #[test]
     fn test_rdf_term_registration() {
         let config = RdfVectorConfig::default();
-        let vector_store = Arc::new(MemoryVectorStore::new());
+        let vector_store = Arc::new(RwLock::new(VectorStore::new()));
         let integration = RdfVectorIntegration::new(config, vector_store);
 
         let named_node = NamedNode::new("http://example.org/person").unwrap();
@@ -646,7 +648,7 @@ mod tests {
     #[test]
     fn test_uri_splitting() {
         let config = RdfVectorConfig::default();
-        let vector_store = Arc::new(MemoryVectorStore::new());
+        let vector_store = Arc::new(RwLock::new(VectorStore::new()));
         let integration = RdfVectorIntegration::new(config, vector_store);
 
         let (namespace, local_name) = integration.split_uri("http://example.org/ontology#Person");
@@ -657,7 +659,7 @@ mod tests {
     #[test]
     fn test_metadata_extraction() {
         let config = RdfVectorConfig::default();
-        let vector_store = Arc::new(MemoryVectorStore::new());
+        let vector_store = Arc::new(RwLock::new(VectorStore::new()));
         let integration = RdfVectorIntegration::new(config, vector_store);
 
         let literal = Literal::new_language_tagged_literal("Hello", "en").unwrap();

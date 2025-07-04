@@ -137,7 +137,7 @@ impl TimeSpaceValidator {
     /// Perform time-space aware validation
     pub async fn validate_spacetime_aware(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         spacetime_context: SpacetimeContext,
     ) -> Result<SpacetimeValidationResult> {
@@ -217,7 +217,7 @@ impl TimeSpaceValidator {
     /// Validate across multiple timelines simultaneously
     pub async fn validate_multi_timeline(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         timelines: Vec<Timeline>,
     ) -> Result<MultiTimelineValidationResult> {
@@ -439,7 +439,7 @@ impl TimeSpaceValidator {
     /// Validate temporal consistency
     async fn validate_temporal_consistency(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         context: &SpacetimeContext,
     ) -> Result<TemporalValidationResults> {
@@ -471,7 +471,7 @@ impl TimeSpaceValidator {
     /// Analyze spatial dimensions
     async fn analyze_spatial_dimensions(
         &self,
-        store: &Store,
+        store: &dyn Store,
         context: &SpacetimeContext,
     ) -> Result<SpatialAnalysisResults> {
         info!("Analyzing spatial dimensions");
@@ -756,11 +756,7 @@ impl TimeSpaceValidator {
         spatial: &SpatialAnalysisResults,
     ) -> Result<ValidationReport> {
         // Simplified implementation - would create comprehensive report
-        Ok(ValidationReport::new(
-            None,
-            temporal.temporal_ordering_valid && spatial.dimensional_consistency,
-            Vec::new(),
-        ))
+        Ok(ValidationReport::default())
     }
 
     /// Calculate overall spacetime consistency
@@ -1028,7 +1024,7 @@ impl TemporalValidationEngine {
 
     async fn check_temporal_ordering(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _temporal_coord: &TemporalCoordinate,
     ) -> Result<TemporalOrderingResults> {
         Ok(TemporalOrderingResults {
@@ -1039,7 +1035,7 @@ impl TemporalValidationEngine {
 
     async fn validate_causal_relationships(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<CausalRelationshipValidation> {
         Ok(CausalRelationshipValidation { consistent: true })
@@ -1047,7 +1043,7 @@ impl TemporalValidationEngine {
 
     async fn check_temporal_consistency_violations(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<TemporalConsistencyCheck> {
         Ok(TemporalConsistencyCheck {
@@ -1090,7 +1086,7 @@ impl SpatialDimensionAnalyzer {
 
     async fn project_onto_spatial_dimensions(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _coordinates: &SpatialCoordinates,
     ) -> Result<SpatialProjectionResults> {
         Ok(SpatialProjectionResults {

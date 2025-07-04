@@ -393,7 +393,8 @@ impl SimpleEmbeddingModel {
 impl EmbeddingModel for SimpleEmbeddingModel {
     fn config(&self) -> &ModelConfig {
         // Create a default config since SimpleEmbeddingModel doesn't store one
-        static DEFAULT_CONFIG: ModelConfig = ModelConfig {
+        use std::sync::LazyLock;
+        static DEFAULT_CONFIG: LazyLock<ModelConfig> = LazyLock::new(|| ModelConfig {
             dimensions: 384,
             learning_rate: 0.01,
             l2_reg: 0.0001,
@@ -403,7 +404,7 @@ impl EmbeddingModel for SimpleEmbeddingModel {
             seed: None,
             use_gpu: false,
             model_params: HashMap::new(),
-        };
+        });
         &DEFAULT_CONFIG
     }
 
@@ -416,7 +417,7 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         "SimpleEmbedding"
     }
 
-    fn add_triple(&mut self, _triple: Triple) -> Result<()> {
+    fn add_triple(&mut self, _triple: EmbedTriple) -> Result<()> {
         // Simple model doesn't learn from triples
         Ok(())
     }
@@ -432,14 +433,14 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         })
     }
 
-    fn get_entity_embedding(&self, entity: &str) -> Result<Vector> {
+    fn get_entity_embedding(&self, entity: &str) -> Result<EmbedVector> {
         let embedding = self.text_to_embedding(entity);
-        Ok(Vector::new(embedding))
+        Ok(EmbedVector::new(embedding))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<EmbedVector> {
         let embedding = self.text_to_embedding(relation);
-        Ok(Vector::new(embedding))
+        Ok(EmbedVector::new(embedding))
     }
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {

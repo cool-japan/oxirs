@@ -11,16 +11,16 @@ pub mod types;
 pub use config::*;
 pub use types::*;
 
-use anyhow::{anyhow, Result};
-use std::collections::{HashMap, HashSet};
+use anyhow::Result;
+use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 use crate::{
     planner::planning::{
-        ExecutionStep, FilterExpression as PlanningFilterExpression, TriplePattern,
+        FilterExpression as PlanningFilterExpression, TriplePattern,
     },
     service_optimizer::{JoinAlgorithm, JoinOperation, JoinOperationType, JoinPlan},
     ServiceRegistry,
@@ -132,12 +132,19 @@ impl DistributedJoinOptimizer {
                         .collect();
 
                     if !shared_vars.is_empty() {
+                        let selectivity = self.estimate_join_selectivity(node1, node2).await?;
+                        let cost = self.estimate_join_cost(node1, node2).await?;
                         let edge = crate::service_optimizer::JoinEdge {
+                            from_node: node1.id.clone(),
+                            to_node: node2.id.clone(),
+                            shared_variables: shared_vars.clone(),
+                            join_selectivity: selectivity,
+                            estimated_cost: cost,
+                            // Legacy field aliases for compatibility
                             from: node1.id.clone(),
                             to: node2.id.clone(),
                             join_variables: shared_vars,
-                            estimated_cost: self.estimate_join_cost(node1, node2).await?,
-                            selectivity: self.estimate_join_selectivity(node1, node2).await?,
+                            selectivity,
                         };
                         graph.edges.push(edge);
                     }
@@ -153,14 +160,20 @@ impl DistributedJoinOptimizer {
         let mut variables = HashSet::new();
 
         // Extract variables from subject, predicate, object
-        if pattern.subject.starts_with('?') {
-            variables.insert(pattern.subject.clone());
+        if let Some(subject) = &pattern.subject {
+            if subject.starts_with('?') {
+                variables.insert(subject.clone());
+            }
         }
-        if pattern.predicate.starts_with('?') {
-            variables.insert(pattern.predicate.clone());
+        if let Some(predicate) = &pattern.predicate {
+            if predicate.starts_with('?') {
+                variables.insert(predicate.clone());
+            }
         }
-        if pattern.object.starts_with('?') {
-            variables.insert(pattern.object.clone());
+        if let Some(object) = &pattern.object {
+            if object.starts_with('?') {
+                variables.insert(object.clone());
+            }
         }
 
         variables
@@ -240,7 +253,7 @@ impl DistributedJoinOptimizer {
             let connected_count = graph
                 .edges
                 .iter()
-                .filter(|edge| edge.from == node.id || edge.to == node.id)
+                .filter(|edge| edge.from_node == node.id || edge.to_node == node.id)
                 .count();
 
             if connected_count >= 3 {
@@ -303,18 +316,24 @@ impl DistributedJoinOptimizer {
             operations.push(JoinOperation {
                 id: format!("join_{}", operations.len()),
                 operation_type: JoinOperationType::HashJoin,
-                left_input: edge.from.clone(),
-                right_input: edge.to.clone(),
-                join_condition: format!("ON {}", edge.join_variables.join(" = ")),
+                left_input: Some(edge.from.clone()),
+                right_input: Some(edge.to.clone()),
+                join_algorithm: JoinAlgorithm::HashJoin,
+                join_variables: edge.join_variables.iter().cloned().collect(),
                 estimated_cost: edge.estimated_cost,
                 estimated_cardinality: (edge.selectivity * 1000.0) as u64,
+                parallelizable: true,
+                join_condition: format!("ON {}", edge.join_variables.join(" = ")),
             });
         }
 
         Ok(JoinPlan {
             operations,
-            estimated_total_cost: graph.edges.iter().map(|e| e.estimated_cost).sum(),
+            estimated_cost: graph.edges.iter().map(|e| e.estimated_cost).sum(),
             parallelization_opportunities: Vec::new(),
+            execution_strategy: crate::service_optimizer::JoinExecutionStrategy::Sequential,
+            memory_requirements: 1024 * 1024, // 1MB default
+            estimated_total_cost: graph.edges.iter().map(|e| e.estimated_cost).sum(),
         })
     }
 

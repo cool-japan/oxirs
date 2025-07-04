@@ -9,17 +9,16 @@ use reqwest::{
     Client,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::{
-    graphql::FederatedSchema, auth::AuthCredentials, FederatedService,
+    FederatedService,
     ServiceCapability, service::ServiceMetadata, ServicePerformance,
 };
-use crate::service_registry::ServiceRegistry;
-use crate::auth::AuthConfig as AuthenticationConfig;
-use crate::service::{ServiceType, AuthType};
+use crate::service::ServiceRegistry;
+use crate::service::ServiceType;
 
 /// Service discovery manager
 #[derive(Debug)]

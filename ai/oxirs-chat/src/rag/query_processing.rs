@@ -170,7 +170,7 @@ pub enum ConstraintType {
 }
 
 /// Query intent classification
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum QueryIntent {
     Definition,
     Comparison,

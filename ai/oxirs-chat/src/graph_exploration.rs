@@ -185,14 +185,14 @@ pub enum GuidanceType {
 
 /// Graph exploration engine
 pub struct GraphExplorer {
-    store: Arc<Store>,
+    store: Arc<dyn Store>,
     config: ExplorationConfig,
     schema_cache: HashMap<String, SchemaInfo>,
 }
 
 impl GraphExplorer {
     /// Create a new graph explorer
-    pub fn new(store: Arc<Store>, config: ExplorationConfig) -> Self {
+    pub fn new(store: Arc<dyn Store>, config: ExplorationConfig) -> Self {
         Self {
             store,
             config,

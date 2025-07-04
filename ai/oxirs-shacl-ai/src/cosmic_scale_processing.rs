@@ -130,7 +130,7 @@ impl CosmicScaleProcessor {
     /// Perform galaxy-wide validation across cosmic scales
     pub async fn validate_cosmic_scale(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         validation_scope: CosmicValidationScope,
     ) -> Result<CosmicValidationResult> {
@@ -232,8 +232,8 @@ impl CosmicScaleProcessor {
 
         for system_id in 0..target_stellar_systems {
             let stellar_coordinates = self.calculate_stellar_coordinates(system_id).await?;
-            let node = StellarValidationNode::new(
-                StellarNodeId::new(),
+            let mut node = StellarValidationNode::new(
+                Uuid::new_v4(),
                 stellar_coordinates,
                 self.config.stellar_node_config.clone(),
             );
@@ -253,6 +253,7 @@ impl CosmicScaleProcessor {
             stellar_systems_coverage: (deployed_nodes as f64 / target_stellar_systems as f64)
                 * 100.0,
             deployment_time_millennia: 0.001, // Quantum deployment is near-instantaneous
+            success: true,
         })
     }
 
@@ -291,8 +292,8 @@ impl CosmicScaleProcessor {
         let mut bridges_established = 0;
 
         for galaxy_index in 0..target_galaxies {
-            let galaxy_id = GalaxyId::new();
-            let bridge = IntergalacticBridge::new(
+            let galaxy_id = Uuid::new_v4();
+            let mut bridge = IntergalacticBridge::new(
                 galaxy_id,
                 self.calculate_intergalactic_coordinates(galaxy_index)
                     .await?,
@@ -341,7 +342,7 @@ impl CosmicScaleProcessor {
     /// Distribute validation across stellar nodes
     async fn distribute_stellar_validation(
         &self,
-        store: &Store,
+        store: &dyn Store,
         shapes: &[Shape],
         scope: &CosmicValidationScope,
     ) -> Result<StellarValidationResults> {
@@ -353,7 +354,9 @@ impl CosmicScaleProcessor {
         let mut stellar_results = Vec::new();
         let chunk_size = shapes.len() / self.stellar_nodes.len().max(1);
 
-        for (node_id, node) in self.stellar_nodes.iter() {
+        for node_ref in self.stellar_nodes.iter() {
+            let node_id = node_ref.key();
+            let node = node_ref.value();
             let start_idx = stellar_results.len() * chunk_size;
             let end_idx = (start_idx + chunk_size).min(shapes.len());
 
@@ -406,7 +409,7 @@ impl CosmicScaleProcessor {
     ) -> Result<CosmicConsciousnessResults> {
         info!("Coordinating cosmic consciousness for transcendent analysis");
 
-        let consciousness = self.cosmic_consciousness.read().await;
+        let mut consciousness = self.cosmic_consciousness.write().await;
 
         // Elevate consciousness to cosmic levels
         let cosmic_elevation = consciousness.elevate_to_cosmic_consciousness().await?;
@@ -430,7 +433,7 @@ impl CosmicScaleProcessor {
     /// Analyze cosmic radiation patterns for data quality insights
     async fn analyze_cosmic_radiation_patterns(
         &self,
-        store: &Store,
+        store: &dyn Store,
     ) -> Result<CosmicRadiationAnalysis> {
         info!("Analyzing cosmic radiation patterns for data quality insights");
 
@@ -599,7 +602,7 @@ impl CosmicScaleProcessor {
         stellar_results: &[StellarValidationResult],
     ) -> Result<ValidationReport> {
         // Simplified implementation - would combine all reports
-        Ok(ValidationReport::new(None, true, Vec::new()))
+        Ok(ValidationReport::new())
     }
 
     /// Calculate galactic coherence
@@ -914,12 +917,13 @@ impl StellarValidationNode {
             total_processing_power: self.processing_capacity,
             stellar_systems_coverage: 100.0,
             deployment_time_millennia: 0.001,
+            success: true,
         })
     }
 
     async fn validate_shapes(
         &self,
-        _store: &Store,
+        _store: &dyn Store,
         _shapes: &[Shape],
         _scope: &CosmicValidationScope,
     ) -> Result<StellarValidationResult> {
@@ -1143,7 +1147,7 @@ impl CosmicRadiationAnalyzer {
         }
     }
 
-    async fn analyze_cmb_patterns(&self, _store: &Store) -> Result<CMBPatterns> {
+    async fn analyze_cmb_patterns(&self, _store: &dyn Store) -> Result<CMBPatterns> {
         Ok(CMBPatterns {
             temperature_fluctuations: 1e-5,  // Typical CMB fluctuation level
             angular_power_spectrum_peaks: 7, // Number of acoustic peaks
@@ -1300,7 +1304,7 @@ pub struct CosmicStatistics {
 }
 
 // Additional result and data types
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GalaxyTopologyResult {
     pub spiral_arms_mapped: usize,
     pub galactic_center_established: bool,
@@ -1315,6 +1319,7 @@ pub struct StellarDeploymentResult {
     pub total_processing_power: f64,
     pub stellar_systems_coverage: f64,
     pub deployment_time_millennia: f64,
+    pub success: bool,
 }
 
 #[derive(Debug, Clone)]

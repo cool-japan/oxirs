@@ -12,7 +12,7 @@ use std::{
 use tokio::sync::RwLock;
 use url::Url;
 
-use oxirs_arq::{Query, QueryType};
+use oxirs_arq::query::{Query, QueryType};
 use oxirs_core::{model::NamedNode, query::QueryResults};
 
 use crate::{
@@ -896,7 +896,8 @@ impl QueryPlanner {
 
         // For now, create a simple placeholder query
         // In a real implementation, this would use proper SPARQL parsing
-        use oxirs_arq::{Algebra, QueryType};
+        use oxirs_arq::Algebra;
+        use oxirs_arq::query::QueryType;
         Ok(Query {
             query_type: QueryType::Select,
             select_variables: vec![],
@@ -911,7 +912,7 @@ impl QueryPlanner {
             construct_template: vec![],
             prefixes: std::collections::HashMap::new(),
             base_iri: None,
-            dataset: oxirs_arq::DatasetClause::default(),
+            dataset: oxirs_arq::query::DatasetClause::default(),
         })
     }
 

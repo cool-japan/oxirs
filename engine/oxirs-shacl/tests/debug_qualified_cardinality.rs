@@ -1,13 +1,13 @@
 //! Debug test for qualified cardinality
 
-use oxirs_core::{model::*, Store};
+use oxirs_core::{model::*, ConcreteStore};
 use oxirs_shacl::*;
 
 #[test]
 fn debug_qualified_cardinality_min_violation() {
     // Debug version of qualified min count violation test
     let mut validator = Validator::new();
-    let mut store = Store::new().unwrap();
+    let mut store = ConcreteStore::new().unwrap();
 
     let alice = NamedNode::new("http://example.org/alice").unwrap();
     let charlie = NamedNode::new("http://example.org/charlie").unwrap();

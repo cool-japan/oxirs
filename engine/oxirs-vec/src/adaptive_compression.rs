@@ -150,7 +150,7 @@ impl VectorStats {
         let mut histogram = vec![0u32; bin_count];
         let range = max_val - min_val;
         if range > 0.0 {
-            for val in values {
+            for val in &values {
                 let bucket = ((val - min_val) / range * (bin_count - 1) as f32)
                     .clamp(0.0, (bin_count - 1) as f32) as usize;
                 histogram[bucket] += 1;
@@ -744,7 +744,7 @@ impl AdaptiveCompressor {
             let step_ratio = compressed.len() as f32 / (current_vector.dimensions * 4) as f32;
             total_ratio *= step_ratio;
 
-            compression_steps.push((method.clone(), compressed));
+            compression_steps.push((method.clone(), compressed.clone()));
 
             // Prepare for next level if needed
             if total_ratio > target_ratio {
@@ -900,6 +900,7 @@ impl AdaptiveCompressor {
                 CompressionMethod::Quantization { .. } => 2u8,
                 CompressionMethod::Pca { .. } => 3u8,
                 CompressionMethod::ProductQuantization { .. } => 4u8,
+                CompressionMethod::Adaptive { .. } => 5u8,
             };
             result.push(method_id);
 
@@ -968,12 +969,18 @@ mod tests {
     #[test]
     fn test_multi_level_compression() {
         let mut compressor = AdaptiveCompressor::new();
-        let vector = Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        // Use a larger vector with repetitive patterns that compress well
+        let values: Vec<f32> = (0..256).map(|i| (i % 16) as f32).collect();
+        let vector = Vector::new(values);
 
         let compressed = compressor.compress_multi_level(&vector, 0.1).unwrap();
 
-        // Should achieve significant compression
-        assert!(compressed.len() < vector.dimensions * 4);
+        // Should achieve significant compression on this larger, repetitive vector
+        // Original size would be 256 * 4 = 1024 bytes
+        // Multi-level compression includes metadata overhead, so expect reasonable compression
+        println!("Compressed size: {} bytes, original size: {} bytes", compressed.len(), vector.dimensions * 4);
+        assert!(compressed.len() < vector.dimensions * 4); // At least some compression
+        assert!(compressed.len() < 900); // Should achieve at least 12% compression
     }
 
     #[test]

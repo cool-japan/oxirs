@@ -272,7 +272,7 @@ impl SparqlFunctionLibrary {
 }
 
 /// Trait for dynamic SPARQL functions with enhanced metadata and security
-pub trait DynamicFunction: Send + Sync {
+pub trait DynamicFunction: Send + Sync + std::fmt::Debug {
     /// Execute the function with given arguments
     fn execute(&self, args: &[Term], context: &ExecutionContext) -> Result<Term>;
 

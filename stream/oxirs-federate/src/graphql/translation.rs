@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use tracing::{debug, info, warn};
 
 use super::types::*;

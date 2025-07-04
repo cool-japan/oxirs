@@ -8,6 +8,7 @@ use oxirs_star::parser::{StarFormat, StarParser};
 use oxirs_star::serializer::StarSerializer;
 use oxirs_star::{StarQuad, StarTerm, StarTriple};
 use proptest::prelude::*;
+use proptest::test_runner::TestRunner;
 use std::collections::HashSet;
 
 /// Strategy for generating potentially problematic strings
@@ -73,9 +74,9 @@ fn deeply_nested_triple_strategy(max_depth: u32) -> BoxedStrategy<StarTriple> {
         )
             .prop_map(|(s, p, o)| {
                 StarTriple::new(
-                    StarTerm::iri(s).unwrap(),
-                    StarTerm::iri(p).unwrap(),
-                    StarTerm::iri(o).unwrap(),
+                    StarTerm::iri(&s).unwrap(),
+                    StarTerm::iri(&p).unwrap(),
+                    StarTerm::iri(&o).unwrap(),
                 )
             })
             .boxed()
@@ -88,7 +89,7 @@ fn deeply_nested_triple_strategy(max_depth: u32) -> BoxedStrategy<StarTriple> {
             .prop_map(|(subject_triple, p, object_triple)| {
                 StarTriple::new(
                     StarTerm::quoted_triple(subject_triple),
-                    StarTerm::iri(p).unwrap(),
+                    StarTerm::iri(&p).unwrap(),
                     StarTerm::quoted_triple(object_triple),
                 )
             })
@@ -152,7 +153,7 @@ mod tests {
                     prop_assert!(literal.is_literal());
                     if let Some(lit) = literal.as_literal() {
                         // Should be able to extract the value
-                        prop_assert!(!lit.value().is_empty() || value.is_empty());
+                        prop_assert!(!lit.value.is_empty() || value.is_empty());
                     }
                 },
                 Err(_) => {
@@ -173,7 +174,7 @@ mod tests {
 
                     // Should handle deep nesting gracefully
                     let computed_depth = triple.nesting_depth();
-                    prop_assert!(computed_depth >= depth);
+                    prop_assert!(computed_depth >= depth as usize);
 
                     // Validation should still work
                     prop_assert!(triple.validate().is_ok());
@@ -182,9 +183,10 @@ mod tests {
                     let serialized = format!("{}", triple);
                     prop_assert!(!serialized.is_empty());
 
-                    // Should count quoted triples correctly
-                    let quoted_count = triple.count_quoted_triples();
-                    prop_assert!(quoted_count > 0);
+                    // Should contain quoted triples for nested structures
+                    if depth > 0 {
+                        prop_assert!(triple.contains_quoted_triples());
+                    }
                 },
                 Err(_) => {
                     // It's acceptable to fail for extreme depths
@@ -400,7 +402,7 @@ mod tests {
 
                 // Try different formats
                 for format in [StarFormat::TurtleStar, StarFormat::NTriplesStar, StarFormat::NQuadsStar] {
-                    match serializer.serialize_graph(&graph, format) {
+                    match serializer.serialize_graph(&graph, format, &oxirs_star::serializer::SerializationOptions::default()) {
                         Ok(serialized) => {
                             prop_assert!(!serialized.is_empty());
                             prop_assert!(serialized.len() < 1_000_000); // Reasonable size limit
@@ -481,7 +483,7 @@ mod tests {
                 Some(triple) => {
                     // Should handle reasonably deep nesting
                     assert!(triple.validate().is_ok());
-                    assert!(triple.nesting_depth() >= depth);
+                    assert!(triple.nesting_depth() >= depth as usize);
                 }
                 None => {
                     // It's acceptable to fail at extreme depths

@@ -34,6 +34,9 @@ pub struct ExtendedServiceMetadata {
     /// Service dependencies
     pub dependencies: Vec<ServiceDependency>,
 
+    /// Known vocabularies supported by this service
+    pub known_vocabularies: Option<Vec<String>>,
+
     /// Last metadata update timestamp
     pub last_updated: DateTime<Utc>,
 }
@@ -280,6 +283,7 @@ impl ExtendedServiceMetadata {
             capability_details: HashMap::new(),
             health_metrics: HealthMetrics::default(),
             dependencies: Vec::new(),
+            known_vocabularies: None,
             last_updated: Utc::now(),
         }
     }

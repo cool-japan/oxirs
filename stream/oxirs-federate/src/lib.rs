@@ -23,15 +23,14 @@
 //! - `FaultHandler`: Manages service failures and retries
 
 use anyhow::{anyhow, Result};
-use oxirs_core::{Graph, Quad, Term, Triple};
-use oxirs_gql::types::Schema as GraphQLSchema;
+use oxirs_core::Term;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
-use crate::planner::planning::PlannerConfig;
+use tracing::{error, info, warn};
+// PlannerConfig will be imported via planner module re-exports
 
 pub mod auth;
 pub mod auto_discovery;
@@ -77,7 +76,9 @@ pub use connection_pool_manager::*;
 pub use discovery::*;
 pub use distributed_tracing::*;
 pub use executor::*;
+// Import from graphql module - using wildcard but resolving specific conflicts
 pub use graphql::*;
+
 pub use integration::*;
 pub use join_optimizer::*;
 pub use k8s_discovery::*;
@@ -88,7 +89,14 @@ pub use monitoring::*;
 pub use nats_federation::*;
 pub use network_optimizer::*;
 pub use performance_analyzer::*;
-pub use planner::*;
+// Import from planner module excluding GraphQLFederationConfig to avoid conflict
+pub use planner::{
+    QueryPlanner, PlannerConfig, HistoricalPerformance, ExecutionContext, ExecutionPlan, 
+    ExecutionStep, StepType, QueryType, QueryInfo, TriplePattern, FilterExpression, 
+    UnifiedSchema, FederatedSchema, ParsedQuery, GraphQLOperationType, ServiceQuery, 
+    EntityResolutionPlan, EntityResolutionStep, ReoptimizationAnalysis, RetryConfig,
+    FederatedQueryPlanner
+};
 pub use privacy::*;
 pub use query_decomposition::advanced_pattern_analysis::{
     AdvancedPatternAnalyzer, ComplexityAssessment, OptimizationOpportunity, PatternAnalysisResult,
@@ -101,15 +109,14 @@ pub use semantic_enhancer::*;
 // Export main service types (from service.rs)
 pub use service::{
     ServiceRegistry, ServiceType, ServiceCapability, FederatedService, 
-    ServiceRegistryConfig, ServiceRegistryStats, ServicePerformance, 
-    AuthConfig, AuthCredentials
+    ServiceRegistryConfig, ServiceRegistryStats, ServicePerformance,
+    ServiceAuthConfig, AuthCredentials
 };
 pub use service_client::*;
 pub use service_executor::*;
 pub use service_optimizer::*;
-// Export specific types from service_registry (to avoid conflicts)
+// Export specific types from service_registry (non-conflicting types only)
 pub use service_registry::{
-    ServiceRegistry as ServiceRegistryImpl, ServiceType as ServiceTypeImpl,
     RegistryConfig, SparqlEndpoint, GraphQLService, HealthStatus as ServiceHealthStatus,
     ServiceCapabilities
 };
@@ -333,7 +340,7 @@ impl FederationEngine {
         let registry = self.service_registry.read().await;
         let execution_plan = self
             .query_planner
-            .plan_sparql(&query_info, &*registry)
+            .plan_sparql(&query_info, &registry)
             .await?;
         drop(registry);
 
@@ -357,7 +364,7 @@ impl FederationEngine {
                             .iter()
                             .map(|(var, term)| {
                                 let sparql_value = match term {
-                                    &oxirs_core::Term::NamedNode(ref node) => {
+                                    oxirs_core::Term::NamedNode(node) => {
                                         crate::executor::SparqlValue {
                                             value_type: "uri".to_string(),
                                             value: node.to_string(),
@@ -365,7 +372,7 @@ impl FederationEngine {
                                             lang: None,
                                         }
                                     }
-                                    &oxirs_core::Term::Literal(ref literal) => {
+                                    oxirs_core::Term::Literal(literal) => {
                                         if let Some(lang) = literal.language() {
                                             crate::executor::SparqlValue {
                                                 value_type: "literal".to_string(),
@@ -382,7 +389,7 @@ impl FederationEngine {
                                             }
                                         }
                                     }
-                                    &oxirs_core::Term::BlankNode(ref bnode) => {
+                                    oxirs_core::Term::BlankNode(bnode) => {
                                         crate::executor::SparqlValue {
                                             value_type: "bnode".to_string(),
                                             value: bnode.to_string(),
@@ -390,7 +397,7 @@ impl FederationEngine {
                                             lang: None,
                                         }
                                     }
-                                    &oxirs_core::Term::Variable(ref var) => {
+                                    oxirs_core::Term::Variable(var) => {
                                         crate::executor::SparqlValue {
                                             value_type: "variable".to_string(),
                                             value: var.to_string(),
@@ -398,7 +405,7 @@ impl FederationEngine {
                                             lang: None,
                                         }
                                     }
-                                    &oxirs_core::Term::QuotedTriple(ref triple) => {
+                                    oxirs_core::Term::QuotedTriple(triple) => {
                                         crate::executor::SparqlValue {
                                             value_type: "quoted_triple".to_string(),
                                             value: format!(
@@ -464,7 +471,7 @@ impl FederationEngine {
         let registry = self.service_registry.read().await;
         let execution_plan = self
             .query_planner
-            .plan_graphql(&query_info, &*registry)
+            .plan_graphql(&query_info, &registry)
             .await?;
         drop(registry);
 
@@ -515,7 +522,7 @@ impl FederationEngine {
     pub async fn discover_services(&self) -> Result<()> {
         let mut registry = self.service_registry.write().await;
         let discovery = ServiceDiscovery::new();
-        discovery.update_service_capabilities(&mut *registry).await
+        discovery.update_service_capabilities(&mut registry).await
     }
 
     /// Get cache statistics
@@ -671,7 +678,7 @@ impl Default for FederationEngine {
 }
 
 /// Configuration for the federation engine
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FederationConfig {
     pub registry_config: ServiceRegistryConfig,
     pub planner_config: PlannerConfig,
@@ -682,19 +689,6 @@ pub struct FederationConfig {
     pub cache_config: CacheConfig,
 }
 
-impl Default for FederationConfig {
-    fn default() -> Self {
-        Self {
-            registry_config: ServiceRegistryConfig::default(),
-            planner_config: PlannerConfig::default(),
-            executor_config: FederatedExecutorConfig::default(),
-            integrator_config: ResultIntegratorConfig::default(),
-            graphql_config: GraphQLFederationConfig::default(),
-            monitor_config: FederationMonitorConfig::default(),
-            cache_config: CacheConfig::default(),
-        }
-    }
-}
 
 /// Result of a federated query execution
 #[derive(Debug, Clone)]

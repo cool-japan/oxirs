@@ -438,3 +438,111 @@ pub struct PerformanceTrainingExample {
     pub strategy_features: Vec<f64>,
     pub performance_outcome: f64,
 }
+
+/// Bayesian optimization for hyperparameter tuning
+#[derive(Debug)]
+pub struct BayesianOptimizer {
+    pub acquisition_function: String,
+    pub surrogate_model: String,
+    pub n_initial_points: usize,
+    pub n_calls: usize,
+    pub noise_level: f64,
+}
+
+impl BayesianOptimizer {
+    pub fn new() -> Self {
+        Self {
+            acquisition_function: "expected_improvement".to_string(),
+            surrogate_model: "gaussian_process".to_string(),
+            n_initial_points: 10,
+            n_calls: 100,
+            noise_level: 0.01,
+        }
+    }
+}
+
+/// Genetic algorithm optimizer for constraint evolution
+#[derive(Debug)]
+pub struct GeneticOptimizer {
+    pub population_size: usize,
+    pub mutation_rate: f64,
+    pub crossover_rate: f64,
+    pub max_generations: usize,
+    pub selection_method: String,
+}
+
+impl GeneticOptimizer {
+    pub fn new() -> Self {
+        Self {
+            population_size: 100,
+            mutation_rate: 0.1,
+            crossover_rate: 0.8,
+            max_generations: 500,
+            selection_method: "tournament".to_string(),
+        }
+    }
+}
+
+/// Multi-objective optimization for competing goals
+#[derive(Debug)]
+pub struct MultiObjectiveOptimizer {
+    pub objectives: Vec<String>,
+    pub weights: Vec<f64>,
+    pub method: String,
+    pub pareto_front_size: usize,
+}
+
+impl MultiObjectiveOptimizer {
+    pub fn new() -> Self {
+        Self {
+            objectives: vec!["performance".to_string(), "accuracy".to_string()],
+            weights: vec![0.5, 0.5],
+            method: "nsga2".to_string(),
+            pareto_front_size: 50,
+        }
+    }
+}
+
+/// Particle swarm optimization for parameter tuning
+#[derive(Debug)]
+pub struct ParticleSwarmOptimizer {
+    pub swarm_size: usize,
+    pub max_iterations: usize,
+    pub inertia_weight: f64,
+    pub cognitive_coefficient: f64,
+    pub social_coefficient: f64,
+}
+
+impl ParticleSwarmOptimizer {
+    pub fn new() -> Self {
+        Self {
+            swarm_size: 50,
+            max_iterations: 1000,
+            inertia_weight: 0.9,
+            cognitive_coefficient: 2.0,
+            social_coefficient: 2.0,
+        }
+    }
+}
+
+/// Simulated annealing for global optimization
+#[derive(Debug)]
+pub struct SimulatedAnnealingOptimizer {
+    pub initial_temperature: f64,
+    pub final_temperature: f64,
+    pub cooling_rate: f64,
+    pub max_iterations: usize,
+    pub acceptance_probability: String,
+}
+
+impl SimulatedAnnealingOptimizer {
+    pub fn new() -> Self {
+        Self {
+            initial_temperature: 1000.0,
+            final_temperature: 0.1,
+            cooling_rate: 0.95,
+            max_iterations: 10000,
+            acceptance_probability: "boltzmann".to_string(),
+        }
+    }
+}

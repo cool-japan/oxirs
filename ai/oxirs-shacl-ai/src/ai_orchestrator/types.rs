@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::ai_orchestrator::config::ModelSelectionStrategy;
+
 /// Data characteristics for adaptive model selection
 #[derive(Debug, Clone)]
 pub struct DataCharacteristics {
@@ -71,28 +73,7 @@ pub struct SelectedModel {
     pub selection_reason: String,
 }
 
-/// Advanced model selection strategies for dynamic orchestration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ModelSelectionStrategy {
-    /// Performance-based selection using historical metrics
-    PerformanceBased,
-    /// Adaptive selection based on data characteristics
-    DataAdaptive,
-    /// Ensemble-weighted selection with dynamic weights
-    EnsembleWeighted,
-    /// Reinforcement learning-based selection
-    ReinforcementLearning,
-    /// Meta-learning approach for model selection
-    MetaLearning,
-    /// Hybrid approach combining multiple strategies
-    Hybrid(Vec<ModelSelectionStrategy>),
-}
-
-impl Default for ModelSelectionStrategy {
-    fn default() -> Self {
-        Self::PerformanceBased
-    }
-}
+// ModelSelectionStrategy is defined in config.rs
 
 /// Model performance metrics for selection
 #[derive(Debug, Clone)]
@@ -122,4 +103,52 @@ impl Default for ModelPerformanceMetrics {
             robustness_score: 0.85,
         }
     }
+}
+
+/// Adaptive learning insights from model orchestration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdaptiveLearningInsights {
+    pub learning_rate_adaptation: f64,
+    pub convergence_indicators: Vec<String>,
+    pub adaptation_recommendations: Vec<String>,
+    pub performance_trends: HashMap<String, f64>,
+}
+
+/// Confident shape with metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfidentShape {
+    pub shape_id: String,
+    pub confidence_score: f64,
+    pub validation_accuracy: f64,
+    pub learning_metadata: LearningMetadata,
+}
+
+/// Learning metadata for shape generation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningMetadata {
+    pub iterations: usize,
+    pub convergence_time: Duration,
+    pub data_quality_score: f64,
+    pub learning_algorithm: String,
+    pub validation_method: String,
+}
+
+/// Orchestration metrics for AI coordination
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrchestrationMetrics {
+    pub coordination_efficiency: f64,
+    pub resource_utilization: f64,
+    pub latency_metrics: HashMap<String, Duration>,
+    pub throughput_metrics: HashMap<String, f64>,
+    pub error_rates: HashMap<String, f64>,
+}
+
+/// Quality analysis results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityAnalysis {
+    pub overall_quality_score: f64,
+    pub quality_dimensions: HashMap<String, f64>,
+    pub quality_trends: Vec<f64>,
+    pub recommendations: Vec<String>,
+    pub quality_threshold_met: bool,
 }

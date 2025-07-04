@@ -5,8 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use backoff::{backoff::Backoff, future::retry, ExponentialBackoff};
-use bytes::Bytes;
+use backoff::{future::retry, ExponentialBackoff};
 use governor::{
     clock::DefaultClock,
     state::{InMemoryState, NotKeyed},
@@ -14,7 +13,7 @@ use governor::{
 };
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT},
-    Client, Response, StatusCode,
+    Client, StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -27,8 +26,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     executor::{GraphQLResponse, SparqlResults},
-    auth::{AuthConfig, AuthCredentials}, FederatedService,
-    service::AuthType,
+    auth::AuthCredentials, FederatedService,
+    service::{AuthType, ServiceAuthConfig},
 };
 
 /// Trait for service clients
@@ -294,7 +293,7 @@ impl SparqlClient {
     }
 
     /// Add authentication header
-    fn add_auth_header(&self, headers: &mut HeaderMap, auth: &AuthConfig) -> Result<()> {
+    fn add_auth_header(&self, headers: &mut HeaderMap, auth: &ServiceAuthConfig) -> Result<()> {
         use base64::encode;
 
         match &auth.auth_type {
@@ -362,7 +361,7 @@ impl SparqlClient {
     }
 
     /// Ensure OAuth2 token is fresh and return the token if available
-    async fn ensure_fresh_oauth2_token(&self, auth: &AuthConfig) -> Result<Option<String>> {
+    async fn ensure_fresh_oauth2_token(&self, auth: &ServiceAuthConfig) -> Result<Option<String>> {
         let current_token = {
             let token_guard = self.oauth2_token.read().await;
             token_guard.clone()
@@ -406,7 +405,7 @@ impl SparqlClient {
     /// Refresh OAuth2 token using refresh token
     async fn refresh_oauth2_token(
         &self,
-        auth: &AuthConfig,
+        auth: &ServiceAuthConfig,
         refresh_token: &str,
     ) -> Result<OAuth2TokenInfo> {
         let token_endpoint = auth
@@ -656,7 +655,7 @@ impl GraphQLClient {
     }
 
     /// Add authentication header (same as SPARQL client)
-    fn add_auth_header(&self, headers: &mut HeaderMap, auth: &AuthConfig) -> Result<()> {
+    fn add_auth_header(&self, headers: &mut HeaderMap, auth: &ServiceAuthConfig) -> Result<()> {
         use base64::encode;
 
         match &auth.auth_type {

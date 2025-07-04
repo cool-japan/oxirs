@@ -488,7 +488,7 @@ impl GraphQLFederation {
     }
 
     /// Extract base type name from GraphQL type notation
-    fn extract_base_type(&self, type_notation: &str) -> String {
+    pub fn extract_base_type(&self, type_notation: &str) -> String {
         type_notation
             .trim_start_matches('[')
             .trim_end_matches(']')

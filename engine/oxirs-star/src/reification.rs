@@ -547,11 +547,9 @@ impl AdvancedReificator {
     /// Check if a term contains quoted triples
     fn term_has_quoted_triples(&self, term: &StarTerm) -> bool {
         match term {
-            StarTerm::QuotedTriple(inner_triple) => {
-                true || // The term itself is a quoted triple
-                self.term_has_quoted_triples(&inner_triple.subject) ||
-                self.term_has_quoted_triples(&inner_triple.predicate) ||
-                self.term_has_quoted_triples(&inner_triple.object)
+            StarTerm::QuotedTriple(_inner_triple) => {
+                // The term itself is a quoted triple
+                true
             }
             _ => false,
         }
@@ -896,7 +894,7 @@ pub mod utils {
 }
 
 #[cfg(test)]
-mod tests {
+mod additional_tests {
     use super::*;
 
     #[test]
@@ -990,7 +988,7 @@ mod tests {
             ))
             .unwrap();
 
-        let mut dereificator = Dereificator::new(
+        let mut dereificator = Reificator::new(
             ReificationStrategy::StandardReification,
             Some("http://example.org/stmt/".to_string()),
         );
@@ -1030,7 +1028,7 @@ mod tests {
         let reified_graph = reificator.reify_graph(&original_graph).unwrap();
 
         // Dereify
-        let mut dereificator = Dereificator::new(
+        let mut dereificator = Reificator::new(
             ReificationStrategy::StandardReification,
             Some("http://example.org/stmt/".to_string()),
         );

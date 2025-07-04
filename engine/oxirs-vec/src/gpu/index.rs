@@ -383,8 +383,8 @@ impl BatchVectorProcessor {
     /// Parallel batch processing using multiple streams
     pub fn parallel_process_batches<F, R>(&self, vectors: &[Vector], operation: F) -> Result<Vec<R>>
     where
-        F: Fn(&[Vector]) -> Result<Vec<R>> + Send + Sync + Clone,
-        R: Send,
+        F: Fn(&[Vector]) -> Result<Vec<R>> + Send + Sync + Clone + 'static,
+        R: Send + 'static,
     {
         use std::thread;
 

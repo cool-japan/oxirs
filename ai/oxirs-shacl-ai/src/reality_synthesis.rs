@@ -24,7 +24,7 @@ use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::f64::consts::{E, PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicF64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
@@ -38,16 +38,16 @@ use oxirs_core::{
 };
 use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
 
-use crate::collective_consciousness::CollectiveConsciousness;
+use crate::collective_consciousness::CollectiveConsciousnessNetwork;
 use crate::consciousness_guided_neuroplasticity::ConsciousnessGuidedNeuroplasticity;
 use crate::consciousness_validation::{
     ConsciousnessLevel, ConsciousnessValidator, EmotionalContext,
 };
-use crate::cosmic_scale_processing::CosmicScaleProcessing;
-use crate::interdimensional_patterns::InterdimensionalPatterns;
+use crate::cosmic_scale_processing::CosmicScaleProcessor;
+use crate::interdimensional_patterns::InterdimensionalPatternEngine;
 use crate::omniscient_validation::OmniscientValidation;
 use crate::quantum_consciousness_entanglement::QuantumConsciousnessEntanglement;
-use crate::time_space_validation::TimeSpaceValidation;
+use crate::time_space_validation::TimeSpaceValidator;
 use crate::universal_knowledge_integration::UniversalKnowledgeIntegration;
 use crate::{Result, ShaclAiError};
 
@@ -716,13 +716,15 @@ impl RealityGenerationEngine {
         // Define reality laws
         let reality_laws = self.define_reality_laws(&reality_patterns).await?;
 
+        let foundation_strength = self.calculate_foundation_strength(&reality_laws).await?;
+        
         Ok(RealityFoundation {
             seeds: reality_seeds,
             structure: foundation_structure,
             elements: reality_elements,
             patterns: reality_patterns,
             laws: reality_laws,
-            foundation_strength: self.calculate_foundation_strength(&reality_laws).await?,
+            foundation_strength,
         })
     }
 
@@ -1215,7 +1217,7 @@ impl UniversalRealityHarmonizer {
 }
 
 // Configuration types
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RealityGenerationConfig;
 
 impl RealityGenerationConfig {
@@ -1253,31 +1255,31 @@ impl RealityGenerationConfig {
 }
 
 // Placeholder configuration types
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct DimensionalConstructionConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct UniverseArchitectureConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PossibilityMaterializationConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RealityCoherenceConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CrossRealityValidationConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TemporalOrchestrationConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct QualityPerfectionConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct DimensionalCoordinationConfig;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct UniversalHarmonizationConfig;
 
 // Supporting component types with default implementations
@@ -1311,20 +1313,20 @@ impl RealityElementSynthesizer {
 #[derive(Debug, Default)]
 pub struct RealityPatternWeaver;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RealityLawDefiner;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RealityPropertyAssigner;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RealityStructureOrganizer;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RealityCoherenceEstablisher;
 
 // Result and data types
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct RealitySynthesisInitResult {
     pub reality_generation: RealityGenerationInitResult,
     pub dimensional_construction: DimensionalConstructionInitResult,
@@ -1337,6 +1339,24 @@ pub struct RealitySynthesisInitResult {
     pub dimensional_coordination: DimensionalCoordinationInitResult,
     pub universal_harmonization: UniversalHarmonizationInitResult,
     pub timestamp: SystemTime,
+}
+
+impl RealitySynthesisInitResult {
+    pub fn new() -> Self {
+        Self {
+            reality_generation: RealityGenerationInitResult::default(),
+            dimensional_construction: DimensionalConstructionInitResult::default(),
+            universe_architecture: UniverseArchitectureInitResult::default(),
+            possibility_materialization: PossibilityMaterializationInitResult::default(),
+            reality_coherence: RealityCoherenceInitResult::default(),
+            cross_reality_validation: CrossRealityValidationInitResult::default(),
+            temporal_orchestration: TemporalOrchestrationInitResult::default(),
+            quality_perfection: QualityPerfectionInitResult::default(),
+            dimensional_coordination: DimensionalCoordinationInitResult::default(),
+            universal_harmonization: UniversalHarmonizationInitResult::default(),
+            timestamp: std::time::SystemTime::now(),
+        }
+    }
 }
 
 #[derive(Debug, Default)]

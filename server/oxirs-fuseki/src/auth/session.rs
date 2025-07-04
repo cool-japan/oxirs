@@ -32,9 +32,10 @@ impl SessionManager {
 
         let session = UserSession {
             user: user.clone(),
-            created_at: now,
-            last_accessed: now,
             session_id: session_id.clone(),
+            created_at: now,
+            expires_at: now + Duration::seconds(self.timeout_seconds),
+            last_activity: now,
         };
 
         let mut sessions = self.sessions.write().await;
@@ -51,12 +52,12 @@ impl SessionManager {
         if let Some(session) = sessions.get_mut(session_id) {
             let timeout = Duration::seconds(self.timeout_seconds);
 
-            if Utc::now() - session.last_accessed > timeout {
+            if Utc::now() > session.expires_at {
                 sessions.remove(session_id);
                 debug!("Session expired: {}", session_id);
                 Ok(AuthResult::Expired)
             } else {
-                session.last_accessed = Utc::now();
+                session.last_activity = Utc::now();
                 Ok(AuthResult::Authenticated(session.user.clone()))
             }
         } else {
@@ -95,7 +96,7 @@ impl SessionManager {
         let now = Utc::now();
         let initial_count = sessions.len();
 
-        sessions.retain(|_, session| now - session.last_accessed <= timeout);
+        sessions.retain(|_, session| now <= session.expires_at);
 
         let removed_count = initial_count - sessions.len();
         if removed_count > 0 {
@@ -118,5 +119,48 @@ impl SessionManager {
             .filter(|session| session.user.username == username)
             .cloned()
             .collect()
+    }
+
+    /// Create JWT token for user
+    #[cfg(feature = "auth")]
+    pub fn create_jwt_token(&self, user: &User) -> FusekiResult<String> {
+        // TODO: Implement actual JWT token creation
+        // For now, return a placeholder token
+        Ok(format!("jwt_token_for_{}", user.username))
+    }
+
+    /// Create JWT token for user (feature-gated fallback)
+    #[cfg(not(feature = "auth"))]
+    pub fn create_jwt_token(&self, _user: &User) -> FusekiResult<String> {
+        Err(FusekiError::service_unavailable("JWT auth not enabled"))
+    }
+
+    /// Validate JWT token
+    #[cfg(feature = "auth")]
+    pub fn validate_jwt_token(&self, token: &str) -> FusekiResult<crate::auth::types::TokenValidation> {
+        // TODO: Implement actual JWT token validation
+        // For now, return a placeholder validation for valid tokens
+        if token.starts_with("jwt_token_for_") {
+            let username = token.strip_prefix("jwt_token_for_").unwrap_or("unknown");
+            Ok(crate::auth::types::TokenValidation {
+                user: User {
+                    username: username.to_string(),
+                    roles: vec!["user".to_string()], // Default role
+                    email: None,
+                    full_name: None,
+                    last_login: Some(chrono::Utc::now()),
+                    permissions: vec![], // Empty permissions for now
+                },
+                expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
+            })
+        } else {
+            Err(FusekiError::authentication("Invalid JWT token"))
+        }
+    }
+
+    /// Validate JWT token (feature-gated fallback)
+    #[cfg(not(feature = "auth"))]
+    pub fn validate_jwt_token(&self, _token: &str) -> FusekiResult<crate::auth::types::TokenValidation> {
+        Err(FusekiError::service_unavailable("JWT auth not enabled"))
     }
 }

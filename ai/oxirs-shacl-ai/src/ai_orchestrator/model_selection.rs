@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::ai_orchestrator::types::*;
+use crate::ai_orchestrator::{config::ModelSelectionStrategy, types::*};
 
 /// Advanced model selector for dynamic orchestration
 #[derive(Debug)]

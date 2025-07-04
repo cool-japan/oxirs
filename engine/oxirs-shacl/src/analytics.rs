@@ -558,15 +558,18 @@ impl AnomalyDetector {
     fn check_execution_anomaly(&mut self, record: &ConstraintExecutionRecord) -> Result<()> {
         let constraint_key = record.constraint_id.as_str().to_string();
 
-        // Get or create baseline for this constraint
-        let baseline = self
-            .baselines
-            .entry(constraint_key.clone())
-            .or_insert_with(StatisticalBaseline::default);
+        // Get or create baseline for this constraint and extract values to avoid borrowing issues
+        let (expected_execution_time, expected_memory_usage) = {
+            let baseline = self
+                .baselines
+                .entry(constraint_key.clone())
+                .or_insert_with(StatisticalBaseline::default);
+            (baseline.expected_execution_time, baseline.expected_memory_usage)
+        };
 
         // Check for time anomaly
         if record.execution_time
-            > baseline.expected_execution_time * self.thresholds.execution_time_multiplier
+            > expected_execution_time * self.thresholds.execution_time_multiplier
         {
             self.record_anomaly(DetectedAnomaly {
                 anomaly_type: AnomalyType::SlowExecution,
@@ -575,12 +578,12 @@ impl AnomalyDetector {
                 description: format!(
                     "Execution time {}ms exceeds expected {}ms",
                     record.execution_time.as_millis(),
-                    baseline.expected_execution_time.as_millis()
+                    expected_execution_time.as_millis()
                 ),
                 timestamp: record.timestamp,
                 metadata: serde_json::json!({
                     "actual_time": record.execution_time.as_millis(),
-                    "expected_time": baseline.expected_execution_time.as_millis(),
+                    "expected_time": expected_execution_time.as_millis(),
                     "focus_node": record.focus_node.as_str()
                 }),
             });
@@ -588,7 +591,7 @@ impl AnomalyDetector {
 
         // Check for memory anomaly
         if record.memory_used
-            > baseline.expected_memory_usage * self.thresholds.memory_usage_multiplier
+            > expected_memory_usage * self.thresholds.memory_usage_multiplier
         {
             self.record_anomaly(DetectedAnomaly {
                 anomaly_type: AnomalyType::HighMemoryUsage,
@@ -597,18 +600,21 @@ impl AnomalyDetector {
                 description: format!(
                     "Memory usage {}KB exceeds expected {}KB",
                     record.memory_used / 1024,
-                    baseline.expected_memory_usage / 1024
+                    expected_memory_usage / 1024
                 ),
                 timestamp: record.timestamp,
                 metadata: serde_json::json!({
                     "actual_memory": record.memory_used,
-                    "expected_memory": baseline.expected_memory_usage
+                    "expected_memory": expected_memory_usage,
+                    "focus_node": record.focus_node.as_str()
                 }),
             });
         }
 
         // Update baseline with new data
-        baseline.update_with_record(record);
+        if let Some(baseline) = self.baselines.get_mut(&constraint_key) {
+            baseline.update_with_record(record);
+        }
 
         Ok(())
     }

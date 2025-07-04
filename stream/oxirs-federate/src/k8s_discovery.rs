@@ -4,13 +4,13 @@
 //! running in Kubernetes clusters by watching for services with specific
 //! labels and annotations.
 
-use anyhow::{anyhow, Result};
-use futures::{StreamExt, TryStreamExt};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tracing::warn;
+use crate::FederatedService;
 
 #[cfg(feature = "kubernetes")]
 use k8s_openapi::api::core::v1::{Service as K8sService, ServicePort};
@@ -21,7 +21,7 @@ use kube::{
     Client,
 };
 
-use crate::{DiscoveredEndpoint, DiscoveryMethod, FederatedService, ServiceDiscovery, ServiceType};
+use crate::DiscoveredEndpoint;
 
 /// Kubernetes service discovery configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

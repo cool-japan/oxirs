@@ -11,29 +11,27 @@
 //! - `explainable::analyzers` - Interpretability analyzer implementations
 //! - `explainable::processors` - Natural language and processing utilities
 
-mod explainable;
-
 // Re-export everything from the explainable module for backward compatibility
-pub use explainable::*;
+pub use crate::explainable::*;
 
 // Additional convenience re-exports for commonly used items
-pub use explainable::{
+pub use crate::explainable::{
     AdaptationExplanation, ExplainableAI, ExplainableAIConfig, ExplanationData,
     InterpretabilityReport, PatternExplanation, PatternRecognitionContext, ProcessedExplanation,
     QuantumExplanation, QuantumPatternContext, RawExplanation, SimpleDecisionTracker,
     ValidationContext, ValidationExplanation,
 };
 
-pub use explainable::{DecisionTracker, ExplanationGenerator, InterpretabilityAnalyzer};
+pub use crate::explainable::{DecisionTracker, ExplanationGenerator, InterpretabilityAnalyzer};
 
-pub use explainable::{
+pub use crate::explainable::{
     AdaptationLogicExplainer, NeuralDecisionExplainer, PatternRecognitionExplainer,
     QuantumPatternExplainer, ValidationReasoningExplainer,
 };
 
-pub use explainable::{
+pub use crate::explainable::{
     AttentionAnalyzer, CounterfactualAnalyzer, DecisionPathAnalyzer, FeatureImportanceAnalyzer,
     ModelBehaviorAnalyzer,
 };
 
-pub use explainable::NaturalLanguageProcessor;
+pub use crate::explainable::NaturalLanguageProcessor;

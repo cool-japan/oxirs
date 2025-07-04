@@ -458,7 +458,7 @@ impl StatisticsCollector {
                 let selectivity = (freq1.min(freq2) / total).sqrt();
 
                 let join_key = format!("{}_{}", pred1, pred2);
-                self.stats.join_selectivity.insert(join_key, selectivity);
+                self.stats.join_selectivities.insert(join_key, selectivity);
             }
         }
 
@@ -479,10 +479,12 @@ impl StatisticsCollector {
             .count() as f64
             / self.stats.predicate_frequency.len().max(1) as f64;
 
-        self.stats
+        // Get or create IndexStatistics for SubjectPredicate index
+        let sp_stats = self.stats
             .index_stats
-            .index_selectivity
-            .insert(IndexType::SubjectPredicate, sp_benefit);
+            .entry(IndexType::SubjectPredicate)
+            .or_insert_with(IndexStatistics::default);
+        sp_stats.index_selectivity = sp_benefit;
 
         // Predicate-Object index benefit
         let po_benefit = self
@@ -492,18 +494,18 @@ impl StatisticsCollector {
             .sum::<f64>()
             / self.histograms.len().max(1) as f64;
 
-        self.stats
+        // Get or create IndexStatistics for PredicateObject index
+        let po_stats = self.stats
             .index_stats
-            .index_selectivity
-            .insert(IndexType::PredicateObject, po_benefit);
+            .entry(IndexType::PredicateObject)
+            .or_insert_with(IndexStatistics::default);
+        po_stats.index_selectivity = po_benefit;
 
         // Update access costs based on selectivity
-        for (index_type, selectivity) in &self.stats.index_stats.index_selectivity {
+        for (index_type, index_stats) in &mut self.stats.index_stats {
+            let selectivity = index_stats.index_selectivity;
             let cost = (1.0 - selectivity) * 10.0 + 1.0;
-            self.stats
-                .index_stats
-                .index_access_cost
-                .insert(index_type.clone(), cost);
+            index_stats.index_access_cost.insert(index_type.clone(), cost);
         }
 
         Ok(())

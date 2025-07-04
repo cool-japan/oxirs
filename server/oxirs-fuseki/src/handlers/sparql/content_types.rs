@@ -104,7 +104,7 @@ pub struct ResponseFormatter;
 
 impl ResponseFormatter {
     /// Format response data based on content type
-    pub fn format<T: Serialize>(
+    pub fn format<T: Serialize + std::fmt::Debug>(
         data: &T,
         content_type: &str,
     ) -> Result<String, Box<dyn std::error::Error>> {

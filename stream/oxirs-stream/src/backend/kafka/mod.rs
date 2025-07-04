@@ -15,3 +15,6 @@ pub use config::{
     SslConfig,
 };
 pub use message::KafkaEvent;
+
+// Type alias for producer (KafkaBackend acts as the producer)
+pub type KafkaProducer = KafkaBackend;

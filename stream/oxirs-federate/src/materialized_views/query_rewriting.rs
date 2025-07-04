@@ -3,8 +3,7 @@
 //! This module provides query rewriting capabilities to utilize materialized views
 //! for improved query performance in federated scenarios.
 
-use anyhow::{anyhow, Result};
-use std::collections::{HashMap, HashSet};
+use anyhow::Result;
 use std::time::Instant;
 use tracing::{debug, info, warn};
 

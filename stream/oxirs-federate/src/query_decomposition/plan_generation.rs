@@ -701,7 +701,7 @@ impl QueryDecomposer {
 
             // Calculate selectivity score (prefer most selective patterns on center service)
             for (_, pattern) in center_patterns {
-                let selectivity = self.estimate_pattern_selectivity(pattern);
+                let selectivity = self.estimate_single_pattern_selectivity(pattern);
                 score += selectivity;
             }
 
@@ -733,8 +733,8 @@ impl QueryDecomposer {
         // Sort patterns by selectivity (most selective first)
         let mut sorted_patterns = satellite_patterns.to_vec();
         sorted_patterns.sort_by(|a, b| {
-            let sel_a = self.estimate_pattern_selectivity(&a.1);
-            let sel_b = self.estimate_pattern_selectivity(&b.1);
+            let sel_a = self.estimate_single_pattern_selectivity(&a.1);
+            let sel_b = self.estimate_single_pattern_selectivity(&b.1);
             sel_a.partial_cmp(&sel_b).unwrap()
         });
 

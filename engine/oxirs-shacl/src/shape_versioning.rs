@@ -20,21 +20,43 @@ use oxirs_core::{
 };
 
 use crate::{
-    constraints::*, report::*, validation::ValidationEngine, Result as ShaclResult, Shape, ShapeId,
-    ValidationConfig, ValidationReport,
+    constraints::*, report::*, validation::ValidationEngine, Result as ShaclResult, Shape, ShapeId, ShapeType,
+    ValidationConfig, ValidationReport, ConstraintComponentId, Constraint, Severity,
 };
 
 /// Shape version identifier
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ShapeVersionId {
     /// Base shape identifier
     pub shape_id: ShapeId,
 
-    /// Version number (semver)
+    /// Version number (semver) - serialized as string
+    #[serde(with = "version_serde")]
     pub version: Version,
 
     /// Unique version UUID
     pub version_uuid: Uuid,
+}
+
+// Custom serde implementation for semver::Version
+mod version_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use semver::Version;
+
+    pub fn serialize<S>(version: &Version, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        version.to_string().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Version, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Version::parse(&s).map_err(serde::de::Error::custom)
+    }
 }
 
 /// Shape version metadata
@@ -581,7 +603,7 @@ impl ShapeVersionRegistry {
         }
 
         // Validate constraint consistency
-        for constraint in &shape.constraints {
+        for (_, constraint) in &shape.constraints {
             self.validate_constraint(constraint)?;
         }
 
@@ -621,22 +643,22 @@ impl ShapeVersionRegistry {
         let mut result = CompatibilityResult::new();
 
         // Compare constraints
-        for old_constraint in &old_shape.constraints {
-            if !new_shape.constraints.contains(old_constraint) {
+        for (old_constraint_id, old_constraint) in &old_shape.constraints {
+            if !new_shape.constraints.contains_key(old_constraint_id) {
                 result.add_issue(CompatibilityIssue {
                     issue_type: CompatibilityIssueType::ConstraintRemoved,
-                    description: format!("Constraint removed: {:?}", old_constraint),
+                    description: format!("Constraint removed: {:?}", old_constraint_id),
                     severity: ImpactSeverity::High,
                 });
             }
         }
 
         // Check for new constraints (may break existing valid data)
-        for new_constraint in &new_shape.constraints {
-            if !old_shape.constraints.contains(new_constraint) {
+        for (new_constraint_id, new_constraint) in &new_shape.constraints {
+            if !old_shape.constraints.contains_key(new_constraint_id) {
                 result.add_issue(CompatibilityIssue {
                     issue_type: CompatibilityIssueType::ConstraintAdded,
-                    description: format!("New constraint added: {:?}", new_constraint),
+                    description: format!("New constraint added: {:?}", new_constraint_id),
                     severity: ImpactSeverity::Medium,
                 });
             }
@@ -711,15 +733,15 @@ impl VersionComparison {
         let mut constraints_modified = Vec::new();
 
         // Find added constraints
-        for constraint in &shape2.constraints {
-            if !shape1.constraints.contains(constraint) {
+        for (constraint_id, constraint) in &shape2.constraints {
+            if !shape1.constraints.contains_key(constraint_id) {
                 constraints_added.push(constraint.clone());
             }
         }
 
         // Find removed constraints
-        for constraint in &shape1.constraints {
-            if !shape2.constraints.contains(constraint) {
+        for (constraint_id, constraint) in &shape1.constraints {
+            if !shape2.constraints.contains_key(constraint_id) {
                 constraints_removed.push(constraint.clone());
             }
         }
@@ -884,19 +906,36 @@ impl VersionValidationStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Severity, ShapeMetadata};
 
     #[test]
     fn test_shape_version_registry() {
         let config = VersionRegistryConfig::default();
         let registry = ShapeVersionRegistry::new(config);
 
-        // Create a test shape
+        // Create a test shape with at least one constraint
+        let mut constraints = IndexMap::new();
+        constraints.insert(
+            ConstraintComponentId::new("minCount"),
+            Constraint::MinCount(crate::constraints::cardinality_constraints::MinCountConstraint { min_count: 1 }),
+        );
+
         let shape = Shape {
             id: ShapeId::new("http://example.org/PersonShape".to_string()),
+            shape_type: ShapeType::NodeShape,
             targets: Vec::new(),
-            constraints: Vec::new(),
-            closed: false,
-            ignored_properties: Vec::new(),
+            path: None,
+            constraints,
+            deactivated: false,
+            label: None,
+            description: None,
+            groups: Vec::new(),
+            order: None,
+            severity: Severity::Violation,
+            messages: IndexMap::new(),
+            extends: Vec::new(),
+            priority: None,
+            metadata: ShapeMetadata::default(),
         };
 
         let version = Version::new(1, 0, 0);

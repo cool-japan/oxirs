@@ -581,10 +581,11 @@ impl StreamingManager {
         // Initialize Kafka if configured
         if let Some(kafka_config) = &self.config.kafka {
             tracing::info!("Initializing Kafka streaming");
+            let kafka_client_config: crate::streaming::kafka::KafkaConfig = kafka_config.clone().into();
             let producer =
-                crate::streaming::kafka::KafkaProducer::new(kafka_config.clone()).await?;
+                crate::streaming::kafka::KafkaProducer::new(kafka_client_config.clone()).await?;
             let consumer =
-                crate::streaming::kafka::KafkaConsumer::new(kafka_config.clone()).await?;
+                crate::streaming::kafka::KafkaConsumer::new(kafka_client_config).await?;
 
             let mut producers = self.producers.write().await;
             let mut consumers = self.consumers.write().await;
@@ -596,8 +597,9 @@ impl StreamingManager {
         // Initialize NATS if configured
         if let Some(nats_config) = &self.config.nats {
             tracing::info!("Initializing NATS streaming");
-            let producer = crate::streaming::nats::NatsProducer::new(nats_config.clone()).await?;
-            let consumer = crate::streaming::nats::NatsConsumer::new(nats_config.clone()).await?;
+            let nats_client_config: crate::streaming::nats::NatsConfig = nats_config.clone().into();
+            let producer = crate::streaming::nats::NatsProducer::new(nats_client_config.clone()).await?;
+            let consumer = crate::streaming::nats::NatsConsumer::new(nats_client_config).await?;
 
             let mut producers = self.producers.write().await;
             let mut consumers = self.consumers.write().await;

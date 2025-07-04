@@ -21,7 +21,7 @@ pub mod types;
 // Re-export commonly used types and functions
 pub use entity_resolution::EntityResolver;
 pub use performance_optimizer::PerformanceOptimizer;
-pub use query_analysis::{QueryAnalyzer, QueryComplexity, QueryInfo};
+pub use query_analysis::{QueryAnalyzer, QueryComplexity};
 pub use schema_composition::SchemaComposer;
 pub use schema_introspection::SchemaIntrospector;
 pub use types::*;
@@ -32,15 +32,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::info;
 
-use crate::{
-    metadata::ExtendedServiceMetadata,
-    query_decomposition::{DecomposerConfig, DecompositionResult, QueryDecomposer},
-    service::ServiceMetadata,
-    service_optimizer::{ServiceOptimizer, ServiceOptimizerConfig},
-    FederatedService, ServiceCapability, ServiceRegistry, StepResult,
-};
+use crate::ServiceRegistry;
 
 /// Main federated query planner
 #[derive(Debug)]
@@ -162,7 +156,7 @@ impl FederatedQueryPlanner {
         // Add service query steps
         for (idx, service_query) in service_queries.iter().enumerate() {
             let step = ExecutionStep {
-                step_id: format!("service_query_{}", idx),
+                step_id: format!("service_query_{idx}"),
                 step_type: StepType::ServiceQuery,
                 service_id: Some(service_query.service_id.clone()),
                 query_fragment: service_query.query.clone(),
@@ -186,7 +180,7 @@ impl FederatedQueryPlanner {
         if let Some(entity_plan) = entity_plan {
             for (idx, entity_step) in entity_plan.steps.iter().enumerate() {
                 let step = ExecutionStep {
-                    step_id: format!("entity_resolution_{}", idx),
+                    step_id: format!("entity_resolution_{idx}"),
                     step_type: StepType::EntityResolution,
                     service_id: Some(entity_step.service_name.clone()),
                     query_fragment: entity_step.query.clone(),
@@ -412,6 +406,124 @@ impl FederatedQueryPlanner {
     /// Get historical performance data
     pub async fn get_performance_history(&self) -> HistoricalPerformance {
         self.performance_history.read().await.clone()
+    }
+
+    /// Analyze a SPARQL query and extract query information
+    pub async fn analyze_sparql(&self, query: &str) -> Result<QueryInfo> {
+        // Parse SPARQL query and extract information
+        let patterns = Vec::new(); // Simplified - would parse actual SPARQL
+        let variables = std::collections::HashSet::new(); // Would extract from query
+        
+        Ok(QueryInfo {
+            query_type: QueryType::Sparql,
+            original_query: query.to_string(),
+            patterns,
+            variables,
+            filters: Vec::new(),
+            complexity: query.len() as u64 / 10, // Simple complexity estimate
+            estimated_cost: query.len() as u64,
+        })
+    }
+
+    /// Plan a SPARQL query execution across federated services
+    pub async fn plan_sparql(
+        &self,
+        query_info: &QueryInfo,
+        service_registry: &ServiceRegistry,
+    ) -> Result<ExecutionPlan> {
+        let start_time = Instant::now();
+        info!("Planning SPARQL federated query");
+
+        // For SPARQL queries, we skip GraphQL parsing and validation
+        // and go directly to execution planning based on the QueryInfo
+        
+        let context = ExecutionContext {
+            query_id: "sparql_query".to_string(),
+            execution_id: "exec_1".to_string(),
+            start_time: std::time::Instant::now(),
+            timeout: None,
+            variables: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new(),
+        };
+
+        // Create execution plan directly from SPARQL query info
+        let plan = ExecutionPlan {
+            id: context.execution_id.clone(),
+            query_id: context.query_id.clone(),
+            steps: vec![
+                ExecutionStep {
+                    id: "sparql_step_1".to_string(),
+                    step_type: StepType::ServiceQuery,
+                    service_ids: vec!["test-1".to_string()], // Use first available service for now
+                    query: ServiceQuery {
+                        query_text: query_info.original_query.clone(),
+                        variables: query_info.variables.iter()
+                            .map(|v| (v.clone(), serde_json::Value::Null))
+                            .collect(),
+                        timeout: Some(std::time::Duration::from_secs(30)),
+                    },
+                    dependencies: vec![],
+                    estimated_cost: query_info.estimated_cost,
+                    timeout: Some(std::time::Duration::from_secs(30)),
+                    retry_config: Some(RetryConfig {
+                        max_retries: 3,
+                        initial_delay: std::time::Duration::from_millis(100),
+                        max_delay: std::time::Duration::from_secs(5),
+                        backoff_factor: 2.0,
+                    }),
+                }
+            ],
+            estimated_total_cost: query_info.estimated_cost,
+            optimization_level: "basic".to_string(),
+            created_at: start_time,
+            timeout: Some(std::time::Duration::from_secs(30)),
+        };
+
+        Ok(plan)
+    }
+
+    /// Analyze a GraphQL query and extract query information
+    pub async fn analyze_graphql(
+        &self,
+        query: &str,
+        variables: Option<&serde_json::Value>,
+    ) -> Result<QueryInfo> {
+        // Parse GraphQL query and extract information
+        let patterns = Vec::new(); // Simplified - would parse actual GraphQL
+        let variables_set = std::collections::HashSet::new(); // Would extract from query
+        
+        Ok(QueryInfo {
+            query_type: QueryType::GraphQL,
+            original_query: query.to_string(),
+            patterns,
+            variables: variables_set,
+            filters: Vec::new(),
+            complexity: query.len() as u64 / 10, // Simple complexity estimate
+            estimated_cost: query.len() as u64,
+        })
+    }
+
+    /// Plan a GraphQL query execution across federated services
+    pub async fn plan_graphql(
+        &self,
+        query_info: &QueryInfo,
+        service_registry: &ServiceRegistry,
+    ) -> Result<ExecutionPlan> {
+        let context = ExecutionContext {
+            query_id: "graphql_query".to_string(),
+            execution_id: "exec_1".to_string(),
+            start_time: std::time::Instant::now(),
+            timeout: None,
+            variables: std::collections::HashMap::new(),
+            metadata: std::collections::HashMap::new(),
+        };
+        
+        self.plan_federated_query(
+            &query_info.original_query,
+            None,
+            &context,
+            service_registry,
+        ).await
     }
 }
 

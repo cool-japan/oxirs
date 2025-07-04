@@ -417,7 +417,7 @@ pub struct CacheStatistics {
 }
 
 /// Strategy pattern for different validation approaches
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ValidationStrategy {
     /// Standard sequential validation
     Sequential,

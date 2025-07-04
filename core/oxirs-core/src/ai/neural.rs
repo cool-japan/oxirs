@@ -315,11 +315,11 @@ impl MultiHeadAttentionLayer {
         let head_dim = embed_dim / num_heads;
 
         Self {
-            query_proj: LinearLayer::new(format!("{}_query", name), embed_dim, embed_dim),
-            key_proj: LinearLayer::new(format!("{}_key", name), embed_dim, embed_dim),
-            value_proj: LinearLayer::new(format!("{}_value", name), embed_dim, embed_dim),
-            output_proj: LinearLayer::new(format!("{}_output", name), embed_dim, embed_dim),
-            dropout: DropoutLayer::new(format!("{}_dropout", name), dropout),
+            query_proj: LinearLayer::new(format!("{name}_query"), embed_dim, embed_dim),
+            key_proj: LinearLayer::new(format!("{name}_key"), embed_dim, embed_dim),
+            value_proj: LinearLayer::new(format!("{name}_value"), embed_dim, embed_dim),
+            output_proj: LinearLayer::new(format!("{name}_output"), embed_dim, embed_dim),
+            dropout: DropoutLayer::new(format!("{name}_dropout"), dropout),
             name,
             embed_dim,
             num_heads,

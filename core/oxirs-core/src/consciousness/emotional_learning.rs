@@ -4,7 +4,7 @@
 //! enabling the system to learn emotional associations and improve decision-making
 //! through emotional context and memory.
 
-use super::{EmotionalState, PatternCharacteristic, QueryContext};
+use super::{EmotionalState, QueryContext};
 use crate::query::algebra::AlgebraTriplePattern;
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
@@ -647,7 +647,7 @@ impl EmotionalLearningNetwork {
         let mut confidence_scores = HashMap::new();
 
         for (i, pattern) in patterns.iter().enumerate() {
-            let pattern_signature = format!("{:?}", pattern);
+            let pattern_signature = format!("{pattern:?}");
             if let Ok(prediction) = self.predict_emotional_response(&pattern_signature) {
                 pattern_emotions.insert(i, prediction.predicted_emotion);
                 confidence_scores.insert(i, prediction.confidence);

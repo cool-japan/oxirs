@@ -4,12 +4,10 @@
 //! including dependency tracking, batch resolution, and entity stitching.
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use tracing::{debug, info, warn};
+use std::collections::{HashMap, VecDeque};
+use tracing::debug;
 
 use super::types::*;
-use crate::{ExecutionPlan, ExecutionStep, FederatedService, ServiceRegistry, StepResult};
 
 /// Entity resolution utilities
 #[derive(Debug)]

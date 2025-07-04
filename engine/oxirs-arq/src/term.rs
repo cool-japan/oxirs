@@ -628,7 +628,7 @@ impl Term {
                     object: Term::from_algebra_term(&quoted_triple.object),
                 }))
             }
-            AlgebraTerm::PropertyPath(path) => Term::PropertyPath(path.clone()),
+            AlgebraTerm::PropertyPath(path) => Term::PropertyPath(Self::convert_algebra_to_path_property_path(path)),
         }
     }
 
@@ -652,7 +652,7 @@ impl Term {
                 predicate: triple.predicate.to_algebra_term(),
                 object: triple.object.to_algebra_term(),
             })),
-            Term::PropertyPath(path) => AlgebraTerm::PropertyPath(path.clone()),
+            Term::PropertyPath(path) => AlgebraTerm::PropertyPath(Self::convert_path_to_algebra_property_path(path)),
         }
     }
 
@@ -688,6 +688,73 @@ impl Term {
                 bail!("Cannot convert IRI, blank node, quoted triple, or property path to numeric")
             }
             Term::Variable(_) => bail!("Cannot convert unbound variable to numeric"),
+        }
+    }
+
+    /// Convert algebra PropertyPath to path PropertyPath
+    fn convert_algebra_to_path_property_path(algebra_path: &crate::algebra::PropertyPath) -> crate::path::PropertyPath {
+        use crate::algebra::PropertyPath as AlgPath;
+        use crate::path::PropertyPath as PathPath;
+        use crate::algebra::Term as AlgTerm;
+        
+        match algebra_path {
+            AlgPath::Iri(iri) => PathPath::Direct(AlgTerm::Iri(iri.clone())),
+            AlgPath::Variable(var) => PathPath::Direct(AlgTerm::Variable(var.clone())),
+            AlgPath::Inverse(path) => PathPath::Inverse(Box::new(Self::convert_algebra_to_path_property_path(path))),
+            AlgPath::Sequence(left, right) => PathPath::Sequence(
+                Box::new(Self::convert_algebra_to_path_property_path(left)),
+                Box::new(Self::convert_algebra_to_path_property_path(right))
+            ),
+            AlgPath::Alternative(left, right) => PathPath::Alternative(
+                Box::new(Self::convert_algebra_to_path_property_path(left)),
+                Box::new(Self::convert_algebra_to_path_property_path(right))
+            ),
+            AlgPath::ZeroOrMore(path) => PathPath::ZeroOrMore(Box::new(Self::convert_algebra_to_path_property_path(path))),
+            AlgPath::OneOrMore(path) => PathPath::OneOrMore(Box::new(Self::convert_algebra_to_path_property_path(path))),
+            AlgPath::ZeroOrOne(path) => PathPath::ZeroOrOne(Box::new(Self::convert_algebra_to_path_property_path(path))),
+            AlgPath::NegatedPropertySet(_) => {
+                // For now, convert negated property sets to a simple Direct path
+                // This is a simplification and might need better handling
+                PathPath::Direct(AlgTerm::Iri(oxirs_core::model::NamedNode::new_unchecked("<urn:negated-property-set>")))
+            }
+        }
+    }
+
+    /// Convert path PropertyPath to algebra PropertyPath
+    fn convert_path_to_algebra_property_path(path_path: &crate::path::PropertyPath) -> crate::algebra::PropertyPath {
+        use crate::algebra::PropertyPath as AlgPath;
+        use crate::path::PropertyPath as PathPath;
+        use crate::algebra::Term as AlgTerm;
+        
+        match path_path {
+            PathPath::Direct(term) => match term {
+                AlgTerm::Iri(iri) => AlgPath::Iri(oxirs_core::model::NamedNode::new_unchecked(iri.as_str())),
+                AlgTerm::Variable(var) => AlgPath::Variable(var.clone()),
+                _ => AlgPath::Iri(oxirs_core::model::NamedNode::new_unchecked("<urn:unknown>"))
+            },
+            PathPath::Inverse(path) => AlgPath::Inverse(Box::new(Self::convert_path_to_algebra_property_path(path))),
+            PathPath::Sequence(left, right) => AlgPath::Sequence(
+                Box::new(Self::convert_path_to_algebra_property_path(left)),
+                Box::new(Self::convert_path_to_algebra_property_path(right))
+            ),
+            PathPath::Alternative(left, right) => AlgPath::Alternative(
+                Box::new(Self::convert_path_to_algebra_property_path(left)),
+                Box::new(Self::convert_path_to_algebra_property_path(right))
+            ),
+            PathPath::ZeroOrMore(path) => AlgPath::ZeroOrMore(Box::new(Self::convert_path_to_algebra_property_path(path))),
+            PathPath::OneOrMore(path) => AlgPath::OneOrMore(Box::new(Self::convert_path_to_algebra_property_path(path))),
+            PathPath::ZeroOrOne(path) => AlgPath::ZeroOrOne(Box::new(Self::convert_path_to_algebra_property_path(path))),
+            PathPath::NegatedPropertySet(terms) => {
+                // Convert terms to PropertyPaths for the negated property set
+                let property_paths: Vec<crate::algebra::PropertyPath> = terms.iter()
+                    .filter_map(|term| match term {
+                        AlgTerm::Iri(iri) => Some(AlgPath::Iri(iri.clone())),
+                        AlgTerm::Variable(var) => Some(AlgPath::Variable(var.clone())),
+                        _ => None,
+                    })
+                    .collect();
+                AlgPath::NegatedPropertySet(property_paths)
+            }
         }
     }
 }
@@ -801,7 +868,7 @@ mod tests {
     fn test_property_path_term() {
         use crate::path::PropertyPath;
 
-        let direct_path = PropertyPath::Direct(Term::iri("http://example.org/prop"));
+        let direct_path = PropertyPath::Direct(crate::algebra::Term::Iri(crate::algebra::Iri::new_unchecked("http://example.org/prop")));
         let path_term = Term::property_path(direct_path);
         assert!(path_term.is_property_path());
     }
@@ -817,9 +884,9 @@ mod tests {
             Term::iri("http://example.org/p"),
             Term::iri("http://example.org/o"),
         );
-        let path = Term::property_path(crate::path::PropertyPath::Direct(Term::iri(
+        let path = Term::property_path(crate::path::PropertyPath::Direct(crate::algebra::Term::Iri(crate::algebra::Iri::new_unchecked(
             "http://example.org/prop",
-        )));
+        ))));
 
         // Test ordering: Variable < BlankNode < Iri < Literal < QuotedTriple < PropertyPath
         assert!(var < blank);

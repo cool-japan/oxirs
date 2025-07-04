@@ -15,7 +15,7 @@ impl HnswIndex {
 
         for &candidate_id in candidates {
             if let Some(node) = self.nodes().get(candidate_id) {
-                let distance = self.config().metric.distance(query, &node.vector);
+                let distance = self.config().metric.distance(query, &node.vector)?;
                 distances.push(distance);
             } else {
                 distances.push(f32::INFINITY);
