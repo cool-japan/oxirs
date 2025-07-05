@@ -192,7 +192,7 @@ impl QualifiedValueShapeConstraint {
     }
 
     /// Check if a value conforms to the qualified shape
-    fn value_conforms_to_shape(
+    pub fn value_conforms_to_shape(
         &self,
         value: &Term,
         store: &dyn Store,

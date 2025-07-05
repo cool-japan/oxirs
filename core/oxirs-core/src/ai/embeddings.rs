@@ -432,10 +432,13 @@ impl KnowledgeGraphEmbedding for TransE {
 
 /// DistMult embedding model
 pub struct DistMult {
+    #[allow(dead_code)]
     config: EmbeddingConfig,
     entity_embeddings: Arc<RwLock<HashMap<String, Array1<f32>>>>,
     relation_embeddings: Arc<RwLock<HashMap<String, Array1<f32>>>>,
+    #[allow(dead_code)]
     entity_vocab: HashMap<String, usize>,
+    #[allow(dead_code)]
     relation_vocab: HashMap<String, usize>,
     trained: bool,
 }
@@ -573,12 +576,15 @@ impl KnowledgeGraphEmbedding for DistMult {
 
 /// ComplEx embedding model with complex numbers
 pub struct ComplEx {
+    #[allow(dead_code)]
     config: EmbeddingConfig,
     entity_embeddings_real: Arc<RwLock<HashMap<String, Array1<f32>>>>,
     entity_embeddings_imag: Arc<RwLock<HashMap<String, Array1<f32>>>>,
     relation_embeddings_real: Arc<RwLock<HashMap<String, Array1<f32>>>>,
     relation_embeddings_imag: Arc<RwLock<HashMap<String, Array1<f32>>>>,
+    #[allow(dead_code)]
     entity_vocab: HashMap<String, usize>,
+    #[allow(dead_code)]
     relation_vocab: HashMap<String, usize>,
     trained: bool,
 }

@@ -138,7 +138,7 @@ pub struct PatternCache {
 type QueryHash = u64;
 
 /// Cached execution plan
-struct CachedPlan {
+pub struct CachedPlan {
     /// The execution plan
     plan: DistributedPlan,
     /// Creation time
@@ -1093,7 +1093,7 @@ struct ActiveQuery {
 }
 
 /// Shared query result
-struct SharedResult {
+pub struct SharedResult {
     /// Query hash
     query_hash: QueryHash,
     /// Result data

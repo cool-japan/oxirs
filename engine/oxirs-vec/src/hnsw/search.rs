@@ -12,17 +12,124 @@ impl HnswIndex {
             return Ok(Vec::new());
         }
 
-        // Placeholder implementation
-        // Real implementation would:
-        // 1. Start from entry point
-        // 2. Search through layers from top to bottom
-        // 3. Use greedy search at each layer
-        // 4. Return k nearest neighbors
+        let entry_point = self.entry_point().unwrap();
+        let mut visited = std::collections::HashSet::new();
+        let mut current_best = Vec::new();
 
-        let mut results = Vec::new();
+        // Start from entry point
+        let initial_distance = self.calculate_distance(query, entry_point)?;
+        current_best.push(Candidate::new(entry_point, initial_distance));
+        visited.insert(entry_point);
 
-        // For now, return empty results
-        // TODO: Implement full HNSW search algorithm
+        // Get the highest level of the entry point
+        let start_level = if let Some(node) = self.nodes().get(entry_point) {
+            node.level()
+        } else {
+            0
+        };
+
+        // Phase 1: Search from top level down to level 1 (greedy search with beam size 1)
+        for level in (1..=start_level).rev() {
+            current_best = self.search_layer(query, &current_best, 1, level, &mut visited)?;
+        }
+
+        // Phase 2: Search at level 0 with dynamic beam size (ef parameter)
+        let ef = (k as f32 * 1.5).max(16.0) as usize; // Dynamic ef based on k
+        current_best = self.search_layer(query, &current_best, ef, 0, &mut visited)?;
+
+        // Phase 3: Extract top k results
+        let mut final_results = current_best;
+        final_results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+        final_results.truncate(k);
+
+        // Convert to output format
+        let results: Vec<(String, f32)> = final_results
+            .into_iter()
+            .filter_map(|candidate| {
+                if let Some(node) = self.nodes().get(candidate.id) {
+                    Some((node.uri.clone(), candidate.distance))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(results)
+    }
+
+    /// Core layer search algorithm for HNSW
+    /// Implements the greedy search with dynamic candidate list
+    fn search_layer(
+        &self,
+        query: &Vector,
+        entry_points: &[Candidate],
+        num_closest: usize,
+        level: usize,
+        visited: &mut std::collections::HashSet<usize>,
+    ) -> Result<Vec<Candidate>> {
+        // Priority queue for candidates (max-heap based on distance)
+        let mut candidates = BinaryHeap::new();
+        
+        // Priority queue for best results so far (min-heap based on distance)
+        let mut dynamic_list: BinaryHeap<std::cmp::Reverse<Candidate>> = BinaryHeap::new();
+
+        // Initialize with entry points
+        for entry in entry_points {
+            if !visited.contains(&entry.id) {
+                visited.insert(entry.id);
+                candidates.push(*entry);
+                dynamic_list.push(std::cmp::Reverse(*entry));
+            }
+        }
+
+        // Main search loop
+        while let Some(current) = candidates.pop() {
+            // Early termination condition
+            if let Some(&std::cmp::Reverse(best)) = dynamic_list.peek() {
+                if current.distance > best.distance && dynamic_list.len() >= num_closest {
+                    break; // Current candidate is farther than the farthest in our result set
+                }
+            }
+
+            // Explore neighbors of current node at the specified level
+            if let Some(node) = self.nodes().get(current.id) {
+                if let Some(connections) = node.get_connections(level) {
+                    for &neighbor_id in connections {
+                        if !visited.contains(&neighbor_id) {
+                            visited.insert(neighbor_id);
+                            
+                            let distance = self.calculate_distance(query, neighbor_id)?;
+                            let neighbor_candidate = Candidate::new(neighbor_id, distance);
+
+                            // Check if this neighbor should be explored further
+                            let should_add = if dynamic_list.len() < num_closest {
+                                true // Still building initial set
+                            } else if let Some(&std::cmp::Reverse(worst)) = dynamic_list.peek() {
+                                distance < worst.distance // Better than current worst
+                            } else {
+                                false
+                            };
+
+                            if should_add {
+                                candidates.push(neighbor_candidate);
+                                dynamic_list.push(std::cmp::Reverse(neighbor_candidate));
+
+                                // Keep only the best num_closest candidates
+                                if dynamic_list.len() > num_closest {
+                                    dynamic_list.pop(); // Remove worst
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Convert result to Vec<Candidate>
+        let results: Vec<Candidate> = dynamic_list
+            .into_iter()
+            .map(|std::cmp::Reverse(candidate)| candidate)
+            .collect();
 
         Ok(results)
     }

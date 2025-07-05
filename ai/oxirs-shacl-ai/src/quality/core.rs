@@ -811,6 +811,30 @@ impl QualityAssessor {
                     // Handle implicit targets
                     instances.push(Term::NamedNode(node.clone()));
                 }
+                Target::Union(_) => {
+                    // Handle union targets - for now just log and skip
+                    eprintln!("Warning: Union targets not yet implemented");
+                }
+                Target::Intersection(_) => {
+                    // Handle intersection targets - for now just log and skip
+                    eprintln!("Warning: Intersection targets not yet implemented");
+                }
+                Target::Difference(_) => {
+                    // Handle difference targets - for now just log and skip
+                    eprintln!("Warning: Difference targets not yet implemented");
+                }
+                Target::Conditional(_) => {
+                    // Handle conditional targets - for now just log and skip
+                    eprintln!("Warning: Conditional targets not yet implemented");
+                }
+                Target::Hierarchical(_) => {
+                    // Handle hierarchical targets - for now just log and skip
+                    eprintln!("Warning: Hierarchical targets not yet implemented");
+                }
+                Target::PathBased(_) => {
+                    // Handle path-based targets - for now just log and skip
+                    eprintln!("Warning: Path-based targets not yet implemented");
+                }
             }
         }
 

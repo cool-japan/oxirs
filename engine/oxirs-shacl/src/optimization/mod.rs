@@ -10,6 +10,7 @@ pub mod constraint_ordering;
 pub mod core;
 pub mod integration;
 pub mod memory;
+pub mod negation_optimizer;
 pub mod parallel;
 pub mod quantum_analytics;
 
@@ -65,4 +66,11 @@ pub use quantum_analytics::{
     MeditationState, QuantumAnalyticsConfig, QuantumOptimizationStrategy,
     QuantumPerformanceAnalytics, QuantumPerformanceInsight, RecommendationCategory,
     TranscendenceComplexity, TranscendentRecommendation,
+};
+
+// Re-export negation optimizer types
+pub use negation_optimizer::{
+    CacheWorthiness, NegationOptimizationConfig, NegationOptimizationResult,
+    NegationOptimizationStats, NegationOptimizer, OptimizationStrategy,
+    ShapeComplexity, ShapeComplexityAnalysis, StrategyStats,
 };

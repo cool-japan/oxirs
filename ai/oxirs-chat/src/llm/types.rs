@@ -12,8 +12,53 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Serde helper for Duration serialization
+mod duration_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        duration.as_millis().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let millis = u64::deserialize(deserializer)?;
+        Ok(Duration::from_millis(millis))
+    }
+}
+
+/// Serde helper for Option<Duration> serialization
+mod option_duration_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S>(duration: &Option<Duration>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match duration {
+            Some(d) => Some(d.as_millis()).serialize(serializer),
+            None => None::<u128>.serialize(serializer),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let millis_opt = Option::<u64>::deserialize(deserializer)?;
+        Ok(millis_opt.map(Duration::from_millis))
+    }
+}
+
 /// LLM request context
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMRequest {
     pub messages: Vec<ChatMessage>,
     pub system_prompt: Option<String>,
@@ -21,6 +66,7 @@ pub struct LLMRequest {
     pub max_tokens: Option<usize>,
     pub use_case: UseCase,
     pub priority: Priority,
+    #[serde(with = "option_duration_serde")]
     pub timeout: Option<Duration>,
 }
 
@@ -40,7 +86,7 @@ pub enum ChatRole {
 }
 
 /// Use case classification for intelligent routing
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum UseCase {
     SimpleQuery,
     ComplexReasoning,
@@ -51,7 +97,7 @@ pub enum UseCase {
     CodeGeneration,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Priority {
     Low,
     Normal,
@@ -60,12 +106,13 @@ pub enum Priority {
 }
 
 /// LLM response
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMResponse {
     pub content: String,
     pub model_used: String,
     pub provider_used: String,
     pub usage: Usage,
+    #[serde(with = "duration_serde")]
     pub latency: Duration,
     pub quality_score: Option<f32>,
     pub metadata: HashMap<String, serde_json::Value>,
@@ -92,7 +139,7 @@ pub struct LLMResponseStream {
 }
 
 /// Token usage information
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Usage {
     pub prompt_tokens: usize,
     pub completion_tokens: usize,

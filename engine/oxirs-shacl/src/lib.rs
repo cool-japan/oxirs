@@ -549,6 +549,7 @@ pub mod sparql;
 pub mod targets;
 pub mod validation;
 pub mod vocabulary;
+pub mod w3c_test_suite;
 
 // Re-export key types for convenience
 pub use analytics::*;
@@ -567,6 +568,7 @@ pub use shapes::*;
 pub use sparql::*;
 pub use targets::*;
 pub use validation::*;
+pub use w3c_test_suite::*;
 
 // Re-export optimization types
 pub use targets::{TargetCacheStats, TargetOptimizationConfig, TargetSelectionStats};
@@ -721,7 +723,7 @@ impl From<&str> for ShapeId {
 }
 
 /// SHACL constraint component identifier
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ConstraintComponentId(pub String);
 
 impl ConstraintComponentId {
@@ -1305,6 +1307,147 @@ impl Validator {
                 Target::Implicit(class_iri) => {
                     // Validate that the implicit class IRI is a valid IRI
                     self.validate_iri_format(class_iri.as_str())?;
+                }
+                Target::Union(union_target) => {
+                    // Recursively validate all targets in the union
+                    for nested_target in &union_target.targets {
+                        self.validate_shape_targets(&Shape {
+                            id: shape.id.clone(),
+                            shape_type: shape.shape_type.clone(),
+                            targets: vec![nested_target.clone()],
+                            constraints: indexmap::IndexMap::new(),
+                            path: None,
+                            deactivated: false,
+                            label: None,
+                            description: None,
+                            groups: vec![],
+                            order: None,
+                            severity: shape.severity.clone(),
+                            messages: indexmap::IndexMap::new(),
+                            extends: vec![],
+                            priority: None,
+                            metadata: ShapeMetadata::default(),
+                        })?;
+                    }
+                }
+                Target::Intersection(intersection_target) => {
+                    // Recursively validate all targets in the intersection
+                    for nested_target in &intersection_target.targets {
+                        self.validate_shape_targets(&Shape {
+                            id: shape.id.clone(),
+                            shape_type: shape.shape_type.clone(),
+                            targets: vec![nested_target.clone()],
+                            constraints: indexmap::IndexMap::new(),
+                            path: None,
+                            deactivated: false,
+                            label: None,
+                            description: None,
+                            groups: vec![],
+                            order: None,
+                            severity: shape.severity.clone(),
+                            messages: indexmap::IndexMap::new(),
+                            extends: vec![],
+                            priority: None,
+                            metadata: ShapeMetadata::default(),
+                        })?;
+                    }
+                }
+                Target::Difference(difference_target) => {
+                    // Validate both primary and exclusion targets
+                    self.validate_shape_targets(&Shape {
+                        id: shape.id.clone(),
+                        shape_type: shape.shape_type.clone(),
+                        targets: vec![(*difference_target.primary_target).clone()],
+                        constraints: indexmap::IndexMap::new(),
+                        path: None,
+                        deactivated: false,
+                        label: None,
+                        description: None,
+                        groups: vec![],
+                        order: None,
+                        severity: shape.severity.clone(),
+                        messages: indexmap::IndexMap::new(),
+                        extends: vec![],
+                        priority: None,
+                        metadata: ShapeMetadata::default(),
+                    })?;
+                    self.validate_shape_targets(&Shape {
+                        id: shape.id.clone(),
+                        shape_type: shape.shape_type.clone(),
+                        targets: vec![(*difference_target.exclusion_target).clone()],
+                        constraints: indexmap::IndexMap::new(),
+                        path: None,
+                        deactivated: false,
+                        label: None,
+                        description: None,
+                        groups: vec![],
+                        order: None,
+                        severity: shape.severity.clone(),
+                        messages: indexmap::IndexMap::new(),
+                        extends: vec![],
+                        priority: None,
+                        metadata: ShapeMetadata::default(),
+                    })?;
+                }
+                Target::Conditional(conditional_target) => {
+                    // Validate the base target
+                    self.validate_shape_targets(&Shape {
+                        id: shape.id.clone(),
+                        shape_type: shape.shape_type.clone(),
+                        targets: vec![(*conditional_target.base_target).clone()],
+                        constraints: indexmap::IndexMap::new(),
+                        path: None,
+                        deactivated: false,
+                        label: None,
+                        description: None,
+                        groups: vec![],
+                        order: None,
+                        severity: shape.severity.clone(),
+                        messages: indexmap::IndexMap::new(),
+                        extends: vec![],
+                        priority: None,
+                        metadata: ShapeMetadata::default(),
+                    })?;
+                }
+                Target::Hierarchical(hierarchical_target) => {
+                    // Validate the root target
+                    self.validate_shape_targets(&Shape {
+                        id: shape.id.clone(),
+                        shape_type: shape.shape_type.clone(),
+                        targets: vec![(*hierarchical_target.root_target).clone()],
+                        constraints: indexmap::IndexMap::new(),
+                        path: None,
+                        deactivated: false,
+                        label: None,
+                        description: None,
+                        groups: vec![],
+                        order: None,
+                        severity: shape.severity.clone(),
+                        messages: indexmap::IndexMap::new(),
+                        extends: vec![],
+                        priority: None,
+                        metadata: ShapeMetadata::default(),
+                    })?;
+                }
+                Target::PathBased(path_based_target) => {
+                    // Validate the start target
+                    self.validate_shape_targets(&Shape {
+                        id: shape.id.clone(),
+                        shape_type: shape.shape_type.clone(),
+                        targets: vec![(*path_based_target.start_target).clone()],
+                        constraints: indexmap::IndexMap::new(),
+                        path: None,
+                        deactivated: false,
+                        label: None,
+                        description: None,
+                        groups: vec![],
+                        order: None,
+                        severity: shape.severity.clone(),
+                        messages: indexmap::IndexMap::new(),
+                        extends: vec![],
+                        priority: None,
+                        metadata: ShapeMetadata::default(),
+                    })?;
                 }
             }
         }

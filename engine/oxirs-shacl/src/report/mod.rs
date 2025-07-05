@@ -2,12 +2,15 @@
 //!
 //! This module handles generation and serialization of SHACL validation reports.
 
+pub mod advanced_filtering;
 pub mod analytics;
 pub mod core;
 pub mod format;
 pub mod generation;
 pub mod generator;
+pub mod interactive;
 pub mod metadata;
+pub mod nested_results;
 pub mod serializers;
 pub mod summary;
 
@@ -27,6 +30,25 @@ pub use generation::{
 
 // Re-export analytics types
 pub use analytics::{AnalyticsConfig, AnalyzedReport, ReportMetrics, ValidationReportAnalytics};
+
+// Re-export advanced filtering types
+pub use advanced_filtering::{
+    FilterConfig, FilteredReport, ReportFilterEngine, ReportQueryEngine, ReportTemplate,
+    TemplateConfig, TimeRange, CustomFilter, FilterFunction, QueryCriteria, QueryResult,
+};
+
+// Re-export interactive viewer types
+pub use interactive::{
+    InteractiveReportViewer, ViewerConfig, ViewerTheme, SortConfig, SortField, SortDirection,
+    PaginationConfig, InteractiveReportView, ViewSummary, FilterOptions, ExportConfig, ExportFormat,
+};
+
+// Re-export nested validation result types
+pub use nested_results::{
+    NestedValidationViolation, NestedValidationResults, LogicalConstraintContext, ShapeConstraintContext,
+    QualifiedConstraintContext, NestedViolationBuilder, ToNestedViolation, RootCause,
+    LogicalConstraintType, ShapeValidationType, PropertyConstraintResult, NodeConstraintResult,
+};
 
 // Re-export validation types
 pub use crate::validation::AsyncValidationStats;

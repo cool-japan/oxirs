@@ -123,7 +123,7 @@ pub struct ClassicalCondition {
 }
 
 /// Comparison operators for classical conditions
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ComparisonOperator {
     Equal,
     NotEqual,

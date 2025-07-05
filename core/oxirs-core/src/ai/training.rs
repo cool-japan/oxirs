@@ -846,12 +846,15 @@ pub fn create_trainer(config: &TrainingConfig) -> Result<Arc<dyn Trainer>> {
 /// Hyperparameter optimization
 pub struct HyperparameterOptimizer {
     /// Search space
+    #[allow(dead_code)]
     search_space: HashMap<String, ParameterRange>,
 
     /// Optimization strategy
+    #[allow(dead_code)]
     strategy: OptimizationStrategy,
 
     /// Number of trials
+    #[allow(dead_code)]
     num_trials: usize,
 }
 

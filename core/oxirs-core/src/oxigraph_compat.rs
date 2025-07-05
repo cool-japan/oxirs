@@ -53,7 +53,7 @@ impl Store {
             quad_ref.graph_name().to_owned(),
         );
 
-        let mut store = self
+        let store = self
             .inner
             .write()
             .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
@@ -391,19 +391,57 @@ impl Store {
     }
 
     /// Executes a SPARQL update
-    pub fn update(&self, _update: &str) -> Result<()> {
-        unimplemented!("SPARQL UPDATE not yet implemented")
+    pub fn update(&self, update_str: &str) -> Result<()> {
+        use crate::query::{UpdateExecutor, UpdateParser};
+        
+        // Parse the UPDATE string
+        let parser = UpdateParser::new();
+        let update = parser.parse(update_str)?;
+        
+        // Get write access to the store
+        let store = self
+            .inner
+            .write()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
+        
+        // Execute the update
+        let executor = UpdateExecutor::new(&*store);
+        executor.execute(&update)?;
+        
+        Ok(())
     }
 
     /// Creates a transaction for the store
     pub fn transaction<T, E>(
         &self,
-        _f: impl FnOnce(&mut Transaction) -> std::result::Result<T, E>,
+        f: impl FnOnce(&mut crate::Transaction) -> std::result::Result<T, E>,
     ) -> std::result::Result<T, E>
     where
         E: From<OxirsError>,
     {
-        unimplemented!("Transactions not yet implemented")
+        // Get write access to the store
+        let mut store = self
+            .inner
+            .write()
+            .map_err(|e| E::from(OxirsError::Store(format!("Failed to acquire write lock: {e}"))))?;
+        
+        // Create a transaction
+        let mut transaction = crate::Transaction::new(&mut *store);
+        
+        // Execute the user function
+        let result = f(&mut transaction);
+        
+        // Commit the transaction if the function succeeded
+        match result {
+            Ok(value) => {
+                transaction.commit().map_err(E::from)?;
+                Ok(value)
+            }
+            Err(error) => {
+                transaction.abort();
+                Err(error)
+            }
+        }
     }
 
     /// Validates the store integrity
@@ -424,8 +462,71 @@ impl Store {
     }
 
     /// Backs up the store to a path
-    pub fn backup<P: AsRef<Path>>(&self, _path: P) -> Result<()> {
-        unimplemented!("Backup not yet implemented")
+    pub fn backup<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        use crate::serializer::Serializer;
+        use crate::parser::RdfFormat;
+        use std::fs::File;
+        use std::io::Write;
+        use std::time::{SystemTime, UNIX_EPOCH};
+        
+        let backup_path = path.as_ref();
+        
+        // Create backup directory if it doesn't exist
+        if let Some(parent) = backup_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| OxirsError::Store(format!("Failed to create backup directory: {}", e)))?;
+        }
+        
+        // Generate backup filename with timestamp
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        let backup_file_path = if backup_path.is_dir() {
+            backup_path.join(format!("oxirs_backup_{}.nq", timestamp))
+        } else {
+            backup_path.to_path_buf()
+        };
+        
+        // Get read lock on the store
+        let store = self.inner.read()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+        
+        // Get all quads from the store
+        let quads = store.iter_quads()
+            .map_err(|e| OxirsError::Store(format!("Failed to iterate quads: {}", e)))?;
+        
+        // Create dataset from quads
+        let dataset = crate::model::dataset::Dataset::from_iter(quads.clone());
+        
+        // Serialize to N-Quads format (most portable and complete format)
+        let serializer = Serializer::new(RdfFormat::NQuads);
+        let serialized_data = serializer.serialize_dataset(&dataset)
+            .map_err(|e| OxirsError::Store(format!("Failed to serialize dataset: {}", e)))?;
+        
+        // Write to backup file
+        let mut backup_file = File::create(&backup_file_path)
+            .map_err(|e| OxirsError::Store(format!("Failed to create backup file: {}", e)))?;
+        
+        backup_file.write_all(serialized_data.as_bytes())
+            .map_err(|e| OxirsError::Store(format!("Failed to write backup data: {}", e)))?;
+        
+        backup_file.sync_all()
+            .map_err(|e| OxirsError::Store(format!("Failed to sync backup file: {}", e)))?;
+        
+        // Calculate backup size for logging
+        let backup_size = serialized_data.len();
+        let quad_count = quads.len();
+        
+        tracing::info!(
+            "Store backup completed successfully. File: {}, Quads: {}, Size: {} bytes",
+            backup_file_path.display(),
+            quad_count,
+            backup_size
+        );
+        
+        Ok(())
     }
 
     /// Flushes any pending changes to disk

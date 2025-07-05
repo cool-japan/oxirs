@@ -161,6 +161,41 @@ impl ShapeValidator {
                 }
                 Ok(())
             }
+            Target::Union(union_target) => {
+                // Validate all targets in the union
+                for target in &union_target.targets {
+                    self.validate_target(target)?;
+                }
+                Ok(())
+            }
+            Target::Intersection(intersection_target) => {
+                // Validate all targets in the intersection
+                for target in &intersection_target.targets {
+                    self.validate_target(target)?;
+                }
+                Ok(())
+            }
+            Target::Difference(difference_target) => {
+                // Validate both primary and exclusion targets
+                self.validate_target(&difference_target.primary_target)?;
+                self.validate_target(&difference_target.exclusion_target)?;
+                Ok(())
+            }
+            Target::Conditional(conditional_target) => {
+                // Validate base target
+                self.validate_target(&conditional_target.base_target)?;
+                Ok(())
+            }
+            Target::Hierarchical(hierarchical_target) => {
+                // Validate root target
+                self.validate_target(&hierarchical_target.root_target)?;
+                Ok(())
+            }
+            Target::PathBased(path_based_target) => {
+                // Validate start target
+                self.validate_target(&path_based_target.start_target)?;
+                Ok(())
+            }
         }
     }
 

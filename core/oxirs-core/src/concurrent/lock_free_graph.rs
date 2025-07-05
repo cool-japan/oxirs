@@ -22,6 +22,7 @@ struct GraphNode {
     /// Index for SPO (Subject-Predicate-Object) lookups
     spo_index: Arc<DashMap<Subject, DashMap<Predicate, HashSet<Object>>>>,
     /// Index for POS (Predicate-Object-Subject) lookups
+    #[allow(dead_code)]
     pos_index: Arc<DashMap<Predicate, DashMap<Object, HashSet<Subject>>>>,
     /// Index for OSP (Object-Subject-Predicate) lookups
     osp_index: Arc<DashMap<Object, DashMap<Subject, HashSet<Predicate>>>>,

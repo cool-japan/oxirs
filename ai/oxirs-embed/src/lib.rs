@@ -129,6 +129,7 @@ pub mod consciousness_aware_embeddings;
 // pub mod contextual;
 pub mod continual_learning;
 pub mod cross_domain_transfer;
+pub mod cross_module_performance;
 pub mod delta;
 pub mod diffusion_embeddings;
 pub mod enterprise_knowledge;
@@ -245,7 +246,7 @@ impl Vector {
         self.inner.unwrap_or_else(|| VecVector::new(self.values))
     }
 
-    /// Create from VecVector
+    /// Create from VecVector with optimized memory allocation
     pub fn from_vec_vector(vec_vector: VecVector) -> Self {
         let values = vec_vector.as_f32().to_vec();
         let dimensions = values.len();
@@ -254,6 +255,34 @@ impl Vector {
             dimensions,
             inner: Some(vec_vector),
         }
+    }
+
+    /// Create vector with pre-allocated capacity for performance
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            values: Vec::with_capacity(capacity),
+            dimensions: 0,
+            inner: None,
+        }
+    }
+
+    /// Extend vector with optimized memory reallocation
+    pub fn extend_optimized(&mut self, other_values: &[f32]) {
+        // Reserve capacity to avoid multiple reallocations
+        self.values.reserve(other_values.len());
+        self.values.extend_from_slice(other_values);
+        self.sync_internal();
+    }
+
+    /// Shrink vector memory to fit actual size
+    pub fn shrink_to_fit(&mut self) {
+        self.values.shrink_to_fit();
+        self.sync_internal();
+    }
+
+    /// Get memory usage in bytes
+    pub fn memory_usage(&self) -> usize {
+        self.values.capacity() * std::mem::size_of::<f32>() + std::mem::size_of::<Self>()
     }
 }
 
@@ -542,6 +571,11 @@ pub use continual_learning::{
     ArchitectureConfig, BoundaryDetection, ConsolidationConfig, ContinualLearningConfig,
     ContinualLearningModel, MemoryConfig, MemoryType, MemoryUpdateStrategy, RegularizationConfig,
     ReplayConfig, ReplayMethod, TaskConfig, TaskDetection, TaskSwitching,
+};
+pub use cross_module_performance::{
+    CoordinatorConfig, CrossModulePerformanceCoordinator, GlobalPerformanceMetrics,
+    ModuleMetrics, ModulePerformanceMonitor, OptimizationCache, PerformanceSnapshot,
+    PredictivePerformanceEngine, ResourceAllocator, ResourceTracker,
 };
 pub use delta::{
     ChangeRecord, ChangeStatistics, ChangeType, DeltaConfig, DeltaManager, DeltaResult, DeltaStats,

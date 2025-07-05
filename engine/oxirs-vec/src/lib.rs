@@ -37,6 +37,7 @@ use std::collections::HashMap;
 use uuid;
 
 pub mod adaptive_compression;
+pub mod adaptive_intelligent_caching;
 pub mod advanced_analytics;
 pub mod advanced_benchmarking;
 pub mod advanced_caching;
@@ -76,6 +77,7 @@ pub mod mmap_advanced;
 pub mod mmap_index;
 pub mod opq;
 pub mod oxirs_arq_integration;
+pub mod performance_insights;
 pub mod pq;
 pub mod quantum_search;
 pub mod rdf_content_enhancement;
@@ -102,6 +104,10 @@ pub mod python_bindings;
 pub use adaptive_compression::{
     AdaptiveCompressor, CompressionMetrics, CompressionPriorities, MultiLevelCompression,
     VectorStats,
+};
+pub use adaptive_intelligent_caching::{
+    AdaptiveIntelligentCache, CacheTier, AccessPatternAnalyzer, PredictivePrefetcher,
+    CacheOptimizer, CachePerformanceMetrics, CacheConfiguration, MLModels,
 };
 pub use advanced_analytics::{
     AnomalyDetection, AnomalyDetector, AnomalyType, ImplementationEffort,
@@ -174,6 +180,10 @@ pub use enhanced_performance_monitoring::{
     QueryInfo, QueryMetricsCollector, QueryStatistics, QueryType, Recommendation,
     RecommendationCategory, RecommendationPriority, SystemMetrics, SystemMetricsCollector,
     SystemStatistics, TrendData, TrendDirection,
+};
+pub use performance_insights::{
+    PerformanceInsightsAnalyzer, QueryStatistics as InsightsQueryStatistics, VectorStatistics, PerformanceTrends as InsightsPerformanceTrends,
+    OptimizationRecommendations, ReportFormat, QueryComplexity, AlertingSystem,
 };
 pub use faiss_compatibility::{
     CompressionLevel, ConversionMetrics, ConversionResult, FaissCompatibility, FaissExportConfig,

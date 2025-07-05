@@ -24,6 +24,7 @@ pub struct TemporalReasoner {
     event_detector: Box<dyn EventDetector>,
 
     /// Temporal constraint solver
+    #[allow(dead_code)]
     constraint_solver: Box<dyn TemporalConstraintSolver>,
 }
 
@@ -416,6 +417,7 @@ pub struct TemporalKnowledgeBase {
     facts_by_entity: HashMap<String, Vec<TemporalFact>>,
 
     /// Temporal rules
+    #[allow(dead_code)]
     temporal_rules: Vec<TemporalRule>,
 
     /// Event definitions

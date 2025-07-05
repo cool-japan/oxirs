@@ -384,7 +384,7 @@ impl ParallelBatchProcessor {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(self.config.num_threads.unwrap_or_else(num_cpus::get))
             .build()
-            .map_err(|e| OxirsError::Store(format!("Failed to build thread pool: {}", e)))?;
+            .map_err(|e| OxirsError::Store(format!("Failed to build thread pool: {e}")))?;
 
         // Clone needed references
         let cancelled = self.cancelled.clone();
@@ -478,9 +478,9 @@ mod tests {
 
     fn create_test_triple(id: usize) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", id)).unwrap()),
-            Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{}", id)).unwrap()),
-            Object::NamedNode(NamedNode::new(&format!("http://object/{}", id)).unwrap()),
+            Subject::NamedNode(NamedNode::new(&format!("http://subject/{id}")).unwrap()),
+            Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{id}")).unwrap()),
+            Object::NamedNode(NamedNode::new(&format!("http://object/{id}")).unwrap()),
         )
     }
 

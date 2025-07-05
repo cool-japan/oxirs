@@ -180,7 +180,7 @@ struct EntityIndex {
 
 /// Entity history
 #[derive(Debug, Clone)]
-struct EntityHistory {
+pub struct EntityHistory {
     /// Chronological list of states
     states: BTreeMap<DateTime<Utc>, EntityState>,
     /// Change events
@@ -198,7 +198,7 @@ struct EntityState {
 
 /// Change event
 #[derive(Debug, Clone)]
-struct ChangeEvent {
+pub struct ChangeEvent {
     /// Time of change
     timestamp: DateTime<Utc>,
     /// Type of change

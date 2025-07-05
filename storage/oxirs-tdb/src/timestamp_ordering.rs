@@ -90,8 +90,8 @@ impl VectorClock {
         }
 
         match (self_greater, other_greater) {
-            (true, false) => CausalRelation::HappensBefore, // self -> other
-            (false, true) => CausalRelation::HappensAfter,  // other -> self
+            (true, false) => CausalRelation::HappensAfter,  // other -> self
+            (false, true) => CausalRelation::HappensBefore, // self -> other
             (false, false) => {
                 // Check if clocks are truly identical (same node sets and all values equal)
                 if self.clocks.keys().collect::<std::collections::HashSet<_>>()

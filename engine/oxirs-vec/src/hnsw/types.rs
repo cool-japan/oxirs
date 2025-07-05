@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 
 /// A candidate for nearest neighbor search
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Candidate {
     pub distance: f32,
     pub id: usize,

@@ -718,6 +718,7 @@ impl ConsciousnessModule {
     }
 
     /// Determine optimal processing approach based on integrated consciousness (legacy method)
+    #[allow(dead_code)]
     fn determine_optimal_approach(
         &self,
         patterns: &[crate::query::algebra::AlgebraTriplePattern],

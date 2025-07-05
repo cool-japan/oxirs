@@ -68,9 +68,15 @@ pub use multi_region_replication::{
 };
 pub use patch::{PatchParser, PatchSerializer};
 pub use performance_optimizer::{
-    AdaptiveBatcher, BatchingStats, MemoryPool, MemoryPoolStats, ParallelEventProcessor,
-    PerformanceConfig as OptimizerPerformanceConfig, ProcessingResult, ProcessingStats,
-    ProcessingStatus, ZeroCopyEvent,
+    ActivationFunction, AdaptiveBatcher, AggregationFunction, AutoTuner, BatchingStats,
+    BatchPerformancePoint, BatchSizePredictor, BandwidthMeasurement, BandwidthTracker,
+    CompressionStats, EnhancedMLConfig, EnhancedMLPredictor, FeatureEngineer, FeatureScaler,
+    InteractionFeatures, MLTrainingPoint, MemoryPool, MemoryPoolStats, ModelPerformanceMetrics,
+    ModelSelector, ModelType, NetworkAwareCompressor, ParallelEventProcessor,
+    PerformanceConfig as OptimizerPerformanceConfig, PerformanceDataPoint, PerformancePredictor,
+    PolynomialFeatures, PolynomialRegressor, PredictionModel, PredictionStats, ProcessingResult,
+    ProcessingStats, ProcessingStatus, SimpleNeuralNetwork, StatisticalFeatures,
+    TemporalFeatures, TuningDecision, ZeroCopyEvent,
 };
 pub use schema_registry::{
     CompatibilityMode, ExternalRegistryConfig, RegistryAuth, SchemaDefinition, SchemaFormat,

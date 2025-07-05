@@ -230,6 +230,7 @@ impl From<crate::OxirsError> for RdfParseError {
             crate::OxirsError::NotSupported(msg) => {
                 Self::unsupported(format!("Not supported: {msg}"))
             }
+            crate::OxirsError::Update(msg) => Self::internal(format!("Update error: {msg}")),
         }
     }
 }

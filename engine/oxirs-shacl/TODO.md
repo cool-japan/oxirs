@@ -229,6 +229,7 @@ This document tracks the implementation status of oxirs-shacl, a comprehensive S
     - [x] `sh:qualifiedValueShape` - Qualified cardinality constraints
     - [x] `sh:qualifiedMinCount` / `sh:qualifiedMaxCount`
     - [x] `sh:qualifiedValueShapesDisjoint`
+    - [x] Complex qualified shape combinations (AND, OR, NOT, XOR, conditional, nested, sequential)
 
   - [x] **Closed Shape Constraints**
     - [x] `sh:closed` - Closed shape validation
@@ -375,7 +376,7 @@ This document tracks the implementation status of oxirs-shacl, a comprehensive S
 - [x] **Qualified Value Shapes**
   - [x] Qualified cardinality constraint validation
   - [x] Shape disjointness handling
-  - [ ] Complex qualified shape combinations
+  - [x] Complex qualified shape combinations
 
 ### 2.7 Closed Shape Validation
 - [x] **Closed Shape Engine**
@@ -469,11 +470,11 @@ This document tracks the implementation status of oxirs-shacl, a comprehensive S
 ## 📊 Phase 5: Validation Reporting System (Week 11-12)
 
 ### 5.1 Comprehensive Report Generation
-- [ ] **Detailed Validation Reports**
-  - [ ] Complete W3C SHACL validation report format
-  - [ ] Nested validation result support
-  - [ ] Severity-based result filtering
-  - [ ] Customizable report templates
+- [x] **Detailed Validation Reports**
+  - [x] Complete W3C SHACL validation report format
+  - [x] Nested validation result support
+  - [x] Severity-based result filtering
+  - [x] Customizable report templates
 
 - [x] **Multiple Output Formats**
   - [x] Turtle/N-Triples validation reports
@@ -484,24 +485,24 @@ This document tracks the implementation status of oxirs-shacl, a comprehensive S
   - [x] CSV/TSV validation reports
 
 ### 5.2 Report Analysis and Statistics
-- [ ] **Validation Statistics**
-  - [ ] Shape conformance rates
-  - [ ] Constraint violation patterns
-  - [ ] Performance metrics
-  - [ ] Data quality indicators
+- [x] **Validation Statistics**
+  - [x] Shape conformance rates
+  - [x] Constraint violation patterns
+  - [x] Performance metrics
+  - [x] Data quality indicators
 
-- [ ] **Report Filtering and Querying**
-  - [ ] Severity-based filtering
-  - [ ] Shape-based filtering
-  - [ ] Path-based filtering
-  - [ ] Custom SPARQL-based report queries
+- [x] **Report Filtering and Querying**
+  - [x] Severity-based filtering
+  - [x] Shape-based filtering
+  - [x] Path-based filtering
+  - [x] Custom SPARQL-based report queries
 
 ### 5.3 Interactive Reporting
-- [ ] **Web-based Report Viewer**
-  - [ ] HTML/JavaScript report interface
-  - [ ] Interactive violation exploration
-  - [ ] Filtering and sorting capabilities
-  - [ ] Export functionality
+- [x] **Web-based Report Viewer**
+  - [x] HTML/JavaScript report interface
+  - [x] Interactive violation exploration
+  - [x] Filtering and sorting capabilities
+  - [x] Export functionality
 
 ---
 

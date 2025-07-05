@@ -918,7 +918,9 @@ impl ClientStats {
     /// Calculate average response time
     pub fn avg_response_time(&self) -> Duration {
         if self.successful_requests > 0 {
-            self.total_response_time / self.successful_requests as u32
+            let total_millis = self.total_response_time.as_millis() as u64;
+            let avg_millis = total_millis / self.successful_requests;
+            Duration::from_millis(avg_millis)
         } else {
             Duration::from_secs(0)
         }

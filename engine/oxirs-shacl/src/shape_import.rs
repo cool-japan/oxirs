@@ -1055,6 +1055,34 @@ impl ShapeImportManager {
                     }
                 }
             }
+            
+            // Complex targets - remap nested targets recursively
+            Target::Union(union_target) => {
+                for nested_target in &mut union_target.targets {
+                    self.remap_target_iris(nested_target, target_namespace);
+                }
+            }
+            Target::Intersection(intersection_target) => {
+                for nested_target in &mut intersection_target.targets {
+                    self.remap_target_iris(nested_target, target_namespace);
+                }
+            }
+            Target::Difference(difference_target) => {
+                self.remap_target_iris(&mut difference_target.primary_target, target_namespace);
+                self.remap_target_iris(&mut difference_target.exclusion_target, target_namespace);
+            }
+            Target::Conditional(conditional_target) => {
+                self.remap_target_iris(&mut conditional_target.base_target, target_namespace);
+                // TODO: Remap IRIs in condition if needed
+            }
+            Target::Hierarchical(hierarchical_target) => {
+                self.remap_target_iris(&mut hierarchical_target.root_target, target_namespace);
+                // TODO: Remap IRIs in relationship if needed  
+            }
+            Target::PathBased(path_target) => {
+                self.remap_target_iris(&mut path_target.start_target, target_namespace);
+                // TODO: Remap IRIs in path if needed
+            }
         }
     }
 

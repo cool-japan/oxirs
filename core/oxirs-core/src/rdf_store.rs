@@ -98,7 +98,7 @@ pub enum StorageBackend {
 
 /// In-memory storage implementation
 #[derive(Debug, Clone, Default)]
-struct MemoryStorage {
+pub struct MemoryStorage {
     /// All quads in the store
     quads: BTreeSet<Quad>,
     /// Index by subject for efficient lookups

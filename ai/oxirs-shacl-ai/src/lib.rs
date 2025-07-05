@@ -177,6 +177,7 @@ use oxirs_shacl::{
 
 pub mod advanced_neural;
 pub mod advanced_pattern_mining;
+pub mod advanced_validation_strategies;
 pub mod advanced_visualization;
 pub mod ai_orchestrator;
 pub mod analytics;
@@ -196,6 +197,7 @@ pub mod explainable_ai;
 pub mod federated_learning;
 pub mod forecasting_models;
 pub mod insights;
+pub mod integration_testing;
 // Temporarily disabled problematic modules for compilation
 pub mod interdimensional_patterns;
 pub mod learning;
@@ -211,6 +213,7 @@ pub mod optimization;
 pub mod optimization_engine;
 pub mod patterns;
 pub mod performance_analytics;
+pub mod performance_benchmarking;
 pub mod photonic_computing;
 pub mod prediction;
 pub mod predictive_analytics;
@@ -227,6 +230,7 @@ pub mod recommendation_systems;
 pub mod self_adaptive_ai;
 pub mod shape;
 pub mod shape_management;
+pub mod sophisticated_validation_optimization;
 pub mod streaming_adaptation;
 pub mod swarm_neuromorphic_networks;
 pub mod system_monitoring;
@@ -249,6 +253,15 @@ pub use advanced_pattern_mining::{
     SeasonalityComponent, SuggestedConstraint, TemporalPatternInfo,
     TrendDirection as MiningTrendDirection,
 };
+pub use advanced_validation_strategies::{
+    AdvancedValidationConfig, AdvancedValidationResult, AdvancedValidationStrategyManager,
+    ComputationalComplexity, ContextAwarenessLevel, DataCharacteristics, DomainContext,
+    DomainType, PerformanceRequirements as ValidationPerformanceRequirements,
+    PriorityLevel, QualityMetrics, QualityRequirements, ShapeCharacteristics,
+    StrategyCapabilities, StrategySelectionApproach, StrategyValidationResult,
+    UncertaintyMetrics, UncertaintySource, UncertaintySourceType, ValidationContext,
+    ValidationExplanation, ValidationStrategy,
+};
 pub use advanced_visualization::{
     AdvancedVisualizationEngine, ArchitectureVisualizationType, ColorScheme, ExportFormat,
     ExportResult, InteractiveControls, QuantumVisualizationMode, VisualizationConfig,
@@ -257,7 +270,7 @@ pub use advanced_visualization::{
 pub use ai_orchestrator::{
     AdaptiveLearningInsights, AdvancedModelSelector, AiOrchestrator, AiOrchestratorConfig,
     AiOrchestratorStats, ComprehensiveLearningResult, ConfidenceDistribution, ConfidentShape,
-    DataCharacteristics, LearningMetadata, ModelPerformanceMetrics, ModelSelectionResult,
+    DataCharacteristics as OrchestratorDataCharacteristics, LearningMetadata, ModelPerformanceMetrics, ModelSelectionResult,
     ModelSelectionStats, ModelSelectionStrategy as AiModelSelectionStrategy,
     OptimizationRecommendation as OrchestratorOptimizationRecommendation, OrchestrationMetrics,
     PerformanceRequirements as AiPerformanceRequirements, PredictiveInsights, QualityAnalysis,
@@ -273,6 +286,14 @@ pub use error_handling::{
 pub use evolution_strategies::*;
 pub use forecasting_models::*;
 pub use insights::*;
+pub use integration_testing::{
+    AdvancedValidationResult, DataConfiguration, DependencyAnalysisResult, ErrorDetails,
+    ExecutionMetadata, IntegrationTestConfig, IntegrationTestFramework, IntegrationTestReport,
+    LatencyPercentiles, PerformanceTestMetrics, QualityMetrics as IntegrationQualityMetrics,
+    QualityThresholds, RecommendationPriority, RecommendationType, ResourceUtilization,
+    ScalabilityMetrics, TestComplexityLevel, TestRecommendation, TestResult, TestStatus,
+    TestSummary, TestType, ValidationTestResults,
+};
 pub use learning::{
     LearningConfig, LearningPerformanceMetrics, LearningStatistics, PatternStatistics,
     ShapeExample, ShapeLearner, ShapeTrainingData as LearningTrainingData, TemporalPatterns,
@@ -321,6 +342,15 @@ pub use optimization_engine::{
 };
 pub use patterns::*;
 pub use performance_analytics::*;
+pub use performance_benchmarking::{
+    AccessPattern, BenchmarkConfig, BenchmarkReport, BenchmarkResult, BenchmarkStatus,
+    BenchmarkSummary, BenchmarkType, CacheBehavior, DataDistribution,
+    EfficiencyMetrics, ImplementationComplexity, LatencyMetrics, MeasurementConfig,
+    PerformanceBenchmarkFramework, PerformanceRecommendation, PerformanceRecommendationType,
+    PrecisionLevel, QualityMetrics as BenchmarkQualityMetrics, RecommendationPriority as BenchmarkRecommendationPriority,
+    ResourceMetrics, ScalabilityAnalysis, SuccessCriteria, TargetComponent, ThroughputMetrics,
+    WorkloadConfig,
+};
 pub use photonic_computing::{
     CoherenceProperties, ConnectionType, GateType,
     InterferencePattern as PhotonicInterferencePattern, InterferenceProcessor, JunctionType,
@@ -362,6 +392,13 @@ pub use realtime_adaptive_query_optimizer::{
 };
 pub use recommendation_systems::*;
 pub use self_adaptive_ai::*;
+pub use sophisticated_validation_optimization::{
+    ConstraintSatisfactionStrategy, EnvironmentalFactors, OptimizationContext,
+    OptimizationMetrics, OptimizationObjective, OptimizationParameters, OptimizationPriority,
+    OptimizationRecommendation, OptimizationRecommendationType, OptimizationResult as SophisticatedOptimizationResult,
+    OptimizationSolution, OptimizationStepType, OptimizationStrategy, ParetoSolution,
+    RiskLevel, SophisticatedOptimizationConfig, SophisticatedValidationOptimizer,
+};
 pub use shape::*;
 pub use system_monitoring::*;
 pub use validation_performance::*;
@@ -377,13 +414,13 @@ pub use collective_consciousness::{
     AgentCapabilities, AgentStats, AgentStatus, CollectiveConfig, CollectiveConsciousnessNetwork,
     CollectiveInsight, CollectiveMetrics, CollectiveValidationResult, ConsciousnessAgent,
     ConsciousnessId, ConsensusDecision, ConsensusResult, ConsensusType, InterdimensionalPattern,
-    QuantumEffect, Reality, SynthesizedReality, ValidationContext, ValidationSpecialization,
+    QuantumEffect, Reality, SynthesizedReality, ValidationContext as InterdimensionalValidationContext, ValidationSpecialization,
 };
 pub use consciousness_validation::{
     ConsciousnessLevel as ValidatorConsciousnessLevel, ConsciousnessValidationResult,
     ConsciousnessValidator, ConsciousnessValidatorConfig, ConsciousnessValidatorStats,
     DreamInsight, DreamState, Emotion, EmotionalContext, IntuitiveInsight, IntuitiveInsightType,
-    ValidationStrategy,
+    ValidationStrategy as ConsciousnessValidationStrategy,
 };
 pub use cosmic_scale_processing::{
     CosmicNetworkInitResult, CosmicScaleConfig, CosmicScaleProcessor, CosmicStatistics,
@@ -393,7 +430,7 @@ pub use cosmic_scale_processing::{
 pub use explainable_ai::{
     AdaptationExplanation, AuditTrail, DecisionTree, DecisionType, ExplainableAI,
     ExplainableAIConfig, ExplanationDepth, FeatureImportanceAnalysis, InterpretabilityReport,
-    KeyFactor, PatternExplanation, QuantumExplanation, ValidationExplanation,
+    KeyFactor, PatternExplanation, QuantumExplanation, ValidationExplanation as ExplainableValidationExplanation,
 };
 pub use federated_learning::{
     AggregationStrategy, ConsensusAlgorithm, FederatedLearningCoordinator, FederatedNode,

@@ -184,6 +184,7 @@ impl Default for CacheConfig {
 /// AI-powered RDF processing engine
 pub struct AiEngine {
     /// Configuration
+    #[allow(dead_code)]
     config: AiConfig,
 
     /// Graph Neural Network

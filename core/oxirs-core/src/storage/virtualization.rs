@@ -290,7 +290,7 @@ struct MigrationState {
 
 /// Migration job
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct MigrationJob {
+pub struct MigrationJob {
     /// Job ID
     id: String,
     /// Source backend

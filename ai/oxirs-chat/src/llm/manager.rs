@@ -12,9 +12,15 @@ use super::{
     anthropic_provider::AnthropicProvider,
     circuit_breaker::CircuitBreaker,
     config::LLMConfig,
+    cross_modal_reasoning::{CrossModalReasoning, CrossModalConfig, CrossModalInput, CrossModalResponse},
+    federated_learning::{FederatedCoordinator, FederatedLearningConfig},
+    fine_tuning::{FineTuningEngine, FineTuningConfig},
     local_provider::LocalModelProvider,
+    neural_architecture_search::{ArchitectureSearch, ArchitectureSearchConfig},
     openai_provider::OpenAIProvider,
+    performance_optimization::{PerformanceOptimizer, PerformanceConfig, PerformanceReport, BenchmarkConfig, BenchmarkResult, OptimizationRecommendation},
     providers::LLMProvider,
+    real_time_adaptation::{RealTimeAdaptation, AdaptationConfig, InteractionData},
     types::{LLMRequest, LLMResponse, Priority, UseCase},
 };
 
@@ -355,11 +361,18 @@ impl LLMManager {
     }
 }
 
-/// Enhanced LLM manager with rate limiting and monitoring
+/// Enhanced LLM manager with rate limiting and monitoring, plus Version 1.3 capabilities
 pub struct EnhancedLLMManager {
     inner: LLMManager,
     rate_limiter: RateLimiter,
     sessions: Arc<TokioMutex<HashMap<String, LockedSession>>>,
+    // Version 1.3 capabilities
+    fine_tuning_engine: Option<Arc<FineTuningEngine>>,
+    architecture_search: Option<Arc<ArchitectureSearch>>,
+    federated_coordinator: Option<Arc<FederatedCoordinator>>,
+    real_time_adaptation: Option<Arc<RealTimeAdaptation>>,
+    cross_modal_reasoning: Option<Arc<CrossModalReasoning>>,
+    performance_optimizer: Option<Arc<PerformanceOptimizer>>,
 }
 
 impl EnhancedLLMManager {
@@ -372,7 +385,54 @@ impl EnhancedLLMManager {
             inner,
             rate_limiter,
             sessions,
+            fine_tuning_engine: None,
+            architecture_search: None,
+            federated_coordinator: None,
+            real_time_adaptation: None,
+            cross_modal_reasoning: None,
+            performance_optimizer: None,
         })
+    }
+
+    /// Enable fine-tuning capabilities
+    pub fn with_fine_tuning(mut self, config: super::fine_tuning::EngineConfig) -> Self {
+        self.fine_tuning_engine = Some(Arc::new(FineTuningEngine::new(config)));
+        self
+    }
+
+    /// Enable neural architecture search
+    pub fn with_architecture_search(mut self) -> Self {
+        self.architecture_search = Some(Arc::new(ArchitectureSearch::new()));
+        self
+    }
+
+    /// Enable federated learning
+    pub fn with_federated_learning(mut self, config: FederatedLearningConfig) -> Self {
+        self.federated_coordinator = Some(Arc::new(FederatedCoordinator::new(config)));
+        self
+    }
+
+    /// Enable real-time adaptation
+    pub fn with_real_time_adaptation(mut self, config: AdaptationConfig) -> Self {
+        self.real_time_adaptation = Some(Arc::new(RealTimeAdaptation::new(config)));
+        self
+    }
+
+    /// Enable cross-modal reasoning
+    pub fn with_cross_modal_reasoning(mut self, config: CrossModalConfig) -> Self {
+        // For now, create a placeholder LLMManager for cross-modal reasoning
+        // In a real implementation, this would share the actual LLMManager
+        if let Ok(placeholder_manager) = LLMManager::new(LLMConfig::default()) {
+            let inner_manager = Arc::new(tokio::sync::RwLock::new(placeholder_manager));
+            self.cross_modal_reasoning = Some(Arc::new(CrossModalReasoning::new(config, inner_manager)));
+        }
+        self
+    }
+
+    /// Enable performance optimization
+    pub fn with_performance_optimization(mut self, config: PerformanceConfig) -> Self {
+        self.performance_optimizer = Some(Arc::new(PerformanceOptimizer::new(config)));
+        self
     }
 
     pub async fn generate_response_with_limits(
@@ -645,4 +705,304 @@ impl EnhancedLLMManager {
         let sessions = self.sessions.lock().await;
         Ok(sessions.get(session_id).cloned())
     }
+
+    // Version 1.3 Capability Methods
+
+    /// Submit a fine-tuning job
+    pub async fn submit_fine_tuning_job(&self, config: FineTuningConfig) -> Result<String> {
+        if let Some(engine) = &self.fine_tuning_engine {
+            engine.submit_job(config).await
+        } else {
+            Err(anyhow!("Fine-tuning engine not enabled"))
+        }
+    }
+
+    /// Get fine-tuning job status
+    pub async fn get_fine_tuning_status(&self, job_id: &str) -> Result<super::fine_tuning::FineTuningJob> {
+        if let Some(engine) = &self.fine_tuning_engine {
+            engine.get_job_status(job_id).await
+        } else {
+            Err(anyhow!("Fine-tuning engine not enabled"))
+        }
+    }
+
+    /// Start neural architecture search
+    pub async fn start_architecture_search(&self, config: ArchitectureSearchConfig) -> Result<String> {
+        if let Some(search) = &self.architecture_search {
+            search.start_search(config).await
+        } else {
+            Err(anyhow!("Architecture search not enabled"))
+        }
+    }
+
+    /// Get architecture search status
+    pub async fn get_architecture_search_status(&self, search_id: &str) -> Result<super::neural_architecture_search::SearchState> {
+        if let Some(search) = &self.architecture_search {
+            search.get_search_status(search_id).await
+        } else {
+            Err(anyhow!("Architecture search not enabled"))
+        }
+    }
+
+    /// Start federated learning round
+    pub async fn start_federation_round(&self) -> Result<usize> {
+        if let Some(coordinator) = &self.federated_coordinator {
+            coordinator.start_federation_round().await
+        } else {
+            Err(anyhow!("Federated learning not enabled"))
+        }
+    }
+
+    /// Register federated learning node
+    pub async fn register_federated_node(&self, node: super::federated_learning::FederatedNode) -> Result<()> {
+        if let Some(coordinator) = &self.federated_coordinator {
+            coordinator.register_node(node).await
+        } else {
+            Err(anyhow!("Federated learning not enabled"))
+        }
+    }
+
+    /// Process interaction for real-time adaptation
+    pub async fn process_adaptation_interaction(&self, request: &LLMRequest, response: &LLMResponse) -> Result<()> {
+        if let Some(adaptation) = &self.real_time_adaptation {
+            let interaction = InteractionData {
+                interaction_id: format!("interaction_{}", uuid::Uuid::new_v4()),
+                request: request.clone(),
+                response: response.clone(),
+                user_feedback: None, // Would be filled based on actual user feedback
+                context_information: super::real_time_adaptation::ContextInformation {
+                    user_profile: super::real_time_adaptation::UserProfile {
+                        user_id: "default_user".to_string(),
+                        expertise_level: super::real_time_adaptation::ExpertiseLevel::Intermediate,
+                        preferences: super::real_time_adaptation::UserPreferences {
+                            response_style: super::real_time_adaptation::ResponseStyle::Conversational,
+                            detail_level: super::real_time_adaptation::DetailLevel::Medium,
+                            preferred_formats: vec!["text".to_string()],
+                            language_preferences: vec!["en".to_string()],
+                        },
+                        interaction_history: super::real_time_adaptation::InteractionHistory {
+                            total_interactions: 0,
+                            average_satisfaction: 0.8,
+                            common_topics: vec![],
+                            feedback_patterns: HashMap::new(),
+                        },
+                    },
+                    session_context: super::real_time_adaptation::SessionContext {
+                        session_id: "default_session".to_string(),
+                        session_duration: Duration::from_secs(300),
+                        conversation_flow: super::real_time_adaptation::ConversationFlow {
+                            topic_transitions: vec![],
+                            question_types: vec![],
+                            complexity_progression: vec![],
+                        },
+                        current_objectives: vec![],
+                    },
+                    domain_context: super::real_time_adaptation::DomainContext {
+                        primary_domain: "general".to_string(),
+                        secondary_domains: vec![],
+                        domain_expertise_required: 0.5,
+                        domain_specific_patterns: HashMap::new(),
+                    },
+                    temporal_context: super::real_time_adaptation::TemporalContext {
+                        time_of_day: "day".to_string(),
+                        day_of_week: "weekday".to_string(),
+                        seasonal_patterns: vec![],
+                        trending_topics: vec![],
+                    },
+                },
+                timestamp: std::time::SystemTime::now(),
+            };
+            adaptation.process_interaction(interaction).await
+        } else {
+            Ok(()) // Silently continue if adaptation is not enabled
+        }
+    }
+
+    /// Enhanced response generation with adaptation tracking
+    pub async fn generate_enhanced_response(&mut self, request: LLMRequest) -> Result<LLMResponse> {
+        // Generate response using existing method
+        let response = self.generate_response_with_limits(request.clone()).await?;
+
+        // Process for real-time adaptation
+        self.process_adaptation_interaction(&request, &response).await?;
+
+        Ok(response)
+    }
+
+    /// Perform cross-modal reasoning
+    pub async fn perform_cross_modal_reasoning(&self, input: CrossModalInput, query: &str) -> Result<CrossModalResponse> {
+        if let Some(reasoning) = &self.cross_modal_reasoning {
+            reasoning.reason(input, query).await
+        } else {
+            Err(anyhow!("Cross-modal reasoning not enabled"))
+        }
+    }
+
+    /// Get cross-modal reasoning history
+    pub async fn get_cross_modal_history(&self) -> Result<Vec<CrossModalResponse>> {
+        if let Some(reasoning) = &self.cross_modal_reasoning {
+            Ok(reasoning.get_reasoning_history().await)
+        } else {
+            Err(anyhow!("Cross-modal reasoning not enabled"))
+        }
+    }
+
+    /// Clear cross-modal reasoning history
+    pub async fn clear_cross_modal_history(&self) -> Result<()> {
+        if let Some(reasoning) = &self.cross_modal_reasoning {
+            reasoning.clear_history().await;
+            Ok(())
+        } else {
+            Err(anyhow!("Cross-modal reasoning not enabled"))
+        }
+    }
+
+    /// Get cross-modal reasoning statistics
+    pub async fn get_cross_modal_stats(&self) -> Result<super::cross_modal_reasoning::CrossModalStats> {
+        if let Some(reasoning) = &self.cross_modal_reasoning {
+            Ok(reasoning.get_stats().await)
+        } else {
+            Err(anyhow!("Cross-modal reasoning not enabled"))
+        }
+    }
+
+    /// Optimize request for better performance
+    pub async fn optimize_request(&self, request: &LLMRequest) -> Result<super::performance_optimization::OptimizedRequest> {
+        if let Some(optimizer) = &self.performance_optimizer {
+            optimizer.optimize_request(request).await
+        } else {
+            Err(anyhow!("Performance optimization not enabled"))
+        }
+    }
+
+    /// Run system benchmark
+    pub async fn run_benchmark(&self, config: BenchmarkConfig) -> Result<BenchmarkResult> {
+        if let Some(optimizer) = &self.performance_optimizer {
+            optimizer.benchmark_system(config).await
+        } else {
+            Err(anyhow!("Performance optimization not enabled"))
+        }
+    }
+
+    /// Get optimization recommendations
+    pub async fn get_optimization_recommendations(&self) -> Result<Vec<OptimizationRecommendation>> {
+        if let Some(optimizer) = &self.performance_optimizer {
+            optimizer.generate_optimization_recommendations().await
+        } else {
+            Err(anyhow!("Performance optimization not enabled"))
+        }
+    }
+
+    /// Get comprehensive performance report
+    pub async fn get_performance_report(&self) -> Result<PerformanceReport> {
+        if let Some(optimizer) = &self.performance_optimizer {
+            optimizer.get_performance_report().await
+        } else {
+            Err(anyhow!("Performance optimization not enabled"))
+        }
+    }
+
+    /// Get comprehensive system statistics including Version 1.3 capabilities
+    pub async fn get_comprehensive_stats(&self) -> Result<ComprehensiveStats> {
+        let basic_stats = self.get_session_stats().await;
+        
+        let fine_tuning_stats = if let Some(engine) = &self.fine_tuning_engine {
+            Some(engine.get_training_statistics().await?)
+        } else {
+            None
+        };
+
+        let federation_stats = if let Some(coordinator) = &self.federated_coordinator {
+            Some(coordinator.get_federation_statistics().await?)
+        } else {
+            None
+        };
+
+        let adaptation_metrics = if let Some(adaptation) = &self.real_time_adaptation {
+            Some(adaptation.get_adaptation_metrics().await?)
+        } else {
+            None
+        };
+
+        let cross_modal_stats = if let Some(reasoning) = &self.cross_modal_reasoning {
+            Some(reasoning.get_stats().await)
+        } else {
+            None
+        };
+
+        let performance_report = if let Some(optimizer) = &self.performance_optimizer {
+            Some(optimizer.get_performance_report().await.unwrap_or_else(|_| PerformanceReport {
+                current_metrics: super::performance_optimization::PerformanceMetrics::default(),
+                benchmark_results: Vec::new(),
+                recommendations: Vec::new(),
+                cache_statistics: super::performance_optimization::CacheStatistics {
+                    total_entries: 0,
+                    total_size_bytes: 0,
+                    hit_rate: 0.0,
+                    miss_rate: 1.0,
+                    eviction_count: 0,
+                    average_access_count: 0.0,
+                    average_compression_ratio: 0.0,
+                },
+                compression_statistics: super::performance_optimization::CompressionStatistics {
+                    total_compressed_requests: 0,
+                    average_compression_ratio: 0.0,
+                    total_bytes_saved: 0,
+                    compression_time_average: Duration::from_millis(0),
+                },
+                optimization_summary: super::performance_optimization::OptimizationSummary {
+                    overall_performance_score: 0.0,
+                    target_achievement_rate: 0.0,
+                    bottleneck_analysis: Vec::new(),
+                    improvement_potential: 0.0,
+                    optimization_status: super::performance_optimization::OptimizationStatus::Critical,
+                },
+                generated_at: std::time::SystemTime::now(),
+            }))
+        } else {
+            None
+        };
+
+        Ok(ComprehensiveStats {
+            session_stats: basic_stats,
+            fine_tuning_stats,
+            federation_stats,
+            adaptation_metrics,
+            cross_modal_stats,
+            performance_report,
+            version: "1.3+".to_string(),
+            capabilities_enabled: CapabilityStatus {
+                fine_tuning: self.fine_tuning_engine.is_some(),
+                architecture_search: self.architecture_search.is_some(),
+                federated_learning: self.federated_coordinator.is_some(),
+                real_time_adaptation: self.real_time_adaptation.is_some(),
+                cross_modal_reasoning: self.cross_modal_reasoning.is_some(),
+                performance_optimization: self.performance_optimizer.is_some(),
+            },
+        })
+    }
+}
+
+/// Comprehensive statistics including Version 1.3 capabilities
+#[derive(Debug, Clone)]
+pub struct ComprehensiveStats {
+    pub session_stats: SessionStats,
+    pub fine_tuning_stats: Option<super::fine_tuning::FineTuningStatistics>,
+    pub federation_stats: Option<super::federated_learning::FederationStatistics>,
+    pub adaptation_metrics: Option<super::real_time_adaptation::AdaptationMetrics>,
+    pub cross_modal_stats: Option<super::cross_modal_reasoning::CrossModalStats>,
+    pub performance_report: Option<super::performance_optimization::PerformanceReport>,
+    pub version: String,
+    pub capabilities_enabled: CapabilityStatus,
+}
+
+/// Status of Version 1.3 capabilities
+#[derive(Debug, Clone)]
+pub struct CapabilityStatus {
+    pub fine_tuning: bool,
+    pub architecture_search: bool,
+    pub federated_learning: bool,
+    pub real_time_adaptation: bool,
+    pub cross_modal_reasoning: bool,
+    pub performance_optimization: bool,
 }

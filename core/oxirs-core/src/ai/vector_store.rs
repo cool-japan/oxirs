@@ -388,8 +388,11 @@ impl VectorIndex for FlatIndex {
 /// HNSW index implementation
 pub struct HNSWIndex {
     /// Configuration
+    #[allow(dead_code)]
     max_connections: usize,
+    #[allow(dead_code)]
     ef_construction: usize,
+    #[allow(dead_code)]
     ef_search: usize,
 
     /// Graph layers

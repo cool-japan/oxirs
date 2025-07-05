@@ -5,11 +5,13 @@ use super::constraint_types::Constraint;
 use super::shape_constraints::EvaluationComplexity;
 use crate::{
     ConstraintComponentId, Result, Severity, ShaclError, ShapeId, ValidationConfig, Validator,
+    optimization::NegationOptimizer,
 };
 use oxirs_core::{model::Term, Store};
 use oxirs_core::{Object, Predicate, Subject};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Not constraint
@@ -177,7 +179,7 @@ impl NotConstraint {
     }
 
     /// Check if a value conforms to the shape that should be negated
-    fn value_conforms_to_negated_shape(
+    pub fn value_conforms_to_negated_shape(
         &self,
         value: &Term,
         store: &dyn Store,
@@ -230,6 +232,16 @@ impl NotConstraint {
             supports_caching: true,
             recursion_safe: true,
         }
+    }
+
+    /// Evaluate using advanced negation optimizer
+    pub fn evaluate_with_optimizer(
+        &self,
+        context: &ConstraintContext,
+        store: &dyn Store,
+        optimizer: &NegationOptimizer,
+    ) -> Result<crate::optimization::NegationOptimizationResult> {
+        optimizer.optimize_negation_evaluation(self, context, store)
     }
 
     /// Estimate the computational complexity of evaluating this NOT constraint

@@ -21,6 +21,7 @@ pub struct EntityResolver {
     clustering_algorithm: Box<dyn ClusteringAlgorithm>,
 
     /// Feature extractor
+    #[allow(dead_code)]
     feature_extractor: Box<dyn FeatureExtractor>,
 
     /// Blocking strategy

@@ -16,6 +16,7 @@ pub mod property_paths;
 pub mod sparql_algebra;
 pub mod sparql_query;
 pub mod streaming_results;
+pub mod update;
 pub mod wasm;
 
 // Re-export the enhanced SPARQL algebra and query types from sparql_algebra
@@ -50,6 +51,7 @@ pub use streaming_results::{
     ConstructResults, SelectResults, Solution as StreamingSolution, SolutionMetadata,
     StreamingConfig, StreamingProgress, StreamingQueryResults, StreamingResultBuilder,
 };
+pub use update::{UpdateExecutor, UpdateParser};
 pub use wasm::{OptimizationLevel, WasmQueryCompiler, WasmTarget};
 
 // TODO: Temporary compatibility layer for SHACL module

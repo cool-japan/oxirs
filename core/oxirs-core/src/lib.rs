@@ -95,6 +95,7 @@ pub mod rdf_store;
 pub mod serializer;
 pub mod storage;
 pub mod store;
+pub mod transaction;
 pub mod vocab;
 // pub mod config;
 pub mod jsonld; // Re-enabled after fixing StringInterner method calls
@@ -112,6 +113,7 @@ pub mod simd;
 // Re-export core types for convenience
 pub use model::*;
 pub use rdf_store::{ConcreteStore, RdfStore, Store};
+pub use transaction::Transaction;
 
 /// Core error type for OxiRS operations
 #[derive(Debug, Clone, thiserror::Error)]
@@ -136,6 +138,8 @@ pub enum OxirsError {
     NeuralSymbolicError(String),
     #[error("Operation not supported: {0}")]
     NotSupported(String),
+    #[error("Update error: {0}")]
+    Update(String),
 }
 
 impl From<std::io::Error> for OxirsError {

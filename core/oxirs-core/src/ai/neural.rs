@@ -93,6 +93,7 @@ pub struct LinearLayer {
     bias: Array1<f32>,
 
     /// Input dimension
+    #[allow(dead_code)]
     input_dim: usize,
 
     /// Output dimension
@@ -210,6 +211,7 @@ pub struct BatchNormLayer {
     beta: Array1<f32>,
     running_mean: Array1<f32>,
     running_var: Array1<f32>,
+    #[allow(dead_code)]
     momentum: f32,
     eps: f32,
     training: bool,
@@ -294,7 +296,9 @@ impl NeuralLayer for BatchNormLayer {
 #[derive(Debug, Clone)]
 pub struct MultiHeadAttentionLayer {
     name: String,
+    #[allow(dead_code)]
     embed_dim: usize,
+    #[allow(dead_code)]
     num_heads: usize,
     head_dim: usize,
     query_proj: LinearLayer,
