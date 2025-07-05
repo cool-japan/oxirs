@@ -1,10 +1,10 @@
+use crate::llm::manager::LLMManager;
+use crate::llm::types::{LLMRequest, LLMResponse, Usage};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
-use crate::llm::types::{LLMRequest, LLMResponse, Usage};
-use crate::llm::manager::LLMManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceConfig {
@@ -236,9 +236,12 @@ impl PerformanceOptimizer {
         }
     }
 
-    pub async fn optimize_request(&self, request: &LLMRequest) -> Result<OptimizedRequest, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn optimize_request(
+        &self,
+        request: &LLMRequest,
+    ) -> Result<OptimizedRequest, Box<dyn std::error::Error + Send + Sync>> {
         let start_time = Instant::now();
-        
+
         // Check cache first
         if self.config.enable_caching {
             if let Some(cached_response) = self.get_cached_response(request).await? {
@@ -269,7 +272,8 @@ impl PerformanceOptimizer {
         }
 
         // Determine if batching would be beneficial
-        let should_batch = self.config.enable_batching && self.should_batch_request(request).await?;
+        let should_batch =
+            self.config.enable_batching && self.should_batch_request(request).await?;
         if should_batch {
             optimization_applied.push(OptimizationType::BatchingImprovement);
         }
@@ -282,7 +286,9 @@ impl PerformanceOptimizer {
 
         // Calculate estimated savings
         let processing_time = start_time.elapsed();
-        let estimated_savings = self.calculate_estimated_savings(&optimization_applied, processing_time).await?;
+        let estimated_savings = self
+            .calculate_estimated_savings(&optimization_applied, processing_time)
+            .await?;
 
         Ok(OptimizedRequest {
             request: optimized_request,
@@ -294,10 +300,13 @@ impl PerformanceOptimizer {
         })
     }
 
-    async fn get_cached_response(&self, request: &LLMRequest) -> Result<Option<LLMResponse>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_cached_response(
+        &self,
+        request: &LLMRequest,
+    ) -> Result<Option<LLMResponse>, Box<dyn std::error::Error + Send + Sync>> {
         let cache_key = self.generate_cache_key(request)?;
         let cache = self.cache.read().await;
-        
+
         if let Some(entry) = cache.get(&cache_key) {
             // Check TTL
             if entry.created_at.elapsed().unwrap_or(Duration::MAX) < self.config.cache_ttl {
@@ -311,16 +320,19 @@ impl PerformanceOptimizer {
                 return Ok(Some(entry.response.clone()));
             }
         }
-        
+
         Ok(None)
     }
 
-    async fn apply_compression(&self, request: &LLMRequest) -> Result<Option<LLMRequest>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn apply_compression(
+        &self,
+        request: &LLMRequest,
+    ) -> Result<Option<LLMRequest>, Box<dyn std::error::Error + Send + Sync>> {
         let prompt_size = request.prompt.len();
         if prompt_size > self.config.compression_threshold {
             let compression_engine = self.compression_engine.read().await;
             let compressed_prompt = compression_engine.compress(&request.prompt)?;
-            
+
             if compressed_prompt.len() < prompt_size {
                 let mut optimized_request = request.clone();
                 optimized_request.prompt = compressed_prompt;
@@ -330,25 +342,34 @@ impl PerformanceOptimizer {
         Ok(None)
     }
 
-    async fn should_batch_request(&self, _request: &LLMRequest) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    async fn should_batch_request(
+        &self,
+        _request: &LLMRequest,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         let queue = self.batch_queue.read().await;
         Ok(queue.len() < self.config.batch_size)
     }
 
-    async fn optimize_query(&self, request: &LLMRequest) -> Result<Option<LLMRequest>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn optimize_query(
+        &self,
+        request: &LLMRequest,
+    ) -> Result<Option<LLMRequest>, Box<dyn std::error::Error + Send + Sync>> {
         // Simple query optimization - could be enhanced with more sophisticated logic
         let optimized_prompt = self.apply_prompt_optimization(&request.prompt)?;
-        
+
         if optimized_prompt != request.prompt {
             let mut optimized_request = request.clone();
             optimized_request.prompt = optimized_prompt;
             return Ok(Some(optimized_request));
         }
-        
+
         Ok(None)
     }
 
-    fn apply_prompt_optimization(&self, prompt: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    fn apply_prompt_optimization(
+        &self,
+        prompt: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Remove redundant whitespace
         let optimized = prompt
             .lines()
@@ -356,19 +377,22 @@ impl PerformanceOptimizer {
             .filter(|line| !line.is_empty())
             .collect::<Vec<_>>()
             .join("\n");
-        
+
         // Remove repetitive phrases
         let optimized = self.remove_repetitive_phrases(&optimized)?;
-        
+
         Ok(optimized)
     }
 
-    fn remove_repetitive_phrases(&self, text: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    fn remove_repetitive_phrases(
+        &self,
+        text: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Simple deduplication - could be enhanced with more sophisticated algorithms
         let words: Vec<&str> = text.split_whitespace().collect();
         let mut deduplicated = Vec::new();
         let mut seen_phrases = std::collections::HashSet::new();
-        
+
         for window in words.windows(3) {
             let phrase = window.join(" ");
             if !seen_phrases.contains(&phrase) {
@@ -380,11 +404,15 @@ impl PerformanceOptimizer {
                 }
             }
         }
-        
+
         Ok(deduplicated.join(" "))
     }
 
-    async fn calculate_estimated_savings(&self, optimizations: &[OptimizationType], processing_time: Duration) -> Result<EstimatedSavings, Box<dyn std::error::Error + Send + Sync>> {
+    async fn calculate_estimated_savings(
+        &self,
+        optimizations: &[OptimizationType],
+        processing_time: Duration,
+    ) -> Result<EstimatedSavings, Box<dyn std::error::Error + Send + Sync>> {
         let mut time_saved = Duration::from_millis(0);
         let mut cost_saved = 0.0;
         let mut resources_saved = 0.0;
@@ -422,7 +450,10 @@ impl PerformanceOptimizer {
         })
     }
 
-    pub async fn benchmark_system(&self, test_config: BenchmarkConfig) -> Result<BenchmarkResult, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn benchmark_system(
+        &self,
+        test_config: BenchmarkConfig,
+    ) -> Result<BenchmarkResult, Box<dyn std::error::Error + Send + Sync>> {
         let start_time = Instant::now();
         let mut latencies = Vec::new();
         let mut successful_requests = 0;
@@ -431,11 +462,11 @@ impl PerformanceOptimizer {
 
         // Create test requests
         let test_requests = self.generate_test_requests(&test_config)?;
-        
+
         // Execute benchmark
         for (i, request) in test_requests.iter().enumerate() {
             let request_start = Instant::now();
-            
+
             match self.execute_test_request(request).await {
                 Ok(response) => {
                     successful_requests += 1;
@@ -462,7 +493,7 @@ impl PerformanceOptimizer {
         latencies.sort();
         let total_duration = start_time.elapsed();
         let total_requests = successful_requests + failed_requests;
-        
+
         let result = BenchmarkResult {
             test_name: test_config.test_name,
             total_requests,
@@ -470,9 +501,18 @@ impl PerformanceOptimizer {
             failed_requests,
             total_duration,
             throughput_rps: successful_requests as f64 / total_duration.as_secs_f64(),
-            latency_p50: latencies.get(latencies.len() / 2).copied().unwrap_or_default(),
-            latency_p95: latencies.get((latencies.len() * 95) / 100).copied().unwrap_or_default(),
-            latency_p99: latencies.get((latencies.len() * 99) / 100).copied().unwrap_or_default(),
+            latency_p50: latencies
+                .get(latencies.len() / 2)
+                .copied()
+                .unwrap_or_default(),
+            latency_p95: latencies
+                .get((latencies.len() * 95) / 100)
+                .copied()
+                .unwrap_or_default(),
+            latency_p99: latencies
+                .get((latencies.len() * 99) / 100)
+                .copied()
+                .unwrap_or_default(),
             error_rate: failed_requests as f32 / total_requests as f32,
             total_bytes_transferred: total_bytes,
             memory_usage_peak: self.get_memory_usage()?,
@@ -487,16 +527,21 @@ impl PerformanceOptimizer {
         Ok(result)
     }
 
-    fn generate_test_requests(&self, config: &BenchmarkConfig) -> Result<Vec<LLMRequest>, Box<dyn std::error::Error + Send + Sync>> {
+    fn generate_test_requests(
+        &self,
+        config: &BenchmarkConfig,
+    ) -> Result<Vec<LLMRequest>, Box<dyn std::error::Error + Send + Sync>> {
         let mut requests = Vec::new();
-        
+
         for i in 0..config.request_count {
             let request = LLMRequest {
                 prompt: format!("Test prompt {} for benchmarking performance", i),
                 max_tokens: Some(100),
                 temperature: Some(0.7),
                 model: None,
-                system_prompt: Some("You are a helpful assistant for performance testing.".to_string()),
+                system_prompt: Some(
+                    "You are a helpful assistant for performance testing.".to_string(),
+                ),
                 stop_sequences: None,
                 top_p: None,
                 frequency_penalty: None,
@@ -508,16 +553,22 @@ impl PerformanceOptimizer {
             };
             requests.push(request);
         }
-        
+
         Ok(requests)
     }
 
-    async fn execute_test_request(&self, request: &LLMRequest) -> Result<LLMResponse, Box<dyn std::error::Error + Send + Sync>> {
+    async fn execute_test_request(
+        &self,
+        request: &LLMRequest,
+    ) -> Result<LLMResponse, Box<dyn std::error::Error + Send + Sync>> {
         // Simulate LLM response for benchmarking
         tokio::time::sleep(Duration::from_millis(100)).await;
-        
+
         Ok(LLMResponse {
-            content: format!("Test response for: {}", request.prompt.chars().take(50).collect::<String>()),
+            content: format!(
+                "Test response for: {}",
+                request.prompt.chars().take(50).collect::<String>()
+            ),
             usage: Usage {
                 prompt_tokens: request.prompt.len() / 4,
                 completion_tokens: 25,
@@ -540,43 +591,57 @@ impl PerformanceOptimizer {
         Ok(45.0) // 45%
     }
 
-    async fn calculate_cache_hit_rate(&self) -> Result<f32, Box<dyn std::error::Error + Send + Sync>> {
+    async fn calculate_cache_hit_rate(
+        &self,
+    ) -> Result<f32, Box<dyn std::error::Error + Send + Sync>> {
         let cache = self.cache.read().await;
         if cache.is_empty() {
             return Ok(0.0);
         }
-        
+
         let total_accesses: u64 = cache.values().map(|entry| entry.access_count).sum();
         let cache_hits = cache.len() as u64;
-        
+
         Ok(cache_hits as f32 / total_accesses as f32)
     }
 
-    async fn calculate_optimization_effectiveness(&self) -> Result<f32, Box<dyn std::error::Error + Send + Sync>> {
+    async fn calculate_optimization_effectiveness(
+        &self,
+    ) -> Result<f32, Box<dyn std::error::Error + Send + Sync>> {
         // Calculate based on various optimization metrics
         let cache_effectiveness = self.calculate_cache_hit_rate().await?;
         let compression_effectiveness = self.calculate_compression_effectiveness().await?;
         let batch_effectiveness = self.calculate_batch_effectiveness().await?;
-        
+
         Ok((cache_effectiveness + compression_effectiveness + batch_effectiveness) / 3.0)
     }
 
-    async fn calculate_compression_effectiveness(&self) -> Result<f32, Box<dyn std::error::Error + Send + Sync>> {
+    async fn calculate_compression_effectiveness(
+        &self,
+    ) -> Result<f32, Box<dyn std::error::Error + Send + Sync>> {
         let compression_engine = self.compression_engine.read().await;
         Ok(compression_engine.get_average_compression_ratio())
     }
 
-    async fn calculate_batch_effectiveness(&self) -> Result<f32, Box<dyn std::error::Error + Send + Sync>> {
+    async fn calculate_batch_effectiveness(
+        &self,
+    ) -> Result<f32, Box<dyn std::error::Error + Send + Sync>> {
         let queue = self.batch_queue.read().await;
         if queue.is_empty() {
             return Ok(0.0);
         }
-        
-        let average_batch_size = queue.iter().map(|batch| batch.requests.len()).sum::<usize>() as f32 / queue.len() as f32;
+
+        let average_batch_size = queue
+            .iter()
+            .map(|batch| batch.requests.len())
+            .sum::<usize>() as f32
+            / queue.len() as f32;
         Ok(average_batch_size / self.config.batch_size as f32)
     }
 
-    pub async fn generate_optimization_recommendations(&self) -> Result<Vec<OptimizationRecommendation>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn generate_optimization_recommendations(
+        &self,
+    ) -> Result<Vec<OptimizationRecommendation>, Box<dyn std::error::Error + Send + Sync>> {
         let mut recommendations = Vec::new();
         let current_metrics = self.get_current_metrics().await?;
 
@@ -584,8 +649,12 @@ impl PerformanceOptimizer {
         if current_metrics.cache_hit_rate < self.config.optimization_targets.target_cache_hit_rate {
             recommendations.push(OptimizationRecommendation {
                 optimization_type: OptimizationType::CacheOptimization,
-                description: "Increase cache size or improve cache eviction strategy to improve hit rate".to_string(),
-                expected_improvement: (self.config.optimization_targets.target_cache_hit_rate - current_metrics.cache_hit_rate) * 100.0,
+                description:
+                    "Increase cache size or improve cache eviction strategy to improve hit rate"
+                        .to_string(),
+                expected_improvement: (self.config.optimization_targets.target_cache_hit_rate
+                    - current_metrics.cache_hit_rate)
+                    * 100.0,
                 implementation_effort: ImplementationEffort::Low,
                 priority: RecommendationPriority::High,
                 estimated_impact: PerformanceImpact {
@@ -599,7 +668,9 @@ impl PerformanceOptimizer {
         }
 
         // Latency optimization recommendations
-        if current_metrics.latency_p95 > Duration::from_millis(self.config.optimization_targets.target_latency_ms) {
+        if current_metrics.latency_p95
+            > Duration::from_millis(self.config.optimization_targets.target_latency_ms)
+        {
             recommendations.push(OptimizationRecommendation {
                 optimization_type: OptimizationType::LoadBalancing,
                 description: "Implement better load balancing to reduce latency spikes".to_string(),
@@ -617,10 +688,14 @@ impl PerformanceOptimizer {
         }
 
         // Memory optimization recommendations
-        if current_metrics.memory_usage_mb > self.config.optimization_targets.target_memory_usage_mb as f64 {
+        if current_metrics.memory_usage_mb
+            > self.config.optimization_targets.target_memory_usage_mb as f64
+        {
             recommendations.push(OptimizationRecommendation {
                 optimization_type: OptimizationType::MemoryOptimization,
-                description: "Optimize memory usage through better caching strategies and data compression".to_string(),
+                description:
+                    "Optimize memory usage through better caching strategies and data compression"
+                        .to_string(),
                 expected_improvement: 15.0,
                 implementation_effort: ImplementationEffort::Medium,
                 priority: RecommendationPriority::Medium,
@@ -635,7 +710,9 @@ impl PerformanceOptimizer {
         }
 
         // Throughput optimization recommendations
-        if current_metrics.throughput_rps < self.config.optimization_targets.target_throughput_rps as f64 {
+        if current_metrics.throughput_rps
+            < self.config.optimization_targets.target_throughput_rps as f64
+        {
             recommendations.push(OptimizationRecommendation {
                 optimization_type: OptimizationType::BatchingImprovement,
                 description: "Improve request batching to increase overall throughput".to_string(),
@@ -655,13 +732,17 @@ impl PerformanceOptimizer {
         Ok(recommendations)
     }
 
-    async fn get_current_metrics(&self) -> Result<PerformanceMetrics, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_current_metrics(
+        &self,
+    ) -> Result<PerformanceMetrics, Box<dyn std::error::Error + Send + Sync>> {
         // Return latest metrics or compute current state
         let history = self.metrics_history.read().await;
         Ok(history.last().cloned().unwrap_or_default())
     }
 
-    pub async fn get_performance_report(&self) -> Result<PerformanceReport, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn get_performance_report(
+        &self,
+    ) -> Result<PerformanceReport, Box<dyn std::error::Error + Send + Sync>> {
         let current_metrics = self.get_current_metrics().await?;
         let benchmark_results = self.benchmark_results.read().await.clone();
         let recommendations = self.generate_optimization_recommendations().await?;
@@ -679,19 +760,22 @@ impl PerformanceOptimizer {
         })
     }
 
-    async fn get_cache_statistics(&self) -> Result<CacheStatistics, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_cache_statistics(
+        &self,
+    ) -> Result<CacheStatistics, Box<dyn std::error::Error + Send + Sync>> {
         let cache = self.cache.read().await;
-        
+
         let total_entries = cache.len();
-        let total_size_bytes: usize = cache.values()
+        let total_size_bytes: usize = cache
+            .values()
             .map(|entry| entry.response.content.len())
             .sum();
-        let total_access_count: u64 = cache.values()
-            .map(|entry| entry.access_count)
-            .sum();
-        let average_compression_ratio = cache.values()
+        let total_access_count: u64 = cache.values().map(|entry| entry.access_count).sum();
+        let average_compression_ratio = cache
+            .values()
             .map(|entry| entry.compression_ratio)
-            .sum::<f32>() / cache.len() as f32;
+            .sum::<f32>()
+            / cache.len() as f32;
 
         Ok(CacheStatistics {
             total_entries,
@@ -704,9 +788,11 @@ impl PerformanceOptimizer {
         })
     }
 
-    async fn get_compression_statistics(&self) -> Result<CompressionStatistics, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_compression_statistics(
+        &self,
+    ) -> Result<CompressionStatistics, Box<dyn std::error::Error + Send + Sync>> {
         let compression_engine = self.compression_engine.read().await;
-        
+
         Ok(CompressionStatistics {
             total_compressed_requests: compression_engine.get_compression_count(),
             average_compression_ratio: compression_engine.get_average_compression_ratio(),
@@ -715,43 +801,85 @@ impl PerformanceOptimizer {
         })
     }
 
-    async fn generate_optimization_summary(&self) -> Result<OptimizationSummary, Box<dyn std::error::Error + Send + Sync>> {
+    async fn generate_optimization_summary(
+        &self,
+    ) -> Result<OptimizationSummary, Box<dyn std::error::Error + Send + Sync>> {
         let current_metrics = self.get_current_metrics().await?;
         let targets = &self.config.optimization_targets;
 
         Ok(OptimizationSummary {
             overall_performance_score: self.calculate_performance_score(&current_metrics, targets),
-            target_achievement_rate: self.calculate_target_achievement_rate(&current_metrics, targets),
+            target_achievement_rate: self
+                .calculate_target_achievement_rate(&current_metrics, targets),
             bottleneck_analysis: self.analyze_bottlenecks(&current_metrics, targets).await?,
             improvement_potential: self.calculate_improvement_potential(&current_metrics, targets),
             optimization_status: self.get_optimization_status(&current_metrics, targets),
         })
     }
 
-    fn calculate_performance_score(&self, metrics: &PerformanceMetrics, targets: &OptimizationTargets) -> f32 {
-        let latency_score = if metrics.latency_p95.as_millis() <= targets.target_latency_ms as u128 { 1.0 } else { targets.target_latency_ms as f32 / metrics.latency_p95.as_millis() as f32 };
-        let throughput_score = if metrics.throughput_rps >= targets.target_throughput_rps as f64 { 1.0 } else { metrics.throughput_rps as f32 / targets.target_throughput_rps as f32 };
+    fn calculate_performance_score(
+        &self,
+        metrics: &PerformanceMetrics,
+        targets: &OptimizationTargets,
+    ) -> f32 {
+        let latency_score = if metrics.latency_p95.as_millis() <= targets.target_latency_ms as u128
+        {
+            1.0
+        } else {
+            targets.target_latency_ms as f32 / metrics.latency_p95.as_millis() as f32
+        };
+        let throughput_score = if metrics.throughput_rps >= targets.target_throughput_rps as f64 {
+            1.0
+        } else {
+            metrics.throughput_rps as f32 / targets.target_throughput_rps as f32
+        };
         let cache_score = metrics.cache_hit_rate / targets.target_cache_hit_rate;
-        let memory_score = if metrics.memory_usage_mb <= targets.target_memory_usage_mb as f64 { 1.0 } else { targets.target_memory_usage_mb as f32 / metrics.memory_usage_mb as f32 };
-        let error_score = if metrics.error_rate <= targets.target_error_rate { 1.0 } else { targets.target_error_rate / metrics.error_rate };
+        let memory_score = if metrics.memory_usage_mb <= targets.target_memory_usage_mb as f64 {
+            1.0
+        } else {
+            targets.target_memory_usage_mb as f32 / metrics.memory_usage_mb as f32
+        };
+        let error_score = if metrics.error_rate <= targets.target_error_rate {
+            1.0
+        } else {
+            targets.target_error_rate / metrics.error_rate
+        };
 
         (latency_score + throughput_score + cache_score + memory_score + error_score) / 5.0 * 100.0
     }
 
-    fn calculate_target_achievement_rate(&self, metrics: &PerformanceMetrics, targets: &OptimizationTargets) -> f32 {
+    fn calculate_target_achievement_rate(
+        &self,
+        metrics: &PerformanceMetrics,
+        targets: &OptimizationTargets,
+    ) -> f32 {
         let mut achieved = 0;
         let total = 5;
 
-        if metrics.latency_p95.as_millis() <= targets.target_latency_ms as u128 { achieved += 1; }
-        if metrics.throughput_rps >= targets.target_throughput_rps as f64 { achieved += 1; }
-        if metrics.cache_hit_rate >= targets.target_cache_hit_rate { achieved += 1; }
-        if metrics.memory_usage_mb <= targets.target_memory_usage_mb as f64 { achieved += 1; }
-        if metrics.error_rate <= targets.target_error_rate { achieved += 1; }
+        if metrics.latency_p95.as_millis() <= targets.target_latency_ms as u128 {
+            achieved += 1;
+        }
+        if metrics.throughput_rps >= targets.target_throughput_rps as f64 {
+            achieved += 1;
+        }
+        if metrics.cache_hit_rate >= targets.target_cache_hit_rate {
+            achieved += 1;
+        }
+        if metrics.memory_usage_mb <= targets.target_memory_usage_mb as f64 {
+            achieved += 1;
+        }
+        if metrics.error_rate <= targets.target_error_rate {
+            achieved += 1;
+        }
 
         achieved as f32 / total as f32 * 100.0
     }
 
-    async fn analyze_bottlenecks(&self, metrics: &PerformanceMetrics, targets: &OptimizationTargets) -> Result<Vec<BottleneckInfo>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_bottlenecks(
+        &self,
+        metrics: &PerformanceMetrics,
+        targets: &OptimizationTargets,
+    ) -> Result<Vec<BottleneckInfo>, Box<dyn std::error::Error + Send + Sync>> {
         let mut bottlenecks = Vec::new();
 
         if metrics.latency_p95.as_millis() > targets.target_latency_ms as u128 {
@@ -784,14 +912,22 @@ impl PerformanceOptimizer {
         Ok(bottlenecks)
     }
 
-    fn calculate_improvement_potential(&self, metrics: &PerformanceMetrics, targets: &OptimizationTargets) -> f32 {
+    fn calculate_improvement_potential(
+        &self,
+        metrics: &PerformanceMetrics,
+        targets: &OptimizationTargets,
+    ) -> f32 {
         let current_score = self.calculate_performance_score(metrics, targets);
         100.0 - current_score
     }
 
-    fn get_optimization_status(&self, metrics: &PerformanceMetrics, targets: &OptimizationTargets) -> OptimizationStatus {
+    fn get_optimization_status(
+        &self,
+        metrics: &PerformanceMetrics,
+        targets: &OptimizationTargets,
+    ) -> OptimizationStatus {
         let achievement_rate = self.calculate_target_achievement_rate(metrics, targets);
-        
+
         if achievement_rate >= 90.0 {
             OptimizationStatus::Excellent
         } else if achievement_rate >= 75.0 {
@@ -803,7 +939,10 @@ impl PerformanceOptimizer {
         }
     }
 
-    fn generate_cache_key(&self, request: &LLMRequest) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    fn generate_cache_key(
+        &self,
+        request: &LLMRequest,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -812,7 +951,7 @@ impl PerformanceOptimizer {
         request.max_tokens.hash(&mut hasher);
         request.temperature.hash(&mut hasher);
         request.model.hash(&mut hasher);
-        
+
         Ok(format!("cache_{:x}", hasher.finish()))
     }
 }
@@ -995,7 +1134,10 @@ impl PrefetchEngine {
         Vec::new()
     }
 
-    pub fn prefetch_responses(&mut self, _requests: Vec<LLMRequest>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn prefetch_responses(
+        &mut self,
+        _requests: Vec<LLMRequest>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Placeholder implementation - would asynchronously prefetch responses
         Ok(())
     }

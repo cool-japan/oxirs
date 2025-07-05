@@ -139,6 +139,7 @@ pub struct TemporalStorage {
     /// Time-bucketed storage
     buckets: Arc<RwLock<BTreeMap<DateTime<Utc>, Bucket>>>,
     /// Interval index
+    #[allow(dead_code)]
     interval_index: Arc<RwLock<IntervalIndex>>,
     /// Entity history index
     entity_index: Arc<RwLock<EntityIndex>>,
@@ -151,6 +152,7 @@ pub struct TemporalStorage {
 /// Time bucket for efficient temporal storage
 struct Bucket {
     /// Start time of bucket
+    #[allow(dead_code)]
     start_time: DateTime<Utc>,
     /// Triples in this bucket
     triples: Vec<TemporalTriple>,
@@ -162,6 +164,7 @@ struct Bucket {
 #[derive(Debug, Default)]
 struct BucketStats {
     triple_count: usize,
+    #[allow(dead_code)]
     compressed_size: Option<usize>,
     last_access: DateTime<Utc>,
 }
@@ -169,6 +172,7 @@ struct BucketStats {
 /// Interval index for temporal queries
 struct IntervalIndex {
     /// Interval tree for efficient range queries
+    #[allow(dead_code)]
     intervals: IntervalTree<DateTime<Utc>, TemporalTriple>,
 }
 

@@ -11,15 +11,15 @@ mod utils;
 mod wrapper;
 
 pub use error::{RdfXmlParseError, RdfXmlSyntaxError};
-pub use parser::{RdfXmlParser, RdfXmlPrefixesIter, ReaderRdfXmlParser, SliceRdfXmlParser};
 #[cfg(feature = "async-tokio")]
 pub use parser::TokioAsyncReaderRdfXmlParser;
-pub use serializer::{RdfXmlSerializer, WriterRdfXmlSerializer};
+pub use parser::{RdfXmlParser, RdfXmlPrefixesIter, ReaderRdfXmlParser, SliceRdfXmlParser};
 #[cfg(feature = "async-tokio")]
 pub use serializer::TokioAsyncWriterRdfXmlSerializer;
+pub use serializer::{RdfXmlSerializer, WriterRdfXmlSerializer};
 pub use streaming::{
-    DomFreeStreamingRdfXmlParser, RdfXmlStreamingConfig, RdfXmlStreamingSink,
-    RdfXmlStreamingStatistics, MemoryRdfXmlSink, RdfXmlSinkStatistics,
-    ElementType, ParseType, NamespaceContext, ElementContext
+    DomFreeStreamingRdfXmlParser, ElementContext, ElementType, MemoryRdfXmlSink, NamespaceContext,
+    ParseType, RdfXmlSinkStatistics, RdfXmlStreamingConfig, RdfXmlStreamingSink,
+    RdfXmlStreamingStatistics,
 };
 pub use wrapper::parse_rdfxml;

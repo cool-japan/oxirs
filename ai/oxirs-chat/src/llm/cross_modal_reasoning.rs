@@ -1,9 +1,9 @@
+use crate::llm::manager::LLMManager;
+use crate::llm::types::{LLMRequest, LLMResponse, Usage};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
-use crate::llm::types::{LLMRequest, LLMResponse, Usage};
-use crate::llm::manager::LLMManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrossModalInput {
@@ -128,7 +128,11 @@ impl CrossModalReasoning {
         }
     }
 
-    pub async fn reason(&self, input: CrossModalInput, query: &str) -> Result<CrossModalResponse, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn reason(
+        &self,
+        input: CrossModalInput,
+        query: &str,
+    ) -> Result<CrossModalResponse, Box<dyn std::error::Error + Send + Sync>> {
         let mut reasoning_steps = Vec::new();
         let mut modality_contributions = HashMap::new();
         let mut total_usage = Usage::default();
@@ -156,7 +160,9 @@ impl CrossModalReasoning {
                 step_id: format!("vision_{}", reasoning_steps.len()),
                 description: "Visual content analysis".to_string(),
                 modality: ReasoningModality::Vision,
-                input_references: (0..input.images.len()).map(|i| format!("image_{}", i)).collect(),
+                input_references: (0..input.images.len())
+                    .map(|i| format!("image_{}", i))
+                    .collect(),
                 output: vision_result.content.clone(),
                 confidence: vision_result.confidence,
             });
@@ -177,7 +183,8 @@ impl CrossModalReasoning {
                     output: structured_result.content.clone(),
                     confidence: structured_result.confidence,
                 });
-                modality_contributions.insert("structured".to_string(), structured_result.confidence);
+                modality_contributions
+                    .insert("structured".to_string(), structured_result.confidence);
                 total_usage.prompt_tokens += structured_result.usage.prompt_tokens;
                 total_usage.completion_tokens += structured_result.usage.completion_tokens;
             }
@@ -193,7 +200,7 @@ impl CrossModalReasoning {
             output: fusion_result.content.clone(),
             confidence: fusion_result.confidence,
         });
-        
+
         total_usage.prompt_tokens += fusion_result.usage.prompt_tokens;
         total_usage.completion_tokens += fusion_result.usage.completion_tokens;
 
@@ -211,7 +218,11 @@ impl CrossModalReasoning {
         Ok(response)
     }
 
-    async fn process_text(&self, text: &str, query: &str) -> Result<ModalityResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn process_text(
+        &self,
+        text: &str,
+        query: &str,
+    ) -> Result<ModalityResult, Box<dyn std::error::Error + Send + Sync>> {
         let prompt = format!(
             "Analyze the following text in the context of the query: '{}'\n\nText: {}\n\nProvide detailed analysis and relevant insights:",
             query, text
@@ -222,7 +233,9 @@ impl CrossModalReasoning {
             max_tokens: Some(1000),
             temperature: Some(0.7),
             model: None,
-            system_prompt: Some("You are an expert text analyst. Provide thorough, accurate analysis.".to_string()),
+            system_prompt: Some(
+                "You are an expert text analyst. Provide thorough, accurate analysis.".to_string(),
+            ),
             stop_sequences: None,
             top_p: None,
             frequency_penalty: None,
@@ -234,7 +247,7 @@ impl CrossModalReasoning {
         };
 
         let response = self.llm_manager.read().await.generate(&request).await?;
-        
+
         Ok(ModalityResult {
             content: response.content,
             confidence: 0.8, // Text analysis typically has high confidence
@@ -242,10 +255,14 @@ impl CrossModalReasoning {
         })
     }
 
-    async fn process_images(&self, images: &[ImageInput], query: &str) -> Result<ModalityResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn process_images(
+        &self,
+        images: &[ImageInput],
+        query: &str,
+    ) -> Result<ModalityResult, Box<dyn std::error::Error + Send + Sync>> {
         let mut vision_processor = self.vision_processor.write().await;
         let vision_analysis = vision_processor.analyze_images(images).await?;
-        
+
         let prompt = format!(
             "Analyze the following visual content in the context of the query: '{}'\n\nVision Analysis: {}\n\nProvide detailed visual insights:",
             query, vision_analysis
@@ -256,7 +273,10 @@ impl CrossModalReasoning {
             max_tokens: Some(1000),
             temperature: Some(0.7),
             model: None,
-            system_prompt: Some("You are an expert visual analyst. Provide thorough, accurate visual analysis.".to_string()),
+            system_prompt: Some(
+                "You are an expert visual analyst. Provide thorough, accurate visual analysis."
+                    .to_string(),
+            ),
             stop_sequences: None,
             top_p: None,
             frequency_penalty: None,
@@ -268,7 +288,7 @@ impl CrossModalReasoning {
         };
 
         let response = self.llm_manager.read().await.generate(&request).await?;
-        
+
         Ok(ModalityResult {
             content: response.content,
             confidence: 0.75, // Vision analysis confidence varies
@@ -276,10 +296,14 @@ impl CrossModalReasoning {
         })
     }
 
-    async fn process_structured_data(&self, data: &StructuredData, query: &str) -> Result<ModalityResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn process_structured_data(
+        &self,
+        data: &StructuredData,
+        query: &str,
+    ) -> Result<ModalityResult, Box<dyn std::error::Error + Send + Sync>> {
         let mut structured_processor = self.structured_processor.write().await;
         let structured_analysis = structured_processor.analyze_data(data).await?;
-        
+
         let prompt = format!(
             "Analyze the following structured data in the context of the query: '{}'\n\nData Format: {:?}\nData Analysis: {}\n\nProvide detailed structural insights:",
             query, data.format, structured_analysis
@@ -290,7 +314,10 @@ impl CrossModalReasoning {
             max_tokens: Some(1000),
             temperature: Some(0.7),
             model: None,
-            system_prompt: Some("You are an expert data analyst. Provide thorough, accurate structural analysis.".to_string()),
+            system_prompt: Some(
+                "You are an expert data analyst. Provide thorough, accurate structural analysis."
+                    .to_string(),
+            ),
             stop_sequences: None,
             top_p: None,
             frequency_penalty: None,
@@ -302,7 +329,7 @@ impl CrossModalReasoning {
         };
 
         let response = self.llm_manager.read().await.generate(&request).await?;
-        
+
         Ok(ModalityResult {
             content: response.content,
             confidence: 0.85, // Structured data analysis typically has high confidence
@@ -310,10 +337,16 @@ impl CrossModalReasoning {
         })
     }
 
-    async fn fuse_modalities(&self, steps: &[ReasoningStep], query: &str) -> Result<ModalityResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fuse_modalities(
+        &self,
+        steps: &[ReasoningStep],
+        query: &str,
+    ) -> Result<ModalityResult, Box<dyn std::error::Error + Send + Sync>> {
         let mut fusion_engine = self.fusion_engine.write().await;
-        let fusion_context = fusion_engine.create_fusion_context(steps, &self.config.fusion_strategy).await?;
-        
+        let fusion_context = fusion_engine
+            .create_fusion_context(steps, &self.config.fusion_strategy)
+            .await?;
+
         let prompt = format!(
             "Given the following multi-modal analysis results for the query: '{}', provide a comprehensive synthesized answer:\n\n{}\n\nSynthesis:",
             query, fusion_context
@@ -336,10 +369,10 @@ impl CrossModalReasoning {
         };
 
         let response = self.llm_manager.read().await.generate(&request).await?;
-        
+
         // Calculate fusion confidence based on input confidences
         let avg_confidence = steps.iter().map(|s| s.confidence).sum::<f32>() / steps.len() as f32;
-        
+
         Ok(ModalityResult {
             content: response.content,
             confidence: avg_confidence,
@@ -376,7 +409,11 @@ impl CrossModalReasoning {
             avg_confidence,
             modality_usage,
             avg_reasoning_steps: if total_requests > 0 {
-                history.iter().map(|r| r.reasoning_chain.len()).sum::<usize>() as f32 / total_requests as f32
+                history
+                    .iter()
+                    .map(|r| r.reasoning_chain.len())
+                    .sum::<usize>() as f32
+                    / total_requests as f32
             } else {
                 0.0
             },
@@ -417,9 +454,12 @@ impl VisionProcessor {
         }
     }
 
-    pub async fn analyze_images(&mut self, images: &[ImageInput]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn analyze_images(
+        &mut self,
+        images: &[ImageInput],
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let mut analyses = Vec::new();
-        
+
         for (i, image) in images.iter().enumerate() {
             if !self.supported_formats.contains(&image.format) {
                 return Err(format!("Unsupported image format: {:?}", image.format).into());
@@ -432,13 +472,23 @@ impl VisionProcessor {
         Ok(analyses.join("\n"))
     }
 
-    async fn analyze_single_image(&self, image: &ImageInput) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_single_image(
+        &self,
+        image: &ImageInput,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Simulate image analysis
         let size_analysis = format!("Image size: {} bytes", image.data.len());
         let format_analysis = format!("Format: {:?}", image.format);
-        let description = image.description.as_ref().map(|d| format!("Description: {}", d)).unwrap_or_default();
-        
-        Ok(format!("{}, {}, {}", size_analysis, format_analysis, description))
+        let description = image
+            .description
+            .as_ref()
+            .map(|d| format!("Description: {}", d))
+            .unwrap_or_default();
+
+        Ok(format!(
+            "{}, {}, {}",
+            size_analysis, format_analysis, description
+        ))
     }
 }
 
@@ -461,7 +511,10 @@ impl StructuredProcessor {
         }
     }
 
-    pub async fn analyze_data(&mut self, data: &StructuredData) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn analyze_data(
+        &mut self,
+        data: &StructuredData,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         if !self.supported_formats.contains(&data.format) {
             return Err(format!("Unsupported data format: {:?}", data.format).into());
         }
@@ -476,32 +529,65 @@ impl StructuredProcessor {
         }
     }
 
-    async fn analyze_json(&self, data: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_json(
+        &self,
+        data: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Parse and analyze JSON structure
         let parsed: serde_json::Value = serde_json::from_str(data)?;
-        let analysis = format!("JSON structure with {} top-level keys", self.count_json_keys(&parsed));
+        let analysis = format!(
+            "JSON structure with {} top-level keys",
+            self.count_json_keys(&parsed)
+        );
         Ok(analysis)
     }
 
-    async fn analyze_xml(&self, data: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_xml(
+        &self,
+        data: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Simple XML analysis
         let element_count = data.matches('<').count() / 2; // Rough estimate
-        Ok(format!("XML document with approximately {} elements", element_count))
+        Ok(format!(
+            "XML document with approximately {} elements",
+            element_count
+        ))
     }
 
-    async fn analyze_csv(&self, data: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_csv(
+        &self,
+        data: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let lines: Vec<&str> = data.lines().collect();
         let rows = lines.len();
-        let columns = lines.first().map(|line| line.split(',').count()).unwrap_or(0);
-        Ok(format!("CSV data with {} rows and {} columns", rows, columns))
+        let columns = lines
+            .first()
+            .map(|line| line.split(',').count())
+            .unwrap_or(0);
+        Ok(format!(
+            "CSV data with {} rows and {} columns",
+            rows, columns
+        ))
     }
 
-    async fn analyze_rdf(&self, data: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let triple_count = data.lines().filter(|line| !line.trim().is_empty() && !line.starts_with('#')).count();
-        Ok(format!("RDF data with approximately {} triples", triple_count))
+    async fn analyze_rdf(
+        &self,
+        data: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let triple_count = data
+            .lines()
+            .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+            .count();
+        Ok(format!(
+            "RDF data with approximately {} triples",
+            triple_count
+        ))
     }
 
-    async fn analyze_sparql(&self, data: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_sparql(
+        &self,
+        data: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let query_type = if data.to_uppercase().contains("SELECT") {
             "SELECT"
         } else if data.to_uppercase().contains("CONSTRUCT") {
@@ -516,7 +602,10 @@ impl StructuredProcessor {
         Ok(format!("SPARQL {} query", query_type))
     }
 
-    async fn analyze_graphql(&self, data: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_graphql(
+        &self,
+        data: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let operation_type = if data.contains("query") {
             "query"
         } else if data.contains("mutation") {
@@ -545,15 +634,31 @@ pub struct FusionEngine {
 impl FusionEngine {
     pub fn new() -> Self {
         let mut strategies = HashMap::new();
-        strategies.insert("early".to_string(), Box::new(EarlyFusionStrategy) as Box<dyn FusionStrategyTrait + Send + Sync>);
-        strategies.insert("late".to_string(), Box::new(LateFusionStrategy) as Box<dyn FusionStrategyTrait + Send + Sync>);
-        strategies.insert("hybrid".to_string(), Box::new(HybridFusionStrategy) as Box<dyn FusionStrategyTrait + Send + Sync>);
-        strategies.insert("adaptive".to_string(), Box::new(AdaptiveFusionStrategy) as Box<dyn FusionStrategyTrait + Send + Sync>);
-        
+        strategies.insert(
+            "early".to_string(),
+            Box::new(EarlyFusionStrategy) as Box<dyn FusionStrategyTrait + Send + Sync>,
+        );
+        strategies.insert(
+            "late".to_string(),
+            Box::new(LateFusionStrategy) as Box<dyn FusionStrategyTrait + Send + Sync>,
+        );
+        strategies.insert(
+            "hybrid".to_string(),
+            Box::new(HybridFusionStrategy) as Box<dyn FusionStrategyTrait + Send + Sync>,
+        );
+        strategies.insert(
+            "adaptive".to_string(),
+            Box::new(AdaptiveFusionStrategy) as Box<dyn FusionStrategyTrait + Send + Sync>,
+        );
+
         Self { strategies }
     }
 
-    pub async fn create_fusion_context(&mut self, steps: &[ReasoningStep], strategy: &FusionStrategy) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn create_fusion_context(
+        &mut self,
+        steps: &[ReasoningStep],
+        strategy: &FusionStrategy,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let strategy_name = match strategy {
             FusionStrategy::EarlyFusion => "early",
             FusionStrategy::LateFusion => "late",
@@ -571,22 +676,30 @@ impl FusionEngine {
 
 #[async_trait::async_trait]
 pub trait FusionStrategyTrait {
-    async fn fuse(&self, steps: &[ReasoningStep]) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
+    async fn fuse(
+        &self,
+        steps: &[ReasoningStep],
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 pub struct EarlyFusionStrategy;
 
 #[async_trait::async_trait]
 impl FusionStrategyTrait for EarlyFusionStrategy {
-    async fn fuse(&self, steps: &[ReasoningStep]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fuse(
+        &self,
+        steps: &[ReasoningStep],
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let mut context = String::new();
         context.push_str("Early Fusion Analysis:\n");
-        
+
         for step in steps {
-            context.push_str(&format!("- {}: {} (confidence: {:.2})\n", 
-                step.description, step.output, step.confidence));
+            context.push_str(&format!(
+                "- {}: {} (confidence: {:.2})\n",
+                step.description, step.output, step.confidence
+            ));
         }
-        
+
         Ok(context)
     }
 }
@@ -595,24 +708,30 @@ pub struct LateFusionStrategy;
 
 #[async_trait::async_trait]
 impl FusionStrategyTrait for LateFusionStrategy {
-    async fn fuse(&self, steps: &[ReasoningStep]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fuse(
+        &self,
+        steps: &[ReasoningStep],
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let mut context = String::new();
         context.push_str("Late Fusion Analysis:\n");
-        
+
         // Group by modality
         let mut modality_groups: HashMap<String, Vec<&ReasoningStep>> = HashMap::new();
         for step in steps {
             let modality_key = format!("{:?}", step.modality);
-            modality_groups.entry(modality_key).or_insert_with(Vec::new).push(step);
+            modality_groups
+                .entry(modality_key)
+                .or_insert_with(Vec::new)
+                .push(step);
         }
-        
+
         for (modality, modality_steps) in modality_groups {
             context.push_str(&format!("\n{} Modality:\n", modality));
             for step in modality_steps {
                 context.push_str(&format!("  - {}: {}\n", step.description, step.output));
             }
         }
-        
+
         Ok(context)
     }
 }
@@ -621,21 +740,24 @@ pub struct HybridFusionStrategy;
 
 #[async_trait::async_trait]
 impl FusionStrategyTrait for HybridFusionStrategy {
-    async fn fuse(&self, steps: &[ReasoningStep]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fuse(
+        &self,
+        steps: &[ReasoningStep],
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let mut context = String::new();
         context.push_str("Hybrid Fusion Analysis:\n");
-        
+
         // Combine early and late fusion approaches
         let early_fusion = EarlyFusionStrategy;
         let late_fusion = LateFusionStrategy;
-        
+
         let early_result = early_fusion.fuse(steps).await?;
         let late_result = late_fusion.fuse(steps).await?;
-        
+
         context.push_str(&early_result);
         context.push_str("\n");
         context.push_str(&late_result);
-        
+
         Ok(context)
     }
 }
@@ -644,14 +766,21 @@ pub struct AdaptiveFusionStrategy;
 
 #[async_trait::async_trait]
 impl FusionStrategyTrait for AdaptiveFusionStrategy {
-    async fn fuse(&self, steps: &[ReasoningStep]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fuse(
+        &self,
+        steps: &[ReasoningStep],
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let mut context = String::new();
         context.push_str("Adaptive Fusion Analysis:\n");
-        
+
         // Adapt strategy based on step confidence and modality distribution
         let avg_confidence = steps.iter().map(|s| s.confidence).sum::<f32>() / steps.len() as f32;
-        let modality_count = steps.iter().map(|s| format!("{:?}", s.modality)).collect::<std::collections::HashSet<_>>().len();
-        
+        let modality_count = steps
+            .iter()
+            .map(|s| format!("{:?}", s.modality))
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+
         if avg_confidence > 0.8 && modality_count > 2 {
             // High confidence, multiple modalities - use hybrid approach
             let hybrid_fusion = HybridFusionStrategy;

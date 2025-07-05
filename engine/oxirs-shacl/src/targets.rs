@@ -34,22 +34,22 @@ pub enum Target {
     Implicit(NamedNode),
 
     /// Complex target combinations
-    
+
     /// Union of multiple targets (all nodes that match any of the targets)
     Union(TargetUnion),
-    
+
     /// Intersection of multiple targets (only nodes that match all targets)
     Intersection(TargetIntersection),
-    
+
     /// Difference between targets (nodes in first target but not in second)
     Difference(TargetDifference),
-    
+
     /// Conditional target (nodes that match primary target and satisfy condition)
     Conditional(ConditionalTarget),
-    
+
     /// Hierarchical target (nodes related to other targets through properties)
     Hierarchical(HierarchicalTarget),
-    
+
     /// Path-based target (nodes reachable through property paths from base targets)
     PathBased(PathBasedTarget),
 }
@@ -170,9 +170,7 @@ pub enum TargetCondition {
         direction: PropertyDirection,
     },
     /// Type condition
-    HasType {
-        class_iri: NamedNode,
-    },
+    HasType { class_iri: NamedNode },
     /// Cardinality condition
     Cardinality {
         property: NamedNode,
@@ -229,10 +227,7 @@ pub enum PathFilter {
     /// Filter by node type
     NodeType(NodeTypeFilter),
     /// Filter by property value
-    PropertyValue {
-        property: NamedNode,
-        value: Term,
-    },
+    PropertyValue { property: NamedNode, value: Term },
     /// Filter by SPARQL condition
     SparqlCondition {
         condition: String,
@@ -318,7 +313,10 @@ impl Target {
     }
 
     /// Create an intersection target with optimization hints
-    pub fn intersection_with_hints(targets: Vec<Target>, hints: IntersectionOptimizationHints) -> Self {
+    pub fn intersection_with_hints(
+        targets: Vec<Target>,
+        hints: IntersectionOptimizationHints,
+    ) -> Self {
         Target::Intersection(TargetIntersection {
             targets,
             optimization_hints: Some(hints),
@@ -343,7 +341,11 @@ impl Target {
     }
 
     /// Create a conditional target with context
-    pub fn conditional_with_context(base: Target, condition: TargetCondition, context: TargetContext) -> Self {
+    pub fn conditional_with_context(
+        base: Target,
+        condition: TargetCondition,
+        context: TargetContext,
+    ) -> Self {
         Target::Conditional(ConditionalTarget {
             base_target: Box::new(base),
             condition,
@@ -352,7 +354,11 @@ impl Target {
     }
 
     /// Create a hierarchical target following relationships
-    pub fn hierarchical(root: Target, relationship: HierarchicalRelationship, max_depth: i32) -> Self {
+    pub fn hierarchical(
+        root: Target,
+        relationship: HierarchicalRelationship,
+        max_depth: i32,
+    ) -> Self {
         Target::Hierarchical(HierarchicalTarget {
             root_target: Box::new(root),
             relationship,
@@ -362,7 +368,11 @@ impl Target {
     }
 
     /// Create a hierarchical target with intermediate nodes included
-    pub fn hierarchical_with_intermediate(root: Target, relationship: HierarchicalRelationship, max_depth: i32) -> Self {
+    pub fn hierarchical_with_intermediate(
+        root: Target,
+        relationship: HierarchicalRelationship,
+        max_depth: i32,
+    ) -> Self {
         Target::Hierarchical(HierarchicalTarget {
             root_target: Box::new(root),
             relationship,
@@ -372,7 +382,11 @@ impl Target {
     }
 
     /// Create a path-based target following property paths
-    pub fn path_based(start: Target, path: crate::paths::PropertyPath, direction: PathDirection) -> Self {
+    pub fn path_based(
+        start: Target,
+        path: crate::paths::PropertyPath,
+        direction: PathDirection,
+    ) -> Self {
         Target::PathBased(PathBasedTarget {
             start_target: Box::new(start),
             path,
@@ -382,7 +396,12 @@ impl Target {
     }
 
     /// Create a path-based target with filters
-    pub fn path_based_with_filters(start: Target, path: crate::paths::PropertyPath, direction: PathDirection, filters: Vec<PathFilter>) -> Self {
+    pub fn path_based_with_filters(
+        start: Target,
+        path: crate::paths::PropertyPath,
+        direction: PathDirection,
+        filters: Vec<PathFilter>,
+    ) -> Self {
         Target::PathBased(PathBasedTarget {
             start_target: Box::new(start),
             path,
@@ -393,13 +412,14 @@ impl Target {
 
     /// Check if this target requires complex evaluation
     pub fn is_complex(&self) -> bool {
-        matches!(self, 
-            Target::Union(_) | 
-            Target::Intersection(_) | 
-            Target::Difference(_) | 
-            Target::Conditional(_) | 
-            Target::Hierarchical(_) | 
-            Target::PathBased(_)
+        matches!(
+            self,
+            Target::Union(_)
+                | Target::Intersection(_)
+                | Target::Difference(_)
+                | Target::Conditional(_)
+                | Target::Hierarchical(_)
+                | Target::PathBased(_)
         )
     }
 
@@ -791,31 +811,44 @@ impl TargetSelector {
                     close_clause
                 ))
             }
-            
+
             // Complex target combinations
             Target::Union(union_target) => {
                 self.generate_union_query(&union_target.targets, graph_name)
             }
-            
+
             Target::Intersection(intersection_target) => {
                 self.generate_intersection_query(&intersection_target.targets, graph_name)
             }
-            
-            Target::Difference(difference_target) => {
-                self.generate_difference_query(&difference_target.primary_target, &difference_target.exclusion_target, graph_name)
-            }
-            
-            Target::Conditional(conditional_target) => {
-                self.generate_conditional_query(&conditional_target.base_target, &conditional_target.condition, conditional_target.context.as_ref(), graph_name)
-            }
-            
-            Target::Hierarchical(hierarchical_target) => {
-                self.generate_hierarchical_query(&hierarchical_target.root_target, &hierarchical_target.relationship, hierarchical_target.max_depth, hierarchical_target.include_intermediate, graph_name)
-            }
-            
-            Target::PathBased(path_target) => {
-                self.generate_path_based_query(&path_target.start_target, &path_target.path, &path_target.direction, &path_target.filters, graph_name)
-            }
+
+            Target::Difference(difference_target) => self.generate_difference_query(
+                &difference_target.primary_target,
+                &difference_target.exclusion_target,
+                graph_name,
+            ),
+
+            Target::Conditional(conditional_target) => self.generate_conditional_query(
+                &conditional_target.base_target,
+                &conditional_target.condition,
+                conditional_target.context.as_ref(),
+                graph_name,
+            ),
+
+            Target::Hierarchical(hierarchical_target) => self.generate_hierarchical_query(
+                &hierarchical_target.root_target,
+                &hierarchical_target.relationship,
+                hierarchical_target.max_depth,
+                hierarchical_target.include_intermediate,
+                graph_name,
+            ),
+
+            Target::PathBased(path_target) => self.generate_path_based_query(
+                &path_target.start_target,
+                &path_target.path,
+                &path_target.direction,
+                &path_target.filters,
+                graph_name,
+            ),
         }
     }
 
@@ -1407,31 +1440,48 @@ impl TargetSelector {
                 let class_target = Target::Class(class_iri.clone());
                 self.execute_target_selection_direct(store, &class_target, graph_name)
             }
-            
+
             // Complex target combinations
             Target::Union(union_target) => {
                 self.execute_union_target(store, &union_target.targets, graph_name)
             }
-            
+
             Target::Intersection(intersection_target) => {
                 self.execute_intersection_target(store, &intersection_target.targets, graph_name)
             }
-            
-            Target::Difference(difference_target) => {
-                self.execute_difference_target(store, &difference_target.primary_target, &difference_target.exclusion_target, graph_name)
-            }
-            
-            Target::Conditional(conditional_target) => {
-                self.execute_conditional_target(store, &conditional_target.base_target, &conditional_target.condition, conditional_target.context.as_ref(), graph_name)
-            }
-            
-            Target::Hierarchical(hierarchical_target) => {
-                self.execute_hierarchical_target(store, &hierarchical_target.root_target, &hierarchical_target.relationship, hierarchical_target.max_depth, hierarchical_target.include_intermediate, graph_name)
-            }
-            
-            Target::PathBased(path_target) => {
-                self.execute_path_based_target(store, &path_target.start_target, &path_target.path, &path_target.direction, &path_target.filters, graph_name)
-            }
+
+            Target::Difference(difference_target) => self.execute_difference_target(
+                store,
+                &difference_target.primary_target,
+                &difference_target.exclusion_target,
+                graph_name,
+            ),
+
+            Target::Conditional(conditional_target) => self.execute_conditional_target(
+                store,
+                &conditional_target.base_target,
+                &conditional_target.condition,
+                conditional_target.context.as_ref(),
+                graph_name,
+            ),
+
+            Target::Hierarchical(hierarchical_target) => self.execute_hierarchical_target(
+                store,
+                &hierarchical_target.root_target,
+                &hierarchical_target.relationship,
+                hierarchical_target.max_depth,
+                hierarchical_target.include_intermediate,
+                graph_name,
+            ),
+
+            Target::PathBased(path_target) => self.execute_path_based_target(
+                store,
+                &path_target.start_target,
+                &path_target.path,
+                &path_target.direction,
+                &path_target.filters,
+                graph_name,
+            ),
         }
     }
 
@@ -1544,7 +1594,7 @@ impl TargetSelector {
             Target::Union(union_target) => {
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
-                
+
                 let mut hasher = DefaultHasher::new();
                 for target in &union_target.targets {
                     self.create_cache_key(target, graph_name).hash(&mut hasher);
@@ -1555,30 +1605,53 @@ impl TargetSelector {
             Target::Intersection(intersection_target) => {
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
-                
+
                 let mut hasher = DefaultHasher::new();
                 for target in &intersection_target.targets {
                     self.create_cache_key(target, graph_name).hash(&mut hasher);
                 }
                 let intersection_hash = hasher.finish();
-                format!("intersection:{}:{}", intersection_hash, graph_name.unwrap_or("default"))
+                format!(
+                    "intersection:{}:{}",
+                    intersection_hash,
+                    graph_name.unwrap_or("default")
+                )
             }
             Target::Difference(difference_target) => {
-                let primary_key = self.create_cache_key(&difference_target.primary_target, graph_name);
-                let exclusion_key = self.create_cache_key(&difference_target.exclusion_target, graph_name);
-                format!("difference:{}:{}:{}", primary_key, exclusion_key, graph_name.unwrap_or("default"))
+                let primary_key =
+                    self.create_cache_key(&difference_target.primary_target, graph_name);
+                let exclusion_key =
+                    self.create_cache_key(&difference_target.exclusion_target, graph_name);
+                format!(
+                    "difference:{}:{}:{}",
+                    primary_key,
+                    exclusion_key,
+                    graph_name.unwrap_or("default")
+                )
             }
             Target::Conditional(conditional_target) => {
                 let base_key = self.create_cache_key(&conditional_target.base_target, graph_name);
-                format!("conditional:{}:{}", base_key, graph_name.unwrap_or("default"))
+                format!(
+                    "conditional:{}:{}",
+                    base_key,
+                    graph_name.unwrap_or("default")
+                )
             }
             Target::Hierarchical(hierarchical_target) => {
                 let root_key = self.create_cache_key(&hierarchical_target.root_target, graph_name);
-                format!("hierarchical:{}:{}", root_key, graph_name.unwrap_or("default"))
+                format!(
+                    "hierarchical:{}:{}",
+                    root_key,
+                    graph_name.unwrap_or("default")
+                )
             }
             Target::PathBased(path_based_target) => {
                 let start_key = self.create_cache_key(&path_based_target.start_target, graph_name);
-                format!("path_based:{}:{}", start_key, graph_name.unwrap_or("default"))
+                format!(
+                    "path_based:{}:{}",
+                    start_key,
+                    graph_name.unwrap_or("default")
+                )
             }
         }
     }
@@ -1858,37 +1931,46 @@ impl TargetSelector {
             }
             Target::Union(union_target) => {
                 // Sum estimates for all targets in union
-                union_target.targets.iter()
+                union_target
+                    .targets
+                    .iter()
                     .map(|t| self.estimate_target_cardinality(t, _options))
                     .sum()
             }
             Target::Intersection(intersection_target) => {
                 // Take minimum estimate for intersection
-                intersection_target.targets.iter()
+                intersection_target
+                    .targets
+                    .iter()
                     .map(|t| self.estimate_target_cardinality(t, _options))
                     .min()
                     .unwrap_or(0)
             }
             Target::Difference(difference_target) => {
                 // Estimate as primary minus exclusion (but at least 0)
-                let primary = self.estimate_target_cardinality(&difference_target.primary_target, _options);
-                let exclusion = self.estimate_target_cardinality(&difference_target.exclusion_target, _options);
+                let primary =
+                    self.estimate_target_cardinality(&difference_target.primary_target, _options);
+                let exclusion =
+                    self.estimate_target_cardinality(&difference_target.exclusion_target, _options);
                 primary.saturating_sub(exclusion)
             }
             Target::Conditional(conditional_target) => {
                 // Estimate as base target with condition filtering (assume 50% selectivity)
-                let base = self.estimate_target_cardinality(&conditional_target.base_target, _options);
+                let base =
+                    self.estimate_target_cardinality(&conditional_target.base_target, _options);
                 base / 2
             }
             Target::Hierarchical(hierarchical_target) => {
                 // Estimate based on hierarchy depth and branching factor
-                let root = self.estimate_target_cardinality(&hierarchical_target.root_target, _options);
+                let root =
+                    self.estimate_target_cardinality(&hierarchical_target.root_target, _options);
                 let depth = hierarchical_target.max_depth.max(1) as usize;
                 root * depth // Simple estimate
             }
             Target::PathBased(path_based_target) => {
                 // Estimate based on path traversal (assume moderate expansion)
-                let start = self.estimate_target_cardinality(&path_based_target.start_target, _options);
+                let start =
+                    self.estimate_target_cardinality(&path_based_target.start_target, _options);
                 start * 2 // Assume 2x expansion on average
             }
         }
@@ -1978,32 +2060,59 @@ impl TargetSelector {
             Target::Union(union_target) => {
                 "union".hash(&mut hasher);
                 for target in &union_target.targets {
-                    self.create_query_plan_cache_key(target, graph_name, options).hash(&mut hasher);
+                    self.create_query_plan_cache_key(target, graph_name, options)
+                        .hash(&mut hasher);
                 }
             }
             Target::Intersection(intersection_target) => {
                 "intersection".hash(&mut hasher);
                 for target in &intersection_target.targets {
-                    self.create_query_plan_cache_key(target, graph_name, options).hash(&mut hasher);
+                    self.create_query_plan_cache_key(target, graph_name, options)
+                        .hash(&mut hasher);
                 }
             }
             Target::Difference(difference_target) => {
                 "difference".hash(&mut hasher);
-                self.create_query_plan_cache_key(&difference_target.primary_target, graph_name, options).hash(&mut hasher);
-                self.create_query_plan_cache_key(&difference_target.exclusion_target, graph_name, options).hash(&mut hasher);
+                self.create_query_plan_cache_key(
+                    &difference_target.primary_target,
+                    graph_name,
+                    options,
+                )
+                .hash(&mut hasher);
+                self.create_query_plan_cache_key(
+                    &difference_target.exclusion_target,
+                    graph_name,
+                    options,
+                )
+                .hash(&mut hasher);
             }
             Target::Conditional(conditional_target) => {
                 "conditional".hash(&mut hasher);
-                self.create_query_plan_cache_key(&conditional_target.base_target, graph_name, options).hash(&mut hasher);
+                self.create_query_plan_cache_key(
+                    &conditional_target.base_target,
+                    graph_name,
+                    options,
+                )
+                .hash(&mut hasher);
             }
             Target::Hierarchical(hierarchical_target) => {
                 "hierarchical".hash(&mut hasher);
-                self.create_query_plan_cache_key(&hierarchical_target.root_target, graph_name, options).hash(&mut hasher);
+                self.create_query_plan_cache_key(
+                    &hierarchical_target.root_target,
+                    graph_name,
+                    options,
+                )
+                .hash(&mut hasher);
                 hierarchical_target.max_depth.hash(&mut hasher);
             }
             Target::PathBased(path_based_target) => {
                 "path_based".hash(&mut hasher);
-                self.create_query_plan_cache_key(&path_based_target.start_target, graph_name, options).hash(&mut hasher);
+                self.create_query_plan_cache_key(
+                    &path_based_target.start_target,
+                    graph_name,
+                    options,
+                )
+                .hash(&mut hasher);
             }
         }
 
@@ -2079,7 +2188,9 @@ impl TargetSelector {
     /// Generate SPARQL query for union targets
     fn generate_union_query(&self, targets: &[Target], graph_name: Option<&str>) -> Result<String> {
         if targets.is_empty() {
-            return Err(ShaclError::ValidationEngine("Union target cannot be empty".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Union target cannot be empty".to_string(),
+            ));
         }
 
         let mut union_parts = Vec::new();
@@ -2102,9 +2213,15 @@ impl TargetSelector {
     }
 
     /// Generate SPARQL query for intersection targets
-    fn generate_intersection_query(&self, targets: &[Target], graph_name: Option<&str>) -> Result<String> {
+    fn generate_intersection_query(
+        &self,
+        targets: &[Target],
+        graph_name: Option<&str>,
+    ) -> Result<String> {
         if targets.is_empty() {
-            return Err(ShaclError::ValidationEngine("Intersection target cannot be empty".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Intersection target cannot be empty".to_string(),
+            ));
         }
 
         if targets.len() == 1 {
@@ -2116,7 +2233,7 @@ impl TargetSelector {
         for (i, target) in targets.iter().enumerate() {
             let target_query = self.generate_target_query(target, graph_name)?;
             let var_name = format!("target{}", i);
-            
+
             // Replace ?target with specific variable
             let modified_query = target_query.replace("?target", &format!("?{}", var_name));
             subqueries.push((var_name, modified_query));
@@ -2154,7 +2271,12 @@ impl TargetSelector {
     }
 
     /// Generate SPARQL query for difference targets
-    fn generate_difference_query(&self, primary: &Target, exclusion: &Target, graph_name: Option<&str>) -> Result<String> {
+    fn generate_difference_query(
+        &self,
+        primary: &Target,
+        exclusion: &Target,
+        graph_name: Option<&str>,
+    ) -> Result<String> {
         let primary_query = self.generate_target_query(primary, graph_name)?;
         let exclusion_query = self.generate_target_query(exclusion, graph_name)?;
 
@@ -2164,22 +2286,32 @@ impl TargetSelector {
             if let Some(where_end) = where_clause.rfind('}') {
                 where_clause[..where_end].trim()
             } else {
-                return Err(ShaclError::ValidationEngine("Invalid primary query structure".to_string()));
+                return Err(ShaclError::ValidationEngine(
+                    "Invalid primary query structure".to_string(),
+                ));
             }
         } else {
-            return Err(ShaclError::ValidationEngine("Primary query missing WHERE clause".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Primary query missing WHERE clause".to_string(),
+            ));
         };
 
-        // Extract WHERE clause content from exclusion query  
+        // Extract WHERE clause content from exclusion query
         let exclusion_where = if let Some(where_start) = exclusion_query.find("WHERE {") {
             let where_clause = &exclusion_query[where_start + 7..];
             if let Some(where_end) = where_clause.rfind('}') {
-                where_clause[..where_end].trim().replace("?target", "?excluded")
+                where_clause[..where_end]
+                    .trim()
+                    .replace("?target", "?excluded")
             } else {
-                return Err(ShaclError::ValidationEngine("Invalid exclusion query structure".to_string()));
+                return Err(ShaclError::ValidationEngine(
+                    "Invalid exclusion query structure".to_string(),
+                ));
             }
         } else {
-            return Err(ShaclError::ValidationEngine("Exclusion query missing WHERE clause".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Exclusion query missing WHERE clause".to_string(),
+            ));
         };
 
         Ok(format!(
@@ -2191,24 +2323,28 @@ impl TargetSelector {
 
     /// Generate SPARQL query for conditional targets
     fn generate_conditional_query(
-        &self, 
-        base_target: &Target, 
-        condition: &TargetCondition, 
+        &self,
+        base_target: &Target,
+        condition: &TargetCondition,
         context: Option<&TargetContext>,
-        graph_name: Option<&str>
+        graph_name: Option<&str>,
     ) -> Result<String> {
         let base_query = self.generate_target_query(base_target, graph_name)?;
-        
+
         // Extract WHERE clause content from base query
         let base_where = if let Some(where_start) = base_query.find("WHERE {") {
             let where_clause = &base_query[where_start + 7..];
             if let Some(where_end) = where_clause.rfind('}') {
                 where_clause[..where_end].trim()
             } else {
-                return Err(ShaclError::ValidationEngine("Invalid base query structure".to_string()));
+                return Err(ShaclError::ValidationEngine(
+                    "Invalid base query structure".to_string(),
+                ));
             }
         } else {
-            return Err(ShaclError::ValidationEngine("Base query missing WHERE clause".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Base query missing WHERE clause".to_string(),
+            ));
         };
 
         let condition_clause = match condition {
@@ -2216,27 +2352,35 @@ impl TargetSelector {
                 // Use the ASK query as a filter condition
                 format!("FILTER EXISTS {{ {} }}", query)
             }
-            TargetCondition::PropertyExists { property, direction } => {
-                match direction {
-                    PropertyDirection::Subject => {
-                        format!("?target <{}> ?value .", property.as_str())
-                    }
-                    PropertyDirection::Object => {
-                        format!("?subject <{}> ?target .", property.as_str())
-                    }
-                    PropertyDirection::Either => {
-                        format!("{{ ?target <{}> ?value . }} UNION {{ ?subject <{}> ?target . }}", 
-                               property.as_str(), property.as_str())
-                    }
+            TargetCondition::PropertyExists {
+                property,
+                direction,
+            } => match direction {
+                PropertyDirection::Subject => {
+                    format!("?target <{}> ?value .", property.as_str())
                 }
-            }
-            TargetCondition::PropertyValue { property, value, direction } => {
+                PropertyDirection::Object => {
+                    format!("?subject <{}> ?target .", property.as_str())
+                }
+                PropertyDirection::Either => {
+                    format!(
+                        "{{ ?target <{}> ?value . }} UNION {{ ?subject <{}> ?target . }}",
+                        property.as_str(),
+                        property.as_str()
+                    )
+                }
+            },
+            TargetCondition::PropertyValue {
+                property,
+                value,
+                direction,
+            } => {
                 let value_str = match value {
                     Term::NamedNode(nn) => format!("<{}>", nn.as_str()),
                     Term::Literal(lit) => format!("\"{}\"", lit.value()),
                     _ => format!("{:?}", value),
                 };
-                
+
                 match direction {
                     PropertyDirection::Subject => {
                         format!("?target <{}> {} .", property.as_str(), value_str)
@@ -2245,28 +2389,52 @@ impl TargetSelector {
                         format!("{} <{}> ?target .", value_str, property.as_str())
                     }
                     PropertyDirection::Either => {
-                        format!("{{ ?target <{}> {} . }} UNION {{ {} <{}> ?target . }}", 
-                               property.as_str(), value_str, value_str, property.as_str())
+                        format!(
+                            "{{ ?target <{}> {} . }} UNION {{ {} <{}> ?target . }}",
+                            property.as_str(),
+                            value_str,
+                            value_str,
+                            property.as_str()
+                        )
                     }
                 }
             }
             TargetCondition::HasType { class_iri } => {
-                format!("?target <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <{}> .", class_iri.as_str())
+                format!(
+                    "?target <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <{}> .",
+                    class_iri.as_str()
+                )
             }
-            TargetCondition::Cardinality { property, min_count, max_count, direction } => {
+            TargetCondition::Cardinality {
+                property,
+                min_count,
+                max_count,
+                direction,
+            } => {
                 let base_pattern = match direction {
                     PropertyDirection::Subject => format!("?target <{}> ?value", property.as_str()),
-                    PropertyDirection::Object => format!("?subject <{}> ?target", property.as_str()),
-                    PropertyDirection::Either => format!("{{ ?target <{}> ?value }} UNION {{ ?subject <{}> ?target }}", 
-                                                         property.as_str(), property.as_str()),
+                    PropertyDirection::Object => {
+                        format!("?subject <{}> ?target", property.as_str())
+                    }
+                    PropertyDirection::Either => format!(
+                        "{{ ?target <{}> ?value }} UNION {{ ?subject <{}> ?target }}",
+                        property.as_str(),
+                        property.as_str()
+                    ),
                 };
 
                 let mut filters = Vec::new();
                 if let Some(min) = min_count {
-                    filters.push(format!("(SELECT (COUNT(*) AS ?count) WHERE {{ {} }}) >= {}", base_pattern, min));
+                    filters.push(format!(
+                        "(SELECT (COUNT(*) AS ?count) WHERE {{ {} }}) >= {}",
+                        base_pattern, min
+                    ));
                 }
                 if let Some(max) = max_count {
-                    filters.push(format!("(SELECT (COUNT(*) AS ?count) WHERE {{ {} }}) <= {}", base_pattern, max));
+                    filters.push(format!(
+                        "(SELECT (COUNT(*) AS ?count) WHERE {{ {} }}) <= {}",
+                        base_pattern, max
+                    ));
                 }
 
                 if !filters.is_empty() {
@@ -2279,7 +2447,8 @@ impl TargetSelector {
 
         // Add context bindings if provided
         let context_bindings = if let Some(ctx) = context {
-            ctx.bindings.iter()
+            ctx.bindings
+                .iter()
                 .map(|(var, term)| {
                     let term_str = match term {
                         Term::NamedNode(nn) => format!("<{}>", nn.as_str()),
@@ -2296,9 +2465,7 @@ impl TargetSelector {
 
         Ok(format!(
             "SELECT DISTINCT ?target WHERE {{\n  {}\n  {}\n  {}\n}}",
-            base_where,
-            condition_clause,
-            context_bindings
+            base_where, condition_clause, context_bindings
         ))
     }
 
@@ -2309,20 +2476,24 @@ impl TargetSelector {
         relationship: &HierarchicalRelationship,
         max_depth: i32,
         include_intermediate: bool,
-        graph_name: Option<&str>
+        graph_name: Option<&str>,
     ) -> Result<String> {
         let root_query = self.generate_target_query(root_target, graph_name)?;
-        
+
         // Extract WHERE clause content from root query
         let root_where = if let Some(where_start) = root_query.find("WHERE {") {
             let where_clause = &root_query[where_start + 7..];
             if let Some(where_end) = where_clause.rfind('}') {
                 where_clause[..where_end].trim().replace("?target", "?root")
             } else {
-                return Err(ShaclError::ValidationEngine("Invalid root query structure".to_string()));
+                return Err(ShaclError::ValidationEngine(
+                    "Invalid root query structure".to_string(),
+                ));
             }
         } else {
-            return Err(ShaclError::ValidationEngine("Root query missing WHERE clause".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Root query missing WHERE clause".to_string(),
+            ));
         };
 
         let relationship_pattern = match relationship {
@@ -2365,10 +2536,7 @@ impl TargetSelector {
 
         Ok(format!(
             "{} WHERE {{\n  {}\n  {}\n  {}\n}}",
-            select_clause,
-            root_where,
-            relationship_pattern,
-            depth_limit
+            select_clause, root_where, relationship_pattern, depth_limit
         ))
     }
 
@@ -2379,36 +2547,42 @@ impl TargetSelector {
         path: &crate::paths::PropertyPath,
         direction: &PathDirection,
         filters: &[PathFilter],
-        graph_name: Option<&str>
+        graph_name: Option<&str>,
     ) -> Result<String> {
         let start_query = self.generate_target_query(start_target, graph_name)?;
-        
+
         // Extract WHERE clause content from start query
         let start_where = if let Some(where_start) = start_query.find("WHERE {") {
             let where_clause = &start_query[where_start + 7..];
             if let Some(where_end) = where_clause.rfind('}') {
-                where_clause[..where_end].trim().replace("?target", "?start")
+                where_clause[..where_end]
+                    .trim()
+                    .replace("?target", "?start")
             } else {
-                return Err(ShaclError::ValidationEngine("Invalid start query structure".to_string()));
+                return Err(ShaclError::ValidationEngine(
+                    "Invalid start query structure".to_string(),
+                ));
             }
         } else {
-            return Err(ShaclError::ValidationEngine("Start query missing WHERE clause".to_string()));
+            return Err(ShaclError::ValidationEngine(
+                "Start query missing WHERE clause".to_string(),
+            ));
         };
 
         // Generate property path pattern
-        let path_pattern = self.generate_property_path_pattern(path, "?start", "?target", direction)?;
+        let path_pattern =
+            self.generate_property_path_pattern(path, "?start", "?target", direction)?;
 
         // Generate filter conditions
-        let filter_conditions = filters.iter()
+        let filter_conditions = filters
+            .iter()
             .map(|filter| self.generate_path_filter_condition(filter))
             .collect::<Result<Vec<_>>>()?
             .join("\n  ");
 
         Ok(format!(
             "SELECT DISTINCT ?target WHERE {{\n  {}\n  {}\n  {}\n}}",
-            start_where,
-            path_pattern,
-            filter_conditions
+            start_where, path_pattern, filter_conditions
         ))
     }
 
@@ -2418,22 +2592,28 @@ impl TargetSelector {
         path: &crate::paths::PropertyPath,
         start_var: &str,
         end_var: &str,
-        direction: &PathDirection
+        direction: &PathDirection,
     ) -> Result<String> {
         use crate::paths::PropertyPath;
-        
+
         match path {
-            PropertyPath::Predicate(prop) => {
-                match direction {
-                    PathDirection::Forward => Ok(format!("{} <{}> {}", start_var, prop.as_str(), end_var)),
-                    PathDirection::Backward => Ok(format!("{} <{}> {}", end_var, prop.as_str(), start_var)),
-                    PathDirection::Both => Ok(format!(
-                        "{{ {} <{}> {} }} UNION {{ {} <{}> {} }}", 
-                        start_var, prop.as_str(), end_var,
-                        end_var, prop.as_str(), start_var
-                    )),
+            PropertyPath::Predicate(prop) => match direction {
+                PathDirection::Forward => {
+                    Ok(format!("{} <{}> {}", start_var, prop.as_str(), end_var))
                 }
-            }
+                PathDirection::Backward => {
+                    Ok(format!("{} <{}> {}", end_var, prop.as_str(), start_var))
+                }
+                PathDirection::Both => Ok(format!(
+                    "{{ {} <{}> {} }} UNION {{ {} <{}> {} }}",
+                    start_var,
+                    prop.as_str(),
+                    end_var,
+                    end_var,
+                    prop.as_str(),
+                    start_var
+                )),
+            },
             PropertyPath::Inverse(inner_path) => {
                 // Reverse the direction for inverse paths
                 let reversed_direction = match direction {
@@ -2441,62 +2621,79 @@ impl TargetSelector {
                     PathDirection::Backward => PathDirection::Forward,
                     PathDirection::Both => PathDirection::Both,
                 };
-                self.generate_property_path_pattern(inner_path, start_var, end_var, &reversed_direction)
+                self.generate_property_path_pattern(
+                    inner_path,
+                    start_var,
+                    end_var,
+                    &reversed_direction,
+                )
             }
             PropertyPath::Sequence(paths) => {
                 if paths.is_empty() {
-                    return Err(ShaclError::ValidationEngine("Empty sequence path".to_string()));
+                    return Err(ShaclError::ValidationEngine(
+                        "Empty sequence path".to_string(),
+                    ));
                 }
-                
+
                 if paths.len() == 1 {
-                    return self.generate_property_path_pattern(&paths[0], start_var, end_var, direction);
+                    return self
+                        .generate_property_path_pattern(&paths[0], start_var, end_var, direction);
                 }
 
                 // Generate intermediate variables
                 let mut patterns = Vec::new();
                 let mut current_start = start_var.to_string();
-                
+
                 for (i, path_segment) in paths.iter().enumerate() {
                     let current_end = if i == paths.len() - 1 {
                         end_var.to_string()
                     } else {
                         format!("?intermediate{}", i)
                     };
-                    
+
                     let pattern = self.generate_property_path_pattern(
-                        path_segment, 
-                        &current_start, 
-                        &current_end, 
-                        direction
+                        path_segment,
+                        &current_start,
+                        &current_end,
+                        direction,
                     )?;
                     patterns.push(pattern);
                     current_start = current_end;
                 }
-                
+
                 Ok(patterns.join(" .\n  "))
             }
             PropertyPath::Alternative(paths) => {
                 if paths.is_empty() {
-                    return Err(ShaclError::ValidationEngine("Empty alternative path".to_string()));
+                    return Err(ShaclError::ValidationEngine(
+                        "Empty alternative path".to_string(),
+                    ));
                 }
-                
-                let patterns: Result<Vec<_>> = paths.iter()
+
+                let patterns: Result<Vec<_>> = paths
+                    .iter()
                     .map(|p| self.generate_property_path_pattern(p, start_var, end_var, direction))
                     .collect();
-                    
+
                 Ok(format!("{{ {} }}", patterns?.join(" } UNION { ")))
             }
             PropertyPath::ZeroOrMore(inner_path) => {
-                let inner_pattern = self.generate_property_path_pattern(inner_path, start_var, end_var, direction)?;
+                let inner_pattern =
+                    self.generate_property_path_pattern(inner_path, start_var, end_var, direction)?;
                 Ok(format!("({})* {}", inner_pattern, end_var))
             }
             PropertyPath::OneOrMore(inner_path) => {
-                let inner_pattern = self.generate_property_path_pattern(inner_path, start_var, end_var, direction)?;
+                let inner_pattern =
+                    self.generate_property_path_pattern(inner_path, start_var, end_var, direction)?;
                 Ok(format!("({})+", inner_pattern))
             }
             PropertyPath::ZeroOrOne(inner_path) => {
-                let inner_pattern = self.generate_property_path_pattern(inner_path, start_var, end_var, direction)?;
-                Ok(format!("{{ {} }} UNION {{ BIND({} AS {}) }}", inner_pattern, start_var, end_var))
+                let inner_pattern =
+                    self.generate_property_path_pattern(inner_path, start_var, end_var, direction)?;
+                Ok(format!(
+                    "{{ {} }} UNION {{ BIND({} AS {}) }}",
+                    inner_pattern, start_var, end_var
+                ))
             }
         }
     }
@@ -2504,19 +2701,15 @@ impl TargetSelector {
     /// Generate filter condition for path filters
     fn generate_path_filter_condition(&self, filter: &PathFilter) -> Result<String> {
         match filter {
-            PathFilter::NodeType(node_type) => {
-                match node_type {
-                    NodeTypeFilter::IriOnly => Ok("FILTER(isIRI(?target))".to_string()),
-                    NodeTypeFilter::BlankNodeOnly => Ok("FILTER(isBlank(?target))".to_string()),
-                    NodeTypeFilter::LiteralOnly => Ok("FILTER(isLiteral(?target))".to_string()),
-                    NodeTypeFilter::InstanceOf(class_iri) => {
-                        Ok(format!(
-                            "?target <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <{}> .",
-                            class_iri.as_str()
-                        ))
-                    }
-                }
-            }
+            PathFilter::NodeType(node_type) => match node_type {
+                NodeTypeFilter::IriOnly => Ok("FILTER(isIRI(?target))".to_string()),
+                NodeTypeFilter::BlankNodeOnly => Ok("FILTER(isBlank(?target))".to_string()),
+                NodeTypeFilter::LiteralOnly => Ok("FILTER(isLiteral(?target))".to_string()),
+                NodeTypeFilter::InstanceOf(class_iri) => Ok(format!(
+                    "?target <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <{}> .",
+                    class_iri.as_str()
+                )),
+            },
             PathFilter::PropertyValue { property, value } => {
                 let value_str = match value {
                     Term::NamedNode(nn) => format!("<{}>", nn.as_str()),
@@ -2525,39 +2718,50 @@ impl TargetSelector {
                 };
                 Ok(format!("?target <{}> {} .", property.as_str(), value_str))
             }
-            PathFilter::SparqlCondition { condition, prefixes: _ } => {
-                Ok(format!("FILTER({})", condition))
-            }
+            PathFilter::SparqlCondition {
+                condition,
+                prefixes: _,
+            } => Ok(format!("FILTER({})", condition)),
         }
     }
 
     /// Execute union target by combining results from multiple targets
-    fn execute_union_target(&self, store: &dyn Store, targets: &[Target], graph_name: Option<&str>) -> Result<Vec<Term>> {
+    fn execute_union_target(
+        &self,
+        store: &dyn Store,
+        targets: &[Target],
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
         let mut all_nodes = HashSet::new();
-        
+
         for target in targets {
             let target_nodes = self.execute_target_selection_direct(store, target, graph_name)?;
             all_nodes.extend(target_nodes);
         }
-        
+
         let mut result: Vec<_> = all_nodes.into_iter().collect();
         self.sort_and_dedupe_targets(&mut result);
         Ok(result)
     }
 
     /// Execute intersection target by finding nodes that match all targets
-    fn execute_intersection_target(&self, store: &dyn Store, targets: &[Target], graph_name: Option<&str>) -> Result<Vec<Term>> {
+    fn execute_intersection_target(
+        &self,
+        store: &dyn Store,
+        targets: &[Target],
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
         if targets.is_empty() {
             return Ok(Vec::new());
         }
-        
+
         if targets.len() == 1 {
             return self.execute_target_selection_direct(store, &targets[0], graph_name);
         }
 
         // Get results for first target
         let mut result_sets: Vec<HashSet<Term>> = Vec::new();
-        
+
         for target in targets {
             let target_nodes = self.execute_target_selection_direct(store, target, graph_name)?;
             result_sets.push(target_nodes.into_iter().collect());
@@ -2565,11 +2769,13 @@ impl TargetSelector {
 
         // Find intersection of all sets
         if let Some(first_set) = result_sets.first() {
-            let intersection: HashSet<_> = result_sets.iter().skip(1)
+            let intersection: HashSet<_> = result_sets
+                .iter()
+                .skip(1)
                 .fold(first_set.clone(), |acc, set| {
                     acc.intersection(set).cloned().collect()
                 });
-            
+
             let mut result: Vec<_> = intersection.into_iter().collect();
             self.sort_and_dedupe_targets(&mut result);
             Ok(result)
@@ -2579,27 +2785,36 @@ impl TargetSelector {
     }
 
     /// Execute difference target by subtracting exclusion target from primary target
-    fn execute_difference_target(&self, store: &dyn Store, primary: &Target, exclusion: &Target, graph_name: Option<&str>) -> Result<Vec<Term>> {
+    fn execute_difference_target(
+        &self,
+        store: &dyn Store,
+        primary: &Target,
+        exclusion: &Target,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
         let primary_nodes = self.execute_target_selection_direct(store, primary, graph_name)?;
-        let exclusion_nodes: HashSet<_> = self.execute_target_selection_direct(store, exclusion, graph_name)?
-            .into_iter().collect();
+        let exclusion_nodes: HashSet<_> = self
+            .execute_target_selection_direct(store, exclusion, graph_name)?
+            .into_iter()
+            .collect();
 
-        let mut result: Vec<_> = primary_nodes.into_iter()
+        let mut result: Vec<_> = primary_nodes
+            .into_iter()
             .filter(|node| !exclusion_nodes.contains(node))
             .collect();
-            
+
         self.sort_and_dedupe_targets(&mut result);
         Ok(result)
     }
 
     /// Execute conditional target by filtering base target with condition  
     fn execute_conditional_target(
-        &self, 
-        store: &dyn Store, 
-        base_target: &Target, 
-        condition: &TargetCondition, 
+        &self,
+        store: &dyn Store,
+        base_target: &Target,
+        condition: &TargetCondition,
         _context: Option<&TargetContext>,
-        graph_name: Option<&str>
+        graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
         let base_nodes = self.execute_target_selection_direct(store, base_target, graph_name)?;
         let mut filtered_nodes = Vec::new();
@@ -2622,13 +2837,20 @@ impl TargetSelector {
         relationship: &HierarchicalRelationship,
         max_depth: i32,
         include_intermediate: bool,
-        graph_name: Option<&str>
+        graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
         let root_nodes = self.execute_target_selection_direct(store, root_target, graph_name)?;
         let mut result_nodes = HashSet::new();
 
         for root_node in root_nodes {
-            let traversed_nodes = self.traverse_hierarchy(store, &root_node, relationship, max_depth, include_intermediate, graph_name)?;
+            let traversed_nodes = self.traverse_hierarchy(
+                store,
+                &root_node,
+                relationship,
+                max_depth,
+                include_intermediate,
+                graph_name,
+            )?;
             result_nodes.extend(traversed_nodes);
         }
 
@@ -2645,14 +2867,15 @@ impl TargetSelector {
         path: &crate::paths::PropertyPath,
         direction: &PathDirection,
         filters: &[PathFilter],
-        graph_name: Option<&str>
+        graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
         let start_nodes = self.execute_target_selection_direct(store, start_target, graph_name)?;
         let mut result_nodes = HashSet::new();
 
         for start_node in start_nodes {
-            let path_nodes = self.evaluate_property_path(store, &start_node, path, direction, graph_name)?;
-            
+            let path_nodes =
+                self.evaluate_property_path(store, &start_node, path, direction, graph_name)?;
+
             // Apply filters
             for node in path_nodes {
                 if self.apply_path_filters(store, &node, filters, graph_name)? {
@@ -2667,20 +2890,33 @@ impl TargetSelector {
     }
 
     /// Evaluate a target condition for a specific node
-    fn evaluate_target_condition(&self, store: &dyn Store, node: &Term, condition: &TargetCondition, graph_name: Option<&str>) -> Result<bool> {
-        use oxirs_core::model::{GraphName, NamedNode as CoreNamedNode, Object, Predicate, Subject};
+    fn evaluate_target_condition(
+        &self,
+        store: &dyn Store,
+        node: &Term,
+        condition: &TargetCondition,
+        graph_name: Option<&str>,
+    ) -> Result<bool> {
+        use oxirs_core::model::{
+            GraphName, NamedNode as CoreNamedNode, Object, Predicate, Subject,
+        };
 
         match condition {
-            TargetCondition::SparqlAsk { query: _, prefixes: _ } => {
+            TargetCondition::SparqlAsk {
+                query: _,
+                prefixes: _,
+            } => {
                 // For now, simplified evaluation - in practice you'd substitute the node into the ASK query
                 Ok(true)
             }
-            TargetCondition::PropertyExists { property, direction } => {
-                let property_predicate = Predicate::NamedNode(
-                    CoreNamedNode::new(property.as_str()).map_err(|e| {
+            TargetCondition::PropertyExists {
+                property,
+                direction,
+            } => {
+                let property_predicate =
+                    Predicate::NamedNode(CoreNamedNode::new(property.as_str()).map_err(|e| {
                         ShaclError::TargetSelection(format!("Invalid property IRI: {}", e))
-                    })?
-                );
+                    })?);
 
                 let exists = match direction {
                     PropertyDirection::Subject => {
@@ -2690,8 +2926,9 @@ impl TargetSelector {
                             Term::BlankNode(bn) => Subject::BlankNode(bn.clone()),
                             _ => return Ok(false),
                         };
-                        
-                        !store.find_quads(Some(&subject), Some(&property_predicate), None, None)?
+
+                        !store
+                            .find_quads(Some(&subject), Some(&property_predicate), None, None)?
                             .is_empty()
                     }
                     PropertyDirection::Object => {
@@ -2702,34 +2939,48 @@ impl TargetSelector {
                             Term::Literal(lit) => Object::Literal(lit.clone()),
                             _ => return Ok(false),
                         };
-                        
-                        !store.find_quads(None, Some(&property_predicate), Some(&object), None)?
+
+                        !store
+                            .find_quads(None, Some(&property_predicate), Some(&object), None)?
                             .is_empty()
                     }
                     PropertyDirection::Either => {
                         // Check both directions
-                        self.evaluate_target_condition(store, node, &TargetCondition::PropertyExists { 
-                            property: property.clone(), 
-                            direction: PropertyDirection::Subject 
-                        }, graph_name)? ||
-                        self.evaluate_target_condition(store, node, &TargetCondition::PropertyExists { 
-                            property: property.clone(), 
-                            direction: PropertyDirection::Object 
-                        }, graph_name)?
+                        self.evaluate_target_condition(
+                            store,
+                            node,
+                            &TargetCondition::PropertyExists {
+                                property: property.clone(),
+                                direction: PropertyDirection::Subject,
+                            },
+                            graph_name,
+                        )? || self.evaluate_target_condition(
+                            store,
+                            node,
+                            &TargetCondition::PropertyExists {
+                                property: property.clone(),
+                                direction: PropertyDirection::Object,
+                            },
+                            graph_name,
+                        )?
                     }
                 };
 
                 Ok(exists)
             }
-            TargetCondition::PropertyValue { property: _, value: _, direction: _ } => {
+            TargetCondition::PropertyValue {
+                property: _,
+                value: _,
+                direction: _,
+            } => {
                 // Similar to PropertyExists but check for specific value
                 Ok(false) // Simplified for now
             }
             TargetCondition::HasType { class_iri } => {
                 let rdf_type = Predicate::NamedNode(
-                    CoreNamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").map_err(|e| {
-                        ShaclError::TargetSelection(format!("Invalid RDF type IRI: {}", e))
-                    })?
+                    CoreNamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").map_err(
+                        |e| ShaclError::TargetSelection(format!("Invalid RDF type IRI: {}", e)),
+                    )?,
                 );
                 let class_object = Object::NamedNode(class_iri.clone());
                 let subject = match node {
@@ -2738,11 +2989,17 @@ impl TargetSelector {
                     _ => return Ok(false),
                 };
 
-                let has_type = !store.find_quads(Some(&subject), Some(&rdf_type), Some(&class_object), None)?
+                let has_type = !store
+                    .find_quads(Some(&subject), Some(&rdf_type), Some(&class_object), None)?
                     .is_empty();
                 Ok(has_type)
             }
-            TargetCondition::Cardinality { property: _, min_count: _, max_count: _, direction: _ } => {
+            TargetCondition::Cardinality {
+                property: _,
+                min_count: _,
+                max_count: _,
+                direction: _,
+            } => {
                 // Simplified for now - would need to count occurrences
                 Ok(true)
             }
@@ -2757,12 +3014,12 @@ impl TargetSelector {
         relationship: &HierarchicalRelationship,
         max_depth: i32,
         include_intermediate: bool,
-        graph_name: Option<&str>
+        graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
         let mut result = Vec::new();
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
-        
+
         queue.push_back((start_node.clone(), 0));
 
         while let Some((current_node, depth)) = queue.pop_front() {
@@ -2780,7 +3037,8 @@ impl TargetSelector {
             }
 
             // Find related nodes based on relationship type
-            let related_nodes = self.find_related_nodes(store, &current_node, relationship, graph_name)?;
+            let related_nodes =
+                self.find_related_nodes(store, &current_node, relationship, graph_name)?;
             for related_node in related_nodes {
                 if !visited.contains(&related_node) {
                     queue.push_back((related_node, depth + 1));
@@ -2797,7 +3055,7 @@ impl TargetSelector {
         store: &dyn Store,
         node: &Term,
         relationship: &HierarchicalRelationship,
-        _graph_name: Option<&str>
+        _graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
         use oxirs_core::model::{NamedNode as CoreNamedNode, Object, Predicate, Subject};
 
@@ -2827,7 +3085,7 @@ impl TargetSelector {
                     Term::BlankNode(bn) => Object::BlankNode(bn.clone()),
                     _ => return Ok(Vec::new()),
                 };
-                
+
                 for quad in store.find_quads(None, Some(&predicate), Some(&object), None)? {
                     match quad.subject() {
                         Subject::NamedNode(nn) => related_nodes.push(Term::NamedNode(nn.clone())),
@@ -2838,11 +3096,11 @@ impl TargetSelector {
             }
             HierarchicalRelationship::SubclassOf => {
                 let subclass_prop = Predicate::NamedNode(
-                    CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").map_err(|e| {
-                        ShaclError::TargetSelection(format!("Invalid subClassOf IRI: {}", e))
-                    })?
+                    CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").map_err(
+                        |e| ShaclError::TargetSelection(format!("Invalid subClassOf IRI: {}", e)),
+                    )?,
                 );
-                
+
                 for quad in store.find_quads(Some(&subject), Some(&subclass_prop), None, None)? {
                     match quad.object() {
                         Object::NamedNode(nn) => related_nodes.push(Term::NamedNode(nn.clone())),
@@ -2854,16 +3112,16 @@ impl TargetSelector {
             HierarchicalRelationship::SuperclassOf => {
                 // Find all nodes that are subclasses of the current node
                 let subclass_prop = Predicate::NamedNode(
-                    CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").map_err(|e| {
-                        ShaclError::TargetSelection(format!("Invalid subClassOf IRI: {}", e))
-                    })?
+                    CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").map_err(
+                        |e| ShaclError::TargetSelection(format!("Invalid subClassOf IRI: {}", e)),
+                    )?,
                 );
                 let object = match node {
                     Term::NamedNode(nn) => Object::NamedNode(nn.clone()),
                     Term::BlankNode(bn) => Object::BlankNode(bn.clone()),
                     _ => return Ok(Vec::new()),
                 };
-                
+
                 for quad in store.find_quads(None, Some(&subclass_prop), Some(&object), None)? {
                     match quad.subject() {
                         Subject::NamedNode(nn) => related_nodes.push(Term::NamedNode(nn.clone())),
@@ -2874,11 +3132,12 @@ impl TargetSelector {
             }
             HierarchicalRelationship::SubpropertyOf => {
                 let subprop_prop = Predicate::NamedNode(
-                    CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subPropertyOf").map_err(|e| {
-                        ShaclError::TargetSelection(format!("Invalid subPropertyOf IRI: {}", e))
-                    })?
+                    CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subPropertyOf")
+                        .map_err(|e| {
+                            ShaclError::TargetSelection(format!("Invalid subPropertyOf IRI: {}", e))
+                        })?,
                 );
-                
+
                 for quad in store.find_quads(Some(&subject), Some(&subprop_prop), None, None)? {
                     match quad.object() {
                         Object::NamedNode(nn) => related_nodes.push(Term::NamedNode(nn.clone())),
@@ -2889,16 +3148,17 @@ impl TargetSelector {
             }
             HierarchicalRelationship::SuperpropertyOf => {
                 let subprop_prop = Predicate::NamedNode(
-                    CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subPropertyOf").map_err(|e| {
-                        ShaclError::TargetSelection(format!("Invalid subPropertyOf IRI: {}", e))
-                    })?
+                    CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subPropertyOf")
+                        .map_err(|e| {
+                            ShaclError::TargetSelection(format!("Invalid subPropertyOf IRI: {}", e))
+                        })?,
                 );
                 let object = match node {
                     Term::NamedNode(nn) => Object::NamedNode(nn.clone()),
                     Term::BlankNode(bn) => Object::BlankNode(bn.clone()),
                     _ => return Ok(Vec::new()),
                 };
-                
+
                 for quad in store.find_quads(None, Some(&subprop_prop), Some(&object), None)? {
                     match quad.subject() {
                         Subject::NamedNode(nn) => related_nodes.push(Term::NamedNode(nn.clone())),
@@ -2923,7 +3183,7 @@ impl TargetSelector {
         start_node: &Term,
         path: &crate::paths::PropertyPath,
         direction: &PathDirection,
-        graph_name: Option<&str>
+        graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
         use crate::paths::PropertyPath;
         use oxirs_core::model::{NamedNode as CoreNamedNode, Object, Predicate, Subject};
@@ -2941,7 +3201,9 @@ impl TargetSelector {
                             _ => return Ok(Vec::new()),
                         };
 
-                        for quad in store.find_quads(Some(&subject), Some(&predicate), None, None)? {
+                        for quad in
+                            store.find_quads(Some(&subject), Some(&predicate), None, None)?
+                        {
                             match quad.object() {
                                 Object::NamedNode(nn) => result.push(Term::NamedNode(nn.clone())),
                                 Object::BlankNode(bn) => result.push(Term::BlankNode(bn.clone())),
@@ -2967,8 +3229,20 @@ impl TargetSelector {
                         }
                     }
                     PathDirection::Both => {
-                        let mut forward_nodes = self.evaluate_property_path(store, start_node, path, &PathDirection::Forward, graph_name)?;
-                        let backward_nodes = self.evaluate_property_path(store, start_node, path, &PathDirection::Backward, graph_name)?;
+                        let mut forward_nodes = self.evaluate_property_path(
+                            store,
+                            start_node,
+                            path,
+                            &PathDirection::Forward,
+                            graph_name,
+                        )?;
+                        let backward_nodes = self.evaluate_property_path(
+                            store,
+                            start_node,
+                            path,
+                            &PathDirection::Backward,
+                            graph_name,
+                        )?;
                         result.append(&mut forward_nodes);
                         result.extend(backward_nodes);
                     }
@@ -2982,7 +3256,13 @@ impl TargetSelector {
                     PathDirection::Backward => PathDirection::Forward,
                     PathDirection::Both => PathDirection::Both,
                 };
-                self.evaluate_property_path(store, start_node, inner_path, &reversed_direction, graph_name)
+                self.evaluate_property_path(
+                    store,
+                    start_node,
+                    inner_path,
+                    &reversed_direction,
+                    graph_name,
+                )
             }
             PropertyPath::Sequence(paths) => {
                 if paths.is_empty() {
@@ -2990,11 +3270,17 @@ impl TargetSelector {
                 }
 
                 let mut current_nodes = vec![start_node.clone()];
-                
+
                 for path_segment in paths {
                     let mut next_nodes = Vec::new();
                     for node in current_nodes {
-                        let segment_nodes = self.evaluate_property_path(store, &node, path_segment, direction, graph_name)?;
+                        let segment_nodes = self.evaluate_property_path(
+                            store,
+                            &node,
+                            path_segment,
+                            direction,
+                            graph_name,
+                        )?;
                         next_nodes.extend(segment_nodes);
                     }
                     current_nodes = next_nodes;
@@ -3005,7 +3291,13 @@ impl TargetSelector {
             PropertyPath::Alternative(paths) => {
                 let mut result = Vec::new();
                 for path_alternative in paths {
-                    let alt_nodes = self.evaluate_property_path(store, start_node, path_alternative, direction, graph_name)?;
+                    let alt_nodes = self.evaluate_property_path(
+                        store,
+                        start_node,
+                        path_alternative,
+                        direction,
+                        graph_name,
+                    )?;
                     result.extend(alt_nodes);
                 }
                 Ok(result)
@@ -3020,7 +3312,8 @@ impl TargetSelector {
             }
             PropertyPath::ZeroOrOne(inner_path) => {
                 let mut result = vec![start_node.clone()]; // Zero case
-                let one_nodes = self.evaluate_property_path(store, start_node, inner_path, direction, graph_name)?;
+                let one_nodes = self
+                    .evaluate_property_path(store, start_node, inner_path, direction, graph_name)?;
                 result.extend(one_nodes); // One case
                 Ok(result)
             }
@@ -3028,7 +3321,13 @@ impl TargetSelector {
     }
 
     /// Apply path filters to a node
-    fn apply_path_filters(&self, store: &dyn Store, node: &Term, filters: &[PathFilter], _graph_name: Option<&str>) -> Result<bool> {
+    fn apply_path_filters(
+        &self,
+        store: &dyn Store,
+        node: &Term,
+        filters: &[PathFilter],
+        _graph_name: Option<&str>,
+    ) -> Result<bool> {
         for filter in filters {
             match filter {
                 PathFilter::NodeType(node_type) => {
@@ -3036,27 +3335,38 @@ impl TargetSelector {
                         NodeTypeFilter::IriOnly => matches!(node, Term::NamedNode(_)),
                         NodeTypeFilter::BlankNodeOnly => matches!(node, Term::BlankNode(_)),
                         NodeTypeFilter::LiteralOnly => matches!(node, Term::Literal(_)),
-                        NodeTypeFilter::InstanceOf(class_iri) => {
-                            self.evaluate_target_condition(store, node, &TargetCondition::HasType { 
-                                class_iri: class_iri.clone() 
-                            }, None)?
-                        }
+                        NodeTypeFilter::InstanceOf(class_iri) => self.evaluate_target_condition(
+                            store,
+                            node,
+                            &TargetCondition::HasType {
+                                class_iri: class_iri.clone(),
+                            },
+                            None,
+                        )?,
                     };
                     if !matches {
                         return Ok(false);
                     }
                 }
                 PathFilter::PropertyValue { property, value } => {
-                    let matches = self.evaluate_target_condition(store, node, &TargetCondition::PropertyValue { 
-                        property: property.clone(),
-                        value: value.clone(),
-                        direction: PropertyDirection::Subject
-                    }, None)?;
+                    let matches = self.evaluate_target_condition(
+                        store,
+                        node,
+                        &TargetCondition::PropertyValue {
+                            property: property.clone(),
+                            value: value.clone(),
+                            direction: PropertyDirection::Subject,
+                        },
+                        None,
+                    )?;
                     if !matches {
                         return Ok(false);
                     }
                 }
-                PathFilter::SparqlCondition { condition: _, prefixes: _ } => {
+                PathFilter::SparqlCondition {
+                    condition: _,
+                    prefixes: _,
+                } => {
                     // Simplified - would need SPARQL evaluation
                     // For now, assume it passes
                 }

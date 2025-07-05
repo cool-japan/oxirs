@@ -1,11 +1,11 @@
 //! Document content validators
 
-use std::collections::HashMap;
 use async_trait::async_trait;
+use std::collections::HashMap;
 
-use crate::{Result, ShaclAiError};
-use super::types::*;
 use super::traits::*;
+use super::types::*;
+use crate::{Result, ShaclAiError};
 
 /// PDF document validator
 #[derive(Debug)]
@@ -25,15 +25,19 @@ impl DocumentValidator for PDFValidator {
         }
 
         let is_pdf = content.data.len() >= 4 && &content.data[0..4] == b"%PDF";
-        
+
         let mut details = HashMap::new();
         details.insert("file_size".to_string(), content.data.len().to_string());
         details.insert("is_pdf".to_string(), is_pdf.to_string());
-        
+
         Ok(Some(ValidationResult {
             is_valid: is_pdf,
             confidence: if is_pdf { 0.95 } else { 0.2 },
-            error_message: if is_pdf { None } else { Some("Invalid PDF format".to_string()) },
+            error_message: if is_pdf {
+                None
+            } else {
+                Some("Invalid PDF format".to_string())
+            },
             details,
         }))
     }
@@ -65,15 +69,19 @@ impl DocumentValidator for OfficeDocumentValidator {
         }
 
         let is_zip = content.data.len() >= 4 && &content.data[0..4] == [0x50, 0x4B, 0x03, 0x04];
-        
+
         let mut details = HashMap::new();
         details.insert("file_size".to_string(), content.data.len().to_string());
         details.insert("is_office_format".to_string(), is_zip.to_string());
-        
+
         Ok(Some(ValidationResult {
             is_valid: is_zip,
             confidence: if is_zip { 0.9 } else { 0.2 },
-            error_message: if is_zip { None } else { Some("Invalid Office format".to_string()) },
+            error_message: if is_zip {
+                None
+            } else {
+                Some("Invalid Office format".to_string())
+            },
             details,
         }))
     }
@@ -105,11 +113,11 @@ impl DocumentValidator for MarkdownValidator {
         }
 
         let text = String::from_utf8_lossy(&content.data);
-        
+
         let mut details = HashMap::new();
         details.insert("file_size".to_string(), content.data.len().to_string());
         details.insert("line_count".to_string(), text.lines().count().to_string());
-        
+
         Ok(Some(ValidationResult {
             is_valid: true,
             confidence: 0.9,

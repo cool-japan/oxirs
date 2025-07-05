@@ -115,17 +115,14 @@ impl AggregationEngine {
         // Initialize aggregated parameters with zeros
         if let Some(first_update) = updates.first() {
             for (param_name, param_values) in &first_update.parameter_updates {
-                aggregated.insert(
-                    param_name.clone(),
-                    Array2::zeros(param_values.raw_dim()),
-                );
+                aggregated.insert(param_name.clone(), Array2::zeros(param_values.raw_dim()));
             }
         }
 
         // Weighted sum of all updates
         for update in updates {
             let weight = weights.get(&update.participant_id).unwrap_or(&0.0) / total_weight;
-            
+
             for (param_name, param_values) in &update.parameter_updates {
                 if let Some(aggregated_param) = aggregated.get_mut(param_name) {
                     *aggregated_param = &*aggregated_param + &(param_values * weight as f32);
@@ -242,17 +239,15 @@ impl AggregationEngine {
         // Element-wise median
         for i in 0..shape[0] {
             for j in 0..shape[1] {
-                let mut values: Vec<f32> = matrices.iter()
-                    .map(|m| m[[i, j]])
-                    .collect();
+                let mut values: Vec<f32> = matrices.iter().map(|m| m[[i, j]]).collect();
                 values.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                
+
                 let median = if values.len() % 2 == 0 {
                     (values[values.len() / 2 - 1] + values[values.len() / 2]) / 2.0
                 } else {
                     values[values.len() / 2]
                 };
-                
+
                 result[[i, j]] = median;
             }
         }
@@ -262,7 +257,11 @@ impl AggregationEngine {
 
     /// Calculate distance between two matrices
     fn matrix_distance(&self, a: &Array2<f32>, b: &Array2<f32>) -> f64 {
-        (a - b).iter().map(|x| (*x as f64) * (*x as f64)).sum::<f64>().sqrt()
+        (a - b)
+            .iter()
+            .map(|x| (*x as f64) * (*x as f64))
+            .sum::<f64>()
+            .sqrt()
     }
 
     /// Calculate participant weights based on weighting scheme
@@ -287,7 +286,8 @@ impl AggregationEngine {
             }
             WeightingScheme::DataQuality => {
                 // Use training accuracy as a proxy for data quality
-                let total_accuracy: f64 = updates.iter()
+                let total_accuracy: f64 = updates
+                    .iter()
                     .map(|u| u.training_stats.local_accuracy)
                     .sum();
                 if total_accuracy > 0.0 {
@@ -299,12 +299,14 @@ impl AggregationEngine {
             }
             WeightingScheme::ComputeContribution => {
                 // Use inverse of training time as compute contribution
-                let total_compute: f64 = updates.iter()
+                let total_compute: f64 = updates
+                    .iter()
                     .map(|u| 1.0 / (u.training_stats.training_time_seconds + 1.0))
                     .sum();
                 if total_compute > 0.0 {
                     for update in updates {
-                        let weight = (1.0 / (update.training_stats.training_time_seconds + 1.0)) / total_compute;
+                        let weight = (1.0 / (update.training_stats.training_time_seconds + 1.0))
+                            / total_compute;
                         weights.insert(update.participant_id, weight);
                     }
                 }
@@ -317,7 +319,9 @@ impl AggregationEngine {
                     weights.insert(update.participant_id, uniform_weight);
                 }
             }
-            WeightingScheme::Custom { weights: custom_weights } => {
+            WeightingScheme::Custom {
+                weights: custom_weights,
+            } => {
                 for update in updates {
                     let weight = custom_weights.get(&update.participant_id).unwrap_or(&0.0);
                     weights.insert(update.participant_id, *weight);
@@ -334,15 +338,11 @@ impl AggregationEngine {
             OutlierDetectionMethod::StatisticalDistance => {
                 self.filter_statistical_outliers(updates)
             }
-            OutlierDetectionMethod::Clustering => {
-                self.filter_clustering_outliers(updates)
-            }
+            OutlierDetectionMethod::Clustering => self.filter_clustering_outliers(updates),
             OutlierDetectionMethod::IsolationForest => {
                 self.filter_isolation_forest_outliers(updates)
             }
-            OutlierDetectionMethod::ByzantineDetection => {
-                self.filter_byzantine_outliers(updates)
-            }
+            OutlierDetectionMethod::ByzantineDetection => self.filter_byzantine_outliers(updates),
         }
     }
 
@@ -365,20 +365,27 @@ impl AggregationEngine {
         }
 
         // Calculate mean and std of distances
-        let mean_distance: f64 = distances.iter().map(|(_, d)| *d).sum::<f64>() / distances.len() as f64;
-        let variance: f64 = distances.iter()
+        let mean_distance: f64 =
+            distances.iter().map(|(_, d)| *d).sum::<f64>() / distances.len() as f64;
+        let variance: f64 = distances
+            .iter()
             .map(|(_, d)| (d - mean_distance).powi(2))
-            .sum::<f64>() / distances.len() as f64;
+            .sum::<f64>()
+            / distances.len() as f64;
         let std_dev = variance.sqrt();
 
         // Filter outliers
         let threshold = mean_distance + self.outlier_detection.threshold * std_dev;
-        let filtered_indices: Vec<usize> = distances.iter()
+        let filtered_indices: Vec<usize> = distances
+            .iter()
             .filter(|(_, d)| *d <= threshold)
             .map(|(i, _)| *i)
             .collect();
 
-        Ok(filtered_indices.iter().map(|&i| updates[i].clone()).collect())
+        Ok(filtered_indices
+            .iter()
+            .map(|&i| updates[i].clone())
+            .collect())
     }
 
     /// Calculate distance between two updates
@@ -408,7 +415,10 @@ impl AggregationEngine {
     }
 
     /// Filter outliers using isolation forest (simplified)
-    fn filter_isolation_forest_outliers(&self, updates: &[LocalUpdate]) -> Result<Vec<LocalUpdate>> {
+    fn filter_isolation_forest_outliers(
+        &self,
+        updates: &[LocalUpdate],
+    ) -> Result<Vec<LocalUpdate>> {
         // Simplified isolation forest
         // In practice, this would implement the full isolation forest algorithm
         self.filter_statistical_outliers(updates)

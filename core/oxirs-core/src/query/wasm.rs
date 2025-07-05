@@ -67,8 +67,10 @@ struct CachedModule {
     /// Compiled WASM bytes
     wasm_bytes: Vec<u8>,
     /// Module metadata
+    #[allow(dead_code)]
     metadata: ModuleMetadata,
     /// Compilation time
+    #[allow(dead_code)]
     compile_time: std::time::Duration,
     /// Usage count
     usage_count: usize,
@@ -577,6 +579,7 @@ impl WasmQueryCompiler {
 
 /// WASM module builder
 struct WasmModuleBuilder {
+    #[allow(dead_code)]
     target: WasmTarget,
     imports: Vec<RequiredImport>,
     functions: Vec<FunctionDef>,
@@ -586,25 +589,34 @@ struct WasmModuleBuilder {
 
 /// Function definition
 struct FunctionDef {
+    #[allow(dead_code)]
     name: String,
+    #[allow(dead_code)]
     params: Vec<WasmType>,
+    #[allow(dead_code)]
     returns: Vec<WasmType>,
+    #[allow(dead_code)]
     body: Vec<WasmInstruction>,
 }
 
 /// Memory definition
 struct MemoryDef {
+    #[allow(dead_code)]
     min_pages: u32,
+    #[allow(dead_code)]
     max_pages: Option<u32>,
 }
 
 /// Structure definition
 struct StructDef {
+    #[allow(dead_code)]
     name: String,
+    #[allow(dead_code)]
     fields: Vec<(String, WasmType)>,
 }
 
 /// WASM instructions (simplified)
+#[allow(dead_code)]
 enum WasmInstruction {
     LocalGet(u32),
     LocalSet(u32),
@@ -635,6 +647,7 @@ impl FunctionBuilder {
         self.instructions.push(WasmInstruction::LocalGet(idx));
     }
 
+    #[allow(dead_code)]
     fn local_set(&mut self, idx: u32) {
         self.instructions.push(WasmInstruction::LocalSet(idx));
     }
@@ -643,6 +656,7 @@ impl FunctionBuilder {
         self.instructions.push(WasmInstruction::I32Const(val));
     }
 
+    #[allow(dead_code)]
     fn i32_add(&mut self) {
         self.instructions.push(WasmInstruction::I32Add);
     }

@@ -157,7 +157,7 @@ impl QuantumMLEngine {
     /// Create a new quantum ML engine
     pub fn new(config: QuantumConfig) -> Self {
         let qubit_count = config.available_qubits as usize;
-        
+
         // Initialize quantum neural network
         let qnn = QuantumNeuralNetwork {
             qubit_count,
@@ -199,13 +199,13 @@ impl QuantumMLEngine {
         // Variational layers with parameterized rotations
         for layer_idx in 0..3 {
             let mut gates = Vec::new();
-            
+
             // Add rotation gates
             for qubit in 0..qubit_count {
                 gates.push(QuantumGate::RY(0.0)); // Will be parameterized
                 gates.push(QuantumGate::RZ(0.0)); // Will be parameterized
             }
-            
+
             // Add entangling gates
             for i in 0..qubit_count - 1 {
                 gates.push(QuantumGate::CNOT(i, i + 1));
@@ -245,7 +245,10 @@ impl QuantumMLEngine {
         let mut network = self.quantum_neural_network.write().await;
         let mut stats = self.training_stats.write().await;
 
-        info!("Starting quantum neural network training with {} epochs", epochs);
+        info!(
+            "Starting quantum neural network training with {} epochs",
+            epochs
+        );
 
         for epoch in 0..epochs {
             let mut epoch_loss = 0.0;
@@ -254,13 +257,14 @@ impl QuantumMLEngine {
             for (input, target) in &training_data {
                 // Forward pass
                 let prediction = self.forward_pass(&network, input).await?;
-                
+
                 // Calculate loss
                 let loss = self.calculate_loss(&prediction, target);
                 epoch_loss += loss;
 
                 // Backward pass (parameter update)
-                self.update_parameters(&mut network, input, target, &prediction).await?;
+                self.update_parameters(&mut network, input, target, &prediction)
+                    .await?;
 
                 // Check prediction accuracy
                 if self.check_prediction_accuracy(&prediction, target) {
@@ -272,7 +276,7 @@ impl QuantumMLEngine {
             stats.iterations += 1;
             stats.current_loss = epoch_loss / training_data.len() as f64;
             stats.training_accuracy = correct_predictions as f64 / training_data.len() as f64;
-            
+
             if stats.current_loss < stats.best_loss || stats.best_loss == 0.0 {
                 stats.best_loss = stats.current_loss;
             }
@@ -301,7 +305,7 @@ impl QuantumMLEngine {
     ) -> Result<Vec<f64>> {
         // Simulate quantum circuit execution
         let mut quantum_state = self.initialize_quantum_state(input).await?;
-        
+
         for layer in &network.layers {
             quantum_state = self.apply_quantum_layer(&quantum_state, layer).await?;
         }
@@ -314,7 +318,7 @@ impl QuantumMLEngine {
     async fn initialize_quantum_state(&self, input: &[f64]) -> Result<QuantumState> {
         // Encode classical data into quantum state
         let mut amplitudes = vec![0.0; 1 << self.config.available_qubits as usize];
-        
+
         // Simple amplitude encoding
         let norm = input.iter().map(|x| x * x).sum::<f64>().sqrt();
         if norm > 0.0 {
@@ -337,7 +341,7 @@ impl QuantumMLEngine {
         layer: &QuantumLayer,
     ) -> Result<QuantumState> {
         let mut new_state = state.clone();
-        
+
         // Apply quantum gates in sequence
         for gate in &layer.gates {
             new_state = self.apply_quantum_gate(&new_state, gate).await?;
@@ -366,7 +370,7 @@ impl QuantumMLEngine {
     async fn apply_hadamard(&self, state: &QuantumState, qubit: usize) -> Result<QuantumState> {
         let mut new_amplitudes = state.amplitudes.clone();
         let n_states = new_amplitudes.len();
-        
+
         for i in 0..n_states {
             if (i >> qubit) & 1 == 0 {
                 let j = i | (1 << qubit);
@@ -378,7 +382,9 @@ impl QuantumMLEngine {
             }
         }
 
-        Ok(QuantumState { amplitudes: new_amplitudes })
+        Ok(QuantumState {
+            amplitudes: new_amplitudes,
+        })
     }
 
     /// Apply Y rotation gate
@@ -386,33 +392,42 @@ impl QuantumMLEngine {
         // Simplified rotation implementation
         let cos_half = (angle / 2.0).cos();
         let _sin_half = (angle / 2.0).sin();
-        
+
         let mut new_amplitudes = state.amplitudes.clone();
         for amp in &mut new_amplitudes {
             *amp = *amp * cos_half; // Simplified - should be proper matrix multiplication
         }
 
-        Ok(QuantumState { amplitudes: new_amplitudes })
+        Ok(QuantumState {
+            amplitudes: new_amplitudes,
+        })
     }
 
     /// Apply Z rotation gate
     async fn apply_rotation_z(&self, state: &QuantumState, angle: f64) -> Result<QuantumState> {
         // Simplified rotation implementation
         let phase_real = (-angle / 2.0).cos();
-        
+
         let mut new_amplitudes = state.amplitudes.clone();
         for amp in &mut new_amplitudes {
             *amp = *amp * phase_real; // Simplified - ignoring imaginary part for now
         }
 
-        Ok(QuantumState { amplitudes: new_amplitudes })
+        Ok(QuantumState {
+            amplitudes: new_amplitudes,
+        })
     }
 
     /// Apply CNOT gate
-    async fn apply_cnot(&self, state: &QuantumState, control: usize, target: usize) -> Result<QuantumState> {
+    async fn apply_cnot(
+        &self,
+        state: &QuantumState,
+        control: usize,
+        target: usize,
+    ) -> Result<QuantumState> {
         let mut new_amplitudes = state.amplitudes.clone();
         let n_states = new_amplitudes.len();
-        
+
         for i in 0..n_states {
             if (i >> control) & 1 == 1 {
                 let j = i ^ (1 << target);
@@ -422,16 +437,16 @@ impl QuantumMLEngine {
             }
         }
 
-        Ok(QuantumState { amplitudes: new_amplitudes })
+        Ok(QuantumState {
+            amplitudes: new_amplitudes,
+        })
     }
 
     /// Measure quantum state to get classical output
     async fn measure_quantum_state(&self, state: &QuantumState) -> Result<Vec<f64>> {
         // Convert quantum amplitudes to classical probabilities
-        let probabilities: Vec<f64> = state.amplitudes.iter()
-            .map(|amp| amp * amp)
-            .collect();
-        
+        let probabilities: Vec<f64> = state.amplitudes.iter().map(|amp| amp * amp).collect();
+
         // For simplicity, return the first few probabilities as output
         let output_size = 4.min(probabilities.len());
         Ok(probabilities[..output_size].to_vec())
@@ -439,10 +454,12 @@ impl QuantumMLEngine {
 
     /// Calculate loss function
     fn calculate_loss(&self, prediction: &[f64], target: &[f64]) -> f64 {
-        prediction.iter()
+        prediction
+            .iter()
             .zip(target.iter())
             .map(|(p, t)| (p - t).powi(2))
-            .sum::<f64>() / prediction.len() as f64
+            .sum::<f64>()
+            / prediction.len() as f64
     }
 
     /// Update network parameters using gradient descent
@@ -467,29 +484,30 @@ impl QuantumMLEngine {
         if prediction.is_empty() || target.is_empty() {
             return false;
         }
-        
-        let pred_max_idx = prediction.iter()
+
+        let pred_max_idx = prediction
+            .iter()
             .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(idx, _)| idx)
             .unwrap_or(0);
-            
-        let target_max_idx = target.iter()
+
+        let target_max_idx = target
+            .iter()
             .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(idx, _)| idx)
             .unwrap_or(0);
-            
+
         pred_max_idx == target_max_idx
     }
 
     /// Calculate quantum fidelity
     async fn calculate_quantum_fidelity(&self, network: &QuantumNeuralNetwork) -> f64 {
         // Simplified fidelity calculation
-        let param_variance = network.parameters.iter()
-            .map(|p| p * p)
-            .sum::<f64>() / network.parameters.len() as f64;
-        
+        let param_variance =
+            network.parameters.iter().map(|p| p * p).sum::<f64>() / network.parameters.len() as f64;
+
         (-param_variance * 0.1).exp() // Exponential decay with parameter magnitude
     }
 
@@ -497,10 +515,13 @@ impl QuantumMLEngine {
     async fn calculate_entanglement_entropy(&self, network: &QuantumNeuralNetwork) -> f64 {
         // Simplified entropy calculation based on parameter distribution
         let mean = network.parameters.iter().sum::<f64>() / network.parameters.len() as f64;
-        let variance = network.parameters.iter()
+        let variance = network
+            .parameters
+            .iter()
             .map(|p| (p - mean).powi(2))
-            .sum::<f64>() / network.parameters.len() as f64;
-        
+            .sum::<f64>()
+            / network.parameters.len() as f64;
+
         variance.ln().max(0.0) // Log of variance as entropy approximation
     }
 
@@ -524,33 +545,36 @@ impl QuantumMLEngine {
     /// Create a quantum support vector machine
     pub async fn create_qsvm(&self, training_data: Vec<(Vec<f64>, f64)>) -> Result<QuantumModel> {
         info!("Creating Quantum Support Vector Machine");
-        
+
         // Simplified QSVM implementation
         let mut network = self.quantum_neural_network.read().await.clone();
         network.topology = NetworkTopology::Hybrid;
-        
+
         let model = QuantumModel {
             id: format!("qsvm_{}", uuid::Uuid::new_v4()),
             model_type: QuantumMLAlgorithm::QSVM,
             network,
             stats: QuantumTrainingStats::default(),
             metadata: HashMap::from([
-                ("training_samples".to_string(), training_data.len().to_string()),
+                (
+                    "training_samples".to_string(),
+                    training_data.len().to_string(),
+                ),
                 ("created_at".to_string(), chrono::Utc::now().to_rfc3339()),
             ]),
         };
-        
+
         Ok(model)
     }
 
     /// Create a quantum principal component analysis model
     pub async fn create_qpca(&self, data: Vec<Vec<f64>>) -> Result<QuantumModel> {
         info!("Creating Quantum Principal Component Analysis model");
-        
+
         // Simplified QPCA implementation
         let mut network = self.quantum_neural_network.read().await.clone();
         network.topology = NetworkTopology::Convolutional;
-        
+
         let model = QuantumModel {
             id: format!("qpca_{}", uuid::Uuid::new_v4()),
             model_type: QuantumMLAlgorithm::QPCA,
@@ -558,11 +582,14 @@ impl QuantumMLEngine {
             stats: QuantumTrainingStats::default(),
             metadata: HashMap::from([
                 ("data_points".to_string(), data.len().to_string()),
-                ("features".to_string(), data.first().map_or(0, |d| d.len()).to_string()),
+                (
+                    "features".to_string(),
+                    data.first().map_or(0, |d| d.len()).to_string(),
+                ),
                 ("created_at".to_string(), chrono::Utc::now().to_rfc3339()),
             ]),
         };
-        
+
         Ok(model)
     }
 }
@@ -605,7 +632,7 @@ mod tests {
             available_qubits: 4,
             ..Default::default()
         };
-        
+
         let engine = QuantumMLEngine::new(config);
         assert_eq!(engine.get_algorithms().len(), 6);
     }
@@ -616,15 +643,15 @@ mod tests {
             available_qubits: 4,
             ..Default::default()
         };
-        
+
         let engine = QuantumMLEngine::new(config);
-        
+
         // Create simple training data
         let training_data = vec![
             (vec![1.0, 0.0], vec![1.0, 0.0]),
             (vec![0.0, 1.0], vec![0.0, 1.0]),
         ];
-        
+
         let stats = engine.train_qnn(training_data, 5).await.unwrap();
         assert!(stats.iterations > 0);
     }
@@ -635,14 +662,11 @@ mod tests {
             available_qubits: 4,
             ..Default::default()
         };
-        
+
         let engine = QuantumMLEngine::new(config);
-        
-        let training_data = vec![
-            (vec![1.0, 0.0], 1.0),
-            (vec![0.0, 1.0], -1.0),
-        ];
-        
+
+        let training_data = vec![(vec![1.0, 0.0], 1.0), (vec![0.0, 1.0], -1.0)];
+
         let model = engine.create_qsvm(training_data).await.unwrap();
         assert!(matches!(model.model_type, QuantumMLAlgorithm::QSVM));
     }
@@ -653,15 +677,15 @@ mod tests {
             available_qubits: 4,
             ..Default::default()
         };
-        
+
         let engine = QuantumMLEngine::new(config);
-        
+
         let data = vec![
             vec![1.0, 2.0, 3.0],
             vec![4.0, 5.0, 6.0],
             vec![7.0, 8.0, 9.0],
         ];
-        
+
         let model = engine.create_qpca(data).await.unwrap();
         assert!(matches!(model.model_type, QuantumMLAlgorithm::QPCA));
     }

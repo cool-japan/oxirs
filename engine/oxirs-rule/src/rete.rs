@@ -339,7 +339,7 @@ impl ReteNetwork {
             .iter()
             .map(|(var, _)| var.clone())
             .collect();
-        
+
         // For the grandparent rule case, we need to ensure Y variable is properly identified as join variable
         if enhanced_node.join_variables.is_empty() {
             // Fallback: analyze patterns directly to find shared variables
@@ -349,13 +349,13 @@ impl ReteNetwork {
             ) {
                 let left_vars = self.extract_variables(&left_pattern);
                 let right_vars = self.extract_variables(&right_pattern);
-                
+
                 for left_var in &left_vars {
                     if right_vars.contains(left_var) {
                         enhanced_node.join_variables.push(left_var.clone());
                     }
                 }
-                
+
                 if self.debug_mode && !enhanced_node.join_variables.is_empty() {
                     debug!(
                         "Fallback join variable detection found variables: {:?} from patterns left: {:?}, right: {:?}",
@@ -364,7 +364,7 @@ impl ReteNetwork {
                 }
             }
         }
-        
+
         // If still empty, ensure we have at least the basic join variables from join_condition
         if enhanced_node.join_variables.is_empty() {
             for constraint in &join_condition.constraints {
@@ -873,26 +873,39 @@ impl ReteNetwork {
 
     /// Check if a token came from the left side of a beta join
     fn is_left_token(&self, token: &Token, beta_id: NodeId) -> Result<bool> {
-        if let Some(ReteNode::Beta { left_parent, right_parent, .. }) = self.nodes.get(&beta_id) {
-            // For tokens coming from the propagation path, check which parent node 
+        if let Some(ReteNode::Beta {
+            left_parent,
+            right_parent,
+            ..
+        }) = self.nodes.get(&beta_id)
+        {
+            // For tokens coming from the propagation path, check which parent node
             // they came from by looking at the most recent fact in the token
             if let Some(last_fact) = token.facts.last() {
                 // Check if this fact matches the left parent's pattern
-                if let Some(ReteNode::Alpha { pattern: left_pattern, .. }) = self.nodes.get(left_parent) {
+                if let Some(ReteNode::Alpha {
+                    pattern: left_pattern,
+                    ..
+                }) = self.nodes.get(left_parent)
+                {
                     if let Some(_) = self.unify_atoms(left_pattern, last_fact, &HashMap::new())? {
                         return Ok(true);
                     }
                 }
-                
-                // Check if this fact matches the right parent's pattern  
-                if let Some(ReteNode::Alpha { pattern: right_pattern, .. }) = self.nodes.get(right_parent) {
+
+                // Check if this fact matches the right parent's pattern
+                if let Some(ReteNode::Alpha {
+                    pattern: right_pattern,
+                    ..
+                }) = self.nodes.get(right_parent)
+                {
                     if let Some(_) = self.unify_atoms(right_pattern, last_fact, &HashMap::new())? {
                         return Ok(false); // Right side
                     }
                 }
             }
         }
-        
+
         // Default to left if we can't determine
         Ok(true)
     }
@@ -1547,8 +1560,10 @@ mod tests {
 
         // Check that evictions occurred
         let stats = network.get_enhanced_stats();
-        println!("Memory management stats: memory_evictions={}, peak_memory_usage={}, enhanced_nodes={}", 
-                 stats.memory_evictions, stats.peak_memory_usage, stats.enhanced_nodes);
+        println!(
+            "Memory management stats: memory_evictions={}, peak_memory_usage={}, enhanced_nodes={}",
+            stats.memory_evictions, stats.peak_memory_usage, stats.enhanced_nodes
+        );
         assert!(stats.memory_evictions > 0);
         assert!(stats.enhanced_nodes > 0);
     }

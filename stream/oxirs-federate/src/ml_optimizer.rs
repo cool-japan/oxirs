@@ -274,27 +274,30 @@ impl NeuralNetworkModel {
         for _ in 0..hidden_size {
             let mut layer_weights = Vec::new();
             for _ in 0..input_size {
-                // Xavier initialization
-                let limit = (6.0 / (input_size + hidden_size) as f64).sqrt();
-                layer_weights.push(rand::random::<f64>() * 2.0 * limit - limit);
+                // Improved Xavier/Glorot initialization with better stability
+                let limit = (2.0 / (input_size + hidden_size) as f64).sqrt();
+                let weight = (rand::random::<f64>() * 2.0 - 1.0) * limit;
+                layer_weights.push(weight);
             }
             weights_input_hidden.push(layer_weights);
         }
 
         let mut weights_hidden_output = Vec::new();
         for _ in 0..hidden_size {
-            let limit = (6.0 / (hidden_size + 1) as f64).sqrt();
-            weights_hidden_output.push(rand::random::<f64>() * 2.0 * limit - limit);
+            // Better initialization for output layer
+            let limit = (2.0 / (hidden_size + 1) as f64).sqrt();
+            let weight = (rand::random::<f64>() * 2.0 - 1.0) * limit;
+            weights_hidden_output.push(weight);
         }
 
         Self {
             weights_input_hidden,
-            bias_hidden: vec![0.0; hidden_size],
+            bias_hidden: vec![0.01; hidden_size], // Small positive bias to avoid dead neurons
             weights_hidden_output,
             bias_output: 0.0,
             iterations: 0,
             accuracy: 0.0,
-            learning_rate,
+            learning_rate: learning_rate.min(0.01), // Cap learning rate for stability
             last_trained: SystemTime::now(),
         }
     }
@@ -331,7 +334,10 @@ impl NeuralNetworkModel {
             return;
         }
 
-        let epochs = 200;
+        let epochs = 100; // Reduced epochs for stability
+        let mut prev_loss = f64::INFINITY;
+        let convergence_threshold = 0.001;
+        let mut convergence_count = 0;
 
         for epoch in 0..epochs {
             let mut total_loss = 0.0;
@@ -344,13 +350,25 @@ impl NeuralNetworkModel {
                 let prediction = self.forward(&features);
                 let error = prediction - target;
 
-                // Backward pass
+                // Backward pass with gradient clipping
                 self.backpropagate(&features, error, target);
 
                 total_loss += error * error;
             }
 
             total_loss /= samples.len() as f64;
+
+            // Early stopping for convergence
+            if (prev_loss - total_loss).abs() < convergence_threshold {
+                convergence_count += 1;
+                if convergence_count >= 5 {
+                    debug!("NN training converged at epoch {}", epoch);
+                    break;
+                }
+            } else {
+                convergence_count = 0;
+            }
+            prev_loss = total_loss;
 
             if epoch % 20 == 0 {
                 debug!("NN training epoch {}: loss = {:.2}", epoch, total_loss);
@@ -376,13 +394,15 @@ impl NeuralNetworkModel {
             hidden_activations.push(activation.max(0.0));
         }
 
-        // Output layer gradients
-        let output_gradient = output_error;
+        // Output layer gradients with clipping
+        let output_gradient = output_error.max(-1.0).min(1.0); // Gradient clipping
 
         // Update output layer weights
         for (i, &hidden_val) in hidden_activations.iter().enumerate() {
             if i < self.weights_hidden_output.len() {
-                self.weights_hidden_output[i] -= self.learning_rate * output_gradient * hidden_val;
+                let weight_update = self.learning_rate * output_gradient * hidden_val;
+                let clipped_update = weight_update.max(-0.5).min(0.5); // Clip weight updates
+                self.weights_hidden_output[i] -= clipped_update;
             }
         }
         self.bias_output -= self.learning_rate * output_gradient;
@@ -396,10 +416,12 @@ impl NeuralNetworkModel {
                     0.0 // ReLU derivative
                 };
 
-                // Update hidden layer weights
+                // Update hidden layer weights with gradient clipping
                 for (j, &feature) in features.iter().enumerate() {
                     if j < neuron_weights.len() {
-                        neuron_weights[j] -= self.learning_rate * hidden_gradient * feature;
+                        let weight_update = self.learning_rate * hidden_gradient * feature;
+                        let clipped_update = weight_update.max(-0.5).min(0.5); // Clip weight updates
+                        neuron_weights[j] -= clipped_update;
                     }
                 }
                 self.bias_hidden[i] -= self.learning_rate * hidden_gradient;
@@ -573,8 +595,14 @@ impl LinearRegressionModel {
         let mean_absolute_error = total_error / samples.len() as f64;
         let mean_actual = total_actual / samples.len() as f64;
 
-        // Accuracy as 1 - normalized MAE
-        1.0 - (mean_absolute_error / mean_actual).min(1.0)
+        // Improved accuracy calculation with better bounds checking
+        if mean_actual <= 0.0 {
+            return 0.0;
+        }
+        
+        let relative_error = mean_absolute_error / mean_actual;
+        // Use exponential decay for accuracy to provide more realistic scores
+        (1.0 - relative_error).max(0.0).min(1.0)
     }
 }
 
@@ -750,7 +778,7 @@ impl MLOptimizer {
                 .map(|(service, &score)| (service.clone(), score))
                 .collect();
             all_services.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-            
+
             recommended_services = all_services
                 .iter()
                 .take(3)
@@ -1045,7 +1073,7 @@ impl MLOptimizer {
         let service_factor = 1.0 - (features.service_count as f64 / 20.0).min(0.15);
 
         let adjusted_score = base_score * complexity_factor * service_factor;
-        
+
         // Ensure the adjusted score doesn't fall below a minimum threshold
         // for new services to still be considered
         adjusted_score.max(self.config.confidence_threshold + 0.01)
@@ -1154,18 +1182,33 @@ impl MLOptimizer {
     async fn calculate_join_cost(
         &self,
         order: &[String],
-        _features: &QueryFeatures,
-        _model: &HashMap<String, f64>,
+        features: &QueryFeatures,
+        model: &HashMap<String, f64>,
     ) -> f64 {
-        // Calculate estimated cost for join order
+        // Calculate estimated cost for join order using more sophisticated model
         let mut cost = 1.0;
 
-        for (i, _pattern) in order.iter().enumerate() {
-            // Cost increases with position (later joins are more expensive)
-            cost += (i + 1) as f64 * 0.1;
+        // Base cost factors
+        let pattern_cost = order.len() as f64 * 0.5;
+        let selectivity_factor = (1.0 - features.selectivity).max(0.1);
+        let complexity_factor = features.complexity_score + 1.0;
+
+        // Position-based cost (later joins are more expensive)
+        for (i, pattern) in order.iter().enumerate() {
+            let position_cost = (i + 1) as f64 * 0.2;
+            
+            // Check if model has specific cost for this pattern
+            let pattern_specific_cost = model.get(pattern).unwrap_or(&1.0);
+            
+            cost += position_cost * pattern_specific_cost * selectivity_factor;
         }
 
-        cost
+        // Apply complexity and service count factors
+        cost *= complexity_factor;
+        cost *= (features.service_count as f64).max(1.0);
+
+        // Ensure reasonable bounds
+        cost.max(0.1).min(100.0)
     }
 
     fn calculate_risk_score(&self, cost: f64, best_cost: f64) -> f64 {

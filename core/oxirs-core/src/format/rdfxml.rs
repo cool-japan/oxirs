@@ -3,6 +3,8 @@
 //! Extracted and adapted from OxiGraph oxrdfxml with OxiRS enhancements.
 //! Based on W3C RDF/XML specification: https://www.w3.org/TR/rdf-syntax-grammar/
 
+#![allow(dead_code)]
+
 use super::error::{ParseResult, RdfParseError};
 use super::serializer::{QuadSerializer, SerializeResult};
 use crate::model::{QuadRef, Triple, TripleRef};
@@ -200,6 +202,7 @@ impl Default for RdfXmlSerializer {
 }
 
 /// Writer-based RDF/XML serializer
+#[allow(dead_code)]
 pub struct WriterRdfXmlSerializer<W: Write> {
     writer: W,
     config: RdfXmlSerializer,
@@ -345,7 +348,10 @@ pub mod namespaces {
     }
 
     /// Generate prefix for namespace
-    pub fn generate_prefix(_namespace: &str, existing_prefixes: &HashMap<String, String>) -> String {
+    pub fn generate_prefix(
+        _namespace: &str,
+        existing_prefixes: &HashMap<String, String>,
+    ) -> String {
         // TODO: Implement smart prefix generation
         // For now, use simple numbering
         let mut counter = 1;

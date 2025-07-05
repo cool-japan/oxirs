@@ -216,7 +216,7 @@ impl FineTuningEngine {
     /// Submit a new fine-tuning job
     pub async fn submit_job(&self, config: FineTuningConfig) -> Result<String> {
         let mut jobs = self.jobs.write().await;
-        
+
         // Check if we're at capacity
         let active_jobs = self.active_jobs.read().await;
         if active_jobs.len() >= self.config.max_concurrent_jobs {
@@ -266,7 +266,7 @@ impl FineTuningEngine {
     /// Cancel a running job
     pub async fn cancel_job(&self, job_id: &str) -> Result<()> {
         let mut active_jobs = self.active_jobs.write().await;
-        
+
         if let Some(handle) = active_jobs.remove(job_id) {
             handle.abort();
         }
@@ -285,10 +285,9 @@ impl FineTuningEngine {
         let job_id = job_id.to_string();
         let jobs_clone = self.jobs.clone();
         let job_id_clone = job_id.clone();
-        
-        let handle = tokio::spawn(async move {
-            Self::execute_training_job(job_id_clone, jobs_clone).await
-        });
+
+        let handle =
+            tokio::spawn(async move { Self::execute_training_job(job_id_clone, jobs_clone).await });
 
         self.active_jobs.write().await.insert(job_id, handle);
         Ok(())
@@ -310,7 +309,7 @@ impl FineTuningEngine {
 
         // Load and validate training data
         let training_data = Self::load_training_data(&job_id, &jobs).await?;
-        
+
         // Update status to training
         {
             let mut jobs_lock = jobs.write().await;
@@ -318,7 +317,8 @@ impl FineTuningEngine {
                 job.status = JobStatus::Training;
                 job.progress.total_examples = training_data.len();
                 job.progress.total_epochs = job.config.training_parameters.num_epochs;
-                job.progress.total_steps = training_data.len() * job.config.training_parameters.num_epochs;
+                job.progress.total_steps =
+                    training_data.len() * job.config.training_parameters.num_epochs;
             }
         }
 
@@ -343,13 +343,14 @@ impl FineTuningEngine {
         jobs: &std::sync::Arc<RwLock<HashMap<String, FineTuningJob>>>,
     ) -> Result<Vec<TrainingExample>> {
         let jobs_lock = jobs.read().await;
-        let job = jobs_lock.get(job_id)
+        let job = jobs_lock
+            .get(job_id)
             .ok_or_else(|| anyhow!("Job not found"))?;
 
         // In a real implementation, this would load from the dataset path
         // For now, return synthetic data
         let mut examples = Vec::new();
-        
+
         for i in 0..100 {
             examples.push(TrainingExample {
                 id: format!("example_{}", i),
@@ -387,11 +388,11 @@ impl FineTuningEngine {
                         job.progress.current_epoch = epoch;
                         job.progress.current_step = step;
                         job.progress.examples_processed = epoch * training_data.len() + step;
-                        
+
                         // Simulate metrics
                         let loss = 2.0 * (-0.1 * step as f32).exp();
                         job.metrics.train_loss.push(loss);
-                        
+
                         if step % 10 == 0 {
                             let accuracy = 0.5 + 0.4 * (1.0 - (-0.01 * step as f32).exp());
                             job.metrics.accuracy.push(accuracy);
@@ -419,14 +420,14 @@ impl FineTuningEngine {
         let mut jobs_lock = jobs.write().await;
         if let Some(job) = jobs_lock.get_mut(job_id) {
             job.status = JobStatus::Validating;
-            
+
             // Simulate validation metrics
             let val_loss = 1.8 * (-0.08 * epoch as f32).exp();
             job.metrics.validation_loss.push(val_loss);
-            
+
             let bleu = 0.3 + 0.4 * (1.0 - (-0.2 * epoch as f32).exp());
             job.metrics.bleu_score.push(bleu);
-            
+
             job.status = JobStatus::Training;
         }
 
@@ -444,7 +445,10 @@ impl FineTuningEngine {
         }
 
         if !config.dataset_path.exists() {
-            return Err(anyhow!("Dataset path does not exist: {:?}", config.dataset_path));
+            return Err(anyhow!(
+                "Dataset path does not exist: {:?}",
+                config.dataset_path
+            ));
         }
 
         if config.validation_split < 0.0 || config.validation_split > 1.0 {
@@ -469,10 +473,12 @@ impl FineTuningEngine {
 
         let total_jobs = jobs.len();
         let running_jobs = active_jobs.len();
-        let completed_jobs = jobs.values()
+        let completed_jobs = jobs
+            .values()
             .filter(|j| matches!(j.status, JobStatus::Completed))
             .count();
-        let failed_jobs = jobs.values()
+        let failed_jobs = jobs
+            .values()
             .filter(|j| matches!(j.status, JobStatus::Failed(_)))
             .count();
 

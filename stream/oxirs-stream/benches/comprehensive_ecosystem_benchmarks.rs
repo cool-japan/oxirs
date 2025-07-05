@@ -661,7 +661,7 @@ impl EcosystemBenchmarkSuite {
 
                     // Simulate sending event
                     // if producer.send(event).await.is_ok() {
-                        events_sent += 1;
+                    events_sent += 1;
                     // }
                 }
 

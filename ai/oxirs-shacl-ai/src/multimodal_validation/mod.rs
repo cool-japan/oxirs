@@ -26,23 +26,23 @@ use crate::neural_patterns::{NeuralPattern, NeuralPatternRecognizer};
 use crate::quality::QualityAssessor;
 use crate::{Result, ShaclAiError};
 
-pub mod types;
-pub mod traits;
-pub mod text_validators;
-pub mod image_validators;
 pub mod audio_validators;
-pub mod video_validators;
 pub mod document_validators;
+pub mod image_validators;
 pub mod semantic_analyzers;
+pub mod text_validators;
+pub mod traits;
+pub mod types;
+pub mod video_validators;
 
-pub use types::*;
-pub use traits::*;
-pub use text_validators::*;
-pub use image_validators::*;
 pub use audio_validators::*;
-pub use video_validators::*;
 pub use document_validators::*;
+pub use image_validators::*;
 pub use semantic_analyzers::*;
+pub use text_validators::*;
+pub use traits::*;
+pub use types::*;
+pub use video_validators::*;
 
 /// Multi-modal validation engine for diverse data types
 #[derive(Debug)]
@@ -227,7 +227,10 @@ impl MultiModalValidator {
             recommendations,
         };
 
-        tracing::info!("Multi-modal validation completed with {} violations", report.violations.len());
+        tracing::info!(
+            "Multi-modal validation completed with {} violations",
+            report.violations.len()
+        );
         Ok(report)
     }
 
@@ -357,7 +360,10 @@ impl MultiModalValidator {
     }
 
     // Helper methods for content loading and analysis
-    async fn load_text_content(&self, content_ref: &MultiModalContentRef) -> Result<MultiModalContent> {
+    async fn load_text_content(
+        &self,
+        content_ref: &MultiModalContentRef,
+    ) -> Result<MultiModalContent> {
         // Implementation for loading text content
         Ok(MultiModalContent {
             id: content_ref.id.clone(),
@@ -369,7 +375,10 @@ impl MultiModalValidator {
         })
     }
 
-    async fn load_image_content(&self, content_ref: &MultiModalContentRef) -> Result<MultiModalContent> {
+    async fn load_image_content(
+        &self,
+        content_ref: &MultiModalContentRef,
+    ) -> Result<MultiModalContent> {
         // Implementation for loading image content
         Ok(MultiModalContent {
             id: content_ref.id.clone(),
@@ -381,7 +390,10 @@ impl MultiModalValidator {
         })
     }
 
-    async fn load_audio_content(&self, content_ref: &MultiModalContentRef) -> Result<MultiModalContent> {
+    async fn load_audio_content(
+        &self,
+        content_ref: &MultiModalContentRef,
+    ) -> Result<MultiModalContent> {
         // Implementation for loading audio content
         Ok(MultiModalContent {
             id: content_ref.id.clone(),
@@ -393,7 +405,10 @@ impl MultiModalValidator {
         })
     }
 
-    async fn load_video_content(&self, content_ref: &MultiModalContentRef) -> Result<MultiModalContent> {
+    async fn load_video_content(
+        &self,
+        content_ref: &MultiModalContentRef,
+    ) -> Result<MultiModalContent> {
         // Implementation for loading video content
         Ok(MultiModalContent {
             id: content_ref.id.clone(),
@@ -405,7 +420,10 @@ impl MultiModalValidator {
         })
     }
 
-    async fn load_document_content(&self, content_ref: &MultiModalContentRef) -> Result<MultiModalContent> {
+    async fn load_document_content(
+        &self,
+        content_ref: &MultiModalContentRef,
+    ) -> Result<MultiModalContent> {
         // Implementation for loading document content
         Ok(MultiModalContent {
             id: content_ref.id.clone(),
@@ -417,7 +435,10 @@ impl MultiModalValidator {
         })
     }
 
-    async fn load_composite_content(&self, content_ref: &MultiModalContentRef) -> Result<MultiModalContent> {
+    async fn load_composite_content(
+        &self,
+        content_ref: &MultiModalContentRef,
+    ) -> Result<MultiModalContent> {
         // Implementation for loading composite content
         Ok(MultiModalContent {
             id: content_ref.id.clone(),
@@ -514,7 +535,10 @@ impl MultiModalValidator {
         })
     }
 
-    async fn analyze_document_content(&self, content: &MultiModalContent) -> Result<DocumentAnalysis> {
+    async fn analyze_document_content(
+        &self,
+        content: &MultiModalContent,
+    ) -> Result<DocumentAnalysis> {
         let validators = self.document_validators.read().await;
         let mut results = HashMap::new();
 
@@ -534,7 +558,10 @@ impl MultiModalValidator {
         })
     }
 
-    async fn analyze_semantic_content(&self, content: &MultiModalContent) -> Result<SemanticAnalysis> {
+    async fn analyze_semantic_content(
+        &self,
+        content: &MultiModalContent,
+    ) -> Result<SemanticAnalysis> {
         let analyzers = self.semantic_analyzers.read().await;
         let mut results = HashMap::new();
 
@@ -563,7 +590,9 @@ impl MultiModalValidator {
         let mut violations = Vec::new();
 
         for shape in shapes {
-            let shape_violations = self.validate_against_shape(content, analysis, shape).await?;
+            let shape_violations = self
+                .validate_against_shape(content, analysis, shape)
+                .await?;
             violations.extend(shape_violations);
         }
 
@@ -598,12 +627,18 @@ impl MultiModalValidator {
         Ok(vec![])
     }
 
-    fn generate_cross_modal_insights(&self, content_analyses: &[ContentAnalysis]) -> Vec<CrossModalInsight> {
+    fn generate_cross_modal_insights(
+        &self,
+        content_analyses: &[ContentAnalysis],
+    ) -> Vec<CrossModalInsight> {
         // Implementation for generating cross-modal insights
         vec![]
     }
 
-    fn calculate_validation_statistics(&self, violations: &[ValidationViolation]) -> ValidationStatistics {
+    fn calculate_validation_statistics(
+        &self,
+        violations: &[ValidationViolation],
+    ) -> ValidationStatistics {
         ValidationStatistics {
             total_validations: violations.len() as u64,
             successful_validations: 0,
@@ -629,11 +664,14 @@ impl MultiModalValidator {
 
     async fn cache_content(&self, content_id: &str, content: &MultiModalContent) -> Result<()> {
         let mut cache = self.content_cache.write().await;
-        cache.insert(content_id.to_string(), CachedContent {
-            content: content.clone(),
-            timestamp: SystemTime::now(),
-            access_count: 1,
-        });
+        cache.insert(
+            content_id.to_string(),
+            CachedContent {
+                content: content.clone(),
+                timestamp: SystemTime::now(),
+                access_count: 1,
+            },
+        );
         Ok(())
     }
 

@@ -1,10 +1,10 @@
-use crate::rdfxml::utils::*;
-use crate::model::{NamedOrBlankNode, NamedOrBlankNodeRef};
 use crate::model::iri::{Iri, IriParseError};
 use crate::model::*;
+use crate::model::{NamedOrBlankNode, NamedOrBlankNodeRef};
+use crate::rdfxml::utils::*;
 use crate::vocab::{rdf, xsd};
-use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::Writer;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io;
@@ -257,7 +257,9 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
         inner.serialize_triple(triple_ref, &mut buffer)?;
         // Write buffer using appropriate writer method
         for event in buffer {
-            writer.write_event(event).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            writer
+                .write_event(event)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         }
         Ok(())
     }
@@ -272,7 +274,9 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 
     fn flush_buffer(&mut self, buffer: &mut Vec<Event<'_>>) -> io::Result<()> {
         for event in buffer.drain(0..) {
-            self.writer.write_event(event).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            self.writer
+                .write_event(event)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         }
         Ok(())
     }
@@ -374,7 +378,9 @@ impl InnerRdfXmlWriter {
 
         let triple = t.into();
         // We open a new rdf:Description if useful
-        if self.current_subject.as_ref().map(NamedOrBlankNode::as_ref) != subject_to_named_or_blank(triple.subject()) {
+        if self.current_subject.as_ref().map(NamedOrBlankNode::as_ref)
+            != subject_to_named_or_blank(triple.subject())
+        {
             if self.current_subject.is_some() {
                 output.push(Event::End(
                     self.current_resource_tag
@@ -391,7 +397,8 @@ impl InnerRdfXmlWriter {
                 ));
             }
 
-            let (mut description_open, with_type_tag) = if matches!(triple.predicate(), PredicateRef::NamedNode(n) if n == &*rdf::TYPE) {
+            let (mut description_open, with_type_tag) = if matches!(triple.predicate(), PredicateRef::NamedNode(n) if n == &*rdf::TYPE)
+            {
                 if let ObjectRef::NamedNode(t) = triple.object() {
                     if RESERVED_SYNTAX_TERMS.contains(&t.as_str()) {
                         (BytesStart::new("rdf:Description"), false)
@@ -400,7 +407,8 @@ impl InnerRdfXmlWriter {
                         let prop_qname_owned = prop_qname.into_owned();
                         let mut description_open = BytesStart::new(prop_qname_owned.clone());
                         if let Some((attr_name, attr_value)) = prop_xmlns {
-                            description_open.push_attribute((attr_name.as_str(), attr_value.as_str()));
+                            description_open
+                                .push_attribute((attr_name.as_str(), attr_value.as_str()));
                         }
                         self.current_resource_tag = Some(prop_qname_owned);
                         (description_open, true)
@@ -417,8 +425,10 @@ impl InnerRdfXmlWriter {
                 clippy::allow_attributes
             )]
             match triple.subject() {
-                SubjectRef::NamedNode(node) => description_open
-                    .push_attribute(("rdf:about", relative_iri(node.as_str(), &self.base_iri).as_ref())),
+                SubjectRef::NamedNode(node) => description_open.push_attribute((
+                    "rdf:about",
+                    relative_iri(node.as_str(), &self.base_iri).as_ref(),
+                )),
                 SubjectRef::BlankNode(node) => {
                     description_open.push_attribute(("rdf:nodeID", node.as_str()))
                 }
@@ -437,12 +447,14 @@ impl InnerRdfXmlWriter {
 
         let pred_node = match triple.predicate() {
             PredicateRef::NamedNode(n) => n,
-            _ => return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "RDF/XML only supports named node predicates",
-            )),
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "RDF/XML only supports named node predicates",
+                ))
+            }
         };
-        
+
         if RESERVED_SYNTAX_TERMS.contains(&pred_node.as_str()) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -462,8 +474,10 @@ impl InnerRdfXmlWriter {
         )]
         let content = match triple.object() {
             ObjectRef::NamedNode(node) => {
-                property_open
-                    .push_attribute(("rdf:resource", relative_iri(node.as_str(), &self.base_iri).as_ref()));
+                property_open.push_attribute((
+                    "rdf:resource",
+                    relative_iri(node.as_str(), &self.base_iri).as_ref(),
+                ));
                 None
             }
             ObjectRef::BlankNode(node) => {
@@ -531,10 +545,7 @@ impl InnerRdfXmlWriter {
         output.push(Event::End(BytesEnd::new("rdf:RDF")));
     }
 
-    fn uri_to_qname_and_xmlns(
-        &self,
-        uri: &NamedNode,
-    ) -> (Cow<str>, Option<(String, String)>) {
+    fn uri_to_qname_and_xmlns(&self, uri: &NamedNode) -> (Cow<str>, Option<(String, String)>) {
         let uri_str = uri.as_str();
         let (prop_prefix, prop_value) = split_iri(uri_str);
         if let Some(prefix) = self.prefixes_by_iri.get(prop_prefix) {
@@ -549,7 +560,10 @@ impl InnerRdfXmlWriter {
         } else if prop_prefix == "http://www.w3.org/2000/xmlns/" {
             (Cow::Owned(format!("xmlns:{prop_value}")), None)
         } else if !prop_value.is_empty() && !self.custom_default_prefix {
-            (Cow::Owned(prop_value.to_string()), Some(("xmlns".to_string(), prop_prefix.to_string())))
+            (
+                Cow::Owned(prop_value.to_string()),
+                Some(("xmlns".to_string(), prop_prefix.to_string())),
+            )
         } else {
             // TODO: does not work on recursive elements
             (

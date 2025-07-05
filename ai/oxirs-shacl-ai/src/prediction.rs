@@ -1380,7 +1380,7 @@ impl ValidationOutcome {
             .iter()
             .filter(|result| {
                 !result.conforms()
-                    // TODO: Check severity when API is available  
+                // TODO: Check severity when API is available
             })
             .count() as u32;
 

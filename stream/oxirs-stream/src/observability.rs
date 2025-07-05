@@ -16,9 +16,9 @@ use uuid::Uuid;
 // OpenTelemetry imports for enhanced observability (simplified for now)
 // Full OpenTelemetry integration can be enabled when dependencies are stable
 #[cfg(feature = "opentelemetry")]
-use opentelemetry::{global, trace::Tracer, KeyValue};
-#[cfg(feature = "opentelemetry")]
 use opentelemetry::global::BoxedTracer;
+#[cfg(feature = "opentelemetry")]
+use opentelemetry::{global, trace::Tracer, KeyValue};
 
 use crate::StreamEvent;
 
@@ -300,11 +300,11 @@ impl StreamObservability {
         // For now, return a placeholder implementation
         // Full OpenTelemetry integration will be implemented when dependencies are stable
         warn!("OpenTelemetry Jaeger integration is disabled pending dependency stability");
-        
+
         if let Some(jaeger_endpoint) = &config.jaeger_endpoint {
             info!("Jaeger endpoint configured: {}", jaeger_endpoint);
         }
-        
+
         // Return a no-op tracer for now
         let tracer = opentelemetry::global::tracer("oxirs-stream");
         Ok(Arc::new(tracer))
@@ -657,7 +657,7 @@ impl StreamObservability {
                 );
             }
         }
-        
+
         #[cfg(not(feature = "opentelemetry"))]
         {
             if let Some(jaeger_endpoint) = &self.config.jaeger_endpoint {
@@ -667,7 +667,7 @@ impl StreamObservability {
                 );
             }
         }
-        
+
         Ok(())
     }
 

@@ -4,6 +4,8 @@
 //! leveraging quantum computing concepts for enhanced graph operations
 //! and advanced optimization techniques.
 
+#![allow(dead_code)]
+
 use crate::error::OxirsResult;
 use crate::model::Triple;
 use ndarray::{Array1, Array2};

@@ -491,10 +491,13 @@ impl ServiceClient for SparqlClient {
     }
 
     async fn health_check(&self) -> Result<bool> {
-        let query = "ASK { ?s ?p ?o }";
-        match self.execute_sparql_query(query).await {
-            Ok(_) => Ok(true),
-            Err(_) => Ok(false),
+        // Use a lightweight query for health check
+        let query = "ASK { }"; // Simpler query that should always work if service is reachable
+        // Respect the client's configured timeout
+        let timeout = self.config.request_timeout;
+        match tokio::time::timeout(timeout, self.execute_sparql_query(query)).await {
+            Ok(Ok(_)) => Ok(true),
+            Ok(Err(_)) | Err(_) => Ok(false), // Either query failed or timed out
         }
     }
 
@@ -734,10 +737,13 @@ impl ServiceClient for GraphQLClient {
     }
 
     async fn health_check(&self) -> Result<bool> {
+        // Use introspection query for health check
         let query = "{ __schema { queryType { name } } }";
-        match self.execute_graphql_query(query, None).await {
-            Ok(_) => Ok(true),
-            Err(_) => Ok(false),
+        // Respect the client's configured timeout
+        let timeout = self.config.request_timeout;
+        match tokio::time::timeout(timeout, self.execute_graphql_query(query, None)).await {
+            Ok(Ok(_)) => Ok(true),
+            Ok(Err(_)) | Err(_) => Ok(false), // Either query failed or timed out
         }
     }
 

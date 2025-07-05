@@ -68,15 +68,15 @@ pub use multi_region_replication::{
 };
 pub use patch::{PatchParser, PatchSerializer};
 pub use performance_optimizer::{
-    ActivationFunction, AdaptiveBatcher, AggregationFunction, AutoTuner, BatchingStats,
-    BatchPerformancePoint, BatchSizePredictor, BandwidthMeasurement, BandwidthTracker,
-    CompressionStats, EnhancedMLConfig, EnhancedMLPredictor, FeatureEngineer, FeatureScaler,
-    InteractionFeatures, MLTrainingPoint, MemoryPool, MemoryPoolStats, ModelPerformanceMetrics,
-    ModelSelector, ModelType, NetworkAwareCompressor, ParallelEventProcessor,
+    ActivationFunction, AdaptiveBatcher, AggregationFunction, AutoTuner, BandwidthMeasurement,
+    BandwidthTracker, BatchPerformancePoint, BatchSizePredictor, BatchingStats, CompressionStats,
+    EnhancedMLConfig, EnhancedMLPredictor, FeatureEngineer, FeatureScaler, InteractionFeatures,
+    MLTrainingPoint, MemoryPool, MemoryPoolStats, ModelPerformanceMetrics, ModelSelector,
+    ModelType, NetworkAwareCompressor, ParallelEventProcessor,
     PerformanceConfig as OptimizerPerformanceConfig, PerformanceDataPoint, PerformancePredictor,
     PolynomialFeatures, PolynomialRegressor, PredictionModel, PredictionStats, ProcessingResult,
-    ProcessingStats, ProcessingStatus, SimpleNeuralNetwork, StatisticalFeatures,
-    TemporalFeatures, TuningDecision, ZeroCopyEvent,
+    ProcessingStats, ProcessingStatus, SimpleNeuralNetwork, StatisticalFeatures, TemporalFeatures,
+    TuningDecision, ZeroCopyEvent,
 };
 pub use schema_registry::{
     CompatibilityMode, ExternalRegistryConfig, RegistryAuth, SchemaDefinition, SchemaFormat,
@@ -116,9 +116,7 @@ pub use quantum_communication::{
 pub use quantum_streaming::{
     QuantumEvent, QuantumOperation, QuantumProcessingStats, QuantumState, QuantumStreamProcessor,
 };
-pub use reliability::{
-    BulkReplayResult, DlqStats, ReplayStatus,
-};
+pub use reliability::{BulkReplayResult, DlqStats, ReplayStatus};
 pub use security::{
     AuditConfig, AuditLogEntry, AuditLogger, AuthConfig, AuthMethod, AuthenticationProvider,
     AuthorizationProvider, AuthzConfig, Credentials, EncryptionConfig, Permission, RateLimitConfig,

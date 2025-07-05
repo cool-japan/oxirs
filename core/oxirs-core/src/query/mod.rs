@@ -422,6 +422,7 @@ impl QueryEngine {
     }
 
     /// Convert a SPARQL algebra triple pattern to a model triple pattern
+    #[allow(dead_code)]
     fn convert_triple_pattern(
         &self,
         pattern: &AlgebraTriplePattern,

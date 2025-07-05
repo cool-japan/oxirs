@@ -868,18 +868,11 @@ pub enum StreamResponseChunk {
         progress: f32, // 0.0 to 1.0
     },
     /// Context information available during processing
-    Context {
-        content: String,
-    },
+    Context { content: String },
     /// Incremental content being generated
-    Content {
-        content: String,
-        is_final: bool,
-    },
+    Content { content: String, is_final: bool },
     /// Error occurred during processing
-    Error {
-        message: String,
-    },
+    Error { message: String },
     /// Processing complete with final message
     Complete {
         message: crate::Message,

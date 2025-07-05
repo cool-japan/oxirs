@@ -806,7 +806,11 @@ mod tests {
 
         assert_eq!(result.format, RdfFormat::Turtle);
         // Adjust confidence threshold to match actual pattern matching behavior
-        assert!(result.confidence > 0.3, "Expected confidence > 0.3, but got {}", result.confidence);
+        assert!(
+            result.confidence > 0.3,
+            "Expected confidence > 0.3, but got {}",
+            result.confidence
+        );
     }
 
     #[test]

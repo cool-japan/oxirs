@@ -112,6 +112,7 @@ pub struct ReadQuery {
 }
 
 /// Transaction coordinator (implements 2PC)
+#[allow(dead_code)]
 pub struct TransactionCoordinator {
     /// Configuration
     config: TransactionConfig,

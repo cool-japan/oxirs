@@ -3,6 +3,8 @@
 //! Implements the W3C Turtle grammar specification as a rule recognizer
 //! that builds RDF triples from N3/Turtle token streams.
 
+#![allow(dead_code)]
+
 use super::error::{ParseResult, RdfParseError, RdfSyntaxError, TextPosition};
 use super::n3_lexer::N3Token;
 use super::toolkit::{Parser, RuleRecognizer};

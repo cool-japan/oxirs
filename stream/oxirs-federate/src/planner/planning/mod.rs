@@ -412,7 +412,7 @@ impl FederatedQueryPlanner {
     pub async fn analyze_sparql(&self, query: &str) -> Result<QueryInfo> {
         // Parse SPARQL query and extract information
         let query_upper = query.to_uppercase();
-        
+
         // Determine query type based on the first keyword
         let query_type = if query_upper.trim_start().starts_with("SELECT") {
             QueryType::Select
@@ -444,24 +444,24 @@ impl FederatedQueryPlanner {
             if let Some(brace_start) = where_clause.find('{') {
                 if let Some(brace_end) = where_clause.rfind('}') {
                     let where_content = &where_clause[brace_start + 1..brace_end];
-                    
+
                     // Extract triple patterns by splitting on '.' and parsing each triple
                     let statements: Vec<&str> = where_content.split('.').collect();
                     for statement in statements {
                         let trimmed = statement.trim();
-                        if !trimmed.is_empty() 
-                            && !trimmed.to_uppercase().contains("SERVICE") 
+                        if !trimmed.is_empty()
+                            && !trimmed.to_uppercase().contains("SERVICE")
                             && !trimmed.starts_with('}')
                             && !trimmed.starts_with('{')
-                            && trimmed.contains('?') {
-                            
+                            && trimmed.contains('?')
+                        {
                             // Parse the triple pattern (subject predicate object)
                             let parts: Vec<&str> = trimmed.split_whitespace().collect();
                             if parts.len() >= 3 {
                                 let subject = parts[0].to_string();
                                 let predicate = parts[1].to_string();
                                 let object = parts[2..].join(" ").trim_end_matches('.').to_string();
-                                
+
                                 patterns.push(TriplePattern {
                                     subject: Some(subject),
                                     predicate: Some(predicate),
@@ -480,14 +480,14 @@ impl FederatedQueryPlanner {
         let filter_regex = regex::Regex::new(r"FILTER\s*\(\s*([^)]+)\s*\)")?;
         for cap in filter_regex.captures_iter(query) {
             let filter_expr = cap[1].to_string();
-            
+
             // Extract variables from the filter expression
             let mut filter_variables = Vec::new();
             let var_regex = regex::Regex::new(r"\?[a-zA-Z_][a-zA-Z0-9_]*")?;
             for mat in var_regex.find_iter(&filter_expr) {
                 filter_variables.push(mat.as_str().to_string());
             }
-            
+
             filters.push(FilterExpression {
                 expression: filter_expr,
                 variables: filter_variables,
@@ -528,12 +528,11 @@ impl FederatedQueryPlanner {
 
         // Analyze query patterns to determine required capabilities
         let required_capabilities = self.analyze_query_capabilities(query_info);
-        
+
         // Select the most appropriate service based on capabilities
-        let selected_service_id = self.select_service_for_capabilities(
-            &required_capabilities, 
-            service_registry
-        ).await?;
+        let selected_service_id = self
+            .select_service_for_capabilities(&required_capabilities, service_registry)
+            .await?;
 
         // Create execution plan directly from SPARQL query info
         let plan = ExecutionPlan {
@@ -607,19 +606,20 @@ impl FederatedQueryPlanner {
     /// Analyze query patterns to determine required service capabilities
     fn analyze_query_capabilities(&self, query_info: &QueryInfo) -> Vec<crate::ServiceCapability> {
         let mut capabilities = Vec::new();
-        
+
         // Basic SPARQL support is always required
         capabilities.push(crate::ServiceCapability::SparqlQuery);
-        
+
         // Analyze patterns to detect specific capability requirements
         for pattern in &query_info.patterns {
             // Check for geospatial patterns
             if pattern.predicate.as_ref().map_or(false, |p| {
                 p.contains("geo:") || p.contains("wgs84") || p.contains("geof:")
-            }) || pattern.pattern_string.contains("geo:") {
+            }) || pattern.pattern_string.contains("geo:")
+            {
                 capabilities.push(crate::ServiceCapability::Geospatial);
             }
-            
+
             // Check for full-text search patterns
             if pattern.predicate.as_ref().map_or(false, |p| {
                 p.contains("pf:") || p.contains("text:") || p.contains("lucene:")
@@ -627,13 +627,16 @@ impl FederatedQueryPlanner {
                 capabilities.push(crate::ServiceCapability::FullTextSearch);
             }
         }
-        
+
         // Check original query for additional capabilities
         let query_lower = query_info.original_query.to_lowercase();
-        if query_lower.contains("insert") || query_lower.contains("delete") || query_lower.contains("update") {
+        if query_lower.contains("insert")
+            || query_lower.contains("delete")
+            || query_lower.contains("update")
+        {
             capabilities.push(crate::ServiceCapability::SparqlUpdate);
         }
-        
+
         capabilities
     }
 
@@ -644,20 +647,20 @@ impl FederatedQueryPlanner {
         service_registry: &ServiceRegistry,
     ) -> Result<String> {
         let services = service_registry.get_all_services();
-        
+
         // Find services that have all required capabilities
         let mut suitable_services = Vec::new();
-        
+
         for service in services {
-            let has_all_capabilities = required_capabilities.iter().all(|cap| {
-                service.capabilities.contains(cap)
-            });
-            
+            let has_all_capabilities = required_capabilities
+                .iter()
+                .all(|cap| service.capabilities.contains(cap));
+
             if has_all_capabilities {
                 suitable_services.push(service);
             }
         }
-        
+
         // If no suitable services found, fall back to any available service
         if suitable_services.is_empty() {
             let mut all_services = service_registry.get_all_services();
@@ -667,7 +670,7 @@ impl FederatedQueryPlanner {
                 return Err(anyhow!("No services available in registry"));
             }
         }
-        
+
         // Select the first suitable service (could be enhanced with more sophisticated selection)
         Ok(suitable_services[0].id.clone())
     }

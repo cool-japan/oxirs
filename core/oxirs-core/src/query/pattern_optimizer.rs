@@ -3,6 +3,8 @@
 //! This module provides specialized pattern matching optimization that
 //! leverages multi-index strategies (SPO/POS/OSP) for efficient query execution.
 
+#![allow(dead_code)]
+
 use crate::indexing::IndexStats as BaseIndexStats;
 use crate::model::pattern::{
     ObjectPattern, PredicatePattern, SubjectPattern, TriplePattern as ModelTriplePattern,

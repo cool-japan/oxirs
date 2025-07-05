@@ -12,15 +12,20 @@ use super::{
     anthropic_provider::AnthropicProvider,
     circuit_breaker::CircuitBreaker,
     config::LLMConfig,
-    cross_modal_reasoning::{CrossModalReasoning, CrossModalConfig, CrossModalInput, CrossModalResponse},
+    cross_modal_reasoning::{
+        CrossModalConfig, CrossModalInput, CrossModalReasoning, CrossModalResponse,
+    },
     federated_learning::{FederatedCoordinator, FederatedLearningConfig},
-    fine_tuning::{FineTuningEngine, FineTuningConfig},
+    fine_tuning::{FineTuningConfig, FineTuningEngine},
     local_provider::LocalModelProvider,
     neural_architecture_search::{ArchitectureSearch, ArchitectureSearchConfig},
     openai_provider::OpenAIProvider,
-    performance_optimization::{PerformanceOptimizer, PerformanceConfig, PerformanceReport, BenchmarkConfig, BenchmarkResult, OptimizationRecommendation},
+    performance_optimization::{
+        BenchmarkConfig, BenchmarkResult, OptimizationRecommendation, PerformanceConfig,
+        PerformanceOptimizer, PerformanceReport,
+    },
     providers::LLMProvider,
-    real_time_adaptation::{RealTimeAdaptation, AdaptationConfig, InteractionData},
+    real_time_adaptation::{AdaptationConfig, InteractionData, RealTimeAdaptation},
     types::{LLMRequest, LLMResponse, Priority, UseCase},
 };
 
@@ -424,7 +429,8 @@ impl EnhancedLLMManager {
         // In a real implementation, this would share the actual LLMManager
         if let Ok(placeholder_manager) = LLMManager::new(LLMConfig::default()) {
             let inner_manager = Arc::new(tokio::sync::RwLock::new(placeholder_manager));
-            self.cross_modal_reasoning = Some(Arc::new(CrossModalReasoning::new(config, inner_manager)));
+            self.cross_modal_reasoning =
+                Some(Arc::new(CrossModalReasoning::new(config, inner_manager)));
         }
         self
     }
@@ -718,7 +724,10 @@ impl EnhancedLLMManager {
     }
 
     /// Get fine-tuning job status
-    pub async fn get_fine_tuning_status(&self, job_id: &str) -> Result<super::fine_tuning::FineTuningJob> {
+    pub async fn get_fine_tuning_status(
+        &self,
+        job_id: &str,
+    ) -> Result<super::fine_tuning::FineTuningJob> {
         if let Some(engine) = &self.fine_tuning_engine {
             engine.get_job_status(job_id).await
         } else {
@@ -727,7 +736,10 @@ impl EnhancedLLMManager {
     }
 
     /// Start neural architecture search
-    pub async fn start_architecture_search(&self, config: ArchitectureSearchConfig) -> Result<String> {
+    pub async fn start_architecture_search(
+        &self,
+        config: ArchitectureSearchConfig,
+    ) -> Result<String> {
         if let Some(search) = &self.architecture_search {
             search.start_search(config).await
         } else {
@@ -736,7 +748,10 @@ impl EnhancedLLMManager {
     }
 
     /// Get architecture search status
-    pub async fn get_architecture_search_status(&self, search_id: &str) -> Result<super::neural_architecture_search::SearchState> {
+    pub async fn get_architecture_search_status(
+        &self,
+        search_id: &str,
+    ) -> Result<super::neural_architecture_search::SearchState> {
         if let Some(search) = &self.architecture_search {
             search.get_search_status(search_id).await
         } else {
@@ -754,7 +769,10 @@ impl EnhancedLLMManager {
     }
 
     /// Register federated learning node
-    pub async fn register_federated_node(&self, node: super::federated_learning::FederatedNode) -> Result<()> {
+    pub async fn register_federated_node(
+        &self,
+        node: super::federated_learning::FederatedNode,
+    ) -> Result<()> {
         if let Some(coordinator) = &self.federated_coordinator {
             coordinator.register_node(node).await
         } else {
@@ -763,7 +781,11 @@ impl EnhancedLLMManager {
     }
 
     /// Process interaction for real-time adaptation
-    pub async fn process_adaptation_interaction(&self, request: &LLMRequest, response: &LLMResponse) -> Result<()> {
+    pub async fn process_adaptation_interaction(
+        &self,
+        request: &LLMRequest,
+        response: &LLMResponse,
+    ) -> Result<()> {
         if let Some(adaptation) = &self.real_time_adaptation {
             let interaction = InteractionData {
                 interaction_id: format!("interaction_{}", uuid::Uuid::new_v4()),
@@ -775,7 +797,8 @@ impl EnhancedLLMManager {
                         user_id: "default_user".to_string(),
                         expertise_level: super::real_time_adaptation::ExpertiseLevel::Intermediate,
                         preferences: super::real_time_adaptation::UserPreferences {
-                            response_style: super::real_time_adaptation::ResponseStyle::Conversational,
+                            response_style:
+                                super::real_time_adaptation::ResponseStyle::Conversational,
                             detail_level: super::real_time_adaptation::DetailLevel::Medium,
                             preferred_formats: vec!["text".to_string()],
                             language_preferences: vec!["en".to_string()],
@@ -824,13 +847,18 @@ impl EnhancedLLMManager {
         let response = self.generate_response_with_limits(request.clone()).await?;
 
         // Process for real-time adaptation
-        self.process_adaptation_interaction(&request, &response).await?;
+        self.process_adaptation_interaction(&request, &response)
+            .await?;
 
         Ok(response)
     }
 
     /// Perform cross-modal reasoning
-    pub async fn perform_cross_modal_reasoning(&self, input: CrossModalInput, query: &str) -> Result<CrossModalResponse> {
+    pub async fn perform_cross_modal_reasoning(
+        &self,
+        input: CrossModalInput,
+        query: &str,
+    ) -> Result<CrossModalResponse> {
         if let Some(reasoning) = &self.cross_modal_reasoning {
             reasoning.reason(input, query).await
         } else {
@@ -858,7 +886,9 @@ impl EnhancedLLMManager {
     }
 
     /// Get cross-modal reasoning statistics
-    pub async fn get_cross_modal_stats(&self) -> Result<super::cross_modal_reasoning::CrossModalStats> {
+    pub async fn get_cross_modal_stats(
+        &self,
+    ) -> Result<super::cross_modal_reasoning::CrossModalStats> {
         if let Some(reasoning) = &self.cross_modal_reasoning {
             Ok(reasoning.get_stats().await)
         } else {
@@ -867,7 +897,10 @@ impl EnhancedLLMManager {
     }
 
     /// Optimize request for better performance
-    pub async fn optimize_request(&self, request: &LLMRequest) -> Result<super::performance_optimization::OptimizedRequest> {
+    pub async fn optimize_request(
+        &self,
+        request: &LLMRequest,
+    ) -> Result<super::performance_optimization::OptimizedRequest> {
         if let Some(optimizer) = &self.performance_optimizer {
             optimizer.optimize_request(request).await
         } else {
@@ -885,7 +918,9 @@ impl EnhancedLLMManager {
     }
 
     /// Get optimization recommendations
-    pub async fn get_optimization_recommendations(&self) -> Result<Vec<OptimizationRecommendation>> {
+    pub async fn get_optimization_recommendations(
+        &self,
+    ) -> Result<Vec<OptimizationRecommendation>> {
         if let Some(optimizer) = &self.performance_optimizer {
             optimizer.generate_optimization_recommendations().await
         } else {
@@ -905,7 +940,7 @@ impl EnhancedLLMManager {
     /// Get comprehensive system statistics including Version 1.3 capabilities
     pub async fn get_comprehensive_stats(&self) -> Result<ComprehensiveStats> {
         let basic_stats = self.get_session_stats().await;
-        
+
         let fine_tuning_stats = if let Some(engine) = &self.fine_tuning_engine {
             Some(engine.get_training_statistics().await?)
         } else {
@@ -931,34 +966,43 @@ impl EnhancedLLMManager {
         };
 
         let performance_report = if let Some(optimizer) = &self.performance_optimizer {
-            Some(optimizer.get_performance_report().await.unwrap_or_else(|_| PerformanceReport {
-                current_metrics: super::performance_optimization::PerformanceMetrics::default(),
-                benchmark_results: Vec::new(),
-                recommendations: Vec::new(),
-                cache_statistics: super::performance_optimization::CacheStatistics {
-                    total_entries: 0,
-                    total_size_bytes: 0,
-                    hit_rate: 0.0,
-                    miss_rate: 1.0,
-                    eviction_count: 0,
-                    average_access_count: 0.0,
-                    average_compression_ratio: 0.0,
-                },
-                compression_statistics: super::performance_optimization::CompressionStatistics {
-                    total_compressed_requests: 0,
-                    average_compression_ratio: 0.0,
-                    total_bytes_saved: 0,
-                    compression_time_average: Duration::from_millis(0),
-                },
-                optimization_summary: super::performance_optimization::OptimizationSummary {
-                    overall_performance_score: 0.0,
-                    target_achievement_rate: 0.0,
-                    bottleneck_analysis: Vec::new(),
-                    improvement_potential: 0.0,
-                    optimization_status: super::performance_optimization::OptimizationStatus::Critical,
-                },
-                generated_at: std::time::SystemTime::now(),
-            }))
+            Some(
+                optimizer
+                    .get_performance_report()
+                    .await
+                    .unwrap_or_else(|_| PerformanceReport {
+                        current_metrics:
+                            super::performance_optimization::PerformanceMetrics::default(),
+                        benchmark_results: Vec::new(),
+                        recommendations: Vec::new(),
+                        cache_statistics: super::performance_optimization::CacheStatistics {
+                            total_entries: 0,
+                            total_size_bytes: 0,
+                            hit_rate: 0.0,
+                            miss_rate: 1.0,
+                            eviction_count: 0,
+                            average_access_count: 0.0,
+                            average_compression_ratio: 0.0,
+                        },
+                        compression_statistics:
+                            super::performance_optimization::CompressionStatistics {
+                                total_compressed_requests: 0,
+                                average_compression_ratio: 0.0,
+                                total_bytes_saved: 0,
+                                compression_time_average: Duration::from_millis(0),
+                            },
+                        optimization_summary:
+                            super::performance_optimization::OptimizationSummary {
+                                overall_performance_score: 0.0,
+                                target_achievement_rate: 0.0,
+                                bottleneck_analysis: Vec::new(),
+                                improvement_potential: 0.0,
+                                optimization_status:
+                                    super::performance_optimization::OptimizationStatus::Critical,
+                            },
+                        generated_at: std::time::SystemTime::now(),
+                    }),
+            )
         } else {
             None
         };

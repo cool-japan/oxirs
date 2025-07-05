@@ -130,6 +130,7 @@ pub struct PerformanceImprovement {
 
 /// Real-time synchronization monitor
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct SynchronizationMonitor {
     /// Current synchronization state
     sync_state: IntegrationSyncState,

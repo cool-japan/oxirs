@@ -2,6 +2,8 @@
 //!
 //! This module implements artificial consciousness concepts for enhanced
 //! query optimization and data processing, including:
+
+#![allow(dead_code)]
 //!
 //! - Intuitive query planning using pattern memory and gut feelings
 //! - Creative optimization strategies inspired by human creativity

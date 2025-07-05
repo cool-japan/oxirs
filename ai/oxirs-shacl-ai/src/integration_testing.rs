@@ -4,33 +4,31 @@
 //! system, including end-to-end validation testing, performance validation, cross-module
 //! integration testing, and automated test scenario generation.
 
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
-use serde::{Deserialize, Serialize};
-use tracing::{info, debug, warn, error};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use oxirs_core::{
-    model::{NamedNode, Term, Triple, Quad},
-    Store, Graph,
+    model::{NamedNode, Quad, Term, Triple},
+    Graph, Store,
 };
 
 use oxirs_shacl::{
-    constraints::*,
-    Shape, ShapeId, Constraint, ConstraintComponentId,
-    PropertyPath, Target, Severity, ValidationReport, ValidationConfig,
-    Validator,
+    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
+    Target, ValidationConfig, ValidationReport, Validator,
 };
 
 use crate::{
-    Result, ShaclAiError,
     advanced_validation_strategies::{
-        AdvancedValidationStrategyManager, AdvancedValidationConfig, ValidationContext,
+        AdvancedValidationConfig, AdvancedValidationStrategyManager, ValidationContext,
     },
-    validation_performance::ValidationPerformanceOptimizer,
     learning::ShapeLearner,
     quality::QualityAssessor,
+    validation_performance::ValidationPerformanceOptimizer,
+    Result, ShaclAiError,
 };
 
 /// Integration testing framework configuration
@@ -38,43 +36,43 @@ use crate::{
 pub struct IntegrationTestConfig {
     /// Test execution timeout per test case
     pub test_timeout_seconds: u64,
-    
+
     /// Number of parallel test workers
     pub parallel_workers: usize,
-    
+
     /// Enable performance profiling during tests
     pub enable_performance_profiling: bool,
-    
+
     /// Enable memory usage monitoring
     pub enable_memory_monitoring: bool,
-    
+
     /// Enable cross-module dependency testing
     pub enable_dependency_testing: bool,
-    
+
     /// Generate random test scenarios
     pub enable_scenario_generation: bool,
-    
+
     /// Test data size variations
     pub test_data_sizes: Vec<usize>,
-    
+
     /// Test complexity levels
     pub test_complexity_levels: Vec<TestComplexityLevel>,
-    
+
     /// Minimum success rate threshold
     pub min_success_rate_threshold: f64,
-    
+
     /// Maximum allowed memory usage (MB)
     pub max_memory_usage_mb: f64,
-    
+
     /// Maximum allowed execution time per test
     pub max_execution_time_ms: u64,
-    
+
     /// Enable regression testing
     pub enable_regression_testing: bool,
-    
+
     /// Test result persistence
     pub persist_test_results: bool,
-    
+
     /// Test report generation
     pub generate_detailed_reports: bool,
 }
@@ -484,48 +482,50 @@ impl IntegrationTestFramework {
     /// Run comprehensive integration tests
     pub async fn run_integration_tests(&self) -> Result<IntegrationTestReport> {
         info!("Starting comprehensive integration tests");
-        
+
         // 1. Generate test scenarios
         let scenarios = self.generate_test_scenarios().await?;
         info!("Generated {} test scenarios", scenarios.len());
-        
+
         // 2. Initialize profiling and monitoring
         if self.config.enable_performance_profiling {
             self.performance_profiler.start_profiling().await?;
         }
-        
+
         if self.config.enable_memory_monitoring {
             self.memory_monitor.start_monitoring().await?;
         }
-        
+
         // 3. Execute test scenarios
         let test_results = self.execute_test_scenarios(scenarios).await?;
-        
+
         // 4. Analyze dependency compatibility
         let dependency_results = if self.config.enable_dependency_testing {
             Some(self.analyze_dependencies().await?)
         } else {
             None
         };
-        
+
         // 5. Generate performance baselines
         let performance_baselines = self.generate_performance_baselines(&test_results).await?;
-        
+
         // 6. Collect and analyze results
         let test_summary = self.analyze_test_results(&test_results).await?;
-        
+
         // 7. Generate recommendations
-        let recommendations = self.generate_recommendations(&test_results, &test_summary).await?;
-        
+        let recommendations = self
+            .generate_recommendations(&test_results, &test_summary)
+            .await?;
+
         // 8. Stop monitoring
         if self.config.enable_performance_profiling {
             self.performance_profiler.stop_profiling().await?;
         }
-        
+
         if self.config.enable_memory_monitoring {
             self.memory_monitor.stop_monitoring().await?;
         }
-        
+
         Ok(IntegrationTestReport {
             test_summary,
             test_results,
@@ -539,7 +539,7 @@ impl IntegrationTestFramework {
     /// Generate test scenarios based on configuration
     async fn generate_test_scenarios(&self) -> Result<Vec<TestScenario>> {
         let mut scenarios = Vec::new();
-        
+
         // Generate scenarios for each test type and complexity level
         for test_type in &[
             TestType::EndToEndValidation,
@@ -551,41 +551,43 @@ impl IntegrationTestFramework {
         ] {
             for complexity in &self.config.test_complexity_levels {
                 for data_size in &self.config.test_data_sizes {
-                    let scenario = self.test_generator.generate_scenario(
-                        test_type.clone(),
-                        complexity.clone(),
-                        *data_size,
-                    ).await?;
+                    let scenario = self
+                        .test_generator
+                        .generate_scenario(test_type.clone(), complexity.clone(), *data_size)
+                        .await?;
                     scenarios.push(scenario);
                 }
             }
         }
-        
+
         // Add regression test scenarios if enabled
         if self.config.enable_regression_testing {
             let regression_scenarios = self.generate_regression_scenarios().await?;
             scenarios.extend(regression_scenarios);
         }
-        
+
         Ok(scenarios)
     }
 
     /// Execute test scenarios using parallel workers
-    async fn execute_test_scenarios(&self, scenarios: Vec<TestScenario>) -> Result<Vec<TestResult>> {
+    async fn execute_test_scenarios(
+        &self,
+        scenarios: Vec<TestScenario>,
+    ) -> Result<Vec<TestResult>> {
         let mut test_runner = self.test_runner.lock().map_err(|e| {
             ShaclAiError::Integration(format!("Failed to acquire test runner lock: {}", e))
         })?;
-        
+
         // Queue all scenarios
         for scenario in scenarios {
             test_runner.queue_test(scenario);
         }
-        
+
         // Execute tests in parallel
-        let results = test_runner.execute_all_tests(
-            Duration::from_secs(self.config.test_timeout_seconds)
-        ).await?;
-        
+        let results = test_runner
+            .execute_all_tests(Duration::from_secs(self.config.test_timeout_seconds))
+            .await?;
+
         Ok(results)
     }
 
@@ -595,36 +597,50 @@ impl IntegrationTestFramework {
     }
 
     /// Generate performance baselines
-    async fn generate_performance_baselines(&self, test_results: &[TestResult]) -> Result<Vec<PerformanceBaseline>> {
-        self.performance_profiler.generate_baselines(test_results).await
+    async fn generate_performance_baselines(
+        &self,
+        test_results: &[TestResult],
+    ) -> Result<Vec<PerformanceBaseline>> {
+        self.performance_profiler
+            .generate_baselines(test_results)
+            .await
     }
 
     /// Analyze test results and generate summary
     async fn analyze_test_results(&self, test_results: &[TestResult]) -> Result<TestSummary> {
         let total_tests = test_results.len();
-        let successful_tests = test_results.iter().filter(|r| r.status == TestStatus::Completed).count();
-        let failed_tests = test_results.iter().filter(|r| r.status == TestStatus::Failed).count();
-        let timed_out_tests = test_results.iter().filter(|r| r.status == TestStatus::Timeout).count();
-        
+        let successful_tests = test_results
+            .iter()
+            .filter(|r| r.status == TestStatus::Completed)
+            .count();
+        let failed_tests = test_results
+            .iter()
+            .filter(|r| r.status == TestStatus::Failed)
+            .count();
+        let timed_out_tests = test_results
+            .iter()
+            .filter(|r| r.status == TestStatus::Timeout)
+            .count();
+
         let success_rate = if total_tests > 0 {
             successful_tests as f64 / total_tests as f64
         } else {
             0.0
         };
-        
+
         let average_execution_time = if !test_results.is_empty() {
             let total_time: Duration = test_results.iter().map(|r| r.execution_time).sum();
             total_time / test_results.len() as u32
         } else {
             Duration::from_secs(0)
         };
-        
+
         let average_memory_usage = if !test_results.is_empty() {
             test_results.iter().map(|r| r.memory_usage_mb).sum::<f64>() / test_results.len() as f64
         } else {
             0.0
         };
-        
+
         Ok(TestSummary {
             total_tests,
             successful_tests,
@@ -633,7 +649,9 @@ impl IntegrationTestFramework {
             success_rate,
             average_execution_time,
             average_memory_usage,
-            performance_regression_detected: self.detect_performance_regression(test_results).await?,
+            performance_regression_detected: self
+                .detect_performance_regression(test_results)
+                .await?,
             memory_leaks_detected: self.detect_memory_leaks(test_results).await?,
             test_coverage_metrics: self.calculate_test_coverage(test_results).await?,
         })
@@ -646,7 +664,7 @@ impl IntegrationTestFramework {
         test_summary: &TestSummary,
     ) -> Result<Vec<TestRecommendation>> {
         let mut recommendations = Vec::new();
-        
+
         // Performance recommendations
         if test_summary.success_rate < self.config.min_success_rate_threshold {
             recommendations.push(TestRecommendation {
@@ -661,7 +679,7 @@ impl IntegrationTestFramework {
                 implementation_effort: ImplementationEffort::Medium,
             });
         }
-        
+
         // Memory recommendations
         if test_summary.average_memory_usage > self.config.max_memory_usage_mb * 0.8 {
             recommendations.push(TestRecommendation {
@@ -676,10 +694,10 @@ impl IntegrationTestFramework {
                 implementation_effort: ImplementationEffort::Low,
             });
         }
-        
+
         // Add more specific recommendations based on test results analysis
         recommendations.extend(self.analyze_failure_patterns(test_results).await?);
-        
+
         Ok(recommendations)
     }
 
@@ -713,7 +731,10 @@ impl IntegrationTestFramework {
     }
 
     /// Calculate test coverage metrics
-    async fn calculate_test_coverage(&self, _test_results: &[TestResult]) -> Result<TestCoverageMetrics> {
+    async fn calculate_test_coverage(
+        &self,
+        _test_results: &[TestResult],
+    ) -> Result<TestCoverageMetrics> {
         Ok(TestCoverageMetrics {
             module_coverage: 0.95,
             feature_coverage: 0.90,
@@ -723,7 +744,10 @@ impl IntegrationTestFramework {
     }
 
     /// Analyze failure patterns
-    async fn analyze_failure_patterns(&self, _test_results: &[TestResult]) -> Result<Vec<TestRecommendation>> {
+    async fn analyze_failure_patterns(
+        &self,
+        _test_results: &[TestResult],
+    ) -> Result<Vec<TestRecommendation>> {
         // Implementation would analyze common failure patterns and suggest solutions
         Ok(vec![])
     }
@@ -734,7 +758,7 @@ impl IntegrationTestFramework {
             os_name: std::env::consts::OS.to_string(),
             architecture: std::env::consts::ARCH.to_string(),
             cpu_count: num_cpus::get(),
-            total_memory_mb: 8192.0, // Placeholder
+            total_memory_mb: 8192.0,            // Placeholder
             rust_version: "1.75.0".to_string(), // Placeholder
         })
     }
@@ -846,19 +870,19 @@ impl TestRunner {
 
     pub async fn execute_all_tests(&mut self, timeout: Duration) -> Result<Vec<TestResult>> {
         let mut results = Vec::new();
-        
+
         while !self.test_queue.is_empty() || !self.active_tests.is_empty() {
             // Assign tests to available workers
             self.assign_tests_to_workers().await?;
-            
+
             // Check for completed tests
             let completed = self.check_completed_tests().await?;
             results.extend(completed);
-            
+
             // Small delay to prevent busy waiting
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        
+
         Ok(results)
     }
 
@@ -875,11 +899,11 @@ impl TestRunner {
                         status: TestStatus::Running,
                         progress: 0.0,
                     };
-                    
+
                     worker.is_busy = true;
                     worker.current_test = Some(test_id);
                     self.active_tests.insert(test_id, running_test);
-                    
+
                     // Start test execution (would be implemented with actual test logic)
                     tokio::spawn(Self::execute_test(test_id, scenario));
                 }
@@ -974,8 +998,16 @@ impl TestScenarioGenerator {
     ) -> Result<TestScenario> {
         Ok(TestScenario {
             scenario_id: Uuid::new_v4(),
-            name: format!("{:?}_{}_{}", test_type, format!("{:?}", complexity).to_lowercase(), data_size),
-            description: format!("Test scenario for {:?} with {:?} complexity and {} data points", test_type, complexity, data_size),
+            name: format!(
+                "{:?}_{}_{}",
+                test_type,
+                format!("{:?}", complexity).to_lowercase(),
+                data_size
+            ),
+            description: format!(
+                "Test scenario for {:?} with {:?} complexity and {} data points",
+                test_type, complexity, data_size
+            ),
             test_type,
             complexity_level: complexity,
             data_configuration: DataConfiguration {
@@ -1010,7 +1042,10 @@ impl TestScenarioGenerator {
             expected_outcomes: ExpectedOutcomes {
                 should_succeed: true,
                 expected_violation_count: Some(data_size / 10),
-                expected_execution_time_range: Some((Duration::from_millis(100), Duration::from_millis(5000))),
+                expected_execution_time_range: Some((
+                    Duration::from_millis(100),
+                    Duration::from_millis(5000),
+                )),
                 expected_memory_usage_range: Some((10.0, 100.0)),
                 expected_quality_metrics: None,
                 expected_error_types: vec![],
@@ -1042,7 +1077,10 @@ impl PerformanceProfiler {
         Ok(())
     }
 
-    pub async fn generate_baselines(&self, _test_results: &[TestResult]) -> Result<Vec<PerformanceBaseline>> {
+    pub async fn generate_baselines(
+        &self,
+        _test_results: &[TestResult],
+    ) -> Result<Vec<PerformanceBaseline>> {
         Ok(vec![])
     }
 }
@@ -1228,7 +1266,7 @@ mod tests {
     fn test_integration_test_framework_creation() {
         let config = IntegrationTestConfig::default();
         let framework = IntegrationTestFramework::new(config);
-        
+
         // Framework should be created successfully
         assert!(framework.config.enable_performance_profiling);
     }
@@ -1236,12 +1274,15 @@ mod tests {
     #[tokio::test]
     async fn test_test_scenario_generation() {
         let generator = TestScenarioGenerator::new();
-        let scenario = generator.generate_scenario(
-            TestType::EndToEndValidation,
-            TestComplexityLevel::Medium,
-            1000,
-        ).await.unwrap();
-        
+        let scenario = generator
+            .generate_scenario(
+                TestType::EndToEndValidation,
+                TestComplexityLevel::Medium,
+                1000,
+            )
+            .await
+            .unwrap();
+
         assert_eq!(scenario.test_type, TestType::EndToEndValidation);
         assert_eq!(scenario.complexity_level, TestComplexityLevel::Medium);
         assert_eq!(scenario.data_configuration.data_size, 1000);
@@ -1266,7 +1307,7 @@ mod tests {
             false_positive_rate: 0.05,
             false_negative_rate: 0.10,
         };
-        
+
         assert_eq!(metrics.precision, 0.95);
         assert_eq!(metrics.f1_score, 0.92);
     }
@@ -1280,8 +1321,11 @@ mod tests {
             estimated_impact: 0.8,
             implementation_effort: ImplementationEffort::Medium,
         };
-        
-        assert_eq!(recommendation.recommendation_type, RecommendationType::PerformanceOptimization);
+
+        assert_eq!(
+            recommendation.recommendation_type,
+            RecommendationType::PerformanceOptimization
+        );
         assert_eq!(recommendation.priority, RecommendationPriority::High);
         assert_eq!(recommendation.estimated_impact, 0.8);
     }

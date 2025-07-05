@@ -3,6 +3,8 @@
 //! This module implements the Raft consensus algorithm optimized for RDF data,
 //! with efficient log compaction and snapshot management.
 
+#![allow(dead_code)]
+
 use crate::model::{Triple, TriplePattern};
 use crate::OxirsError;
 use async_trait::async_trait;
@@ -286,6 +288,7 @@ struct CompactionState {
 }
 
 /// Compaction job
+#[allow(dead_code)]
 struct CompactionJob {
     /// Start index
     start: u64,
@@ -933,7 +936,11 @@ impl RaftNode {
     }
 
     /// Create snapshot
-    async fn create_snapshot(log: &Arc<RwLock<RaftLog>>, last_index: u64, _config: &SnapshotConfig) {
+    async fn create_snapshot(
+        log: &Arc<RwLock<RaftLog>>,
+        last_index: u64,
+        _config: &SnapshotConfig,
+    ) {
         tracing::info!("Creating snapshot at index {}", last_index);
 
         // In real implementation, would create actual snapshot

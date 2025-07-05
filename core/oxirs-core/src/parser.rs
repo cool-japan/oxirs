@@ -160,7 +160,7 @@ impl Parser {
     /// Parse RDF data from bytes
     pub fn parse_bytes_to_quads(&self, data: &[u8]) -> Result<Vec<Quad>> {
         let data_str = std::str::from_utf8(data)
-            .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
+            .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {e}")))?;
         self.parse_str_to_quads(data_str)
     }
 
@@ -845,7 +845,7 @@ impl TurtleParserState {
             let named_node = NamedNode::new(iri)?;
             Ok(Subject::NamedNode(named_node))
         } else {
-            Err(OxirsError::Parse(format!("Invalid subject: {}", token)))
+            Err(OxirsError::Parse(format!("Invalid subject: {token}")))
         }
     }
 
@@ -868,7 +868,7 @@ impl TurtleParserState {
             let named_node = NamedNode::new(iri)?;
             Ok(Predicate::NamedNode(named_node))
         } else {
-            Err(OxirsError::Parse(format!("Invalid predicate: {}", token)))
+            Err(OxirsError::Parse(format!("Invalid predicate: {token}")))
         }
     }
 
@@ -894,7 +894,7 @@ impl TurtleParserState {
             let named_node = NamedNode::new(iri)?;
             Ok(Object::NamedNode(named_node))
         } else {
-            Err(OxirsError::Parse(format!("Invalid object: {}", token)))
+            Err(OxirsError::Parse(format!("Invalid object: {token}")))
         }
     }
 
@@ -977,9 +977,9 @@ impl TurtleParserState {
             let local_name = &prefixed_name[colon_pos + 1..];
 
             if let Some(namespace) = self.prefixes.get(prefix) {
-                Ok(format!("{}{}", namespace, local_name))
+                Ok(format!("{namespace}{local_name}"))
             } else {
-                Err(OxirsError::Parse(format!("Unknown prefix: {}", prefix)))
+                Err(OxirsError::Parse(format!("Unknown prefix: {prefix}")))
             }
         } else {
             Err(OxirsError::Parse(format!(
@@ -996,9 +996,9 @@ impl TurtleParserState {
         } else if let Some(base) = &self.base_iri {
             // Resolve relative IRI against base
             if base.ends_with('/') {
-                Ok(format!("{}{}", base, iri))
+                Ok(format!("{base}{iri}"))
             } else {
-                Ok(format!("{}/{}", base, iri))
+                Ok(format!("{base}/{iri}"))
             }
         } else {
             // No base IRI, return as-is

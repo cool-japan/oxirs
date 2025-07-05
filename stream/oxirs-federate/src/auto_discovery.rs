@@ -46,6 +46,18 @@ impl AutoDiscovery {
         let (tx, rx) = mpsc::channel(100);
         self.discovery_channel = Some(tx.clone());
 
+        // Check if any discovery method is enabled
+        let any_enabled = self.config.enable_dns_discovery 
+            || self.config.enable_kubernetes_discovery
+            || self.config.enable_mdns;
+
+        if !any_enabled {
+            info!("No discovery methods enabled, closing channel");
+            // Drop the sender to signal that no discoveries will be sent
+            drop(tx);
+            return Ok(rx);
+        }
+
         // Start mDNS/DNS-SD discovery if enabled
         #[cfg(feature = "service-discovery")]
         if self.config.enable_mdns {

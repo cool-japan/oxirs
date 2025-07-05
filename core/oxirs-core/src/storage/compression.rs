@@ -320,6 +320,7 @@ impl UriDictionary {
         id
     }
 
+    #[allow(dead_code)]
     fn get_uri(&self, id: u32) -> Option<&str> {
         self.id_to_uri.get(&id).map(|s| s.as_str())
     }

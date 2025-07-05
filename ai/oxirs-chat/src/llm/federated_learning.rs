@@ -121,7 +121,7 @@ pub struct NodeCapabilities {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ComputePower {
-    CPU(usize), // Number of cores
+    CPU(usize),       // Number of cores
     GPU(String, f32), // GPU model and memory
     TPU(String),
     Hybrid(Vec<ComputePower>),
@@ -213,10 +213,10 @@ impl FederatedCoordinator {
     /// Register a new federated learning node
     pub async fn register_node(&self, node: FederatedNode) -> Result<()> {
         let mut nodes = self.nodes.write().await;
-        
+
         // Validate node capabilities
         self.validate_node_capabilities(&node)?;
-        
+
         nodes.insert(node.node_id.clone(), node);
         Ok(())
     }
@@ -224,7 +224,7 @@ impl FederatedCoordinator {
     /// Start a new federation round
     pub async fn start_federation_round(&self) -> Result<usize> {
         let _permit = self.round_semaphore.acquire().await.unwrap();
-        
+
         let round_number = {
             let rounds = self.rounds.read().await;
             rounds.len()
@@ -232,7 +232,7 @@ impl FederatedCoordinator {
 
         // Select participants for this round
         let participants = self.select_participants().await?;
-        
+
         if participants.len() < self.config.min_participants {
             return Err(anyhow!("Insufficient participants for federation round"));
         }
@@ -266,7 +266,8 @@ impl FederatedCoordinator {
         }
 
         // Execute federation round
-        self.execute_federation_round(round_number, participants).await?;
+        self.execute_federation_round(round_number, participants)
+            .await?;
 
         Ok(round_number)
     }
@@ -295,8 +296,11 @@ impl FederatedCoordinator {
             if let Some(round) = rounds.get_mut(round_number) {
                 round.aggregation_result = aggregation_result;
                 round.completed_at = Some(SystemTime::now());
-                round.round_metrics.round_duration = 
-                    round.completed_at.unwrap().duration_since(round.started_at).unwrap_or(Duration::from_secs(0));
+                round.round_metrics.round_duration = round
+                    .completed_at
+                    .unwrap()
+                    .duration_since(round.started_at)
+                    .unwrap_or(Duration::from_secs(0));
             }
         }
 
@@ -306,14 +310,15 @@ impl FederatedCoordinator {
     /// Select participants for federation round
     async fn select_participants(&self) -> Result<Vec<String>> {
         let nodes = self.nodes.read().await;
-        
+
         // Simple selection strategy: choose top nodes by reputation
-        let mut eligible_nodes: Vec<_> = nodes.values()
+        let mut eligible_nodes: Vec<_> = nodes
+            .values()
             .filter(|node| self.is_node_eligible(node))
             .collect();
-        
+
         eligible_nodes.sort_by(|a, b| b.reputation_score.partial_cmp(&a.reputation_score).unwrap());
-        
+
         let selected = eligible_nodes
             .into_iter()
             .take(self.config.max_participants)
@@ -343,7 +348,8 @@ impl FederatedCoordinator {
         // Check last seen time
         let now = SystemTime::now();
         if let Ok(duration) = now.duration_since(node.last_seen) {
-            if duration > Duration::from_secs(3600) { // 1 hour timeout
+            if duration > Duration::from_secs(3600) {
+                // 1 hour timeout
                 return false;
             }
         }
@@ -354,7 +360,7 @@ impl FederatedCoordinator {
     /// Distribute global model to participants
     async fn distribute_global_model(&self, participants: &[String]) -> Result<()> {
         let current_model = self.current_model.read().await;
-        
+
         if let Some(model_weights) = current_model.as_ref() {
             // Simulate model distribution
             for participant_id in participants {
@@ -374,7 +380,7 @@ impl FederatedCoordinator {
         for participant_id in participants {
             // Simulate waiting for local training
             tokio::time::sleep(Duration::from_millis(500)).await;
-            
+
             let update = LocalUpdate {
                 node_id: participant_id.clone(),
                 model_weights: vec![0u8; 1000], // Mock weights
@@ -390,14 +396,13 @@ impl FederatedCoordinator {
     }
 
     /// Aggregate model updates from participants
-    async fn aggregate_model_updates(&self, updates: Vec<LocalUpdate>) -> Result<AggregationResult> {
+    async fn aggregate_model_updates(
+        &self,
+        updates: Vec<LocalUpdate>,
+    ) -> Result<AggregationResult> {
         match self.config.aggregation_strategy {
-            AggregationStrategy::FederatedAveraging => {
-                self.federated_averaging(updates).await
-            }
-            AggregationStrategy::WeightedAveraging => {
-                self.weighted_averaging(updates).await
-            }
+            AggregationStrategy::FederatedAveraging => self.federated_averaging(updates).await,
+            AggregationStrategy::WeightedAveraging => self.weighted_averaging(updates).await,
             _ => {
                 // Fallback to simple averaging
                 self.federated_averaging(updates).await
@@ -432,7 +437,8 @@ impl FederatedCoordinator {
         }
 
         // Calculate weights based on data contribution and quality
-        let total_weight: f32 = updates.iter()
+        let total_weight: f32 = updates
+            .iter()
             .map(|u| u.data_contribution as f32 * self.get_node_quality(&u.node_id))
             .sum();
 
@@ -465,11 +471,17 @@ impl FederatedCoordinator {
     /// Validate node capabilities
     fn validate_node_capabilities(&self, node: &FederatedNode) -> Result<()> {
         if node.capabilities.memory_gb < 2.0 {
-            return Err(anyhow!("Insufficient memory: {} GB", node.capabilities.memory_gb));
+            return Err(anyhow!(
+                "Insufficient memory: {} GB",
+                node.capabilities.memory_gb
+            ));
         }
 
         if node.capabilities.network_bandwidth_mbps < 10.0 {
-            return Err(anyhow!("Insufficient bandwidth: {} Mbps", node.capabilities.network_bandwidth_mbps));
+            return Err(anyhow!(
+                "Insufficient bandwidth: {} Mbps",
+                node.capabilities.network_bandwidth_mbps
+            ));
         }
 
         Ok(())
@@ -481,15 +493,18 @@ impl FederatedCoordinator {
         let rounds = self.rounds.read().await;
 
         let total_nodes = nodes.len();
-        let active_nodes = nodes.values()
+        let active_nodes = nodes
+            .values()
             .filter(|node| self.is_node_eligible(node))
             .count();
 
         let total_rounds = rounds.len();
         let average_participation = if total_rounds > 0 {
-            rounds.iter()
+            rounds
+                .iter()
                 .map(|r| r.aggregation_result.participation_rate)
-                .sum::<f32>() / total_rounds as f32
+                .sum::<f32>()
+                / total_rounds as f32
         } else {
             0.0
         };
@@ -499,7 +514,11 @@ impl FederatedCoordinator {
             active_nodes,
             total_rounds,
             average_participation,
-            convergence_status: if total_rounds > 5 { "Converging".to_string() } else { "Training".to_string() },
+            convergence_status: if total_rounds > 5 {
+                "Converging".to_string()
+            } else {
+                "Training".to_string()
+            },
             privacy_budget_utilization: 0.3, // Mock value
         })
     }

@@ -3,13 +3,13 @@
 //! This module provides validators for video content including format validation,
 //! scene analysis, and motion detection.
 
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
-use async_trait::async_trait;
 
-use crate::{Result, ShaclAiError};
-use super::types::*;
 use super::traits::*;
+use super::types::*;
+use crate::{Result, ShaclAiError};
 
 /// Video format validator
 #[derive(Debug)]
@@ -43,28 +43,48 @@ impl VideoValidator for VideoFormatValidator {
 
         let format = self.detect_video_format(&content.data);
         let size_valid = content.data.len() <= self.max_file_size;
-        let format_valid = format.is_some() && self.supported_formats.contains(&format.as_ref().unwrap().to_lowercase());
-        
+        let format_valid = format.is_some()
+            && self
+                .supported_formats
+                .contains(&format.as_ref().unwrap().to_lowercase());
+
         let is_valid = format_valid && size_valid;
-        
+
         let mut details = HashMap::new();
-        details.insert("detected_format".to_string(), format.clone().unwrap_or("unknown".to_string()));
-        details.insert("supported_formats".to_string(), self.supported_formats.join(", "));
+        details.insert(
+            "detected_format".to_string(),
+            format.clone().unwrap_or("unknown".to_string()),
+        );
+        details.insert(
+            "supported_formats".to_string(),
+            self.supported_formats.join(", "),
+        );
         details.insert("file_size".to_string(), content.data.len().to_string());
         details.insert("max_file_size".to_string(), self.max_file_size.to_string());
-        
+
         let confidence = if is_valid { 0.95 } else { 0.1 };
-        
+
         let mut issues = Vec::new();
         if !format_valid {
-            issues.push(format!("Unsupported video format: {}", format.unwrap_or("unknown".to_string())));
+            issues.push(format!(
+                "Unsupported video format: {}",
+                format.unwrap_or("unknown".to_string())
+            ));
         }
         if !size_valid {
-            issues.push(format!("File size exceeds limit: {} > {}", content.data.len(), self.max_file_size));
+            issues.push(format!(
+                "File size exceeds limit: {} > {}",
+                content.data.len(),
+                self.max_file_size
+            ));
         }
-        
-        let error_message = if issues.is_empty() { None } else { Some(issues.join("; ")) };
-        
+
+        let error_message = if issues.is_empty() {
+            None
+        } else {
+            Some(issues.join("; "))
+        };
+
         Ok(Some(ValidationResult {
             is_valid,
             confidence,
@@ -87,7 +107,7 @@ impl VideoFormatValidator {
         if data.len() < 12 {
             return None;
         }
-        
+
         // Check file signatures (magic numbers)
         match &data[0..4] {
             [0x66, 0x74, 0x79, 0x70] => Some("mp4".to_string()), // ftyp
@@ -135,26 +155,35 @@ impl VideoValidator for SceneAnalysisValidator {
 
         let analysis = self.analyze_scenes(&content.data);
         let is_valid = analysis.confidence >= self.min_confidence;
-        
+
         let mut details = HashMap::new();
         details.insert("scene_count".to_string(), analysis.scenes.len().to_string());
         details.insert("confidence".to_string(), analysis.confidence.to_string());
-        
+
         if self.detect_faces && !analysis.faces.is_empty() {
-            details.insert("faces_detected".to_string(), analysis.faces.len().to_string());
+            details.insert(
+                "faces_detected".to_string(),
+                analysis.faces.len().to_string(),
+            );
         }
-        
+
         if self.detect_objects && !analysis.objects.is_empty() {
-            details.insert("objects_detected".to_string(), analysis.objects.len().to_string());
+            details.insert(
+                "objects_detected".to_string(),
+                analysis.objects.len().to_string(),
+            );
         }
-        
+
         let confidence = analysis.confidence;
         let error_message = if is_valid {
             None
         } else {
-            Some(format!("Scene analysis confidence too low: {:.2} < {:.2}", analysis.confidence, self.min_confidence))
+            Some(format!(
+                "Scene analysis confidence too low: {:.2} < {:.2}",
+                analysis.confidence, self.min_confidence
+            ))
         };
-        
+
         Ok(Some(ValidationResult {
             is_valid,
             confidence,
@@ -212,14 +241,27 @@ impl VideoValidator for MotionDetectionValidator {
 
         let motion_data = self.detect_motion(&content.data);
         let is_valid = motion_data.motion_detected;
-        
+
         let mut details = HashMap::new();
-        details.insert("motion_detected".to_string(), motion_data.motion_detected.to_string());
-        details.insert("motion_intensity".to_string(), motion_data.motion_intensity.to_string());
-        details.insert("motion_regions".to_string(), motion_data.motion_regions.len().to_string());
-        
-        let confidence = if motion_data.motion_detected { 0.8 } else { 0.9 };
-        
+        details.insert(
+            "motion_detected".to_string(),
+            motion_data.motion_detected.to_string(),
+        );
+        details.insert(
+            "motion_intensity".to_string(),
+            motion_data.motion_intensity.to_string(),
+        );
+        details.insert(
+            "motion_regions".to_string(),
+            motion_data.motion_regions.len().to_string(),
+        );
+
+        let confidence = if motion_data.motion_detected {
+            0.8
+        } else {
+            0.9
+        };
+
         Ok(Some(ValidationResult {
             is_valid,
             confidence,
@@ -262,8 +304,8 @@ pub struct VideoQualityValidator {
 impl VideoQualityValidator {
     pub fn new() -> Self {
         Self {
-            min_resolution: (240, 180),     // 240p
-            max_resolution: (7680, 4320),   // 8K
+            min_resolution: (240, 180),   // 240p
+            max_resolution: (7680, 4320), // 8K
             min_fps: 1.0,
             max_fps: 120.0,
             min_duration: Duration::from_millis(100),
@@ -280,24 +322,30 @@ impl VideoValidator for VideoQualityValidator {
         }
 
         let quality_info = self.analyze_quality(&content.data);
-        
+
         let mut is_valid = true;
         let mut issues = Vec::new();
         let mut details = HashMap::new();
-        
+
         // Check resolution
         if let Some((width, height)) = quality_info.resolution {
             details.insert("resolution".to_string(), format!("{}x{}", width, height));
             if width < self.min_resolution.0 || height < self.min_resolution.1 {
                 is_valid = false;
-                issues.push(format!("Resolution too low: {}x{} < {}x{}", width, height, self.min_resolution.0, self.min_resolution.1));
+                issues.push(format!(
+                    "Resolution too low: {}x{} < {}x{}",
+                    width, height, self.min_resolution.0, self.min_resolution.1
+                ));
             }
             if width > self.max_resolution.0 || height > self.max_resolution.1 {
                 is_valid = false;
-                issues.push(format!("Resolution too high: {}x{} > {}x{}", width, height, self.max_resolution.0, self.max_resolution.1));
+                issues.push(format!(
+                    "Resolution too high: {}x{} > {}x{}",
+                    width, height, self.max_resolution.0, self.max_resolution.1
+                ));
             }
         }
-        
+
         // Check FPS
         if let Some(fps) = quality_info.fps {
             details.insert("fps".to_string(), fps.to_string());
@@ -310,10 +358,14 @@ impl VideoValidator for VideoQualityValidator {
                 issues.push(format!("FPS too high: {} > {}", fps, self.max_fps));
             }
         }
-        
+
         let confidence = if is_valid { 0.9 } else { 0.3 };
-        let error_message = if issues.is_empty() { None } else { Some(issues.join("; ")) };
-        
+        let error_message = if issues.is_empty() {
+            None
+        } else {
+            Some(issues.join("; "))
+        };
+
         Ok(Some(ValidationResult {
             is_valid,
             confidence,
@@ -391,9 +443,11 @@ mod tests {
     async fn test_video_format_validator_mp4() {
         let validator = VideoFormatValidator::new();
         // MP4 ftyp signature with proper length (12+ bytes)
-        let mp4_data = vec![0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D, 0x00, 0x00, 0x00, 0x00];
+        let mp4_data = vec![
+            0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D, 0x00, 0x00, 0x00, 0x00,
+        ];
         let content = create_test_video_content(&mp4_data);
-        
+
         let result = validator.validate(&content).await.unwrap().unwrap();
         assert!(result.is_valid);
         assert_eq!(result.details.get("detected_format").unwrap(), "mp4");
@@ -403,7 +457,7 @@ mod tests {
     async fn test_scene_analysis_validator() {
         let validator = SceneAnalysisValidator::new();
         let content = create_test_video_content(&[0x66, 0x74, 0x79, 0x70]);
-        
+
         let result = validator.validate(&content).await.unwrap().unwrap();
         assert!(result.is_valid);
         assert!(result.details.contains_key("scene_count"));
@@ -414,7 +468,7 @@ mod tests {
     async fn test_motion_detection_validator() {
         let validator = MotionDetectionValidator::new();
         let content = create_test_video_content(&[0x66, 0x74, 0x79, 0x70]);
-        
+
         let result = validator.validate(&content).await.unwrap().unwrap();
         assert!(result.is_valid);
         assert!(result.details.contains_key("motion_detected"));

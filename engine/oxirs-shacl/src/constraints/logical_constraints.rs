@@ -4,8 +4,8 @@ use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
 use super::constraint_types::Constraint;
 use super::shape_constraints::EvaluationComplexity;
 use crate::{
-    ConstraintComponentId, Result, Severity, ShaclError, ShapeId, ValidationConfig, Validator,
-    optimization::NegationOptimizer,
+    optimization::NegationOptimizer, ConstraintComponentId, Result, Severity, ShaclError, ShapeId,
+    ValidationConfig, Validator,
 };
 use oxirs_core::{model::Term, Store};
 use oxirs_core::{Object, Predicate, Subject};

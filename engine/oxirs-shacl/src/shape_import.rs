@@ -1055,7 +1055,7 @@ impl ShapeImportManager {
                     }
                 }
             }
-            
+
             // Complex targets - remap nested targets recursively
             Target::Union(union_target) => {
                 for nested_target in &mut union_target.targets {
@@ -1077,7 +1077,7 @@ impl ShapeImportManager {
             }
             Target::Hierarchical(hierarchical_target) => {
                 self.remap_target_iris(&mut hierarchical_target.root_target, target_namespace);
-                // TODO: Remap IRIs in relationship if needed  
+                // TODO: Remap IRIs in relationship if needed
             }
             Target::PathBased(path_target) => {
                 self.remap_target_iris(&mut path_target.start_target, target_namespace);

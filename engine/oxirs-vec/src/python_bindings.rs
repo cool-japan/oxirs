@@ -11,7 +11,7 @@ use crate::{
     index::{IndexType, VectorIndex},
     similarity::{SimilarityMetric, SimilarityResult},
     sparql_integration::SparqlVectorService,
-    SearchResult, VectorStore, VectorId,
+    SearchResult, VectorId, VectorStore,
 };
 
 use anyhow::{Context, Result};
@@ -844,11 +844,11 @@ impl PyJupyterVectorTools {
                         let similarity = match similarity_metric {
                             SimilarityMetric::Cosine => crate::similarity::cosine_similarity(
                                 &vector1.as_f32(),
-                                &vector2.as_f32()
+                                &vector2.as_f32(),
                             ),
                             _ => crate::similarity::cosine_similarity(
                                 &vector1.as_f32(),
-                                &vector2.as_f32()
+                                &vector2.as_f32(),
                             ), // TODO: implement other metrics
                         };
                         row.push(similarity);
@@ -1406,7 +1406,10 @@ fn oxirs_vec(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(batch_normalize, m)?)?;
 
     // Add exceptions
-    m.add("VectorSearchError", py.get_type_bound::<VectorSearchError>())?;
+    m.add(
+        "VectorSearchError",
+        py.get_type_bound::<VectorSearchError>(),
+    )?;
     m.add("EmbeddingError", py.get_type_bound::<EmbeddingError>())?;
     m.add("IndexError", py.get_type_bound::<IndexError>())?;
 

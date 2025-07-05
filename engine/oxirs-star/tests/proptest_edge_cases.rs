@@ -430,7 +430,7 @@ mod tests {
 
     #[test]
     fn test_extremely_long_iri() {
-        let very_long_path = "a".repeat(1_000);  // Reduced for performance
+        let very_long_path = "a".repeat(1_000); // Reduced for performance
         let long_iri = format!("http://example.org/{}", very_long_path);
 
         let result = StarTerm::iri(&long_iri);

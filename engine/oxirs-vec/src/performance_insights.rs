@@ -173,8 +173,8 @@ pub struct PerformanceSnapshot {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeasonalPatterns {
-    pub daily_patterns: Vec<(u8, f64)>, // Hour -> performance factor
-    pub weekly_patterns: Vec<(u8, f64)>, // Day of week -> performance factor
+    pub daily_patterns: Vec<(u8, f64)>,   // Hour -> performance factor
+    pub weekly_patterns: Vec<(u8, f64)>,  // Day of week -> performance factor
     pub monthly_patterns: Vec<(u8, f64)>, // Day of month -> performance factor
 }
 
@@ -366,26 +366,30 @@ impl PerformanceInsightsAnalyzer {
 
     /// Record a query execution for performance analysis
     pub fn record_query(&mut self, duration: Duration, complexity: QueryComplexity, success: bool) {
-        self.metrics_collector.record_query(duration, complexity, success);
+        self.metrics_collector
+            .record_query(duration, complexity, success);
         self.query_stats.total_queries += 1;
-        
+
         let latency_ms = duration.as_secs_f64() * 1000.0;
         self.update_latency_statistics(latency_ms);
-        
+
         if !success {
             self.query_stats.error_rate = self.calculate_error_rate();
         }
-        
+
         self.check_performance_alerts(latency_ms);
     }
 
     /// Analyze vector dataset characteristics
-    pub fn analyze_vector_dataset(&mut self, vectors: &[(VectorId, Vector)]) -> Result<VectorStatistics> {
+    pub fn analyze_vector_dataset(
+        &mut self,
+        vectors: &[(VectorId, Vector)],
+    ) -> Result<VectorStatistics> {
         info!("Analyzing vector dataset with {} vectors", vectors.len());
-        
+
         let mut stats = VectorStatistics::default();
         stats.total_vectors = vectors.len() as u64;
-        
+
         if vectors.is_empty() {
             return Ok(stats);
         }
@@ -393,7 +397,7 @@ impl PerformanceInsightsAnalyzer {
         // Analyze dimensions
         let dimensions: Vec<u32> = vectors.iter().map(|(_, v)| v.dimensions as u32).collect();
         stats.average_dimension = dimensions.iter().sum::<u32>() / dimensions.len() as u32;
-        
+
         for &dim in &dimensions {
             *stats.dimension_distribution.entry(dim).or_insert(0) += 1;
         }
@@ -439,7 +443,8 @@ impl PerformanceInsightsAnalyzer {
         recommendations.hardware_recommendations = self.generate_hardware_recommendations();
 
         // Configuration recommendations
-        recommendations.configuration_recommendations = self.generate_configuration_recommendations();
+        recommendations.configuration_recommendations =
+            self.generate_configuration_recommendations();
 
         // Priority actions
         recommendations.priority_actions = self.generate_priority_actions();
@@ -479,17 +484,21 @@ impl PerformanceInsightsAnalyzer {
         if self.query_stats.total_queries == 1 {
             self.query_stats.average_latency_ms = latency_ms;
         } else {
-            self.query_stats.average_latency_ms = 
+            self.query_stats.average_latency_ms =
                 alpha * latency_ms + (1.0 - alpha) * self.query_stats.average_latency_ms;
         }
 
         // Update percentiles (simplified implementation)
-        self.metrics_collector.query_times.push(Duration::from_secs_f64(latency_ms / 1000.0));
+        self.metrics_collector
+            .query_times
+            .push(Duration::from_secs_f64(latency_ms / 1000.0));
         self.update_percentiles();
     }
 
     fn update_percentiles(&mut self) {
-        let mut times: Vec<f64> = self.metrics_collector.query_times
+        let mut times: Vec<f64> = self
+            .metrics_collector
+            .query_times
             .iter()
             .map(|d| d.as_secs_f64() * 1000.0)
             .collect();
@@ -527,7 +536,7 @@ impl PerformanceInsightsAnalyzer {
                 rules_to_alert.push(rule.clone());
             }
         }
-        
+
         // Now trigger alerts for collected rules
         for rule in rules_to_alert {
             self.alerting_system.trigger_alert(&rule, latency_ms);
@@ -594,7 +603,7 @@ impl PerformanceInsightsAnalyzer {
         let density_score = stats.vector_density;
         let clustering_score = stats.clustering_coefficient;
         let noise_penalty = 1.0 - stats.noise_estimation;
-        
+
         (density_score + clustering_score + noise_penalty) / 3.0
     }
 
@@ -614,7 +623,9 @@ impl PerformanceInsightsAnalyzer {
         if self.vector_stats.sparsity_ratio > 0.8 {
             recommendations.push(IndexRecommendation {
                 recommendation_type: "Sparse Index".to_string(),
-                description: "High sparsity detected - consider using sparse-optimized index structures".to_string(),
+                description:
+                    "High sparsity detected - consider using sparse-optimized index structures"
+                        .to_string(),
                 estimated_improvement: 0.4,
                 implementation_effort: EffortLevel::High,
                 prerequisites: vec!["Sparse vector support".to_string()],
@@ -641,14 +652,12 @@ impl PerformanceInsightsAnalyzer {
     }
 
     fn generate_query_recommendations(&self) -> Vec<QueryRecommendation> {
-        vec![
-            QueryRecommendation {
-                query_pattern: "High-dimensional similarity search".to_string(),
-                optimization_technique: "Dimensionality reduction with PCA".to_string(),
-                expected_speedup: 1.5,
-                applicability: 0.8,
-            }
-        ]
+        vec![QueryRecommendation {
+            query_pattern: "High-dimensional similarity search".to_string(),
+            optimization_technique: "Dimensionality reduction with PCA".to_string(),
+            expected_speedup: 1.5,
+            applicability: 0.8,
+        }]
     }
 
     fn generate_hardware_recommendations(&self) -> Vec<HardwareRecommendation> {
@@ -668,15 +677,14 @@ impl PerformanceInsightsAnalyzer {
     }
 
     fn generate_configuration_recommendations(&self) -> Vec<ConfigurationRecommendation> {
-        vec![
-            ConfigurationRecommendation {
-                parameter: "thread_pool_size".to_string(),
-                current_value: "4".to_string(),
-                recommended_value: "8".to_string(),
-                justification: "CPU utilization suggests more threads could improve throughput".to_string(),
-                risk_level: RiskLevel::Low,
-            }
-        ]
+        vec![ConfigurationRecommendation {
+            parameter: "thread_pool_size".to_string(),
+            current_value: "4".to_string(),
+            recommended_value: "8".to_string(),
+            justification: "CPU utilization suggests more threads could improve throughput"
+                .to_string(),
+            risk_level: RiskLevel::Low,
+        }]
     }
 
     fn generate_priority_actions(&self) -> Vec<PriorityAction> {
@@ -696,7 +704,10 @@ impl PerformanceInsightsAnalyzer {
         actions
     }
 
-    fn estimate_improvements(&self, _recommendations: &OptimizationRecommendations) -> ImprovementEstimates {
+    fn estimate_improvements(
+        &self,
+        _recommendations: &OptimizationRecommendations,
+    ) -> ImprovementEstimates {
         ImprovementEstimates {
             latency_improvement: 0.3,
             throughput_improvement: 0.25,
@@ -709,12 +720,30 @@ impl PerformanceInsightsAnalyzer {
     fn export_csv_report(&self) -> Result<String> {
         let mut csv = String::new();
         csv.push_str("Metric,Value,Unit\n");
-        csv.push_str(&format!("Total Queries,{},count\n", self.query_stats.total_queries));
-        csv.push_str(&format!("Average Latency,{:.2},ms\n", self.query_stats.average_latency_ms));
-        csv.push_str(&format!("P99 Latency,{:.2},ms\n", self.query_stats.p99_latency_ms));
-        csv.push_str(&format!("Throughput,{:.2},QPS\n", self.query_stats.throughput_qps));
-        csv.push_str(&format!("Error Rate,{:.4},ratio\n", self.query_stats.error_rate));
-        csv.push_str(&format!("Cache Hit Rate,{:.4},ratio\n", self.query_stats.cache_hit_rate));
+        csv.push_str(&format!(
+            "Total Queries,{},count\n",
+            self.query_stats.total_queries
+        ));
+        csv.push_str(&format!(
+            "Average Latency,{:.2},ms\n",
+            self.query_stats.average_latency_ms
+        ));
+        csv.push_str(&format!(
+            "P99 Latency,{:.2},ms\n",
+            self.query_stats.p99_latency_ms
+        ));
+        csv.push_str(&format!(
+            "Throughput,{:.2},QPS\n",
+            self.query_stats.throughput_qps
+        ));
+        csv.push_str(&format!(
+            "Error Rate,{:.4},ratio\n",
+            self.query_stats.error_rate
+        ));
+        csv.push_str(&format!(
+            "Cache Hit Rate,{:.4},ratio\n",
+            self.query_stats.cache_hit_rate
+        ));
         Ok(csv)
     }
 
@@ -755,14 +784,38 @@ impl PerformanceInsightsAnalyzer {
 
     fn export_prometheus_metrics(&self) -> Result<String> {
         let mut metrics = String::new();
-        metrics.push_str(&format!("oxirs_query_total {}\n", self.query_stats.total_queries));
-        metrics.push_str(&format!("oxirs_query_latency_avg {}\n", self.query_stats.average_latency_ms));
-        metrics.push_str(&format!("oxirs_query_latency_p99 {}\n", self.query_stats.p99_latency_ms));
-        metrics.push_str(&format!("oxirs_query_throughput {}\n", self.query_stats.throughput_qps));
-        metrics.push_str(&format!("oxirs_query_error_rate {}\n", self.query_stats.error_rate));
-        metrics.push_str(&format!("oxirs_cache_hit_rate {}\n", self.query_stats.cache_hit_rate));
-        metrics.push_str(&format!("oxirs_vector_total {}\n", self.vector_stats.total_vectors));
-        metrics.push_str(&format!("oxirs_vector_quality_score {}\n", self.vector_stats.quality_score));
+        metrics.push_str(&format!(
+            "oxirs_query_total {}\n",
+            self.query_stats.total_queries
+        ));
+        metrics.push_str(&format!(
+            "oxirs_query_latency_avg {}\n",
+            self.query_stats.average_latency_ms
+        ));
+        metrics.push_str(&format!(
+            "oxirs_query_latency_p99 {}\n",
+            self.query_stats.p99_latency_ms
+        ));
+        metrics.push_str(&format!(
+            "oxirs_query_throughput {}\n",
+            self.query_stats.throughput_qps
+        ));
+        metrics.push_str(&format!(
+            "oxirs_query_error_rate {}\n",
+            self.query_stats.error_rate
+        ));
+        metrics.push_str(&format!(
+            "oxirs_cache_hit_rate {}\n",
+            self.query_stats.cache_hit_rate
+        ));
+        metrics.push_str(&format!(
+            "oxirs_vector_total {}\n",
+            self.vector_stats.total_vectors
+        ));
+        metrics.push_str(&format!(
+            "oxirs_vector_quality_score {}\n",
+            self.vector_stats.quality_score
+        ));
         Ok(metrics)
     }
 }
@@ -802,9 +855,12 @@ impl MetricsCollector {
     pub fn record_query(&mut self, duration: Duration, complexity: QueryComplexity, success: bool) {
         self.query_times.push(duration);
         self.query_complexities.push(complexity);
-        
+
         if !success {
-            *self.error_counts.entry("query_error".to_string()).or_insert(0) += 1;
+            *self
+                .error_counts
+                .entry("query_error".to_string())
+                .or_insert(0) += 1;
         }
     }
 }
@@ -851,14 +907,17 @@ impl AlertingSystem {
         };
 
         self.active_alerts.push(alert.clone());
-        
+
         let event = AlertEvent {
             timestamp: SystemTime::now(),
             alert_name: rule.name.clone(),
             event_type: AlertEventType::Triggered,
-            details: format!("Alert triggered: {} = {:.2} > {:.2}", rule.metric, value, rule.threshold),
+            details: format!(
+                "Alert triggered: {} = {:.2} > {:.2}",
+                rule.metric, value, rule.threshold
+            ),
         };
-        
+
         self.alert_history.push(event);
         self.send_notifications(&alert);
     }
@@ -871,20 +930,28 @@ impl AlertingSystem {
         for channel in &self.notification_channels {
             match channel {
                 NotificationChannel::Console => {
-                    warn!("ALERT: {} - {} at {:.2} (threshold: {:.2})", 
-                          alert.rule_name, 
-                          alert.severity as u8, 
-                          alert.current_value, 
-                          alert.threshold);
+                    warn!(
+                        "ALERT: {} - {} at {:.2} (threshold: {:.2})",
+                        alert.rule_name, alert.severity as u8, alert.current_value, alert.threshold
+                    );
                 }
                 NotificationChannel::Email(_) => {
-                    debug!("Would send email notification for alert: {}", alert.rule_name);
+                    debug!(
+                        "Would send email notification for alert: {}",
+                        alert.rule_name
+                    );
                 }
                 NotificationChannel::Webhook(_) => {
-                    debug!("Would send webhook notification for alert: {}", alert.rule_name);
+                    debug!(
+                        "Would send webhook notification for alert: {}",
+                        alert.rule_name
+                    );
                 }
                 NotificationChannel::Slack(_) => {
-                    debug!("Would send Slack notification for alert: {}", alert.rule_name);
+                    debug!(
+                        "Would send Slack notification for alert: {}",
+                        alert.rule_name
+                    );
                 }
             }
         }
@@ -912,7 +979,7 @@ mod tests {
     fn test_query_recording() {
         let mut analyzer = PerformanceInsightsAnalyzer::new();
         analyzer.record_query(Duration::from_millis(50), QueryComplexity::Simple, true);
-        
+
         assert_eq!(analyzer.query_stats.total_queries, 1);
         assert_eq!(analyzer.query_stats.average_latency_ms, 50.0);
     }
@@ -924,7 +991,7 @@ mod tests {
             ("vec1".to_string(), Vector::new(vec![1.0, 2.0, 3.0])),
             ("vec2".to_string(), Vector::new(vec![4.0, 5.0, 6.0])),
         ];
-        
+
         let stats = analyzer.analyze_vector_dataset(&vectors).unwrap();
         assert_eq!(stats.total_vectors, 2);
         assert_eq!(stats.average_dimension, 3);
@@ -935,7 +1002,7 @@ mod tests {
         let mut analyzer = PerformanceInsightsAnalyzer::new();
         // Record a slow query that should trigger an alert
         analyzer.record_query(Duration::from_millis(1500), QueryComplexity::Complex, true);
-        
+
         assert!(!analyzer.alerting_system.active_alerts.is_empty());
     }
 
@@ -945,7 +1012,7 @@ mod tests {
         // Set up conditions that should trigger recommendations
         analyzer.query_stats.average_latency_ms = 100.0;
         analyzer.vector_stats.sparsity_ratio = 0.9;
-        
+
         let recommendations = analyzer.generate_recommendations();
         assert!(!recommendations.index_recommendations.is_empty());
     }
@@ -953,10 +1020,14 @@ mod tests {
     #[test]
     fn test_report_export() {
         let analyzer = PerformanceInsightsAnalyzer::new();
-        let json_report = analyzer.export_performance_report(ReportFormat::Json).unwrap();
+        let json_report = analyzer
+            .export_performance_report(ReportFormat::Json)
+            .unwrap();
         assert!(!json_report.is_empty());
-        
-        let csv_report = analyzer.export_performance_report(ReportFormat::Csv).unwrap();
+
+        let csv_report = analyzer
+            .export_performance_report(ReportFormat::Csv)
+            .unwrap();
         assert!(csv_report.contains("Metric,Value,Unit"));
     }
 }

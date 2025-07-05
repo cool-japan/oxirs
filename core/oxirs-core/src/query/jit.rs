@@ -3,6 +3,8 @@
 //! This module provides JIT compilation of frequently executed SPARQL queries
 //! to native machine code for maximum performance.
 
+#![allow(dead_code)]
+
 use crate::model::pattern::TriplePattern;
 use crate::model::{Object, Predicate, Subject, Term, Triple, Variable};
 use crate::query::algebra::TermPattern;

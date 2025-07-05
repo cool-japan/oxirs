@@ -3,6 +3,8 @@
 //! This module implements enhanced property paths for SPARQL 1.2,
 //! allowing complex graph navigation patterns.
 
+#![allow(dead_code)]
+
 use crate::model::{NamedNode, Term, Variable};
 use crate::query::algebra::{TermPattern, TriplePattern};
 use crate::OxirsError;
@@ -325,7 +327,10 @@ impl PropertyPathEvaluator {
 
     /// Evaluate a property path pattern
     /// This is a placeholder - actual implementation would query the graph
-    pub fn evaluate(&self, _pattern: &PropertyPathPattern) -> Result<Vec<(Term, Term)>, OxirsError> {
+    pub fn evaluate(
+        &self,
+        _pattern: &PropertyPathPattern,
+    ) -> Result<Vec<(Term, Term)>, OxirsError> {
         // Placeholder implementation
         Ok(Vec::new())
     }

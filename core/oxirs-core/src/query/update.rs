@@ -1,11 +1,11 @@
 //! SPARQL UPDATE execution engine
 
 use crate::{
-    model::{GraphName, Quad, NamedNode},
-    query::algebra::{GraphPattern, GraphTarget, Update, UpdateOperation, QuadPattern, Expression},
-    query::{TermPattern, AlgebraTriplePattern},
+    model::{GraphName, NamedNode, Quad},
+    query::algebra::{Expression, GraphPattern, GraphTarget, QuadPattern, Update, UpdateOperation},
+    query::{AlgebraTriplePattern, TermPattern},
     vocab::xsd,
-    Store, OxirsError, Result,
+    OxirsError, Result, Store,
 };
 use std::collections::HashMap;
 
@@ -149,7 +149,9 @@ impl<'a> UpdateExecutor<'a> {
             GraphTarget::Default => {
                 // Clear default graph
                 let default_graph = GraphName::DefaultGraph;
-                let quads = self.store.find_quads(None, None, None, Some(&default_graph))?;
+                let quads = self
+                    .store
+                    .find_quads(None, None, None, Some(&default_graph))?;
                 for quad in quads {
                     self.store.remove_quad(&quad)?;
                 }
@@ -196,7 +198,7 @@ impl<'a> UpdateExecutor<'a> {
     ) -> Result<()> {
         // First clear destination, then copy from source
         self.execute_clear(destination, true)?;
-        
+
         let source_quads = self.get_quads_from_target(source)?;
         for quad in source_quads {
             let dest_quad = self.move_quad_to_target(&quad, destination)?;
@@ -240,7 +242,11 @@ impl<'a> UpdateExecutor<'a> {
         let subject = self.term_pattern_to_subject(&pattern.subject)?;
         let predicate = self.term_pattern_to_predicate(&pattern.predicate)?;
         let object = self.term_pattern_to_object(&pattern.object)?;
-        let graph = pattern.graph.as_ref().map(|g| self.term_pattern_to_graph_name(g)).transpose()?;
+        let graph = pattern
+            .graph
+            .as_ref()
+            .map(|g| self.term_pattern_to_graph_name(g))
+            .transpose()?;
 
         self.store.find_quads(
             subject.as_ref(),
@@ -251,28 +257,39 @@ impl<'a> UpdateExecutor<'a> {
     }
 
     /// Convert TermPattern to Subject (only if concrete)
-    fn term_pattern_to_subject(&self, pattern: &TermPattern) -> Result<Option<crate::model::Subject>> {
+    fn term_pattern_to_subject(
+        &self,
+        pattern: &TermPattern,
+    ) -> Result<Option<crate::model::Subject>> {
         match pattern {
             TermPattern::NamedNode(n) => Ok(Some(crate::model::Subject::NamedNode(n.clone()))),
             TermPattern::BlankNode(b) => Ok(Some(crate::model::Subject::BlankNode(b.clone()))),
             TermPattern::Variable(_) => Ok(None), // Variables match anything
-            TermPattern::Literal(_) => Err(OxirsError::Update("Subject cannot be a literal".to_string())),
+            TermPattern::Literal(_) => Err(OxirsError::Update(
+                "Subject cannot be a literal".to_string(),
+            )),
         }
     }
 
     /// Convert TermPattern to Predicate (only if concrete)
-    fn term_pattern_to_predicate(&self, pattern: &TermPattern) -> Result<Option<crate::model::Predicate>> {
+    fn term_pattern_to_predicate(
+        &self,
+        pattern: &TermPattern,
+    ) -> Result<Option<crate::model::Predicate>> {
         match pattern {
             TermPattern::NamedNode(n) => Ok(Some(crate::model::Predicate::NamedNode(n.clone()))),
             TermPattern::Variable(_) => Ok(None), // Variables match anything
-            TermPattern::BlankNode(_) | TermPattern::Literal(_) => {
-                Err(OxirsError::Update("Predicate must be a named node".to_string()))
-            }
+            TermPattern::BlankNode(_) | TermPattern::Literal(_) => Err(OxirsError::Update(
+                "Predicate must be a named node".to_string(),
+            )),
         }
     }
 
     /// Convert TermPattern to Object (only if concrete)
-    fn term_pattern_to_object(&self, pattern: &TermPattern) -> Result<Option<crate::model::Object>> {
+    fn term_pattern_to_object(
+        &self,
+        pattern: &TermPattern,
+    ) -> Result<Option<crate::model::Object>> {
         match pattern {
             TermPattern::NamedNode(n) => Ok(Some(crate::model::Object::NamedNode(n.clone()))),
             TermPattern::BlankNode(b) => Ok(Some(crate::model::Object::BlankNode(b.clone()))),
@@ -286,25 +303,31 @@ impl<'a> UpdateExecutor<'a> {
         match pattern {
             TermPattern::NamedNode(n) => Ok(GraphName::NamedNode(n.clone())),
             TermPattern::Variable(_) => Ok(GraphName::DefaultGraph), // Default for variables
-            TermPattern::BlankNode(_) | TermPattern::Literal(_) => {
-                Err(OxirsError::Update("Graph name must be a named node".to_string()))
-            }
+            TermPattern::BlankNode(_) | TermPattern::Literal(_) => Err(OxirsError::Update(
+                "Graph name must be a named node".to_string(),
+            )),
         }
     }
 
     /// Evaluate a graph pattern to get variable bindings
-    fn evaluate_graph_pattern(&self, pattern: &GraphPattern) -> Result<Vec<HashMap<String, crate::model::Term>>> {
+    fn evaluate_graph_pattern(
+        &self,
+        pattern: &GraphPattern,
+    ) -> Result<Vec<HashMap<String, crate::model::Term>>> {
         use crate::query::{QueryEngine, QueryResult};
-        
+
         // Create a temporary SELECT query to evaluate the pattern
         let query_engine = QueryEngine::new();
-        
+
         // Convert the graph pattern to a SPARQL query string
         let sparql_query = self.graph_pattern_to_sparql(pattern)?;
-        
+
         // Execute the query
         match query_engine.query(&sparql_query, self.store)? {
-            QueryResult::Select { variables: _, bindings } => {
+            QueryResult::Select {
+                variables: _,
+                bindings,
+            } => {
                 // Convert the bindings to the expected format
                 let mut solutions = Vec::new();
                 for binding in bindings {
@@ -318,7 +341,7 @@ impl<'a> UpdateExecutor<'a> {
             }
             _ => Err(OxirsError::Update(
                 "Expected SELECT query result for WHERE clause evaluation".to_string(),
-            ))
+            )),
         }
     }
 
@@ -329,7 +352,7 @@ impl<'a> UpdateExecutor<'a> {
         solution: &HashMap<String, crate::model::Term>,
     ) -> Result<Option<Quad>> {
         use crate::model::*;
-        
+
         // Instantiate subject
         let subject = match &pattern.subject {
             TermPattern::Variable(var) => {
@@ -347,7 +370,7 @@ impl<'a> UpdateExecutor<'a> {
             TermPattern::BlankNode(b) => Subject::BlankNode(b.clone()),
             TermPattern::Literal(_) => return Ok(None), // Subject cannot be literal
         };
-        
+
         // Instantiate predicate
         let predicate = match &pattern.predicate {
             TermPattern::Variable(var) => {
@@ -360,7 +383,7 @@ impl<'a> UpdateExecutor<'a> {
             TermPattern::NamedNode(n) => Predicate::NamedNode(n.clone()),
             _ => return Ok(None), // Predicate must be named node
         };
-        
+
         // Instantiate object
         let object = match &pattern.object {
             TermPattern::Variable(var) => {
@@ -379,7 +402,7 @@ impl<'a> UpdateExecutor<'a> {
             TermPattern::BlankNode(b) => Object::BlankNode(b.clone()),
             TermPattern::Literal(l) => Object::Literal(l.clone()),
         };
-        
+
         // Instantiate graph name
         let graph_name = match &pattern.graph {
             Some(graph_pattern) => match graph_pattern {
@@ -395,7 +418,7 @@ impl<'a> UpdateExecutor<'a> {
             },
             None => GraphName::DefaultGraph,
         };
-        
+
         Ok(Some(Quad::new(subject, predicate, object, graph_name)))
     }
 
@@ -410,9 +433,7 @@ impl<'a> UpdateExecutor<'a> {
                 let graph = GraphName::NamedNode(graph_name.clone());
                 self.store.find_quads(None, None, None, Some(&graph))
             }
-            GraphTarget::All => {
-                self.store.find_quads(None, None, None, None)
-            }
+            GraphTarget::All => self.store.find_quads(None, None, None, None),
         }
     }
 
@@ -441,7 +462,7 @@ impl<'a> UpdateExecutor<'a> {
     /// Convert a graph pattern to a SPARQL query string
     fn graph_pattern_to_sparql(&self, pattern: &GraphPattern) -> Result<String> {
         use crate::query::algebra::*;
-        
+
         match pattern {
             GraphPattern::Bgp(triple_patterns) => {
                 let mut sparql = String::from("SELECT * WHERE { ");
@@ -457,33 +478,42 @@ impl<'a> UpdateExecutor<'a> {
             GraphPattern::Join(left, right) => {
                 let left_sparql = self.graph_pattern_to_sparql(left)?;
                 let right_sparql = self.graph_pattern_to_sparql(right)?;
-                
+
                 // Extract WHERE clause content from both patterns
                 let left_where = self.extract_where_clause(&left_sparql)?;
                 let right_where = self.extract_where_clause(&right_sparql)?;
-                
-                Ok(format!("SELECT * WHERE {{ {} . {} }}", left_where, right_where))
+
+                Ok(format!(
+                    "SELECT * WHERE {{ {} . {} }}",
+                    left_where, right_where
+                ))
             }
             GraphPattern::Filter { expr, inner } => {
                 let inner_sparql = self.graph_pattern_to_sparql(inner)?;
                 let inner_where = self.extract_where_clause(&inner_sparql)?;
                 let filter_expr = self.expression_to_sparql(expr)?;
-                
-                Ok(format!("SELECT * WHERE {{ {} FILTER ({}) }}", inner_where, filter_expr))
+
+                Ok(format!(
+                    "SELECT * WHERE {{ {} FILTER ({}) }}",
+                    inner_where, filter_expr
+                ))
             }
             GraphPattern::Union(left, right) => {
                 let left_sparql = self.graph_pattern_to_sparql(left)?;
                 let right_sparql = self.graph_pattern_to_sparql(right)?;
-                
+
                 let left_where = self.extract_where_clause(&left_sparql)?;
                 let right_where = self.extract_where_clause(&right_sparql)?;
-                
-                Ok(format!("SELECT * WHERE {{ {{ {} }} UNION {{ {} }} }}", left_where, right_where))
+
+                Ok(format!(
+                    "SELECT * WHERE {{ {{ {} }} UNION {{ {} }} }}",
+                    left_where, right_where
+                ))
             }
             _ => Err(OxirsError::Update(format!(
                 "Graph pattern type not yet supported in SPARQL conversion: {:?}",
                 pattern
-            )))
+            ))),
         }
     }
 
@@ -492,7 +522,7 @@ impl<'a> UpdateExecutor<'a> {
         let subject = self.term_pattern_to_sparql(&pattern.subject)?;
         let predicate = self.term_pattern_to_sparql(&pattern.predicate)?;
         let object = self.term_pattern_to_sparql(&pattern.object)?;
-        
+
         Ok(format!("{} {} {}", subject, predicate, object))
     }
 
@@ -518,22 +548,22 @@ impl<'a> UpdateExecutor<'a> {
     fn expression_to_sparql(&self, expr: &Expression) -> Result<String> {
         match expr {
             Expression::Variable(var) => Ok(format!("?{}", var.name())),
-            Expression::Term(term) => {
-                match term {
-                    crate::model::Term::NamedNode(n) => Ok(format!("<{}>", n.as_str())),
-                    crate::model::Term::BlankNode(b) => Ok(format!("_:{}", b.as_str())),
-                    crate::model::Term::Literal(l) => {
-                        if let Some(lang) = l.language() {
-                            Ok(format!("\"{}\"@{}", l.value(), lang))
-                        } else if l.datatype() != xsd::STRING.as_ref() {
-                            Ok(format!("\"{}\"^^<{}>", l.value(), l.datatype()))
-                        } else {
-                            Ok(format!("\"{}\"", l.value()))
-                        }
+            Expression::Term(term) => match term {
+                crate::model::Term::NamedNode(n) => Ok(format!("<{}>", n.as_str())),
+                crate::model::Term::BlankNode(b) => Ok(format!("_:{}", b.as_str())),
+                crate::model::Term::Literal(l) => {
+                    if let Some(lang) = l.language() {
+                        Ok(format!("\"{}\"@{}", l.value(), lang))
+                    } else if l.datatype() != xsd::STRING.as_ref() {
+                        Ok(format!("\"{}\"^^<{}>", l.value(), l.datatype()))
+                    } else {
+                        Ok(format!("\"{}\"", l.value()))
                     }
-                    _ => Err(OxirsError::Update("Unsupported term type in expression".to_string()))
                 }
-            }
+                _ => Err(OxirsError::Update(
+                    "Unsupported term type in expression".to_string(),
+                )),
+            },
             Expression::Equal(left, right) => {
                 let left_sparql = self.expression_to_sparql(left)?;
                 let right_sparql = self.expression_to_sparql(right)?;
@@ -556,7 +586,7 @@ impl<'a> UpdateExecutor<'a> {
             _ => Err(OxirsError::Update(format!(
                 "Expression type not yet supported in SPARQL conversion: {:?}",
                 expr
-            )))
+            ))),
         }
     }
 
@@ -568,10 +598,14 @@ impl<'a> UpdateExecutor<'a> {
                 let where_content = &sparql[where_start..end].trim();
                 Ok(where_content.to_string())
             } else {
-                Err(OxirsError::Update("Malformed SPARQL query: missing closing brace".to_string()))
+                Err(OxirsError::Update(
+                    "Malformed SPARQL query: missing closing brace".to_string(),
+                ))
             }
         } else {
-            Err(OxirsError::Update("Malformed SPARQL query: missing WHERE clause".to_string()))
+            Err(OxirsError::Update(
+                "Malformed SPARQL query: missing WHERE clause".to_string(),
+            ))
         }
     }
 }
@@ -589,9 +623,9 @@ impl UpdateParser {
     pub fn parse(&self, update_str: &str) -> Result<Update> {
         // This is a very simplified parser that only handles basic cases
         // A full implementation would need a complete SPARQL UPDATE grammar parser
-        
+
         let trimmed = update_str.trim();
-        
+
         if trimmed.starts_with("INSERT DATA") {
             self.parse_insert_data(trimmed)
         } else if trimmed.starts_with("DELETE DATA") {
@@ -609,17 +643,17 @@ impl UpdateParser {
     /// Parse INSERT DATA operation
     fn parse_insert_data(&self, update_str: &str) -> Result<Update> {
         use crate::query::algebra::UpdateOperation;
-        
+
         // Extract the data block from "INSERT DATA { ... }"
         let data_start = update_str.find('{');
         let data_end = update_str.rfind('}');
-        
+
         if let (Some(start), Some(end)) = (data_start, data_end) {
             let data_block = &update_str[start + 1..end].trim();
-            
+
             // Parse the quads from the data block
             let quads = self.parse_quad_data(data_block)?;
-            
+
             Ok(Update {
                 base: None,
                 prefixes: HashMap::new(),
@@ -635,17 +669,17 @@ impl UpdateParser {
     /// Parse DELETE DATA operation
     fn parse_delete_data(&self, update_str: &str) -> Result<Update> {
         use crate::query::algebra::UpdateOperation;
-        
+
         // Extract the data block from "DELETE DATA { ... }"
         let data_start = update_str.find('{');
         let data_end = update_str.rfind('}');
-        
+
         if let (Some(start), Some(end)) = (data_start, data_end) {
             let data_block = &update_str[start + 1..end].trim();
-            
+
             // Parse the quads from the data block
             let quads = self.parse_quad_data(data_block)?;
-            
+
             Ok(Update {
                 base: None,
                 prefixes: HashMap::new(),
@@ -666,11 +700,11 @@ impl UpdateParser {
 
     /// Parse CLEAR operation
     fn parse_clear(&self, update_str: &str) -> Result<Update> {
-        use crate::query::algebra::{UpdateOperation, GraphTarget};
-        
+        use crate::query::algebra::{GraphTarget, UpdateOperation};
+
         let trimmed = update_str.trim();
         let silent = trimmed.contains("SILENT");
-        
+
         let graph_target = if trimmed.contains("DEFAULT") {
             GraphTarget::Default
         } else if trimmed.contains("ALL") {
@@ -685,7 +719,9 @@ impl UpdateParser {
                         .map_err(|e| OxirsError::Parse(format!("Invalid graph IRI: {}", e)))?;
                     GraphTarget::Named(graph_node)
                 } else {
-                    return Err(OxirsError::Parse("Malformed graph IRI in CLEAR".to_string()));
+                    return Err(OxirsError::Parse(
+                        "Malformed graph IRI in CLEAR".to_string(),
+                    ));
                 }
             } else {
                 return Err(OxirsError::Parse("Missing graph IRI in CLEAR".to_string()));
@@ -693,7 +729,7 @@ impl UpdateParser {
         } else {
             GraphTarget::Default // Default if no target specified
         };
-        
+
         Ok(Update {
             base: None,
             prefixes: HashMap::new(),

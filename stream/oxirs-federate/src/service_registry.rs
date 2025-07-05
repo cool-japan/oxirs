@@ -455,7 +455,10 @@ impl ServiceRegistry {
 
         // Check if endpoint already exists
         if self.sparql_endpoints.contains_key(&endpoint.id) {
-            return Err(anyhow!("SPARQL endpoint with ID '{}' already registered", endpoint.id));
+            return Err(anyhow!(
+                "SPARQL endpoint with ID '{}' already registered",
+                endpoint.id
+            ));
         }
 
         // Validate endpoint
@@ -496,7 +499,10 @@ impl ServiceRegistry {
 
         // Check if service already exists
         if self.graphql_services.contains_key(&service.id) {
-            return Err(anyhow!("GraphQL service with ID '{}' already registered", service.id));
+            return Err(anyhow!(
+                "GraphQL service with ID '{}' already registered",
+                service.id
+            ));
         }
 
         // Validate service
@@ -856,26 +862,37 @@ impl ServiceRegistry {
         match service.service_type {
             crate::ServiceType::Sparql => {
                 if self.sparql_endpoints.contains_key(&service.id) {
-                    return Err(anyhow!("Service with ID '{}' already registered", service.id));
+                    return Err(anyhow!(
+                        "Service with ID '{}' already registered",
+                        service.id
+                    ));
                 }
             }
             crate::ServiceType::GraphQL => {
                 if self.graphql_services.contains_key(&service.id) {
-                    return Err(anyhow!("Service with ID '{}' already registered", service.id));
+                    return Err(anyhow!(
+                        "Service with ID '{}' already registered",
+                        service.id
+                    ));
                 }
             }
             _ => {
                 // For other types, check both collections
-                if self.sparql_endpoints.contains_key(&service.id) || self.graphql_services.contains_key(&service.id) {
-                    return Err(anyhow!("Service with ID '{}' already registered", service.id));
+                if self.sparql_endpoints.contains_key(&service.id)
+                    || self.graphql_services.contains_key(&service.id)
+                {
+                    return Err(anyhow!(
+                        "Service with ID '{}' already registered",
+                        service.id
+                    ));
                 }
             }
         }
-        
+
         match service.service_type {
             crate::ServiceType::Sparql => {
                 let mut capabilities = SparqlCapabilities::default();
-                
+
                 // Convert FederatedService capabilities to SparqlCapabilities
                 for cap in &service.capabilities {
                     match cap {
@@ -896,7 +913,7 @@ impl ServiceRegistry {
                         }
                     }
                 }
-                
+
                 let sparql_endpoint = SparqlEndpoint {
                     id: service.id,
                     name: service.name,
@@ -1021,15 +1038,19 @@ impl ServiceRegistry {
                 endpoint.name.clone(),
                 endpoint.url.to_string(),
             );
-            
+
             // Convert capabilities from endpoint to service
             if endpoint.capabilities.supports_full_text_search {
-                service.capabilities.insert(crate::ServiceCapability::FullTextSearch);
+                service
+                    .capabilities
+                    .insert(crate::ServiceCapability::FullTextSearch);
             }
             if endpoint.capabilities.supports_geospatial {
-                service.capabilities.insert(crate::ServiceCapability::Geospatial);
+                service
+                    .capabilities
+                    .insert(crate::ServiceCapability::Geospatial);
             }
-            
+
             services.push(service);
         }
 
@@ -1041,7 +1062,7 @@ impl ServiceRegistry {
                 gql_service.name.clone(),
                 gql_service.url.to_string(),
             );
-            
+
             services.push(service);
         }
 
@@ -1057,21 +1078,29 @@ impl ServiceRegistry {
                 endpoint.name.clone(),
                 endpoint.url.to_string(),
             );
-            
+
             // Convert capabilities from endpoint to service
             if endpoint.capabilities.supports_full_text_search {
-                service.capabilities.insert(crate::ServiceCapability::FullTextSearch);
+                service
+                    .capabilities
+                    .insert(crate::ServiceCapability::FullTextSearch);
             }
             if endpoint.capabilities.supports_geospatial {
-                service.capabilities.insert(crate::ServiceCapability::Geospatial);
+                service
+                    .capabilities
+                    .insert(crate::ServiceCapability::Geospatial);
             }
             if endpoint.capabilities.supports_update {
-                service.capabilities.insert(crate::ServiceCapability::SparqlUpdate);
+                service
+                    .capabilities
+                    .insert(crate::ServiceCapability::SparqlUpdate);
             }
             if endpoint.capabilities.supports_rdf_star {
-                service.capabilities.insert(crate::ServiceCapability::RdfStar);
+                service
+                    .capabilities
+                    .insert(crate::ServiceCapability::RdfStar);
             }
-            
+
             return Some(service);
         }
 
@@ -1082,7 +1111,7 @@ impl ServiceRegistry {
                 gql_service.name.clone(),
                 gql_service.url.to_string(),
             );
-            
+
             return Some(service);
         }
 

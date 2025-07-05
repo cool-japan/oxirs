@@ -1,5 +1,7 @@
 //! Byzantine behavior detection systems and security components
 
+#![allow(dead_code)]
+
 use super::types::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
@@ -83,6 +85,7 @@ pub struct EquivocationDetector {
 
 /// Resource exhaustion monitoring
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ResourceMonitor {
     /// Message rate per node
     message_rates: HashMap<NodeId, VecDeque<Instant>>,

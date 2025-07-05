@@ -2,24 +2,27 @@
 
 use async_trait::async_trait;
 
-use crate::{Result, ShaclAiError};
 use super::types::*;
+use crate::{Result, ShaclAiError};
 
 /// Trait for text content validation
 #[async_trait]
 pub trait TextValidator: Send + Sync + std::fmt::Debug {
     /// Validate text content
     async fn validate(&self, content: &MultiModalContent) -> Result<Option<ValidationResult>>;
-    
+
     /// Get validator name
     fn name(&self) -> &str;
-    
+
     /// Get validator description
     fn description(&self) -> &str;
-    
+
     /// Check if validator supports the given content
     fn supports_content(&self, content: &MultiModalContent) -> bool {
-        matches!(content.content_type, ContentType::Text | ContentType::Composite)
+        matches!(
+            content.content_type,
+            ContentType::Text | ContentType::Composite
+        )
     }
 }
 
@@ -28,16 +31,19 @@ pub trait TextValidator: Send + Sync + std::fmt::Debug {
 pub trait ImageValidator: Send + Sync + std::fmt::Debug {
     /// Validate image content
     async fn validate(&self, content: &MultiModalContent) -> Result<Option<ValidationResult>>;
-    
+
     /// Get validator name
     fn name(&self) -> &str;
-    
+
     /// Get validator description
     fn description(&self) -> &str;
-    
+
     /// Check if validator supports the given content
     fn supports_content(&self, content: &MultiModalContent) -> bool {
-        matches!(content.content_type, ContentType::Image | ContentType::Composite)
+        matches!(
+            content.content_type,
+            ContentType::Image | ContentType::Composite
+        )
     }
 }
 
@@ -46,16 +52,19 @@ pub trait ImageValidator: Send + Sync + std::fmt::Debug {
 pub trait AudioValidator: Send + Sync + std::fmt::Debug {
     /// Validate audio content
     async fn validate(&self, content: &MultiModalContent) -> Result<Option<ValidationResult>>;
-    
+
     /// Get validator name
     fn name(&self) -> &str;
-    
+
     /// Get validator description
     fn description(&self) -> &str;
-    
+
     /// Check if validator supports the given content
     fn supports_content(&self, content: &MultiModalContent) -> bool {
-        matches!(content.content_type, ContentType::Audio | ContentType::Composite)
+        matches!(
+            content.content_type,
+            ContentType::Audio | ContentType::Composite
+        )
     }
 }
 
@@ -64,16 +73,19 @@ pub trait AudioValidator: Send + Sync + std::fmt::Debug {
 pub trait VideoValidator: Send + Sync + std::fmt::Debug {
     /// Validate video content
     async fn validate(&self, content: &MultiModalContent) -> Result<Option<ValidationResult>>;
-    
+
     /// Get validator name
     fn name(&self) -> &str;
-    
+
     /// Get validator description
     fn description(&self) -> &str;
-    
+
     /// Check if validator supports the given content
     fn supports_content(&self, content: &MultiModalContent) -> bool {
-        matches!(content.content_type, ContentType::Video | ContentType::Composite)
+        matches!(
+            content.content_type,
+            ContentType::Video | ContentType::Composite
+        )
     }
 }
 
@@ -82,16 +94,19 @@ pub trait VideoValidator: Send + Sync + std::fmt::Debug {
 pub trait DocumentValidator: Send + Sync + std::fmt::Debug {
     /// Validate document content
     async fn validate(&self, content: &MultiModalContent) -> Result<Option<ValidationResult>>;
-    
+
     /// Get validator name
     fn name(&self) -> &str;
-    
+
     /// Get validator description
     fn description(&self) -> &str;
-    
+
     /// Check if validator supports the given content
     fn supports_content(&self, content: &MultiModalContent) -> bool {
-        matches!(content.content_type, ContentType::Document | ContentType::Composite)
+        matches!(
+            content.content_type,
+            ContentType::Document | ContentType::Composite
+        )
     }
 }
 
@@ -100,13 +115,13 @@ pub trait DocumentValidator: Send + Sync + std::fmt::Debug {
 pub trait SemanticAnalyzer: Send + Sync + std::fmt::Debug {
     /// Analyze content semantically
     async fn analyze(&self, content: &MultiModalContent) -> Result<Option<AnalysisResult>>;
-    
+
     /// Get analyzer name
     fn name(&self) -> &str;
-    
+
     /// Get analyzer description
     fn description(&self) -> &str;
-    
+
     /// Check if analyzer supports the given content
     fn supports_content(&self, content: &MultiModalContent) -> bool {
         true // Most semantic analyzers can work with any content type
@@ -121,13 +136,13 @@ pub trait CrossModalValidator: Send + Sync + std::fmt::Debug {
         &self,
         content_analyses: &[ContentAnalysis],
     ) -> Result<Vec<ValidationResult>>;
-    
+
     /// Get validator name
     fn name(&self) -> &str;
-    
+
     /// Get validator description
     fn description(&self) -> &str;
-    
+
     /// Get required content types for cross-modal validation
     fn required_content_types(&self) -> Vec<ContentType>;
 }
@@ -137,10 +152,10 @@ pub trait CrossModalValidator: Send + Sync + std::fmt::Debug {
 pub trait ContentLoader: Send + Sync + std::fmt::Debug {
     /// Load content from a reference
     async fn load_content(&self, content_ref: &MultiModalContentRef) -> Result<MultiModalContent>;
-    
+
     /// Check if loader supports the given content reference
     fn supports_content_ref(&self, content_ref: &MultiModalContentRef) -> bool;
-    
+
     /// Get loader name
     fn name(&self) -> &str;
 }
@@ -150,10 +165,10 @@ pub trait ContentLoader: Send + Sync + std::fmt::Debug {
 pub trait ContentPreprocessor: Send + Sync + std::fmt::Debug {
     /// Preprocess content before validation
     async fn preprocess(&self, content: &MultiModalContent) -> Result<MultiModalContent>;
-    
+
     /// Check if preprocessor supports the given content
     fn supports_content(&self, content: &MultiModalContent) -> bool;
-    
+
     /// Get preprocessor name
     fn name(&self) -> &str;
 }
@@ -163,16 +178,16 @@ pub trait ContentPreprocessor: Send + Sync + std::fmt::Debug {
 pub trait ContentCache: Send + Sync + std::fmt::Debug {
     /// Get cached content
     async fn get(&self, key: &str) -> Result<Option<CachedContent>>;
-    
+
     /// Store content in cache
     async fn set(&self, key: &str, content: &CachedContent) -> Result<()>;
-    
+
     /// Remove content from cache
     async fn remove(&self, key: &str) -> Result<()>;
-    
+
     /// Clear all cached content
     async fn clear(&self) -> Result<()>;
-    
+
     /// Get cache statistics
     async fn stats(&self) -> Result<CacheStats>;
 }
@@ -196,10 +211,10 @@ pub struct CacheStats {
 pub trait ValidationReporter: Send + Sync + std::fmt::Debug {
     /// Generate validation report
     fn generate_report(&self, report: &MultiModalValidationReport) -> Result<String>;
-    
+
     /// Get reporter name
     fn name(&self) -> &str;
-    
+
     /// Get supported output formats
     fn supported_formats(&self) -> Vec<String>;
 }
@@ -207,14 +222,19 @@ pub trait ValidationReporter: Send + Sync + std::fmt::Debug {
 /// Trait for validation metrics
 pub trait ValidationMetrics: Send + Sync + std::fmt::Debug {
     /// Record validation metrics
-    fn record_validation(&self, content_type: &ContentType, duration: std::time::Duration, success: bool);
-    
+    fn record_validation(
+        &self,
+        content_type: &ContentType,
+        duration: std::time::Duration,
+        success: bool,
+    );
+
     /// Record analysis metrics
     fn record_analysis(&self, analyzer: &str, duration: std::time::Duration, confidence: f64);
-    
+
     /// Get validation statistics
     fn get_statistics(&self) -> ValidationStatistics;
-    
+
     /// Reset metrics
     fn reset(&self);
 }
@@ -223,11 +243,15 @@ pub trait ValidationMetrics: Send + Sync + std::fmt::Debug {
 #[async_trait]
 pub trait QualityAssessor: Send + Sync + std::fmt::Debug {
     /// Assess content quality
-    async fn assess_quality(&self, content: &MultiModalContent, analysis: &ContentAnalysis) -> Result<QualityAssessment>;
-    
+    async fn assess_quality(
+        &self,
+        content: &MultiModalContent,
+        analysis: &ContentAnalysis,
+    ) -> Result<QualityAssessment>;
+
     /// Get quality thresholds
     fn get_thresholds(&self) -> QualityThresholds;
-    
+
     /// Set quality thresholds
     fn set_thresholds(&self, thresholds: QualityThresholds);
 }
@@ -300,21 +324,27 @@ impl Default for QualityThresholds {
 pub trait ValidationRuleManager: Send + Sync + std::fmt::Debug {
     /// Add a validation rule
     async fn add_rule(&self, rule: ValidationRule) -> Result<()>;
-    
+
     /// Remove a validation rule
     async fn remove_rule(&self, rule_id: &str) -> Result<()>;
-    
+
     /// Update a validation rule
     async fn update_rule(&self, rule: ValidationRule) -> Result<()>;
-    
+
     /// Get all validation rules
     async fn get_rules(&self) -> Result<Vec<ValidationRule>>;
-    
+
     /// Get rules for a specific content type
-    async fn get_rules_for_content_type(&self, content_type: &ContentType) -> Result<Vec<ValidationRule>>;
-    
+    async fn get_rules_for_content_type(
+        &self,
+        content_type: &ContentType,
+    ) -> Result<Vec<ValidationRule>>;
+
     /// Validate content against all applicable rules
-    async fn validate_with_rules(&self, content: &MultiModalContent) -> Result<Vec<ValidationResult>>;
+    async fn validate_with_rules(
+        &self,
+        content: &MultiModalContent,
+    ) -> Result<Vec<ValidationResult>>;
 }
 
 /// Validation rule
@@ -363,13 +393,13 @@ pub struct RuleAction {
 pub trait PluginManager: Send + Sync + std::fmt::Debug {
     /// Load a plugin
     async fn load_plugin(&self, plugin_path: &str) -> Result<()>;
-    
+
     /// Unload a plugin
     async fn unload_plugin(&self, plugin_id: &str) -> Result<()>;
-    
+
     /// List loaded plugins
     async fn list_plugins(&self) -> Result<Vec<PluginInfo>>;
-    
+
     /// Get plugin by ID
     async fn get_plugin(&self, plugin_id: &str) -> Result<Option<PluginInfo>>;
 }

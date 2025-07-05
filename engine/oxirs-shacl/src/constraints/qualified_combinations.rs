@@ -6,9 +6,7 @@
 
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
 use super::shape_constraints::QualifiedValueShapeConstraint;
-use crate::{
-    validation::ValidationEngine, Result, ShaclError, ShapeId, ValidationConfig,
-};
+use crate::{validation::ValidationEngine, Result, ShaclError, ShapeId, ValidationConfig};
 use oxirs_core::{model::Term, Store};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -19,14 +17,14 @@ use std::time::{Duration, Instant};
 pub struct ComplexQualifiedShapeCombination {
     /// The qualified shape combination specification
     pub combination: QualifiedCombination,
-    
+
     /// Global cardinality constraints for the entire combination
     pub global_min_count: Option<u32>,
     pub global_max_count: Option<u32>,
-    
+
     /// Whether to enable performance optimizations
     pub enable_optimizations: bool,
-    
+
     /// Cache results of shape validations
     pub enable_caching: bool,
 }
@@ -90,7 +88,7 @@ impl ComplexQualifiedShapeCombination {
         store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         let start_time = Instant::now();
-        
+
         // Create evaluation context with caching if enabled
         let mut eval_context = QualifiedEvaluationContext::new(
             context,
@@ -100,14 +98,14 @@ impl ComplexQualifiedShapeCombination {
 
         // Evaluate the combination
         let result = self.combination.evaluate(&mut eval_context, store)?;
-        
+
         // Apply global cardinality constraints
         let final_result = self.apply_global_cardinality_constraints(&result, &eval_context)?;
-        
+
         // Update performance metrics
         let evaluation_time = start_time.elapsed();
         eval_context.update_metrics(evaluation_time);
-        
+
         tracing::debug!(
             "Complex qualified shape combination evaluated in {:?} with {} cache hits and {} cache misses",
             evaluation_time,
@@ -169,7 +167,11 @@ impl ComplexQualifiedShapeCombination {
             combination_complexity: self.combination.calculate_complexity(),
             estimated_evaluation_time: self.combination.estimate_evaluation_time(),
             cache_effectiveness: if self.enable_caching { 0.8 } else { 0.0 },
-            optimization_level: if self.enable_optimizations { OptimizationLevel::High } else { OptimizationLevel::None },
+            optimization_level: if self.enable_optimizations {
+                OptimizationLevel::High
+            } else {
+                OptimizationLevel::None
+            },
         }
     }
 }
@@ -179,25 +181,25 @@ impl ComplexQualifiedShapeCombination {
 pub enum QualifiedCombination {
     /// Single qualified shape constraint
     Single(QualifiedValueShapeConstraint),
-    
+
     /// Logical AND combination - all qualified shapes must be satisfied
     And(AndQualifiedCombination),
-    
+
     /// Logical OR combination - at least one qualified shape must be satisfied
     Or(OrQualifiedCombination),
-    
+
     /// Logical NOT combination - qualified shape must not be satisfied
     Not(NotQualifiedCombination),
-    
+
     /// Exactly one (XOR) combination - exactly one qualified shape must be satisfied
     ExactlyOne(ExactlyOneQualifiedCombination),
-    
+
     /// Conditional combination - qualified shape satisfaction depends on condition
     Conditional(ConditionalQualifiedCombination),
-    
+
     /// Nested combination - allows hierarchical combination structures
     Nested(NestedQualifiedCombination),
-    
+
     /// Sequential combination - qualified shapes must be satisfied in order
     Sequential(SequentialQualifiedCombination),
 }
@@ -249,14 +251,18 @@ impl QualifiedCombination {
 
         for value in &context.constraint_context.values {
             let cache_key = (constraint.shape.clone(), value.clone());
-            
+
             let conforms = if context.enable_caching {
                 if let Some(&cached_result) = context.validation_cache.get(&cache_key) {
                     context.cache_hits += 1;
                     cached_result
                 } else {
                     context.cache_misses += 1;
-                    let result = constraint.value_conforms_to_shape(value, store, context.constraint_context)?;
+                    let result = constraint.value_conforms_to_shape(
+                        value,
+                        store,
+                        context.constraint_context,
+                    )?;
                     context.validation_cache.insert(cache_key, result);
                     result
                 }
@@ -273,14 +279,16 @@ impl QualifiedCombination {
 
         // Apply cardinality constraints
         let conforming_count = conforming_values.len() as u32;
-        
+
         // Check qualified min count
         if let Some(min_count) = constraint.qualified_min_count {
             if conforming_count < min_count {
                 return Ok(QualifiedCombinationResult::violated(
                     format!(
                         "Expected at least {} values conforming to shape '{}', but found {}",
-                        min_count, constraint.shape.as_str(), conforming_count
+                        min_count,
+                        constraint.shape.as_str(),
+                        conforming_count
                     ),
                     non_conforming_values.first().cloned(),
                     conforming_count,
@@ -294,7 +302,9 @@ impl QualifiedCombination {
                 return Ok(QualifiedCombinationResult::violated(
                     format!(
                         "Expected at most {} values conforming to shape '{}', but found {}",
-                        max_count, constraint.shape.as_str(), conforming_count
+                        max_count,
+                        constraint.shape.as_str(),
+                        conforming_count
                     ),
                     conforming_values.get(max_count as usize).cloned(),
                     conforming_count,
@@ -379,13 +389,13 @@ impl AndQualifiedCombination {
         // Evaluate each sub-combination
         for combination in &self.combinations {
             let result = combination.evaluate(context, store)?;
-            
+
             if !result.is_satisfied() {
                 return Ok(result); // Early termination on first failure
             }
 
             total_conforming_count += result.total_conforming_count();
-            
+
             // Track conforming values if distinctness is required
             if self.require_all_distinct {
                 // For distinctness checking, we would need to track which specific values
@@ -395,7 +405,9 @@ impl AndQualifiedCombination {
         }
 
         // Check distinctness constraint if required
-        if self.require_all_distinct && all_conforming_values.len() != total_conforming_count as usize {
+        if self.require_all_distinct
+            && all_conforming_values.len() != total_conforming_count as usize
+        {
             return Ok(QualifiedCombinationResult::violated(
                 "AND combination with distinct values requirement failed: overlapping conforming values found".to_string(),
                 None,
@@ -403,11 +415,15 @@ impl AndQualifiedCombination {
             ));
         }
 
-        Ok(QualifiedCombinationResult::satisfied(total_conforming_count))
+        Ok(QualifiedCombinationResult::satisfied(
+            total_conforming_count,
+        ))
     }
 
     pub fn calculate_complexity(&self) -> CombinationComplexity {
-        let max_child_complexity = self.combinations.iter()
+        let max_child_complexity = self
+            .combinations
+            .iter()
             .map(|c| c.calculate_complexity())
             .max()
             .unwrap_or(CombinationComplexity::Low);
@@ -421,7 +437,8 @@ impl AndQualifiedCombination {
     }
 
     pub fn estimate_evaluation_time(&self) -> Duration {
-        self.combinations.iter()
+        self.combinations
+            .iter()
             .map(|c| c.estimate_evaluation_time())
             .sum()
     }
@@ -480,11 +497,11 @@ impl OrQualifiedCombination {
         // Evaluate each sub-combination
         for combination in &self.combinations {
             let result = combination.evaluate(context, store)?;
-            
+
             if result.is_satisfied() {
                 satisfied_count += 1;
                 total_conforming_count += result.total_conforming_count();
-                
+
                 // Early termination if we have enough satisfied combinations
                 if satisfied_count >= self.minimum_satisfied {
                     break;
@@ -506,11 +523,15 @@ impl OrQualifiedCombination {
             ));
         }
 
-        Ok(QualifiedCombinationResult::satisfied(total_conforming_count))
+        Ok(QualifiedCombinationResult::satisfied(
+            total_conforming_count,
+        ))
     }
 
     pub fn calculate_complexity(&self) -> CombinationComplexity {
-        let max_child_complexity = self.combinations.iter()
+        let max_child_complexity = self
+            .combinations
+            .iter()
             .map(|c| c.calculate_complexity())
             .max()
             .unwrap_or(CombinationComplexity::Low);
@@ -524,10 +545,12 @@ impl OrQualifiedCombination {
 
     pub fn estimate_evaluation_time(&self) -> Duration {
         // OR can potentially terminate early, so estimate average case
-        let total_time: Duration = self.combinations.iter()
+        let total_time: Duration = self
+            .combinations
+            .iter()
             .map(|c| c.estimate_evaluation_time())
             .sum();
-        
+
         total_time / self.combinations.len() as u32 * self.minimum_satisfied
     }
 }
@@ -555,7 +578,7 @@ impl NotQualifiedCombination {
         store: &dyn Store,
     ) -> Result<QualifiedCombinationResult> {
         let result = self.combination.evaluate(context, store)?;
-        
+
         // Negate the result
         if result.is_satisfied() {
             Ok(QualifiedCombinationResult::violated(
@@ -583,7 +606,8 @@ impl ExactlyOneQualifiedCombination {
     pub fn validate(&self) -> Result<()> {
         if self.combinations.len() < 2 {
             return Err(ShaclError::ConstraintValidation(
-                "ExactlyOne qualified combination must have at least two sub-combinations".to_string(),
+                "ExactlyOne qualified combination must have at least two sub-combinations"
+                    .to_string(),
             ));
         }
 
@@ -605,11 +629,11 @@ impl ExactlyOneQualifiedCombination {
         // Evaluate all sub-combinations
         for combination in &self.combinations {
             let result = combination.evaluate(context, store)?;
-            
+
             if result.is_satisfied() {
                 satisfied_count += 1;
                 total_conforming_count += result.total_conforming_count();
-                
+
                 // Early termination if more than one is satisfied
                 if satisfied_count > 1 {
                     return Ok(QualifiedCombinationResult::violated(
@@ -623,7 +647,9 @@ impl ExactlyOneQualifiedCombination {
 
         // Check that exactly one was satisfied
         if satisfied_count == 1 {
-            Ok(QualifiedCombinationResult::satisfied(total_conforming_count))
+            Ok(QualifiedCombinationResult::satisfied(
+                total_conforming_count,
+            ))
         } else {
             Ok(QualifiedCombinationResult::violated(
                 format!("ExactlyOne combination failed: {} sub-combinations were satisfied, expected exactly 1", satisfied_count),
@@ -640,7 +666,8 @@ impl ExactlyOneQualifiedCombination {
 
     pub fn estimate_evaluation_time(&self) -> Duration {
         // XOR must evaluate all combinations
-        self.combinations.iter()
+        self.combinations
+            .iter()
             .map(|c| c.estimate_evaluation_time())
             .sum()
     }
@@ -695,7 +722,7 @@ impl ConditionalQualifiedCombination {
     ) -> Result<QualifiedCombinationResult> {
         // Evaluate condition
         let condition_satisfied = self.evaluate_condition(context, store)?;
-        
+
         // Choose combination based on condition
         let chosen_combination = if condition_satisfied {
             &self.then_combination
@@ -784,7 +811,7 @@ impl NestedQualifiedCombination {
     ) -> Result<QualifiedCombinationResult> {
         // First evaluate outer combination
         let outer_result = self.outer_combination.evaluate(context, store)?;
-        
+
         if !outer_result.is_satisfied() {
             return Ok(outer_result);
         }
@@ -794,7 +821,7 @@ impl NestedQualifiedCombination {
             NestingStrategy::ApplyToResults => {
                 // Apply inner combinations to the results
                 let mut total_count = outer_result.total_conforming_count();
-                
+
                 for inner in &self.inner_combinations {
                     let inner_result = inner.evaluate(context, store)?;
                     if !inner_result.is_satisfied() {
@@ -802,7 +829,7 @@ impl NestedQualifiedCombination {
                     }
                     total_count += inner_result.total_conforming_count();
                 }
-                
+
                 Ok(QualifiedCombinationResult::satisfied(total_count))
             }
             NestingStrategy::FilterOuter => {
@@ -817,24 +844,25 @@ impl NestedQualifiedCombination {
                         ));
                     }
                 }
-                
+
                 Ok(outer_result)
             }
             NestingStrategy::Hierarchical => {
                 // Hierarchical evaluation
                 let mut current_result = outer_result;
-                
+
                 for inner in &self.inner_combinations {
                     let inner_result = inner.evaluate(context, store)?;
                     if !inner_result.is_satisfied() {
                         return Ok(inner_result);
                     }
-                    
+
                     // Combine results hierarchically
-                    let combined_count = current_result.total_conforming_count() + inner_result.total_conforming_count();
+                    let combined_count = current_result.total_conforming_count()
+                        + inner_result.total_conforming_count();
                     current_result = QualifiedCombinationResult::satisfied(combined_count);
                 }
-                
+
                 Ok(current_result)
             }
         }
@@ -846,10 +874,12 @@ impl NestedQualifiedCombination {
 
     pub fn estimate_evaluation_time(&self) -> Duration {
         let outer_time = self.outer_combination.estimate_evaluation_time();
-        let inner_time: Duration = self.inner_combinations.iter()
+        let inner_time: Duration = self
+            .inner_combinations
+            .iter()
             .map(|c| c.estimate_evaluation_time())
             .sum();
-        
+
         outer_time + inner_time
     }
 }
@@ -884,7 +914,8 @@ impl SequentialQualifiedCombination {
     pub fn validate(&self) -> Result<()> {
         if self.combinations.is_empty() {
             return Err(ShaclError::ConstraintValidation(
-                "Sequential qualified combination must have at least one sub-combination".to_string(),
+                "Sequential qualified combination must have at least one sub-combination"
+                    .to_string(),
             ));
         }
 
@@ -906,28 +937,33 @@ impl SequentialQualifiedCombination {
         for combination in &self.combinations {
             // If overlap is not allowed, filter out already used values
             let eval_context = if !self.allow_overlap && !used_values.is_empty() {
-                let filtered_values: Vec<Term> = context.constraint_context.values.iter()
+                let filtered_values: Vec<Term> = context
+                    .constraint_context
+                    .values
+                    .iter()
                     .filter(|v| !used_values.contains(v))
                     .cloned()
                     .collect();
-                
+
                 // Create a modified context with filtered values
                 let mut filtered_constraint_context = context.constraint_context.clone();
                 filtered_constraint_context.values = filtered_values;
-                
+
                 let mut filtered_context = QualifiedEvaluationContext::new(
                     &filtered_constraint_context,
                     context.enable_caching,
                     context.enable_optimizations,
                 );
-                
+
                 let result = combination.evaluate(&mut filtered_context, store)?;
-                
+
                 // Update the main context with cache results
                 context.cache_hits += filtered_context.cache_hits;
                 context.cache_misses += filtered_context.cache_misses;
-                context.validation_cache.extend(filtered_context.validation_cache);
-                
+                context
+                    .validation_cache
+                    .extend(filtered_context.validation_cache);
+
                 result
             } else {
                 combination.evaluate(context, store)?
@@ -938,7 +974,7 @@ impl SequentialQualifiedCombination {
             }
 
             total_conforming_count += eval_context.total_conforming_count();
-            
+
             // Track used values if overlap is not allowed
             if !self.allow_overlap {
                 // For simplicity, mark all values as used - in a full implementation,
@@ -947,7 +983,9 @@ impl SequentialQualifiedCombination {
             }
         }
 
-        Ok(QualifiedCombinationResult::satisfied(total_conforming_count))
+        Ok(QualifiedCombinationResult::satisfied(
+            total_conforming_count,
+        ))
     }
 
     pub fn calculate_complexity(&self) -> CombinationComplexity {
@@ -959,7 +997,8 @@ impl SequentialQualifiedCombination {
     }
 
     pub fn estimate_evaluation_time(&self) -> Duration {
-        self.combinations.iter()
+        self.combinations
+            .iter()
             .map(|c| c.estimate_evaluation_time())
             .sum()
     }
@@ -1080,7 +1119,12 @@ pub enum OptimizationLevel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ShapeId, constraints::{constraint_context::ConstraintContext, shape_constraints::QualifiedValueShapeConstraint}};
+    use crate::{
+        constraints::{
+            constraint_context::ConstraintContext, shape_constraints::QualifiedValueShapeConstraint,
+        },
+        ShapeId,
+    };
     use oxirs_core::model::{NamedNode, Term};
 
     #[test]
@@ -1088,12 +1132,11 @@ mod tests {
         let constraint = QualifiedValueShapeConstraint::new(ShapeId::new("TestShape"))
             .with_qualified_min_count(1)
             .with_qualified_max_count(5);
-        
-        let combination = ComplexQualifiedShapeCombination::new(
-            QualifiedCombination::Single(constraint)
-        )
-        .with_global_min_count(1)
-        .with_global_max_count(10);
+
+        let combination =
+            ComplexQualifiedShapeCombination::new(QualifiedCombination::Single(constraint))
+                .with_global_min_count(1)
+                .with_global_max_count(10);
 
         assert_eq!(combination.global_min_count, Some(1));
         assert_eq!(combination.global_max_count, Some(10));
@@ -1103,15 +1146,16 @@ mod tests {
 
     #[test]
     fn test_and_qualified_combination() {
-        let constraint1 = QualifiedValueShapeConstraint::new(ShapeId::new("Shape1"))
-            .with_qualified_min_count(1);
-        let constraint2 = QualifiedValueShapeConstraint::new(ShapeId::new("Shape2"))
-            .with_qualified_max_count(5);
-        
+        let constraint1 =
+            QualifiedValueShapeConstraint::new(ShapeId::new("Shape1")).with_qualified_min_count(1);
+        let constraint2 =
+            QualifiedValueShapeConstraint::new(ShapeId::new("Shape2")).with_qualified_max_count(5);
+
         let and_combo = AndQualifiedCombination::new(vec![
             QualifiedCombination::Single(constraint1),
             QualifiedCombination::Single(constraint2),
-        ]).with_distinct_values(true);
+        ])
+        .with_distinct_values(true);
 
         assert_eq!(and_combo.combinations.len(), 2);
         assert!(and_combo.require_all_distinct);
@@ -1120,18 +1164,19 @@ mod tests {
 
     #[test]
     fn test_or_qualified_combination() {
-        let constraint1 = QualifiedValueShapeConstraint::new(ShapeId::new("Shape1"))
-            .with_qualified_min_count(1);
-        let constraint2 = QualifiedValueShapeConstraint::new(ShapeId::new("Shape2"))
-            .with_qualified_max_count(3);
-        let constraint3 = QualifiedValueShapeConstraint::new(ShapeId::new("Shape3"))
-            .with_qualified_min_count(2);
-        
+        let constraint1 =
+            QualifiedValueShapeConstraint::new(ShapeId::new("Shape1")).with_qualified_min_count(1);
+        let constraint2 =
+            QualifiedValueShapeConstraint::new(ShapeId::new("Shape2")).with_qualified_max_count(3);
+        let constraint3 =
+            QualifiedValueShapeConstraint::new(ShapeId::new("Shape3")).with_qualified_min_count(2);
+
         let or_combo = OrQualifiedCombination::new(vec![
             QualifiedCombination::Single(constraint1),
             QualifiedCombination::Single(constraint2),
             QualifiedCombination::Single(constraint3),
-        ]).with_minimum_satisfied(2);
+        ])
+        .with_minimum_satisfied(2);
 
         assert_eq!(or_combo.combinations.len(), 3);
         assert_eq!(or_combo.minimum_satisfied, 2);
@@ -1140,11 +1185,11 @@ mod tests {
 
     #[test]
     fn test_exactly_one_qualified_combination() {
-        let constraint1 = QualifiedValueShapeConstraint::new(ShapeId::new("Shape1"))
-            .with_qualified_min_count(1);
-        let constraint2 = QualifiedValueShapeConstraint::new(ShapeId::new("Shape2"))
-            .with_qualified_min_count(1);
-        
+        let constraint1 =
+            QualifiedValueShapeConstraint::new(ShapeId::new("Shape1")).with_qualified_min_count(1);
+        let constraint2 =
+            QualifiedValueShapeConstraint::new(ShapeId::new("Shape2")).with_qualified_min_count(1);
+
         let xor_combo = ExactlyOneQualifiedCombination::new(vec![
             QualifiedCombination::Single(constraint1),
             QualifiedCombination::Single(constraint2),
@@ -1160,12 +1205,12 @@ mod tests {
             .with_qualified_min_count(1);
         let else_constraint = QualifiedValueShapeConstraint::new(ShapeId::new("ElseShape"))
             .with_qualified_min_count(1);
-        
+
         let condition = QualificationCondition::ValueCount {
             min: Some(1),
             max: Some(10),
         };
-        
+
         let cond_combo = ConditionalQualifiedCombination::new(
             condition,
             QualifiedCombination::Single(then_constraint),
@@ -1183,7 +1228,7 @@ mod tests {
             .with_qualified_min_count(1);
         let inner_constraint2 = QualifiedValueShapeConstraint::new(ShapeId::new("InnerShape2"))
             .with_qualified_min_count(1);
-        
+
         let nested_combo = NestedQualifiedCombination::new(
             QualifiedCombination::Single(outer_constraint),
             vec![
@@ -1200,11 +1245,11 @@ mod tests {
 
     #[test]
     fn test_sequential_qualified_combination() {
-        let constraint1 = QualifiedValueShapeConstraint::new(ShapeId::new("Shape1"))
-            .with_qualified_min_count(1);
-        let constraint2 = QualifiedValueShapeConstraint::new(ShapeId::new("Shape2"))
-            .with_qualified_min_count(1);
-        
+        let constraint1 =
+            QualifiedValueShapeConstraint::new(ShapeId::new("Shape1")).with_qualified_min_count(1);
+        let constraint2 =
+            QualifiedValueShapeConstraint::new(ShapeId::new("Shape2")).with_qualified_min_count(1);
+
         let seq_combo = SequentialQualifiedCombination::new(vec![
             QualifiedCombination::Single(constraint1),
             QualifiedCombination::Single(constraint2),
@@ -1223,13 +1268,20 @@ mod tests {
         let simple_constraint = QualifiedValueShapeConstraint::new(ShapeId::new("SimpleShape"))
             .with_qualified_min_count(1);
         let simple_combo = QualifiedCombination::Single(simple_constraint);
-        assert_eq!(simple_combo.calculate_complexity(), CombinationComplexity::Low);
+        assert_eq!(
+            simple_combo.calculate_complexity(),
+            CombinationComplexity::Low
+        );
 
-        let and_combo = AndQualifiedCombination::new(vec![simple_combo.clone(), simple_combo.clone()]);
+        let and_combo =
+            AndQualifiedCombination::new(vec![simple_combo.clone(), simple_combo.clone()]);
         assert!(and_combo.calculate_complexity() >= CombinationComplexity::Low);
 
         let not_combo = QualifiedCombination::Not(NotQualifiedCombination::new(simple_combo));
-        assert_eq!(not_combo.calculate_complexity(), CombinationComplexity::Medium);
+        assert_eq!(
+            not_combo.calculate_complexity(),
+            CombinationComplexity::Medium
+        );
     }
 
     #[test]
@@ -1241,7 +1293,9 @@ mod tests {
 
         let violated_result = QualifiedCombinationResult::violated(
             "Test violation".to_string(),
-            Some(Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())),
+            Some(Term::NamedNode(
+                NamedNode::new("http://example.org/test").unwrap(),
+            )),
             3,
         );
         assert!(!violated_result.is_satisfied());

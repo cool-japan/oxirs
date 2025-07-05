@@ -29,6 +29,7 @@ pub struct TemporalConsciousness {
 
 /// Temporal memory for storing time-based experiences and patterns
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct TemporalMemory {
     /// Time-indexed experiences
     experiences: BTreeMap<SystemTime, TemporalExperience>,
@@ -106,6 +107,7 @@ pub struct MemoryRetentionPolicy {
 
 /// Chronological pattern analyzer for temporal sequences
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ChronologicalPatternAnalyzer {
     /// Detected temporal sequences
     temporal_sequences: HashMap<String, TemporalSequence>,
@@ -147,6 +149,7 @@ pub struct SequenceStep {
 
 /// Pattern evolution tracker for monitoring changes over time
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct PatternEvolutionTracker {
     /// Evolution history of patterns
     evolution_history: HashMap<String, Vec<EvolutionSnapshot>>,
@@ -231,6 +234,7 @@ pub struct FutureProjection {
 
 /// Evolution prediction model for patterns
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct EvolutionPredictionModel {
     /// Model type
     model_type: PredictionModelType,
@@ -259,6 +263,7 @@ pub enum PredictionModelType {
 
 /// Temporal emotional processor for time-aware emotional learning
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct TemporalEmotionalProcessor {
     /// Emotional state history
     emotional_history: BTreeMap<SystemTime, EmotionalState>,
@@ -272,6 +277,7 @@ pub struct TemporalEmotionalProcessor {
 
 /// Emotional trend analyzer for understanding emotional patterns over time
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct EmotionalTrendAnalyzer {
     /// Current emotional trends
     current_trends: HashMap<EmotionalState, EmotionalTrend>,
@@ -311,6 +317,7 @@ pub struct SeasonalEmotionalPattern {
 
 /// Mood prediction engine for forecasting emotional states
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct MoodPredictionEngine {
     /// Prediction models for each emotional state
     prediction_models: HashMap<EmotionalState, EmotionalPredictionModel>,
@@ -322,6 +329,7 @@ pub struct MoodPredictionEngine {
 
 /// Prediction model for emotional states
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct EmotionalPredictionModel {
     /// Model parameters
     parameters: HashMap<String, f64>,
@@ -335,6 +343,7 @@ pub struct EmotionalPredictionModel {
 
 /// Emotional memory consolidator for long-term emotional learning
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct EmotionalMemoryConsolidator {
     /// Consolidated emotional experiences
     consolidated_memories: HashMap<String, ConsolidatedEmotionalMemory>,

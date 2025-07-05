@@ -1,10 +1,6 @@
 //! Transaction support for OxiRS
 
-use crate::{
-    model::Quad,
-    rdf_store::RdfStore,
-    OxirsError, Result,
-};
+use crate::{model::Quad, rdf_store::RdfStore, OxirsError, Result};
 
 /// A transaction for atomic operations on the RDF store
 pub struct Transaction {
@@ -35,7 +31,9 @@ impl Transaction {
     /// Insert a quad into the transaction
     pub fn insert<'a>(&mut self, quad: impl Into<crate::model::QuadRef<'a>>) -> Result<bool> {
         if self.finished {
-            return Err(OxirsError::Store("Transaction already finished".to_string()));
+            return Err(OxirsError::Store(
+                "Transaction already finished".to_string(),
+            ));
         }
 
         let quad_ref = quad.into();
@@ -59,7 +57,9 @@ impl Transaction {
     /// Remove a quad from the transaction
     pub fn remove<'a>(&mut self, quad: impl Into<crate::model::QuadRef<'a>>) -> Result<bool> {
         if self.finished {
-            return Err(OxirsError::Store("Transaction already finished".to_string()));
+            return Err(OxirsError::Store(
+                "Transaction already finished".to_string(),
+            ));
         }
 
         let quad_ref = quad.into();
@@ -83,7 +83,9 @@ impl Transaction {
     /// Check if the transaction contains a quad (considering pending changes)
     pub fn contains<'a>(&self, quad: impl Into<crate::model::QuadRef<'a>>) -> Result<bool> {
         if self.finished {
-            return Err(OxirsError::Store("Transaction already finished".to_string()));
+            return Err(OxirsError::Store(
+                "Transaction already finished".to_string(),
+            ));
         }
 
         let quad_ref = quad.into();
@@ -115,7 +117,9 @@ impl Transaction {
     /// Commit the transaction
     pub fn commit(mut self) -> Result<()> {
         if self.finished {
-            return Err(OxirsError::Store("Transaction already finished".to_string()));
+            return Err(OxirsError::Store(
+                "Transaction already finished".to_string(),
+            ));
         }
 
         // SAFETY: We ensure the store pointer remains valid for the transaction lifetime
@@ -172,7 +176,7 @@ impl Drop for Transaction {
 mod tests {
     use super::*;
     use crate::{
-        model::{NamedNode, Literal, QuadRef, SubjectRef, PredicateRef, ObjectRef, GraphNameRef},
+        model::{GraphNameRef, Literal, NamedNode, ObjectRef, PredicateRef, QuadRef, SubjectRef},
         rdf_store::RdfStore,
     };
 

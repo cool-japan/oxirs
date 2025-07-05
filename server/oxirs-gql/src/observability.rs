@@ -103,17 +103,26 @@ impl ObservabilitySystem {
     pub async fn record_operation(&self, metrics: &OperationMetrics) -> Result<()> {
         // Record metrics
         if self.config.enable_custom_metrics {
-            self.metrics_collector.write().await.record_operation(metrics)?;
+            self.metrics_collector
+                .write()
+                .await
+                .record_operation(metrics)?;
         }
 
         // Create trace span
         if self.config.enable_distributed_tracing {
-            self.trace_collector.write().await.create_operation_span(metrics)?;
+            self.trace_collector
+                .write()
+                .await
+                .create_operation_span(metrics)?;
         }
 
         // Update real-time monitoring
         if self.config.enable_real_time_monitoring {
-            self.real_time_monitor.write().await.update_metrics(metrics)?;
+            self.real_time_monitor
+                .write()
+                .await
+                .update_metrics(metrics)?;
         }
 
         // Check alert conditions
@@ -183,13 +192,15 @@ impl ObservabilitySystem {
         if self.config.enable_real_time_monitoring {
             let monitor = self.real_time_monitor.read().await;
             let current_state = monitor.get_current_state();
-            
+
             if current_state.error_rate > self.config.alert_thresholds.max_error_rate {
                 health_score -= 20.0;
                 issues.push("High error rate detected".to_string());
             }
 
-            if current_state.avg_response_time.as_millis() > self.config.alert_thresholds.max_response_time_ms as u128 {
+            if current_state.avg_response_time.as_millis()
+                > self.config.alert_thresholds.max_response_time_ms as u128
+            {
                 health_score -= 15.0;
                 issues.push("High response time detected".to_string());
             }
@@ -216,9 +227,13 @@ impl ObservabilitySystem {
         if let Some(endpoint) = &self.config.export_endpoint {
             let dashboard = self.get_dashboard().await?;
             let serialized = serde_json::to_string(&dashboard)?;
-            
+
             // In a real implementation, this would send to external monitoring systems
-            info!("Exporting metrics to {}: {} bytes", endpoint, serialized.len());
+            info!(
+                "Exporting metrics to {}: {} bytes",
+                endpoint,
+                serialized.len()
+            );
         }
         Ok(())
     }
@@ -254,7 +269,10 @@ impl MetricsCollector {
 
         // Update execution time histogram
         let histogram_key = "execution_time_ms".to_string();
-        let histogram = self.custom_histograms.entry(histogram_key).or_insert_with(Histogram::new);
+        let histogram = self
+            .custom_histograms
+            .entry(histogram_key)
+            .or_insert_with(Histogram::new);
         histogram.record(metrics.execution_time.as_millis() as f64);
 
         Ok(())
@@ -266,7 +284,9 @@ impl MetricsCollector {
             aggregated: self.aggregated_metrics.clone(),
             counters: self.custom_counters.clone(),
             gauges: self.custom_gauges.clone(),
-            histograms: self.custom_histograms.iter()
+            histograms: self
+                .custom_histograms
+                .iter()
                 .map(|(k, v)| (k.clone(), v.summary()))
                 .collect(),
         }
@@ -292,25 +312,34 @@ impl TraceCollector {
     fn create_operation_span(&mut self, metrics: &OperationMetrics) -> Result<()> {
         self.trace_id_counter += 1;
         let trace_id = format!("trace_{}", self.trace_id_counter);
-        
+
         let span = TraceSpan {
             trace_id: trace_id.clone(),
             span_id: format!("span_{}", self.trace_id_counter),
             parent_span_id: None,
-            operation_name: metrics.operation_name.clone().unwrap_or_else(|| "anonymous".to_string()),
+            operation_name: metrics
+                .operation_name
+                .clone()
+                .unwrap_or_else(|| "anonymous".to_string()),
             start_time: metrics.timestamp,
             duration: Some(metrics.execution_time),
             tags: vec![
-                ("operation.type".to_string(), format!("{:?}", metrics.operation_type)),
-                ("query.complexity".to_string(), metrics.complexity_score.to_string()),
+                (
+                    "operation.type".to_string(),
+                    format!("{:?}", metrics.operation_type),
+                ),
+                (
+                    "query.complexity".to_string(),
+                    metrics.complexity_score.to_string(),
+                ),
                 ("query.depth".to_string(), metrics.depth.to_string()),
                 ("cache.hit".to_string(), metrics.cache_hit.to_string()),
             ],
             logs: Vec::new(),
-            status: if metrics.error_count > 0 { 
-                SpanStatus::Error 
-            } else { 
-                SpanStatus::Ok 
+            status: if metrics.error_count > 0 {
+                SpanStatus::Error
+            } else {
+                SpanStatus::Ok
             },
         };
 
@@ -323,7 +352,7 @@ impl TraceCollector {
         };
 
         self.completed_traces.push_back(trace);
-        
+
         // Keep only recent traces
         while self.completed_traces.len() > 1000 {
             self.completed_traces.pop_front();
@@ -333,7 +362,8 @@ impl TraceCollector {
     }
 
     fn get_recent_traces(&self, limit: usize) -> Vec<DistributedTrace> {
-        self.completed_traces.iter()
+        self.completed_traces
+            .iter()
             .rev()
             .take(limit)
             .cloned()
@@ -363,12 +393,20 @@ impl AlertManager {
         // Check response time
         if metrics.execution_time.as_millis() > self.thresholds.max_response_time_ms as u128 {
             new_alerts.push(Alert {
-                id: format!("response_time_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()),
+                id: format!(
+                    "response_time_{}",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis()
+                ),
                 alert_type: AlertType::HighResponseTime,
                 severity: AlertSeverity::Warning,
-                message: format!("Operation took {}ms (threshold: {}ms)", 
-                    metrics.execution_time.as_millis(), 
-                    self.thresholds.max_response_time_ms),
+                message: format!(
+                    "Operation took {}ms (threshold: {}ms)",
+                    metrics.execution_time.as_millis(),
+                    self.thresholds.max_response_time_ms
+                ),
                 timestamp: SystemTime::now(),
                 resolved: false,
                 metadata: HashMap::new(),
@@ -378,7 +416,13 @@ impl AlertManager {
         // Check error rate
         if metrics.error_count > 0 {
             new_alerts.push(Alert {
-                id: format!("error_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()),
+                id: format!(
+                    "error_{}",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis()
+                ),
                 alert_type: AlertType::HighErrorRate,
                 severity: AlertSeverity::Critical,
                 message: format!("Operation had {} errors", metrics.error_count),
@@ -423,33 +467,35 @@ impl RealTimeMonitor {
     fn update_metrics(&mut self, operation_metrics: &OperationMetrics) -> Result<()> {
         self.current_metrics.total_requests += 1;
         self.current_metrics.total_errors += operation_metrics.error_count as u64;
-        
+
         // Update running averages
         let new_response_time = operation_metrics.execution_time;
         self.current_metrics.avg_response_time = Duration::from_millis(
-            ((self.current_metrics.avg_response_time.as_millis() as u64 + new_response_time.as_millis() as u64) / 2)
+            ((self.current_metrics.avg_response_time.as_millis() as u64
+                + new_response_time.as_millis() as u64)
+                / 2),
         );
 
         // Update error rate
-        self.current_metrics.error_rate = 
+        self.current_metrics.error_rate =
             self.current_metrics.total_errors as f64 / self.current_metrics.total_requests as f64;
 
         // Update cache metrics
         if operation_metrics.cache_hit {
             self.current_metrics.cache_hits += 1;
         }
-        self.current_metrics.cache_hit_ratio = 
+        self.current_metrics.cache_hit_ratio =
             self.current_metrics.cache_hits as f64 / self.current_metrics.total_requests as f64;
 
         // Store historical data
         if self.last_update.elapsed() >= self.update_interval {
             self.metrics_history.push_back(self.current_metrics.clone());
-            
+
             // Keep only recent history
             while self.metrics_history.len() > 100 {
                 self.metrics_history.pop_front();
             }
-            
+
             self.last_update = Instant::now();
         }
 
@@ -519,9 +565,9 @@ impl AggregatedMetrics {
     fn update(&mut self, metrics: &OperationMetrics) {
         self.total_requests += 1;
         self.total_errors += metrics.error_count as u64;
-        
+
         let exec_time = metrics.execution_time;
-        
+
         // Update min/max
         if exec_time < self.min_execution_time {
             self.min_execution_time = exec_time;
@@ -529,11 +575,12 @@ impl AggregatedMetrics {
         if exec_time > self.max_execution_time {
             self.max_execution_time = exec_time;
         }
-        
+
         // Update running average
         self.avg_execution_time = Duration::from_millis(
-            ((self.avg_execution_time.as_millis() as u64 * (self.total_requests - 1) + 
-              exec_time.as_millis() as u64) / self.total_requests)
+            ((self.avg_execution_time.as_millis() as u64 * (self.total_requests - 1)
+                + exec_time.as_millis() as u64)
+                / self.total_requests),
         );
     }
 }
@@ -673,9 +720,19 @@ impl Histogram {
     fn new() -> Self {
         Self {
             buckets: vec![
-                (1.0, 0), (5.0, 0), (10.0, 0), (25.0, 0), (50.0, 0),
-                (100.0, 0), (250.0, 0), (500.0, 0), (1000.0, 0), (2500.0, 0),
-                (5000.0, 0), (10000.0, 0), (f64::INFINITY, 0),
+                (1.0, 0),
+                (5.0, 0),
+                (10.0, 0),
+                (25.0, 0),
+                (50.0, 0),
+                (100.0, 0),
+                (250.0, 0),
+                (500.0, 0),
+                (1000.0, 0),
+                (2500.0, 0),
+                (5000.0, 0),
+                (10000.0, 0),
+                (f64::INFINITY, 0),
             ],
             total_count: 0,
             total_sum: 0.0,
@@ -717,7 +774,7 @@ mod tests {
     async fn test_observability_system_creation() {
         let config = ObservabilityConfig::default();
         let system = ObservabilitySystem::new(config);
-        
+
         let dashboard = system.get_dashboard().await.unwrap();
         assert_eq!(dashboard.service_info.name, "oxirs-gql");
     }
@@ -726,7 +783,7 @@ mod tests {
     async fn test_metrics_collection() {
         let config = ObservabilityConfig::default();
         let system = ObservabilitySystem::new(config);
-        
+
         let metrics = OperationMetrics {
             operation_name: Some("test_query".to_string()),
             operation_type: OperationType::Query,
@@ -743,9 +800,9 @@ mod tests {
             timestamp: SystemTime::now(),
             client_info: ClientInfo::default(),
         };
-        
+
         system.record_operation(&metrics).await.unwrap();
-        
+
         let dashboard = system.get_dashboard().await.unwrap();
         assert!(dashboard.metrics.is_some());
     }
@@ -754,9 +811,9 @@ mod tests {
     async fn test_alert_generation() {
         let mut config = ObservabilityConfig::default();
         config.alert_thresholds.max_response_time_ms = 50; // Low threshold for testing
-        
+
         let system = ObservabilitySystem::new(config);
-        
+
         let slow_metrics = OperationMetrics {
             operation_name: Some("slow_query".to_string()),
             operation_type: OperationType::Query,
@@ -773,9 +830,9 @@ mod tests {
             timestamp: SystemTime::now(),
             client_info: ClientInfo::default(),
         };
-        
+
         system.record_operation(&slow_metrics).await.unwrap();
-        
+
         let dashboard = system.get_dashboard().await.unwrap();
         if let Some(alerts) = dashboard.alerts {
             assert!(!alerts.is_empty());
@@ -786,7 +843,7 @@ mod tests {
     async fn test_health_status_calculation() {
         let config = ObservabilityConfig::default();
         let system = ObservabilitySystem::new(config);
-        
+
         let health = system.calculate_health_status().await;
         assert!(matches!(health.status, HealthStatusLevel::Healthy));
         assert!(health.score >= 90.0);

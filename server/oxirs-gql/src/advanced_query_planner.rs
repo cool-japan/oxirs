@@ -86,9 +86,12 @@ impl AdvancedQueryPlanner {
     }
 
     /// Generate optimized execution plan for a GraphQL query
-    pub async fn create_execution_plan(&self, document: &Document) -> Result<OptimizedExecutionPlan> {
+    pub async fn create_execution_plan(
+        &self,
+        document: &Document,
+    ) -> Result<OptimizedExecutionPlan> {
         let start_time = Instant::now();
-        
+
         // Extract operations from document
         let operations = self.extract_operations(document)?;
         if operations.is_empty() {
@@ -97,32 +100,38 @@ impl AdvancedQueryPlanner {
 
         // Analyze the query structure
         let query_analysis = self.analyze_query_structure(&operations[0]).await?;
-        
+
         // Build execution graph
         let execution_graph = self.build_execution_graph(&operations[0], &query_analysis)?;
-        
+
         // Apply optimizations
         let optimized_graph = self.optimize_execution_graph(execution_graph).await?;
-        
+
         // Generate final execution plan
         let execution_plan = self.generate_execution_plan(optimized_graph, &query_analysis)?;
-        
+
         // Record planning time
         let planning_time = start_time.elapsed();
-        
-        info!("Generated optimized execution plan in {:?} with {} stages", 
-              planning_time, execution_plan.execution_stages.len());
+
+        info!(
+            "Generated optimized execution plan in {:?} with {} stages",
+            planning_time,
+            execution_plan.execution_stages.len()
+        );
 
         Ok(execution_plan)
     }
 
     /// Analyze the structure of a GraphQL query
-    async fn analyze_query_structure(&self, operation: &OperationDefinition) -> Result<QueryAnalysis> {
+    async fn analyze_query_structure(
+        &self,
+        operation: &OperationDefinition,
+    ) -> Result<QueryAnalysis> {
         let complexity = self.calculate_query_complexity(&operation.selection_set)?;
         let depth = self.calculate_query_depth(&operation.selection_set)?;
         let field_dependencies = self.analyze_field_dependencies(&operation.selection_set)?;
         let data_access_patterns = self.analyze_data_access_patterns(&operation.selection_set)?;
-        
+
         // Get ML predictions if enabled
         let performance_prediction = if self.config.enable_ml_prediction {
             let model = self.ml_model.read().await;
@@ -139,12 +148,17 @@ impl AdvancedQueryPlanner {
             data_access_patterns,
             performance_prediction,
             cache_opportunities: self.identify_cache_opportunities(&operation.selection_set)?,
-            parallelization_opportunities: self.identify_parallelization_opportunities(&operation.selection_set)?,
+            parallelization_opportunities: self
+                .identify_parallelization_opportunities(&operation.selection_set)?,
         })
     }
 
     /// Build execution graph representing query structure
-    fn build_execution_graph(&self, operation: &OperationDefinition, analysis: &QueryAnalysis) -> Result<ExecutionGraph> {
+    fn build_execution_graph(
+        &self,
+        operation: &OperationDefinition,
+        analysis: &QueryAnalysis,
+    ) -> Result<ExecutionGraph> {
         let mut graph = ExecutionGraph::new();
         let root_node = ExecutionNode {
             id: "root".to_string(),
@@ -156,10 +170,10 @@ impl AdvancedQueryPlanner {
             cache_key: None,
             data_source: DataSource::Local,
         };
-        
+
         graph.add_node(root_node);
         self.build_selection_graph(&mut graph, &operation.selection_set, "root", analysis)?;
-        
+
         Ok(graph)
     }
 
@@ -176,9 +190,10 @@ impl AdvancedQueryPlanner {
                 Selection::Field(field) => {
                     let node_id = format!("{}_{}", parent_id, index);
                     let estimated_cost = self.estimate_field_cost(field, analysis)?;
-                    let can_parallelize = analysis.parallelization_opportunities.contains(&field.name);
+                    let can_parallelize =
+                        analysis.parallelization_opportunities.contains(&field.name);
                     let cache_key = analysis.cache_opportunities.get(&field.name).cloned();
-                    
+
                     let node = ExecutionNode {
                         id: node_id.clone(),
                         node_type: ExecutionNodeType::Field,
@@ -189,13 +204,18 @@ impl AdvancedQueryPlanner {
                         cache_key,
                         data_source: self.determine_data_source(field)?,
                     };
-                    
+
                     graph.add_node(node);
                     graph.add_edge(parent_id.to_string(), node_id.clone());
-                    
+
                     // Recursively process nested selections
                     if let Some(ref nested_selection_set) = field.selection_set {
-                        self.build_selection_graph(graph, nested_selection_set, &node_id, analysis)?;
+                        self.build_selection_graph(
+                            graph,
+                            nested_selection_set,
+                            &node_id,
+                            analysis,
+                        )?;
                     }
                 }
                 Selection::InlineFragment(fragment) => {
@@ -210,7 +230,7 @@ impl AdvancedQueryPlanner {
                         cache_key: None,
                         data_source: DataSource::Local,
                     };
-                    
+
                     graph.add_node(node);
                     graph.add_edge(parent_id.to_string(), node_id.clone());
                     self.build_selection_graph(graph, &fragment.selection_set, &node_id, analysis)?;
@@ -228,13 +248,13 @@ impl AdvancedQueryPlanner {
                         cache_key: None,
                         data_source: DataSource::Local,
                     };
-                    
+
                     graph.add_node(node);
                     graph.add_edge(parent_id.to_string(), node_id);
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -271,12 +291,15 @@ impl AdvancedQueryPlanner {
 
         // Identify strongly connected components
         let components = self.find_strongly_connected_components(&graph);
-        
+
         // Optimize within each component
         for component in components {
             if component.len() > 1 {
                 // These nodes can potentially be merged or optimized together
-                debug!("Found strongly connected component with {} nodes", component.len());
+                debug!(
+                    "Found strongly connected component with {} nodes",
+                    component.len()
+                );
             }
         }
 
@@ -292,16 +315,22 @@ impl AdvancedQueryPlanner {
             if let Some(cache_key) = &node.cache_key {
                 // Adjust cost based on cache benefit
                 node.estimated_cost *= (1.0 - self.config.cost_model_weights.cache_benefit);
-                debug!("Applied cache optimization to node {}: cache_key={}", node.id, cache_key);
+                debug!(
+                    "Applied cache optimization to node {}: cache_key={}",
+                    node.id, cache_key
+                );
             }
         }
         Ok(graph)
     }
 
     /// Apply parallelization optimizations
-    fn apply_parallelization_optimizations(&self, mut graph: ExecutionGraph) -> Result<ExecutionGraph> {
+    fn apply_parallelization_optimizations(
+        &self,
+        mut graph: ExecutionGraph,
+    ) -> Result<ExecutionGraph> {
         let parallel_groups = self.identify_parallel_execution_groups(&graph)?;
-        
+
         for group in parallel_groups {
             if group.len() > 1 && group.len() <= self.config.max_parallelism {
                 let group_len = group.len();
@@ -309,35 +338,44 @@ impl AdvancedQueryPlanner {
                     if let Some(node) = graph.nodes.get_mut(&node_id) {
                         if node.can_parallelize {
                             // Apply parallelism benefit to cost
-                            node.estimated_cost *= (1.0 - self.config.cost_model_weights.parallelism_benefit / group_len as f64);
+                            node.estimated_cost *= (1.0
+                                - self.config.cost_model_weights.parallelism_benefit
+                                    / group_len as f64);
                         }
                     }
                 }
             }
         }
-        
+
         Ok(graph)
     }
 
     /// Apply machine learning based cost optimizations
-    async fn apply_cost_based_optimizations(&self, mut graph: ExecutionGraph) -> Result<ExecutionGraph> {
+    async fn apply_cost_based_optimizations(
+        &self,
+        mut graph: ExecutionGraph,
+    ) -> Result<ExecutionGraph> {
         let model = self.ml_model.read().await;
-        
+
         for node in graph.nodes.values_mut() {
             if let Some(field_name) = &node.field_name {
                 // Get ML prediction for this field
                 let predicted_cost = model.predict_field_cost(field_name, &node.data_source);
-                
+
                 // Combine with existing estimate
                 node.estimated_cost = (node.estimated_cost + predicted_cost) / 2.0;
             }
         }
-        
+
         Ok(graph)
     }
 
     /// Generate final execution plan from optimized graph
-    fn generate_execution_plan(&self, graph: ExecutionGraph, analysis: &QueryAnalysis) -> Result<OptimizedExecutionPlan> {
+    fn generate_execution_plan(
+        &self,
+        graph: ExecutionGraph,
+        analysis: &QueryAnalysis,
+    ) -> Result<OptimizedExecutionPlan> {
         let execution_stages = if let Some(ref execution_order) = graph.execution_order {
             self.group_nodes_into_stages(&graph, execution_order)?
         } else {
@@ -352,7 +390,7 @@ impl AdvancedQueryPlanner {
 
         let total_estimated_cost = graph.nodes.values().map(|n| n.estimated_cost).sum();
         let parallelization_factor = self.calculate_parallelization_factor(&execution_stages);
-        
+
         Ok(OptimizedExecutionPlan {
             plan_id: format!("plan_{}", chrono::Utc::now().timestamp_millis()),
             execution_stages,
@@ -364,7 +402,9 @@ impl AdvancedQueryPlanner {
                 "Parallelization".to_string(),
                 "Caching".to_string(),
             ],
-            estimated_execution_time: Duration::from_millis((total_estimated_cost / parallelization_factor) as u64),
+            estimated_execution_time: Duration::from_millis(
+                (total_estimated_cost / parallelization_factor) as u64,
+            ),
             cache_strategy: CacheStrategy::Intelligent,
             monitoring_points: self.identify_monitoring_points(&graph),
         })
@@ -372,8 +412,12 @@ impl AdvancedQueryPlanner {
 
     // Helper methods for graph analysis and optimization
 
-    fn extract_operations<'a>(&self, document: &'a Document) -> Result<Vec<&'a OperationDefinition>> {
-        let operations: Vec<&OperationDefinition> = document.definitions
+    fn extract_operations<'a>(
+        &self,
+        document: &'a Document,
+    ) -> Result<Vec<&'a OperationDefinition>> {
+        let operations: Vec<&OperationDefinition> = document
+            .definitions
             .iter()
             .filter_map(|def| {
                 if let crate::ast::Definition::Operation(op) = def {
@@ -383,17 +427,17 @@ impl AdvancedQueryPlanner {
                 }
             })
             .collect();
-        
+
         if operations.is_empty() {
             return Err(anyhow!("No operations found in document"));
         }
-        
+
         Ok(operations)
     }
 
     fn calculate_query_complexity(&self, selection_set: &SelectionSet) -> Result<f64> {
         let mut complexity = 0.0;
-        
+
         for selection in &selection_set.selections {
             complexity += match selection {
                 Selection::Field(field) => {
@@ -410,13 +454,13 @@ impl AdvancedQueryPlanner {
                 Selection::FragmentSpread(_) => 0.3,
             };
         }
-        
+
         Ok(complexity)
     }
 
     fn calculate_query_depth(&self, selection_set: &SelectionSet) -> Result<usize> {
         let mut max_depth = 1;
-        
+
         for selection in &selection_set.selections {
             let depth = match selection {
                 Selection::Field(field) => {
@@ -431,16 +475,16 @@ impl AdvancedQueryPlanner {
                 }
                 Selection::FragmentSpread(_) => 1,
             };
-            
+
             max_depth = max_depth.max(depth);
         }
-        
+
         Ok(max_depth)
     }
 
     fn count_fields(&self, selection_set: &SelectionSet) -> usize {
         let mut count = 0;
-        
+
         for selection in &selection_set.selections {
             count += match selection {
                 Selection::Field(field) => {
@@ -455,23 +499,29 @@ impl AdvancedQueryPlanner {
                 Selection::FragmentSpread(_) => 1,
             };
         }
-        
+
         count
     }
 
-    fn analyze_field_dependencies(&self, _selection_set: &SelectionSet) -> Result<HashMap<String, Vec<String>>> {
+    fn analyze_field_dependencies(
+        &self,
+        _selection_set: &SelectionSet,
+    ) -> Result<HashMap<String, Vec<String>>> {
         // Simplified dependency analysis
         let mut dependencies = HashMap::new();
-        
+
         // In a real implementation, this would analyze the schema and field relationships
         dependencies.insert("user".to_string(), vec!["id".to_string()]);
         dependencies.insert("posts".to_string(), vec!["user".to_string()]);
         dependencies.insert("comments".to_string(), vec!["posts".to_string()]);
-        
+
         Ok(dependencies)
     }
 
-    fn analyze_data_access_patterns(&self, _selection_set: &SelectionSet) -> Result<Vec<DataAccessPattern>> {
+    fn analyze_data_access_patterns(
+        &self,
+        _selection_set: &SelectionSet,
+    ) -> Result<Vec<DataAccessPattern>> {
         // Simplified data access pattern analysis
         Ok(vec![
             DataAccessPattern::SingleEntity,
@@ -480,24 +530,30 @@ impl AdvancedQueryPlanner {
         ])
     }
 
-    fn identify_cache_opportunities(&self, _selection_set: &SelectionSet) -> Result<HashMap<String, String>> {
+    fn identify_cache_opportunities(
+        &self,
+        _selection_set: &SelectionSet,
+    ) -> Result<HashMap<String, String>> {
         let mut opportunities = HashMap::new();
-        
+
         // Simple cache key generation based on field names
         opportunities.insert("user".to_string(), "user:cache".to_string());
         opportunities.insert("posts".to_string(), "posts:cache".to_string());
-        
+
         Ok(opportunities)
     }
 
-    fn identify_parallelization_opportunities(&self, _selection_set: &SelectionSet) -> Result<HashSet<String>> {
+    fn identify_parallelization_opportunities(
+        &self,
+        _selection_set: &SelectionSet,
+    ) -> Result<HashSet<String>> {
         let mut opportunities = HashSet::new();
-        
+
         // Fields that can be resolved in parallel
         opportunities.insert("user".to_string());
         opportunities.insert("posts".to_string());
         opportunities.insert("metadata".to_string());
-        
+
         Ok(opportunities)
     }
 
@@ -505,14 +561,19 @@ impl AdvancedQueryPlanner {
         // Simplified cost estimation based on field characteristics
         let base_cost = 1.0;
         let argument_cost = field.arguments.len() as f64 * 0.1;
-        let nesting_cost = if field.selection_set.is_some() { 0.5 } else { 0.0 };
-        
+        let nesting_cost = if field.selection_set.is_some() {
+            0.5
+        } else {
+            0.0
+        };
+
         Ok(base_cost + argument_cost + nesting_cost)
     }
 
     fn get_field_dependencies(&self, _field: &Field, analysis: &QueryAnalysis) -> HashSet<String> {
         // Get dependencies for this field from analysis
-        analysis.field_dependencies
+        analysis
+            .field_dependencies
             .get(&_field.name)
             .cloned()
             .unwrap_or_default()
@@ -529,13 +590,19 @@ impl AdvancedQueryPlanner {
         let mut visited = HashSet::new();
         let mut temp_visited = HashSet::new();
         let mut result = Vec::new();
-        
+
         for node_id in graph.nodes.keys() {
             if !visited.contains(node_id) {
-                self.dfs_topological_sort(graph, node_id, &mut visited, &mut temp_visited, &mut result)?;
+                self.dfs_topological_sort(
+                    graph,
+                    node_id,
+                    &mut visited,
+                    &mut temp_visited,
+                    &mut result,
+                )?;
             }
         }
-        
+
         result.reverse();
         Ok(result)
     }
@@ -551,23 +618,23 @@ impl AdvancedQueryPlanner {
         if temp_visited.contains(node_id) {
             return Err(anyhow!("Cycle detected in execution graph"));
         }
-        
+
         if visited.contains(node_id) {
             return Ok(());
         }
-        
+
         temp_visited.insert(node_id.to_string());
-        
+
         if let Some(edges) = graph.edges.get(node_id) {
             for target in edges {
                 self.dfs_topological_sort(graph, target, visited, temp_visited, result)?;
             }
         }
-        
+
         temp_visited.remove(node_id);
         visited.insert(node_id.to_string());
         result.push(node_id.to_string());
-        
+
         Ok(())
     }
 
@@ -581,10 +648,13 @@ impl AdvancedQueryPlanner {
         Ok(graph)
     }
 
-    fn identify_parallel_execution_groups(&self, graph: &ExecutionGraph) -> Result<Vec<Vec<String>>> {
+    fn identify_parallel_execution_groups(
+        &self,
+        graph: &ExecutionGraph,
+    ) -> Result<Vec<Vec<String>>> {
         let mut groups = Vec::new();
         let mut visited = HashSet::new();
-        
+
         for node_id in graph.nodes.keys() {
             if !visited.contains(node_id) {
                 if let Some(node) = graph.nodes.get(node_id) {
@@ -592,19 +662,21 @@ impl AdvancedQueryPlanner {
                         // Find all nodes that can be parallelized with this one
                         let mut group = vec![node_id.clone()];
                         visited.insert(node_id.clone());
-                        
+
                         // Simplified grouping logic
                         for other_id in graph.nodes.keys() {
                             if !visited.contains(other_id) {
                                 if let Some(other_node) = graph.nodes.get(other_id) {
-                                    if other_node.can_parallelize && self.can_execute_in_parallel(node, other_node) {
+                                    if other_node.can_parallelize
+                                        && self.can_execute_in_parallel(node, other_node)
+                                    {
                                         group.push(other_id.clone());
                                         visited.insert(other_id.clone());
                                     }
                                 }
                             }
                         }
-                        
+
                         if group.len() > 1 {
                             groups.push(group);
                         }
@@ -612,7 +684,7 @@ impl AdvancedQueryPlanner {
                 }
             }
         }
-        
+
         Ok(groups)
     }
 
@@ -621,16 +693,20 @@ impl AdvancedQueryPlanner {
         !node1.dependencies.contains(&node2.id) && !node2.dependencies.contains(&node1.id)
     }
 
-    fn group_nodes_into_stages(&self, graph: &ExecutionGraph, execution_order: &[String]) -> Result<Vec<ExecutionStage>> {
+    fn group_nodes_into_stages(
+        &self,
+        graph: &ExecutionGraph,
+        execution_order: &[String],
+    ) -> Result<Vec<ExecutionStage>> {
         let mut stages = Vec::new();
         let mut current_stage_nodes = Vec::new();
         let mut stage_id = 0;
-        
+
         for node_id in execution_order {
             if let Some(node) = graph.nodes.get(node_id) {
                 // Check if this node can be added to current stage
-                let can_add_to_current = current_stage_nodes.is_empty() || 
-                    current_stage_nodes.iter().all(|other_id| {
+                let can_add_to_current = current_stage_nodes.is_empty()
+                    || current_stage_nodes.iter().all(|other_id| {
                         if let Some(other_node) = graph.nodes.get(other_id) {
                             self.can_execute_in_parallel(node, other_node)
                         } else {
@@ -656,7 +732,7 @@ impl AdvancedQueryPlanner {
                 }
             }
         }
-        
+
         // Add final stage
         if !current_stage_nodes.is_empty() {
             stages.push(ExecutionStage {
@@ -667,7 +743,7 @@ impl AdvancedQueryPlanner {
                 dependencies: HashSet::new(),
             });
         }
-        
+
         Ok(stages)
     }
 
@@ -675,13 +751,14 @@ impl AdvancedQueryPlanner {
         if stages.is_empty() {
             return 1.0;
         }
-        
+
         let total_nodes: usize = stages.iter().map(|s| s.nodes.len()).sum();
-        let parallel_nodes: usize = stages.iter()
+        let parallel_nodes: usize = stages
+            .iter()
             .filter(|s| s.can_parallelize)
             .map(|s| s.nodes.len())
             .sum();
-        
+
         if total_nodes == 0 {
             1.0
         } else {
@@ -690,7 +767,9 @@ impl AdvancedQueryPlanner {
     }
 
     fn identify_monitoring_points(&self, graph: &ExecutionGraph) -> Vec<MonitoringPoint> {
-        graph.nodes.values()
+        graph
+            .nodes
+            .values()
             .filter(|node| node.estimated_cost > 5.0) // Monitor expensive operations
             .map(|node| MonitoringPoint {
                 node_id: node.id.clone(),
@@ -736,21 +815,26 @@ impl MLPredictionModel {
         feature_weights.insert("depth".to_string(), 0.6);
         feature_weights.insert("field_count".to_string(), 0.4);
         feature_weights.insert("has_cache".to_string(), -0.5);
-        
+
         Self {
             feature_weights,
             historical_data: VecDeque::new(),
         }
     }
 
-    pub fn predict_performance(&self, _selection_set: &SelectionSet, complexity: f64, depth: usize) -> PerformancePrediction {
+    pub fn predict_performance(
+        &self,
+        _selection_set: &SelectionSet,
+        complexity: f64,
+        depth: usize,
+    ) -> PerformancePrediction {
         // Simplified ML prediction
         let base_time = 100.0; // Base execution time in ms
         let complexity_factor = complexity * self.feature_weights.get("complexity").unwrap_or(&1.0);
         let depth_factor = depth as f64 * self.feature_weights.get("depth").unwrap_or(&1.0);
-        
+
         let predicted_time = base_time + complexity_factor * 10.0 + depth_factor * 5.0;
-        
+
         PerformancePrediction {
             estimated_execution_time: Duration::from_millis(predicted_time as u64),
             confidence: 0.8,
@@ -769,25 +853,25 @@ impl MLPredictionModel {
             DataSource::RemoteService => 5.0,
             DataSource::Cache => 0.1,
         };
-        
+
         // Adjust based on field name characteristics
         let field_factor = if field_name.contains("list") || field_name.ends_with('s') {
             2.0 // Collections are typically more expensive
         } else {
             1.0
         };
-        
+
         base_cost * field_factor
     }
 
     pub fn train(&mut self, data_point: PerformanceDataPoint) {
         self.historical_data.push_back(data_point);
-        
+
         // Keep only recent data for training
         while self.historical_data.len() > 1000 {
             self.historical_data.pop_front();
         }
-        
+
         // Simplified training - adjust weights based on error
         // In production, this would use proper ML algorithms
     }
@@ -810,11 +894,17 @@ impl ExecutionStatistics {
     }
 
     pub fn record_query_execution(&mut self, query_hash: String, duration: Duration) {
-        self.query_performance.entry(query_hash).or_insert_with(Vec::new).push(duration);
+        self.query_performance
+            .entry(query_hash)
+            .or_insert_with(Vec::new)
+            .push(duration);
     }
 
     pub fn record_field_execution(&mut self, field_name: String, duration: Duration) {
-        self.field_performance.entry(field_name).or_insert_with(Vec::new).push(duration);
+        self.field_performance
+            .entry(field_name)
+            .or_insert_with(Vec::new)
+            .push(duration);
     }
 
     pub fn record_cache_hit(&mut self, cache_key: String, hit: bool) {
@@ -985,7 +1075,7 @@ mod tests {
         let config = QueryPlannerConfig::default();
         let schema = Arc::new(Schema::new());
         let planner = AdvancedQueryPlanner::new(config, schema);
-        
+
         // Test basic functionality
         assert!(planner.config.enable_graph_optimization);
         assert!(planner.config.enable_ml_prediction);
@@ -996,20 +1086,18 @@ mod tests {
         let config = QueryPlannerConfig::default();
         let schema = Arc::new(Schema::new());
         let planner = AdvancedQueryPlanner::new(config, schema);
-        
+
         // Create a simple selection set for testing
         let selection_set = SelectionSet {
-            selections: vec![
-                Selection::Field(Field {
-                    alias: None,
-                    name: "user".to_string(),
-                    arguments: vec![],
-                    directives: vec![],
-                    selection_set: None,
-                }),
-            ],
+            selections: vec![Selection::Field(Field {
+                alias: None,
+                name: "user".to_string(),
+                arguments: vec![],
+                directives: vec![],
+                selection_set: None,
+            })],
         };
-        
+
         let complexity = planner.calculate_query_complexity(&selection_set).unwrap();
         assert!(complexity > 0.0);
     }
@@ -1018,7 +1106,7 @@ mod tests {
     async fn test_ml_model_prediction() {
         let model = MLPredictionModel::new();
         let selection_set = SelectionSet { selections: vec![] };
-        
+
         let prediction = model.predict_performance(&selection_set, 5.0, 3);
         assert!(prediction.estimated_execution_time.as_millis() > 0);
         assert!(prediction.confidence > 0.0 && prediction.confidence <= 1.0);
@@ -1027,7 +1115,7 @@ mod tests {
     #[tokio::test]
     async fn test_execution_graph_creation() {
         let mut graph = ExecutionGraph::new();
-        
+
         let node = ExecutionNode {
             id: "test_node".to_string(),
             node_type: ExecutionNodeType::Field,
@@ -1038,7 +1126,7 @@ mod tests {
             cache_key: None,
             data_source: DataSource::Database,
         };
-        
+
         graph.add_node(node);
         assert_eq!(graph.nodes.len(), 1);
         assert!(graph.nodes.contains_key("test_node"));

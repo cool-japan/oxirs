@@ -104,6 +104,7 @@ impl Triple {
     ///
     /// This enables efficient storage in BTree-based indexes.
     /// Order: Subject -> Predicate -> Object
+    #[allow(dead_code)]
     fn canonical_ordering(&self) -> (u8, &str, u8, &str, u8, &str) {
         let subject_ord = match &self.subject {
             Subject::NamedNode(_) => 0,
@@ -136,6 +137,7 @@ impl Triple {
     }
 
     /// Returns the subject as a string for ordering
+    #[allow(dead_code)]
     fn subject_str(&self) -> &str {
         match &self.subject {
             Subject::NamedNode(n) => n.as_str(),
@@ -146,6 +148,7 @@ impl Triple {
     }
 
     /// Returns the predicate as a string for ordering
+    #[allow(dead_code)]
     fn predicate_str(&self) -> &str {
         match &self.predicate {
             Predicate::NamedNode(n) => n.as_str(),
@@ -154,6 +157,7 @@ impl Triple {
     }
 
     /// Returns the object as a string for ordering
+    #[allow(dead_code)]
     fn object_str(&self) -> &str {
         match &self.object {
             Object::NamedNode(n) => n.as_str(),

@@ -3,6 +3,8 @@
 //! This module implements evolutionary optimization for RDF graph storage and query
 //! execution using genetic algorithms inspired by biological evolution.
 
+#![allow(dead_code)]
+
 use super::dna_structures::DnaDataStructure;
 use crate::model::Triple;
 use crate::OxirsError;

@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 
 use super::types::{LLMRequest, LLMResponse, Usage};
 
@@ -335,7 +335,7 @@ impl RealTimeAdaptation {
         {
             let mut buffer = self.interaction_buffer.lock().await;
             buffer.push_back(interaction.clone());
-            
+
             // Maintain buffer size
             if buffer.len() > self.config.adaptation_parameters.memory_window_size {
                 buffer.pop_front();
@@ -372,7 +372,10 @@ impl RealTimeAdaptation {
 
         // Check user feedback
         if let Some(feedback) = &interaction.user_feedback {
-            if matches!(feedback.rating, FeedbackRating::Poor | FeedbackRating::Terrible) {
+            if matches!(
+                feedback.rating,
+                FeedbackRating::Poor | FeedbackRating::Terrible
+            ) {
                 return Ok(true);
             }
         }
@@ -382,7 +385,10 @@ impl RealTimeAdaptation {
             AdaptationFrequency::Continuous => Ok(true),
             AdaptationFrequency::Periodic(duration) => {
                 if let Some(last_adaptation) = current_perf.last_adaptation {
-                    Ok(SystemTime::now().duration_since(last_adaptation).unwrap_or(Duration::from_secs(0)) >= duration)
+                    Ok(SystemTime::now()
+                        .duration_since(last_adaptation)
+                        .unwrap_or(Duration::from_secs(0))
+                        >= duration)
                 } else {
                     Ok(true)
                 }
@@ -418,15 +424,9 @@ impl RealTimeAdaptation {
             AdaptationStrategy::ReinforcementLearning => {
                 self.reinforcement_learning(&interactions).await
             }
-            AdaptationStrategy::MetaLearning => {
-                self.meta_learning(&interactions).await
-            }
-            AdaptationStrategy::InContextLearning => {
-                self.in_context_learning(&interactions).await
-            }
-            AdaptationStrategy::AdaptivePrompting => {
-                self.adaptive_prompting(&interactions).await
-            }
+            AdaptationStrategy::MetaLearning => self.meta_learning(&interactions).await,
+            AdaptationStrategy::InContextLearning => self.in_context_learning(&interactions).await,
+            AdaptationStrategy::AdaptivePrompting => self.adaptive_prompting(&interactions).await,
             _ => {
                 // Fallback to online gradient descent
                 self.online_gradient_descent(&interactions).await
@@ -447,7 +447,10 @@ impl RealTimeAdaptation {
     }
 
     /// Online gradient descent adaptation
-    async fn online_gradient_descent(&self, interactions: &[InteractionData]) -> Result<AdaptationResult> {
+    async fn online_gradient_descent(
+        &self,
+        interactions: &[InteractionData],
+    ) -> Result<AdaptationResult> {
         // Simulate gradient descent adaptation
         tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -463,7 +466,10 @@ impl RealTimeAdaptation {
     }
 
     /// Reinforcement learning adaptation
-    async fn reinforcement_learning(&self, interactions: &[InteractionData]) -> Result<AdaptationResult> {
+    async fn reinforcement_learning(
+        &self,
+        interactions: &[InteractionData],
+    ) -> Result<AdaptationResult> {
         // Simulate RL adaptation
         tokio::time::sleep(Duration::from_millis(150)).await;
 
@@ -493,7 +499,10 @@ impl RealTimeAdaptation {
     }
 
     /// In-context learning adaptation
-    async fn in_context_learning(&self, interactions: &[InteractionData]) -> Result<AdaptationResult> {
+    async fn in_context_learning(
+        &self,
+        interactions: &[InteractionData],
+    ) -> Result<AdaptationResult> {
         // Simulate in-context learning
         tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -508,7 +517,10 @@ impl RealTimeAdaptation {
     }
 
     /// Adaptive prompting
-    async fn adaptive_prompting(&self, interactions: &[InteractionData]) -> Result<AdaptationResult> {
+    async fn adaptive_prompting(
+        &self,
+        interactions: &[InteractionData],
+    ) -> Result<AdaptationResult> {
         // Simulate prompt optimization
         tokio::time::sleep(Duration::from_millis(75)).await;
 
@@ -523,7 +535,10 @@ impl RealTimeAdaptation {
     }
 
     /// Calculate performance improvement from interactions
-    async fn calculate_performance_improvement(&self, interactions: &[InteractionData]) -> Result<f32> {
+    async fn calculate_performance_improvement(
+        &self,
+        interactions: &[InteractionData],
+    ) -> Result<f32> {
         let mut total_feedback_score = 0.0;
         let mut feedback_count = 0;
 
@@ -557,7 +572,13 @@ impl RealTimeAdaptation {
         let current_perf = self.current_performance.read().await;
 
         let checkpoint = ModelCheckpoint {
-            checkpoint_id: format!("checkpoint_{}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()),
+            checkpoint_id: format!(
+                "checkpoint_{}",
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+            ),
             model_state: vec![0u8; 1000], // Mock model state
             performance_metrics: current_metrics,
             timestamp: SystemTime::now(),
@@ -578,7 +599,13 @@ impl RealTimeAdaptation {
     /// Record adaptation event
     async fn record_adaptation_event(&self, result: AdaptationResult) -> Result<()> {
         let event = AdaptationEvent {
-            event_id: format!("event_{}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()),
+            event_id: format!(
+                "event_{}",
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+            ),
             adaptation_type: result.adaptation_type,
             trigger_reason: "Performance threshold".to_string(),
             performance_before: PerformanceSnapshot {
@@ -618,7 +645,7 @@ impl RealTimeAdaptation {
     /// Rollback to previous checkpoint if needed
     pub async fn rollback_if_needed(&self) -> Result<bool> {
         let current_perf = self.current_performance.read().await;
-        
+
         // Check if rollback is needed
         if current_perf.accuracy < self.config.rollback_config.rollback_threshold {
             self.rollback_to_checkpoint().await?;
@@ -631,17 +658,24 @@ impl RealTimeAdaptation {
     /// Rollback to most recent checkpoint
     async fn rollback_to_checkpoint(&self) -> Result<()> {
         let checkpoints = self.model_checkpoints.read().await;
-        
+
         if let Some(latest_checkpoint) = checkpoints.back() {
             // Simulate rollback process
             tokio::time::sleep(Duration::from_millis(100)).await;
-            
+
             // Update performance to checkpoint state
             let mut current_perf = self.current_performance.write().await;
-            current_perf.accuracy = latest_checkpoint.performance_metrics.accuracy_improvement + 0.8;
-            current_perf.user_satisfaction = latest_checkpoint.performance_metrics.user_satisfaction_improvement + 0.8;
-            
-            println!("Rolled back to checkpoint: {}", latest_checkpoint.checkpoint_id);
+            current_perf.accuracy =
+                latest_checkpoint.performance_metrics.accuracy_improvement + 0.8;
+            current_perf.user_satisfaction = latest_checkpoint
+                .performance_metrics
+                .user_satisfaction_improvement
+                + 0.8;
+
+            println!(
+                "Rolled back to checkpoint: {}",
+                latest_checkpoint.checkpoint_id
+            );
         }
 
         Ok(())

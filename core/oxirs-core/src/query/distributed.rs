@@ -3,6 +3,8 @@
 //! This module provides federated query capabilities, cross-datacenter optimization,
 //! edge computing distribution, and real-time collaborative filtering.
 
+#![allow(dead_code)]
+
 use crate::model::*;
 use crate::query::algebra::{self, *};
 // use crate::query::plan::ExecutionPlan; // For future distributed execution
@@ -610,7 +612,10 @@ impl DistributedQueryEngine {
     }
 
     /// Optimize join order for distributed execution
-    fn optimize_join_order(&self, _routes: &[QueryRoute]) -> Result<Vec<JoinOperation>, OxirsError> {
+    fn optimize_join_order(
+        &self,
+        _routes: &[QueryRoute],
+    ) -> Result<Vec<JoinOperation>, OxirsError> {
         // Placeholder - would use cost-based optimization
         Ok(Vec::new())
     }

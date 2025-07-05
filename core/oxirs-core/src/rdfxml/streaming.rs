@@ -4,28 +4,29 @@
 //! without building a DOM tree, using SAX-style parsing with zero-copy optimizations.
 
 use crate::{
-    rdfxml::{RdfXmlParseError},
-    model::{Triple, NamedNode, BlankNode, Term, Subject, Object},
     interning::StringInterner,
+    model::{BlankNode, NamedNode, Object, Subject, Term, Triple},
     optimization::TermInternerExt,
     // optimization::{ZeroCopyBuffer, SimdProcessor}, // TODO: Implement these types
+    rdfxml::RdfXmlParseError,
 };
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::{Arc, atomic::{AtomicUsize, Ordering}, Mutex},
-    time::{Duration, Instant},
-};
-use tokio::{
-    sync::{mpsc},
-};
-use std::io::BufReader;
-use quick_xml::{
-    events::{Event, BytesStart, BytesEnd, BytesText, attributes::Attributes},
-    Reader as XmlReader,
-};
+use bumpalo::Bump;
 #[cfg(feature = "parallel")]
 use parking_lot::Mutex as ParkingLotMutex;
-use bumpalo::Bump;
+use quick_xml::{
+    events::{attributes::Attributes, BytesEnd, BytesStart, BytesText, Event},
+    Reader as XmlReader,
+};
+use std::io::BufReader;
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
+    time::{Duration, Instant},
+};
+use tokio::sync::mpsc;
 
 /// Ultra-high performance DOM-free streaming RDF/XML parser
 pub struct DomFreeStreamingRdfXmlParser {
@@ -121,10 +122,18 @@ pub struct RdfXmlBufferPool {
 /// High-performance streaming sink for RDF/XML output
 pub trait RdfXmlStreamingSink: Send + Sync {
     type Error: Send + Sync + std::error::Error;
-    
-    fn process_triple_stream(&mut self, triples: Vec<Triple>) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
-    fn process_namespace_declaration(&mut self, prefix: &str, namespace: &str) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
-    fn flush_output(&mut self) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
+
+    fn process_triple_stream(
+        &mut self,
+        triples: Vec<Triple>,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
+    fn process_namespace_declaration(
+        &mut self,
+        prefix: &str,
+        namespace: &str,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
+    fn flush_output(&mut self)
+        -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
     fn get_statistics(&self) -> RdfXmlSinkStatistics;
 }
 
@@ -147,7 +156,7 @@ impl Default for RdfXmlStreamingConfig {
             enable_zero_copy: true,
             enable_parallel_processing: true,
             triple_batch_size: 1000,
-            arena_size: 1024 * 1024, // 1MB
+            arena_size: 1024 * 1024,                      // 1MB
             memory_pressure_threshold: 512 * 1024 * 1024, // 512MB
         }
     }
@@ -180,10 +189,10 @@ impl DomFreeStreamingRdfXmlParser {
         let mut buf_reader = BufReader::new(reader);
         let mut xml_reader = XmlReader::from_reader(&mut buf_reader);
         xml_reader.config_mut().trim_text(true);
-        
+
         let mut triple_buffer = Vec::with_capacity(self.config.triple_batch_size);
         let (tx, mut rx) = mpsc::channel::<TripleBatch>(100);
-        
+
         // Spawn background task to handle triple batches
         let _sink_tx = tx.clone();
         let sink_handle = tokio::spawn(async move {
@@ -193,13 +202,14 @@ impl DomFreeStreamingRdfXmlParser {
             sink.flush_output().await?;
             Ok::<(), S::Error>(())
         });
-        
+
         // Main parsing loop
         let mut buf = Vec::new();
         loop {
             match xml_reader.read_event_into(&mut buf) {
                 Ok(Event::Start(ref e)) => {
-                    self.handle_start_element(e, &mut triple_buffer, &tx).await?;
+                    self.handle_start_element(e, &mut triple_buffer, &tx)
+                        .await?;
                 }
                 Ok(Event::End(ref e)) => {
                     self.handle_end_element(e, &mut triple_buffer, &tx).await?;
@@ -208,36 +218,39 @@ impl DomFreeStreamingRdfXmlParser {
                     self.handle_text_content(e, &mut triple_buffer, &tx).await?;
                 }
                 Ok(Event::Empty(ref e)) => {
-                    self.handle_empty_element(e, &mut triple_buffer, &tx).await?;
+                    self.handle_empty_element(e, &mut triple_buffer, &tx)
+                        .await?;
                 }
                 Ok(Event::Eof) => break,
-                Ok(_) => {}, // Ignore other events
+                Ok(_) => {} // Ignore other events
                 Err(e) => return Err(RdfXmlParseError::XmlError(e.to_string())),
             }
-            
+
             // Check for memory pressure
             if self.should_cleanup_memory() {
                 self.cleanup_memory().await;
             }
-            
+
             buf.clear();
         }
-        
+
         // Send final batch
         if !triple_buffer.is_empty() {
             let batch = TripleBatch {
                 triples: triple_buffer,
             };
-            tx.send(batch).await
+            tx.send(batch)
+                .await
                 .map_err(|_| RdfXmlParseError::XmlError("Channel send failed".to_string()))?;
         }
-        
+
         // Close channel and wait for sink to finish
         drop(tx);
-        sink_handle.await
-            .map_err(|e| RdfXmlParseError::XmlError(format!("Sink task failed: {}", e)))?
-            .map_err(|e| RdfXmlParseError::XmlError(format!("Sink error: {}", e)))?;
-        
+        sink_handle
+            .await
+            .map_err(|e| RdfXmlParseError::XmlError(format!("Sink task failed: {e}")))?
+            .map_err(|e| RdfXmlParseError::XmlError(format!("Sink error: {e}")))?;
+
         Ok(self.performance_monitor.get_statistics())
     }
 
@@ -249,40 +262,46 @@ impl DomFreeStreamingRdfXmlParser {
         tx: &mpsc::Sender<TripleBatch>,
     ) -> Result<(), RdfXmlParseError> {
         self.performance_monitor.record_element_processed();
-        
+
         let element_name = self.resolve_qname(element.name().as_ref())?;
         let mut context = ElementContext::new();
-        
+
         // Determine element type
         context.element_type = self.classify_element(&element_name)?;
-        
+
         // Process attributes with zero-copy optimization
-        self.process_attributes_zero_copy(element.attributes(), &mut context).await?;
-        
+        self.process_attributes_zero_copy(element.attributes(), &mut context)
+            .await?;
+
         // Handle different element types
         match context.element_type {
             ElementType::RdfRoot => {
                 self.handle_rdf_root(&context).await?;
             }
             ElementType::Description => {
-                self.handle_description_element(&mut context, triple_buffer, tx).await?;
+                self.handle_description_element(&mut context, triple_buffer, tx)
+                    .await?;
             }
             ElementType::Property => {
-                self.handle_property_element(&mut context, triple_buffer, tx).await?;
+                self.handle_property_element(&mut context, triple_buffer, tx)
+                    .await?;
             }
             ElementType::Collection => {
-                self.handle_collection_element(&mut context, triple_buffer, tx).await?;
+                self.handle_collection_element(&mut context, triple_buffer, tx)
+                    .await?;
             }
             ElementType::ParseType(parse_type) => {
-                self.handle_parse_type_element(parse_type, &mut context, triple_buffer, tx).await?;
+                self.handle_parse_type_element(parse_type, &mut context, triple_buffer, tx)
+                    .await?;
             }
             ElementType::Unknown => {
                 // Treat as property element by default
                 context.element_type = ElementType::Property;
-                self.handle_property_element(&mut context, triple_buffer, tx).await?;
+                self.handle_property_element(&mut context, triple_buffer, tx)
+                    .await?;
             }
         }
-        
+
         self.element_stack.push(context);
         Ok(())
     }
@@ -296,18 +315,20 @@ impl DomFreeStreamingRdfXmlParser {
     ) -> Result<(), RdfXmlParseError> {
         if let Some(context) = self.element_stack.pop() {
             // Finalize element processing
-            self.finalize_element_processing(context, triple_buffer, tx).await?;
+            self.finalize_element_processing(context, triple_buffer, tx)
+                .await?;
         }
-        
+
         // Flush batch if buffer is full
         if triple_buffer.len() >= self.config.triple_batch_size {
             let batch = TripleBatch {
                 triples: std::mem::take(triple_buffer),
             };
-            tx.send(batch).await
+            tx.send(batch)
+                .await
                 .map_err(|_| RdfXmlParseError::XmlError("Channel send failed".to_string()))?;
         }
-        
+
         Ok(())
     }
 
@@ -326,20 +347,21 @@ impl DomFreeStreamingRdfXmlParser {
                 .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?
                 .into_owned()
         };
-        
+
         if let Some(context) = self.element_stack.last_mut() {
             if context.element_type == ElementType::Property {
-                
                 let literal = if let Some(datatype) = &context.datatype {
-                    self.term_interner.intern_literal_with_datatype(&text_content, &datatype.to_string())?
+                    self.term_interner
+                        .intern_literal_with_datatype(&text_content, &datatype.to_string())?
                 } else if let Some(language) = &context.language {
-                    self.term_interner.intern_literal_with_language(&text_content, language)?
+                    self.term_interner
+                        .intern_literal_with_language(&text_content, language)?
                 } else {
                     self.term_interner.intern_literal(&text_content)?
                 };
-                
+
                 context.object = Some(literal.clone().into());
-                
+
                 // Generate triple if we have subject and predicate
                 if let (Some(subject), Some(predicate)) = (&context.subject, &context.predicate) {
                     if let Ok(subj) = Subject::try_from(subject.clone()) {
@@ -349,7 +371,7 @@ impl DomFreeStreamingRdfXmlParser {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -361,12 +383,14 @@ impl DomFreeStreamingRdfXmlParser {
         tx: &mpsc::Sender<TripleBatch>,
     ) -> Result<(), RdfXmlParseError> {
         // Process as start element followed immediately by end element
-        self.handle_start_element(element, triple_buffer, tx).await?;
-        
+        self.handle_start_element(element, triple_buffer, tx)
+            .await?;
+
         if let Some(context) = self.element_stack.pop() {
-            self.finalize_element_processing(context, triple_buffer, tx).await?;
+            self.finalize_element_processing(context, triple_buffer, tx)
+                .await?;
         }
-        
+
         Ok(())
     }
 
@@ -378,13 +402,13 @@ impl DomFreeStreamingRdfXmlParser {
     ) -> Result<(), RdfXmlParseError> {
         for attr_result in attributes {
             let attr = attr_result.map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?;
-            
+
             let attr_name = if self.config.enable_zero_copy {
                 self.process_attribute_name_zero_copy(attr.key.as_ref())?
             } else {
                 String::from_utf8_lossy(attr.key.as_ref()).into_owned()
             };
-            
+
             let attr_value = if self.config.enable_zero_copy {
                 self.process_attribute_value_zero_copy(&attr_name, &attr.value)?
             } else {
@@ -392,7 +416,7 @@ impl DomFreeStreamingRdfXmlParser {
                     .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?
                     .into_owned()
             };
-            
+
             // Handle special RDF attributes
             match attr_name.as_str() {
                 "rdf:about" | "about" => {
@@ -414,9 +438,8 @@ impl DomFreeStreamingRdfXmlParser {
                     context.language = Some(attr_value);
                 }
                 "rdf:parseType" | "parseType" => {
-                    context.element_type = ElementType::ParseType(
-                        self.parse_parse_type(&attr_value)?
-                    );
+                    context.element_type =
+                        ElementType::ParseType(self.parse_parse_type(&attr_value)?);
                 }
                 _ => {
                     // Regular attribute
@@ -424,7 +447,7 @@ impl DomFreeStreamingRdfXmlParser {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -433,7 +456,9 @@ impl DomFreeStreamingRdfXmlParser {
         match element_name {
             "rdf:RDF" | "RDF" => Ok(ElementType::RdfRoot),
             "rdf:Description" | "Description" => Ok(ElementType::Description),
-            "rdf:Bag" | "rdf:Seq" | "rdf:Alt" | "Bag" | "Seq" | "Alt" => Ok(ElementType::Collection),
+            "rdf:Bag" | "rdf:Seq" | "rdf:Alt" | "Bag" | "Seq" | "Alt" => {
+                Ok(ElementType::Collection)
+            }
             _ => {
                 // Check if it's a known RDF property or type
                 if self.is_rdf_property(element_name) {
@@ -451,8 +476,8 @@ impl DomFreeStreamingRdfXmlParser {
     async fn handle_rdf_root(&mut self, context: &ElementContext) -> Result<(), RdfXmlParseError> {
         // Process namespace declarations from attributes
         for (name, value) in &context.attributes {
-            if name.starts_with("xmlns:") {
-                let prefix = &name[6..]; // Remove "xmlns:" prefix
+            if let Some(prefix) = name.strip_prefix("xmlns:") {
+                // Remove "xmlns:" prefix
                 self.declare_namespace(prefix, value).await?;
             } else if name == "xmlns" {
                 self.set_default_namespace(value).await?;
@@ -460,7 +485,7 @@ impl DomFreeStreamingRdfXmlParser {
                 self.set_base_uri(value).await?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -475,29 +500,31 @@ impl DomFreeStreamingRdfXmlParser {
         if context.subject.is_none() {
             context.subject = Some(self.term_interner.intern_blank_node().into());
         }
-        
+
         // Process attribute properties
         for (name, value) in &context.attributes.clone() {
             if !name.starts_with("rdf:") && !name.starts_with("xml:") {
                 let predicate_iri = self.resolve_qname(name.as_bytes())?;
                 let predicate = self.term_interner.intern_named_node(&predicate_iri)?;
-                
+
                 let object: Term = if self.is_uri_reference(value) {
                     let iri = self.resolve_uri(value)?;
                     self.term_interner.intern_named_node(&iri)?.into()
                 } else {
                     self.term_interner.intern_literal(value)?.into()
                 };
-                
+
                 if let Some(subject) = &context.subject {
-                    if let (Ok(subj), Ok(obj)) = (Subject::try_from(subject.clone()), Object::try_from(object)) {
+                    if let (Ok(subj), obj) =
+                        (Subject::try_from(subject.clone()), Object::from(object))
+                    {
                         let triple = Triple::new(subj, predicate, obj);
                         triple_buffer.push(triple);
                     }
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -505,22 +532,25 @@ impl DomFreeStreamingRdfXmlParser {
     async fn handle_property_element(
         &mut self,
         context: &mut ElementContext,
-        _triple_buffer: &mut Vec<Triple>,
+        _triple_buffer: &mut [Triple],
         _tx: &mpsc::Sender<TripleBatch>,
     ) -> Result<(), RdfXmlParseError> {
         // Get parent context for subject
         if let Some(parent_context) = self.element_stack.iter().rev().find(|ctx| {
-            matches!(ctx.element_type, ElementType::Description | ElementType::Property)
+            matches!(
+                ctx.element_type,
+                ElementType::Description | ElementType::Property
+            )
         }) {
             context.subject = parent_context.subject.clone();
         }
-        
+
         // Property IRI is the element name
         if let Some(element_name) = self.get_current_element_name() {
             let predicate_iri = self.resolve_qname(element_name.as_bytes())?;
             context.predicate = Some(self.term_interner.intern_named_node(&predicate_iri)?);
         }
-        
+
         Ok(())
     }
 
@@ -535,17 +565,25 @@ impl DomFreeStreamingRdfXmlParser {
         if context.subject.is_none() {
             context.subject = Some(self.term_interner.intern_blank_node().into());
         }
-        
+
         // Add rdf:type triple for collection type
-        if let (Some(subject), Some(collection_type)) = (&context.subject, self.get_collection_type(&context.element_type)) {
-            let rdf_type = self.term_interner.intern_named_node("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
-            let type_object: Object = self.term_interner.intern_named_node(collection_type)?.into();
+        if let (Some(subject), Some(collection_type)) = (
+            &context.subject,
+            self.get_collection_type(&context.element_type),
+        ) {
+            let rdf_type = self
+                .term_interner
+                .intern_named_node("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
+            let type_object: Object = self
+                .term_interner
+                .intern_named_node(collection_type)?
+                .into();
             if let Ok(subj) = Subject::try_from(subject.clone()) {
                 let triple = Triple::new(subj, rdf_type, type_object);
                 triple_buffer.push(triple);
             }
         }
-        
+
         Ok(())
     }
 
@@ -554,7 +592,7 @@ impl DomFreeStreamingRdfXmlParser {
         &mut self,
         parse_type: ParseType,
         context: &mut ElementContext,
-        _triple_buffer: &mut Vec<Triple>,
+        _triple_buffer: &mut [Triple],
         _tx: &mpsc::Sender<TripleBatch>,
     ) -> Result<(), RdfXmlParseError> {
         match parse_type {
@@ -569,12 +607,13 @@ impl DomFreeStreamingRdfXmlParser {
             ParseType::Literal => {
                 // parseType="Literal" treats content as XML literal
                 // This would require special handling of nested XML
-                context.datatype = Some(self.term_interner.intern_named_node(
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral"
-                )?);
+                context.datatype =
+                    Some(self.term_interner.intern_named_node(
+                        "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral",
+                    )?);
             }
         }
-        
+
         Ok(())
     }
 
@@ -586,14 +625,15 @@ impl DomFreeStreamingRdfXmlParser {
         _tx: &mpsc::Sender<TripleBatch>,
     ) -> Result<(), RdfXmlParseError> {
         // Generate final triple if all components are available
-        if let (Some(subject), Some(predicate), Some(object)) = 
-            (context.subject, context.predicate, context.object) {
-            if let (Ok(subj), Ok(obj)) = (Subject::try_from(subject), Object::try_from(object)) {
+        if let (Some(subject), Some(predicate), Some(object)) =
+            (context.subject, context.predicate, context.object)
+        {
+            if let (Ok(subj), obj) = (Subject::try_from(subject), Object::from(object)) {
                 let triple = Triple::new(subj, predicate, obj);
                 triple_buffer.push(triple);
             }
         }
-        
+
         Ok(())
     }
 
@@ -601,11 +641,14 @@ impl DomFreeStreamingRdfXmlParser {
     fn process_text_zero_copy(&self, text: &BytesText<'_>) -> Result<String, RdfXmlParseError> {
         if self.config.enable_zero_copy {
             // Use arena allocation for temporary string
-            let text_str = self.arena.alloc_str(std::str::from_utf8(text.as_ref())
-                .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?);
+            let text_str = self.arena.alloc_str(
+                std::str::from_utf8(text.as_ref())
+                    .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?,
+            );
             Ok(text_str.to_string()) // Still need to copy for return value
         } else {
-            Ok(text.unescape()
+            Ok(text
+                .unescape()
                 .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?
                 .into_owned())
         }
@@ -616,7 +659,11 @@ impl DomFreeStreamingRdfXmlParser {
         Ok(String::from_utf8_lossy(name).into_owned())
     }
 
-    fn process_attribute_value_zero_copy(&self, _name: &str, value: &[u8]) -> Result<String, RdfXmlParseError> {
+    fn process_attribute_value_zero_copy(
+        &self,
+        _name: &str,
+        value: &[u8],
+    ) -> Result<String, RdfXmlParseError> {
         self.performance_monitor.record_zero_copy_operation();
         Ok(String::from_utf8_lossy(value).into_owned())
     }
@@ -627,16 +674,16 @@ impl DomFreeStreamingRdfXmlParser {
         if let Some(colon_pos) = qname_str.find(':') {
             let prefix = &qname_str[..colon_pos];
             let local_name = &qname_str[colon_pos + 1..];
-            
+
             if let Some(namespace_uri) = self.get_namespace_uri(prefix) {
-                Ok(format!("{}{}", namespace_uri, local_name))
+                Ok(format!("{namespace_uri}{local_name}"))
             } else {
                 Err(RdfXmlParseError::UndefinedPrefix(prefix.to_string()))
             }
         } else {
             // No prefix, use default namespace or treat as local name
             if let Some(default_ns) = self.get_default_namespace() {
-                Ok(format!("{}{}", default_ns, qname_str))
+                Ok(format!("{default_ns}{qname_str}"))
             } else {
                 Ok(qname_str.into_owned())
             }
@@ -647,26 +694,40 @@ impl DomFreeStreamingRdfXmlParser {
         if uri.starts_with("http://") || uri.starts_with("https://") {
             Ok(uri.to_string())
         } else if let Some(base_uri) = self.get_base_uri() {
-            Ok(format!("{}{}", base_uri, uri))
+            Ok(format!("{base_uri}{uri}"))
         } else {
             Ok(uri.to_string())
         }
     }
 
     fn is_rdf_property(&self, name: &str) -> bool {
-        matches!(name, "rdf:type" | "type" | "rdf:value" | "value" | 
-                      "rdf:first" | "first" | "rdf:rest" | "rest")
+        matches!(
+            name,
+            "rdf:type"
+                | "type"
+                | "rdf:value"
+                | "value"
+                | "rdf:first"
+                | "first"
+                | "rdf:rest"
+                | "rest"
+        )
     }
 
     fn is_rdf_type(&self, name: &str) -> bool {
         // Check if it's a known RDF/RDFS/OWL class
-        name.contains("Class") || name.contains("Property") || 
-        name == "rdf:Resource" || name == "Resource"
+        name.contains("Class")
+            || name.contains("Property")
+            || name == "rdf:Resource"
+            || name == "Resource"
     }
 
     fn is_uri_reference(&self, value: &str) -> bool {
-        value.starts_with("http://") || value.starts_with("https://") || 
-        value.starts_with("#") || value.starts_with("../") || value.starts_with("./")
+        value.starts_with("http://")
+            || value.starts_with("https://")
+            || value.starts_with("#")
+            || value.starts_with("../")
+            || value.starts_with("./")
     }
 
     fn parse_parse_type(&self, parse_type: &str) -> Result<ParseType, RdfXmlParseError> {
@@ -698,9 +759,15 @@ impl DomFreeStreamingRdfXmlParser {
         self.namespace_stack.last()?.base_uri.clone()
     }
 
-    async fn declare_namespace(&mut self, prefix: &str, namespace: &str) -> Result<(), RdfXmlParseError> {
+    async fn declare_namespace(
+        &mut self,
+        prefix: &str,
+        namespace: &str,
+    ) -> Result<(), RdfXmlParseError> {
         if let Some(context) = self.namespace_stack.last_mut() {
-            context.prefixes.insert(prefix.to_string(), namespace.to_string());
+            context
+                .prefixes
+                .insert(prefix.to_string(), namespace.to_string());
         }
         Ok(())
     }
@@ -758,10 +825,19 @@ pub struct RdfXmlStreamingStatistics {
 impl Default for NamespaceContext {
     fn default() -> Self {
         let mut prefixes = HashMap::new();
-        prefixes.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-        prefixes.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-        prefixes.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
-        
+        prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
+
         Self {
             prefixes,
             default_namespace: None,
@@ -821,13 +897,13 @@ impl RdfXmlPerformanceMonitor {
         let namespace_lookups = self.namespace_lookups.load(Ordering::Relaxed);
         let zero_copy_ops = self.zero_copy_operations.load(Ordering::Relaxed);
         let errors = self.parse_errors.load(Ordering::Relaxed);
-        
+
         let throughput = if elapsed.as_secs() > 0 {
             elements as f64 / elapsed.as_secs_f64()
         } else {
             0.0
         };
-        
+
         RdfXmlStreamingStatistics {
             elements_processed: elements,
             triples_generated: triples,
@@ -853,7 +929,9 @@ impl RdfXmlBufferPool {
 
     fn get_xml_buffer(&self) -> Vec<u8> {
         let mut buffers = self.xml_buffers.lock().unwrap();
-        buffers.pop().unwrap_or_else(|| Vec::with_capacity(self.buffer_size))
+        buffers
+            .pop()
+            .unwrap_or_else(|| Vec::with_capacity(self.buffer_size))
     }
 
     fn return_xml_buffer(&self, mut buffer: Vec<u8>) {
@@ -929,32 +1007,36 @@ impl RdfXmlStreamingSink for MemoryRdfXmlSink {
             let mut triple_vec = self.triples.lock().unwrap();
             triple_vec.extend(triples);
         }
-        
+
         // Update statistics
         {
             let mut stats = self.statistics.lock().unwrap();
             stats.triples_processed += count;
         }
-        
+
         Ok(())
     }
 
-    fn process_namespace_declaration(&mut self, prefix: &str, namespace: &str) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
+    fn process_namespace_declaration(
+        &mut self,
+        prefix: &str,
+        namespace: &str,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
         let prefix = prefix.to_string();
         let namespace = namespace.to_string();
         async move {
-        {
-            let mut namespaces = self.namespaces.lock().unwrap();
-            namespaces.insert(prefix, namespace);
-        }
-        
-        // Update statistics
-        {
-            let mut stats = self.statistics.lock().unwrap();
-            stats.namespaces_declared += 1;
-        }
-        
-        Ok(())
+            {
+                let mut namespaces = self.namespaces.lock().unwrap();
+                namespaces.insert(prefix, namespace);
+            }
+
+            // Update statistics
+            {
+                let mut stats = self.statistics.lock().unwrap();
+                stats.namespaces_declared += 1;
+            }
+
+            Ok(())
         }
     }
 
@@ -976,7 +1058,7 @@ mod tests {
     #[tokio::test]
     async fn test_dom_free_streaming_parser() {
         use std::io::Cursor;
-        
+
         let rdfxml_data = r#"<?xml version="1.0"?>
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
          xmlns:foaf="http://xmlns.com/foaf/0.1/">
@@ -989,13 +1071,13 @@ mod tests {
         let config = RdfXmlStreamingConfig::default();
         let mut parser = DomFreeStreamingRdfXmlParser::new(config);
         let reader = Cursor::new(rdfxml_data.as_bytes());
-        let mut sink = MemoryRdfXmlSink::new();
+        let sink = MemoryRdfXmlSink::new();
 
         let stats = parser.stream_parse(reader, sink).await.unwrap();
-        
+
         assert!(stats.elements_processed > 0);
         // Note: actual triple generation depends on proper parsing implementation
-        
+
         // Test basic statistics
         assert!(stats.processing_time.as_nanos() > 0);
     }

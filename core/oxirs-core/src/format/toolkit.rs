@@ -7,6 +7,7 @@ use super::error::{ParseResult, RdfParseError, TextPosition};
 use std::io::BufRead;
 
 /// A generic lexer that tokenizes input streams
+#[allow(dead_code)]
 pub struct Lexer<B, TR> {
     buffer: B,
     tokenizer: TR,
@@ -170,6 +171,7 @@ impl<R: BufRead> ReaderBuffer<R> {
         }
     }
 
+    #[allow(dead_code)]
     fn ensure_chars_available(&mut self) -> ParseResult<()> {
         if self.buffer_pos + 1 >= self.char_buffer.len() {
             self.fill_buffer()?;

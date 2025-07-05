@@ -3,6 +3,8 @@
 //! This module implements multi-region replication with active-active support,
 //! optimized for low latency and high availability across geographic regions.
 
+#![allow(dead_code)]
+
 use crate::model::{Triple, TriplePattern};
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
@@ -321,16 +323,19 @@ pub struct ReplicationManager {
 }
 
 /// Replication storage
+#[allow(dead_code)]
 struct ReplicationStorage {
     /// Current triples with versions
     triples: HashMap<Triple, VersionedTriple>,
     /// Conflict storage
     conflicts: HashMap<Triple, Vec<VersionedTriple>>,
     /// Pending operations
+    #[allow(dead_code)]
     pending_ops: VecDeque<ReplicationOp>,
 }
 
 /// Replication state
+#[allow(dead_code)]
 struct ReplicationState {
     /// Vector clock for this region
     vector_clock: VectorClock,
@@ -344,6 +349,7 @@ struct ReplicationState {
 
 /// Peer state tracking
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct PeerState {
     /// Last seen timestamp
     last_seen: Instant,
@@ -358,6 +364,7 @@ struct PeerState {
 }
 
 /// Snapshot transfer state
+#[allow(dead_code)]
 struct SnapshotTransfer {
     /// Snapshot ID
     id: String,
@@ -837,7 +844,9 @@ impl ReplicationManager {
 
                         // Resolve conflict
                         let winner = resolver.resolve_conflict(existing, &versioned).await?;
-                        storage_guard.triples.insert(versioned.triple.clone(), winner);
+                        storage_guard
+                            .triples
+                            .insert(versioned.triple.clone(), winner);
 
                         // Store conflict for later analysis
                         storage_guard
@@ -875,7 +884,8 @@ impl ReplicationManager {
                         state.clone(),
                         resolver.clone(),
                         stats.clone(),
-                    )).await?;
+                    ))
+                    .await?;
                 }
             }
             ReplicationOp::Heartbeat(info) => {

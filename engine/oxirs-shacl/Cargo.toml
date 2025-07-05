@@ -36,11 +36,17 @@ num_cpus.workspace = true
 rand.workspace = true
 serde_yaml = "0.9"
 semver = { version = "1.0", features = ["serde"] }
+tracing-subscriber = "0.3"
 
 [dev-dependencies]
 criterion.workspace = true
 proptest = "1.4"
 tokio-test = "0.4"
+tracing-subscriber = "0.3"
+
+[[bin]]
+name = "w3c_test_runner"
+path = "src/bin/w3c_test_runner.rs"
 
 [features]
 default = ["core", "async", "parallel"]

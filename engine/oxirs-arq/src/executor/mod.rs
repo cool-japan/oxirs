@@ -1536,20 +1536,28 @@ impl QueryExecutor {
             for condition in conditions {
                 let val_a = self.evaluate_order_expression(&condition.expr, a);
                 let val_b = self.evaluate_order_expression(&condition.expr, b);
-                
+
                 let cmp = match (val_a, val_b) {
-                    (Some(crate::algebra::Term::Literal(lit_a)), Some(crate::algebra::Term::Literal(lit_b))) => {
+                    (
+                        Some(crate::algebra::Term::Literal(lit_a)),
+                        Some(crate::algebra::Term::Literal(lit_b)),
+                    ) => {
                         // Try to compare as numbers first
-                        if let (Ok(num_a), Ok(num_b)) = (lit_a.value.parse::<f64>(), lit_b.value.parse::<f64>()) {
-                            num_a.partial_cmp(&num_b).unwrap_or(std::cmp::Ordering::Equal)
+                        if let (Ok(num_a), Ok(num_b)) =
+                            (lit_a.value.parse::<f64>(), lit_b.value.parse::<f64>())
+                        {
+                            num_a
+                                .partial_cmp(&num_b)
+                                .unwrap_or(std::cmp::Ordering::Equal)
                         } else {
                             // Fall back to string comparison
                             lit_a.value.cmp(&lit_b.value)
                         }
                     }
-                    (Some(crate::algebra::Term::Iri(iri_a)), Some(crate::algebra::Term::Iri(iri_b))) => {
-                        iri_a.as_str().cmp(iri_b.as_str())
-                    }
+                    (
+                        Some(crate::algebra::Term::Iri(iri_a)),
+                        Some(crate::algebra::Term::Iri(iri_b)),
+                    ) => iri_a.as_str().cmp(iri_b.as_str()),
                     (Some(a), Some(b)) => {
                         // Generic string comparison for other types
                         format!("{}", a).cmp(&format!("{}", b))
@@ -1558,16 +1566,20 @@ impl QueryExecutor {
                     (None, Some(_)) => std::cmp::Ordering::Greater,
                     (None, None) => std::cmp::Ordering::Equal,
                 };
-                
-                let result = if condition.ascending { cmp } else { cmp.reverse() };
-                
+
+                let result = if condition.ascending {
+                    cmp
+                } else {
+                    cmp.reverse()
+                };
+
                 if result != std::cmp::Ordering::Equal {
                     return result;
                 }
             }
             std::cmp::Ordering::Equal
         });
-        
+
         solution
     }
 
@@ -1578,9 +1590,7 @@ impl QueryExecutor {
         binding: &std::collections::HashMap<crate::algebra::Variable, crate::algebra::Term>,
     ) -> Option<crate::algebra::Term> {
         match expr {
-            crate::algebra::Expression::Variable(var) => {
-                binding.get(var).cloned()
-            }
+            crate::algebra::Expression::Variable(var) => binding.get(var).cloned(),
             _ => {
                 // For more complex expressions, we would need full expression evaluation
                 // For now, return None for unsupported expressions

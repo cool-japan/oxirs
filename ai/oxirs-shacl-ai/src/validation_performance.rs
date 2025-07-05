@@ -1061,7 +1061,7 @@ impl Default for ValidationPerformanceOptimizer {
 }
 
 /// Quantum-Enhanced Validation Performance Optimizer
-/// 
+///
 /// This module provides quantum consciousness-guided performance optimization
 /// capabilities that leverage quantum computing principles for ultra-advanced
 /// validation performance enhancement.
@@ -1177,11 +1177,11 @@ pub struct EmotionalValidationContext {
 /// Validation emotions that affect optimization
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationEmotion {
-    Curiosity,      // Explores new optimization strategies
-    Confidence,     // Applies proven strategies
-    Caution,        // Conservative optimization
-    Excitement,     // Aggressive optimization
-    Contemplation,  // Deep analysis mode
+    Curiosity,     // Explores new optimization strategies
+    Confidence,    // Applies proven strategies
+    Caution,       // Conservative optimization
+    Excitement,    // Aggressive optimization
+    Contemplation, // Deep analysis mode
 }
 
 /// Intuitive optimization insights
@@ -1221,33 +1221,45 @@ impl QuantumValidationPerformanceOptimizer {
     }
 
     /// Perform quantum-enhanced validation optimization
-    pub async fn quantum_optimize_validation(&self, shapes: &[Shape]) -> Result<QuantumOptimizationResult, ShaclAiError> {
+    pub async fn quantum_optimize_validation(
+        &self,
+        shapes: &[Shape],
+    ) -> Result<QuantumOptimizationResult, ShaclAiError> {
         // 1. Initialize quantum consciousness for optimization
         let consciousness_state = self.initialize_quantum_consciousness().await?;
-        
+
         // 2. Create quantum superposition of optimization strategies
         let superposition_strategies = self.create_optimization_superposition(shapes).await?;
-        
+
         // 3. Use neural pattern recognition for performance prediction
         let neural_predictions = self.predict_performance_patterns(shapes).await?;
-        
+
         // 4. Apply sentient optimization with emotional context
-        let sentient_optimizations = self.apply_sentient_optimization(&consciousness_state, &neural_predictions).await?;
-        
+        let sentient_optimizations = self
+            .apply_sentient_optimization(&consciousness_state, &neural_predictions)
+            .await?;
+
         // 5. Measure quantum optimization outcomes
-        let quantum_result = self.measure_quantum_optimization(&superposition_strategies, &sentient_optimizations).await?;
-        
+        let quantum_result = self
+            .measure_quantum_optimization(&superposition_strategies, &sentient_optimizations)
+            .await?;
+
         Ok(quantum_result)
     }
 
     /// Initialize quantum consciousness for optimization
     async fn initialize_quantum_consciousness(&self) -> Result<ConsciousnessState, ShaclAiError> {
         // Placeholder implementation for quantum consciousness initialization
-        Ok(ConsciousnessState::new(self.consciousness_processor.consciousness_level.clone()))
+        Ok(ConsciousnessState::new(
+            self.consciousness_processor.consciousness_level.clone(),
+        ))
     }
 
     /// Create quantum superposition of optimization strategies
-    async fn create_optimization_superposition(&self, _shapes: &[Shape]) -> Result<Vec<OptimizationStrategy>, ShaclAiError> {
+    async fn create_optimization_superposition(
+        &self,
+        _shapes: &[Shape],
+    ) -> Result<Vec<OptimizationStrategy>, ShaclAiError> {
         // Placeholder implementation for quantum superposition
         Ok(vec![
             OptimizationStrategy::Selectivity,
@@ -1258,7 +1270,10 @@ impl QuantumValidationPerformanceOptimizer {
     }
 
     /// Predict performance patterns using neural recognition
-    async fn predict_performance_patterns(&self, _shapes: &[Shape]) -> Result<Vec<PerformancePrediction>, ShaclAiError> {
+    async fn predict_performance_patterns(
+        &self,
+        _shapes: &[Shape],
+    ) -> Result<Vec<PerformancePrediction>, ShaclAiError> {
         // Placeholder implementation for neural performance prediction
         Ok(vec![])
     }
@@ -1360,13 +1375,15 @@ impl QuantumEntanglementNetwork {
 
 impl NeuralPatternRecognizer {
     pub fn new() -> Self {
-        use crate::neural_transformer_pattern_integration::NeuralTransformerConfig;
         use crate::neural_patterns::types::CorrelationAnalysisConfig;
-        
+        use crate::neural_transformer_pattern_integration::NeuralTransformerConfig;
+
         Self {
             pattern_memory: PatternMemoryBank::new(NeuralTransformerConfig::default()),
             attention_mechanisms: vec![],
-            correlation_analyzer: AdvancedPatternCorrelationAnalyzer::new(CorrelationAnalysisConfig::default()),
+            correlation_analyzer: AdvancedPatternCorrelationAnalyzer::new(
+                CorrelationAnalysisConfig::default(),
+            ),
             hierarchical_processor: PatternHierarchy::new(),
         }
     }
@@ -1400,15 +1417,11 @@ impl SentientValidationOptimizer {
 }
 
 // Placeholder imports for quantum components (these would come from other modules)
+use crate::neural_patterns::{AdvancedPatternCorrelationAnalyzer, AttentionHead};
 use crate::quantum_consciousness_synthesis::{
-    QuantumIntuitionEngine, MultiDimensionalAwarenessSystem,
+    MultiDimensionalAwarenessSystem, QuantumIntuitionEngine,
 };
-use crate::{
-    PatternMemoryBank, PatternHierarchy,
-};
-use crate::neural_patterns::{
-    AttentionHead, AdvancedPatternCorrelationAnalyzer,
-};
+use crate::{PatternHierarchy, PatternMemoryBank};
 
 // Placeholder type definitions for components that would be defined elsewhere
 #[derive(Debug, Clone)]

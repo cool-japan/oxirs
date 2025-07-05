@@ -1,9 +1,9 @@
+use crate::model::iri::{Iri, IriParseError};
+use crate::model::literal::LanguageTag;
+use crate::model::term::{Object, Predicate, Subject};
+use crate::model::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
 use crate::rdfxml::error::{RdfXmlParseError, RdfXmlSyntaxError};
 use crate::rdfxml::utils::*;
-use crate::model::{BlankNode, Literal, NamedNode, Term, Triple, NamedOrBlankNode};
-use crate::model::term::{Object, Subject, Predicate};
-use crate::model::literal::LanguageTag;
-use crate::model::iri::{Iri, IriParseError};
 use quick_xml::escape::{resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
@@ -15,7 +15,6 @@ use std::io::{BufReader, Read};
 use std::str;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
-
 
 impl From<NamedOrBlankNode> for Term {
     fn from(node: NamedOrBlankNode) -> Self {
@@ -788,6 +787,15 @@ struct InternalRdfXmlParser<R> {
     lenient: bool,
 }
 
+/// Attributes for a node element
+struct NodeElementAttributes {
+    id_attr: Option<NamedNode>,
+    node_id_attr: Option<BlankNode>,
+    about_attr: Option<NamedNode>,
+    type_attr: Option<NamedNode>,
+    property_attrs: Vec<(NamedNode, String)>,
+}
+
 impl<R> InternalRdfXmlParser<R> {
     fn parse_event(
         &mut self,
@@ -1065,11 +1073,13 @@ impl<R> InternalRdfXmlParser<R> {
                         self.parse_iri(tag_name)?,
                         base_iri,
                         language,
-                        id_attr,
-                        node_id_attr,
-                        about_attr,
-                        type_attr,
-                        property_attrs,
+                        NodeElementAttributes {
+                            id_attr,
+                            node_id_attr,
+                            about_attr,
+                            type_attr,
+                            property_attrs,
+                        },
                         results,
                     )?
                 }
@@ -1085,11 +1095,13 @@ impl<R> InternalRdfXmlParser<R> {
                     self.parse_iri(tag_name)?,
                     base_iri,
                     language,
-                    id_attr,
-                    node_id_attr,
-                    about_attr,
-                    type_attr,
-                    property_attrs,
+                    NodeElementAttributes {
+                        id_attr,
+                        node_id_attr,
+                        about_attr,
+                        type_attr,
+                        property_attrs,
+                    },
                     results,
                 )?
             }
@@ -1137,9 +1149,9 @@ impl<R> InternalRdfXmlParser<R> {
                             );
                             if let Some(type_attr) = type_attr {
                                 results.push(Triple::new(
-                                    crate::model::term::Subject::from(object.clone()), 
-                                    NamedNode::new_unchecked(RDF_TYPE), 
-                                    type_attr
+                                    crate::model::term::Subject::from(object.clone()),
+                                    NamedNode::new_unchecked(RDF_TYPE),
+                                    type_attr,
                                 ));
                             }
                             RdfXmlState::PropertyElt {
@@ -1297,14 +1309,10 @@ impl<R> InternalRdfXmlParser<R> {
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
-        id_attr: Option<NamedNode>,
-        node_id_attr: Option<BlankNode>,
-        about_attr: Option<NamedNode>,
-        type_attr: Option<NamedNode>,
-        property_attrs: Vec<(NamedNode, String)>,
+        attrs: NodeElementAttributes,
         results: &mut Vec<Triple>,
     ) -> Result<RdfXmlState, RdfXmlSyntaxError> {
-        let subject = match (id_attr, node_id_attr, about_attr) {
+        let subject = match (attrs.id_attr, attrs.node_id_attr, attrs.about_attr) {
             (Some(id_attr), None, None) => NamedOrBlankNode::from(id_attr),
             (None, Some(node_id_attr), None) => node_id_attr.into(),
             (None, None, Some(about_attr)) => about_attr.into(),
@@ -1326,21 +1334,21 @@ impl<R> InternalRdfXmlParser<R> {
             }
         };
 
-        self.emit_property_attrs(&subject, property_attrs, language.as_deref(), results);
+        self.emit_property_attrs(&subject, attrs.property_attrs, language.as_deref(), results);
 
-        if let Some(type_attr) = type_attr {
+        if let Some(type_attr) = attrs.type_attr {
             results.push(Triple::new(
-                crate::model::term::Subject::from(subject.clone()), 
-                NamedNode::new_unchecked(RDF_TYPE), 
-                type_attr
+                crate::model::term::Subject::from(subject.clone()),
+                NamedNode::new_unchecked(RDF_TYPE),
+                type_attr,
             ));
         }
 
         if iri.as_str() != RDF_DESCRIPTION {
             results.push(Triple::new(
-                crate::model::term::Subject::from(subject.clone()), 
-                NamedNode::new_unchecked(RDF_TYPE), 
-                iri
+                crate::model::term::Subject::from(subject.clone()),
+                NamedNode::new_unchecked(RDF_TYPE),
+                iri,
             ));
         }
         Ok(RdfXmlState::NodeElt {
@@ -1360,7 +1368,11 @@ impl<R> InternalRdfXmlParser<R> {
         results: &mut Vec<Triple>,
     ) -> RdfXmlState {
         let object = BlankNode::default();
-        let triple = Triple::new(crate::model::term::Subject::from(subject), iri, object.clone());
+        let triple = Triple::new(
+            crate::model::term::Subject::from(subject),
+            iri,
+            object.clone(),
+        );
         if let Some(id_attr) = id_attr {
             Self::reify(triple.clone(), id_attr, results);
         }
@@ -1396,7 +1408,9 @@ impl<R> InternalRdfXmlParser<R> {
                     Some(NodeOrText::Text(text)) => {
                         Object::Literal(self.new_literal(text, language, datatype_attr))
                     }
-                    None => Object::Literal(self.new_literal(String::new(), language, datatype_attr)),
+                    None => {
+                        Object::Literal(self.new_literal(String::new(), language, datatype_attr))
+                    }
                 };
                 let triple = Triple::new(crate::model::term::Subject::from(subject), iri, object);
                 if let Some(id_attr) = id_attr {
@@ -1415,18 +1429,22 @@ impl<R> InternalRdfXmlParser<R> {
                 for object in objects.into_iter().rev() {
                     let subject = NamedOrBlankNode::from(BlankNode::default());
                     results.push(Triple::new(
-                        crate::model::term::Subject::from(subject.clone()), 
-                        NamedNode::new_unchecked(RDF_FIRST), 
-                        object
+                        crate::model::term::Subject::from(subject.clone()),
+                        NamedNode::new_unchecked(RDF_FIRST),
+                        object,
                     ));
                     results.push(Triple::new(
-                        crate::model::term::Subject::from(subject.clone()), 
-                        NamedNode::new_unchecked(RDF_REST), 
-                        crate::model::term::Object::from(current_node.clone())
+                        crate::model::term::Subject::from(subject.clone()),
+                        NamedNode::new_unchecked(RDF_REST),
+                        crate::model::term::Object::from(current_node.clone()),
                     ));
                     current_node = subject;
                 }
-                let triple = Triple::new(crate::model::term::Subject::from(subject), iri, crate::model::term::Object::from(current_node));
+                let triple = Triple::new(
+                    crate::model::term::Subject::from(subject),
+                    iri,
+                    crate::model::term::Object::from(current_node),
+                );
                 if let Some(id_attr) = id_attr {
                     Self::reify(triple.clone(), id_attr, results);
                 }
@@ -1503,9 +1521,9 @@ impl<R> InternalRdfXmlParser<R> {
 
     fn reify(triple: Triple, statement_id: NamedNode, results: &mut Vec<Triple>) {
         results.push(Triple::new(
-            statement_id.clone(), 
-            NamedNode::new_unchecked(RDF_TYPE), 
-            NamedNode::new_unchecked(RDF_STATEMENT)
+            statement_id.clone(),
+            NamedNode::new_unchecked(RDF_TYPE),
+            NamedNode::new_unchecked(RDF_STATEMENT),
         ));
         results.push(Triple::new(
             statement_id.clone(),
@@ -1526,9 +1544,9 @@ impl<R> InternalRdfXmlParser<R> {
             },
         ));
         results.push(Triple::new(
-            statement_id, 
-            NamedNode::new_unchecked(RDF_OBJECT), 
-            triple.object().clone()
+            statement_id,
+            NamedNode::new_unchecked(RDF_OBJECT),
+            triple.object().clone(),
         ));
     }
 
@@ -1544,10 +1562,11 @@ impl<R> InternalRdfXmlParser<R> {
                 crate::model::term::Subject::from(subject.clone()),
                 literal_predicate,
                 if let Some(language) = language.or_else(|| self.current_language()) {
-                    Literal::new_lang(&literal_value, language).unwrap_or_else(|_| Literal::new(literal_value))
+                    Literal::new_lang(&literal_value, language)
+                        .unwrap_or_else(|_| Literal::new(literal_value))
                 } else {
                     Literal::new(literal_value)
-                }
+                },
             ));
         }
     }
@@ -1572,16 +1591,14 @@ impl<R> InternalRdfXmlParser<R> {
         relative_iri: String,
     ) -> Result<NamedNode, RdfXmlSyntaxError> {
         if let Some(base_iri) = base_iri.or_else(|| self.current_base_iri()) {
-            Ok(NamedNode::new_unchecked(
-                if self.lenient {
-                    base_iri.resolve_unchecked(&relative_iri)
-                } else {
-                    base_iri
-                        .resolve(&relative_iri)
-                        .map_err(|error| RdfXmlSyntaxError::invalid_iri(relative_iri, error))?
-                        .into_inner()
-                },
-            ))
+            Ok(NamedNode::new_unchecked(if self.lenient {
+                base_iri.resolve_unchecked(&relative_iri)
+            } else {
+                base_iri
+                    .resolve(&relative_iri)
+                    .map_err(|error| RdfXmlSyntaxError::invalid_iri(relative_iri, error))?
+                    .into_inner()
+            }))
         } else {
             self.parse_iri(relative_iri)
         }

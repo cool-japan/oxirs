@@ -13,7 +13,7 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::{StreamEvent, EventMetadata};
+use crate::{EventMetadata, StreamEvent};
 
 /// Advanced consciousness levels with detailed cognitive modeling
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -165,9 +165,28 @@ pub struct EmotionalContext {
 /// Comprehensive emotion types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Emotion {
-    Joy, Sadness, Anger, Fear, Surprise, Disgust, Trust, Anticipation,
-    Love, Optimism, Submission, Awe, Disappointment, Remorse, Contempt, Aggressiveness,
-    Curiosity, Confusion, Excitement, Calmness, Inspiration, Determination,
+    Joy,
+    Sadness,
+    Anger,
+    Fear,
+    Surprise,
+    Disgust,
+    Trust,
+    Anticipation,
+    Love,
+    Optimism,
+    Submission,
+    Awe,
+    Disappointment,
+    Remorse,
+    Contempt,
+    Aggressiveness,
+    Curiosity,
+    Confusion,
+    Excitement,
+    Calmness,
+    Inspiration,
+    Determination,
     Neutral,
 }
 
@@ -266,7 +285,15 @@ pub struct DreamElement {
 /// Types of dream elements
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DreamElementType {
-    Memory, Metaphor, Symbol, Emotion, Concept, Relationship, Transformation, Conflict, Resolution,
+    Memory,
+    Metaphor,
+    Symbol,
+    Emotion,
+    Concept,
+    Relationship,
+    Transformation,
+    Conflict,
+    Resolution,
 }
 
 /// Symbolic representations in consciousness
@@ -306,7 +333,14 @@ pub struct MeditationState {
 /// Types of meditation practices
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MeditationType {
-    Mindfulness, Concentration, LovingKindness, Insight, Zen, Transcendental, Movement, Breath,
+    Mindfulness,
+    Concentration,
+    LovingKindness,
+    Insight,
+    Zen,
+    Transcendental,
+    Movement,
+    Breath,
 }
 
 /// Influence of meditation on processing
@@ -481,7 +515,7 @@ impl ConsciousnessStreamProcessor {
     /// Create a new consciousness stream processor
     pub async fn new() -> Self {
         let id = Uuid::new_v4().to_string();
-        
+
         // Initialize all components
         let emotional_engine = Arc::new(EmotionalContextEngine::new().await);
         let intuitive_engine = Arc::new(IntuitiveEngine::new().await);
@@ -507,25 +541,28 @@ impl ConsciousnessStreamProcessor {
     /// Process stream event with consciousness enhancement
     pub async fn process_event(&self, event: StreamEvent) -> Result<ConsciousnessEvent> {
         let start_time = Instant::now();
-        
+
         // Determine appropriate consciousness level for this event
         let consciousness_level = self.determine_consciousness_level(&event).await?;
-        
+
         // Update current consciousness level
         *self.current_level.write().await = consciousness_level.clone();
-        
+
         // Generate emotional context
         let emotional_context = self.emotional_engine.analyze_event(&event).await?;
-        
+
         // Generate intuitive insights
-        let insights = self.intuitive_engine.generate_insights(&event, &emotional_context).await?;
-        
+        let insights = self
+            .intuitive_engine
+            .generate_insights(&event, &emotional_context)
+            .await?;
+
         // Recognize patterns
         let patterns = self.pattern_network.recognize_patterns(&event).await?;
-        
+
         // Check meditation influence
         let meditation_influence = self.meditation_manager.get_current_influence().await;
-        
+
         // Create consciousness-enhanced event
         let consciousness_event = ConsciousnessEvent {
             event,
@@ -536,43 +573,49 @@ impl ConsciousnessStreamProcessor {
             processed_at: Utc::now(),
             meditation_influence,
         };
-        
+
         // Update statistics
         let processing_time = start_time.elapsed();
         self.update_stats(processing_time).await?;
-        
+
         // Store in memory system
         self.memory_system.store_event(&consciousness_event).await?;
-        
+
         // Add to event buffer
         let mut buffer = self.event_buffer.lock().await;
         buffer.push_back(consciousness_event.clone());
-        
+
         // Maintain buffer size
         if buffer.len() > 10000 {
             buffer.pop_front();
         }
-        
-        debug!("Processed event with consciousness level: {:?}", consciousness_event.consciousness_level);
-        
+
+        debug!(
+            "Processed event with consciousness level: {:?}",
+            consciousness_event.consciousness_level
+        );
+
         Ok(consciousness_event)
     }
 
     /// Determine appropriate consciousness level for event
-    async fn determine_consciousness_level(&self, event: &StreamEvent) -> Result<ConsciousnessLevel> {
+    async fn determine_consciousness_level(
+        &self,
+        event: &StreamEvent,
+    ) -> Result<ConsciousnessLevel> {
         // Analyze event complexity
         let complexity = self.analyze_event_complexity(event).await?;
-        
+
         // Consider emotional charge
         let emotional_context = self.emotional_engine.quick_analysis(event).await?;
         let emotional_charge = emotional_context.intensity * emotional_context.valence.abs();
-        
+
         // Check pattern novelty
         let pattern_novelty = self.pattern_network.assess_novelty(event).await?;
-        
+
         // Calculate consciousness level score
         let score = complexity * 0.4 + emotional_charge * 0.3 + pattern_novelty * 0.3;
-        
+
         let level = match score {
             s if s < 0.2 => ConsciousnessLevel::Unconscious,
             s if s < 0.4 => ConsciousnessLevel::Subconscious,
@@ -581,7 +624,7 @@ impl ConsciousnessStreamProcessor {
             s if s < 0.9 => ConsciousnessLevel::SelfConscious,
             _ => ConsciousnessLevel::SuperConscious,
         };
-        
+
         Ok(level)
     }
 
@@ -596,14 +639,14 @@ impl ConsciousnessStreamProcessor {
             StreamEvent::SchemaChanged { .. } => 0.8,
             _ => 0.4,
         };
-        
+
         // Add complexity based on metadata
         let metadata_complexity = if let Some(metadata) = self.extract_metadata(event) {
             metadata.properties.len() as f64 * 0.01
         } else {
             0.0
         };
-        
+
         Ok((base_complexity + metadata_complexity).min(1.0))
     }
 
@@ -635,12 +678,12 @@ impl ConsciousnessStreamProcessor {
     async fn update_stats(&self, processing_time: Duration) -> Result<()> {
         let mut stats = self.stats.write().await;
         stats.total_processing_time += processing_time;
-        
+
         // Update other metrics based on recent processing
         // This is a simplified implementation
         stats.pattern_recognition_rate = (stats.pattern_recognition_rate * 0.95) + (0.85 * 0.05);
         stats.emotional_stability = (stats.emotional_stability * 0.98) + (0.8 * 0.02);
-        
+
         Ok(())
     }
 
@@ -717,7 +760,11 @@ impl IntuitiveEngine {
         }
     }
 
-    async fn generate_insights(&self, _event: &StreamEvent, _context: &EmotionalContext) -> Result<Vec<IntuitiveInsight>> {
+    async fn generate_insights(
+        &self,
+        _event: &StreamEvent,
+        _context: &EmotionalContext,
+    ) -> Result<Vec<IntuitiveInsight>> {
         // Simplified implementation
         Ok(vec![])
     }
@@ -809,18 +856,25 @@ impl MeditationStateManager {
             insight_clarity: 0.6,
             meditation_type,
         };
-        
+
         *self.current_state.write().await = Some(state);
         Ok(())
     }
 
     async fn end_session(&self) -> Result<MeditationState> {
-        let state = self.current_state.write().await.take()
+        let state = self
+            .current_state
+            .write()
+            .await
+            .take()
             .ok_or_else(|| anyhow!("No active meditation session"))?;
-        
+
         // Store in history
-        self.meditation_history.lock().await.push_back(state.clone());
-        
+        self.meditation_history
+            .lock()
+            .await
+            .push_back(state.clone());
+
         Ok(state)
     }
 
@@ -867,7 +921,7 @@ mod tests {
     async fn test_consciousness_processor_creation() {
         let processor = ConsciousnessStreamProcessor::new().await;
         assert!(!processor.id.is_empty());
-        
+
         let level = processor.get_current_level().await;
         assert_eq!(level, ConsciousnessLevel::Conscious);
     }
@@ -876,9 +930,11 @@ mod tests {
     async fn test_event_processing() {
         let processor = ConsciousnessStreamProcessor::new().await;
         let event = create_test_event();
-        
+
         let consciousness_event = processor.process_event(event).await.unwrap();
-        assert!(!consciousness_event.insights.is_empty() || consciousness_event.insights.is_empty()); // Either is fine
+        assert!(
+            !consciousness_event.insights.is_empty() || consciousness_event.insights.is_empty()
+        ); // Either is fine
         assert!(consciousness_event.processed_at <= Utc::now());
     }
 
@@ -886,7 +942,7 @@ mod tests {
     async fn test_consciousness_levels() {
         assert!(ConsciousnessLevel::SuperConscious > ConsciousnessLevel::Conscious);
         assert!(ConsciousnessLevel::Conscious > ConsciousnessLevel::Unconscious);
-        
+
         assert_eq!(ConsciousnessLevel::Conscious.complexity_multiplier(), 1.0);
         assert!(ConsciousnessLevel::SuperConscious.complexity_multiplier() > 1.0);
     }
@@ -894,10 +950,13 @@ mod tests {
     #[tokio::test]
     async fn test_meditation_state() {
         let processor = ConsciousnessStreamProcessor::new().await;
-        
-        processor.enter_meditation(MeditationType::Mindfulness).await.unwrap();
+
+        processor
+            .enter_meditation(MeditationType::Mindfulness)
+            .await
+            .unwrap();
         let state = processor.exit_meditation().await.unwrap();
-        
+
         assert!(matches!(state.meditation_type, MeditationType::Mindfulness));
         assert!(state.focus_quality > 0.0);
     }
@@ -906,7 +965,7 @@ mod tests {
     async fn test_emotional_context() {
         let emotion = Emotion::Joy;
         assert!(emotion.processing_weight() > 1.0);
-        
+
         let neutral = Emotion::Neutral;
         assert_eq!(neutral.processing_weight(), 1.0);
     }

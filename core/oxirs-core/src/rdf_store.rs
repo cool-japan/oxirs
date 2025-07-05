@@ -204,6 +204,7 @@ impl MemoryStorage {
         self.quads.contains(quad)
     }
 
+    #[allow(dead_code)]
     fn iter_quads(&self) -> impl Iterator<Item = &Quad> {
         self.quads.iter()
     }
@@ -444,6 +445,7 @@ pub trait Store: Send + Sync {
 
 /// Prepared SPARQL query
 pub struct PreparedQuery {
+    #[allow(dead_code)]
     sparql: String,
 }
 
@@ -1197,6 +1199,7 @@ mod tests {
     #[test]
     fn test_store_quad_operations() {
         // Use legacy backend for faster testing
+        #[allow(unused_mut)]
         let mut store = RdfStore::new_legacy().unwrap();
         let quad = create_test_quad();
 
@@ -1222,6 +1225,7 @@ mod tests {
 
     #[test]
     fn test_store_triple_operations() {
+        #[allow(unused_mut)]
         let mut store = RdfStore::new().unwrap();
         let triple = create_test_triple();
 
@@ -1241,6 +1245,7 @@ mod tests {
 
     #[test]
     fn test_store_string_insertion() {
+        #[allow(unused_mut)]
         let mut store = RdfStore::new().unwrap();
 
         let result = store
@@ -1257,6 +1262,7 @@ mod tests {
 
     #[test]
     fn test_store_query_patterns() {
+        #[allow(unused_mut)]
         let mut store = RdfStore::new().unwrap();
 
         // Create test data
@@ -1320,6 +1326,7 @@ mod tests {
 
     #[test]
     fn test_store_clear() {
+        #[allow(unused_mut)]
         let mut store = RdfStore::new().unwrap();
 
         // Insert some data
@@ -1342,6 +1349,7 @@ mod tests {
 
     #[test]
     fn test_bulk_insert() {
+        #[allow(unused_mut)]
         let mut store = RdfStore::new().unwrap();
 
         let mut quads = Vec::new();
@@ -1361,6 +1369,7 @@ mod tests {
 
     #[test]
     fn test_default_graph_operations() {
+        #[allow(unused_mut)]
         let mut store = RdfStore::new().unwrap();
 
         // Insert into default graph

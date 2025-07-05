@@ -1,5 +1,7 @@
 //! Streaming result sets for large query results with minimal memory overhead
 
+#![allow(dead_code)]
+
 #[cfg(test)]
 use crate::model::{Literal, NamedNode};
 use crate::model::{Term, Triple, Variable};

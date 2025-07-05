@@ -298,14 +298,16 @@ pub mod ai_query_predictor;
 pub mod async_streaming;
 pub mod benchmarking;
 pub mod dataloader;
+pub mod neuromorphic_query_processor;
 pub mod performance;
 pub mod predictive_analytics;
 pub mod quantum_real_time_analytics;
 
 // Ultra-modern enterprise modules (July 5, 2025 enhancements)
-pub mod observability;
 pub mod advanced_query_planner;
 pub mod advanced_subscriptions;
+pub mod ai_orchestration_engine;
+pub mod observability;
 
 // Organized module groups
 pub mod core;
@@ -623,4 +625,3 @@ impl GraphQLServer {
 }
 
 // Comprehensive module declarations moved to top of file to avoid duplicates
-

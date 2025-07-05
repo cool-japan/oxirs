@@ -106,8 +106,8 @@ pub use adaptive_compression::{
     VectorStats,
 };
 pub use adaptive_intelligent_caching::{
-    AdaptiveIntelligentCache, CacheTier, AccessPatternAnalyzer, PredictivePrefetcher,
-    CacheOptimizer, CachePerformanceMetrics, CacheConfiguration, MLModels,
+    AccessPatternAnalyzer, AdaptiveIntelligentCache, CacheConfiguration, CacheOptimizer,
+    CachePerformanceMetrics, CacheTier, MLModels, PredictivePrefetcher,
 };
 pub use advanced_analytics::{
     AnomalyDetection, AnomalyDetector, AnomalyType, ImplementationEffort,
@@ -181,10 +181,6 @@ pub use enhanced_performance_monitoring::{
     RecommendationCategory, RecommendationPriority, SystemMetrics, SystemMetricsCollector,
     SystemStatistics, TrendData, TrendDirection,
 };
-pub use performance_insights::{
-    PerformanceInsightsAnalyzer, QueryStatistics as InsightsQueryStatistics, VectorStatistics, PerformanceTrends as InsightsPerformanceTrends,
-    OptimizationRecommendations, ReportFormat, QueryComplexity, AlertingSystem,
-};
 pub use faiss_compatibility::{
     CompressionLevel, ConversionMetrics, ConversionResult, FaissCompatibility, FaissExportConfig,
     FaissImportConfig, FaissIndexMetadata, FaissIndexType, FaissMetricType, FaissParameter,
@@ -224,6 +220,11 @@ pub use kg_embeddings::{
 };
 pub use lsh::{LshConfig, LshFamily, LshIndex, LshStats};
 pub use mmap_index::{MemoryMappedIndexStats, MemoryMappedVectorIndex};
+pub use performance_insights::{
+    AlertingSystem, OptimizationRecommendations, PerformanceInsightsAnalyzer,
+    PerformanceTrends as InsightsPerformanceTrends, QueryComplexity,
+    QueryStatistics as InsightsQueryStatistics, ReportFormat, VectorStatistics,
+};
 pub use pq::{PQConfig, PQIndex, PQStats};
 pub use quantum_search::{
     QuantumSearchConfig, QuantumSearchResult, QuantumSearchStatistics, QuantumState,

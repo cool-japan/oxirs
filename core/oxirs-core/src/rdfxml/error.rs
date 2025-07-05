@@ -1,5 +1,5 @@
-use crate::model::literal::LanguageTagParseError;
 use crate::model::iri::IriParseError;
+use crate::model::literal::LanguageTagParseError;
 // Note: EncodingError has been moved in newer versions of quick-xml
 use quick_xml::events::attributes::AttrError;
 use std::io;
@@ -32,8 +32,14 @@ impl From<RdfXmlParseError> for io::Error {
             RdfXmlParseError::Io(error) => error,
             RdfXmlParseError::Syntax(error) => error.into(),
             RdfXmlParseError::XmlError(msg) => Self::new(io::ErrorKind::InvalidData, msg),
-            RdfXmlParseError::UndefinedPrefix(msg) => Self::new(io::ErrorKind::InvalidData, format!("Undefined prefix: {}", msg)),
-            RdfXmlParseError::InvalidParseType(msg) => Self::new(io::ErrorKind::InvalidData, format!("Invalid parse type: {}", msg)),
+            RdfXmlParseError::UndefinedPrefix(msg) => Self::new(
+                io::ErrorKind::InvalidData,
+                format!("Undefined prefix: {msg}"),
+            ),
+            RdfXmlParseError::InvalidParseType(msg) => Self::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid parse type: {msg}"),
+            ),
         }
     }
 }

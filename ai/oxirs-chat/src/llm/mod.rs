@@ -56,8 +56,8 @@ pub use cross_modal_reasoning::{
     DataFormat, FusionStrategy, ImageFormat, ImageInput, ReasoningModality, StructuredData,
 };
 pub use federated_learning::{
-    FederatedCoordinator, FederatedLearningConfig, FederatedNode, FederationStatistics,
-    AggregationStrategy, PrivacyConfig,
+    AggregationStrategy, FederatedCoordinator, FederatedLearningConfig, FederatedNode,
+    FederationStatistics, PrivacyConfig,
 };
 pub use fine_tuning::{
     FineTuningConfig, FineTuningEngine, FineTuningJob, FineTuningStatistics, JobStatus,
@@ -69,15 +69,15 @@ pub use neural_architecture_search::{
     ArchitectureOptimizer, ArchitectureSearch, ArchitectureSearchConfig, ModelArchitecture,
     SearchResult,
 };
+pub use openai_provider::OpenAIProvider;
 pub use performance_optimization::{
     BenchmarkConfig, BenchmarkResult, LoadBalanceStrategy, OptimizationRecommendation,
     PerformanceConfig, PerformanceMetrics, PerformanceOptimizer, PerformanceReport,
 };
-pub use real_time_adaptation::{
-    RealTimeAdaptation, AdaptationConfig, AdaptationStrategy, AdaptationMetrics,
-};
-pub use openai_provider::OpenAIProvider;
 pub use providers::LLMProvider;
+pub use real_time_adaptation::{
+    AdaptationConfig, AdaptationMetrics, AdaptationStrategy, RealTimeAdaptation,
+};
 pub use types::{
     ChatMessage, ChatRole, LLMRequest, LLMResponse, LLMResponseChunk, LLMResponseStream, Priority,
     RoutingCandidate, Usage, UseCase,

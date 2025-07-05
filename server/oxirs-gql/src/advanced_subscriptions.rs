@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{broadcast, mpsc, RwLock, Mutex as AsyncMutex};
+use tokio::sync::{broadcast, mpsc, Mutex as AsyncMutex, RwLock};
 use tokio::time::interval;
 use tokio_stream::{Stream, StreamExt};
 use tracing::{debug, error, info, span, warn, Level};
@@ -72,7 +72,7 @@ pub struct AdvancedSubscriptionManager {
 impl AdvancedSubscriptionManager {
     pub fn new(config: AdvancedSubscriptionConfig) -> Self {
         let (event_source, event_receiver) = broadcast::channel(10000);
-        
+
         Self {
             config: config.clone(),
             active_subscriptions: Arc::new(RwLock::new(HashMap::new())),
@@ -103,7 +103,7 @@ impl AdvancedSubscriptionManager {
 
         // Analyze subscription for optimization opportunities
         let analysis = self.analyze_subscription(&document).await?;
-        
+
         // Create subscription session
         let session = SubscriptionSession {
             id: subscription_id.clone(),
@@ -122,7 +122,9 @@ impl AdvancedSubscriptionManager {
 
         // Register with multiplexer for intelligent grouping
         if self.config.enable_intelligent_multiplexing {
-            self.event_multiplexer.register_subscription(&session).await?;
+            self.event_multiplexer
+                .register_subscription(&session)
+                .await?;
         }
 
         // Add to appropriate subscription group
@@ -133,12 +135,18 @@ impl AdvancedSubscriptionManager {
         let stream = self.create_subscription_stream(&session).await?;
 
         // Store active subscription
-        self.active_subscriptions.write().await.insert(subscription_id.clone(), session);
+        self.active_subscriptions
+            .write()
+            .await
+            .insert(subscription_id.clone(), session);
 
         // Update metrics
         self.metrics.write().await.subscription_created();
 
-        info!("Created advanced subscription: {} with priority {:?}", subscription_id, priority);
+        info!(
+            "Created advanced subscription: {} with priority {:?}",
+            subscription_id, priority
+        );
 
         Ok(stream)
     }
@@ -149,7 +157,7 @@ impl AdvancedSubscriptionManager {
         let data_requirements = self.analyze_data_requirements(document)?;
         let update_frequency = self.estimate_update_frequency(document)?;
         let resource_usage = self.estimate_resource_usage(document, complexity)?;
-        
+
         Ok(SubscriptionAnalysis {
             complexity,
             data_requirements,
@@ -162,9 +170,12 @@ impl AdvancedSubscriptionManager {
     }
 
     /// Create intelligent subscription stream with advanced features
-    async fn create_subscription_stream(&self, session: &SubscriptionSession) -> Result<SubscriptionStream> {
+    async fn create_subscription_stream(
+        &self,
+        session: &SubscriptionSession,
+    ) -> Result<SubscriptionStream> {
         let (tx, rx) = mpsc::channel(self.config.buffer_size);
-        
+
         // Create stream processor
         let processor = StreamProcessor::new(
             session.clone(),
@@ -178,32 +189,44 @@ impl AdvancedSubscriptionManager {
         let filters = session.filters.clone();
         let transformations = session.transformations.clone();
         let processor_clone = processor.clone();
-        
+
         // Spawn background task to process events
         tokio::spawn(async move {
             let mut event_stream = tokio_stream::wrappers::BroadcastStream::new(event_rx);
-            
+
             while let Some(event_result) = event_stream.next().await {
                 match event_result {
                     Ok(event) => {
                         // Apply filters
                         if processor_clone.should_process_event(&event, &filters).await {
                             // Apply transformations
-                            match processor_clone.transform_event(event, &transformations).await {
+                            match processor_clone
+                                .transform_event(event, &transformations)
+                                .await
+                            {
                                 Ok(transformed_event) => {
                                     if let Err(e) = tx.send(transformed_event).await {
-                                        warn!("Failed to send event to subscription {}: {}", subscription_id, e);
+                                        warn!(
+                                            "Failed to send event to subscription {}: {}",
+                                            subscription_id, e
+                                        );
                                         break;
                                     }
                                 }
                                 Err(e) => {
-                                    error!("Failed to transform event for subscription {}: {}", subscription_id, e);
+                                    error!(
+                                        "Failed to transform event for subscription {}: {}",
+                                        subscription_id, e
+                                    );
                                 }
                             }
                         }
                     }
                     Err(e) => {
-                        error!("Error receiving event for subscription {}: {}", subscription_id, e);
+                        error!(
+                            "Error receiving event for subscription {}: {}",
+                            subscription_id, e
+                        );
                         break;
                     }
                 }
@@ -222,24 +245,31 @@ impl AdvancedSubscriptionManager {
     /// Publish event to all relevant subscriptions
     pub async fn publish_event(&self, event: RealTimeEvent) -> Result<PublishResult> {
         let start_time = Instant::now();
-        
+
         // Apply intelligent multiplexing
         let targeted_subscriptions = if self.config.enable_intelligent_multiplexing {
-            self.event_multiplexer.find_interested_subscriptions(&event).await?
+            self.event_multiplexer
+                .find_interested_subscriptions(&event)
+                .await?
         } else {
             self.get_all_subscription_ids().await
         };
 
         // Send event through broadcast channel
-        let subscriber_count = self.event_source.send(event.clone())
+        let subscriber_count = self
+            .event_source
+            .send(event.clone())
             .map_err(|_| anyhow!("Failed to broadcast event"))?;
 
         // Update metrics
         let mut metrics = self.metrics.write().await;
         metrics.event_published(targeted_subscriptions.len(), start_time.elapsed());
 
-        info!("Published event to {} subscribers in {:?}", 
-              subscriber_count, start_time.elapsed());
+        info!(
+            "Published event to {} subscribers in {:?}",
+            subscriber_count,
+            start_time.elapsed()
+        );
 
         Ok(PublishResult {
             event_id: event.id,
@@ -252,17 +282,24 @@ impl AdvancedSubscriptionManager {
     /// Cancel subscription and clean up resources
     pub async fn cancel_subscription(&self, subscription_id: &str) -> Result<()> {
         // Remove from active subscriptions
-        let session = self.active_subscriptions.write().await.remove(subscription_id);
-        
+        let session = self
+            .active_subscriptions
+            .write()
+            .await
+            .remove(subscription_id);
+
         if let Some(session) = session {
             // Remove from multiplexer
             if self.config.enable_intelligent_multiplexing {
-                self.event_multiplexer.unregister_subscription(&session).await?;
+                self.event_multiplexer
+                    .unregister_subscription(&session)
+                    .await?;
             }
 
             // Remove from subscription group
             let group_key = self.calculate_group_key(&session);
-            self.remove_from_subscription_group(&group_key, subscription_id).await?;
+            self.remove_from_subscription_group(&group_key, subscription_id)
+                .await?;
 
             // Update metrics
             self.metrics.write().await.subscription_cancelled();
@@ -284,10 +321,10 @@ impl AdvancedSubscriptionManager {
         SubscriptionAnalytics {
             total_subscriptions: subscriptions.len(),
             subscription_groups: groups.len(),
-            average_group_size: if groups.is_empty() { 
-                0.0 
-            } else { 
-                subscriptions.len() as f64 / groups.len() as f64 
+            average_group_size: if groups.is_empty() {
+                0.0
+            } else {
+                subscriptions.len() as f64 / groups.len() as f64
             },
             events_per_second: metrics.events_per_second(),
             average_processing_time: metrics.average_processing_time(),
@@ -317,7 +354,11 @@ impl AdvancedSubscriptionManager {
         Ok(Duration::from_secs(1)) // 1 Hz update frequency
     }
 
-    fn estimate_resource_usage(&self, _document: &Document, complexity: f64) -> Result<ResourceUsage> {
+    fn estimate_resource_usage(
+        &self,
+        _document: &Document,
+        complexity: f64,
+    ) -> Result<ResourceUsage> {
         Ok(ResourceUsage {
             memory_mb: complexity * 0.1,
             cpu_percent: complexity * 0.05,
@@ -338,43 +379,49 @@ impl AdvancedSubscriptionManager {
     }
 
     fn extract_filters(&self, _document: &Document) -> Result<Vec<SubscriptionFilter>> {
-        Ok(vec![
-            SubscriptionFilter {
-                field_path: "user.id".to_string(),
-                operator: FilterOperator::Equals,
-                value: Value::StringValue("user123".to_string()),
-            }
-        ])
+        Ok(vec![SubscriptionFilter {
+            field_path: "user.id".to_string(),
+            operator: FilterOperator::Equals,
+            value: Value::StringValue("user123".to_string()),
+        }])
     }
 
     fn extract_transformations(&self, _document: &Document) -> Result<Vec<DataTransformation>> {
-        Ok(vec![
-            DataTransformation {
-                transformation_type: TransformationType::FieldMapping,
-                source_field: "userId".to_string(),
-                target_field: "user.id".to_string(),
-                parameters: HashMap::new(),
-            }
-        ])
+        Ok(vec![DataTransformation {
+            transformation_type: TransformationType::FieldMapping,
+            source_field: "userId".to_string(),
+            target_field: "user.id".to_string(),
+            parameters: HashMap::new(),
+        }])
     }
 
     fn calculate_group_key(&self, session: &SubscriptionSession) -> String {
         // Group subscriptions by similar characteristics
-        format!("group_{}_{}", 
-                session.analysis.data_requirements.entities.join("_"),
-                session.priority as u8)
+        format!(
+            "group_{}_{}",
+            session.analysis.data_requirements.entities.join("_"),
+            session.priority as u8
+        )
     }
 
-    async fn add_to_subscription_group(&self, group_key: &str, session: &SubscriptionSession) -> Result<()> {
+    async fn add_to_subscription_group(
+        &self,
+        group_key: &str,
+        session: &SubscriptionSession,
+    ) -> Result<()> {
         let mut groups = self.subscription_groups.write().await;
-        let group = groups.entry(group_key.to_string()).or_insert_with(|| {
-            SubscriptionGroup::new(group_key.to_string())
-        });
+        let group = groups
+            .entry(group_key.to_string())
+            .or_insert_with(|| SubscriptionGroup::new(group_key.to_string()));
         group.add_subscription(session.id.clone());
         Ok(())
     }
 
-    async fn remove_from_subscription_group(&self, group_key: &str, subscription_id: &str) -> Result<()> {
+    async fn remove_from_subscription_group(
+        &self,
+        group_key: &str,
+        subscription_id: &str,
+    ) -> Result<()> {
         let mut groups = self.subscription_groups.write().await;
         if let Some(group) = groups.get_mut(group_key) {
             group.remove_subscription(subscription_id);
@@ -386,23 +433,32 @@ impl AdvancedSubscriptionManager {
     }
 
     async fn get_all_subscription_ids(&self) -> Vec<String> {
-        self.active_subscriptions.read().await.keys().cloned().collect()
+        self.active_subscriptions
+            .read()
+            .await
+            .keys()
+            .cloned()
+            .collect()
     }
 
     fn estimate_memory_usage(&self, subscriptions: &HashMap<String, SubscriptionSession>) -> f64 {
-        subscriptions.values()
+        subscriptions
+            .values()
             .map(|s| s.analysis.resource_usage.memory_mb)
             .sum()
     }
 
-    fn calculate_subscription_distribution(&self, subscriptions: &HashMap<String, SubscriptionSession>) -> HashMap<String, usize> {
+    fn calculate_subscription_distribution(
+        &self,
+        subscriptions: &HashMap<String, SubscriptionSession>,
+    ) -> HashMap<String, usize> {
         let mut distribution = HashMap::new();
-        
+
         for session in subscriptions.values() {
             let priority_key = format!("{:?}", session.priority);
             *distribution.entry(priority_key).or_insert(0) += 1;
         }
-        
+
         distribution
     }
 }
@@ -426,32 +482,35 @@ impl EventMultiplexer {
     pub async fn register_subscription(&self, session: &SubscriptionSession) -> Result<()> {
         let mut index = self.subscription_index.write().await;
         index.add_subscription(session);
-        
+
         let mut stats = self.statistics.write().await;
         stats.subscriptions_registered += 1;
-        
+
         Ok(())
     }
 
     pub async fn unregister_subscription(&self, session: &SubscriptionSession) -> Result<()> {
         let mut index = self.subscription_index.write().await;
         index.remove_subscription(&session.id);
-        
+
         let mut stats = self.statistics.write().await;
         stats.subscriptions_unregistered += 1;
-        
+
         Ok(())
     }
 
-    pub async fn find_interested_subscriptions(&self, event: &RealTimeEvent) -> Result<Vec<String>> {
+    pub async fn find_interested_subscriptions(
+        &self,
+        event: &RealTimeEvent,
+    ) -> Result<Vec<String>> {
         let index = self.subscription_index.read().await;
         let interested = index.find_matching_subscriptions(event);
-        
+
         let mut stats = self.statistics.write().await;
         stats.events_processed += 1;
         stats.total_subscription_checks += index.total_subscriptions();
         stats.matched_subscriptions += interested.len();
-        
+
         Ok(interested)
     }
 
@@ -479,11 +538,11 @@ impl DataTransformer {
         transformations: &[DataTransformation],
     ) -> Result<Value> {
         let mut result = data;
-        
+
         for transformation in transformations {
             result = self.apply_transformation(result, transformation).await?;
         }
-        
+
         Ok(result)
     }
 
@@ -555,7 +614,8 @@ impl StreamProcessor {
         event: RealTimeEvent,
         transformations: &[DataTransformation],
     ) -> Result<SubscriptionMessage> {
-        let transformed_data = self.data_transformer
+        let transformed_data = self
+            .data_transformer
             .transform_data(event.data.clone(), transformations)
             .await?;
 
@@ -610,7 +670,8 @@ impl PriorityQueue {
     }
 
     pub fn dequeue(&mut self) -> Option<String> {
-        self.high_priority.pop_front()
+        self.high_priority
+            .pop_front()
             .or_else(|| self.normal_priority.pop_front())
             .or_else(|| self.low_priority.pop_front())
     }
@@ -836,9 +897,7 @@ impl SubscriptionIndex {
     }
 
     pub fn total_subscriptions(&self) -> usize {
-        self.by_event_type.values()
-            .map(|set| set.len())
-            .sum()
+        self.by_event_type.values().map(|set| set.len()).sum()
     }
 }
 
@@ -962,7 +1021,7 @@ mod tests {
     async fn test_subscription_manager_creation() {
         let config = AdvancedSubscriptionConfig::default();
         let manager = AdvancedSubscriptionManager::new(config);
-        
+
         let analytics = manager.get_analytics().await;
         assert_eq!(analytics.total_subscriptions, 0);
     }
@@ -971,7 +1030,7 @@ mod tests {
     async fn test_subscription_creation() {
         let config = AdvancedSubscriptionConfig::default();
         let manager = AdvancedSubscriptionManager::new(config);
-        
+
         let document = Document {
             definitions: vec![Definition::Operation(OperationDefinition {
                 operation_type: OperationType::Subscription,
@@ -981,17 +1040,19 @@ mod tests {
                 selection_set: SelectionSet { selections: vec![] },
             })],
         };
-        
-        let result = manager.create_subscription(
-            "test_sub_1".to_string(),
-            document,
-            HashMap::new(),
-            ClientInfo::default(),
-            SubscriptionPriority::Normal,
-        ).await;
-        
+
+        let result = manager
+            .create_subscription(
+                "test_sub_1".to_string(),
+                document,
+                HashMap::new(),
+                ClientInfo::default(),
+                SubscriptionPriority::Normal,
+            )
+            .await;
+
         assert!(result.is_ok());
-        
+
         let analytics = manager.get_analytics().await;
         assert_eq!(analytics.total_subscriptions, 1);
     }
@@ -1000,7 +1061,7 @@ mod tests {
     async fn test_event_publishing() {
         let config = AdvancedSubscriptionConfig::default();
         let manager = AdvancedSubscriptionManager::new(config);
-        
+
         let event = RealTimeEvent {
             id: "event_1".to_string(),
             event_type: "data_change".to_string(),
@@ -1010,7 +1071,7 @@ mod tests {
             source: "test_source".to_string(),
             metadata: HashMap::new(),
         };
-        
+
         let result = manager.publish_event(event).await;
         assert!(result.is_ok());
     }
@@ -1018,11 +1079,11 @@ mod tests {
     #[tokio::test]
     async fn test_priority_queue() {
         let mut queue = PriorityQueue::new();
-        
+
         queue.enqueue("low".to_string(), SubscriptionPriority::Low);
         queue.enqueue("high".to_string(), SubscriptionPriority::High);
         queue.enqueue("normal".to_string(), SubscriptionPriority::Normal);
-        
+
         assert_eq!(queue.dequeue(), Some("high".to_string()));
         assert_eq!(queue.dequeue(), Some("normal".to_string()));
         assert_eq!(queue.dequeue(), Some("low".to_string()));
@@ -1031,10 +1092,12 @@ mod tests {
     #[tokio::test]
     async fn test_subscription_index() {
         let mut index = SubscriptionIndex::new();
-        
+
         let session = SubscriptionSession {
             id: "test_sub".to_string(),
-            document: Document { definitions: vec![] },
+            document: Document {
+                definitions: vec![],
+            },
             variables: HashMap::new(),
             client_info: ClientInfo::default(),
             priority: SubscriptionPriority::Normal,
@@ -1062,10 +1125,10 @@ mod tests {
             filters: vec![],
             transformations: vec![],
         };
-        
+
         index.add_subscription(&session);
         assert_eq!(index.total_subscriptions(), 1);
-        
+
         index.remove_subscription("test_sub");
         assert_eq!(index.total_subscriptions(), 0);
     }

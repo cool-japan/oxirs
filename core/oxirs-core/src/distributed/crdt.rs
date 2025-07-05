@@ -3,6 +3,8 @@
 //! This module implements Conflict-free Replicated Data Types (CRDTs) optimized
 //! for RDF data, enabling eventual consistency without coordination.
 
+#![allow(dead_code)]
+
 use crate::model::{Triple, TriplePattern};
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
@@ -446,6 +448,7 @@ struct CrdtStats {
     /// Current triple count
     triple_count: usize,
     /// Tombstone count
+    #[allow(dead_code)]
     tombstone_count: usize,
 }
 

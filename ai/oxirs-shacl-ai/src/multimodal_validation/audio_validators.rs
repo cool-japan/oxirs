@@ -1,12 +1,12 @@
 //! Audio content validators
 
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
-use async_trait::async_trait;
 
-use crate::{Result, ShaclAiError};
-use super::types::*;
 use super::traits::*;
+use super::types::*;
+use crate::{Result, ShaclAiError};
 
 /// Audio format validator
 #[derive(Debug)]
@@ -29,14 +29,14 @@ impl AudioFormatValidator {
             max_file_size: 100 * 1024 * 1024, // 100MB
         }
     }
-    
+
     pub fn with_formats(formats: Vec<String>) -> Self {
         Self {
             supported_formats: formats,
             max_file_size: 100 * 1024 * 1024,
         }
     }
-    
+
     pub fn with_max_size(mut self, max_size: usize) -> Self {
         self.max_file_size = max_size;
         self
@@ -52,28 +52,48 @@ impl AudioValidator for AudioFormatValidator {
 
         let format = self.detect_audio_format(&content.data);
         let size_valid = content.data.len() <= self.max_file_size;
-        let format_valid = format.is_some() && self.supported_formats.contains(&format.as_ref().unwrap().to_lowercase());
-        
+        let format_valid = format.is_some()
+            && self
+                .supported_formats
+                .contains(&format.as_ref().unwrap().to_lowercase());
+
         let is_valid = format_valid && size_valid;
-        
+
         let mut details = HashMap::new();
-        details.insert("detected_format".to_string(), format.clone().unwrap_or("unknown".to_string()));
-        details.insert("supported_formats".to_string(), self.supported_formats.join(", "));
+        details.insert(
+            "detected_format".to_string(),
+            format.clone().unwrap_or("unknown".to_string()),
+        );
+        details.insert(
+            "supported_formats".to_string(),
+            self.supported_formats.join(", "),
+        );
         details.insert("file_size".to_string(), content.data.len().to_string());
         details.insert("max_file_size".to_string(), self.max_file_size.to_string());
-        
+
         let confidence = if is_valid { 0.95 } else { 0.1 };
-        
+
         let mut issues = Vec::new();
         if !format_valid {
-            issues.push(format!("Unsupported audio format: {}", format.unwrap_or("unknown".to_string())));
+            issues.push(format!(
+                "Unsupported audio format: {}",
+                format.unwrap_or("unknown".to_string())
+            ));
         }
         if !size_valid {
-            issues.push(format!("File size exceeds limit: {} > {}", content.data.len(), self.max_file_size));
+            issues.push(format!(
+                "File size exceeds limit: {} > {}",
+                content.data.len(),
+                self.max_file_size
+            ));
         }
-        
-        let error_message = if issues.is_empty() { None } else { Some(issues.join("; ")) };
-        
+
+        let error_message = if issues.is_empty() {
+            None
+        } else {
+            Some(issues.join("; "))
+        };
+
         Ok(Some(ValidationResult {
             is_valid,
             confidence,
@@ -96,7 +116,7 @@ impl AudioFormatValidator {
         if data.len() < 12 {
             return None;
         }
-        
+
         // Check file signatures (magic numbers)
         match &data[0..4] {
             [0x49, 0x44, 0x33, ..] => Some("mp3".to_string()), // ID3 tag
@@ -137,12 +157,12 @@ impl SpeechRecognitionValidator {
             target_language: None,
         }
     }
-    
+
     pub fn with_confidence_threshold(mut self, threshold: f64) -> Self {
         self.min_confidence = threshold;
         self
     }
-    
+
     pub fn with_target_language(mut self, language: String) -> Self {
         self.target_language = Some(language);
         self
@@ -158,26 +178,35 @@ impl AudioValidator for SpeechRecognitionValidator {
 
         let transcription = self.transcribe_audio(&content.data);
         let is_valid = transcription.confidence >= self.min_confidence;
-        
+
         let mut details = HashMap::new();
         details.insert("transcription".to_string(), transcription.text.clone());
-        details.insert("confidence".to_string(), transcription.confidence.to_string());
+        details.insert(
+            "confidence".to_string(),
+            transcription.confidence.to_string(),
+        );
         details.insert("language".to_string(), transcription.language.clone());
-        details.insert("duration".to_string(), format!("{:.2}s", transcription.duration.as_secs_f64()));
-        
+        details.insert(
+            "duration".to_string(),
+            format!("{:.2}s", transcription.duration.as_secs_f64()),
+        );
+
         if let Some(target_lang) = &self.target_language {
             details.insert("target_language".to_string(), target_lang.clone());
             let language_match = transcription.language == *target_lang;
             details.insert("language_match".to_string(), language_match.to_string());
         }
-        
+
         let confidence = transcription.confidence;
         let error_message = if is_valid {
             None
         } else {
-            Some(format!("Speech recognition confidence too low: {:.2} < {:.2}", transcription.confidence, self.min_confidence))
+            Some(format!(
+                "Speech recognition confidence too low: {:.2} < {:.2}",
+                transcription.confidence, self.min_confidence
+            ))
         };
-        
+
         Ok(Some(ValidationResult {
             is_valid,
             confidence,
@@ -204,13 +233,32 @@ impl SpeechRecognitionValidator {
             language: "en".to_string(),
             duration: Duration::from_secs(5),
             word_timestamps: vec![
-                ("Hello", Duration::from_millis(0), Duration::from_millis(500)),
-                ("this", Duration::from_millis(500), Duration::from_millis(750)),
+                (
+                    "Hello",
+                    Duration::from_millis(0),
+                    Duration::from_millis(500),
+                ),
+                (
+                    "this",
+                    Duration::from_millis(500),
+                    Duration::from_millis(750),
+                ),
                 ("is", Duration::from_millis(750), Duration::from_millis(900)),
                 ("a", Duration::from_millis(900), Duration::from_millis(1000)),
-                ("test", Duration::from_millis(1000), Duration::from_millis(1300)),
-                ("transcription", Duration::from_millis(1300), Duration::from_millis(2000)),
-            ].into_iter().map(|(w, s, e)| (w.to_string(), s, e)).collect(),
+                (
+                    "test",
+                    Duration::from_millis(1000),
+                    Duration::from_millis(1300),
+                ),
+                (
+                    "transcription",
+                    Duration::from_millis(1300),
+                    Duration::from_millis(2000),
+                ),
+            ]
+            .into_iter()
+            .map(|(w, s, e)| (w.to_string(), s, e))
+            .collect(),
         }
     }
 }
@@ -231,8 +279,12 @@ impl MusicAnalysisValidator {
             analyze_genre: true,
         }
     }
-    
-    pub fn with_analysis_options(analyze_tempo: bool, analyze_key: bool, analyze_genre: bool) -> Self {
+
+    pub fn with_analysis_options(
+        analyze_tempo: bool,
+        analyze_key: bool,
+        analyze_genre: bool,
+    ) -> Self {
         Self {
             analyze_tempo,
             analyze_key,
@@ -250,35 +302,35 @@ impl AudioValidator for MusicAnalysisValidator {
 
         let analysis = self.analyze_music(&content.data);
         let is_valid = true; // Music analysis is informational
-        
+
         let mut details = HashMap::new();
-        
+
         if self.analyze_tempo {
             if let Some(tempo) = analysis.tempo {
                 details.insert("tempo_bpm".to_string(), tempo.to_string());
             }
         }
-        
+
         if self.analyze_key {
             if let Some(key) = &analysis.key {
                 details.insert("key_signature".to_string(), key.clone());
             }
         }
-        
+
         if self.analyze_genre {
             if let Some(genre) = &analysis.genre {
                 details.insert("genre".to_string(), genre.clone());
             }
         }
-        
+
         if let Some(mood) = &analysis.mood {
             details.insert("mood".to_string(), mood.clone());
         }
-        
+
         if let Some(time_sig) = &analysis.time_signature {
             details.insert("time_signature".to_string(), time_sig.clone());
         }
-        
+
         Ok(Some(ValidationResult {
             is_valid,
             confidence: 0.7,
@@ -329,13 +381,13 @@ impl AudioQualityValidator {
             max_duration: Duration::from_secs(3600), // 1 hour
         }
     }
-    
+
     pub fn with_sample_rate_limits(mut self, min_rate: u32, max_rate: u32) -> Self {
         self.min_sample_rate = min_rate;
         self.max_sample_rate = max_rate;
         self
     }
-    
+
     pub fn with_duration_limits(mut self, min_duration: Duration, max_duration: Duration) -> Self {
         self.min_duration = min_duration;
         self.max_duration = max_duration;
@@ -351,54 +403,78 @@ impl AudioValidator for AudioQualityValidator {
         }
 
         let quality_info = self.analyze_quality(&content.data);
-        
+
         let mut is_valid = true;
         let mut issues = Vec::new();
         let mut details = HashMap::new();
-        
+
         // Check sample rate
         if let Some(sample_rate) = quality_info.sample_rate {
             details.insert("sample_rate".to_string(), sample_rate.to_string());
             if sample_rate < self.min_sample_rate {
                 is_valid = false;
-                issues.push(format!("Sample rate too low: {} < {}", sample_rate, self.min_sample_rate));
+                issues.push(format!(
+                    "Sample rate too low: {} < {}",
+                    sample_rate, self.min_sample_rate
+                ));
             }
             if sample_rate > self.max_sample_rate {
                 is_valid = false;
-                issues.push(format!("Sample rate too high: {} > {}", sample_rate, self.max_sample_rate));
+                issues.push(format!(
+                    "Sample rate too high: {} > {}",
+                    sample_rate, self.max_sample_rate
+                ));
             }
         }
-        
+
         // Check bitrate
         if let Some(bitrate) = quality_info.bitrate {
             details.insert("bitrate".to_string(), bitrate.to_string());
             if bitrate < self.min_bitrate {
                 is_valid = false;
-                issues.push(format!("Bitrate too low: {} < {}", bitrate, self.min_bitrate));
+                issues.push(format!(
+                    "Bitrate too low: {} < {}",
+                    bitrate, self.min_bitrate
+                ));
             }
         }
-        
+
         // Check duration
         if let Some(duration) = quality_info.duration {
-            details.insert("duration".to_string(), format!("{:.2}s", duration.as_secs_f64()));
+            details.insert(
+                "duration".to_string(),
+                format!("{:.2}s", duration.as_secs_f64()),
+            );
             if duration < self.min_duration {
                 is_valid = false;
-                issues.push(format!("Duration too short: {:.2}s < {:.2}s", duration.as_secs_f64(), self.min_duration.as_secs_f64()));
+                issues.push(format!(
+                    "Duration too short: {:.2}s < {:.2}s",
+                    duration.as_secs_f64(),
+                    self.min_duration.as_secs_f64()
+                ));
             }
             if duration > self.max_duration {
                 is_valid = false;
-                issues.push(format!("Duration too long: {:.2}s > {:.2}s", duration.as_secs_f64(), self.max_duration.as_secs_f64()));
+                issues.push(format!(
+                    "Duration too long: {:.2}s > {:.2}s",
+                    duration.as_secs_f64(),
+                    self.max_duration.as_secs_f64()
+                ));
             }
         }
-        
+
         // Check channels
         if let Some(channels) = quality_info.channels {
             details.insert("channels".to_string(), channels.to_string());
         }
-        
+
         let confidence = if is_valid { 0.9 } else { 0.3 };
-        let error_message = if issues.is_empty() { None } else { Some(issues.join("; ")) };
-        
+        let error_message = if issues.is_empty() {
+            None
+        } else {
+            Some(issues.join("; "))
+        };
+
         Ok(Some(ValidationResult {
             is_valid,
             confidence,
@@ -469,9 +545,11 @@ mod tests {
     async fn test_audio_format_validator_mp3() {
         let validator = AudioFormatValidator::new();
         // MP3 ID3 tag signature with proper length (12+ bytes)
-        let mp3_data = vec![0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let mp3_data = vec![
+            0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
         let content = create_test_audio_content(&mp3_data);
-        
+
         let result = validator.validate(&content).await.unwrap().unwrap();
         assert!(result.is_valid);
         assert_eq!(result.details.get("detected_format").unwrap(), "mp3");
@@ -485,7 +563,7 @@ mod tests {
         wav_data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // file size
         wav_data.extend_from_slice(&[0x57, 0x41, 0x56, 0x45]); // WAVE
         let content = create_test_audio_content(&wav_data);
-        
+
         let result = validator.validate(&content).await.unwrap().unwrap();
         assert!(result.is_valid);
         assert_eq!(result.details.get("detected_format").unwrap(), "wav");
@@ -495,7 +573,7 @@ mod tests {
     async fn test_speech_recognition_validator() {
         let validator = SpeechRecognitionValidator::new();
         let content = create_test_audio_content(&[0x49, 0x44, 0x33]); // Minimal MP3
-        
+
         let result = validator.validate(&content).await.unwrap().unwrap();
         assert!(result.is_valid);
         assert!(result.details.contains_key("transcription"));
@@ -506,7 +584,7 @@ mod tests {
     async fn test_music_analysis_validator() {
         let validator = MusicAnalysisValidator::new();
         let content = create_test_audio_content(&[0x49, 0x44, 0x33]); // Minimal MP3
-        
+
         let result = validator.validate(&content).await.unwrap().unwrap();
         assert!(result.is_valid);
         assert!(result.details.contains_key("tempo_bpm"));
@@ -517,7 +595,7 @@ mod tests {
     async fn test_audio_quality_validator() {
         let validator = AudioQualityValidator::new();
         let content = create_test_audio_content(&[0x49, 0x44, 0x33]); // Minimal MP3
-        
+
         let result = validator.validate(&content).await.unwrap().unwrap();
         assert!(result.is_valid);
         assert!(result.details.contains_key("sample_rate"));

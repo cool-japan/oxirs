@@ -1,7 +1,31 @@
 //! SHACL Security Module
 //!
-//! This module provides security features for SHACL validation, particularly
+//! This module provides comprehensive security features for SHACL validation, particularly
 //! for SPARQL constraints to prevent injection attacks and ensure safe execution.
+//! 
+//! Features include:
+//! - Query sanitization and analysis
+//! - Execution sandboxing with resource limits
+//! - Advanced injection detection with ML support
+//! - Policy-based execution control
+//! - Rate limiting and quota management
+//! - Comprehensive audit logging
+//! - Security context management
+//! - Query rewriting for security
+
+pub mod advanced;
+pub mod secure_executor;
+
+// Re-export key types for convenience
+pub use advanced::{
+    SecurityPolicyManager, SecurityContext, SecurityPolicy, Permission, SecurityConstraints,
+    SecurityEvent, SecurityEventType, SecurityMetrics, InjectionAnalysisResult,
+    PolicyAuthorizationResult, ExecutionConstraints,
+};
+pub use secure_executor::{
+    SecureSparqlExecutor, SecureExecutorFactory, SecureConstraintResult, SecureQueryResult,
+    ComprehensiveSecurityMetrics, utils,
+};
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};

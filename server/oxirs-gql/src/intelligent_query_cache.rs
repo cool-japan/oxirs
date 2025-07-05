@@ -676,9 +676,13 @@ impl IntelligentQueryCache {
 
         let total_entries = cache.len();
         let total_queries = stats.values().map(|s| s.hit_count as usize).sum::<usize>();
-        let total_hit_time: Duration = stats.values().map(|s| Duration::from_millis(s.average_execution_time_ms as u64)).sum();
+        let total_hit_time: Duration = stats
+            .values()
+            .map(|s| Duration::from_millis(s.average_execution_time_ms as u64))
+            .sum();
         let cache_efficiency = if total_queries > 0 {
-            stats.values().filter(|s| s.cache_hit_ratio() > 0.0).count() as f64 / total_queries as f64
+            stats.values().filter(|s| s.cache_hit_ratio() > 0.0).count() as f64
+                / total_queries as f64
         } else {
             0.0
         };
@@ -686,7 +690,8 @@ impl IntelligentQueryCache {
         // Calculate pattern diversity score
         let unique_patterns = patterns.len();
         let pattern_diversity = if unique_patterns > 0 {
-            1.0 - (patterns.iter().map(|p| p.complexity_score).sum::<f64>() / (unique_patterns as f64).powi(2))
+            1.0 - (patterns.iter().map(|p| p.complexity_score).sum::<f64>()
+                / (unique_patterns as f64).powi(2))
         } else {
             0.0
         };
@@ -696,7 +701,9 @@ impl IntelligentQueryCache {
 
         // Performance predictions
         let predicted_hit_ratio = self.predict_future_hit_ratio(&stats).await;
-        let optimization_recommendations = self.generate_optimization_recommendations(&cache, &stats).await;
+        let optimization_recommendations = self
+            .generate_optimization_recommendations(&cache, &stats)
+            .await;
 
         AdvancedCacheAnalytics {
             total_entries,
@@ -704,10 +711,10 @@ impl IntelligentQueryCache {
             cache_efficiency,
             pattern_diversity,
             estimated_memory_bytes,
-            average_response_time: if total_queries > 0 { 
-                total_hit_time / total_queries as u32 
-            } else { 
-                Duration::from_millis(0) 
+            average_response_time: if total_queries > 0 {
+                total_hit_time / total_queries as u32
+            } else {
+                Duration::from_millis(0)
             },
             predicted_hit_ratio,
             optimization_recommendations,
@@ -722,9 +729,7 @@ impl IntelligentQueryCache {
             return 0.0;
         }
 
-        let recent_hits: Vec<f64> = stats.values()
-            .map(|s| s.cache_hit_ratio())
-            .collect();
+        let recent_hits: Vec<f64> = stats.values().map(|s| s.cache_hit_ratio()).collect();
 
         // Simple exponential moving average prediction
         let mut ema = recent_hits[0];
@@ -782,14 +787,17 @@ impl IntelligentQueryCache {
     }
 
     /// Generate a heat map showing cache performance by query pattern
-    async fn generate_cache_heat_map(&self, stats: &HashMap<String, QueryUsageStats>) -> CacheHeatMap {
+    async fn generate_cache_heat_map(
+        &self,
+        stats: &HashMap<String, QueryUsageStats>,
+    ) -> CacheHeatMap {
         let mut hot_queries = Vec::new();
         let mut warm_queries = Vec::new();
         let mut cold_queries = Vec::new();
 
         for (key, stat) in stats {
             let heat_score = stat.hit_count as f64 * stat.cache_hit_ratio();
-            
+
             if heat_score > 50.0 {
                 hot_queries.push((key.clone(), heat_score));
             } else if heat_score > 10.0 {
@@ -812,13 +820,16 @@ impl IntelligentQueryCache {
     }
 
     /// Calculate performance trends over time
-    async fn calculate_performance_trends(&self, patterns: &VecDeque<QueryPattern>) -> PerformanceTrends {
+    async fn calculate_performance_trends(
+        &self,
+        patterns: &VecDeque<QueryPattern>,
+    ) -> PerformanceTrends {
         if patterns.is_empty() {
             return PerformanceTrends::default();
         }
 
         let recent_patterns: Vec<&QueryPattern> = patterns.iter().rev().take(50).collect();
-        
+
         let complexity_trend = self.calculate_complexity_trend(&recent_patterns);
         let frequency_trend = self.calculate_frequency_trend(&recent_patterns);
         let efficiency_trend = self.calculate_efficiency_trend(&recent_patterns);
@@ -836,8 +847,19 @@ impl IntelligentQueryCache {
             return TrendDirection::Stable;
         }
 
-        let recent_avg = patterns.iter().rev().take(10).map(|p| p.complexity_score).sum::<f64>() / 10.0;
-        let older_avg = patterns.iter().take(10).map(|p| p.complexity_score).sum::<f64>() / 10.0;
+        let recent_avg = patterns
+            .iter()
+            .rev()
+            .take(10)
+            .map(|p| p.complexity_score)
+            .sum::<f64>()
+            / 10.0;
+        let older_avg = patterns
+            .iter()
+            .take(10)
+            .map(|p| p.complexity_score)
+            .sum::<f64>()
+            / 10.0;
 
         if recent_avg > older_avg * 1.1 {
             TrendDirection::Increasing
@@ -853,8 +875,19 @@ impl IntelligentQueryCache {
             return TrendDirection::Stable;
         }
 
-        let recent_avg = patterns.iter().rev().take(10).map(|p| p.complexity_score).sum::<f64>() / 10.0;
-        let older_avg = patterns.iter().take(10).map(|p| p.complexity_score).sum::<f64>() / 10.0;
+        let recent_avg = patterns
+            .iter()
+            .rev()
+            .take(10)
+            .map(|p| p.complexity_score)
+            .sum::<f64>()
+            / 10.0;
+        let older_avg = patterns
+            .iter()
+            .take(10)
+            .map(|p| p.complexity_score)
+            .sum::<f64>()
+            / 10.0;
 
         if recent_avg > older_avg * 1.1 {
             TrendDirection::Increasing
@@ -871,13 +904,20 @@ impl IntelligentQueryCache {
             return TrendDirection::Stable;
         }
 
-        let recent_efficiency: f64 = patterns.iter().rev().take(10)
+        let recent_efficiency: f64 = patterns
+            .iter()
+            .rev()
+            .take(10)
             .map(|p| p.complexity_score / (p.field_count as f64 + 1.0))
-            .sum::<f64>() / 10.0;
-        
-        let older_efficiency: f64 = patterns.iter().take(10)
+            .sum::<f64>()
+            / 10.0;
+
+        let older_efficiency: f64 = patterns
+            .iter()
+            .take(10)
             .map(|p| p.complexity_score / (p.field_count as f64 + 1.0))
-            .sum::<f64>() / 10.0;
+            .sum::<f64>()
+            / 10.0;
 
         if recent_efficiency > older_efficiency * 1.1 {
             TrendDirection::Increasing
@@ -895,12 +935,14 @@ impl IntelligentQueryCache {
             return 0.0;
         }
 
-        let consistency_score = patterns.iter()
+        let consistency_score = patterns
+            .iter()
             .map(|p| p.complexity_score)
             .collect::<Vec<_>>()
             .windows(2)
             .map(|w| (w[0] - w[1]).abs())
-            .sum::<f64>() / patterns.len() as f64;
+            .sum::<f64>()
+            / patterns.len() as f64;
 
         (1.0f64 - consistency_score.min(1.0f64)).max(0.0f64)
     }

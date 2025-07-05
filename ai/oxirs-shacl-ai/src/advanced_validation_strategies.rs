@@ -4,23 +4,21 @@
 //! SHACL validation, including context-aware validation, adaptive constraint selection,
 //! multi-objective optimization, and dynamic strategy selection.
 
-use std::collections::{HashMap, HashSet, BTreeMap, VecDeque};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
-use serde::{Deserialize, Serialize};
-use tracing::{info, debug, warn, error};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use oxirs_core::{
-    model::{NamedNode, Term, Triple, Quad},
-    Store, Graph,
+    model::{NamedNode, Quad, Term, Triple},
+    Graph, Store,
 };
 
 use oxirs_shacl::{
-    constraints::*,
-    Shape, ShapeId, Constraint, ConstraintComponentId,
-    PropertyPath, Target, Severity, ValidationReport, ValidationConfig,
-    Validator,
+    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
+    Target, ValidationConfig, ValidationReport, Validator,
 };
 
 use crate::{Result, ShaclAiError};
@@ -30,37 +28,37 @@ use crate::{Result, ShaclAiError};
 pub struct AdvancedValidationConfig {
     /// Strategy selection approach
     pub strategy_selection: StrategySelectionApproach,
-    
+
     /// Context awareness level
     pub context_awareness_level: ContextAwarenessLevel,
-    
+
     /// Enable multi-objective optimization
     pub enable_multi_objective_optimization: bool,
-    
+
     /// Enable adaptive constraint weighting
     pub enable_adaptive_constraint_weighting: bool,
-    
+
     /// Enable semantic validation enhancement
     pub enable_semantic_enhancement: bool,
-    
+
     /// Maximum strategies to consider simultaneously
     pub max_concurrent_strategies: usize,
-    
+
     /// Strategy performance monitoring window (in validations)
     pub performance_window_size: usize,
-    
+
     /// Minimum confidence threshold for strategy selection
     pub min_strategy_confidence: f64,
-    
+
     /// Enable cross-validation for strategy effectiveness
     pub enable_cross_validation: bool,
-    
+
     /// Dynamic strategy adaptation interval (in minutes)
     pub adaptation_interval_minutes: u64,
-    
+
     /// Enable validation result explanation
     pub enable_result_explanation: bool,
-    
+
     /// Enable uncertainty quantification
     pub enable_uncertainty_quantification: bool,
 }
@@ -132,10 +130,10 @@ pub struct AdvancedValidationStrategyManager {
 pub trait ValidationStrategy: Send + Sync {
     /// Strategy name
     fn name(&self) -> &str;
-    
+
     /// Strategy description
     fn description(&self) -> &str;
-    
+
     /// Validate using this strategy
     fn validate(
         &self,
@@ -143,16 +141,16 @@ pub trait ValidationStrategy: Send + Sync {
         shapes: &[Shape],
         context: &ValidationContext,
     ) -> Result<StrategyValidationResult>;
-    
+
     /// Get strategy capabilities
     fn capabilities(&self) -> StrategyCapabilities;
-    
+
     /// Get strategy configuration parameters
     fn parameters(&self) -> HashMap<String, f64>;
-    
+
     /// Update strategy parameters based on performance feedback
     fn update_parameters(&mut self, feedback: &PerformanceFeedback) -> Result<()>;
-    
+
     /// Get strategy confidence for given context
     fn confidence_for_context(&self, context: &ValidationContext) -> f64;
 }
@@ -376,8 +374,12 @@ pub struct PerformanceRecord {
 impl AdvancedValidationStrategyManager {
     /// Create a new advanced validation strategy manager
     pub fn new(config: AdvancedValidationConfig) -> Self {
-        let strategy_selector = Arc::new(RwLock::new(StrategySelector::new(config.strategy_selection.clone())));
-        let performance_monitor = Arc::new(Mutex::new(StrategyPerformanceMonitor::new(config.performance_window_size)));
+        let strategy_selector = Arc::new(RwLock::new(StrategySelector::new(
+            config.strategy_selection.clone(),
+        )));
+        let performance_monitor = Arc::new(Mutex::new(StrategyPerformanceMonitor::new(
+            config.performance_window_size,
+        )));
         let context_analyzer = Arc::new(ValidationContextAnalyzer::new());
         let result_explainer = Arc::new(ValidationResultExplainer::new());
         let uncertainty_quantifier = Arc::new(UncertaintyQuantifier::new());
@@ -410,32 +412,41 @@ impl AdvancedValidationStrategyManager {
     ) -> Result<AdvancedValidationResult> {
         // 1. Analyze validation context
         let context = self.context_analyzer.analyze_context(store, shapes).await?;
-        
+
         // 2. Select optimal strategy
         let selected_strategy = self.select_optimal_strategy(&context).await?;
-        
+
         // 3. Execute validation with selected strategy
         let start_time = Instant::now();
         let strategy_result = selected_strategy.validate(store, shapes, &context)?;
         let execution_time = start_time.elapsed();
-        
+
         // 4. Generate explanation if enabled
         let explanation = if self.config.enable_result_explanation {
-            Some(self.result_explainer.explain_result(&strategy_result, &context).await?)
+            Some(
+                self.result_explainer
+                    .explain_result(&strategy_result, &context)
+                    .await?,
+            )
         } else {
             None
         };
-        
+
         // 5. Quantify uncertainty if enabled
         let uncertainty_metrics = if self.config.enable_uncertainty_quantification {
-            Some(self.uncertainty_quantifier.quantify_uncertainty(&strategy_result, &context).await?)
+            Some(
+                self.uncertainty_quantifier
+                    .quantify_uncertainty(&strategy_result, &context)
+                    .await?,
+            )
         } else {
             None
         };
-        
+
         // 6. Record performance for future optimization
-        self.record_performance(&strategy_result, &context, execution_time).await?;
-        
+        self.record_performance(&strategy_result, &context, execution_time)
+            .await?;
+
         Ok(AdvancedValidationResult {
             strategy_result,
             selected_strategy_name: selected_strategy.name().to_string(),
@@ -447,7 +458,10 @@ impl AdvancedValidationStrategyManager {
     }
 
     /// Select optimal strategy based on context
-    async fn select_optimal_strategy(&self, context: &ValidationContext) -> Result<&dyn ValidationStrategy> {
+    async fn select_optimal_strategy(
+        &self,
+        context: &ValidationContext,
+    ) -> Result<&dyn ValidationStrategy> {
         let selector = self.strategy_selector.read().map_err(|e| {
             ShaclAiError::Validation(format!("Failed to acquire strategy selector lock: {}", e))
         })?;
@@ -463,22 +477,28 @@ impl AdvancedValidationStrategyManager {
             .iter()
             .find(|s| s.name() == best_strategy_name)
             .map(|s| s.as_ref())
-            .ok_or_else(|| ShaclAiError::Validation(format!("Strategy {} not found", best_strategy_name)))
+            .ok_or_else(|| {
+                ShaclAiError::Validation(format!("Strategy {} not found", best_strategy_name))
+            })
     }
 
     /// Calculate strategy scores for context
-    async fn calculate_strategy_scores(&self, context: &ValidationContext) -> Result<Vec<(String, f64)>> {
+    async fn calculate_strategy_scores(
+        &self,
+        context: &ValidationContext,
+    ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
-        
+
         for strategy in &self.strategies {
             let base_confidence = strategy.confidence_for_context(context);
             let performance_boost = self.get_performance_boost(strategy.name()).await?;
             let capability_match = self.calculate_capability_match(strategy, context);
-            
-            let total_score = base_confidence * 0.4 + performance_boost * 0.3 + capability_match * 0.3;
+
+            let total_score =
+                base_confidence * 0.4 + performance_boost * 0.3 + capability_match * 0.3;
             scores.push((strategy.name().to_string(), total_score));
         }
-        
+
         Ok(scores)
     }
 
@@ -492,41 +512,53 @@ impl AdvancedValidationStrategyManager {
     }
 
     /// Calculate capability match score
-    fn calculate_capability_match(&self, strategy: &dyn ValidationStrategy, context: &ValidationContext) -> f64 {
+    fn calculate_capability_match(
+        &self,
+        strategy: &dyn ValidationStrategy,
+        context: &ValidationContext,
+    ) -> f64 {
         let capabilities = strategy.capabilities();
         let mut match_score = 0.0;
         let mut total_factors = 0.0;
 
         // Data size compatibility
         let data_size = context.data_characteristics.total_triples;
-        if data_size >= capabilities.optimal_data_size_range.0 && data_size <= capabilities.optimal_data_size_range.1 {
+        if data_size >= capabilities.optimal_data_size_range.0
+            && data_size <= capabilities.optimal_data_size_range.1
+        {
             match_score += 0.3;
         }
         total_factors += 0.3;
 
         // Shape complexity compatibility
         let shape_complexity = context.shape_characteristics.complexity_distribution.len() as f64;
-        if shape_complexity >= capabilities.optimal_shape_complexity_range.0 && shape_complexity <= capabilities.optimal_shape_complexity_range.1 {
+        if shape_complexity >= capabilities.optimal_shape_complexity_range.0
+            && shape_complexity <= capabilities.optimal_shape_complexity_range.1
+        {
             match_score += 0.2;
         }
         total_factors += 0.2;
 
         // Temporal data support
-        if context.data_characteristics.has_temporal_data && capabilities.supports_temporal_validation {
+        if context.data_characteristics.has_temporal_data
+            && capabilities.supports_temporal_validation
+        {
             match_score += 0.15;
         }
         total_factors += 0.15;
 
         // Performance requirements
-        if context.performance_requirements.priority_level == PriorityLevel::Critical &&
-           capabilities.supports_parallel_processing {
+        if context.performance_requirements.priority_level == PriorityLevel::Critical
+            && capabilities.supports_parallel_processing
+        {
             match_score += 0.2;
         }
         total_factors += 0.2;
 
         // Uncertainty quantification
-        if context.quality_requirements.require_explainability &&
-           capabilities.supports_uncertainty_quantification {
+        if context.quality_requirements.require_explainability
+            && capabilities.supports_uncertainty_quantification
+        {
             match_score += 0.15;
         }
         total_factors += 0.15;
@@ -571,7 +603,10 @@ impl AdvancedValidationStrategyManager {
         let mut hasher = DefaultHasher::new();
         context.data_characteristics.total_triples.hash(&mut hasher);
         context.shape_characteristics.total_shapes.hash(&mut hasher);
-        context.performance_requirements.priority_level.hash(&mut hasher);
+        context
+            .performance_requirements
+            .priority_level
+            .hash(&mut hasher);
         hasher.finish()
     }
 
@@ -673,7 +708,9 @@ impl StrategyPerformanceMonitor {
                     0.5 // Neutral score for new strategies
                 } else {
                     let recent_records = records.iter().rev().take(10);
-                    let avg_accuracy: f64 = recent_records.map(|r| r.validation_accuracy).sum::<f64>() / 10.0f64.min(records.len() as f64);
+                    let avg_accuracy: f64 =
+                        recent_records.map(|r| r.validation_accuracy).sum::<f64>()
+                            / 10.0f64.min(records.len() as f64);
                     avg_accuracy
                 }
             })
@@ -691,16 +728,20 @@ impl ValidationContextAnalyzer {
         }
     }
 
-    pub async fn analyze_context(&self, store: &Store, shapes: &[Shape]) -> Result<ValidationContext> {
+    pub async fn analyze_context(
+        &self,
+        store: &Store,
+        shapes: &[Shape],
+    ) -> Result<ValidationContext> {
         // Analyze data characteristics
         let data_characteristics = self.analyze_data_characteristics(store).await?;
-        
+
         // Analyze shape characteristics
         let shape_characteristics = self.analyze_shape_characteristics(shapes);
-        
+
         // Determine domain context
         let domain_context = self.determine_domain_context(store, shapes).await?;
-        
+
         // Set default performance and quality requirements
         let performance_requirements = PerformanceRequirements {
             max_validation_time: Duration::from_secs(30),
@@ -708,7 +749,7 @@ impl ValidationContextAnalyzer {
             min_throughput_per_second: 100.0,
             priority_level: PriorityLevel::Normal,
         };
-        
+
         let quality_requirements = QualityRequirements {
             min_precision: 0.85,
             min_recall: 0.80,
@@ -717,14 +758,14 @@ impl ValidationContextAnalyzer {
             max_false_negative_rate: 0.15,
             require_explainability: true,
         };
-        
+
         let temporal_context = TemporalContext {
             validation_timestamp: SystemTime::now(),
             data_freshness: Duration::from_hours(1),
             temporal_validation_window: None,
             historical_performance: Vec::new(),
         };
-        
+
         Ok(ValidationContext {
             data_characteristics,
             shape_characteristics,
@@ -762,7 +803,11 @@ impl ValidationContextAnalyzer {
         }
     }
 
-    async fn determine_domain_context(&self, _store: &Store, _shapes: &[Shape]) -> Result<DomainContext> {
+    async fn determine_domain_context(
+        &self,
+        _store: &Store,
+        _shapes: &[Shape],
+    ) -> Result<DomainContext> {
         Ok(DomainContext {
             domain_type: DomainType::Generic,
             domain_specific_rules: Vec::new(),
@@ -787,7 +832,10 @@ impl ValidationResultExplainer {
         _context: &ValidationContext,
     ) -> Result<ValidationExplanation> {
         Ok(ValidationExplanation {
-            summary: format!("Validation completed using {} strategy", result.strategy_name),
+            summary: format!(
+                "Validation completed using {} strategy",
+                result.strategy_name
+            ),
             detailed_explanation: "Detailed explanation would be generated here".to_string(),
             constraint_contributions: HashMap::new(),
             key_factors: Vec::new(),
@@ -977,7 +1025,7 @@ impl OptimizedSequentialStrategy {
         let mut parameters = HashMap::new();
         parameters.insert("constraint_ordering_weight".to_string(), 0.8);
         parameters.insert("early_termination_threshold".to_string(), 0.95);
-        
+
         Self {
             name: "OptimizedSequential".to_string(),
             parameters,
@@ -1069,7 +1117,7 @@ impl ParallelConstraintStrategy {
         let mut parameters = HashMap::new();
         parameters.insert("parallel_threads".to_string(), 4.0);
         parameters.insert("batch_size".to_string(), 1000.0);
-        
+
         Self {
             name: "ParallelConstraint".to_string(),
             parameters,
@@ -1140,8 +1188,9 @@ impl ValidationStrategy for ParallelConstraintStrategy {
     }
 
     fn confidence_for_context(&self, context: &ValidationContext) -> f64 {
-        if context.performance_requirements.priority_level == PriorityLevel::High ||
-           context.performance_requirements.priority_level == PriorityLevel::Critical {
+        if context.performance_requirements.priority_level == PriorityLevel::High
+            || context.performance_requirements.priority_level == PriorityLevel::Critical
+        {
             0.95
         } else {
             0.75
@@ -1160,7 +1209,7 @@ impl AdaptiveHybridStrategy {
         let mut parameters = HashMap::new();
         parameters.insert("adaptation_rate".to_string(), 0.1);
         parameters.insert("hybrid_weight".to_string(), 0.6);
-        
+
         Self {
             name: "AdaptiveHybrid".to_string(),
             parameters,
@@ -1246,7 +1295,7 @@ impl SemanticEnhancedStrategy {
         let mut parameters = HashMap::new();
         parameters.insert("semantic_weight".to_string(), 0.7);
         parameters.insert("context_sensitivity".to_string(), 0.9);
-        
+
         Self {
             name: "SemanticEnhanced".to_string(),
             parameters,
@@ -1332,7 +1381,10 @@ mod tests {
     #[test]
     fn test_advanced_validation_config_default() {
         let config = AdvancedValidationConfig::default();
-        assert_eq!(config.strategy_selection, StrategySelectionApproach::AdaptiveMLBased);
+        assert_eq!(
+            config.strategy_selection,
+            StrategySelectionApproach::AdaptiveMLBased
+        );
         assert_eq!(config.context_awareness_level, ContextAwarenessLevel::High);
         assert!(config.enable_multi_objective_optimization);
         assert_eq!(config.max_concurrent_strategies, 4);
@@ -1351,7 +1403,10 @@ mod tests {
         let capabilities = strategy.capabilities();
         assert!(!capabilities.supports_temporal_validation);
         assert!(capabilities.supports_semantic_enrichment);
-        assert_eq!(capabilities.computational_complexity, ComputationalComplexity::Linear);
+        assert_eq!(
+            capabilities.computational_complexity,
+            ComputationalComplexity::Linear
+        );
     }
 
     #[test]
@@ -1367,7 +1422,7 @@ mod tests {
             Matthews_correlation_coefficient: 0.75,
             area_under_roc_curve: 0.89,
         };
-        
+
         assert_eq!(metrics.precision, 0.92);
         assert_eq!(metrics.f1_score, 0.90);
     }
@@ -1385,7 +1440,7 @@ mod tests {
             },
             uncertainty_sources: vec![],
         };
-        
+
         assert_eq!(uncertainty.total_uncertainty, 0.15);
         assert_eq!(uncertainty.confidence_interval.confidence_level, 0.95);
     }
@@ -1395,7 +1450,7 @@ mod tests {
         let strategy = OptimizedSequentialStrategy::new();
         let store = Store::new().unwrap();
         let shapes = vec![];
-        
+
         // Create a mock context
         let context = ValidationContext {
             data_characteristics: DataCharacteristics {
@@ -1445,12 +1500,14 @@ mod tests {
                 historical_performance: vec![],
             },
         };
-        
+
         let result = strategy.validate(&store, &shapes, &context);
         assert!(result.is_ok());
-        
+
         let validation_result = result.unwrap();
         assert_eq!(validation_result.strategy_name, "OptimizedSequential");
-        assert!(validation_result.confidence_score >= 0.0 && validation_result.confidence_score <= 1.0);
+        assert!(
+            validation_result.confidence_score >= 0.0 && validation_result.confidence_score <= 1.0
+        );
     }
 }

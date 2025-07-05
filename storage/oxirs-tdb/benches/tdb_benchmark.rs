@@ -5,7 +5,9 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use oxirs_tdb::{
-    compression::{AdaptiveCompressor, ColumnStoreCompressor, RunLengthEncoder, CompressionAlgorithm},
+    compression::{
+        AdaptiveCompressor, ColumnStoreCompressor, CompressionAlgorithm, RunLengthEncoder,
+    },
     config::TdbConfig,
     nodes::NodeTableConfig,
     SimpleTdbConfig, TdbStore, Term,

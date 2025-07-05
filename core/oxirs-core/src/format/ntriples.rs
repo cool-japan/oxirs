@@ -470,6 +470,7 @@ impl Default for NTriplesSerializer {
 }
 
 /// Writer-based N-Triples serializer
+#[allow(dead_code)]
 pub struct WriterNTriplesSerializer<W: Write> {
     writer: W,
     config: NTriplesSerializer,

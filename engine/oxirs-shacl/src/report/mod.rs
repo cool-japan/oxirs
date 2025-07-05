@@ -33,21 +33,22 @@ pub use analytics::{AnalyticsConfig, AnalyzedReport, ReportMetrics, ValidationRe
 
 // Re-export advanced filtering types
 pub use advanced_filtering::{
-    FilterConfig, FilteredReport, ReportFilterEngine, ReportQueryEngine, ReportTemplate,
-    TemplateConfig, TimeRange, CustomFilter, FilterFunction, QueryCriteria, QueryResult,
+    CustomFilter, FilterConfig, FilterFunction, FilteredReport, QueryCriteria, QueryResult,
+    ReportFilterEngine, ReportQueryEngine, ReportTemplate, TemplateConfig, TimeRange,
 };
 
 // Re-export interactive viewer types
 pub use interactive::{
-    InteractiveReportViewer, ViewerConfig, ViewerTheme, SortConfig, SortField, SortDirection,
-    PaginationConfig, InteractiveReportView, ViewSummary, FilterOptions, ExportConfig, ExportFormat,
+    ExportConfig, ExportFormat, FilterOptions, InteractiveReportView, InteractiveReportViewer,
+    PaginationConfig, SortConfig, SortDirection, SortField, ViewSummary, ViewerConfig, ViewerTheme,
 };
 
 // Re-export nested validation result types
 pub use nested_results::{
-    NestedValidationViolation, NestedValidationResults, LogicalConstraintContext, ShapeConstraintContext,
-    QualifiedConstraintContext, NestedViolationBuilder, ToNestedViolation, RootCause,
-    LogicalConstraintType, ShapeValidationType, PropertyConstraintResult, NodeConstraintResult,
+    LogicalConstraintContext, LogicalConstraintType, NestedValidationResults,
+    NestedValidationViolation, NestedViolationBuilder, NodeConstraintResult,
+    PropertyConstraintResult, QualifiedConstraintContext, RootCause, ShapeConstraintContext,
+    ShapeValidationType, ToNestedViolation,
 };
 
 // Re-export validation types

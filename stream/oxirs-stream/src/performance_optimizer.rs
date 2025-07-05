@@ -542,14 +542,23 @@ impl EnhancedMLPredictor {
         // For 6 base features: 6 original + 6 squared + 15 interactions = 27 total
         let base_features = 6;
         let expected_features = if config.enable_feature_engineering {
-            base_features + base_features + (base_features * (base_features - 1)) / 2 // original + squares + interactions
+            base_features + base_features + (base_features * (base_features - 1)) / 2
+        // original + squares + interactions
         } else {
             base_features
         };
 
         Self {
-            polynomial_model: PolynomialRegressor::new(config.max_polynomial_degree, config.regularization_lambda),
-            neural_network: SimpleNeuralNetwork::new(expected_features, config.hidden_layer_size, 1, config.neural_learning_rate),
+            polynomial_model: PolynomialRegressor::new(
+                config.max_polynomial_degree,
+                config.regularization_lambda,
+            ),
+            neural_network: SimpleNeuralNetwork::new(
+                expected_features,
+                config.hidden_layer_size,
+                1,
+                config.neural_learning_rate,
+            ),
             feature_engineer: FeatureEngineer::new(),
             model_selector: ModelSelector::new(),
             training_data: VecDeque::with_capacity(config.max_training_size),
@@ -562,7 +571,7 @@ impl EnhancedMLPredictor {
     pub fn add_training_point(&mut self, point: MLTrainingPoint) -> Result<()> {
         // Add to training data
         self.training_data.push_back(point.clone());
-        
+
         // Maintain training data size limit
         if self.training_data.len() > self.config.max_training_size {
             self.training_data.pop_front();
@@ -587,7 +596,8 @@ impl EnhancedMLPredictor {
     pub fn predict(&self, input_features: &[f64]) -> Result<f64> {
         // Engineer features
         let engineered_features = if self.config.enable_feature_engineering {
-            self.feature_engineer.engineer_features_from_raw(input_features)?
+            self.feature_engineer
+                .engineer_features_from_raw(input_features)?
         } else {
             input_features.to_vec()
         };
@@ -615,14 +625,17 @@ impl EnhancedMLPredictor {
 
         // Train polynomial model
         self.polynomial_model.fit(&features, &targets)?;
-        
+
         // Train neural network
         self.neural_network.fit(&features, &targets)?;
 
         // Evaluate and update model selection
         self.update_model_selection(&features, &targets)?;
 
-        debug!("Enhanced ML models retrained with {} samples", self.training_data.len());
+        debug!(
+            "Enhanced ML models retrained with {} samples",
+            self.training_data.len()
+        );
         Ok(())
     }
 
@@ -637,7 +650,7 @@ impl EnhancedMLPredictor {
             } else {
                 point.features.clone()
             };
-            
+
             features.push(engineered_features);
             targets.push(point.target);
         }
@@ -648,21 +661,25 @@ impl EnhancedMLPredictor {
     /// Update model selection based on performance
     fn update_model_selection(&mut self, features: &[Vec<f64>], targets: &[f64]) -> Result<()> {
         // Evaluate polynomial model
-        let poly_predictions: Result<Vec<f64>, _> = features.iter()
+        let poly_predictions: Result<Vec<f64>, _> = features
+            .iter()
             .map(|f| self.polynomial_model.predict(f))
             .collect();
         let poly_predictions = poly_predictions?;
         let poly_mse = calculate_mse(&poly_predictions, targets);
 
         // Evaluate neural network
-        let neural_predictions: Result<Vec<f64>, _> = features.iter()
+        let neural_predictions: Result<Vec<f64>, _> = features
+            .iter()
             .map(|f| self.neural_network.predict(f))
             .collect();
         let neural_predictions = neural_predictions?;
         let neural_mse = calculate_mse(&neural_predictions, targets);
 
         // Update performance tracking
-        self.model_selector.polynomial_performance.push_back(poly_mse);
+        self.model_selector
+            .polynomial_performance
+            .push_back(poly_mse);
         self.model_selector.neural_performance.push_back(neural_mse);
 
         // Keep performance history limited
@@ -672,9 +689,13 @@ impl EnhancedMLPredictor {
         }
 
         // Select best model
-        let poly_avg = self.model_selector.polynomial_performance.iter().sum::<f64>() 
+        let poly_avg = self
+            .model_selector
+            .polynomial_performance
+            .iter()
+            .sum::<f64>()
             / self.model_selector.polynomial_performance.len() as f64;
-        let neural_avg = self.model_selector.neural_performance.iter().sum::<f64>() 
+        let neural_avg = self.model_selector.neural_performance.iter().sum::<f64>()
             / self.model_selector.neural_performance.len() as f64;
 
         if (poly_avg - neural_avg).abs() < self.model_selector.switch_threshold {
@@ -683,10 +704,8 @@ impl EnhancedMLPredictor {
             let total_perf = poly_avg + neural_avg;
             if total_perf > 0.0 {
                 // Weight inversely proportional to error
-                self.model_selector.ensemble_weights = (
-                    neural_avg / total_perf,
-                    poly_avg / total_perf,
-                );
+                self.model_selector.ensemble_weights =
+                    (neural_avg / total_perf, poly_avg / total_perf);
             } else {
                 self.model_selector.ensemble_weights = (0.5, 0.5);
             }
@@ -696,8 +715,10 @@ impl EnhancedMLPredictor {
             self.model_selector.best_model = ModelType::NeuralNetwork;
         }
 
-        debug!("Model selection updated: {:?}, poly_mse={:.4}, neural_mse={:.4}", 
-               self.model_selector.best_model, poly_avg, neural_avg);
+        debug!(
+            "Model selection updated: {:?}, poly_mse={:.4}, neural_mse={:.4}",
+            self.model_selector.best_model, poly_avg, neural_avg
+        );
 
         Ok(())
     }
@@ -719,7 +740,8 @@ fn calculate_mse(predictions: &[f64], targets: &[f64]) -> f64 {
         return f64::INFINITY;
     }
 
-    let sum_squared_errors: f64 = predictions.iter()
+    let sum_squared_errors: f64 = predictions
+        .iter()
         .zip(targets.iter())
         .map(|(pred, target)| (pred - target).powi(2))
         .sum();
@@ -746,12 +768,14 @@ impl PolynomialRegressor {
 
         // Scale features
         self.feature_scaler.fit(features);
-        let scaled_features: Vec<Vec<f64>> = features.iter()
+        let scaled_features: Vec<Vec<f64>> = features
+            .iter()
             .map(|f| self.feature_scaler.transform(f))
             .collect();
 
         // Generate polynomial features
-        let poly_features: Vec<Vec<f64>> = scaled_features.iter()
+        let poly_features: Vec<Vec<f64>> = scaled_features
+            .iter()
             .map(|f| self.generate_polynomial_features(f))
             .collect();
 
@@ -759,7 +783,7 @@ impl PolynomialRegressor {
         let n_samples = poly_features.len();
         let n_features = poly_features[0].len();
         let mut x_matrix = DMatrix::zeros(n_samples, n_features);
-        
+
         for (i, features) in poly_features.iter().enumerate() {
             for (j, &feature) in features.iter().enumerate() {
                 x_matrix[(i, j)] = feature;
@@ -780,13 +804,17 @@ impl PolynomialRegressor {
                 self.coefficients = Some(inv * xty);
                 Ok(())
             }
-            None => Err(anyhow!("Matrix inversion failed during polynomial regression")),
+            None => Err(anyhow!(
+                "Matrix inversion failed during polynomial regression"
+            )),
         }
     }
 
     /// Predict using the polynomial model
     pub fn predict(&self, features: &[f64]) -> Result<f64> {
-        let coefficients = self.coefficients.as_ref()
+        let coefficients = self
+            .coefficients
+            .as_ref()
             .ok_or_else(|| anyhow!("Model not trained"))?;
 
         let scaled_features = self.feature_scaler.transform(features);
@@ -825,7 +853,12 @@ impl PolynomialRegressor {
 
 impl SimpleNeuralNetwork {
     /// Create a new neural network
-    pub fn new(input_size: usize, hidden_size: usize, output_size: usize, learning_rate: f64) -> Self {
+    pub fn new(
+        input_size: usize,
+        hidden_size: usize,
+        output_size: usize,
+        learning_rate: f64,
+    ) -> Self {
         let mut rng = rand::thread_rng();
 
         // Xavier initialization
@@ -836,9 +869,7 @@ impl SimpleNeuralNetwork {
             rng.gen_range(-xavier_input..xavier_input)
         });
 
-        let bias_hidden = DVector::from_fn(hidden_size, |_, _| {
-            rng.gen_range(-0.1..0.1)
-        });
+        let bias_hidden = DVector::from_fn(hidden_size, |_, _| rng.gen_range(-0.1..0.1));
 
         let weights_hidden_output = DVector::from_fn(hidden_size, |_, _| {
             rng.gen_range(-xavier_hidden..xavier_hidden)
@@ -904,7 +935,7 @@ impl SimpleNeuralNetwork {
     /// Predict using the neural network
     pub fn predict(&self, features: &[f64]) -> Result<f64> {
         let input = DVector::from_vec(features.to_vec());
-        
+
         // Forward pass
         let hidden_input = &self.weights_input_hidden * &input + &self.bias_hidden;
         let hidden_output = hidden_input.map(|x| self.activate(x));
@@ -926,11 +957,17 @@ impl SimpleNeuralNetwork {
     /// Activation function derivative
     fn activate_derivative(&self, x: f64) -> f64 {
         match self.activation {
-            ActivationFunction::ReLU => if x > 0.0 { 1.0 } else { 0.0 },
+            ActivationFunction::ReLU => {
+                if x > 0.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
             ActivationFunction::Sigmoid => {
                 let s = self.activate(x);
                 s * (1.0 - s)
-            },
+            }
             ActivationFunction::Tanh => 1.0 - x.tanh().powi(2),
             ActivationFunction::Linear => 1.0,
         }
@@ -984,7 +1021,8 @@ impl FeatureScaler {
             return features.to_vec();
         }
 
-        features.iter()
+        features
+            .iter()
             .zip(self.means.iter())
             .zip(self.stds.iter())
             .map(|((&value, &mean), &std)| (value - mean) / std)
@@ -996,14 +1034,17 @@ impl FeatureScaler {
 impl FeatureEngineer {
     pub fn new() -> Self {
         Self {
-            polynomial_features: PolynomialFeatures { degree: 2, include_interactions: true },
-            interaction_features: InteractionFeatures { max_order: 2 },
-            temporal_features: TemporalFeatures { 
-                window_sizes: vec![5, 10, 20], 
-                history: VecDeque::with_capacity(100) 
+            polynomial_features: PolynomialFeatures {
+                degree: 2,
+                include_interactions: true,
             },
-            statistical_features: StatisticalFeatures { 
-                aggregations: vec![AggregationFunction::Mean, AggregationFunction::StdDev] 
+            interaction_features: InteractionFeatures { max_order: 2 },
+            temporal_features: TemporalFeatures {
+                window_sizes: vec![5, 10, 20],
+                history: VecDeque::with_capacity(100),
+            },
+            statistical_features: StatisticalFeatures {
+                aggregations: vec![AggregationFunction::Mean, AggregationFunction::StdDev],
             },
         }
     }
@@ -1014,7 +1055,7 @@ impl FeatureEngineer {
 
     pub fn engineer_features_from_raw(&self, features: &[f64]) -> Result<Vec<f64>> {
         let mut engineered = features.to_vec();
-        
+
         // Add polynomial features
         for i in 0..features.len() {
             engineered.push(features[i].powi(2)); // Quadratic terms
@@ -2483,7 +2524,7 @@ mod enhanced_ml_tests {
     fn test_enhanced_ml_predictor_creation() {
         let config = EnhancedMLConfig::default();
         let predictor = EnhancedMLPredictor::new(config);
-        
+
         // Test that predictor is created successfully
         assert_eq!(predictor.training_data.len(), 0);
         assert_eq!(predictor.model_selector.best_model, ModelType::Polynomial);
@@ -2493,34 +2534,34 @@ mod enhanced_ml_tests {
     fn test_enhanced_ml_predictor_training() {
         let config = EnhancedMLConfig::default();
         let mut predictor = EnhancedMLPredictor::new(config);
-        
+
         // Add training data
         for i in 1..=20 {
             let point = MLTrainingPoint {
                 features: vec![
-                    i as f64,           // batch_size
-                    0.1 * i as f64,     // system_load
-                    0.05 * i as f64,    // event_complexity
-                    100.0 - i as f64,   // available_memory
-                    i as f64 * 0.8,     // cpu_usage
-                    50.0 + i as f64,    // network_bandwidth
+                    i as f64,         // batch_size
+                    0.1 * i as f64,   // system_load
+                    0.05 * i as f64,  // event_complexity
+                    100.0 - i as f64, // available_memory
+                    i as f64 * 0.8,   // cpu_usage
+                    50.0 + i as f64,  // network_bandwidth
                 ],
                 target: (i as f64 * 2.0 + 10.0), // synthetic latency target
                 timestamp: Utc::now(),
                 metadata: HashMap::new(),
             };
-            
+
             predictor.add_training_point(point).unwrap();
         }
-        
+
         // Test prediction
         let test_features = vec![15.0, 1.5, 0.75, 85.0, 12.0, 65.0];
         let prediction = predictor.predict(&test_features);
-        
+
         assert!(prediction.is_ok());
         let pred_value = prediction.unwrap();
         assert!(pred_value > 0.0); // Should predict a positive latency
-        
+
         // Test that training data is maintained
         assert_eq!(predictor.training_data.len(), 20);
     }
@@ -2528,24 +2569,22 @@ mod enhanced_ml_tests {
     #[test]
     fn test_polynomial_regressor() {
         let mut regressor = PolynomialRegressor::new(2, 0.001);
-        
+
         // Create simple training data: y = 2x + 3
-        let features = vec![
-            vec![1.0], vec![2.0], vec![3.0], vec![4.0], vec![5.0]
-        ];
+        let features = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0], vec![5.0]];
         let targets = vec![5.0, 7.0, 9.0, 11.0, 13.0]; // 2x + 3
-        
+
         // Train the model
         let result = regressor.fit(&features, &targets);
         assert!(result.is_ok());
-        
+
         // Test prediction
         let prediction = regressor.predict(&[6.0]);
         assert!(prediction.is_ok());
-        
+
         let pred_value = prediction.unwrap();
         let expected = 15.0; // 2*6 + 3 = 15
-        
+
         // Should be reasonably close (within 20% for this simple test)
         assert!((pred_value - expected).abs() < expected * 0.2);
     }
@@ -2553,7 +2592,7 @@ mod enhanced_ml_tests {
     #[test]
     fn test_neural_network_creation() {
         let network = SimpleNeuralNetwork::new(3, 5, 1, 0.01);
-        
+
         // Test network structure
         assert_eq!(network.weights_input_hidden.nrows(), 5); // hidden layer size
         assert_eq!(network.weights_input_hidden.ncols(), 3); // input size
@@ -2565,7 +2604,7 @@ mod enhanced_ml_tests {
     #[test]
     fn test_neural_network_training() {
         let mut network = SimpleNeuralNetwork::new(2, 4, 1, 0.1);
-        
+
         // Simple linear relationship: y = x1 + x2
         let features = vec![
             vec![1.0, 2.0],
@@ -2574,15 +2613,15 @@ mod enhanced_ml_tests {
             vec![4.0, 5.0],
         ];
         let targets = vec![3.0, 5.0, 7.0, 9.0];
-        
+
         // Train the network
         let result = network.fit(&features, &targets);
         assert!(result.is_ok());
-        
+
         // Test prediction
         let prediction = network.predict(&[5.0, 6.0]);
         assert!(prediction.is_ok());
-        
+
         let pred_value = prediction.unwrap();
         assert!(pred_value.is_finite()); // Should produce a finite output
     }
@@ -2590,32 +2629,32 @@ mod enhanced_ml_tests {
     #[test]
     fn test_feature_engineering() {
         let engineer = FeatureEngineer::new();
-        
+
         let base_features = vec![2.0, 3.0];
         let engineered = engineer.engineer_features_from_raw(&base_features).unwrap();
-        
+
         // Should have original features + polynomial + interactions
         // Original: [2, 3]
-        // Polynomial (squares): [4, 9]  
+        // Polynomial (squares): [4, 9]
         // Interactions: [6]
         assert_eq!(engineered.len(), 5); // 2 + 2 + 1 = 5 features
-        
+
         // Check that original features are preserved
         assert_eq!(engineered[0], 2.0);
         assert_eq!(engineered[1], 3.0);
-        
+
         // Check polynomial features (squares)
-        assert_eq!(engineered[2], 4.0);  // 2^2
-        assert_eq!(engineered[3], 9.0);  // 3^2
-        
+        assert_eq!(engineered[2], 4.0); // 2^2
+        assert_eq!(engineered[3], 9.0); // 3^2
+
         // Check interaction features
-        assert_eq!(engineered[4], 6.0);  // 2*3
+        assert_eq!(engineered[4], 6.0); // 2*3
     }
 
     #[test]
     fn test_feature_scaler() {
         let mut scaler = FeatureScaler::new();
-        
+
         // Training data
         let features = vec![
             vec![1.0, 10.0],
@@ -2623,15 +2662,15 @@ mod enhanced_ml_tests {
             vec![3.0, 30.0],
             vec![4.0, 40.0],
         ];
-        
+
         // Fit the scaler
         scaler.fit(&features);
         assert!(scaler.fitted);
-        
+
         // Test transformation
         let transformed = scaler.transform(&[2.5, 25.0]);
         assert_eq!(transformed.len(), 2);
-        
+
         // Transformed values should be reasonably normalized
         assert!(transformed[0].abs() < 2.0); // Should be close to mean-normalized
         assert!(transformed[1].abs() < 2.0);
@@ -2640,7 +2679,7 @@ mod enhanced_ml_tests {
     #[test]
     fn test_model_selector() {
         let selector = ModelSelector::new();
-        
+
         // Test initial state
         assert_eq!(selector.best_model, ModelType::Polynomial);
         assert_eq!(selector.ensemble_weights, (0.5, 0.5));
@@ -2652,7 +2691,7 @@ mod enhanced_ml_tests {
     #[test]
     fn test_enhanced_ml_config() {
         let config = EnhancedMLConfig::default();
-        
+
         // Test default values
         assert_eq!(config.max_polynomial_degree, 3);
         assert_eq!(config.neural_learning_rate, 0.01);
@@ -2667,12 +2706,12 @@ mod enhanced_ml_tests {
     #[test]
     fn test_activation_functions() {
         let network = SimpleNeuralNetwork::new(2, 3, 1, 0.1);
-        
+
         // Test different activation values
         assert_eq!(network.activate(0.0), 0.0); // ReLU at 0
         assert_eq!(network.activate(-1.0), 0.0); // ReLU negative
         assert!(network.activate(1.0) > 0.0); // ReLU positive
-        
+
         // Test activation derivatives
         assert_eq!(network.activate_derivative(-1.0), 0.0); // ReLU derivative negative
         assert_eq!(network.activate_derivative(1.0), 1.0); // ReLU derivative positive
@@ -2682,15 +2721,15 @@ mod enhanced_ml_tests {
     fn test_calculate_mse() {
         let predictions = vec![1.0, 2.0, 3.0, 4.0];
         let targets = vec![1.1, 1.9, 3.2, 3.8];
-        
+
         let mse = calculate_mse(&predictions, &targets);
         assert!(mse > 0.0);
         assert!(mse < 1.0); // Should be small for close predictions
-        
+
         // Test perfect predictions
         let perfect_mse = calculate_mse(&predictions, &predictions);
         assert_eq!(perfect_mse, 0.0);
-        
+
         // Test empty vectors
         let empty_mse = calculate_mse(&[], &[]);
         assert_eq!(empty_mse, f64::INFINITY);

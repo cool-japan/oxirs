@@ -7,13 +7,13 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Semaphore};
 use tokio::time;
-use tracing::{debug, info, warn, error};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Cross-module performance coordinator
@@ -376,18 +376,25 @@ impl CrossModulePerformanceCoordinator {
     /// Register a module for performance monitoring
     pub async fn register_module(&self, module_name: String) -> Result<()> {
         let monitor = ModulePerformanceMonitor::new(module_name.clone());
-        
+
         {
             let mut monitors = self.module_monitors.write().unwrap();
             monitors.insert(module_name.clone(), monitor);
         }
 
-        info!("Registered module '{}' for performance monitoring", module_name);
+        info!(
+            "Registered module '{}' for performance monitoring",
+            module_name
+        );
         Ok(())
     }
 
     /// Update module metrics
-    pub async fn update_module_metrics(&self, module_name: &str, metrics: ModuleMetrics) -> Result<()> {
+    pub async fn update_module_metrics(
+        &self,
+        module_name: &str,
+        metrics: ModuleMetrics,
+    ) -> Result<()> {
         let monitors = self.module_monitors.read().unwrap();
         if let Some(monitor) = monitors.get(module_name) {
             monitor.update_metrics(metrics).await?;
@@ -400,20 +407,25 @@ impl CrossModulePerformanceCoordinator {
     /// Optimize performance across all modules
     pub async fn optimize_performance(&self) -> Result<OptimizationResults> {
         info!("Starting cross-module performance optimization");
-        
+
         let mut results = OptimizationResults::new();
-        
+
         // Collect current performance data
         let performance_data = self.collect_performance_data().await?;
-        
+
         // Detect anomalies
-        let anomalies = self.predictive_engine.detect_anomalies(&performance_data).await?;
+        let anomalies = self
+            .predictive_engine
+            .detect_anomalies(&performance_data)
+            .await?;
         results.anomalies_detected = anomalies.len();
-        
+
         // Generate optimization recommendations
-        let recommendations = self.generate_optimization_recommendations(&performance_data, &anomalies).await?;
+        let recommendations = self
+            .generate_optimization_recommendations(&performance_data, &anomalies)
+            .await?;
         results.recommendations = recommendations.clone();
-        
+
         // Apply optimizations
         for recommendation in recommendations {
             match self.apply_optimization(recommendation).await {
@@ -427,10 +439,10 @@ impl CrossModulePerformanceCoordinator {
                 }
             }
         }
-        
+
         // Update global metrics
         self.update_global_metrics(&results).await?;
-        
+
         info!("Performance optimization completed: {:?}", results);
         Ok(results)
     }
@@ -439,12 +451,12 @@ impl CrossModulePerformanceCoordinator {
     async fn collect_performance_data(&self) -> Result<HashMap<String, ModuleMetrics>> {
         let monitors = self.module_monitors.read().unwrap();
         let mut data = HashMap::new();
-        
+
         for (module_name, monitor) in monitors.iter() {
             let metrics = monitor.get_current_metrics().await?;
             data.insert(module_name.clone(), metrics);
         }
-        
+
         Ok(data)
     }
 
@@ -455,7 +467,7 @@ impl CrossModulePerformanceCoordinator {
         anomalies: &[AnomalyEvent],
     ) -> Result<Vec<OptimizationRecommendation>> {
         let mut recommendations = Vec::new();
-        
+
         // Analyze resource usage patterns
         for (module_name, metrics) in performance_data {
             // CPU optimization
@@ -464,7 +476,8 @@ impl CrossModulePerformanceCoordinator {
                     module_name: module_name.clone(),
                     optimization_type: OptimizationType::ResourceReallocation,
                     priority: Priority::High,
-                    description: "High CPU usage detected - recommend resource reallocation".to_string(),
+                    description: "High CPU usage detected - recommend resource reallocation"
+                        .to_string(),
                     estimated_impact: PerformanceImpact {
                         latency_change_pct: -15.0,
                         throughput_change_pct: 20.0,
@@ -478,9 +491,10 @@ impl CrossModulePerformanceCoordinator {
                     ],
                 });
             }
-            
+
             // Memory optimization
-            if metrics.memory_usage > 8_000_000_000 { // 8GB
+            if metrics.memory_usage > 8_000_000_000 {
+                // 8GB
                 recommendations.push(OptimizationRecommendation {
                     module_name: module_name.clone(),
                     optimization_type: OptimizationType::MemoryOptimization,
@@ -499,7 +513,7 @@ impl CrossModulePerformanceCoordinator {
                     ],
                 });
             }
-            
+
             // Cache optimization
             if metrics.cache_hit_rate < 80.0 {
                 recommendations.push(OptimizationRecommendation {
@@ -521,32 +535,40 @@ impl CrossModulePerformanceCoordinator {
                 });
             }
         }
-        
+
         // Add anomaly-based recommendations
         for anomaly in anomalies {
             recommendations.extend(self.generate_anomaly_recommendations(anomaly).await?);
         }
-        
+
         // Sort by priority and estimated impact
         recommendations.sort_by(|a, b| {
-            b.priority.cmp(&a.priority)
-                .then_with(|| b.estimated_impact.overall_score.partial_cmp(&a.estimated_impact.overall_score).unwrap_or(std::cmp::Ordering::Equal))
+            b.priority.cmp(&a.priority).then_with(|| {
+                b.estimated_impact
+                    .overall_score
+                    .partial_cmp(&a.estimated_impact.overall_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
         });
-        
+
         Ok(recommendations)
     }
 
     /// Generate recommendations based on anomalies
-    async fn generate_anomaly_recommendations(&self, anomaly: &AnomalyEvent) -> Result<Vec<OptimizationRecommendation>> {
+    async fn generate_anomaly_recommendations(
+        &self,
+        anomaly: &AnomalyEvent,
+    ) -> Result<Vec<OptimizationRecommendation>> {
         let mut recommendations = Vec::new();
-        
+
         match anomaly.anomaly_type {
             AnomalyType::PerformanceDegradation => {
                 recommendations.push(OptimizationRecommendation {
                     module_name: anomaly.module_name.clone(),
                     optimization_type: OptimizationType::PerformanceTuning,
                     priority: Priority::High,
-                    description: "Performance degradation detected - immediate optimization needed".to_string(),
+                    description: "Performance degradation detected - immediate optimization needed"
+                        .to_string(),
                     estimated_impact: PerformanceImpact {
                         latency_change_pct: -30.0,
                         throughput_change_pct: 40.0,
@@ -597,46 +619,63 @@ impl CrossModulePerformanceCoordinator {
                 });
             }
         }
-        
+
         Ok(recommendations)
     }
 
     /// Apply an optimization recommendation
-    async fn apply_optimization(&self, recommendation: OptimizationRecommendation) -> Result<PerformanceImpact> {
+    async fn apply_optimization(
+        &self,
+        recommendation: OptimizationRecommendation,
+    ) -> Result<PerformanceImpact> {
         info!("Applying optimization: {}", recommendation.description);
-        
+
         match recommendation.optimization_type {
             OptimizationType::ResourceReallocation => {
-                self.resource_allocator.reallocate_resources(&recommendation.module_name, &recommendation).await?;
+                self.resource_allocator
+                    .reallocate_resources(&recommendation.module_name, &recommendation)
+                    .await?;
             }
             OptimizationType::MemoryOptimization => {
-                self.apply_memory_optimization(&recommendation.module_name, &recommendation).await?;
+                self.apply_memory_optimization(&recommendation.module_name, &recommendation)
+                    .await?;
             }
             OptimizationType::CacheOptimization => {
-                self.apply_cache_optimization(&recommendation.module_name, &recommendation).await?;
+                self.apply_cache_optimization(&recommendation.module_name, &recommendation)
+                    .await?;
             }
             OptimizationType::PerformanceTuning => {
-                self.apply_performance_tuning(&recommendation.module_name, &recommendation).await?;
+                self.apply_performance_tuning(&recommendation.module_name, &recommendation)
+                    .await?;
             }
             OptimizationType::GeneralOptimization => {
-                self.apply_general_optimization(&recommendation.module_name, &recommendation).await?;
+                self.apply_general_optimization(&recommendation.module_name, &recommendation)
+                    .await?;
             }
         }
-        
+
         // Measure actual impact
         tokio::time::sleep(Duration::from_secs(5)).await; // Allow time for changes to take effect
-        let actual_impact = self.measure_optimization_impact(&recommendation.module_name).await?;
-        
+        let actual_impact = self
+            .measure_optimization_impact(&recommendation.module_name)
+            .await?;
+
         // Update prediction models with actual results
-        self.predictive_engine.update_models(&recommendation, &actual_impact).await?;
-        
+        self.predictive_engine
+            .update_models(&recommendation, &actual_impact)
+            .await?;
+
         Ok(actual_impact)
     }
 
     /// Apply memory optimization
-    async fn apply_memory_optimization(&self, module_name: &str, recommendation: &OptimizationRecommendation) -> Result<()> {
+    async fn apply_memory_optimization(
+        &self,
+        module_name: &str,
+        recommendation: &OptimizationRecommendation,
+    ) -> Result<()> {
         debug!("Applying memory optimization for module: {}", module_name);
-        
+
         // Implement memory optimization strategies
         for step in &recommendation.implementation_steps {
             if step.contains("memory pooling") {
@@ -647,14 +686,18 @@ impl CrossModulePerformanceCoordinator {
                 self.optimize_data_structures(module_name).await?;
             }
         }
-        
+
         Ok(())
     }
 
     /// Apply cache optimization
-    async fn apply_cache_optimization(&self, module_name: &str, recommendation: &OptimizationRecommendation) -> Result<()> {
+    async fn apply_cache_optimization(
+        &self,
+        module_name: &str,
+        recommendation: &OptimizationRecommendation,
+    ) -> Result<()> {
         debug!("Applying cache optimization for module: {}", module_name);
-        
+
         for step in &recommendation.implementation_steps {
             if step.contains("cache size") {
                 self.increase_cache_size(module_name).await?;
@@ -664,14 +707,18 @@ impl CrossModulePerformanceCoordinator {
                 self.optimize_cache_eviction(module_name).await?;
             }
         }
-        
+
         Ok(())
     }
 
     /// Apply performance tuning
-    async fn apply_performance_tuning(&self, module_name: &str, recommendation: &OptimizationRecommendation) -> Result<()> {
+    async fn apply_performance_tuning(
+        &self,
+        module_name: &str,
+        recommendation: &OptimizationRecommendation,
+    ) -> Result<()> {
         debug!("Applying performance tuning for module: {}", module_name);
-        
+
         // Implement performance tuning strategies
         for step in &recommendation.implementation_steps {
             if step.contains("parallel processing") {
@@ -682,18 +729,22 @@ impl CrossModulePerformanceCoordinator {
                 self.optimize_algorithms(module_name).await?;
             }
         }
-        
+
         Ok(())
     }
 
     /// Apply general optimization
-    async fn apply_general_optimization(&self, module_name: &str, recommendation: &OptimizationRecommendation) -> Result<()> {
+    async fn apply_general_optimization(
+        &self,
+        module_name: &str,
+        recommendation: &OptimizationRecommendation,
+    ) -> Result<()> {
         debug!("Applying general optimization for module: {}", module_name);
-        
+
         // Apply generic optimization strategies
         self.tune_module_parameters(module_name).await?;
         self.optimize_resource_usage(module_name).await?;
-        
+
         Ok(())
     }
 
@@ -701,28 +752,24 @@ impl CrossModulePerformanceCoordinator {
     async fn measure_optimization_impact(&self, module_name: &str) -> Result<PerformanceImpact> {
         // Get baseline metrics
         let baseline = self.get_baseline_metrics(module_name).await?;
-        
+
         // Get current metrics
         let current = self.get_current_module_metrics(module_name).await?;
-        
+
         // Calculate impact
         let latency_change = calculate_percentage_change(
             baseline.avg_response_time.as_millis() as f64,
             current.avg_response_time.as_millis() as f64,
         );
-        
-        let throughput_change = calculate_percentage_change(
-            baseline.request_rate,
-            current.request_rate,
-        );
-        
-        let efficiency_change = calculate_percentage_change(
-            baseline.cpu_usage,
-            current.cpu_usage,
-        );
-        
-        let overall_score = (latency_change.abs() + throughput_change + efficiency_change.abs()) / 3.0;
-        
+
+        let throughput_change =
+            calculate_percentage_change(baseline.request_rate, current.request_rate);
+
+        let efficiency_change = calculate_percentage_change(baseline.cpu_usage, current.cpu_usage);
+
+        let overall_score =
+            (latency_change.abs() + throughput_change + efficiency_change.abs()) / 3.0;
+
         Ok(PerformanceImpact {
             latency_change_pct: latency_change,
             throughput_change_pct: throughput_change,
@@ -915,19 +962,19 @@ impl GlobalPerformanceMetrics {
 
     fn update(&mut self, results: &OptimizationResults) {
         self.total_optimizations.fetch_add(1, Ordering::SeqCst);
-        
+
         {
             let mut gain = self.avg_performance_gain.write().unwrap();
             *gain = (*gain + results.total_performance_gain) / 2.0;
         }
-        
+
         {
             let mut rate = self.success_rate.write().unwrap();
-            let success = results.optimizations_applied as f64 / 
-                         (results.optimizations_applied + results.optimization_failures).max(1) as f64;
+            let success = results.optimizations_applied as f64
+                / (results.optimizations_applied + results.optimization_failures).max(1) as f64;
             *rate = (*rate + success) / 2.0;
         }
-        
+
         {
             let mut last = self.last_optimization.write().unwrap();
             *last = Some(Utc::now());
@@ -995,16 +1042,22 @@ impl ResourceAllocator {
         }
     }
 
-    async fn reallocate_resources(&self, module_name: &str, recommendation: &OptimizationRecommendation) -> Result<()> {
+    async fn reallocate_resources(
+        &self,
+        module_name: &str,
+        recommendation: &OptimizationRecommendation,
+    ) -> Result<()> {
         debug!("Reallocating resources for module: {}", module_name);
-        
+
         // Calculate new allocation based on recommendation
         let current_allocation = self.get_current_allocation(module_name).await?;
-        let new_allocation = self.calculate_new_allocation(&current_allocation, recommendation).await?;
-        
+        let new_allocation = self
+            .calculate_new_allocation(&current_allocation, recommendation)
+            .await?;
+
         // Apply new allocation
         self.apply_allocation(module_name, new_allocation).await?;
-        
+
         Ok(())
     }
 
@@ -1016,7 +1069,7 @@ impl ResourceAllocator {
             // Return default allocation if none exists
             Ok(ResourceAllocation {
                 cpu_cores: 2,
-                memory_bytes: 2_000_000_000, // 2GB
+                memory_bytes: 2_000_000_000,           // 2GB
                 gpu_memory_bytes: Some(1_000_000_000), // 1GB
                 priority: 50,
                 allocated_at: Utc::now(),
@@ -1025,9 +1078,13 @@ impl ResourceAllocator {
         }
     }
 
-    async fn calculate_new_allocation(&self, current: &ResourceAllocation, recommendation: &OptimizationRecommendation) -> Result<ResourceAllocation> {
+    async fn calculate_new_allocation(
+        &self,
+        current: &ResourceAllocation,
+        recommendation: &OptimizationRecommendation,
+    ) -> Result<ResourceAllocation> {
         let mut new_allocation = current.clone();
-        
+
         // Adjust allocation based on optimization type
         match recommendation.optimization_type {
             OptimizationType::ResourceReallocation => {
@@ -1039,11 +1096,13 @@ impl ResourceAllocator {
                     }
                     Priority::High => {
                         new_allocation.cpu_cores = (current.cpu_cores + 2).min(6);
-                        new_allocation.memory_bytes = (current.memory_bytes + 1_000_000_000).min(6_000_000_000);
+                        new_allocation.memory_bytes =
+                            (current.memory_bytes + 1_000_000_000).min(6_000_000_000);
                     }
                     _ => {
                         new_allocation.cpu_cores = (current.cpu_cores + 1).min(4);
-                        new_allocation.memory_bytes = (current.memory_bytes + 500_000_000).min(4_000_000_000);
+                        new_allocation.memory_bytes =
+                            (current.memory_bytes + 500_000_000).min(4_000_000_000);
                     }
                 }
             }
@@ -1052,12 +1111,16 @@ impl ResourceAllocator {
                 new_allocation.priority = (current.priority + 10).min(100);
             }
         }
-        
+
         new_allocation.allocated_at = Utc::now();
         Ok(new_allocation)
     }
 
-    async fn apply_allocation(&self, module_name: &str, allocation: ResourceAllocation) -> Result<()> {
+    async fn apply_allocation(
+        &self,
+        module_name: &str,
+        allocation: ResourceAllocation,
+    ) -> Result<()> {
         {
             let mut allocations = self.current_allocations.write().unwrap();
             allocations.insert(module_name.to_string(), allocation.clone());
@@ -1075,7 +1138,7 @@ impl ResourceAllocator {
         {
             let mut history = self.allocation_history.write().unwrap();
             history.push_back(event);
-            
+
             // Keep only last 1000 events
             if history.len() > 1000 {
                 history.pop_front();
@@ -1096,12 +1159,21 @@ impl PredictivePerformanceEngine {
         }
     }
 
-    async fn detect_anomalies(&self, performance_data: &HashMap<String, ModuleMetrics>) -> Result<Vec<AnomalyEvent>> {
+    async fn detect_anomalies(
+        &self,
+        performance_data: &HashMap<String, ModuleMetrics>,
+    ) -> Result<Vec<AnomalyEvent>> {
         self.anomaly_detector.detect(performance_data).await
     }
 
-    async fn update_models(&self, recommendation: &OptimizationRecommendation, actual_impact: &PerformanceImpact) -> Result<()> {
-        self.learning_engine.update_model(recommendation, actual_impact).await
+    async fn update_models(
+        &self,
+        recommendation: &OptimizationRecommendation,
+        actual_impact: &PerformanceImpact,
+    ) -> Result<()> {
+        self.learning_engine
+            .update_model(recommendation, actual_impact)
+            .await
     }
 }
 
@@ -1115,7 +1187,11 @@ impl LearningEngine {
         }
     }
 
-    async fn update_model(&self, recommendation: &OptimizationRecommendation, actual_impact: &PerformanceImpact) -> Result<()> {
+    async fn update_model(
+        &self,
+        recommendation: &OptimizationRecommendation,
+        actual_impact: &PerformanceImpact,
+    ) -> Result<()> {
         let sample = TrainingSample {
             features: vec![
                 recommendation.estimated_impact.overall_score,
@@ -1130,7 +1206,7 @@ impl LearningEngine {
         {
             let mut samples = self.training_samples.write().unwrap();
             samples.push_back(sample);
-            
+
             // Keep only last 10000 samples
             if samples.len() > 10000 {
                 samples.pop_front();
@@ -1154,12 +1230,18 @@ impl AnomalyDetector {
         }
     }
 
-    async fn detect(&self, performance_data: &HashMap<String, ModuleMetrics>) -> Result<Vec<AnomalyEvent>> {
+    async fn detect(
+        &self,
+        performance_data: &HashMap<String, ModuleMetrics>,
+    ) -> Result<Vec<AnomalyEvent>> {
         let mut anomalies = Vec::new();
 
         for (module_name, metrics) in performance_data {
             // Check for performance anomalies
-            if metrics.cpu_usage > 90.0 || metrics.error_rate > 5.0 || metrics.avg_response_time > Duration::from_millis(1000) {
+            if metrics.cpu_usage > 90.0
+                || metrics.error_rate > 5.0
+                || metrics.avg_response_time > Duration::from_millis(1000)
+            {
                 let anomaly = AnomalyEvent {
                     module_name: module_name.clone(),
                     anomaly_type: AnomalyType::PerformanceDegradation,
@@ -1169,7 +1251,11 @@ impl AnomalyDetector {
                         SeverityLevel::High
                     },
                     score: calculate_anomaly_score(metrics),
-                    affected_metrics: vec!["cpu_usage".to_string(), "error_rate".to_string(), "response_time".to_string()],
+                    affected_metrics: vec![
+                        "cpu_usage".to_string(),
+                        "error_rate".to_string(),
+                        "response_time".to_string(),
+                    ],
                     recommended_actions: vec![
                         "Increase resource allocation".to_string(),
                         "Investigate error sources".to_string(),
@@ -1182,7 +1268,8 @@ impl AnomalyDetector {
             }
 
             // Check for memory issues
-            if metrics.memory_usage > 12_000_000_000 { // 12GB
+            if metrics.memory_usage > 12_000_000_000 {
+                // 12GB
                 let anomaly = AnomalyEvent {
                     module_name: module_name.clone(),
                     anomaly_type: AnomalyType::MemoryLeak,
@@ -1207,7 +1294,7 @@ impl AnomalyDetector {
             for anomaly in &anomalies {
                 history.push_back(anomaly.clone());
             }
-            
+
             // Keep only last 1000 anomalies
             while history.len() > 1000 {
                 history.pop_front();
@@ -1256,7 +1343,7 @@ impl ModulePerformanceMonitor {
         {
             let mut history = self.history.write().unwrap();
             history.push_back(snapshot);
-            
+
             // Keep only last 1000 snapshots
             if history.len() > 1000 {
                 history.pop_front();
@@ -1338,14 +1425,18 @@ fn calculate_percentage_change(old_value: f64, new_value: f64) -> f64 {
 }
 
 fn calculate_anomaly_score(metrics: &ModuleMetrics) -> f64 {
-    let cpu_score = if metrics.cpu_usage > 80.0 { metrics.cpu_usage } else { 0.0 };
+    let cpu_score = if metrics.cpu_usage > 80.0 {
+        metrics.cpu_usage
+    } else {
+        0.0
+    };
     let error_score = metrics.error_rate * 10.0;
     let latency_score = if metrics.avg_response_time > Duration::from_millis(500) {
         metrics.avg_response_time.as_millis() as f64 / 10.0
     } else {
         0.0
     };
-    
+
     (cpu_score + error_score + latency_score) / 3.0
 }
 
@@ -1366,7 +1457,7 @@ mod tests {
     async fn test_module_registration() {
         let config = CoordinatorConfig::default();
         let coordinator = CrossModulePerformanceCoordinator::new(config);
-        
+
         let result = coordinator.register_module("test_module".to_string()).await;
         assert!(result.is_ok());
         assert_eq!(coordinator.module_monitors.read().unwrap().len(), 1);
@@ -1376,9 +1467,12 @@ mod tests {
     async fn test_metrics_update() {
         let config = CoordinatorConfig::default();
         let coordinator = CrossModulePerformanceCoordinator::new(config);
-        
-        coordinator.register_module("test_module".to_string()).await.unwrap();
-        
+
+        coordinator
+            .register_module("test_module".to_string())
+            .await
+            .unwrap();
+
         let metrics = ModuleMetrics {
             cpu_usage: 75.0,
             memory_usage: 4_000_000_000,
@@ -1392,39 +1486,47 @@ mod tests {
             active_connections: 50,
             queue_depth: 10,
         };
-        
-        let result = coordinator.update_module_metrics("test_module", metrics).await;
+
+        let result = coordinator
+            .update_module_metrics("test_module", metrics)
+            .await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_anomaly_detection() {
         let detector = AnomalyDetector::new();
-        
+
         let mut performance_data = HashMap::new();
-        performance_data.insert("test_module".to_string(), ModuleMetrics {
-            cpu_usage: 95.0, // High CPU usage should trigger anomaly
-            memory_usage: 4_000_000_000,
-            gpu_memory_usage: Some(2_000_000_000),
-            network_io_bps: 1_000_000,
-            disk_io_bps: 500_000,
-            request_rate: 100.0,
-            avg_response_time: Duration::from_millis(1500), // High latency
-            error_rate: 8.0, // High error rate
-            cache_hit_rate: 85.0,
-            active_connections: 50,
-            queue_depth: 10,
-        });
-        
+        performance_data.insert(
+            "test_module".to_string(),
+            ModuleMetrics {
+                cpu_usage: 95.0, // High CPU usage should trigger anomaly
+                memory_usage: 4_000_000_000,
+                gpu_memory_usage: Some(2_000_000_000),
+                network_io_bps: 1_000_000,
+                disk_io_bps: 500_000,
+                request_rate: 100.0,
+                avg_response_time: Duration::from_millis(1500), // High latency
+                error_rate: 8.0,                                // High error rate
+                cache_hit_rate: 85.0,
+                active_connections: 50,
+                queue_depth: 10,
+            },
+        );
+
         let anomalies = detector.detect(&performance_data).await.unwrap();
         assert!(!anomalies.is_empty());
-        assert_eq!(anomalies[0].anomaly_type, AnomalyType::PerformanceDegradation);
+        assert_eq!(
+            anomalies[0].anomaly_type,
+            AnomalyType::PerformanceDegradation
+        );
     }
 
     #[tokio::test]
     async fn test_resource_allocation() {
         let allocator = ResourceAllocator::new();
-        
+
         let recommendation = OptimizationRecommendation {
             module_name: "test_module".to_string(),
             optimization_type: OptimizationType::ResourceReallocation,
@@ -1438,8 +1540,10 @@ mod tests {
             },
             implementation_steps: vec!["Increase CPU allocation".to_string()],
         };
-        
-        let result = allocator.reallocate_resources("test_module", &recommendation).await;
+
+        let result = allocator
+            .reallocate_resources("test_module", &recommendation)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -1465,7 +1569,7 @@ mod tests {
             active_connections: 50,
             queue_depth: 10,
         };
-        
+
         let score = calculate_anomaly_score(&metrics);
         assert!(score > 0.0);
         assert!(score > 50.0); // Should be high due to high CPU and error rate
@@ -1481,7 +1585,7 @@ mod tests {
     async fn test_module_monitor_creation() {
         let monitor = ModulePerformanceMonitor::new("test_module".to_string());
         assert_eq!(monitor.module_name, "test_module");
-        
+
         let metrics = monitor.get_current_metrics().await.unwrap();
         assert_eq!(metrics.cpu_usage, 0.0);
     }

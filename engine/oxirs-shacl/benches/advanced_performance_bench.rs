@@ -10,8 +10,8 @@ use oxirs_core::{
     ConcreteStore, Store,
 };
 use oxirs_shacl::{
-    constraints::*, Constraint, ConstraintComponentId, PropertyPath,
-    Severity, Shape, ShapeId, ShapeType, Target, ValidationConfig, ValidationStrategy, Validator,
+    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
+    ShapeType, Target, ValidationConfig, ValidationStrategy, Validator,
 };
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -47,18 +47,17 @@ impl Default for AdvancedBenchConfig {
 }
 
 /// Create ultra-high performance test data with advanced patterns
-fn create_ultra_performance_data(size: usize, complexity: DataComplexity) -> (ConcreteStore, Vec<Shape>) {
+fn create_ultra_performance_data(
+    size: usize,
+    complexity: DataComplexity,
+) -> (ConcreteStore, Vec<Shape>) {
     let store = ConcreteStore::new().unwrap();
     let mut shapes = Vec::new();
 
     // Generate data based on complexity level
     match complexity {
-        DataComplexity::Simple => {
-            create_simple_validation_data(&store, size, &mut shapes)
-        }
-        DataComplexity::Complex => {
-            create_complex_validation_data(&store, size, &mut shapes)
-        }
+        DataComplexity::Simple => create_simple_validation_data(&store, size, &mut shapes),
+        DataComplexity::Complex => create_complex_validation_data(&store, size, &mut shapes),
         DataComplexity::UltraComplex => {
             create_ultra_complex_validation_data(&store, size, &mut shapes)
         }
@@ -84,12 +83,15 @@ fn create_simple_validation_data(store: &ConcreteStore, size: usize, shapes: &mu
         let person_iri = NamedNode::new(&format!("http://example.org/person{}", i)).unwrap();
         let name_literal = Term::Literal(Literal::new(&format!("Person {}", i)));
         let age_literal = Term::Literal(Literal::new(&format!("{}", 20 + (i % 60))));
-        
+
         // Simple constraints
-        let mut person_shape = Shape::node_shape(
-            ShapeId::new(&format!("http://example.org/PersonShape{}", i))
-        );
-        person_shape.add_target(Target::Class(NamedNode::new("http://example.org/Person").unwrap()));
+        let mut person_shape = Shape::node_shape(ShapeId::new(&format!(
+            "http://example.org/PersonShape{}",
+            i
+        )));
+        person_shape.add_target(Target::Class(
+            NamedNode::new("http://example.org/Person").unwrap(),
+        ));
         shapes.push(person_shape);
     }
 }
@@ -113,7 +115,7 @@ fn create_complex_validation_data(store: &ConcreteStore, size: usize, shapes: &m
             ShapeId::new(&format!("http://example.org/ComplexShape{}", i)),
             complex_path,
         );
-        
+
         // Add multiple advanced constraints
         complex_shape.add_constraint(
             ConstraintComponentId::new("qualifiedValueShape"),
@@ -122,9 +124,9 @@ fn create_complex_validation_data(store: &ConcreteStore, size: usize, shapes: &m
                 qualified_min_count: Some(1),
                 qualified_max_count: Some(5),
                 qualified_value_shapes_disjoint: true,
-            })
+            }),
         );
-        
+
         complex_shape.add_constraint(
             ConstraintComponentId::new("and"),
             Constraint::And(AndConstraint {
@@ -132,14 +134,18 @@ fn create_complex_validation_data(store: &ConcreteStore, size: usize, shapes: &m
                     ShapeId::new("http://example.org/ValidEmployee"),
                     ShapeId::new("http://example.org/ActiveStatus"),
                 ],
-            })
+            }),
         );
-        
+
         shapes.push(complex_shape);
     }
 }
 
-fn create_ultra_complex_validation_data(store: &ConcreteStore, size: usize, shapes: &mut Vec<Shape>) {
+fn create_ultra_complex_validation_data(
+    store: &ConcreteStore,
+    size: usize,
+    shapes: &mut Vec<Shape>,
+) {
     // Ultra-complex validation scenarios with deep nesting and quantum patterns
     for i in 0..size {
         // Ultra-complex nested property paths with quantum entanglement simulation
@@ -162,7 +168,7 @@ fn create_ultra_complex_validation_data(store: &ConcreteStore, size: usize, shap
             ShapeId::new(&format!("http://example.org/QuantumShape{}", i)),
             quantum_path,
         );
-        
+
         // Add ultra-advanced constraints
         ultra_shape.add_constraint(
             ConstraintComponentId::new("xone"),
@@ -172,9 +178,9 @@ fn create_ultra_complex_validation_data(store: &ConcreteStore, size: usize, shap
                     ShapeId::new("http://example.org/QuantumState1"),
                     ShapeId::new("http://example.org/Superposition"),
                 ],
-            })
+            }),
         );
-        
+
         ultra_shape.add_constraint(
             ConstraintComponentId::new("qualifiedValueShape"),
             Constraint::QualifiedValueShape(QualifiedValueShapeConstraint {
@@ -182,25 +188,33 @@ fn create_ultra_complex_validation_data(store: &ConcreteStore, size: usize, shap
                 qualified_min_count: Some(2),
                 qualified_max_count: Some(8),
                 qualified_value_shapes_disjoint: false,
-            })
+            }),
         );
-        
+
         shapes.push(ultra_shape);
     }
 }
 
-fn create_quantum_enhanced_validation_data(store: &ConcreteStore, size: usize, shapes: &mut Vec<Shape>) {
+fn create_quantum_enhanced_validation_data(
+    store: &ConcreteStore,
+    size: usize,
+    shapes: &mut Vec<Shape>,
+) {
     // Quantum-enhanced validation with consciousness-inspired patterns
     for i in 0..size {
         // Consciousness-inspired quantum property paths
         let consciousness_path = PropertyPath::sequence(vec![
-            PropertyPath::predicate(NamedNode::new("http://example.org/consciousness/awareness").unwrap()),
+            PropertyPath::predicate(
+                NamedNode::new("http://example.org/consciousness/awareness").unwrap(),
+            ),
             PropertyPath::alternative(vec![
                 PropertyPath::one_or_more(PropertyPath::predicate(
                     NamedNode::new("http://example.org/consciousness/intuition").unwrap(),
                 )),
                 PropertyPath::zero_or_more(PropertyPath::sequence(vec![
-                    PropertyPath::predicate(NamedNode::new("http://example.org/consciousness/emotion").unwrap()),
+                    PropertyPath::predicate(
+                        NamedNode::new("http://example.org/consciousness/emotion").unwrap(),
+                    ),
                     PropertyPath::inverse(PropertyPath::predicate(
                         NamedNode::new("http://example.org/consciousness/memory").unwrap(),
                     )),
@@ -215,22 +229,23 @@ fn create_quantum_enhanced_validation_data(store: &ConcreteStore, size: usize, s
             ShapeId::new(&format!("http://example.org/ConsciousnessShape{}", i)),
             consciousness_path,
         );
-        
+
         // Add consciousness-enhanced constraints using standard SHACL constraints
         quantum_consciousness_shape.add_constraint(
             ConstraintComponentId::new("class"),
             Constraint::Class(ClassConstraint {
-                class_iri: NamedNode::new("http://example.org/consciousness/EnlightenedBeing").unwrap(),
-            })
+                class_iri: NamedNode::new("http://example.org/consciousness/EnlightenedBeing")
+                    .unwrap(),
+            }),
         );
-        
+
         quantum_consciousness_shape.add_constraint(
             ConstraintComponentId::new("minInclusive"),
             Constraint::MinInclusive(MinInclusiveConstraint {
                 min_value: Literal::new("0.95"),
-            })
+            }),
         );
-        
+
         shapes.push(quantum_consciousness_shape);
     }
 }
@@ -238,7 +253,7 @@ fn create_quantum_enhanced_validation_data(store: &ConcreteStore, size: usize, s
 /// Benchmark ultra-high performance validation scenarios
 fn bench_ultra_performance_validation(c: &mut Criterion) {
     let mut group = c.benchmark_group("ultra_performance_validation");
-    
+
     let configs = vec![
         ("simple_1k", DataComplexity::Simple, 1000),
         ("complex_1k", DataComplexity::Complex, 1000),
@@ -251,8 +266,7 @@ fn bench_ultra_performance_validation(c: &mut Criterion) {
         let mut validator = Validator::new();
 
         // Configure high performance validation
-        let config = ValidationConfig::default()
-            .with_strategy(ValidationStrategy::Optimized);
+        let config = ValidationConfig::default().with_strategy(ValidationStrategy::Optimized);
 
         for shape in shapes {
             validator.add_shape(shape).unwrap();
@@ -286,7 +300,7 @@ fn bench_enhanced_constraint_evaluation(c: &mut Criterion) {
             }),
         ),
         (
-            "pattern_constraint", 
+            "pattern_constraint",
             Constraint::Pattern(PatternConstraint {
                 pattern: r"^[A-Z][a-z]+$".to_string(),
                 flags: None,
@@ -343,7 +357,11 @@ fn bench_memory_optimization_performance(c: &mut Criterion) {
                 b.iter(|| {
                     // Simulate memory optimization by using different validation configurations
                     let opt_config = ValidationConfig {
-                        max_violations: if config.memory_optimization_level > 5 { 100 } else { 0 },
+                        max_violations: if config.memory_optimization_level > 5 {
+                            100
+                        } else {
+                            0
+                        },
                         ..ValidationConfig::default()
                     };
                     let result = validator.validate_store(black_box(store), Some(opt_config));
@@ -367,10 +385,7 @@ fn bench_adaptive_constraint_ordering(c: &mut Criterion) {
         validator.add_shape(shape).unwrap();
     }
 
-    let ordering_strategies = vec![
-        ("default", false),
-        ("adaptive", true),
-    ];
+    let ordering_strategies = vec![("default", false), ("adaptive", true)];
 
     for (name, adaptive) in ordering_strategies {
         let config = ValidationConfig {
@@ -381,7 +396,8 @@ fn bench_adaptive_constraint_ordering(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("ordering", name), |b| {
             b.iter(|| {
                 // Create fresh data for each benchmark iteration to avoid ownership issues
-                let (store, shapes) = create_ultra_performance_data(500, DataComplexity::UltraComplex);
+                let (store, shapes) =
+                    create_ultra_performance_data(500, DataComplexity::UltraComplex);
                 let mut validator = Validator::new();
                 for shape in shapes {
                     validator.add_shape(shape).unwrap();
@@ -403,7 +419,9 @@ fn bench_parallel_processing_scaling(c: &mut Criterion) {
 
     for thread_count in thread_counts {
         let config = ValidationConfig {
-            strategy: ValidationStrategy::Parallel { max_threads: thread_count },
+            strategy: ValidationStrategy::Parallel {
+                max_threads: thread_count,
+            },
             parallel: thread_count > 1,
             max_violations: 100,
             ..ValidationConfig::default()
@@ -431,10 +449,7 @@ fn bench_parallel_processing_scaling(c: &mut Criterion) {
 fn bench_analytics_impact(c: &mut Criterion) {
     let mut group = c.benchmark_group("analytics_impact");
 
-    let analytics_configs = vec![
-        ("no_analytics", false),
-        ("with_analytics", true),
-    ];
+    let analytics_configs = vec![("no_analytics", false), ("with_analytics", true)];
 
     for (name, analytics_enabled) in analytics_configs {
         let config = ValidationConfig {
@@ -447,7 +462,8 @@ fn bench_analytics_impact(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("analytics", name), |b| {
             b.iter(|| {
                 // Create fresh data for each benchmark iteration to avoid ownership issues
-                let (store, shapes) = create_ultra_performance_data(1000, DataComplexity::QuantumEnhanced);
+                let (store, shapes) =
+                    create_ultra_performance_data(1000, DataComplexity::QuantumEnhanced);
                 let mut validator = Validator::new();
                 for shape in shapes {
                     validator.add_shape(shape).unwrap();

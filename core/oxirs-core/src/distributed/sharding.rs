@@ -3,6 +3,8 @@
 //! This module implements intelligent sharding that keeps semantically related
 //! RDF data together to minimize cross-shard queries and improve performance.
 
+#![allow(dead_code)]
+
 use crate::model::{NamedNode, Object, Predicate, Subject, Triple};
 use crate::store::IndexedGraph;
 use anyhow::{anyhow, Result};

@@ -169,6 +169,7 @@ impl<'a> QueryExecutor<'a> {
         Some(solution)
     }
 
+    #[allow(dead_code)]
     fn match_term_pattern(
         &self,
         term: &Term,

@@ -961,6 +961,7 @@ impl Default for ConcurrentGraph {
 }
 
 /// Thread pool for concurrent graph operations
+#[allow(dead_code)]
 pub struct GraphThreadPool {
     #[cfg(feature = "parallel")]
     pool: rayon::ThreadPool,

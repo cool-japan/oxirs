@@ -99,8 +99,8 @@ pub mod transaction;
 pub mod vocab;
 // pub mod config;
 pub mod jsonld; // Re-enabled after fixing StringInterner method calls
-pub mod rdfxml;
-pub mod oxigraph_compat; // Oxigraph compatibility layer
+pub mod oxigraph_compat;
+pub mod rdfxml; // Oxigraph compatibility layer
 
 // Core abstractions for OxiRS ecosystem
 pub mod error;

@@ -365,7 +365,7 @@ impl BftNodeState {
 
             // Use this node's ID as key to track its votes
             let node_id = &self.identity.node_id;
-            
+
             if let Some(previous_vote) = term_votes.get(node_id) {
                 if previous_vote.candidate_id != vote_req.candidate_id {
                     Some(previous_vote.candidate_id.clone())
@@ -638,8 +638,8 @@ mod tests {
     #[test]
     fn test_leading_zeros_count() {
         assert_eq!(count_leading_zeros(&[0, 0, 0xFF]), 16); // Two zero bytes = 16 zeros
-        assert_eq!(count_leading_zeros(&[0x80, 0xFF]), 0);  // 0x80 = 10000000 = 0 leading zeros
-        assert_eq!(count_leading_zeros(&[0x40, 0xFF]), 1);  // 0x40 = 01000000 = 1 leading zero
-        assert_eq!(count_leading_zeros(&[0x20, 0xFF]), 2);  // 0x20 = 00100000 = 2 leading zeros
+        assert_eq!(count_leading_zeros(&[0x80, 0xFF]), 0); // 0x80 = 10000000 = 0 leading zeros
+        assert_eq!(count_leading_zeros(&[0x40, 0xFF]), 1); // 0x40 = 01000000 = 1 leading zero
+        assert_eq!(count_leading_zeros(&[0x20, 0xFF]), 2); // 0x20 = 00100000 = 2 leading zeros
     }
 }

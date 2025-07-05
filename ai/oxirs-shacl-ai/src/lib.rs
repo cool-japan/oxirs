@@ -81,7 +81,7 @@
 //! // Monitor learning performance
 //! let stats = learner.get_statistics();
 //! println!("Learning efficiency: {:.2}%", stats.success_rate * 100.0);
-//! 
+//!
 //! # Ok(())
 //! # }
 //! ```
@@ -108,7 +108,7 @@
 //!
 //! // 3. Use AI predictor for optimization
 //! let predictor = ValidationPredictor::new();
-//! 
+//!
 //! # Ok(())
 //! # }
 //! ```
@@ -117,7 +117,7 @@
 //!
 //! ```rust
 //! use oxirs_shacl_ai::{
-//!     QuantumConsciousnessSynthesisEngine, 
+//!     QuantumConsciousnessSynthesisEngine,
 //!     QuantumConsciousnessLevel,
 //!     ShapeLearner
 //! };
@@ -125,13 +125,13 @@
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Initialize quantum consciousness synthesis
 //! let consciousness_engine = QuantumConsciousnessSynthesisEngine::new();
-//! 
+//!
 //! // Configure consciousness-guided learning
 //! let mut learner = ShapeLearner::new();
-//! 
+//!
 //! // Enhanced learning with quantum consciousness
 //! let consciousness_level = QuantumConsciousnessLevel::UltraTranscendent;
-//! 
+//!
 //! # Ok(())
 //! # }
 //! ```
@@ -255,12 +255,11 @@ pub use advanced_pattern_mining::{
 };
 pub use advanced_validation_strategies::{
     AdvancedValidationConfig, AdvancedValidationResult, AdvancedValidationStrategyManager,
-    ComputationalComplexity, ContextAwarenessLevel, DataCharacteristics, DomainContext,
-    DomainType, PerformanceRequirements as ValidationPerformanceRequirements,
-    PriorityLevel, QualityMetrics, QualityRequirements, ShapeCharacteristics,
-    StrategyCapabilities, StrategySelectionApproach, StrategyValidationResult,
-    UncertaintyMetrics, UncertaintySource, UncertaintySourceType, ValidationContext,
-    ValidationExplanation, ValidationStrategy,
+    ComputationalComplexity, ContextAwarenessLevel, DataCharacteristics, DomainContext, DomainType,
+    PerformanceRequirements as ValidationPerformanceRequirements, PriorityLevel, QualityMetrics,
+    QualityRequirements, ShapeCharacteristics, StrategyCapabilities, StrategySelectionApproach,
+    StrategyValidationResult, UncertaintyMetrics, UncertaintySource, UncertaintySourceType,
+    ValidationContext, ValidationExplanation, ValidationStrategy,
 };
 pub use advanced_visualization::{
     AdvancedVisualizationEngine, ArchitectureVisualizationType, ColorScheme, ExportFormat,
@@ -270,8 +269,9 @@ pub use advanced_visualization::{
 pub use ai_orchestrator::{
     AdaptiveLearningInsights, AdvancedModelSelector, AiOrchestrator, AiOrchestratorConfig,
     AiOrchestratorStats, ComprehensiveLearningResult, ConfidenceDistribution, ConfidentShape,
-    DataCharacteristics as OrchestratorDataCharacteristics, LearningMetadata, ModelPerformanceMetrics, ModelSelectionResult,
-    ModelSelectionStats, ModelSelectionStrategy as AiModelSelectionStrategy,
+    DataCharacteristics as OrchestratorDataCharacteristics, LearningMetadata,
+    ModelPerformanceMetrics, ModelSelectionResult, ModelSelectionStats,
+    ModelSelectionStrategy as AiModelSelectionStrategy,
     OptimizationRecommendation as OrchestratorOptimizationRecommendation, OrchestrationMetrics,
     PerformanceRequirements as AiPerformanceRequirements, PredictiveInsights, QualityAnalysis,
     SelectedModel,
@@ -344,12 +344,12 @@ pub use patterns::*;
 pub use performance_analytics::*;
 pub use performance_benchmarking::{
     AccessPattern, BenchmarkConfig, BenchmarkReport, BenchmarkResult, BenchmarkStatus,
-    BenchmarkSummary, BenchmarkType, CacheBehavior, DataDistribution,
-    EfficiencyMetrics, ImplementationComplexity, LatencyMetrics, MeasurementConfig,
-    PerformanceBenchmarkFramework, PerformanceRecommendation, PerformanceRecommendationType,
-    PrecisionLevel, QualityMetrics as BenchmarkQualityMetrics, RecommendationPriority as BenchmarkRecommendationPriority,
-    ResourceMetrics, ScalabilityAnalysis, SuccessCriteria, TargetComponent, ThroughputMetrics,
-    WorkloadConfig,
+    BenchmarkSummary, BenchmarkType, CacheBehavior, DataDistribution, EfficiencyMetrics,
+    ImplementationComplexity, LatencyMetrics, MeasurementConfig, PerformanceBenchmarkFramework,
+    PerformanceRecommendation, PerformanceRecommendationType, PrecisionLevel,
+    QualityMetrics as BenchmarkQualityMetrics,
+    RecommendationPriority as BenchmarkRecommendationPriority, ResourceMetrics,
+    ScalabilityAnalysis, SuccessCriteria, TargetComponent, ThroughputMetrics, WorkloadConfig,
 };
 pub use photonic_computing::{
     CoherenceProperties, ConnectionType, GateType,
@@ -392,14 +392,15 @@ pub use realtime_adaptive_query_optimizer::{
 };
 pub use recommendation_systems::*;
 pub use self_adaptive_ai::*;
-pub use sophisticated_validation_optimization::{
-    ConstraintSatisfactionStrategy, EnvironmentalFactors, OptimizationContext,
-    OptimizationMetrics, OptimizationObjective, OptimizationParameters, OptimizationPriority,
-    OptimizationRecommendation, OptimizationRecommendationType, OptimizationResult as SophisticatedOptimizationResult,
-    OptimizationSolution, OptimizationStepType, OptimizationStrategy, ParetoSolution,
-    RiskLevel, SophisticatedOptimizationConfig, SophisticatedValidationOptimizer,
-};
 pub use shape::*;
+pub use sophisticated_validation_optimization::{
+    ConstraintSatisfactionStrategy, EnvironmentalFactors, OptimizationContext, OptimizationMetrics,
+    OptimizationObjective, OptimizationParameters, OptimizationPriority,
+    OptimizationRecommendation, OptimizationRecommendationType,
+    OptimizationResult as SophisticatedOptimizationResult, OptimizationSolution,
+    OptimizationStepType, OptimizationStrategy, ParetoSolution, RiskLevel,
+    SophisticatedOptimizationConfig, SophisticatedValidationOptimizer,
+};
 pub use system_monitoring::*;
 pub use validation_performance::*;
 pub use version_control::*;
@@ -414,7 +415,8 @@ pub use collective_consciousness::{
     AgentCapabilities, AgentStats, AgentStatus, CollectiveConfig, CollectiveConsciousnessNetwork,
     CollectiveInsight, CollectiveMetrics, CollectiveValidationResult, ConsciousnessAgent,
     ConsciousnessId, ConsensusDecision, ConsensusResult, ConsensusType, InterdimensionalPattern,
-    QuantumEffect, Reality, SynthesizedReality, ValidationContext as InterdimensionalValidationContext, ValidationSpecialization,
+    QuantumEffect, Reality, SynthesizedReality,
+    ValidationContext as InterdimensionalValidationContext, ValidationSpecialization,
 };
 pub use consciousness_validation::{
     ConsciousnessLevel as ValidatorConsciousnessLevel, ConsciousnessValidationResult,
@@ -430,7 +432,8 @@ pub use cosmic_scale_processing::{
 pub use explainable_ai::{
     AdaptationExplanation, AuditTrail, DecisionTree, DecisionType, ExplainableAI,
     ExplainableAIConfig, ExplanationDepth, FeatureImportanceAnalysis, InterpretabilityReport,
-    KeyFactor, PatternExplanation, QuantumExplanation, ValidationExplanation as ExplainableValidationExplanation,
+    KeyFactor, PatternExplanation, QuantumExplanation,
+    ValidationExplanation as ExplainableValidationExplanation,
 };
 pub use federated_learning::{
     AggregationStrategy, ConsensusAlgorithm, FederatedLearningCoordinator, FederatedNode,
@@ -443,7 +446,8 @@ pub use interdimensional_patterns::{
     RealityDimension,
 };
 pub use multimodal_validation::{
-    ContentType, MultiModalConfig, MultiModalValidationReport, MultiModalValidator, ValidationResult,
+    ContentType, MultiModalConfig, MultiModalValidationReport, MultiModalValidator,
+    ValidationResult,
 };
 pub use neuromorphic_validation::{
     NeuromorphicValidationNetwork, NeuromorphicValidationResult, NeuronState, NeuronType,

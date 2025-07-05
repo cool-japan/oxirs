@@ -19,8 +19,7 @@ pub use crate::federated_learning::config::{
     AggregationStrategy, AuthenticationConfig, AuthenticationMethod, CertificateConfig,
     CommunicationConfig, CommunicationProtocol, EncryptionScheme, FederatedConfig,
     MetaLearningAlgorithm, MetaLearningConfig, NoiseMechanism, PersonalizationConfig,
-    PersonalizationStrategy, PrivacyConfig, SecurityConfig, TrainingConfig,
-    VerificationMechanism,
+    PersonalizationStrategy, PrivacyConfig, SecurityConfig, TrainingConfig, VerificationMechanism,
 };
 
 pub use crate::federated_learning::participant::{
@@ -32,9 +31,9 @@ pub use crate::federated_learning::participant::{
 };
 
 pub use crate::federated_learning::privacy::{
-    AdvancedPrivacyAccountant, BudgetEntry, ClippingMechanisms, ClippingMethod,
-    CompositionEntry, CompositionMethod, NoiseGenerator, PrivacyAccountant, PrivacyEngine,
-    PrivacyGuarantees, PrivacyParams,
+    AdvancedPrivacyAccountant, BudgetEntry, ClippingMechanisms, ClippingMethod, CompositionEntry,
+    CompositionMethod, NoiseGenerator, PrivacyAccountant, PrivacyEngine, PrivacyGuarantees,
+    PrivacyParams,
 };
 
 // Import common types from parent module
@@ -112,20 +111,21 @@ impl FederatedCoordinator {
     pub fn register_participant(&mut self, participant: Participant) -> Result<()> {
         // Validate participant capabilities
         self.validate_participant(&participant)?;
-        
+
         // Add to participant registry
-        self.participants.insert(participant.participant_id, participant);
-        
+        self.participants
+            .insert(participant.participant_id, participant);
+
         Ok(())
     }
 
     /// Start a new federated learning round
     pub async fn start_round(&mut self) -> Result<FederatedRound> {
         let round_number = self.round_history.len() + 1;
-        
+
         // Select participants for this round
         let selected_participants = self.select_participants()?;
-        
+
         // Create new round
         let new_round = FederatedRound {
             round_number,
@@ -162,24 +162,24 @@ impl FederatedCoordinator {
         if let Some(mut current_round) = self.current_round.take() {
             // Aggregate updates using the aggregation engine
             let aggregated_params = self.aggregation_engine.aggregate_updates(&updates)?;
-            
+
             // Update global model
             self.global_model.parameters = aggregated_params;
             self.global_model.global_round += 1;
             self.global_model.last_updated = Utc::now();
-            
+
             // Update round with aggregated results
             current_round.aggregated_updates = self.global_model.parameters.clone();
             current_round.status = RoundStatus::Completed;
             current_round.end_time = Some(Utc::now());
-            
+
             // Calculate round metrics
             self.calculate_round_metrics(&mut current_round, &updates);
-            
+
             // Move completed round to history
             self.round_history.push(current_round);
         }
-        
+
         Ok(())
     }
 
@@ -189,17 +189,18 @@ impl FederatedCoordinator {
         if participant.capabilities.available_memory_gb < 1.0 {
             return Err(anyhow!("Participant has insufficient memory"));
         }
-        
+
         if participant.capabilities.network_bandwidth_mbps < 1.0 {
             return Err(anyhow!("Participant has insufficient bandwidth"));
         }
-        
+
         Ok(())
     }
 
     /// Select participants for the current round
     fn select_participants(&self) -> Result<Vec<Uuid>> {
-        let active_participants: Vec<Uuid> = self.participants
+        let active_participants: Vec<Uuid> = self
+            .participants
             .iter()
             .filter(|(_, p)| p.status == ParticipantStatus::Active)
             .map(|(id, _)| *id)
@@ -217,17 +218,19 @@ impl FederatedCoordinator {
     /// Calculate metrics for the completed round
     fn calculate_round_metrics(&self, round: &mut FederatedRound, updates: &[LocalUpdate]) {
         let mut metrics = &mut round.metrics;
-        
+
         metrics.num_participants = updates.len();
         metrics.total_samples = updates.iter().map(|u| u.num_samples).sum();
-        metrics.avg_local_loss = updates.iter()
+        metrics.avg_local_loss = updates
+            .iter()
             .map(|u| u.training_stats.local_loss)
-            .sum::<f64>() / updates.len() as f64;
-            
+            .sum::<f64>()
+            / updates.len() as f64;
+
         // Calculate duration
         if let Some(end_time) = round.end_time {
-            metrics.duration_seconds = (end_time - round.start_time)
-                .num_milliseconds() as f64 / 1000.0;
+            metrics.duration_seconds =
+                (end_time - round.start_time).num_milliseconds() as f64 / 1000.0;
         }
     }
 }
@@ -299,9 +302,7 @@ pub enum FederatedMessage {
         participant_id: Uuid,
     },
     /// Local update submission
-    LocalUpdate {
-        update: LocalUpdate,
-    },
+    LocalUpdate { update: LocalUpdate },
     /// Aggregation complete
     AggregationComplete {
         round_number: usize,
@@ -657,17 +658,32 @@ impl EmbeddingModel for FederatedEmbeddingModel {
         Ok(0.8)
     }
 
-    fn predict_objects(&self, _subject: &str, _predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        _subject: &str,
+        _predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         // Implementation would predict objects
         Ok((0..k).map(|i| (format!("object_{}", i), 0.8)).collect())
     }
 
-    fn predict_subjects(&self, _predicate: &str, _object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        _predicate: &str,
+        _object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         // Implementation would predict subjects
         Ok((0..k).map(|i| (format!("subject_{}", i), 0.8)).collect())
     }
 
-    fn predict_relations(&self, _subject: &str, _object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        _subject: &str,
+        _object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         // Implementation would predict relations
         Ok((0..k).map(|i| (format!("relation_{}", i), 0.8)).collect())
     }

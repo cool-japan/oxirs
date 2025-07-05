@@ -836,7 +836,7 @@ mod tests {
         let sink = MemoryStreamingSink::new();
 
         // Clone the Arc so we can access the data after parsing
-        let sink_data = Arc::clone(&sink.triples);
+        let _sink_data = Arc::clone(&sink.triples);
 
         let stats = parser.stream_parse(reader, sink).await.unwrap();
 

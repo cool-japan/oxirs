@@ -9,7 +9,7 @@ mod r#impl;
 pub use r#impl::*;
 
 // Import necessary types for tests
-use crate::{ModelConfig, Vector, EmbeddingModel};
+use crate::{EmbeddingModel, ModelConfig, Vector};
 use anyhow::Result;
 use ndarray::Array1;
 

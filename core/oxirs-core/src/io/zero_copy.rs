@@ -160,6 +160,7 @@ pub struct ZeroCopyQuad<'a> {
 }
 
 // Binary format constants
+#[allow(dead_code)]
 const FORMAT_VERSION: u8 = 1;
 const TERM_NAMED_NODE: u8 = 0;
 const TERM_BLANK_NODE: u8 = 1;

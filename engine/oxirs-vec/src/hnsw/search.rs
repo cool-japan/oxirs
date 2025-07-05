@@ -39,7 +39,11 @@ impl HnswIndex {
 
         // Phase 3: Extract top k results
         let mut final_results = current_best;
-        final_results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+        final_results.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         final_results.truncate(k);
 
         // Convert to output format
@@ -69,7 +73,7 @@ impl HnswIndex {
     ) -> Result<Vec<Candidate>> {
         // Priority queue for candidates (max-heap based on distance)
         let mut candidates = BinaryHeap::new();
-        
+
         // Priority queue for best results so far (min-heap based on distance)
         let mut dynamic_list: BinaryHeap<std::cmp::Reverse<Candidate>> = BinaryHeap::new();
 
@@ -97,7 +101,7 @@ impl HnswIndex {
                     for &neighbor_id in connections {
                         if !visited.contains(&neighbor_id) {
                             visited.insert(neighbor_id);
-                            
+
                             let distance = self.calculate_distance(query, neighbor_id)?;
                             let neighbor_candidate = Candidate::new(neighbor_id, distance);
 

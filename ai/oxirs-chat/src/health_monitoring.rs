@@ -972,8 +972,8 @@ impl Default for SelfHealingConfig {
             enabled: true,
             max_recovery_attempts: 3,
             recovery_cooldown: Duration::from_secs(300), // 5 minutes
-            auto_restart_threshold: 95.0, // 95% resource usage
-            memory_cleanup_threshold: 85.0, // 85% memory usage
+            auto_restart_threshold: 95.0,                // 95% resource usage
+            memory_cleanup_threshold: 85.0,              // 85% memory usage
             circuit_breaker_reset_interval: Duration::from_secs(600), // 10 minutes
         }
     }
@@ -1025,7 +1025,10 @@ impl SelfHealingSystem {
     }
 
     /// Analyze health issues and trigger appropriate healing actions
-    pub async fn analyze_and_heal(&mut self, health_report: &SystemHealthReport) -> Result<Vec<HealingAction>> {
+    pub async fn analyze_and_heal(
+        &mut self,
+        health_report: &SystemHealthReport,
+    ) -> Result<Vec<HealingAction>> {
         if !self.config.enabled {
             return Ok(Vec::new());
         }
@@ -1034,24 +1037,30 @@ impl SelfHealingSystem {
 
         // High CPU usage healing
         if health_report.system_metrics.cpu_usage > self.config.auto_restart_threshold {
-            if let Some(action) = self.create_healing_action(
-                "cpu_cleanup".to_string(),
-                HealingActionType::MemoryCleanup,
-                "system".to_string(),
-                "Clean up memory to reduce CPU pressure".to_string(),
-            ).await {
+            if let Some(action) = self
+                .create_healing_action(
+                    "cpu_cleanup".to_string(),
+                    HealingActionType::MemoryCleanup,
+                    "system".to_string(),
+                    "Clean up memory to reduce CPU pressure".to_string(),
+                )
+                .await
+            {
                 triggered_actions.push(action);
             }
         }
 
         // High memory usage healing
         if health_report.system_metrics.memory_usage > self.config.memory_cleanup_threshold {
-            if let Some(action) = self.create_healing_action(
-                "memory_cleanup".to_string(),
-                HealingActionType::MemoryCleanup,
-                "system".to_string(),
-                "Trigger garbage collection and cache cleanup".to_string(),
-            ).await {
+            if let Some(action) = self
+                .create_healing_action(
+                    "memory_cleanup".to_string(),
+                    HealingActionType::MemoryCleanup,
+                    "system".to_string(),
+                    "Trigger garbage collection and cache cleanup".to_string(),
+                )
+                .await
+            {
                 triggered_actions.push(action);
             }
         }
@@ -1059,25 +1068,32 @@ impl SelfHealingSystem {
         // Service availability issues
         for component in &health_report.component_statuses {
             if component.1.status == HealthStatus::Critical {
-                if let Some(action) = self.create_healing_action(
-                    format!("{}_restart", component.0),
-                    HealingActionType::RestartComponent,
-                    component.0.clone(),
-                    format!("Restart {} due to critical status", component.0),
-                ).await {
+                if let Some(action) = self
+                    .create_healing_action(
+                        format!("{}_restart", component.0),
+                        HealingActionType::RestartComponent,
+                        component.0.clone(),
+                        format!("Restart {} due to critical status", component.0),
+                    )
+                    .await
+                {
                     triggered_actions.push(action);
                 }
             }
         }
 
         // High error rates
-        if health_report.error_metrics.error_rate > 0.1 { // 10% error rate
-            if let Some(action) = self.create_healing_action(
-                "circuit_breaker_reset".to_string(),
-                HealingActionType::ResetCircuitBreaker,
-                "llm_service".to_string(),
-                "Reset circuit breakers due to high error rate".to_string(),
-            ).await {
+        if health_report.error_metrics.error_rate > 0.1 {
+            // 10% error rate
+            if let Some(action) = self
+                .create_healing_action(
+                    "circuit_breaker_reset".to_string(),
+                    HealingActionType::ResetCircuitBreaker,
+                    "llm_service".to_string(),
+                    "Reset circuit breakers due to high error rate".to_string(),
+                )
+                .await
+            {
                 triggered_actions.push(action);
             }
         }
@@ -1105,7 +1121,8 @@ impl SelfHealingSystem {
             if let Some(last_attempt) = existing_action.last_attempt {
                 if SystemTime::now()
                     .duration_since(last_attempt)
-                    .unwrap_or(Duration::ZERO) < self.config.recovery_cooldown
+                    .unwrap_or(Duration::ZERO)
+                    < self.config.recovery_cooldown
                 {
                     return None; // Still in cooldown
                 }
@@ -1121,9 +1138,17 @@ impl SelfHealingSystem {
             action_type,
             target_component,
             description,
-            attempts: self.healing_actions.get(&id).map(|a| a.attempts + 1).unwrap_or(1),
+            attempts: self
+                .healing_actions
+                .get(&id)
+                .map(|a| a.attempts + 1)
+                .unwrap_or(1),
             last_attempt: Some(SystemTime::now()),
-            success_rate: self.healing_actions.get(&id).map(|a| a.success_rate).unwrap_or(0.0),
+            success_rate: self
+                .healing_actions
+                .get(&id)
+                .map(|a| a.success_rate)
+                .unwrap_or(0.0),
         };
 
         self.healing_actions.insert(id, action.clone());
@@ -1155,7 +1180,8 @@ impl SelfHealingSystem {
                 true
             }
             HealingActionType::RollbackConfiguration => {
-                self.rollback_configuration(&action.target_component).await?;
+                self.rollback_configuration(&action.target_component)
+                    .await?;
                 true
             }
             HealingActionType::FlushConnections => {
@@ -1176,12 +1202,14 @@ impl SelfHealingSystem {
             self.recovery_stats.failed_recoveries += 1;
         }
 
-        let recovery_time = SystemTime::now().duration_since(start_time).unwrap_or(Duration::ZERO);
+        let recovery_time = SystemTime::now()
+            .duration_since(start_time)
+            .unwrap_or(Duration::ZERO);
         self.update_average_recovery_time(recovery_time);
 
         // Update action success rate
         if let Some(mut stored_action) = self.healing_actions.get_mut(&action.id) {
-            stored_action.success_rate = self.recovery_stats.successful_recoveries as f32 
+            stored_action.success_rate = self.recovery_stats.successful_recoveries as f32
                 / self.recovery_stats.total_recoveries as f32;
         }
 
@@ -1251,11 +1279,12 @@ impl SelfHealingSystem {
             self.recovery_stats.average_recovery_time = recovery_time;
         } else {
             // Calculate weighted average
-            let current_total = self.recovery_stats.average_recovery_time.as_millis() 
+            let current_total = self.recovery_stats.average_recovery_time.as_millis()
                 * (self.recovery_stats.total_recoveries - 1) as u128;
             let new_total = current_total + recovery_time.as_millis();
-            self.recovery_stats.average_recovery_time = 
-                Duration::from_millis((new_total / self.recovery_stats.total_recoveries as u128) as u64);
+            self.recovery_stats.average_recovery_time = Duration::from_millis(
+                (new_total / self.recovery_stats.total_recoveries as u128) as u64,
+            );
         }
     }
 
@@ -1275,7 +1304,8 @@ impl SelfHealingSystem {
             action.last_attempt.map_or(false, |last| {
                 SystemTime::now()
                     .duration_since(last)
-                    .unwrap_or(Duration::MAX) < self.config.recovery_cooldown
+                    .unwrap_or(Duration::MAX)
+                    < self.config.recovery_cooldown
             })
         })
     }

@@ -965,9 +965,7 @@ impl OxiRSChat {
             }
 
             // Stage 2: SPARQL Processing (if applicable)
-            let (sparql_query, sparql_results) = if user_message
-                .to_lowercase()
-                .contains("sparql")
+            let (sparql_query, sparql_results) = if user_message.to_lowercase().contains("sparql")
                 || user_message.to_lowercase().contains("query")
             {
                 let _ = tx
@@ -1060,9 +1058,7 @@ impl OxiRSChat {
                         content: prompt,
                         metadata: None,
                     }],
-                    system_prompt: Some(
-                        "You are an advanced AI assistant.".to_string(),
-                    ),
+                    system_prompt: Some("You are an advanced AI assistant.".to_string()),
                     temperature: 0.7,
                     max_tokens: Some(1000),
                     use_case: llm::UseCase::Conversation,
@@ -1086,7 +1082,7 @@ impl OxiRSChat {
             // Send response in chunks for streaming effect
             let words: Vec<&str> = response_text.split_whitespace().collect();
             let chunk_size = 3; // Words per chunk
-            
+
             for (i, chunk) in words.chunks(chunk_size).enumerate() {
                 let progress = 0.8 + (0.2 * i as f32 / (words.len() / chunk_size) as f32);
                 let _ = tx
@@ -1095,7 +1091,7 @@ impl OxiRSChat {
                         is_final: false,
                     })
                     .await;
-                
+
                 // Small delay for streaming effect
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }

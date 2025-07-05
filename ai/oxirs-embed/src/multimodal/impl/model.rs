@@ -1,10 +1,10 @@
 //! Main multi-modal embedding model implementation
 
+use super::adaptation::RealTimeFinetuning;
 use super::config::CrossModalConfig;
 use super::encoders::{AlignmentNetwork, KGEncoder, TextEncoder};
 use super::learning::FewShotLearning;
-use super::adaptation::RealTimeFinetuning;
-use crate::{EmbeddingModel, ModelStats, TrainingStats, Vector, NamedNode};
+use crate::{EmbeddingModel, ModelStats, NamedNode, TrainingStats, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;

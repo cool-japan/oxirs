@@ -10,10 +10,10 @@
 //! - Real-time analytics and metrics computation
 
 use crate::event::StreamEventType;
-use crate::{EventMetadata, StreamEvent};
 use crate::quantum_processing::ComparisonOperator;
+use crate::{EventMetadata, StreamEvent};
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Duration as ChronoDuration, Utc, Timelike, Datelike};
+use chrono::{DateTime, Datelike, Duration as ChronoDuration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -1459,7 +1459,7 @@ impl Default for ComplexEventProcessor {
 }
 
 /// Advanced Complex Event Processing capabilities with ML and real-time analytics
-/// 
+///
 /// Machine Learning-Enhanced Anomaly Detection for automatic pattern discovery
 #[derive(Debug)]
 pub struct AnomalyDetector {
@@ -1724,9 +1724,9 @@ pub enum StatisticType {
 /// Temporal ordering requirements
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TemporalOrdering {
-    Strict,      // Events must occur in exact order
-    Partial,     // Some events can be reordered
-    Unordered,   // Order doesn't matter
+    Strict,    // Events must occur in exact order
+    Partial,   // Some events can be reordered
+    Unordered, // Order doesn't matter
 }
 
 /// Causality analyzer for event relationships
@@ -1875,7 +1875,10 @@ pub enum KpiType {
     /// Simple metric calculation
     Simple,
     /// Ratio between two metrics
-    Ratio { numerator: String, denominator: String },
+    Ratio {
+        numerator: String,
+        denominator: String,
+    },
     /// Percentage calculation
     Percentage { part: String, whole: String },
     /// Growth rate calculation
@@ -2137,13 +2140,13 @@ impl AnomalyDetector {
     pub async fn process_event(&mut self, event: &StreamEvent) -> Result<Option<AnomalyEvent>> {
         // Extract features from the event
         let data_point = self.extract_features(event)?;
-        
+
         // Update or create baseline model
         self.update_baseline_model(&data_point).await?;
-        
+
         // Calculate anomaly score
         let score = self.calculate_anomaly_score(&data_point)?;
-        
+
         // Check if score exceeds threshold
         if score >= self.config.min_score_threshold {
             let anomaly = AnomalyEvent {
@@ -2155,7 +2158,7 @@ impl AnomalyDetector {
                 explanation: self.generate_explanation(&data_point, score),
                 context_events: self.get_context_events(event).await,
             };
-            
+
             self.detected_anomalies.push(anomaly.clone());
             Ok(Some(anomaly))
         } else {
@@ -2167,18 +2170,27 @@ impl AnomalyDetector {
     fn extract_features(&self, event: &StreamEvent) -> Result<AnomalyDataPoint> {
         let mut features = HashMap::new();
         let mut categorical_features = HashMap::new();
-        
+
         // Extract basic features
-        features.insert("timestamp_hour".to_string(), event.timestamp().hour() as f64);
-        features.insert("timestamp_day_of_week".to_string(), event.timestamp().weekday().num_days_from_monday() as f64);
-        
+        features.insert(
+            "timestamp_hour".to_string(),
+            event.timestamp().hour() as f64,
+        );
+        features.insert(
+            "timestamp_day_of_week".to_string(),
+            event.timestamp().weekday().num_days_from_monday() as f64,
+        );
+
         // Extract event-specific features
-        categorical_features.insert("event_type".to_string(), format!("{:?}", event.event_type()));
-        
+        categorical_features.insert(
+            "event_type".to_string(),
+            format!("{:?}", event.event_type()),
+        );
+
         let metadata = event.metadata();
         // Note: EventMetadata doesn't have priority field, using defaults
         features.insert("priority".to_string(), 1.0); // Default priority
-        
+
         // Use event_id length as a size proxy
         features.insert("size".to_string(), metadata.event_id.len() as f64);
 
@@ -2192,7 +2204,8 @@ impl AnomalyDetector {
 
     /// Update baseline statistical model
     async fn update_baseline_model(&mut self, data_point: &AnomalyDataPoint) -> Result<()> {
-        let model = self.baseline_models
+        let model = self
+            .baseline_models
             .entry(data_point.source.clone())
             .or_insert_with(|| StatisticalModel {
                 means: HashMap::new(),
@@ -2212,23 +2225,29 @@ impl AnomalyDetector {
         for (feature_name, &value) in &data_point.features {
             let old_mean = model.means.get(feature_name).unwrap_or(&0.0);
             let old_std = model.std_devs.get(feature_name).unwrap_or(&1.0);
-            
+
             // Incremental mean and standard deviation update
             let new_count = model.sample_count + 1;
             let new_mean = (old_mean * model.sample_count as f64 + value) / new_count as f64;
-            
+
             model.means.insert(feature_name.clone(), new_mean);
-            
+
             if model.sample_count > 1 {
-                let new_variance = ((model.sample_count - 1) as f64 * old_std.powi(2) + 
-                                   (value - new_mean).powi(2)) / (new_count - 1) as f64;
-                model.std_devs.insert(feature_name.clone(), new_variance.sqrt());
+                let new_variance = ((model.sample_count - 1) as f64 * old_std.powi(2)
+                    + (value - new_mean).powi(2))
+                    / (new_count - 1) as f64;
+                model
+                    .std_devs
+                    .insert(feature_name.clone(), new_variance.sqrt());
             }
         }
 
         // Update categorical feature frequencies
         for (feature_name, value) in &data_point.categorical_features {
-            let freq_map = model.frequencies.entry(feature_name.clone()).or_insert_with(HashMap::new);
+            let freq_map = model
+                .frequencies
+                .entry(feature_name.clone())
+                .or_insert_with(HashMap::new);
             let current_count = freq_map.get(value).unwrap_or(&0.0);
             freq_map.insert(value.clone(), current_count + 1.0);
         }
@@ -2247,7 +2266,9 @@ impl AnomalyDetector {
 
     /// Calculate anomaly score for a data point
     fn calculate_anomaly_score(&self, data_point: &AnomalyDataPoint) -> Result<f64> {
-        let model = self.baseline_models.get(&data_point.source)
+        let model = self
+            .baseline_models
+            .get(&data_point.source)
             .ok_or_else(|| anyhow!("No baseline model for source: {}", data_point.source))?;
 
         let mut total_score = 0.0;
@@ -2256,7 +2277,10 @@ impl AnomalyDetector {
         // Calculate statistical anomaly scores
         if self.config.enable_statistical {
             for (feature_name, &value) in &data_point.features {
-                if let (Some(&mean), Some(&std_dev)) = (model.means.get(feature_name), model.std_devs.get(feature_name)) {
+                if let (Some(&mean), Some(&std_dev)) = (
+                    model.means.get(feature_name),
+                    model.std_devs.get(feature_name),
+                ) {
                     if std_dev > 0.0 {
                         let z_score = ((value - mean) / std_dev).abs();
                         let stat_score = 1.0 - (-z_score.powi(2) / 2.0).exp(); // Gaussian-based score
@@ -2271,10 +2295,12 @@ impl AnomalyDetector {
         if self.config.enable_temporal {
             let hour = data_point.timestamp.hour() as usize;
             let day = data_point.timestamp.weekday().num_days_from_monday() as usize;
-            
-            let expected_hourly = model.temporal_patterns.hourly_patterns[hour] / model.sample_count as f64;
-            let expected_daily = model.temporal_patterns.daily_patterns[day] / model.sample_count as f64;
-            
+
+            let expected_hourly =
+                model.temporal_patterns.hourly_patterns[hour] / model.sample_count as f64;
+            let expected_daily =
+                model.temporal_patterns.daily_patterns[day] / model.sample_count as f64;
+
             let temporal_score = 1.0 - (expected_hourly * expected_daily).min(1.0);
             total_score += temporal_score;
             score_count += 1;
@@ -2291,7 +2317,11 @@ impl AnomalyDetector {
             }
         }
 
-        Ok(if score_count > 0 { total_score / score_count as f64 } else { 0.0 })
+        Ok(if score_count > 0 {
+            total_score / score_count as f64
+        } else {
+            0.0
+        })
     }
 
     /// Classify the type of anomaly detected
@@ -2299,9 +2329,14 @@ impl AnomalyDetector {
         // Simple classification based on score and features
         if score > 0.9 {
             AnomalyType::MultiDimensional
-        } else if data_point.categorical_features.values().any(|v| v.contains("rare")) {
+        } else if data_point
+            .categorical_features
+            .values()
+            .any(|v| v.contains("rare"))
+        {
             AnomalyType::RareEvent
-        } else if data_point.features.values().any(|&v| v > 1000.0) { // arbitrary threshold
+        } else if data_point.features.values().any(|&v| v > 1000.0) {
+            // arbitrary threshold
             AnomalyType::StatisticalOutlier
         } else {
             AnomalyType::TemporalAnomaly
@@ -2375,11 +2410,17 @@ impl AdvancedTemporalProcessor {
         event: &StreamEvent,
     ) -> Result<Option<PatternMatch>> {
         // Get or create pattern state
-        let state = self.state_manager.get_or_create_state(&pattern.id, event).await?;
+        let state = self
+            .state_manager
+            .get_or_create_state(&pattern.id, event)
+            .await?;
 
         // Evaluate each condition
         for condition in &pattern.conditions {
-            match self.evaluate_advanced_condition(condition, event, &state).await? {
+            match self
+                .evaluate_advanced_condition(condition, event, &state)
+                .await?
+            {
                 ConditionResult::Matched => {
                     // Update state and continue
                     self.state_manager.update_state(&pattern.id, event).await?;
@@ -2413,7 +2454,12 @@ impl AdvancedTemporalProcessor {
         state: &PatternState,
     ) -> Result<ConditionResult> {
         match condition {
-            AdvancedPatternCondition::FollowedBy { first, second, within, exactly } => {
+            AdvancedPatternCondition::FollowedBy {
+                first,
+                second,
+                within,
+                exactly,
+            } => {
                 // Check if we've seen the first condition and now seeing the second
                 let first_match = self.check_condition_in_history(first, &state.matched_events)?;
                 if first_match {
@@ -2430,7 +2476,11 @@ impl AdvancedTemporalProcessor {
                 }
                 Ok(ConditionResult::Pending)
             }
-            AdvancedPatternCondition::NotFollowedBy { first, second, within } => {
+            AdvancedPatternCondition::NotFollowedBy {
+                first,
+                second,
+                within,
+            } => {
                 // Check if first condition was matched but second hasn't occurred within time window
                 let first_match = self.check_condition_in_history(first, &state.matched_events)?;
                 if first_match {
@@ -2447,12 +2497,19 @@ impl AdvancedTemporalProcessor {
                 }
                 Ok(ConditionResult::Pending)
             }
-            AdvancedPatternCondition::FrequencyThreshold { condition, count, within, comparison } => {
+            AdvancedPatternCondition::FrequencyThreshold {
+                condition,
+                count,
+                within,
+                comparison,
+            } => {
                 // Count matching events within time window
                 let now = event.timestamp();
                 let window_start = now - *within;
-                
-                let matching_count = state.matched_events.iter()
+
+                let matching_count = state
+                    .matched_events
+                    .iter()
                     .filter(|e| e.timestamp() >= window_start && e.timestamp() <= now)
                     .filter(|e| self.evaluate_basic_condition(condition, e).unwrap_or(false))
                     .count() as u32;
@@ -2461,7 +2518,9 @@ impl AdvancedTemporalProcessor {
                     FrequencyComparison::Exactly => matching_count == *count,
                     FrequencyComparison::AtLeast => matching_count >= *count,
                     FrequencyComparison::AtMost => matching_count <= *count,
-                    FrequencyComparison::Between(min, max) => matching_count >= *min && matching_count <= *max,
+                    FrequencyComparison::Between(min, max) => {
+                        matching_count >= *min && matching_count <= *max
+                    }
                 };
 
                 if threshold_met {
@@ -2470,10 +2529,16 @@ impl AdvancedTemporalProcessor {
                     Ok(ConditionResult::Pending)
                 }
             }
-            AdvancedPatternCondition::TrendPattern { field, trend_type, sensitivity, window } => {
+            AdvancedPatternCondition::TrendPattern {
+                field,
+                trend_type,
+                sensitivity,
+                window,
+            } => {
                 // Analyze trend in the specified field over the time window
-                let trend_result = self.analyze_field_trend(field, window, &state.matched_events, *sensitivity)?;
-                
+                let trend_result =
+                    self.analyze_field_trend(field, window, &state.matched_events, *sensitivity)?;
+
                 let trend_matches = match trend_type {
                     TrendType::Increasing => trend_result.direction == TrendDirection::Increasing,
                     TrendType::Decreasing => trend_result.direction == TrendDirection::Decreasing,
@@ -2496,7 +2561,11 @@ impl AdvancedTemporalProcessor {
     }
 
     /// Check if a condition exists in event history
-    fn check_condition_in_history(&self, condition: &PatternCondition, events: &[StreamEvent]) -> Result<bool> {
+    fn check_condition_in_history(
+        &self,
+        condition: &PatternCondition,
+        events: &[StreamEvent],
+    ) -> Result<bool> {
         for event in events {
             if self.evaluate_basic_condition(condition, event)? {
                 return Ok(true);
@@ -2506,7 +2575,11 @@ impl AdvancedTemporalProcessor {
     }
 
     /// Evaluate a basic pattern condition (delegated to existing implementation)
-    fn evaluate_basic_condition(&self, condition: &PatternCondition, event: &StreamEvent) -> Result<bool> {
+    fn evaluate_basic_condition(
+        &self,
+        condition: &PatternCondition,
+        event: &StreamEvent,
+    ) -> Result<bool> {
         // This would delegate to the existing pattern condition evaluation logic
         // Placeholder implementation
         Ok(true)
@@ -2531,7 +2604,11 @@ impl AdvancedTemporalProcessor {
     }
 
     /// Calculate confidence score for pattern match
-    fn calculate_pattern_confidence(&self, pattern: &AdvancedTemporalPattern, events: &[StreamEvent]) -> f64 {
+    fn calculate_pattern_confidence(
+        &self,
+        pattern: &AdvancedTemporalPattern,
+        events: &[StreamEvent],
+    ) -> f64 {
         // Simple confidence calculation based on number of matched events
         let base_confidence = events.len() as f64 / pattern.conditions.len() as f64;
         base_confidence.min(1.0)
@@ -2558,7 +2635,10 @@ impl CausalityAnalyzer {
 
     pub async fn process_event(&mut self, event: &StreamEvent) -> Result<()> {
         // Placeholder implementation for causality analysis
-        debug!("Processing event for causality analysis: {:?}", event.event_type());
+        debug!(
+            "Processing event for causality analysis: {:?}",
+            event.event_type()
+        );
         Ok(())
     }
 }
@@ -2576,7 +2656,11 @@ impl TemporalStateManager {
         }
     }
 
-    pub async fn get_or_create_state(&mut self, pattern_id: &str, event: &StreamEvent) -> Result<PatternState> {
+    pub async fn get_or_create_state(
+        &mut self,
+        pattern_id: &str,
+        event: &StreamEvent,
+    ) -> Result<PatternState> {
         if let Some(state) = self.active_states.get(pattern_id) {
             Ok(state.clone())
         } else {
@@ -2588,7 +2672,8 @@ impl TemporalStateManager {
                 started_at: event.timestamp(),
                 updated_at: event.timestamp(),
             };
-            self.active_states.insert(pattern_id.to_string(), new_state.clone());
+            self.active_states
+                .insert(pattern_id.to_string(), new_state.clone());
             Ok(new_state)
         }
     }
@@ -2620,23 +2705,23 @@ impl TrendAnalyzer {
     pub async fn process_event(&mut self, event: &StreamEvent) -> Result<()> {
         // Extract numerical value from event for trend analysis
         let value = self.extract_numerical_value(event)?;
-        
+
         let point = TimeSeriesPoint {
             timestamp: event.timestamp(),
             value,
             metadata: HashMap::new(),
         };
-        
+
         self.time_series.push_back(point);
-        
+
         // Keep series bounded
         if self.time_series.len() > 1000 {
             self.time_series.pop_front();
         }
-        
+
         // Update trend analysis
         self.update_trend_analysis()?;
-        
+
         Ok(())
     }
 
@@ -2654,7 +2739,9 @@ impl TrendAnalyzer {
         match &self.algorithm {
             TrendAlgorithm::LinearRegression { window } => {
                 let window_size = (*window).min(self.time_series.len());
-                let recent_data: Vec<f64> = self.time_series.iter()
+                let recent_data: Vec<f64> = self
+                    .time_series
+                    .iter()
                     .skip(self.time_series.len() - window_size)
                     .map(|p| p.value)
                     .collect();
@@ -2689,7 +2776,7 @@ impl TrendAnalyzer {
         let x2_sum: f64 = (0..data.len()).map(|i| (i as f64).powi(2)).sum();
 
         let slope = (n * xy_sum - x_sum * y_sum) / (n * x2_sum - x_sum.powi(2));
-        
+
         let direction = if slope > self.sensitivity {
             TrendDirection::Increasing
         } else if slope < -self.sensitivity {
@@ -2723,7 +2810,8 @@ impl RealTimeAnalyticsEngine {
     /// Add a KPI calculator
     pub fn add_kpi(&mut self, definition: KpiDefinition) {
         let calculator = KpiCalculator::new(definition.clone());
-        self.kpi_calculators.insert(definition.name.clone(), calculator);
+        self.kpi_calculators
+            .insert(definition.name.clone(), calculator);
     }
 
     /// Process event for real-time analytics
@@ -2848,16 +2936,18 @@ impl KpiCalculator {
     pub async fn process_event(&mut self, event: &StreamEvent) -> Result<Option<KpiResult>> {
         // Extract value from event based on KPI definition
         let value = self.extract_value_from_event(event)?;
-        
+
         // Update aggregation state
         self.aggregation_state.update(value);
-        
+
         // Calculate current KPI value
         let previous_value = self.current_value;
         self.current_value = match self.definition.aggregation {
             AggregateFunction::Count => self.aggregation_state.count as f64,
             AggregateFunction::Sum => self.aggregation_state.sum,
-            AggregateFunction::Average => self.aggregation_state.sum / self.aggregation_state.count as f64,
+            AggregateFunction::Average => {
+                self.aggregation_state.sum / self.aggregation_state.count as f64
+            }
             AggregateFunction::Min => self.aggregation_state.min,
             AggregateFunction::Max => self.aggregation_state.max,
             _ => value, // For other functions, use raw value
@@ -2889,28 +2979,37 @@ impl KpiCalculator {
         match self.definition.target_field.as_str() {
             "size" => Ok(event.metadata().event_id.len() as f64), // Use event_id length as size proxy
             "priority" => Ok(1.0), // Default priority since metadata doesn't have priority field
-            _ => Ok(1.0), // Default to count
+            _ => Ok(1.0),          // Default to count
         }
     }
 
     fn check_thresholds(&self) -> Result<Option<AnalyticsAlert>> {
         for threshold in &self.definition.thresholds {
             let threshold_breached = match threshold.operator {
-                ComparisonOperator::Equal => (self.current_value - threshold.value).abs() < f64::EPSILON,
+                ComparisonOperator::Equal => {
+                    (self.current_value - threshold.value).abs() < f64::EPSILON
+                }
                 ComparisonOperator::GreaterThan => self.current_value > threshold.value,
                 ComparisonOperator::LessThan => self.current_value < threshold.value,
                 ComparisonOperator::GreaterOrEqual => self.current_value >= threshold.value,
                 ComparisonOperator::LessOrEqual => self.current_value <= threshold.value,
-                ComparisonOperator::NotEqual => (self.current_value - threshold.value).abs() > f64::EPSILON,
+                ComparisonOperator::NotEqual => {
+                    (self.current_value - threshold.value).abs() > f64::EPSILON
+                }
             };
 
             if threshold_breached {
                 return Ok(Some(AnalyticsAlert {
                     id: Uuid::new_v4().to_string(),
                     alert_type: AlertType::KpiThresholdBreached,
-                    message: format!("KPI '{}' breached threshold '{}': current value {:.2} {} {:.2}",
-                                   self.definition.name, threshold.name, self.current_value,
-                                   format!("{:?}", threshold.operator), threshold.value),
+                    message: format!(
+                        "KPI '{}' breached threshold '{}': current value {:.2} {} {:.2}",
+                        self.definition.name,
+                        threshold.name,
+                        self.current_value,
+                        format!("{:?}", threshold.operator),
+                        threshold.value
+                    ),
                     severity: threshold.severity.clone(),
                     timestamp: Utc::now(),
                     source: self.definition.name.clone(),
@@ -2962,22 +3061,36 @@ impl RealTimeMetrics {
 
     pub async fn update_from_event(&mut self, event: &StreamEvent) -> Result<()> {
         // Update basic metrics from event
-        self.update_metric("event_count", 1.0, event.timestamp()).await?;
-        
+        self.update_metric("event_count", 1.0, event.timestamp())
+            .await?;
+
         // Use event_id length as a size proxy since metadata doesn't have size field
         let metadata = event.metadata();
-        self.update_metric("total_size", metadata.event_id.len() as f64, event.timestamp()).await?;
+        self.update_metric(
+            "total_size",
+            metadata.event_id.len() as f64,
+            event.timestamp(),
+        )
+        .await?;
 
         Ok(())
     }
 
-    async fn update_metric(&mut self, name: &str, value: f64, timestamp: DateTime<Utc>) -> Result<()> {
+    async fn update_metric(
+        &mut self,
+        name: &str,
+        value: f64,
+        timestamp: DateTime<Utc>,
+    ) -> Result<()> {
         // Update current value
         let current = self.current_metrics.entry(name.to_string()).or_insert(0.0);
         *current += value;
 
         // Add to history
-        let history = self.metrics_history.entry(name.to_string()).or_insert_with(|| VecDeque::with_capacity(1000));
+        let history = self
+            .metrics_history
+            .entry(name.to_string())
+            .or_insert_with(|| VecDeque::with_capacity(1000));
         history.push_back(MetricPoint {
             value,
             timestamp,

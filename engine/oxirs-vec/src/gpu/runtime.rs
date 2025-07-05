@@ -28,7 +28,6 @@ impl CudaStream {
                 device_id,
             })
         }
-
     }
 
     pub fn synchronize(&self) -> anyhow::Result<()> {
@@ -37,7 +36,7 @@ impl CudaStream {
             // CUDA functionality temporarily disabled
             Err(anyhow::anyhow!("CUDA support needs proper implementation"))
         }
-        
+
         #[cfg(any(not(feature = "cuda"), not(feature = "cuda-fully-supported")))]
         {
             Ok(())

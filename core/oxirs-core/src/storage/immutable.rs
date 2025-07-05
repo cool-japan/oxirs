@@ -136,6 +136,7 @@ struct MerkleTree {
     /// Tree nodes
     nodes: HashMap<ContentHash, MerkleNode>,
     /// Depth of tree
+    #[allow(dead_code)]
     depth: usize,
 }
 
@@ -165,6 +166,7 @@ struct ReferenceTracker {
 /// Deduplication index
 struct DeduplicationIndex {
     /// Content fingerprint to hash mapping
+    #[allow(dead_code)]
     fingerprints: HashMap<u64, Vec<ContentHash>>,
     /// Triple to block mapping
     triple_blocks: HashMap<Triple, ContentHash>,
@@ -175,7 +177,9 @@ struct DeduplicationIndex {
 struct ImmutableStats {
     total_blocks: u64,
     unique_blocks: u64,
+    #[allow(dead_code)]
     total_size: u64,
+    #[allow(dead_code)]
     dedup_savings: u64,
     gc_reclaimed: u64,
 }
@@ -734,7 +738,7 @@ mod tests {
         let triples = vec![triple.clone(), triple.clone(), triple.clone()];
 
         // Should deduplicate
-        let commit = storage.store_triples(&triples, "Dedup test").await.unwrap();
+        let _commit = storage.store_triples(&triples, "Dedup test").await.unwrap();
 
         let stats = storage.stats.read().await;
         // Should only store one unique block for the triples

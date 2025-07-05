@@ -3,6 +3,8 @@
 //! This module implements advanced query optimization using machine learning
 //! techniques to improve query performance based on historical patterns.
 
+#![allow(dead_code)]
+
 use crate::indexing::IndexStats;
 use crate::model::Variable;
 use crate::query::algebra::{

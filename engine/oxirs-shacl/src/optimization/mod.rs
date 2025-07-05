@@ -62,15 +62,15 @@ pub use memory::{
 
 // Re-export quantum analytics types
 pub use quantum_analytics::{
-    ConsciousnessInsight, ConsciousnessState, EntanglementInfo, EntanglementType,
-    MeditationState, QuantumAnalyticsConfig, QuantumOptimizationStrategy,
-    QuantumPerformanceAnalytics, QuantumPerformanceInsight, RecommendationCategory,
-    TranscendenceComplexity, TranscendentRecommendation,
+    ConsciousnessInsight, ConsciousnessState, EntanglementInfo, EntanglementType, MeditationState,
+    QuantumAnalyticsConfig, QuantumOptimizationStrategy, QuantumPerformanceAnalytics,
+    QuantumPerformanceInsight, RecommendationCategory, TranscendenceComplexity,
+    TranscendentRecommendation,
 };
 
 // Re-export negation optimizer types
 pub use negation_optimizer::{
     CacheWorthiness, NegationOptimizationConfig, NegationOptimizationResult,
-    NegationOptimizationStats, NegationOptimizer, OptimizationStrategy,
-    ShapeComplexity, ShapeComplexityAnalysis, StrategyStats,
+    NegationOptimizationStats, NegationOptimizer, OptimizationStrategy, ShapeComplexity,
+    ShapeComplexityAnalysis, StrategyStats,
 };

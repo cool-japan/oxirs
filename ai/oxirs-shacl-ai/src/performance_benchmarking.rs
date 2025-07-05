@@ -4,32 +4,30 @@
 //! system, including micro-benchmarks, macro-benchmarks, scalability testing, regression
 //! detection, and automated performance analysis.
 
-use std::collections::{HashMap, HashSet, BTreeMap, VecDeque};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
-use serde::{Deserialize, Serialize};
-use tracing::{info, debug, warn, error};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use oxirs_core::{
-    model::{NamedNode, Term, Triple, Quad},
-    Store, Graph,
+    model::{NamedNode, Quad, Term, Triple},
+    Graph, Store,
 };
 
 use oxirs_shacl::{
-    constraints::*,
-    Shape, ShapeId, Constraint, ConstraintComponentId,
-    PropertyPath, Target, Severity, ValidationReport, ValidationConfig,
-    Validator,
+    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
+    Target, ValidationConfig, ValidationReport, Validator,
 };
 
 use crate::{
-    Result, ShaclAiError,
     advanced_validation_strategies::{
-        AdvancedValidationStrategyManager, AdvancedValidationConfig, ValidationContext,
+        AdvancedValidationConfig, AdvancedValidationStrategyManager, ValidationContext,
     },
-    validation_performance::ValidationPerformanceOptimizer,
     learning::ShapeLearner,
+    validation_performance::ValidationPerformanceOptimizer,
+    Result, ShaclAiError,
 };
 
 /// Performance benchmarking configuration
@@ -37,46 +35,46 @@ use crate::{
 pub struct BenchmarkConfig {
     /// Benchmark execution timeout per benchmark
     pub benchmark_timeout_seconds: u64,
-    
+
     /// Number of benchmark iterations
     pub benchmark_iterations: usize,
-    
+
     /// Warmup iterations before measurement
     pub warmup_iterations: usize,
-    
+
     /// Enable statistical analysis
     pub enable_statistical_analysis: bool,
-    
+
     /// Enable memory profiling
     pub enable_memory_profiling: bool,
-    
+
     /// Enable CPU profiling
     pub enable_cpu_profiling: bool,
-    
+
     /// Enable I/O profiling
     pub enable_io_profiling: bool,
-    
+
     /// Data sizes for scalability testing
     pub scalability_data_sizes: Vec<usize>,
-    
+
     /// Concurrency levels for parallel testing
     pub concurrency_levels: Vec<usize>,
-    
+
     /// Performance regression threshold (percentage)
     pub regression_threshold_percent: f64,
-    
+
     /// Enable automated performance tuning
     pub enable_auto_tuning: bool,
-    
+
     /// Benchmark result persistence
     pub persist_results: bool,
-    
+
     /// Generate detailed reports
     pub generate_detailed_reports: bool,
-    
+
     /// Enable comparative analysis
     pub enable_comparative_analysis: bool,
-    
+
     /// Baseline comparison enabled
     pub enable_baseline_comparison: bool,
 }
@@ -587,35 +585,42 @@ impl PerformanceBenchmarkFramework {
     /// Run comprehensive performance benchmarks
     pub async fn run_benchmarks(&self) -> Result<BenchmarkReport> {
         info!("Starting comprehensive performance benchmarks");
-        
+
         // 1. Generate benchmark suites
         let benchmark_suites = self.generate_benchmark_suites().await?;
         info!("Generated {} benchmark suites", benchmark_suites.len());
-        
+
         // 2. Initialize profiling
         self.initialize_profiling().await?;
-        
+
         // 3. Execute benchmark suites
         let benchmark_results = self.execute_benchmark_suites(benchmark_suites).await?;
-        
+
         // 4. Perform statistical analysis
-        let statistical_results = self.perform_statistical_analysis(&benchmark_results).await?;
-        
+        let statistical_results = self
+            .perform_statistical_analysis(&benchmark_results)
+            .await?;
+
         // 5. Perform scalability analysis
-        let scalability_results = self.perform_scalability_analysis(&benchmark_results).await?;
-        
+        let scalability_results = self
+            .perform_scalability_analysis(&benchmark_results)
+            .await?;
+
         // 6. Detect performance regressions
         let regression_results = self.detect_regressions(&benchmark_results).await?;
-        
+
         // 7. Generate performance recommendations
-        let recommendations = self.generate_performance_recommendations(&benchmark_results).await?;
-        
+        let recommendations = self
+            .generate_performance_recommendations(&benchmark_results)
+            .await?;
+
         // 8. Update performance baselines
-        self.update_performance_baselines(&benchmark_results).await?;
-        
+        self.update_performance_baselines(&benchmark_results)
+            .await?;
+
         // 9. Finalize profiling
         self.finalize_profiling().await?;
-        
+
         Ok(BenchmarkReport {
             summary: self.generate_benchmark_summary(&benchmark_results).await?,
             benchmark_results,
@@ -630,31 +635,31 @@ impl PerformanceBenchmarkFramework {
     /// Generate benchmark suites based on configuration
     async fn generate_benchmark_suites(&self) -> Result<Vec<BenchmarkSuite>> {
         let mut suites = Vec::new();
-        
+
         // Micro-benchmarks for individual components
         suites.push(self.create_micro_benchmark_suite().await?);
-        
+
         // Macro-benchmarks for end-to-end scenarios
         suites.push(self.create_macro_benchmark_suite().await?);
-        
+
         // Scalability benchmarks
         suites.push(self.create_scalability_benchmark_suite().await?);
-        
+
         // Stress benchmarks
         suites.push(self.create_stress_benchmark_suite().await?);
-        
+
         // Regression benchmarks
         if self.config.enable_baseline_comparison {
             suites.push(self.create_regression_benchmark_suite().await?);
         }
-        
+
         Ok(suites)
     }
 
     /// Create micro-benchmark suite
     async fn create_micro_benchmark_suite(&self) -> Result<BenchmarkSuite> {
         let mut benchmarks = Vec::new();
-        
+
         // Shape learner benchmarks
         benchmarks.push(Benchmark {
             benchmark_id: Uuid::new_v4(),
@@ -692,9 +697,9 @@ impl PerformanceBenchmarkFramework {
                 min_scalability_efficiency: None,
             },
         });
-        
+
         // Add more micro-benchmarks for other components...
-        
+
         Ok(BenchmarkSuite {
             suite_id: Uuid::new_v4(),
             name: "micro_benchmarks".to_string(),
@@ -712,15 +717,18 @@ impl PerformanceBenchmarkFramework {
     }
 
     /// Execute benchmark suites
-    async fn execute_benchmark_suites(&self, suites: Vec<BenchmarkSuite>) -> Result<Vec<BenchmarkResult>> {
+    async fn execute_benchmark_suites(
+        &self,
+        suites: Vec<BenchmarkSuite>,
+    ) -> Result<Vec<BenchmarkResult>> {
         let mut all_results = Vec::new();
-        
+
         for suite in suites {
             info!("Executing benchmark suite: {}", suite.name);
             let suite_results = self.execute_benchmark_suite(suite).await?;
             all_results.extend(suite_results);
         }
-        
+
         Ok(all_results)
     }
 
@@ -729,7 +737,7 @@ impl PerformanceBenchmarkFramework {
         let mut benchmark_runner = self.benchmark_runner.lock().map_err(|e| {
             ShaclAiError::Benchmark(format!("Failed to acquire benchmark runner lock: {}", e))
         })?;
-        
+
         benchmark_runner.execute_suite(suite, &self.config).await
     }
 
@@ -762,36 +770,53 @@ impl PerformanceBenchmarkFramework {
     }
 
     /// Perform statistical analysis on benchmark results
-    async fn perform_statistical_analysis(&self, results: &[BenchmarkResult]) -> Result<Vec<StatisticalAnalysis>> {
+    async fn perform_statistical_analysis(
+        &self,
+        results: &[BenchmarkResult],
+    ) -> Result<Vec<StatisticalAnalysis>> {
         self.performance_analyzer.analyze_results(results).await
     }
 
     /// Perform scalability analysis
-    async fn perform_scalability_analysis(&self, results: &[BenchmarkResult]) -> Result<Vec<ScalabilityAnalysis>> {
+    async fn perform_scalability_analysis(
+        &self,
+        results: &[BenchmarkResult],
+    ) -> Result<Vec<ScalabilityAnalysis>> {
         self.scalability_tester.analyze_scalability(results).await
     }
 
     /// Detect performance regressions
-    async fn detect_regressions(&self, results: &[BenchmarkResult]) -> Result<Vec<RegressionAnalysis>> {
-        self.regression_detector.detect_regressions(results, self.config.regression_threshold_percent).await
+    async fn detect_regressions(
+        &self,
+        results: &[BenchmarkResult],
+    ) -> Result<Vec<RegressionAnalysis>> {
+        self.regression_detector
+            .detect_regressions(results, self.config.regression_threshold_percent)
+            .await
     }
 
     /// Generate performance recommendations
-    async fn generate_performance_recommendations(&self, results: &[BenchmarkResult]) -> Result<Vec<PerformanceRecommendation>> {
+    async fn generate_performance_recommendations(
+        &self,
+        results: &[BenchmarkResult],
+    ) -> Result<Vec<PerformanceRecommendation>> {
         let mut recommendations = Vec::new();
-        
+
         for result in results {
             let component_recommendations = self.analyze_component_performance(result).await?;
             recommendations.extend(component_recommendations);
         }
-        
+
         Ok(recommendations)
     }
 
     /// Analyze performance for specific component
-    async fn analyze_component_performance(&self, result: &BenchmarkResult) -> Result<Vec<PerformanceRecommendation>> {
+    async fn analyze_component_performance(
+        &self,
+        result: &BenchmarkResult,
+    ) -> Result<Vec<PerformanceRecommendation>> {
         let mut recommendations = Vec::new();
-        
+
         // CPU efficiency analysis
         if result.performance_metrics.efficiency_metrics.cpu_efficiency < 0.7 {
             recommendations.push(PerformanceRecommendation {
@@ -807,15 +832,24 @@ impl PerformanceBenchmarkFramework {
                 estimated_effort_hours: 16.0,
             });
         }
-        
+
         // Memory efficiency analysis
-        if result.performance_metrics.efficiency_metrics.memory_efficiency < 0.8 {
+        if result
+            .performance_metrics
+            .efficiency_metrics
+            .memory_efficiency
+            < 0.8
+        {
             recommendations.push(PerformanceRecommendation {
                 recommendation_type: PerformanceRecommendationType::MemoryManagement,
                 priority: RecommendationPriority::Medium,
                 description: format!(
                     "Memory efficiency ({:.2}%) could be improved for {}.",
-                    result.performance_metrics.efficiency_metrics.memory_efficiency * 100.0,
+                    result
+                        .performance_metrics
+                        .efficiency_metrics
+                        .memory_efficiency
+                        * 100.0,
                     result.benchmark_name
                 ),
                 estimated_improvement: 0.2,
@@ -823,7 +857,7 @@ impl PerformanceBenchmarkFramework {
                 estimated_effort_hours: 8.0,
             });
         }
-        
+
         // Latency analysis
         if result.performance_metrics.latency_metrics.p99_latency > Duration::from_millis(1000) {
             recommendations.push(PerformanceRecommendation {
@@ -831,7 +865,11 @@ impl PerformanceBenchmarkFramework {
                 priority: RecommendationPriority::High,
                 description: format!(
                     "P99 latency ({:.2}ms) is high for {}. Consider caching optimization.",
-                    result.performance_metrics.latency_metrics.p99_latency.as_millis(),
+                    result
+                        .performance_metrics
+                        .latency_metrics
+                        .p99_latency
+                        .as_millis(),
                     result.benchmark_name
                 ),
                 estimated_improvement: 0.4,
@@ -839,7 +877,7 @@ impl PerformanceBenchmarkFramework {
                 estimated_effort_hours: 12.0,
             });
         }
-        
+
         Ok(recommendations)
     }
 
@@ -849,20 +887,32 @@ impl PerformanceBenchmarkFramework {
     }
 
     /// Generate benchmark summary
-    async fn generate_benchmark_summary(&self, results: &[BenchmarkResult]) -> Result<BenchmarkSummary> {
+    async fn generate_benchmark_summary(
+        &self,
+        results: &[BenchmarkResult],
+    ) -> Result<BenchmarkSummary> {
         let total_benchmarks = results.len();
-        let successful_benchmarks = results.iter().filter(|r| r.status == BenchmarkStatus::Completed).count();
-        let failed_benchmarks = results.iter().filter(|r| r.status == BenchmarkStatus::Failed).count();
-        
+        let successful_benchmarks = results
+            .iter()
+            .filter(|r| r.status == BenchmarkStatus::Completed)
+            .count();
+        let failed_benchmarks = results
+            .iter()
+            .filter(|r| r.status == BenchmarkStatus::Failed)
+            .count();
+
         let average_execution_time = if !results.is_empty() {
-            let total_time: Duration = results.iter().map(|r| r.execution_summary.average_execution_time).sum();
+            let total_time: Duration = results
+                .iter()
+                .map(|r| r.execution_summary.average_execution_time)
+                .sum();
             total_time / results.len() as u32
         } else {
             Duration::from_secs(0)
         };
-        
+
         let overall_performance_score = self.calculate_overall_performance_score(results).await?;
-        
+
         Ok(BenchmarkSummary {
             total_benchmarks,
             successful_benchmarks,
@@ -875,28 +925,37 @@ impl PerformanceBenchmarkFramework {
     }
 
     /// Calculate overall performance score
-    async fn calculate_overall_performance_score(&self, results: &[BenchmarkResult]) -> Result<f64> {
+    async fn calculate_overall_performance_score(
+        &self,
+        results: &[BenchmarkResult],
+    ) -> Result<f64> {
         if results.is_empty() {
             return Ok(0.0);
         }
-        
-        let cpu_efficiency_avg = results.iter()
+
+        let cpu_efficiency_avg = results
+            .iter()
             .map(|r| r.performance_metrics.efficiency_metrics.cpu_efficiency)
-            .sum::<f64>() / results.len() as f64;
-            
-        let memory_efficiency_avg = results.iter()
+            .sum::<f64>()
+            / results.len() as f64;
+
+        let memory_efficiency_avg = results
+            .iter()
             .map(|r| r.performance_metrics.efficiency_metrics.memory_efficiency)
-            .sum::<f64>() / results.len() as f64;
-            
-        let parallel_efficiency_avg = results.iter()
+            .sum::<f64>()
+            / results.len() as f64;
+
+        let parallel_efficiency_avg = results
+            .iter()
             .map(|r| r.performance_metrics.efficiency_metrics.parallel_efficiency)
-            .sum::<f64>() / results.len() as f64;
-        
+            .sum::<f64>()
+            / results.len() as f64;
+
         // Weighted average of different efficiency metrics
-        let overall_score = (cpu_efficiency_avg * 0.4) + 
-                           (memory_efficiency_avg * 0.3) + 
-                           (parallel_efficiency_avg * 0.3);
-        
+        let overall_score = (cpu_efficiency_avg * 0.4)
+            + (memory_efficiency_avg * 0.3)
+            + (parallel_efficiency_avg * 0.3);
+
         Ok(overall_score)
     }
 
@@ -935,9 +994,9 @@ impl PerformanceBenchmarkFramework {
             os_name: std::env::consts::OS.to_string(),
             architecture: std::env::consts::ARCH.to_string(),
             cpu_count: num_cpus::get(),
-            total_memory_mb: 16384.0, // Placeholder
+            total_memory_mb: 16384.0,         // Placeholder
             cpu_model: "Unknown".to_string(), // Placeholder
-            clock_speed_ghz: 3.2, // Placeholder
+            clock_speed_ghz: 3.2,             // Placeholder
         })
     }
 
@@ -1088,18 +1147,26 @@ impl BenchmarkRunner {
         }
     }
 
-    pub async fn execute_suite(&mut self, suite: BenchmarkSuite, config: &BenchmarkConfig) -> Result<Vec<BenchmarkResult>> {
+    pub async fn execute_suite(
+        &mut self,
+        suite: BenchmarkSuite,
+        config: &BenchmarkConfig,
+    ) -> Result<Vec<BenchmarkResult>> {
         let mut results = Vec::new();
-        
+
         for benchmark in suite.benchmarks {
             let result = self.execute_benchmark(benchmark, config).await?;
             results.push(result);
         }
-        
+
         Ok(results)
     }
 
-    async fn execute_benchmark(&mut self, benchmark: Benchmark, config: &BenchmarkConfig) -> Result<BenchmarkResult> {
+    async fn execute_benchmark(
+        &mut self,
+        benchmark: Benchmark,
+        config: &BenchmarkConfig,
+    ) -> Result<BenchmarkResult> {
         // Placeholder implementation
         Ok(BenchmarkResult {
             benchmark_id: benchmark.benchmark_id,
@@ -1320,7 +1387,7 @@ macro_rules! impl_default_analysis {
     ($type_name:ident) => {
         #[derive(Debug, Clone, Serialize, Deserialize)]
         pub struct $type_name;
-        
+
         impl Default for $type_name {
             fn default() -> Self {
                 Self
@@ -1427,19 +1494,29 @@ impl BaselineManager {
 
 // Implement async methods for analyzers
 impl PerformanceAnalyzer {
-    pub async fn analyze_results(&self, _results: &[BenchmarkResult]) -> Result<Vec<StatisticalAnalysis>> {
+    pub async fn analyze_results(
+        &self,
+        _results: &[BenchmarkResult],
+    ) -> Result<Vec<StatisticalAnalysis>> {
         Ok(vec![StatisticalAnalysis::default()])
     }
 }
 
 impl ScalabilityTester {
-    pub async fn analyze_scalability(&self, _results: &[BenchmarkResult]) -> Result<Vec<ScalabilityAnalysis>> {
+    pub async fn analyze_scalability(
+        &self,
+        _results: &[BenchmarkResult],
+    ) -> Result<Vec<ScalabilityAnalysis>> {
         Ok(vec![])
     }
 }
 
 impl RegressionDetector {
-    pub async fn detect_regressions(&self, _results: &[BenchmarkResult], _threshold: f64) -> Result<Vec<RegressionAnalysis>> {
+    pub async fn detect_regressions(
+        &self,
+        _results: &[BenchmarkResult],
+        _threshold: f64,
+    ) -> Result<Vec<RegressionAnalysis>> {
         Ok(vec![])
     }
 }
@@ -1448,7 +1525,7 @@ impl MemoryProfiler {
     pub async fn start_profiling(&self) -> Result<()> {
         Ok(())
     }
-    
+
     pub async fn stop_profiling(&self) -> Result<()> {
         Ok(())
     }
@@ -1458,7 +1535,7 @@ impl CpuProfiler {
     pub async fn start_profiling(&self) -> Result<()> {
         Ok(())
     }
-    
+
     pub async fn stop_profiling(&self) -> Result<()> {
         Ok(())
     }
@@ -1468,7 +1545,7 @@ impl IoProfiler {
     pub async fn start_profiling(&self) -> Result<()> {
         Ok(())
     }
-    
+
     pub async fn stop_profiling(&self) -> Result<()> {
         Ok(())
     }
@@ -1549,7 +1626,7 @@ mod tests {
     fn test_benchmark_framework_creation() {
         let config = BenchmarkConfig::default();
         let framework = PerformanceBenchmarkFramework::new(config);
-        
+
         assert!(framework.config.enable_statistical_analysis);
     }
 
@@ -1557,7 +1634,7 @@ mod tests {
     async fn test_micro_benchmark_suite_creation() {
         let config = BenchmarkConfig::default();
         let framework = PerformanceBenchmarkFramework::new(config);
-        
+
         let suite = framework.create_micro_benchmark_suite().await.unwrap();
         assert_eq!(suite.name, "micro_benchmarks");
         assert!(!suite.benchmarks.is_empty());
@@ -1587,7 +1664,7 @@ mod tests {
             recommendations: vec![],
             timestamp: SystemTime::now(),
         };
-        
+
         assert_eq!(result.benchmark_name, "test_benchmark");
         assert_eq!(result.status, BenchmarkStatus::Completed);
     }
@@ -1602,8 +1679,11 @@ mod tests {
             implementation_complexity: ImplementationComplexity::Moderate,
             estimated_effort_hours: 16.0,
         };
-        
-        assert_eq!(recommendation.recommendation_type, PerformanceRecommendationType::AlgorithmOptimization);
+
+        assert_eq!(
+            recommendation.recommendation_type,
+            PerformanceRecommendationType::AlgorithmOptimization
+        );
         assert_eq!(recommendation.priority, RecommendationPriority::High);
         assert_eq!(recommendation.estimated_improvement, 0.3);
     }

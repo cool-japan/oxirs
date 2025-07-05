@@ -619,7 +619,13 @@ impl ReliabilityManager {
 
     /// Replay a single message from DLQ by message ID
     pub async fn replay_message(&self, message_id: &str) -> Result<ReliableMessage> {
-        if !self.config.dlq_config.as_ref().map(|dlq| dlq.enable_replay).unwrap_or(false) {
+        if !self
+            .config
+            .dlq_config
+            .as_ref()
+            .map(|dlq| dlq.enable_replay)
+            .unwrap_or(false)
+        {
             return Err(anyhow!("Message replay is disabled"));
         }
 
@@ -628,10 +634,17 @@ impl ReliabilityManager {
 
         if let Some(pos) = position {
             let mut message = dlq[pos].clone();
-            
+
             // Check if message can be replayed
-            if message.replay_status == ReplayStatus::Failed 
-                || message.replay_count >= self.config.dlq_config.as_ref().map(|dlq| dlq.max_replay_attempts).unwrap_or(0) {
+            if message.replay_status == ReplayStatus::Failed
+                || message.replay_count
+                    >= self
+                        .config
+                        .dlq_config
+                        .as_ref()
+                        .map(|dlq| dlq.max_replay_attempts)
+                        .unwrap_or(0)
+            {
                 return Err(anyhow!("Message has exceeded maximum replay attempts"));
             }
 
@@ -641,7 +654,10 @@ impl ReliabilityManager {
             message.last_replay_attempt = Some(Utc::now());
             dlq[pos] = message.clone();
 
-            info!("Replaying message {} (attempt {})", message_id, message.replay_count);
+            info!(
+                "Replaying message {} (attempt {})",
+                message_id, message.replay_count
+            );
             Ok(message)
         } else {
             Err(anyhow!("Message not found in DLQ: {}", message_id))
@@ -649,11 +665,21 @@ impl ReliabilityManager {
     }
 
     /// Replay multiple messages from DLQ with optional filter
-    pub async fn replay_messages_with_filter<F>(&self, filter: F, limit: usize) -> Result<Vec<ReliableMessage>>
+    pub async fn replay_messages_with_filter<F>(
+        &self,
+        filter: F,
+        limit: usize,
+    ) -> Result<Vec<ReliableMessage>>
     where
         F: Fn(&ReliableMessage) -> bool,
     {
-        if !self.config.dlq_config.as_ref().map(|dlq| dlq.enable_replay).unwrap_or(false) {
+        if !self
+            .config
+            .dlq_config
+            .as_ref()
+            .map(|dlq| dlq.enable_replay)
+            .unwrap_or(false)
+        {
             return Err(anyhow!("Message replay is disabled"));
         }
 
@@ -666,15 +692,21 @@ impl ReliabilityManager {
                 break;
             }
 
-            if filter(message) 
+            if filter(message)
                 && message.replay_status != ReplayStatus::Failed
-                && message.replay_count < self.config.dlq_config.as_ref().map(|dlq| dlq.max_replay_attempts).unwrap_or(0) {
-                
+                && message.replay_count
+                    < self
+                        .config
+                        .dlq_config
+                        .as_ref()
+                        .map(|dlq| dlq.max_replay_attempts)
+                        .unwrap_or(0)
+            {
                 let mut updated_message = message.clone();
                 updated_message.replay_status = ReplayStatus::InProgress;
                 updated_message.replay_count += 1;
                 updated_message.last_replay_attempt = Some(Utc::now());
-                
+
                 replayed_messages.push(updated_message.clone());
                 updated_indices.push((index, updated_message));
             }
@@ -694,9 +726,12 @@ impl ReliabilityManager {
         let mut dlq = self.dlq.lock().await;
         let initial_len = dlq.len();
         dlq.retain(|msg| msg.message_id != message_id);
-        
+
         if dlq.len() < initial_len {
-            info!("Removed successfully replayed message {} from DLQ", message_id);
+            info!(
+                "Removed successfully replayed message {} from DLQ",
+                message_id
+            );
             Ok(())
         } else {
             Err(anyhow!("Message not found in DLQ: {}", message_id))
@@ -708,7 +743,10 @@ impl ReliabilityManager {
         let mut dlq = self.dlq.lock().await;
         if let Some(message) = dlq.iter_mut().find(|msg| msg.message_id == message_id) {
             message.replay_status = status;
-            debug!("Updated replay status for message {} to {:?}", message_id, status);
+            debug!(
+                "Updated replay status for message {} to {:?}",
+                message_id, status
+            );
             Ok(())
         } else {
             Err(anyhow!("Message not found in DLQ: {}", message_id))
@@ -718,7 +756,7 @@ impl ReliabilityManager {
     /// Get DLQ statistics for monitoring
     pub async fn get_dlq_stats(&self) -> DlqStats {
         let dlq = self.dlq.lock().await;
-        
+
         let mut error_categories = HashMap::new();
         let mut status_counts = HashMap::new();
         let mut oldest_message_age = 0u64;
@@ -726,7 +764,7 @@ impl ReliabilityManager {
         let mut size_bytes = 0u64;
 
         let now = Utc::now();
-        
+
         for message in dlq.iter() {
             // Count error categories
             for error in &message.errors {
@@ -750,7 +788,8 @@ impl ReliabilityManager {
 
         let messages_count = dlq.len() as u64;
         let replay_success_rate = if total_replay_attempts > 0 {
-            (status_counts.get("Succeeded").unwrap_or(&0) * 100) as f64 / total_replay_attempts as f64
+            (status_counts.get("Succeeded").unwrap_or(&0) * 100) as f64
+                / total_replay_attempts as f64
         } else {
             100.0
         };
@@ -763,17 +802,33 @@ impl ReliabilityManager {
             total_replay_attempts,
             replay_success_rate,
             size_bytes,
-            retention_period_ms: self.config.dlq_config.as_ref().map(|dlq| dlq.retention.as_millis() as u64).unwrap_or(0),
+            retention_period_ms: self
+                .config
+                .dlq_config
+                .as_ref()
+                .map(|dlq| dlq.retention.as_millis() as u64)
+                .unwrap_or(0),
         }
     }
 
     /// Bulk replay messages with batching
     pub async fn bulk_replay_messages(&self, message_ids: Vec<String>) -> Result<BulkReplayResult> {
-        if !self.config.dlq_config.as_ref().map(|dlq| dlq.enable_replay).unwrap_or(false) {
+        if !self
+            .config
+            .dlq_config
+            .as_ref()
+            .map(|dlq| dlq.enable_replay)
+            .unwrap_or(false)
+        {
             return Err(anyhow!("Message replay is disabled"));
         }
 
-        let batch_size = self.config.dlq_config.as_ref().map(|dlq| dlq.replay_batch_size).unwrap_or(100);
+        let batch_size = self
+            .config
+            .dlq_config
+            .as_ref()
+            .map(|dlq| dlq.replay_batch_size)
+            .unwrap_or(100);
         let mut successful = Vec::new();
         let mut failed = Vec::new();
 
@@ -785,7 +840,14 @@ impl ReliabilityManager {
                 }
 
                 // Add backoff between replays
-                tokio::time::sleep(self.config.dlq_config.as_ref().map(|dlq| dlq.replay_backoff).unwrap_or(std::time::Duration::from_secs(1))).await;
+                tokio::time::sleep(
+                    self.config
+                        .dlq_config
+                        .as_ref()
+                        .map(|dlq| dlq.replay_backoff)
+                        .unwrap_or(std::time::Duration::from_secs(1)),
+                )
+                .await;
             }
         }
 

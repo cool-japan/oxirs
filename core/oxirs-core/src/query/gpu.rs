@@ -3,6 +3,8 @@
 //! This module provides GPU acceleration for RDF query operations using
 //! a generic interface that can work with CUDA, OpenCL, or WebGPU backends.
 
+#![allow(dead_code)]
+
 use crate::model::*;
 use crate::query::plan::ExecutionPlan;
 use crate::OxirsError;

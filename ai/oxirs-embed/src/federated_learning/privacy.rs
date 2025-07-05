@@ -42,7 +42,7 @@ impl PrivacyEngine {
     ) -> anyhow::Result<Array2<f32>> {
         // Clip gradients first
         let clipped_gradients = self.clipping_mechanisms.clip_gradients(gradients);
-        
+
         // Add noise for differential privacy
         let noisy_gradients = if self.config.enable_differential_privacy {
             self.noise_generator.add_noise(&clipped_gradients)
@@ -52,7 +52,8 @@ impl PrivacyEngine {
 
         // Update privacy budget
         let privacy_cost = self.calculate_privacy_cost(&noisy_gradients);
-        self.privacy_accountant.consume_budget(participant_id, privacy_cost)?;
+        self.privacy_accountant
+            .consume_budget(participant_id, privacy_cost)?;
 
         Ok(noisy_gradients)
     }
@@ -117,7 +118,10 @@ impl PrivacyAccountant {
         }
 
         self.used_epsilon += cost;
-        *self.participant_budgets.entry(participant_id).or_insert(0.0) += cost;
+        *self
+            .participant_budgets
+            .entry(participant_id)
+            .or_insert(0.0) += cost;
 
         // Record budget entry
         self.budget_history.push(BudgetEntry {
@@ -211,7 +215,7 @@ impl NoiseGenerator {
     fn add_sparse_vector_noise(&self, parameters: &Array2<f32>) -> Array2<f32> {
         // Simplified implementation - would need proper sparse vector technique
         let mut result = self.add_gaussian_noise(parameters);
-        
+
         // Apply sparsity by zeroing out small values
         result.mapv_inplace(|x| {
             if x.abs() < self.scale as f32 * 0.1 {
@@ -220,7 +224,7 @@ impl NoiseGenerator {
                 x
             }
         });
-        
+
         result
     }
 }
@@ -287,10 +291,11 @@ impl ClippingMechanisms {
         if self.adaptive_clipping {
             let current_norm = self.calculate_norm(gradients);
             self.threshold_history.push(current_norm);
-            
+
             // Adapt threshold based on history (simplified)
             if self.threshold_history.len() > 10 {
-                let avg_norm: f64 = self.threshold_history.iter().sum::<f64>() / self.threshold_history.len() as f64;
+                let avg_norm: f64 = self.threshold_history.iter().sum::<f64>()
+                    / self.threshold_history.len() as f64;
                 self.threshold = avg_norm * 1.2; // Allow 20% above average
                 self.threshold_history.remove(0); // Keep only recent history
             }
@@ -302,15 +307,16 @@ impl ClippingMechanisms {
     /// Calculate gradient norm
     fn calculate_norm(&self, gradients: &Array2<f32>) -> f64 {
         match self.method {
-            ClippingMethod::L2Norm | ClippingMethod::Adaptive => {
-                gradients.iter().map(|x| (*x as f64) * (*x as f64)).sum::<f64>().sqrt()
-            }
-            ClippingMethod::L1Norm => {
-                gradients.iter().map(|x| (*x as f64).abs()).sum::<f64>()
-            }
-            ClippingMethod::ElementWise => {
-                gradients.iter().map(|x| (*x as f64).abs()).fold(0.0, f64::max)
-            }
+            ClippingMethod::L2Norm | ClippingMethod::Adaptive => gradients
+                .iter()
+                .map(|x| (*x as f64) * (*x as f64))
+                .sum::<f64>()
+                .sqrt(),
+            ClippingMethod::L1Norm => gradients.iter().map(|x| (*x as f64).abs()).sum::<f64>(),
+            ClippingMethod::ElementWise => gradients
+                .iter()
+                .map(|x| (*x as f64).abs())
+                .fold(0.0, f64::max),
         }
     }
 

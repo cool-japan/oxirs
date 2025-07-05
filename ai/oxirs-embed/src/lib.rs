@@ -573,9 +573,9 @@ pub use continual_learning::{
     ReplayConfig, ReplayMethod, TaskConfig, TaskDetection, TaskSwitching,
 };
 pub use cross_module_performance::{
-    CoordinatorConfig, CrossModulePerformanceCoordinator, GlobalPerformanceMetrics,
-    ModuleMetrics, ModulePerformanceMonitor, OptimizationCache, PerformanceSnapshot,
-    PredictivePerformanceEngine, ResourceAllocator, ResourceTracker,
+    CoordinatorConfig, CrossModulePerformanceCoordinator, GlobalPerformanceMetrics, ModuleMetrics,
+    ModulePerformanceMonitor, OptimizationCache, PerformanceSnapshot, PredictivePerformanceEngine,
+    ResourceAllocator, ResourceTracker,
 };
 pub use delta::{
     ChangeRecord, ChangeStatistics, ChangeType, DeltaConfig, DeltaManager, DeltaResult, DeltaStats,
@@ -745,55 +745,66 @@ pub mod quick_start {
         }
         Ok(count)
     }
-    
+
     /// Quick function to compute cosine similarity between two embedding vectors
     pub fn cosine_similarity(a: &[f64], b: &[f64]) -> Result<f64> {
         if a.len() != b.len() {
-            return Err(anyhow::anyhow!("Vector dimensions don't match: {} vs {}", a.len(), b.len()));
+            return Err(anyhow::anyhow!(
+                "Vector dimensions don't match: {} vs {}",
+                a.len(),
+                b.len()
+            ));
         }
-        
+
         let dot_product: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let norm_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
         let norm_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
-        
+
         if norm_a == 0.0 || norm_b == 0.0 {
             return Ok(0.0);
         }
-        
+
         Ok(dot_product / (norm_a * norm_b))
     }
-    
+
     /// Generate sample knowledge graph data for testing and prototyping
-    pub fn generate_sample_kg_data(num_entities: usize, num_relations: usize) -> Vec<(String, String, String)> {
+    pub fn generate_sample_kg_data(
+        num_entities: usize,
+        num_relations: usize,
+    ) -> Vec<(String, String, String)> {
         use rand::prelude::*;
-        
+
         let mut rng = thread_rng();
         let mut triples = Vec::new();
-        
+
         let entities: Vec<String> = (0..num_entities)
             .map(|i| format!("http://example.org/entity_{}", i))
             .collect();
-            
+
         let relations: Vec<String> = (0..num_relations)
             .map(|i| format!("http://example.org/relation_{}", i))
             .collect();
-            
+
         // Generate random triples (avoid self-loops)
         for _ in 0..(num_entities * 2) {
             let subject = entities.choose(&mut rng).unwrap().clone();
             let relation = relations.choose(&mut rng).unwrap().clone();
             let object = entities.choose(&mut rng).unwrap().clone();
-            
+
             if subject != object {
                 triples.push((subject, relation, object));
             }
         }
-        
+
         triples
     }
-    
+
     /// Quick performance measurement utility
-    pub fn quick_performance_test<F>(name: &str, iterations: usize, operation: F) -> std::time::Duration
+    pub fn quick_performance_test<F>(
+        name: &str,
+        iterations: usize,
+        operation: F,
+    ) -> std::time::Duration
     where
         F: Fn() -> (),
     {
@@ -802,10 +813,15 @@ pub mod quick_start {
             operation();
         }
         let duration = start.elapsed();
-        
-        println!("Performance test '{}': {} iterations in {:?} ({:.2} ops/sec)", 
-                name, iterations, duration, iterations as f64 / duration.as_secs_f64());
-        
+
+        println!(
+            "Performance test '{}': {} iterations in {:?} ({:.2} ops/sec)",
+            name,
+            iterations,
+            duration,
+            iterations as f64 / duration.as_secs_f64()
+        );
+
         duration
     }
 }
@@ -851,28 +867,28 @@ mod quick_start_tests {
         let count = add_triples_from_strings(&mut model, &triple_strings).unwrap();
         assert_eq!(count, 2);
     }
-    
+
     #[test]
     fn test_cosine_similarity() {
         let a = vec![1.0, 0.0, 0.0];
         let b = vec![1.0, 0.0, 0.0];
         let similarity = cosine_similarity(&a, &b).unwrap();
         assert!((similarity - 1.0).abs() < 1e-10);
-        
+
         let c = vec![0.0, 1.0, 0.0];
         let similarity2 = cosine_similarity(&a, &c).unwrap();
         assert!((similarity2 - 0.0).abs() < 1e-10);
-        
+
         // Test different dimensions should fail
         let d = vec![1.0, 0.0];
         assert!(cosine_similarity(&a, &d).is_err());
     }
-    
+
     #[test]
     fn test_generate_sample_kg_data() {
         let triples = generate_sample_kg_data(5, 3);
         assert!(!triples.is_empty());
-        
+
         // Check that all subjects and objects are in the expected format
         for (subject, relation, object) in &triples {
             assert!(subject.starts_with("http://example.org/entity_"));
@@ -881,14 +897,14 @@ mod quick_start_tests {
             assert_ne!(subject, object); // No self-loops
         }
     }
-    
+
     #[test]
     fn test_quick_performance_test() {
         let duration = quick_performance_test("test_operation", 100, || {
             // Simple operation for testing
             let _sum: i32 = (1..10).sum();
         });
-        
+
         assert!(duration.as_nanos() > 0);
     }
 }

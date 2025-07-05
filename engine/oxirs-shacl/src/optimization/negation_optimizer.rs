@@ -1,21 +1,18 @@
 //! Advanced performance optimizations for negation constraints (sh:not)
 //!
 //! This module provides sophisticated optimization strategies specifically for negation constraints,
-//! which are often the most expensive operations in SHACL validation due to their need to 
+//! which are often the most expensive operations in SHACL validation due to their need to
 //! perform full shape validation and then negate the result.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
 use oxirs_core::{model::Term, Store};
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    constraints::{
-        constraint_context::ConstraintContext,
-        logical_constraints::NotConstraint,
-    },
+    constraints::{constraint_context::ConstraintContext, logical_constraints::NotConstraint},
     Result, ShaclError, ShapeId,
 };
 
@@ -24,16 +21,16 @@ use crate::{
 pub struct NegationOptimizer {
     /// Cache for shape validation results with TTL
     validation_cache: Arc<RwLock<HashMap<NegationCacheKey, CachedValidationResult>>>,
-    
+
     /// Static analysis results for negated shapes
     shape_analysis_cache: Arc<RwLock<HashMap<ShapeId, ShapeComplexityAnalysis>>>,
-    
+
     /// Predictive models for value conformance
     conformance_predictor: ConformancePredictor,
-    
+
     /// Configuration for optimization strategies
     config: NegationOptimizationConfig,
-    
+
     /// Performance statistics
     stats: Arc<RwLock<NegationOptimizationStats>>,
 }
@@ -69,13 +66,13 @@ impl NegationOptimizer {
         store: &dyn Store,
     ) -> Result<NegationOptimizationResult> {
         let start_time = Instant::now();
-        
+
         // Get or analyze the shape complexity
         let shape_analysis = self.analyze_shape_complexity(&constraint.shape, store)?;
-        
+
         // Choose optimization strategy based on shape complexity and value count
         let strategy = self.select_optimization_strategy(&shape_analysis, &context.values);
-        
+
         let result = match strategy {
             OptimizationStrategy::DirectEvaluation => {
                 self.direct_evaluation(constraint, context, store)
@@ -102,7 +99,11 @@ impl NegationOptimizer {
     }
 
     /// Analyze the complexity of a negated shape to guide optimization decisions
-    fn analyze_shape_complexity(&self, shape_id: &ShapeId, store: &dyn Store) -> Result<ShapeComplexityAnalysis> {
+    fn analyze_shape_complexity(
+        &self,
+        shape_id: &ShapeId,
+        store: &dyn Store,
+    ) -> Result<ShapeComplexityAnalysis> {
         // Check cache first
         if let Ok(cache) = self.shape_analysis_cache.read() {
             if let Some(analysis) = cache.get(shape_id) {
@@ -112,7 +113,7 @@ impl NegationOptimizer {
 
         // Perform analysis
         let analysis = self.perform_shape_analysis(shape_id, store)?;
-        
+
         // Cache the result
         if let Ok(mut cache) = self.shape_analysis_cache.write() {
             cache.insert(shape_id.clone(), analysis.clone());
@@ -122,13 +123,17 @@ impl NegationOptimizer {
     }
 
     /// Perform detailed analysis of shape complexity
-    fn perform_shape_analysis(&self, shape_id: &ShapeId, _store: &dyn Store) -> Result<ShapeComplexityAnalysis> {
+    fn perform_shape_analysis(
+        &self,
+        shape_id: &ShapeId,
+        _store: &dyn Store,
+    ) -> Result<ShapeComplexityAnalysis> {
         // This is a simplified analysis - in a full implementation, this would:
         // 1. Parse the shape definition from the store
         // 2. Analyze the number and types of constraints
         // 3. Detect recursive patterns
         // 4. Estimate evaluation cost
-        
+
         let complexity = if shape_id.as_str().contains("Complex") {
             ShapeComplexity::High
         } else if shape_id.as_str().contains("Medium") {
@@ -149,7 +154,9 @@ impl NegationOptimizer {
                 ShapeComplexity::Low => 1..=3,
                 ShapeComplexity::Medium => 4..=10,
                 ShapeComplexity::High => 11..=50,
-            }.start().clone(),
+            }
+            .start()
+            .clone(),
             has_recursive_patterns: shape_id.as_str().contains("Recursive"),
             has_expensive_constraints: complexity == ShapeComplexity::High,
             cache_worthiness: match complexity {
@@ -167,23 +174,23 @@ impl NegationOptimizer {
         values: &[Term],
     ) -> OptimizationStrategy {
         let value_count = values.len();
-        
+
         match (analysis.complexity, value_count) {
             // For simple shapes with few values, direct evaluation is fastest
             (ShapeComplexity::Low, 1..=5) => OptimizationStrategy::DirectEvaluation,
-            
+
             // For complex shapes or many values, use caching
             (ShapeComplexity::High, _) | (_, 6..=50) => OptimizationStrategy::CachedEvaluation,
-            
+
             // For patterns that can be predicted, use predictive evaluation
             _ if analysis.has_recursive_patterns => OptimizationStrategy::PredictiveEvaluation,
-            
+
             // For very large value sets, use batch optimization
             (_, 51..=200) => OptimizationStrategy::BatchOptimization,
-            
+
             // For extremely large sets, consider parallel evaluation
             (_, 201..) => OptimizationStrategy::ParallelEvaluation,
-            
+
             // Default to cached evaluation
             _ => OptimizationStrategy::CachedEvaluation,
         }
@@ -216,13 +223,13 @@ impl NegationOptimizer {
     ) -> Result<NegationOptimizationResult> {
         let mut cache_hits = 0;
         let mut cache_misses = 0;
-        
+
         for value in &context.values {
             let cache_key = NegationCacheKey {
                 shape_id: constraint.shape.clone(),
                 value: value.clone(),
             };
-            
+
             if let Ok(cache) = self.validation_cache.read() {
                 if let Some(cached_result) = cache.get(&cache_key) {
                     if !cached_result.is_expired() {
@@ -231,15 +238,15 @@ impl NegationOptimizer {
                     }
                 }
             }
-            
+
             // Cache miss - perform evaluation
             cache_misses += 1;
             let conforms = constraint.value_conforms_to_negated_shape(value, store, context)?;
-            
+
             // Cache the result
             if let Ok(mut cache) = self.validation_cache.write() {
                 cache.insert(cache_key, CachedValidationResult::new(conforms));
-                
+
                 // Perform cache cleanup if needed
                 if cache.len() > self.config.max_cache_size {
                     self.cleanup_cache(&mut cache);
@@ -249,7 +256,7 @@ impl NegationOptimizer {
 
         // Evaluate using cached results
         let result = constraint.evaluate_optimized(context, store)?;
-        
+
         Ok(NegationOptimizationResult {
             constraint_result: result,
             strategy_used: OptimizationStrategy::CachedEvaluation,
@@ -268,22 +275,23 @@ impl NegationOptimizer {
         store: &dyn Store,
     ) -> Result<NegationOptimizationResult> {
         let mut predictions_used = 0;
-        
+
         // Use the conformance predictor to pre-filter likely non-conforming values
-        let predicted_non_conforming = self.conformance_predictor
+        let predicted_non_conforming = self
+            .conformance_predictor
             .predict_non_conforming_values(&constraint.shape, &context.values);
-        
+
         if !predicted_non_conforming.is_empty() {
             predictions_used = predicted_non_conforming.len();
-            
+
             // Create a modified context with only predicted non-conforming values
             let filtered_context = ConstraintContext {
                 values: predicted_non_conforming,
                 ..context.clone()
             };
-            
+
             let result = constraint.evaluate_optimized(&filtered_context, store)?;
-            
+
             return Ok(NegationOptimizationResult {
                 constraint_result: result,
                 strategy_used: OptimizationStrategy::PredictiveEvaluation,
@@ -293,7 +301,7 @@ impl NegationOptimizer {
                 parallel_tasks: 0,
             });
         }
-        
+
         // Fall back to cached evaluation if prediction doesn't help
         self.cached_evaluation(constraint, context, store)
     }
@@ -309,17 +317,17 @@ impl NegationOptimizer {
         let batch_size = self.config.batch_size;
         let mut total_cache_hits = 0;
         let mut total_cache_misses = 0;
-        
+
         for batch in context.values.chunks(batch_size) {
             let batch_context = ConstraintContext {
                 values: batch.to_vec(),
                 ..context.clone()
             };
-            
+
             let batch_result = self.cached_evaluation(constraint, &batch_context, store)?;
             total_cache_hits += batch_result.cache_hits;
             total_cache_misses += batch_result.cache_misses;
-            
+
             // Early termination if we find a violation
             if !batch_result.constraint_result.is_satisfied() {
                 return Ok(NegationOptimizationResult {
@@ -332,10 +340,10 @@ impl NegationOptimizer {
                 });
             }
         }
-        
+
         // All batches satisfied - constraint is satisfied
         let result = constraint.evaluate_optimized(context, store)?;
-        
+
         Ok(NegationOptimizationResult {
             constraint_result: result,
             strategy_used: OptimizationStrategy::BatchOptimization,
@@ -357,13 +365,13 @@ impl NegationOptimizer {
         // In a full implementation, this would use rayon or similar for parallel processing
         // Negation constraints are well-suited for parallelization since each value
         // can be evaluated independently
-        
+
         let mut result = self.batch_optimization(constraint, context, store)?;
         result.strategy_used = OptimizationStrategy::ParallelEvaluation;
         result.parallel_tasks = std::thread::available_parallelism()
             .map(|p| p.get())
             .unwrap_or(4);
-        
+
         Ok(result)
     }
 
@@ -371,18 +379,19 @@ impl NegationOptimizer {
     fn cleanup_cache(&self, cache: &mut HashMap<NegationCacheKey, CachedValidationResult>) {
         // Remove expired entries
         cache.retain(|_, result| !result.is_expired());
-        
+
         // If still too large, remove least recently used entries
         if cache.len() > self.config.max_cache_size {
             let target_size = self.config.max_cache_size / 2;
             let to_remove = cache.len() - target_size;
-            
+
             // Collect keys to remove (sorted by creation time)
-            let mut keys_to_remove: Vec<_> = cache.iter()
+            let mut keys_to_remove: Vec<_> = cache
+                .iter()
                 .map(|(key, result)| (key.clone(), result.created_at))
                 .collect();
             keys_to_remove.sort_by_key(|(_, created_at)| *created_at);
-            
+
             // Remove the oldest entries
             for (key, _) in keys_to_remove.iter().take(to_remove) {
                 cache.remove(key);
@@ -401,22 +410,24 @@ impl NegationOptimizer {
             stats.total_evaluations += 1;
             stats.total_execution_time += execution_time;
             stats.total_values_processed += value_count;
-            
-            let strategy_stats = stats.strategy_stats.entry(strategy.clone()).or_insert_with(|| {
-                StrategyStats {
-                    usage_count: 0,
-                    total_time: Duration::ZERO,
-                    total_values: 0,
-                    average_time_per_value: Duration::ZERO,
-                }
-            });
-            
+
+            let strategy_stats =
+                stats
+                    .strategy_stats
+                    .entry(strategy.clone())
+                    .or_insert_with(|| StrategyStats {
+                        usage_count: 0,
+                        total_time: Duration::ZERO,
+                        total_values: 0,
+                        average_time_per_value: Duration::ZERO,
+                    });
+
             strategy_stats.usage_count += 1;
             strategy_stats.total_time += execution_time;
             strategy_stats.total_values += value_count;
-            
+
             if strategy_stats.total_values > 0 {
-                strategy_stats.average_time_per_value = 
+                strategy_stats.average_time_per_value =
                     strategy_stats.total_time / strategy_stats.total_values as u32;
             }
         }
@@ -424,9 +435,9 @@ impl NegationOptimizer {
 
     /// Get performance statistics for analysis
     pub fn get_performance_stats(&self) -> Result<NegationOptimizationStats> {
-        self.stats.read()
-            .map(|stats| stats.clone())
-            .map_err(|_| ShaclError::ValidationEngine("Failed to read performance stats".to_string()))
+        self.stats.read().map(|stats| stats.clone()).map_err(|_| {
+            ShaclError::ValidationEngine("Failed to read performance stats".to_string())
+        })
     }
 
     /// Clear all caches and reset statistics
@@ -434,15 +445,15 @@ impl NegationOptimizer {
         if let Ok(mut cache) = self.validation_cache.write() {
             cache.clear();
         }
-        
+
         if let Ok(mut analysis_cache) = self.shape_analysis_cache.write() {
             analysis_cache.clear();
         }
-        
+
         if let Ok(mut stats) = self.stats.write() {
             *stats = NegationOptimizationStats::new();
         }
-        
+
         Ok(())
     }
 }
@@ -452,19 +463,19 @@ impl NegationOptimizer {
 pub struct NegationOptimizationConfig {
     /// Maximum number of entries to keep in validation cache
     pub max_cache_size: usize,
-    
+
     /// Time-to-live for cached validation results
     pub cache_ttl: Duration,
-    
+
     /// Batch size for batch optimization strategy
     pub batch_size: usize,
-    
+
     /// Whether to enable predictive optimization
     pub enable_prediction: bool,
-    
+
     /// Whether to enable parallel evaluation
     pub enable_parallel: bool,
-    
+
     /// Minimum number of values to consider parallel evaluation
     pub parallel_threshold: usize,
 }
@@ -505,7 +516,7 @@ impl CachedValidationResult {
             ttl: Duration::from_secs(300),
         }
     }
-    
+
     fn is_expired(&self) -> bool {
         self.created_at.elapsed() > self.ttl
     }
@@ -573,17 +584,14 @@ impl ConformancePredictor {
             patterns: HashMap::new(),
         }
     }
-    
+
     fn predict_non_conforming_values(&self, _shape_id: &ShapeId, values: &[Term]) -> Vec<Term> {
         // Simplified prediction - in a full implementation, this would use
         // machine learning or pattern matching to predict which values
         // are likely to violate the negation constraint
-        
+
         // For now, return a subset for demonstration
-        values.iter()
-            .take(values.len() / 2)
-            .cloned()
-            .collect()
+        values.iter().take(values.len() / 2).cloned().collect()
     }
 }
 
@@ -620,7 +628,7 @@ impl NegationOptimizationStats {
             strategy_stats: HashMap::new(),
         }
     }
-    
+
     pub fn get_average_time_per_evaluation(&self) -> Duration {
         if self.total_evaluations > 0 {
             self.total_execution_time / self.total_evaluations as u32
@@ -628,7 +636,7 @@ impl NegationOptimizationStats {
             Duration::ZERO
         }
     }
-    
+
     pub fn get_average_values_per_evaluation(&self) -> f64 {
         if self.total_evaluations > 0 {
             self.total_values_processed as f64 / self.total_evaluations as f64
@@ -656,7 +664,10 @@ impl Default for NegationOptimizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ShapeId, constraints::{constraint_context::ConstraintContext, logical_constraints::NotConstraint}};
+    use crate::{
+        constraints::{constraint_context::ConstraintContext, logical_constraints::NotConstraint},
+        ShapeId,
+    };
     use oxirs_core::model::{NamedNode, Term};
 
     #[test]
@@ -668,7 +679,7 @@ mod tests {
     #[test]
     fn test_optimization_strategy_selection() {
         let optimizer = NegationOptimizer::new();
-        
+
         // Test strategy selection for different scenarios
         let low_complexity = ShapeComplexityAnalysis {
             shape_id: ShapeId::new("test"),
@@ -679,8 +690,10 @@ mod tests {
             has_expensive_constraints: false,
             cache_worthiness: CacheWorthiness::Low,
         };
-        
-        let few_values = vec![Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())];
+
+        let few_values = vec![Term::NamedNode(
+            NamedNode::new("http://example.org/test").unwrap(),
+        )];
         let strategy = optimizer.select_optimization_strategy(&low_complexity, &few_values);
         assert_eq!(strategy, OptimizationStrategy::DirectEvaluation);
     }
@@ -688,16 +701,20 @@ mod tests {
     #[test]
     fn test_shape_complexity_analysis() {
         let optimizer = NegationOptimizer::new();
-        
+
         // Mock store for testing
         let store = oxirs_core::ConcreteStore::new().unwrap();
-        
+
         let simple_shape = ShapeId::new("SimpleShape");
-        let analysis = optimizer.perform_shape_analysis(&simple_shape, &store).unwrap();
+        let analysis = optimizer
+            .perform_shape_analysis(&simple_shape, &store)
+            .unwrap();
         assert_eq!(analysis.complexity, ShapeComplexity::Low);
-        
+
         let complex_shape = ShapeId::new("ComplexShape");
-        let analysis = optimizer.perform_shape_analysis(&complex_shape, &store).unwrap();
+        let analysis = optimizer
+            .perform_shape_analysis(&complex_shape, &store)
+            .unwrap();
         assert_eq!(analysis.complexity, ShapeComplexity::High);
     }
 
@@ -705,19 +722,21 @@ mod tests {
     fn test_cache_cleanup() {
         let optimizer = NegationOptimizer::new();
         let mut cache = HashMap::new();
-        
+
         // Add some entries to cache
         for i in 0..100 {
             let key = NegationCacheKey {
                 shape_id: ShapeId::new(&format!("shape_{}", i)),
-                value: Term::NamedNode(NamedNode::new(&format!("http://example.org/{}", i)).unwrap()),
+                value: Term::NamedNode(
+                    NamedNode::new(&format!("http://example.org/{}", i)).unwrap(),
+                ),
             };
             cache.insert(key, CachedValidationResult::new(i % 2 == 0));
         }
-        
+
         assert_eq!(cache.len(), 100);
         optimizer.cleanup_cache(&mut cache);
-        
+
         // Cache should be cleaned up (exact size depends on implementation)
         assert!(cache.len() <= optimizer.config.max_cache_size);
     }
@@ -725,16 +744,18 @@ mod tests {
     #[test]
     fn test_performance_stats() {
         let optimizer = NegationOptimizer::new();
-        
+
         optimizer.update_performance_stats(
             &OptimizationStrategy::DirectEvaluation,
             Duration::from_millis(10),
             5,
         );
-        
+
         let stats = optimizer.get_performance_stats().unwrap();
         assert_eq!(stats.total_evaluations, 1);
         assert_eq!(stats.total_values_processed, 5);
-        assert!(stats.strategy_stats.contains_key(&OptimizationStrategy::DirectEvaluation));
+        assert!(stats
+            .strategy_stats
+            .contains_key(&OptimizationStrategy::DirectEvaluation));
     }
 }

@@ -224,6 +224,7 @@ impl IntuitionNetwork {
 }
 
 /// Gut feeling engine for making intuitive decisions
+#[allow(dead_code)]
 pub struct GutFeelingEngine {
     /// Historical success patterns
     success_patterns: HashMap<String, f64>,
@@ -304,6 +305,7 @@ impl GutFeelingEngine {
 }
 
 /// Creativity engine for generating novel optimization strategies
+#[allow(dead_code)]
 pub struct CreativityEngine {
     /// Repository of creative optimization techniques
     techniques: Vec<CreativeTechnique>,
@@ -413,6 +415,7 @@ pub struct CreativeOptimization {
 }
 
 /// Intuitive query planner that combines all consciousness-inspired components
+#[allow(dead_code)]
 pub struct IntuitiveQueryPlanner {
     /// Pattern memory for learning
     pattern_memory: Arc<RwLock<PatternMemory>>,

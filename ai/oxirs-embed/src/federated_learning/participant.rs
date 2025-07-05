@@ -270,7 +270,9 @@ pub enum DataSelectionStrategy {
     /// Random sampling
     RandomSampling { sample_rate: f64 },
     /// Stratified sampling
-    StratifiedSampling { strata_proportions: HashMap<String, f64> },
+    StratifiedSampling {
+        strata_proportions: HashMap<String, f64>,
+    },
     /// Active learning selection
     ActiveLearning { uncertainty_threshold: f64 },
     /// Importance sampling

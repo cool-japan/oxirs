@@ -332,7 +332,7 @@ impl ArchitectureSearch {
     /// Start a new architecture search
     pub async fn start_search(&self, config: ArchitectureSearchConfig) -> Result<String> {
         let search_id = config.search_id.clone();
-        
+
         let search_state = SearchState {
             config: config.clone(),
             status: SearchStatus::Queued,
@@ -352,7 +352,7 @@ impl ArchitectureSearch {
         let searches_clone = self.searches.clone();
         let evaluator_clone = self.evaluator.clone();
         let optimizer_clone = self.optimizer.clone();
-        
+
         tokio::spawn(async move {
             Self::execute_search(search_id, searches_clone, evaluator_clone, optimizer_clone).await
         });
@@ -385,7 +385,8 @@ impl ArchitectureSearch {
         }
 
         // Generate initial population
-        let initial_architectures = Self::generate_initial_population(&search_id, &searches).await?;
+        let initial_architectures =
+            Self::generate_initial_population(&search_id, &searches).await?;
 
         // Update status to searching
         {
@@ -396,14 +397,17 @@ impl ArchitectureSearch {
         }
 
         // Main search loop
-        for iteration in 0..100 {  // Mock iteration count
+        for iteration in 0..100 {
+            // Mock iteration count
             // Generate candidate architectures
-            let candidates = optimizer.generate_candidates(&initial_architectures, iteration).await?;
-            
+            let candidates = optimizer
+                .generate_candidates(&initial_architectures, iteration)
+                .await?;
+
             // Evaluate candidates
             for candidate in candidates {
                 let evaluation = evaluator.evaluate_architecture(&candidate).await?;
-                
+
                 let result = SearchResult {
                     architecture: candidate,
                     evaluation_metrics: evaluation,
@@ -421,11 +425,17 @@ impl ArchitectureSearch {
                     let mut searches_lock = searches.write().await;
                     if let Some(search) = searches_lock.get_mut(&search_id) {
                         search.evaluated_architectures.push(result.clone());
-                        
+
                         // Update best result if improved
-                        if search.current_best.is_none() || 
-                           result.evaluation_metrics.primary_metric > 
-                           search.current_best.as_ref().unwrap().evaluation_metrics.primary_metric {
+                        if search.current_best.is_none()
+                            || result.evaluation_metrics.primary_metric
+                                > search
+                                    .current_best
+                                    .as_ref()
+                                    .unwrap()
+                                    .evaluation_metrics
+                                    .primary_metric
+                        {
                             search.current_best = Some(result);
                         }
                     }
@@ -549,7 +559,10 @@ impl ArchitectureEvaluator {
     }
 
     /// Evaluate architecture performance
-    pub async fn evaluate_architecture(&self, architecture: &ModelArchitecture) -> Result<EvaluationMetrics> {
+    pub async fn evaluate_architecture(
+        &self,
+        architecture: &ModelArchitecture,
+    ) -> Result<EvaluationMetrics> {
         // Check cache first
         {
             let cache = self.evaluation_cache.read().await;
@@ -573,9 +586,11 @@ impl ArchitectureEvaluator {
                 map
             },
             efficiency_metrics: EfficiencyMetrics {
-                parameters_per_performance: architecture.estimated_metrics.parameter_count as f32 / primary_metric,
+                parameters_per_performance: architecture.estimated_metrics.parameter_count as f32
+                    / primary_metric,
                 memory_efficiency: primary_metric / architecture.estimated_metrics.memory_usage_mb,
-                latency_efficiency: primary_metric / architecture.estimated_metrics.inference_latency_ms,
+                latency_efficiency: primary_metric
+                    / architecture.estimated_metrics.inference_latency_ms,
                 energy_efficiency: Some(primary_metric * 0.8),
             },
             validation_score: primary_metric * 0.95,
@@ -656,7 +671,7 @@ mod tests {
     #[tokio::test]
     async fn test_architecture_search_creation() {
         let search = ArchitectureSearch::new();
-        
+
         let config = ArchitectureSearchConfig {
             search_id: "test_search".to_string(),
             target_task: TaskType::LanguageModeling,
@@ -701,7 +716,7 @@ mod tests {
     #[tokio::test]
     async fn test_architecture_evaluator() {
         let evaluator = ArchitectureEvaluator::new();
-        
+
         let architecture = ModelArchitecture {
             architecture_id: "test_arch".to_string(),
             layers: vec![],
@@ -735,7 +750,10 @@ mod tests {
             },
         };
 
-        let metrics = evaluator.evaluate_architecture(&architecture).await.unwrap();
+        let metrics = evaluator
+            .evaluate_architecture(&architecture)
+            .await
+            .unwrap();
         assert!(metrics.primary_metric > 0.0);
         assert!(metrics.validation_score > 0.0);
     }

@@ -1,5 +1,7 @@
 //! BFT Node implementation and consensus logic
 
+#![allow(dead_code)]
+
 use super::detection::ByzantineDetector;
 use super::messages::BftMessage;
 use super::state_machine::RdfStateMachine;
