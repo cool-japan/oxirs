@@ -29,7 +29,7 @@ chrono = { version = "0.4", features = ["serde"] }
 # HTTP Server and WebSocket
 axum = { version = "0.7", features = ["ws"] }
 axum-extra = { version = "0.9", features = ["typed-header"] }
-tower = "0.4"
+tower = "0.5"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 tokio-tungstenite = "0.21"
 futures-util = "0.3"
